@@ -17,33 +17,58 @@
 import { IModel } from './IModel.js';
 import { ITool } from './ITool.js';
 import { IContent } from '../services/history/IContent.js';
+import type { SettingsService } from '../settings/SettingsService.js';
+import type { Config } from '../config/config.js';
+import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+
+export type ProviderToolset = Array<{
+  functionDeclarations: Array<{
+    name: string;
+    description?: string;
+    parametersJsonSchema?: unknown;
+    parameters?: unknown;
+  }>;
+}>;
+
+export interface GenerateChatOptions {
+  contents: IContent[];
+  tools?: ProviderToolset;
+  settings?: SettingsService;
+  config?: Config;
+  runtime?: ProviderRuntimeContext;
+  metadata?: Record<string, unknown>;
+}
 
 export interface IProvider {
   name: string;
   isDefault?: boolean;
   getModels(): Promise<IModel[]>;
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P04
+   * @requirement REQ-SP-001
+   * @pseudocode base-provider.md lines 4-15
+   */
+  generateChatCompletion(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
     content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
-    }>,
+    tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent>;
-  setModel?(modelId: string): void;
   getCurrentModel?(): string;
   getDefaultModel(): string;
   // Methods for updating provider configuration
-  setApiKey?(apiKey: string): void;
-  setBaseUrl?(baseUrl?: string): void;
   getToolFormat?(): string;
-  setToolFormatOverride?(format: string | null): void;
   isPaidMode?(): boolean;
   // Method to clear any provider-specific state (e.g., conversation cache, tool call tracking)
+  /**
+   * @deprecated PLAN-20250218-STATELESSPROVIDER.P04: Prefer scoped runtime lifecycle hooks.
+   */
   clearState?(): void;
   // Method to set the config instance (for providers that need it)
+  /**
+   * @deprecated PLAN-20250218-STATELESSPROVIDER.P04: Use GenerateChatOptions.config instead.
+   */
   setConfig?(config: unknown): void;
   // ServerTool methods for provider-native tools
   getServerTools(): string[];
@@ -58,21 +83,21 @@ export interface IProvider {
    * Set model parameters to be included in API calls
    * @param params Parameters to merge with existing, or undefined to clear all
    */
-  setModelParams?(params: Record<string, unknown> | undefined): void;
-
-  /**
-   * Get current model parameters
-   * @returns Current parameters or undefined if not set
-   */
   getModelParams?(): Record<string, unknown> | undefined;
 
   /**
    * Clear authentication cache (for OAuth logout)
    */
+  /**
+   * @deprecated PLAN-20250218-STATELESSPROVIDER.P04: Authentication cache is managed per runtime context.
+   */
   clearAuthCache?(): void;
 
   /**
    * Clear authentication settings (keys and keyfiles)
+   */
+  /**
+   * @deprecated PLAN-20250218-STATELESSPROVIDER.P04: Use runtime scoped authentication handlers.
    */
   clearAuth?(): void;
 }

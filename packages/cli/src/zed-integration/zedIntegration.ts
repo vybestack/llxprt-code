@@ -44,6 +44,17 @@ import { z } from 'zod';
 import os from 'os';
 
 import { randomUUID } from 'crypto';
+import {
+  setProviderApiKey,
+  setProviderBaseUrl,
+} from '../providers/providerConfigUtils.js';
+import {
+  setCliRuntimeContext,
+  switchActiveProvider,
+  setActiveModelParam,
+  clearActiveModelParam,
+  getActiveModelParams,
+} from '../runtime/runtimeSettings.js';
 
 type ToolRunResult = {
   parts: Part[];
@@ -62,6 +73,17 @@ export async function runZedIntegration(
   const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
 
   logger.debug(() => 'Streams created');
+
+  /**
+   * @plan:PLAN-20250218-STATELESSPROVIDER.P07
+   * @requirement:REQ-SP-005
+   * Align Zed integration with cli-runtime pseudocode by registering the
+   * current Config/SettingsService pair before spawning session handlers.
+   * @pseudocode:cli-runtime.md lines 2-11
+   */
+  setCliRuntimeContext(config.getSettingsService(), config, {
+    metadata: { source: 'zed-integration', stage: 'bootstrap' },
+  });
 
   try {
     new acp.AgentSideConnection(
@@ -97,6 +119,50 @@ class GeminiAgent {
     private client: acp.Client,
   ) {
     this.logger = new DebugLogger('llxprt:zed-integration');
+  }
+
+  /**
+   * @plan:PLAN-20250218-STATELESSPROVIDER.P07
+   * @requirement:REQ-SP-005
+   * Reapply profile-derived credentials and base URLs through runtime helpers
+   * to keep provider state in sync with the CLI context.
+   * @pseudocode:cli-runtime.md lines 9-15
+   */
+  private async applyRuntimeProviderOverrides(): Promise<void> {
+    const authKey = this.config.getEphemeralSetting('auth-key') as
+      | string
+      | undefined;
+    const authKeyfile = this.config.getEphemeralSetting('auth-keyfile') as
+      | string
+      | undefined;
+    const baseUrl = this.config.getEphemeralSetting('base-url') as
+      | string
+      | undefined;
+
+    if (authKey && authKey.trim() !== '') {
+      const result = await setProviderApiKey(authKey);
+      this.logger.debug(() => `[zed-integration] ${result.message}`);
+    } else if (authKeyfile) {
+      try {
+        const resolvedPath = authKeyfile.replace(/^~/, os.homedir());
+        const keyFromFile = (await fs.readFile(resolvedPath, 'utf-8')).trim();
+        if (keyFromFile) {
+          const result = await setProviderApiKey(keyFromFile);
+          this.config.setEphemeralSetting('auth-keyfile', resolvedPath);
+          this.logger.debug(() => `[zed-integration] ${result.message}`);
+        }
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `ERROR: Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    if (baseUrl !== undefined) {
+      const result = await setProviderBaseUrl(baseUrl);
+      this.logger.debug(() => `[zed-integration] ${result.message}`);
+    }
   }
 
   async initialize(
@@ -182,17 +248,17 @@ class GeminiAgent {
         );
 
         // Auto-authenticate based on available configuration
-        const providerManager = sessionConfig.getProviderManager();
+        let providerManager = sessionConfig.getProviderManager();
 
         // Debug provider state
         if (providerManager) {
           this.logger.debug(
             () =>
-              `ProviderManager exists: ${providerManager.hasActiveProvider() ? 'has active provider' : 'no active provider'}`,
+              `ProviderManager exists: ${providerManager?.hasActiveProvider?.() ? 'has active provider' : 'no active provider'}`,
           );
           this.logger.debug(
             () =>
-              `Active provider name: ${providerManager.getActiveProviderName() || 'none'}`,
+              `Active provider name: ${providerManager?.getActiveProviderName?.() || 'none'}`,
           );
         } else {
           this.logger.debug(() => 'No ProviderManager available');
@@ -200,70 +266,70 @@ class GeminiAgent {
 
         // Check for provider from config (loaded from profile or CLI)
         const configProvider = sessionConfig.getProvider();
-        if (configProvider && providerManager) {
+        let hasActiveProvider = providerManager?.hasActiveProvider?.() ?? false;
+
+        if (configProvider) {
           this.logger.debug(() => `Config has provider: ${configProvider}`);
-          // Ensure provider is activated
-          if (!providerManager.hasActiveProvider()) {
-            this.logger.debug(() => `Activating provider: ${configProvider}`);
-            await providerManager.setActiveProvider(configProvider);
+          try {
+            /**
+             * @plan:PLAN-20250218-STATELESSPROVIDER.P07
+             * @requirement:REQ-SP-005
+             * Switch active provider via runtime helper to keep Config and
+             * SettingsService aligned with stateless semantics.
+             * @pseudocode:cli-runtime.md lines 9-12
+             */
+            const result = await switchActiveProvider(configProvider);
+            providerManager = sessionConfig.getProviderManager();
+            hasActiveProvider =
+              providerManager?.hasActiveProvider?.() ?? result.changed;
+            if (result.infoMessages.length > 0) {
+              for (const info of result.infoMessages) {
+                this.logger.debug(() => `[zed-integration] ${info}`);
+              }
+            }
+          } catch (error) {
+            this.logger.debug(
+              () =>
+                `ERROR: Failed to activate provider ${configProvider}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
 
-            // Apply ephemeral settings from profile to the provider
-            const activeProvider = providerManager.getActiveProvider();
-            if (activeProvider) {
-              const authKey = sessionConfig.getEphemeralSetting(
-                'auth-key',
-              ) as string;
-              const authKeyfile = sessionConfig.getEphemeralSetting(
-                'auth-keyfile',
-              ) as string;
-              const baseUrl = sessionConfig.getEphemeralSetting(
-                'base-url',
-              ) as string;
+        if (!hasActiveProvider && providerManager?.hasActiveProvider?.()) {
+          hasActiveProvider = true;
+        }
 
-              // Apply auth settings from profile
-              if (authKey && activeProvider.setApiKey) {
-                this.logger.debug(() => 'Setting API key from profile');
-                activeProvider.setApiKey(authKey);
-              } else if (authKeyfile && activeProvider.setApiKey) {
-                // Load API key from file
-                try {
-                  const apiKey = (
-                    await fs.readFile(
-                      authKeyfile.replace(/^~/, os.homedir()),
-                      'utf-8',
-                    )
-                  ).trim();
-                  if (apiKey) {
-                    this.logger.debug(() => 'Setting API key from keyfile');
-                    activeProvider.setApiKey(apiKey);
-                  }
-                } catch (error) {
-                  this.logger.debug(
-                    () =>
-                      `ERROR: Failed to load keyfile ${authKeyfile}: ${error}`,
-                  );
+        if (hasActiveProvider) {
+          try {
+            await this.applyRuntimeProviderOverrides();
+          } catch (error) {
+            this.logger.debug(
+              () =>
+                `ERROR: Failed to apply runtime provider overrides: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+
+          const activeProvider = providerManager?.getActiveProvider();
+          if (activeProvider) {
+            const configWithProfile = sessionConfig as Config & {
+              _profileModelParams?: Record<string, unknown>;
+            };
+            if (
+              configWithProfile._profileModelParams &&
+              Object.keys(configWithProfile._profileModelParams).length > 0
+            ) {
+              this.logger.debug(() => 'Setting model params from profile');
+              const profileParams = configWithProfile._profileModelParams;
+              const existingParams = getActiveModelParams();
+
+              for (const [key, value] of Object.entries(profileParams)) {
+                setActiveModelParam(key, value);
+              }
+
+              for (const key of Object.keys(existingParams)) {
+                if (!(key in profileParams)) {
+                  clearActiveModelParam(key);
                 }
-              }
-
-              // Apply base URL if specified
-              if (baseUrl && baseUrl !== 'none' && activeProvider.setBaseUrl) {
-                this.logger.debug(() => `Setting base URL: ${baseUrl}`);
-                activeProvider.setBaseUrl(baseUrl);
-              }
-
-              // Apply profile model params if loaded
-              const configWithProfile = sessionConfig as Config & {
-                _profileModelParams?: Record<string, unknown>;
-              };
-              if (
-                configWithProfile._profileModelParams &&
-                'setModelParams' in activeProvider &&
-                activeProvider.setModelParams
-              ) {
-                this.logger.debug(() => 'Setting model params from profile');
-                activeProvider.setModelParams(
-                  configWithProfile._profileModelParams,
-                );
               }
             }
           }

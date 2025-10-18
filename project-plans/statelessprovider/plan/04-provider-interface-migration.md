@@ -14,7 +14,7 @@
 
 ### Files to Create
 
-- `packages/core/src/providers/__tests__/providerInterface.compat.test.ts`
+- `packages/core/src/providers/providerInterface.compat.test.ts`
   - Cover new `generateChatCompletion` signature accepting runtime context while ensuring legacy two-argument form still routes correctly.
   - Include markers referencing pseudocode (`base-provider.md`, `provider-invocation.md`).
 
@@ -57,7 +57,7 @@ Each updated function should reference the relevant pseudocode section:
 
 ```bash
 npm run typecheck
-npm test -- --runTestsByPath packages/core/src/providers/__tests__/providerInterface.compat.test.ts packages/core/src/providers/BaseProvider.test.ts packages/core/src/providers/integration/multi-provider.integration.test.ts
+npx vitest run packages/core/src/providers/providerInterface.compat.test.ts packages/core/src/providers/BaseProvider.test.ts packages/core/src/providers/integration/multi-provider.integration.test.ts
 ```
 
 ### Manual Verification Checklist
@@ -93,7 +93,7 @@ Files Modified:
 - packages/core/src/providers/{openai,anthropic,gemini,openai-responses}/*.ts
 - packages/core/src/providers/BaseProvider.test.ts
 - packages/core/src/providers/integration/multi-provider.integration.test.ts
-- packages/core/src/providers/__tests__/providerInterface.compat.test.ts (new)
+- packages/core/src/providers/providerInterface.compat.test.ts (new)
 - packages/core/src/index.ts
 Verification:
 - <paste test outputs>

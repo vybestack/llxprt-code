@@ -5,12 +5,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { BaseProvider, BaseProviderConfig } from './BaseProvider.js';
+import {
+  BaseProvider,
+  BaseProviderConfig,
+  NormalizedGenerateChatOptions,
+} from './BaseProvider.js';
 import { OAuthManager } from '../auth/precedence.js';
 import { IModel } from './IModel.js';
-import { IMessage } from './IMessage.js';
-import { ITool } from './ITool.js';
-import { ContentGeneratorRole } from './ContentGeneratorRole.js';
+import { IContent, TextBlock } from '../services/history/IContent.js';
+import type { Config } from '../config/config.js';
+import { SettingsService } from '../settings/SettingsService.js';
 import {
   getSettingsService,
   resetSettingsService,
@@ -22,8 +26,27 @@ const mockOAuthManager: OAuthManager = {
   isAuthenticated: vi.fn(),
 };
 
+const userMessage = (text: string): IContent => ({
+  speaker: 'human',
+  blocks: [
+    {
+      type: 'text',
+      text,
+    },
+  ],
+});
+
+const getContentText = (content: IContent | undefined): string => {
+  const textBlock = content?.blocks.find(
+    (block): block is TextBlock => block.type === 'text',
+  );
+  return textBlock?.text ?? '';
+};
+
 // Concrete implementation of BaseProvider for testing
 class TestProvider extends BaseProvider {
+  lastOptions?: NormalizedGenerateChatOptions;
+
   constructor(config: BaseProviderConfig) {
     super(config);
   }
@@ -47,16 +70,19 @@ class TestProvider extends BaseProvider {
     return 'claude-sonnet-4-20250514';
   }
 
-  async *generateChatCompletion(
-    _messages: IMessage[],
-    _tools?: ITool[],
-    _toolFormat?: string,
-  ): AsyncIterableIterator<unknown> {
-    // Use the base auth token to ensure it's resolved
+  protected override async *generateChatCompletionWithOptions(
+    options: NormalizedGenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
+    this.lastOptions = options;
     const token = await this.getAuthToken();
     yield {
-      role: 'assistant',
-      content: `Response using token: ${token.substring(0, 10)}...`,
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'text',
+          text: `Response using token: ${token.substring(0, 10)}...`,
+        },
+      ],
     };
   }
 }
@@ -75,12 +101,19 @@ class NonOAuthTestProvider extends BaseProvider {
     return 'claude-sonnet-4-20250514';
   }
 
-  async *generateChatCompletion(
-    _messages: IMessage[],
-    _tools?: ITool[],
-  ): AsyncIterableIterator<unknown> {
+  protected override async *generateChatCompletionWithOptions(
+    _options: NormalizedGenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
     const token = await this.getAuthToken();
-    yield { role: 'assistant', content: `Non-OAuth response: ${token}` };
+    yield {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'text',
+          text: `Non-OAuth response: ${token}`,
+        },
+      ],
+    };
   }
 }
 
@@ -122,15 +155,13 @@ describe('BaseProvider', () => {
 
       // When: Generate chat completion (triggers lazy auth)
       const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
+        .generateChatCompletion([userMessage('test')])
         .next();
 
       // Then: Should use SettingsService auth-key
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('settings-a'),
-      });
+      expect(getContentText(response.value as IContent)).toContain(
+        'settings-a',
+      );
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
@@ -149,14 +180,12 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(config);
 
       const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
+        .generateChatCompletion([userMessage('test')])
         .next();
 
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('env-key-78'),
-      });
+      expect(getContentText(response.value as IContent)).toContain(
+        'env-key-78',
+      );
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
@@ -175,14 +204,12 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(config);
 
       const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
+        .generateChatCompletion([userMessage('test')])
         .next();
 
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('oauth-toke'),
-      });
+      expect(getContentText(response.value as IContent)).toContain(
+        'oauth-toke',
+      );
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith('test');
     });
 
@@ -206,6 +233,54 @@ describe('BaseProvider', () => {
     });
   });
 
+  describe('Signature Normalization', () => {
+    it('normalizes legacy arguments into GenerateChatOptions', async () => {
+      const config: BaseProviderConfig = {
+        name: 'test',
+      };
+
+      const provider = new TestProvider(config);
+      const defaultSettings = getSettingsService();
+      const messages = [userMessage('legacy signature test')];
+
+      await provider.generateChatCompletion(messages).next();
+
+      expect(provider.lastOptions?.contents).toEqual(messages);
+      expect(provider.lastOptions?.tools).toBeUndefined();
+      expect(provider.lastOptions?.settings).toBe(defaultSettings);
+    });
+
+    it('passes explicit options including settings and config to implementation', async () => {
+      const config: BaseProviderConfig = {
+        name: 'test',
+      };
+
+      const provider = new TestProvider(config);
+      const customSettings = new SettingsService();
+      customSettings.set('auth-key', 'custom-auth-xyz');
+      const fakeConfig = {
+        getUserMemory: () => 'test-memory',
+        getModel: () => 'test-model',
+      } as unknown as Config;
+
+      const options = {
+        contents: [userMessage('options signature test')],
+        settings: customSettings,
+        config: fakeConfig,
+        metadata: { requestId: 'req-123' },
+      } satisfies Parameters<TestProvider['generateChatCompletion']>[0];
+
+      const result = await provider.generateChatCompletion(options).next();
+
+      expect(provider.lastOptions?.settings).toBe(customSettings);
+      expect(provider.lastOptions?.config).toBe(fakeConfig);
+      expect(provider.lastOptions?.metadata).toMatchObject({
+        requestId: 'req-123',
+      });
+      expect(getContentText(result.value as IContent)).toContain('custom-aut');
+    });
+  });
+
   describe('OAuth Support Validation', () => {
     it('should not attempt OAuth when provider does not support it', async () => {
       const config: BaseProviderConfig = {
@@ -222,14 +297,12 @@ describe('BaseProvider', () => {
 
       // Should succeed with empty token when no auth is available
       const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
+        .generateChatCompletion([userMessage('test')])
         .next();
 
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('Non-OAuth response:'),
-      });
+      expect(getContentText(response.value as IContent)).toContain(
+        'Non-OAuth response:',
+      );
 
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
@@ -247,14 +320,12 @@ describe('BaseProvider', () => {
 
       // Should succeed with empty token when no auth is available
       const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
+        .generateChatCompletion([userMessage('test')])
         .next();
 
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('Response using token:'),
-      });
+      expect(getContentText(response.value as IContent)).toContain(
+        'Response using token:',
+      );
     });
   });
 
@@ -277,11 +348,7 @@ describe('BaseProvider', () => {
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
 
       // When: Make API call
-      await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
-        .next();
+      await provider.generateChatCompletion([userMessage('test')]).next();
 
       // Then: OAuth should be called
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith('test');
@@ -301,16 +368,8 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(config);
 
       // When: Make multiple API calls
-      await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test 1' },
-        ])
-        .next();
-      await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test 2' },
-        ])
-        .next();
+      await provider.generateChatCompletion([userMessage('test 1')]).next();
+      await provider.generateChatCompletion([userMessage('test 2')]).next();
 
       // Then: OAuth should be called once and cached for the second call
       expect(mockOAuthManager.getToken).toHaveBeenCalledTimes(1); // Called once, cached for second call
@@ -335,21 +394,13 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(config);
 
       // First call
-      await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test 1' },
-        ])
-        .next();
+      await provider.generateChatCompletion([userMessage('test 1')]).next();
 
       // Advance time beyond cache duration (1 minute)
       mockTime += 61000;
 
       // Second call after cache expiry
-      await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test 2' },
-        ])
-        .next();
+      await provider.generateChatCompletion([userMessage('test 2')]).next();
 
       expect(mockOAuthManager.getToken).toHaveBeenCalledTimes(2);
 
@@ -429,20 +480,18 @@ describe('BaseProvider', () => {
       };
 
       const provider = new TestProvider(config);
+      const settingsService = getSettingsService();
 
-      // When: Update API key
-      provider.setApiKey?.('new-key');
+      // When: Update API key through SettingsService
+      settingsService.set('auth-key', 'new-key');
+      provider.clearAuthCache?.();
 
       // Then: Should use new key
       const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
+        .generateChatCompletion([userMessage('test')])
         .next();
 
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('new-key'),
-      });
+      expect(getContentText(response.value as IContent)).toContain('new-key');
     });
 
     it('should clear auth cache when API key is updated', async () => {
@@ -461,25 +510,21 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(config);
 
       // First call uses OAuth
-      await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test 1' },
-        ])
-        .next();
+      await provider.generateChatCompletion([userMessage('test 1')]).next();
 
-      // Update to use API key
-      provider.setApiKey?.('new-api-key');
+      // Update to use API key via SettingsService
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key', 'new-api-key');
+      provider.clearAuthCache?.();
 
       // Second call should use new API key, not cached OAuth
       const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test 2' },
-        ])
+        .generateChatCompletion([userMessage('test 2')])
         .next();
 
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('new-api-ke'),
-      });
+      expect(getContentText(response.value as IContent)).toContain(
+        'new-api-ke',
+      );
     });
 
     it('should update OAuth configuration correctly', async () => {
@@ -494,14 +539,12 @@ describe('BaseProvider', () => {
 
       // Initially should succeed with empty token
       const response1 = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
+        .generateChatCompletion([userMessage('test')])
         .next();
 
-      expect(response1.value).toMatchObject({
-        content: expect.stringContaining('Response using token:'),
-      });
+      expect(getContentText(response1.value as IContent)).toContain(
+        'Response using token:',
+      );
 
       // Enable OAuth
       (
@@ -517,14 +560,12 @@ describe('BaseProvider', () => {
 
       // Should now work with OAuth
       const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
+        .generateChatCompletion([userMessage('test')])
         .next();
 
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('oauth-toke'),
-      });
+      expect(getContentText(response.value as IContent)).toContain(
+        'oauth-toke',
+      );
     });
   });
 
@@ -546,14 +587,12 @@ describe('BaseProvider', () => {
 
       // Should succeed with empty token when OAuth is unavailable
       const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
+        .generateChatCompletion([userMessage('test')])
         .next();
 
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('Response using token:'),
-      });
+      expect(getContentText(response.value as IContent)).toContain(
+        'Response using token:',
+      );
     });
 
     it('should handle missing OAuth provider gracefully', async () => {
@@ -569,14 +608,12 @@ describe('BaseProvider', () => {
 
       // Should succeed with empty token when OAuth is unavailable
       const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
+        .generateChatCompletion([userMessage('test')])
         .next();
 
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('Response using token:'),
-      });
+      expect(getContentText(response.value as IContent)).toContain(
+        'Response using token:',
+      );
 
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });

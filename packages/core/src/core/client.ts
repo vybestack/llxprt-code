@@ -432,11 +432,21 @@ export class GeminiClient {
     try {
       const userMemory = this.config.getUserMemory();
       const model = this.config.getModel();
+      const providerName =
+        this.config
+          .getContentGeneratorConfig()
+          ?.providerManager?.getActiveProviderName() ||
+        this.config.getProvider() ||
+        'gemini';
       const logger = new DebugLogger('llxprt:client:start');
       logger.debug(
         () => `DEBUG [client.startChat]: Model from config: ${model}`,
       );
-      let systemInstruction = await getCoreSystemPromptAsync(userMemory, model);
+      let systemInstruction = await getCoreSystemPromptAsync({
+        userMemory,
+        model,
+        provider: providerName,
+      });
 
       // Add environment context to system instruction
       const envContextText = envParts
@@ -853,10 +863,17 @@ export class GeminiClient {
     const modelToUse = model;
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = await getCoreSystemPromptAsync(
+      const providerName =
+        this.config
+          .getContentGeneratorConfig()
+          ?.providerManager?.getActiveProviderName() ||
+        this.config.getProvider() ||
+        'gemini';
+      const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
-        modelToUse,
-      );
+        model: modelToUse,
+        provider: providerName,
+      });
       const requestConfig = {
         abortSignal,
         ...this.generateContentConfig,
@@ -990,10 +1007,17 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = await getCoreSystemPromptAsync(
+      const providerName =
+        this.config
+          .getContentGeneratorConfig()
+          ?.providerManager?.getActiveProviderName() ||
+        this.config.getProvider() ||
+        'gemini';
+      const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
-        modelToUse,
-      );
+        model: modelToUse,
+        provider: providerName,
+      });
 
       const requestConfig = {
         abortSignal,

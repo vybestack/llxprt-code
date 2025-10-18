@@ -33,7 +33,7 @@ Include plan/requirement annotations within the report.
 
 ```bash
 npm run typecheck
-npm test -- --runTestsByPath packages/core/src/runtime/__tests__/providerRuntimeContext.test.ts
+npx vitest run packages/core/src/runtime/providerRuntimeContext.test.ts
 grep -r "@plan PLAN-20250218-STATELESSPROVIDER.P03" packages/core/src/runtime
 ```
 

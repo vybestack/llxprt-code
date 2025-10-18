@@ -9,7 +9,7 @@ import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { AuthType, Config, getErrorMessage } from '@vybestack/llxprt-code-core';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { getCliProviderManager } from '../../runtime/runtimeSettings.js';
 
 export const useAuthCommand = (
   settings: LoadedSettings,
@@ -64,7 +64,7 @@ export const useAuthCommand = (
         }
 
         // Update serverToolsProvider after authentication
-        const providerManager = getProviderManager();
+        const providerManager = getCliProviderManager();
         if (providerManager) {
           const serverToolsProvider = providerManager.getServerToolsProvider();
           if (

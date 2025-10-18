@@ -10,7 +10,7 @@ import {
   ProviderMessage as Message,
   getOpenAIProviderInfo,
 } from '@vybestack/llxprt-code-core';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { getCliRuntimeServices } from '../../runtime/runtimeSettings.js';
 
 // Import OpenAIProviderInfo type from the function return type
 type OpenAIProviderInfo = ReturnType<typeof getOpenAIProviderInfo>;
@@ -29,20 +29,24 @@ export interface UseOpenAIProviderInfoReturn extends OpenAIProviderInfo {
  * @returns OpenAI provider information and helper methods
  */
 export function useOpenAIProviderInfo(
-  config: Config,
+  _config: Config,
 ): UseOpenAIProviderInfoReturn {
   const [providerInfo, setProviderInfo] = useState<OpenAIProviderInfo>(() =>
-    getOpenAIProviderInfo(getProviderManager(config)),
+    getOpenAIProviderInfo(getCliRuntimeServices().providerManager),
   );
 
   const refresh = useCallback(() => {
-    setProviderInfo(getOpenAIProviderInfo(getProviderManager(config)));
-  }, [config]);
+    setProviderInfo(
+      getOpenAIProviderInfo(getCliRuntimeServices().providerManager),
+    );
+  }, []);
 
   // Refresh when config changes or model switches
   useEffect(() => {
     const checkInterval = setInterval(() => {
-      const newInfo = getOpenAIProviderInfo(getProviderManager(config));
+      const newInfo = getOpenAIProviderInfo(
+        getCliRuntimeServices().providerManager,
+      );
 
       // Only update if something changed
       if (
@@ -55,7 +59,7 @@ export function useOpenAIProviderInfo(
     }, 1000); // Check every second
 
     return () => clearInterval(checkInterval);
-  }, [config, providerInfo]);
+  }, [providerInfo]);
 
   const getCachedConversation = useCallback(
     (conversationId: string, parentId: string) => {

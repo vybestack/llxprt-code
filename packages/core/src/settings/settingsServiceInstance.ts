@@ -9,18 +9,70 @@
  */
 
 import { SettingsService } from './SettingsService.js';
+import {
+  clearActiveProviderRuntimeContext,
+  createProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  setProviderRuntimeContextFallback,
+} from '../runtime/providerRuntimeContext.js';
 
 let settingsServiceInstance: SettingsService | null = null;
 
-/**
- * Get or create the global SettingsService singleton instance
- */
-export function getSettingsService(): SettingsService {
+function ensureSingletonSettingsService(): SettingsService {
   if (!settingsServiceInstance) {
     settingsServiceInstance = new SettingsService();
   }
 
   return settingsServiceInstance;
+}
+
+setProviderRuntimeContextFallback(() =>
+  createProviderRuntimeContext({
+    settingsService: ensureSingletonSettingsService(),
+    runtimeId: 'legacy-singleton',
+    metadata: { source: 'singleton-fallback' },
+  }),
+);
+
+/**
+ * Get or create the global SettingsService singleton instance.
+ * Resolves through the currently active ProviderRuntimeContext when present.
+ */
+export function getSettingsService(): SettingsService {
+  const activeContext = peekActiveProviderRuntimeContext();
+  if (activeContext?.settingsService) {
+    settingsServiceInstance = activeContext.settingsService;
+    return activeContext.settingsService;
+  }
+
+  return ensureSingletonSettingsService();
+}
+
+/**
+ * Register an externally created SettingsService with the active runtime context.
+ */
+export function registerSettingsService(
+  settingsService: SettingsService,
+): void {
+  settingsServiceInstance = settingsService;
+
+  const existingContext = peekActiveProviderRuntimeContext();
+  if (existingContext) {
+    setActiveProviderRuntimeContext({
+      ...existingContext,
+      settingsService,
+    });
+    return;
+  }
+
+  setActiveProviderRuntimeContext(
+    createProviderRuntimeContext({
+      settingsService,
+      runtimeId: 'registered-singleton',
+      metadata: { source: 'registerSettingsService' },
+    }),
+  );
 }
 
 /**
@@ -31,4 +83,5 @@ export function resetSettingsService(): void {
     settingsServiceInstance.clear();
   }
   settingsServiceInstance = null;
+  clearActiveProviderRuntimeContext();
 }

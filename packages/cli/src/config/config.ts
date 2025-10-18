@@ -30,6 +30,7 @@ import {
   WriteFileTool,
   MCPServerConfig,
   getSettingsService,
+  SettingsService,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
@@ -528,6 +529,7 @@ export async function loadCliConfig(
   sessionId: string,
   argv: CliArgs,
   cwd: string = process.cwd(),
+  runtimeOverrides: { settingsService?: SettingsService } = {},
 ): Promise<Config> {
   // Handle --load flag early to apply profile settings
   let effectiveSettings = settings;
@@ -555,10 +557,8 @@ export async function loadCliConfig(
       profileModel = argv.provider !== undefined ? undefined : profile.model;
       profileModelParams = profile.modelParams;
 
-      logger.debug(
-        () =>
-          `Loaded profile ${profileToLoad}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`,
-      );
+      const loadSummary = `Loaded profile ${profileToLoad}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`;
+      logger.debug(() => loadSummary);
 
       // Check debug mode for logging
       const tempDebugMode =
@@ -577,9 +577,10 @@ export async function loadCliConfig(
         effectiveSettings = settings;
 
         if (tempDebugMode) {
-          logger.debug(
-            `Skipping profile ephemeral settings because --provider was specified`,
-          );
+          const skipMessage =
+            'Skipping profile ephemeral settings because --provider was specified';
+          logger.debug(skipMessage);
+          console.debug(`[DEBUG] ${skipMessage}`);
         }
       } else {
         effectiveSettings = {
@@ -589,12 +590,20 @@ export async function loadCliConfig(
       }
 
       if (tempDebugMode) {
-        logger.debug(
-          `Loaded profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
-        );
+        console.debug(loadSummary);
+        const detailedSummary = `Loaded profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`;
+        logger.debug(detailedSummary);
+        console.debug(detailedSummary);
       }
     } catch (error) {
-      logger.error(`Failed to load profile '${profileToLoad}': ${error}`);
+      const failureSummary = `Failed to load profile '${profileToLoad}': ${error instanceof Error ? error.message : String(error)}`;
+      logger.error(() => {
+        if (error instanceof Error && error.stack) {
+          return `${failureSummary}\n${error.stack}`;
+        }
+        return failureSummary;
+      });
+      console.error(failureSummary);
       // Continue without the profile settings
     }
   }
@@ -913,7 +922,19 @@ export async function loadCliConfig(
 
   // Apply emojifilter setting from settings.json to SettingsService
   // Only set if there isn't already an ephemeral setting (from /set command)
-  const settingsService = getSettingsService();
+  const settingsService =
+    runtimeOverrides.settingsService ?? getSettingsService();
+  if (!runtimeOverrides.settingsService) {
+    /**
+     * @plan:PLAN-20250218-STATELESSPROVIDER.P06
+     * @requirement:REQ-SP-005
+     * Fallback path maintained temporarily until remaining entrypoints adopt
+     * runtime helpers. Remove once all callers supply a scoped SettingsService.
+     */
+    logger.warn(
+      '[cli-runtime] loadCliConfig called without runtime SettingsService override; falling back to singleton instance (deprecated).',
+    );
+  }
   if (effectiveSettings.emojifilter && !settingsService.get('emojifilter')) {
     settingsService.set('emojifilter', effectiveSettings.emojifilter);
   }
@@ -1059,3 +1080,11 @@ export function loadEnvironment(): void {
     dotenv.config({ path: envFilePath, quiet: true });
   }
 }
+
+export {
+  getCliRuntimeConfig,
+  getCliRuntimeServices,
+  getCliProviderManager,
+  getActiveProviderStatus,
+  listProviders as listRuntimeProviders,
+} from '../runtime/runtimeSettings.js';

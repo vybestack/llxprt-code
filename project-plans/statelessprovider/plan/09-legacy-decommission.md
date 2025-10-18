@@ -37,7 +37,7 @@
 
 - `packages/core/test/settings/SettingsService.spec.ts`
   - Ensure tests construct services via factory helpers.
-- `packages/core/src/providers/__tests__/providerInterface.compat.test.ts`
+- `packages/core/src/providers/providerInterface.compat.test.ts`
   - Remove legacy-path assertions; keep context-based tests.
 - `packages/cli/src/integration-tests/*`
   - Clean up expectations referencing removed APIs.

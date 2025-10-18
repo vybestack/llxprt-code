@@ -18,7 +18,7 @@
   - Implement helper functions for provider/model/profile operations backed by the injected `SettingsService` and `Config`.
   - Provide typings for runtime context consumption on the CLI side.
   - Include instrumentation (debug logging hooks) consistent with existing CLI conventions.
-- `packages/cli/src/runtime/__tests__/runtimeSettings.test.ts`
+- `packages/cli/src/runtime/runtimeSettings.test.ts`
   - Cover provider switch, model change, profile load/save, key/base-url updates.
 
 ### Files to Modify
@@ -43,7 +43,7 @@
   - Read token metrics, model labels, and paid/free mode through the helper layer.
 - `packages/cli/src/ui/commands/aboutCommand.ts`
   - Resolve the active provider/model via runtime helpers rather than direct provider manager imports.
-- `packages/cli/src/ui/containers/__tests__/SessionController.test.tsx` and related UI/component tests
+- `packages/cli/src/ui/containers/SessionController.test.tsx` and related UI/component tests
   - Update mocks to use the runtime helper API instead of direct provider manager spies.
 - `packages/cli/src/ui/{App.test.tsx,App.e2e.test.tsx}`
   - Align test harnesses with the new runtime helper/context wiring.
@@ -66,7 +66,7 @@ Tag updated sections with plan/requirement/pseudocode annotations referencing `c
 
 ```bash
 npm run typecheck
-npm test -- --runTestsByPath packages/cli/src/runtime/__tests__/runtimeSettings.test.ts packages/cli/src/integration-tests/cli-args.integration.test.ts packages/cli/src/integration-tests/model-params-isolation.integration.test.ts packages/cli/src/integration-tests/base-url-behavior.integration.test.ts
+npx vitest run packages/cli/src/runtime/runtimeSettings.test.ts packages/cli/src/integration-tests/cli-args.integration.test.ts packages/cli/src/integration-tests/model-params-isolation.integration.test.ts packages/cli/src/integration-tests/base-url-behavior.integration.test.ts
 ```
 
 ## Manual Verification Checklist
@@ -95,14 +95,14 @@ Phase: P06
 Completed: YYYY-MM-DD HH:MM
 Files Modified:
 - packages/cli/src/runtime/runtimeSettings.ts
-- packages/cli/src/runtime/__tests__/runtimeSettings.test.ts
+- packages/cli/src/runtime/runtimeSettings.test.ts
 - packages/cli/src/gemini.tsx
 - packages/cli/src/config/config.ts
 - packages/cli/src/ui/commands/{modelCommand,providerCommand,profileCommand,setCommand,toolformatCommand,diagnosticsCommand,keyCommand,baseurlCommand}.ts
 - packages/cli/src/providers/providerManagerInstance.ts
 - packages/cli/src/ui/hooks/{useGeminiStream,useProviderDialog,useLoadProfileDialog,useProviderModelDialog,useOpenAIProviderInfo}.ts
 - packages/cli/src/ui/containers/SessionController.tsx
-- packages/cli/src/ui/containers/__tests__/SessionController.test.tsx
+- packages/cli/src/ui/containers/SessionController.test.tsx
 - packages/cli/src/ui/{App.test.tsx,App.e2e.test.tsx}
 - packages/cli/src/ui/App.tsx
 - packages/cli/src/ui/components/{StatsDisplay.tsx,Footer.tsx}

@@ -58,8 +58,14 @@ import { MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import { IdeClient } from '../ide/ide-client.js';
 import { ideContext } from '../ide/ideContext.js';
 import type { Content } from '@google/genai';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import { registerSettingsService } from '../settings/settingsServiceInstance.js';
 import { SettingsService } from '../settings/SettingsService.js';
+import {
+  createProviderRuntimeContext,
+  getActiveProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
 import {
   FileSystemService,
   StandardFileSystemService,
@@ -284,14 +290,14 @@ export interface ConfigParameters {
   enablePromptCompletion?: boolean;
   eventEmitter?: EventEmitter;
   useSmartEdit?: boolean;
+  settingsService?: SettingsService;
 }
 
 export class Config {
   private toolRegistry!: ToolRegistry;
   private promptRegistry!: PromptRegistry;
   private readonly sessionId: string;
-  // Line 80: Get service instance
-  private settingsService = getSettingsService();
+  private readonly settingsService: SettingsService;
   private fileSystemService: FileSystemService;
   private contentGeneratorConfig!: ContentGeneratorConfig;
   private readonly embeddingModel: string;
@@ -381,6 +387,42 @@ export class Config {
   private readonly useSmartEdit: boolean;
 
   constructor(params: ConfigParameters) {
+    const providedSettingsService = params.settingsService;
+    if (providedSettingsService) {
+      registerSettingsService(providedSettingsService);
+    }
+
+    const existingContext = peekActiveProviderRuntimeContext();
+    if (providedSettingsService) {
+      this.settingsService = providedSettingsService;
+    } else if (existingContext?.settingsService) {
+      this.settingsService = existingContext.settingsService;
+    } else {
+      this.settingsService = getActiveProviderRuntimeContext().settingsService;
+    }
+
+    const currentContext = peekActiveProviderRuntimeContext();
+    if (!currentContext) {
+      setActiveProviderRuntimeContext(
+        createProviderRuntimeContext({
+          settingsService: this.settingsService,
+          config: this,
+          runtimeId: providedSettingsService
+            ? 'injected-config'
+            : 'legacy-config',
+          metadata: { source: 'ConfigConstructor' },
+        }),
+      );
+    } else if (
+      currentContext.settingsService === this.settingsService &&
+      currentContext.config !== this
+    ) {
+      setActiveProviderRuntimeContext({
+        ...currentContext,
+        config: this,
+      });
+    }
+
     this.sessionId = params.sessionId;
     this.embeddingModel =
       params.embeddingModel ?? DEFAULT_GEMINI_EMBEDDING_MODEL;

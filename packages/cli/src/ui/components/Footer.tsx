@@ -19,7 +19,7 @@ import {
 import { ConsoleSummaryDisplay } from './ConsoleSummaryDisplay.js';
 import process from 'node:process';
 import Gradient from 'ink-gradient';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { getActiveProviderStatus } from '../../runtime/runtimeSettings.js';
 import { DebugProfiler } from './DebugProfiler.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { truncateMiddle } from '../utils/responsive.js';
@@ -418,11 +418,8 @@ export const Footer = React.memo<FooterProps>(
               {/* Show paid/free mode for Gemini provider */}
               {isPaidMode !== undefined &&
                 (() => {
-                  const providerManager = getProviderManager();
-                  const activeProvider = providerManager?.getActiveProvider?.();
-                  const isGeminiProvider = activeProvider?.name === 'gemini';
-
-                  if (isGeminiProvider) {
+                  const status = getActiveProviderStatus();
+                  if (status.providerName === 'gemini') {
                     return (
                       <>
                         {showModelName && (

@@ -5,11 +5,16 @@
  */
 
 import { useCallback, useState } from 'react';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { IModel } from '../../providers/index.js';
+import type { IModel } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
+import {
+  listAvailableModels,
+  getActiveModelName,
+  setActiveModel,
+  getActiveProviderStatus,
+} from '../../runtime/runtimeSettings.js';
 
 interface UseProviderModelDialogParams {
   addMessage: (msg: {
@@ -33,10 +38,9 @@ export const useProviderModelDialog = ({
 
   const openDialog = useCallback(async () => {
     try {
-      const provider = getProviderManager().getActiveProvider();
-      const list = await provider.getModels();
+      const list = await listAvailableModels();
       setModels(list);
-      setCurrentModel(provider.getCurrentModel?.() ?? '');
+      setCurrentModel(getActiveModelName());
       appDispatch({ type: 'OPEN_DIALOG', payload: 'providerModel' });
     } catch (e) {
       addMessage({
@@ -53,21 +57,20 @@ export const useProviderModelDialog = ({
   );
 
   const handleSelect = useCallback(
-    (modelId: string) => {
+    async (modelId: string) => {
       try {
-        const provider = getProviderManager().getActiveProvider();
-        const prev = provider.getCurrentModel?.() ?? '';
-        provider.setModel?.(modelId);
+        const result = await setActiveModel(modelId);
         addMessage({
           type: MessageType.INFO,
-          content: `Switched from ${prev} to ${modelId} in provider '${provider.name}'`,
+          content: `Switched from ${result.previousModel ?? 'unknown'} to ${result.nextModel} in provider '${result.providerName}'`,
           timestamp: new Date(),
         });
         onModelChange?.();
       } catch (e) {
+        const status = getActiveProviderStatus();
         addMessage({
           type: MessageType.ERROR,
-          content: `Failed to switch model: ${e instanceof Error ? e.message : String(e)}`,
+          content: `Failed to switch model for provider '${status.providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
           timestamp: new Date(),
         });
       }

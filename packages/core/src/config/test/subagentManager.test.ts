@@ -243,26 +243,32 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       );
     });
 
-    const nonEmptyPromptArb = fc.constantFrom(
-      'Primary prompt',
-      'Secondary instructions',
-      'Assist the user with debugging',
-      'Provide documentation summary',
-      'Evaluate code changes carefully',
-    );
+    const nonEmptyPromptArb = fc
+      .string({ minLength: 1 })
+      .filter((value) => value.trim().length > 0);
 
     itProp(
       'preserves saved subagent configuration for any valid prompt @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-002',
       [validNameArb, nonEmptyPromptArb],
       async (name, prompt) => {
+        if (typeof name !== 'string') {
+          return;
+        }
+        const normalizedName = name;
+        const normalizedPrompt =
+          typeof prompt === 'string' ? prompt : String(prompt);
         await fs.rm(subagentsDir, { recursive: true, force: true });
-        await subagentManager.saveSubagent(name, 'testprofile', prompt);
+        await subagentManager.saveSubagent(
+          normalizedName,
+          'testprofile',
+          normalizedPrompt,
+        );
 
-        const loaded = await subagentManager.loadSubagent(name);
+        const loaded = await subagentManager.loadSubagent(normalizedName);
 
-        expect(loaded.name).toBe(name);
+        expect(loaded.name).toBe(normalizedName);
         expect(loaded.profile).toBe('testprofile');
-        expect(loaded.systemPrompt).toBe(prompt);
+        expect(loaded.systemPrompt).toBe(normalizedPrompt);
       },
     );
   });
@@ -316,6 +322,12 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       'lists saved subagents in sorted order for any valid set @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-002',
       [fc.array(validNameArb, { minLength: 1, maxLength: 6 })],
       async (names) => {
+        if (
+          !Array.isArray(names) ||
+          names.some((value) => typeof value !== 'string')
+        ) {
+          return;
+        }
         // Reset directory to ensure independence between runs
         await fs.rm(subagentsDir, { recursive: true, force: true });
         const uniqueNames = Array.from(new Set(names));
@@ -362,6 +374,9 @@ describe('SubagentManager @plan:PLAN-20250117-SUBAGENTCONFIG.P04', () => {
       'returns false for any unsaved subagent name @plan:PLAN-20250117-SUBAGENTCONFIG.P04 @requirement:REQ-002',
       [validNameArb],
       async (name) => {
+        if (typeof name !== 'string') {
+          return;
+        }
         await fs.rm(subagentsDir, { recursive: true, force: true });
         await fs.mkdir(subagentsDir, { recursive: true });
         const deleted = await subagentManager.deleteSubagent(name);

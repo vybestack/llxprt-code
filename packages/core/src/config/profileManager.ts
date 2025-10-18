@@ -5,7 +5,7 @@
  */
 
 import { Profile } from '../types/modelParams.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import type { SettingsService } from '../settings/SettingsService.js';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -156,9 +156,17 @@ export class ProfileManager {
    * Save current settings to a profile through SettingsService
    * @param profileName The name of the profile to save
    */
-  async save(profileName: string): Promise<void> {
-    const settingsService = getSettingsService();
-
+  /**
+   * @plan:PLAN-20250218-STATELESSPROVIDER.P07
+   * @requirement:REQ-SP-005
+   * Persist profile data through the injected SettingsService instead of the
+   * legacy singleton accessor.
+   * @pseudocode:cli-runtime.md lines 9-11
+   */
+  async save(
+    profileName: string,
+    settingsService: SettingsService,
+  ): Promise<void> {
     // Use SettingsService to export current settings
     if (!settingsService.exportForProfile) {
       throw new Error('SettingsService does not support profile export');
@@ -197,9 +205,16 @@ export class ProfileManager {
    * Load a profile and apply through SettingsService
    * @param profileName The name of the profile to load
    */
-  async load(profileName: string): Promise<void> {
-    const settingsService = getSettingsService();
-
+  /**
+   * @plan:PLAN-20250218-STATELESSPROVIDER.P07
+   * @requirement:REQ-SP-005
+   * Apply profiles via the injected SettingsService rather than the singleton.
+   * @pseudocode:cli-runtime.md lines 9-11
+   */
+  async load(
+    profileName: string,
+    settingsService: SettingsService,
+  ): Promise<void> {
     // Load profile from file
     const profile = await this.loadProfile(profileName);
 

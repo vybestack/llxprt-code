@@ -16,6 +16,7 @@ This documentation is organized into the following sections:
   - **[CLI Introduction](./cli/index.md):** Overview of the command-line interface.
   - **[Commands](./cli/commands.md):** Description of available CLI commands.
   - **[Configuration](./cli/configuration.md):** Information on configuring the CLI.
+  - **[Runtime helper APIs](./cli/runtime-helpers.md):** Reference for runtime-scoped helper functions.
   - **[Authentication](./cli/authentication.md):** Set up authentication for various providers.
   - **[OAuth Setup](./oauth-setup.md):** Configure OAuth authentication for providers.
   - **[Provider Configuration](./cli/providers.md):** Configure and manage LLM providers.
@@ -33,6 +34,8 @@ This documentation is organized into the following sections:
   - **[Telemetry Privacy](./telemetry-privacy.md):** Privacy information for telemetry.
 - **Core Details:** Documentation for `packages/core`.
   - **[Core Introduction](./core/index.md):** Overview of the core component.
+  - **[Provider runtime context](./core/provider-runtime-context.md):** Manage `ProviderRuntimeContext` lifecycles.
+  - **[Provider interface](./core/provider-interface.md):** Implement providers against the stateless runtime.
   - **[Tools API](./core/tools-api.md):** Information on how the core manages and exposes tools.
   - **[Memory Import Processor](./core/memport.md):** Modular LLXPRT.md import feature.
 - **Tools:**
@@ -49,8 +52,10 @@ This documentation is organized into the following sections:
   - **[Shell Replacement](./shell-replacement.md):** Command substitution in shell commands.
   - **[Contributing & Development Guide](../CONTRIBUTING.md):** Information for contributors and developers.
   - **[NPM Workspaces and Publishing](./npm.md):** Details on how the project's packages are managed and published.
+  - **[Release notes: Stateless Provider](./release-notes/stateless-provider.md):** Summary of new runtime features, breaking changes, and validation steps.
   - **[Troubleshooting Guide](./troubleshooting.md):** Find solutions to common problems and FAQs.
   - **[Migration from Gemini CLI](./gemini-cli-tips.md):** Guide for users migrating from Gemini CLI.
+  - **[Stateless provider migration](./migration/stateless-provider.md):** Upgrade guide for the new provider runtime model.
   - **[Terms of Service and Privacy Notice](./tos-privacy.md):** Information on the terms of service and privacy notices.
 
 We hope this documentation helps you make the most of the LLxprt Code!

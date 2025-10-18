@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { NotYetImplemented } from '../../utils/errors.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import { createProviderWithRuntime as createProviderWithRuntimeHelper } from '../../test-utils/runtime.js';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -48,6 +49,46 @@ vi.mock('openai', () => ({
 describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
   let mockOAuthManager: MockOAuthManager;
   let originalEnv: NodeJS.ProcessEnv;
+  const createProviderWithRuntime = (
+    options: {
+      cliKey?: string | null;
+      baseUrl?: string;
+      providerConfig?: typeof TEST_PROVIDER_CONFIG;
+      oauthManager?: MockOAuthManager;
+    } = {},
+  ): OpenAIProvider => {
+    const {
+      cliKey,
+      baseUrl,
+      providerConfig = TEST_PROVIDER_CONFIG,
+      oauthManager = mockOAuthManager,
+    } = options;
+
+    const { provider } = createProviderWithRuntimeHelper<OpenAIProvider>(
+      ({ settingsService }) => {
+        if (cliKey !== undefined) {
+          if (cliKey && cliKey.trim() !== '') {
+            settingsService.set('auth-key', cliKey);
+          } else {
+            settingsService.set('auth-key', undefined);
+          }
+        }
+
+        return new OpenAIProvider(
+          cliKey ?? '',
+          baseUrl,
+          providerConfig,
+          oauthManager,
+        );
+      },
+      {
+        runtimeId: 'openai.oauth.spec.runtime',
+        metadata: { source: 'openai-oauth.spec.ts' },
+      },
+    );
+
+    return provider;
+  };
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -57,8 +98,8 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
     const { getSettingsService } = await import(
       '../../settings/settingsServiceInstance.js'
     );
-    const settingsService = getSettingsService();
-    settingsService.clear();
+    const globalSettingsService = getSettingsService();
+    globalSettingsService.clear();
 
     // Clear OPENAI_API_KEY for OAuth tests to work properly
     delete process.env.OPENAI_API_KEY;
@@ -90,13 +131,8 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       process.env.OPENAI_API_KEY = 'env-key-456';
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-789');
 
-      // When: Creating provider with CLI key and OAuth manager
-      const provider = new OpenAIProvider(
-        cliApiKey,
-        undefined,
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      // When: Creating provider with CLI key stored in runtime settings
+      const provider = createProviderWithRuntime({ cliKey: cliApiKey });
 
       // Then: Should be authenticated (using CLI API key with highest precedence)
       const isAuthenticated = await provider.isAuthenticated();
@@ -120,12 +156,7 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-789');
 
       // When: Creating provider without CLI key
-      const provider = new OpenAIProvider(
-        '', // Empty CLI key
-        undefined,
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      const provider = createProviderWithRuntime();
 
       // Then: Should be authenticated (using environment variable with second precedence)
       const isAuthenticated = await provider.isAuthenticated();
@@ -148,12 +179,7 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-789');
 
       // When: Creating provider without CLI key or env var (defaults to standard OpenAI endpoint)
-      const provider = new OpenAIProvider(
-        '', // Empty CLI key
-        undefined, // Will default to standard OpenAI endpoint - does not support OAuth
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      const provider = createProviderWithRuntime();
 
       // Then: Should not be authenticated (OAuth not supported for standard OpenAI endpoints)
       const isAuthenticated = await provider.isAuthenticated();
@@ -176,12 +202,7 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
 
       // When: Creating provider without any auth (defaults to standard OpenAI endpoint)
-      const provider = new OpenAIProvider(
-        '', // Empty CLI key
-        undefined, // Will default to standard OpenAI endpoint
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      const provider = createProviderWithRuntime();
 
       // Then: Should not be authenticated (no auth available, and OAuth not supported for standard OpenAI)
       const isAuthenticated = await provider.isAuthenticated();
@@ -216,12 +237,7 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       ).isOAuthEnabled = mockIsOAuthEnabled;
 
       // When: Creating provider and checking authentication (simulating API call prep)
-      const provider = new OpenAIProvider(
-        '', // Empty CLI key
-        qwenBaseUrl, // Qwen endpoint allows OAuth
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      const provider = createProviderWithRuntime({ baseUrl: qwenBaseUrl });
 
       // Then: Should be authenticated through lazy OAuth triggering
       const isAuthenticated = await provider.isAuthenticated();
@@ -245,12 +261,10 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(oauthToken);
 
       // When: Creating provider with both API key and OAuth available
-      const provider = new OpenAIProvider(
-        apiKey,
-        'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      const provider = createProviderWithRuntime({
+        cliKey: apiKey,
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      });
 
       // Then: Should use API key without calling OAuth manager
       const isAuthenticated = await provider.isAuthenticated();
@@ -273,12 +287,9 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(oauthToken);
 
       // When: Using OAuth token for Qwen endpoint
-      const provider = new OpenAIProvider(
-        '',
-        'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      const provider = createProviderWithRuntime({
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      });
 
       // Then: Should be authenticated with OAuth token available for SDK usage
       const isAuthenticated = await provider.isAuthenticated();
@@ -546,12 +557,10 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const apiKey = 'traditional-api-key-123';
 
       // When: Creating provider without OAuth manager
-      const provider = new OpenAIProvider(
-        apiKey,
-        undefined,
-        TEST_PROVIDER_CONFIG,
-        undefined, // No OAuth manager
-      );
+      const provider = createProviderWithRuntime({
+        cliKey: apiKey,
+        oauthManager: undefined,
+      });
 
       // Then: Should work exactly as before - provider should be authenticated with API key
       const isAuthenticated = await provider.isAuthenticated();
@@ -601,12 +610,10 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token');
 
       // When: Checking status with multiple auth sources
-      const provider = new OpenAIProvider(
-        apiKey,
-        undefined,
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      const provider = createProviderWithRuntime({
+        cliKey: apiKey,
+        oauthManager: mockOAuthManager,
+      });
 
       // Then: Should return true (uses precedence - API key first)
       const isAuthenticated = await provider.isAuthenticated();

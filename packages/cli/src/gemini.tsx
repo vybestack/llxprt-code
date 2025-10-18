@@ -26,7 +26,6 @@ import {
   SettingScope,
 } from './config/settings.js';
 import {
-  getSettingsService,
   Config,
   sessionId,
   AuthType,
@@ -35,6 +34,7 @@ import {
   FatalConfigError,
   uiTelemetryService,
   // IDE connection logging removed - telemetry disabled in llxprt
+  SettingsService,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -50,7 +50,7 @@ import {
 import { getCliVersion } from './utils/version.js';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
-import { getProviderManager } from './providers/providerManagerInstance.js';
+import { createProviderManager } from './providers/providerManagerInstance.js';
 import {
   setProviderApiKey,
   setProviderBaseUrl,
@@ -62,6 +62,15 @@ import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
+import {
+  registerCliProviderInfrastructure,
+  setCliRuntimeContext,
+  switchActiveProvider,
+  setActiveModel,
+  setActiveModelParam,
+  clearActiveModelParam,
+  getActiveModelParams,
+} from './runtime/runtimeSettings.js';
 import { writeFileSync } from 'node:fs';
 
 export function validateDnsResolutionOrder(
@@ -310,12 +319,29 @@ export async function main() {
     console.debug = console.error;
   }
   const extensions = loadExtensions(workspaceRoot);
+
+  /**
+   * @plan:PLAN-20250218-STATELESSPROVIDER.P06
+   * @requirement:REQ-SP-005
+   * Seed the CLI runtime context with a scoped SettingsService before Config
+   * construction, mirroring pseudocode/cli-runtime.md:2-5.
+   */
+  const runtimeSettingsService = new SettingsService();
+  setCliRuntimeContext(runtimeSettingsService, undefined, {
+    metadata: { source: 'cli-bootstrap', stage: 'pre-config' },
+  });
+
   const config = await loadCliConfig(
     settings.merged,
     extensions,
     sessionId,
     argv,
+    process.cwd(),
+    { settingsService: runtimeSettingsService },
   );
+  setCliRuntimeContext(runtimeSettingsService, config, {
+    metadata: { source: 'cli-bootstrap', stage: 'post-config' },
+  });
 
   if (argv.sessionSummary) {
     registerCleanup(() => {
@@ -334,8 +360,16 @@ export async function main() {
   consolePatcher.patch();
   registerCleanup(consolePatcher.cleanup);
 
-  const providerManager = getProviderManager(config, false, settings);
-  config.setProviderManager(providerManager);
+  const { manager: providerManager, oauthManager } = createProviderManager(
+    {
+      settingsService: runtimeSettingsService,
+      config,
+      runtimeId: 'cli.providerManager',
+      metadata: { source: 'cli.getProviderManager' },
+    },
+    { config, allowBrowserEnvironment: false, settings },
+  );
+  registerCliProviderInfrastructure(providerManager, oauthManager);
 
   // Initialize git stats service for tracking file changes when logging is enabled
   if (config.getConversationLoggingEnabled()) {
@@ -429,10 +463,8 @@ export async function main() {
   const configProvider = config.getProvider();
   if (configProvider) {
     try {
-      await providerManager.setActiveProvider(configProvider);
+      await switchActiveProvider(configProvider);
 
-      // Set the model after activating provider
-      // If no model specified, use the provider's default
       const activeProvider = providerManager.getActiveProvider();
       let configModel = config.getModel();
 
@@ -444,15 +476,8 @@ export async function main() {
         configModel = activeProvider.getDefaultModel();
       }
 
-      if (configModel && activeProvider.setModel) {
-        activeProvider.setModel(configModel);
-        // Also update the config with the resolved model
-        const settingsService = getSettingsService();
-        settingsService.setProviderSetting(
-          configProvider,
-          'model',
-          configModel,
-        );
+      if (configModel && configModel !== 'placeholder-model') {
+        await setActiveModel(configModel);
       }
 
       // Apply profile model params if loaded AND provider was NOT specified via CLI
@@ -464,11 +489,17 @@ export async function main() {
         configWithProfile._profileModelParams &&
         activeProvider
       ) {
-        if (
-          'setModelParams' in activeProvider &&
-          activeProvider.setModelParams
-        ) {
-          activeProvider.setModelParams(configWithProfile._profileModelParams);
+        const profileParams = configWithProfile._profileModelParams;
+        const existingParams = getActiveModelParams();
+
+        for (const [key, value] of Object.entries(profileParams)) {
+          setActiveModelParam(key, value);
+        }
+
+        for (const key of Object.keys(existingParams)) {
+          if (!(key in profileParams)) {
+            clearActiveModelParam(key);
+          }
         }
       }
 
@@ -482,19 +513,21 @@ export async function main() {
 
         // Only apply profile auth settings if no CLI auth args were provided
         if (!argv.key && !argv.keyfile) {
-          if (authKey && activeProvider.setApiKey) {
-            activeProvider.setApiKey(authKey);
-          } else if (authKeyfile && activeProvider.setApiKey) {
-            // Load API key from file
+          if (authKey) {
+            const result = await setProviderApiKey(authKey);
+            if (config.getDebugMode()) {
+              console.debug(result.message);
+            }
+          } else if (authKeyfile) {
             try {
-              const apiKey = (
-                await fs.readFile(
-                  authKeyfile.replace(/^~/, os.homedir()),
-                  'utf-8',
-                )
-              ).trim();
+              const resolvedPath = authKeyfile.replace(/^~/, os.homedir());
+              const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
               if (apiKey) {
-                activeProvider.setApiKey(apiKey);
+                const result = await setProviderApiKey(apiKey);
+                config.setEphemeralSetting('auth-keyfile', resolvedPath);
+                if (config.getDebugMode()) {
+                  console.debug(result.message);
+                }
               }
             } catch (error) {
               console.error(
@@ -507,13 +540,11 @@ export async function main() {
         }
 
         // Only apply profile base URL if not overridden by CLI
-        if (
-          !argv.baseurl &&
-          baseUrl &&
-          baseUrl !== 'none' &&
-          activeProvider.setBaseUrl
-        ) {
-          activeProvider.setBaseUrl(baseUrl);
+        if (!argv.baseurl && baseUrl !== undefined) {
+          const result = await setProviderBaseUrl(baseUrl);
+          if (!result.success && config.getDebugMode()) {
+            console.debug(result.message);
+          }
         }
       }
 
@@ -537,19 +568,21 @@ export async function main() {
 
       // Only apply profile auth settings if no CLI auth args were provided
       if (!argv.key && !argv.keyfile) {
-        if (authKey && activeProvider.setApiKey) {
-          activeProvider.setApiKey(authKey);
-        } else if (authKeyfile && activeProvider.setApiKey) {
-          // Load API key from file
+        if (authKey) {
+          const result = await setProviderApiKey(authKey);
+          if (config.getDebugMode()) {
+            console.debug(result.message);
+          }
+        } else if (authKeyfile) {
           try {
-            const apiKey = (
-              await fs.readFile(
-                authKeyfile.replace(/^~/, os.homedir()),
-                'utf-8',
-              )
-            ).trim();
+            const resolvedPath = authKeyfile.replace(/^~/, os.homedir());
+            const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
             if (apiKey) {
-              activeProvider.setApiKey(apiKey);
+              const result = await setProviderApiKey(apiKey);
+              config.setEphemeralSetting('auth-keyfile', resolvedPath);
+              if (config.getDebugMode()) {
+                console.debug(result.message);
+              }
             }
           } catch (error) {
             console.error(
@@ -562,13 +595,11 @@ export async function main() {
       }
 
       // Only apply profile base URL if not overridden by CLI
-      if (
-        !argv.baseurl &&
-        baseUrl &&
-        baseUrl !== 'none' &&
-        activeProvider.setBaseUrl
-      ) {
-        activeProvider.setBaseUrl(baseUrl);
+      if (!argv.baseurl && baseUrl !== undefined) {
+        const result = await setProviderBaseUrl(baseUrl);
+        if (!result.success && config.getDebugMode()) {
+          console.debug(result.message);
+        }
       }
 
       // Apply profile model params if loaded
@@ -577,10 +608,20 @@ export async function main() {
       };
       if (
         configWithProfile._profileModelParams &&
-        'setModelParams' in activeProvider &&
-        activeProvider.setModelParams
+        Object.keys(configWithProfile._profileModelParams).length > 0
       ) {
-        activeProvider.setModelParams(configWithProfile._profileModelParams);
+        const profileParams = configWithProfile._profileModelParams;
+        const existingParams = getActiveModelParams();
+
+        for (const [key, value] of Object.entries(profileParams)) {
+          setActiveModelParam(key, value);
+        }
+
+        for (const key of Object.keys(existingParams)) {
+          if (!(key in profileParams)) {
+            clearActiveModelParam(key);
+          }
+        }
       }
     }
   }
@@ -591,12 +632,7 @@ export async function main() {
 
     // Handle --key
     if (argv.key) {
-      const result = await setProviderApiKey(
-        providerManager,
-        settings,
-        argv.key,
-        config,
-      );
+      const result = await setProviderApiKey(argv.key);
       if (!result.success) {
         console.error(chalk.red(result.message));
         process.exit(1);
@@ -619,12 +655,7 @@ export async function main() {
           process.exit(1);
         }
 
-        const result = await setProviderApiKey(
-          providerManager,
-          settings,
-          trimmedKey,
-          config,
-        );
+        const result = await setProviderApiKey(trimmedKey);
 
         if (!result.success) {
           console.error(chalk.red(result.message));
@@ -654,11 +685,7 @@ export async function main() {
 
     // Handle --baseurl
     if (argv.baseurl) {
-      const result = await setProviderBaseUrl(
-        providerManager,
-        settings,
-        argv.baseurl,
-      );
+      const result = await setProviderBaseUrl(argv.baseurl);
       if (!result.success) {
         console.error(chalk.red(result.message));
         process.exit(1);

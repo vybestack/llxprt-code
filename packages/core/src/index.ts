@@ -151,6 +151,10 @@ export type {
 } from './providers/types.js';
 // Export the actual interfaces too
 export * from './providers/IProvider.js';
+export type {
+  GenerateChatOptions,
+  ProviderToolset,
+} from './providers/IProvider.js';
 export * from './providers/ITool.js';
 export * from './providers/IModel.js';
 export * from './providers/IProviderManager.js';
@@ -193,6 +197,7 @@ export { SettingsService } from './settings/SettingsService.js';
 export {
   getSettingsService,
   resetSettingsService,
+  registerSettingsService,
 } from './settings/settingsServiceInstance.js';
 export type {
   ISettingsService,
@@ -205,6 +210,16 @@ export type {
   EventUnsubscribe,
 } from './settings/types.js';
 export type { TelemetrySettings as SettingsTelemetrySettings } from './settings/types.js';
+
+export {
+  createProviderRuntimeContext,
+  getActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
+  setProviderRuntimeContextFallback,
+} from './runtime/providerRuntimeContext.js';
+export type { ProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
 
 // Export emoji filter system
 export { EmojiFilter } from './filters/EmojiFilter.js';

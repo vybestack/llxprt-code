@@ -14,6 +14,12 @@ import {
   getSettingsService,
   resetSettingsService,
 } from '../settings/settingsServiceInstance.js';
+import type { SettingsService } from '../settings/SettingsService.js';
+import {
+  createProviderRuntimeContext,
+  getActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
 
 // Mock fs module
 vi.mock('node:fs/promises', () => ({
@@ -453,6 +459,67 @@ describe('AuthPrecedenceResolver', () => {
       const result = await resolver.resolveAuthentication();
       expect(result).toBe('new-oauth-token');
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+    });
+  });
+
+  describe('Injected SettingsService', () => {
+    let originalContext: ReturnType<
+      typeof getActiveProviderRuntimeContext
+    > | null;
+
+    const createStubSettingsService = (
+      values: Record<string, unknown>,
+    ): SettingsService =>
+      ({
+        get: vi.fn((key: string) => values[key]),
+        set: vi.fn((key: string, value: unknown) => {
+          values[key] = value;
+        }),
+      }) as unknown as SettingsService;
+
+    beforeEach(() => {
+      try {
+        originalContext = getActiveProviderRuntimeContext();
+      } catch {
+        originalContext = null;
+      }
+    });
+
+    afterEach(() => {
+      if (originalContext) {
+        setActiveProviderRuntimeContext(originalContext);
+      }
+    });
+
+    it('uses the SettingsService injected via constructor', async () => {
+      const injected = createStubSettingsService({
+        'auth-key': 'injected-key',
+      });
+      const resolver = new AuthPrecedenceResolver(
+        {},
+        mockOAuthManager,
+        injected,
+      );
+
+      const result = await resolver.resolveAuthentication();
+      expect(result).toBe('injected-key');
+      expect(injected.get).toHaveBeenCalledWith('auth-key');
+    });
+
+    it('falls back to the active runtime context when no service is injected', async () => {
+      const runtimeService = createStubSettingsService({
+        'auth-key': 'runtime-key',
+      });
+      const runtimeContext = createProviderRuntimeContext({
+        settingsService: runtimeService,
+      });
+      setActiveProviderRuntimeContext(runtimeContext);
+
+      const resolver = new AuthPrecedenceResolver({}, mockOAuthManager);
+      const result = await resolver.resolveAuthentication();
+
+      expect(result).toBe('runtime-key');
+      expect(runtimeService.get).toHaveBeenCalledWith('auth-key');
     });
   });
 });

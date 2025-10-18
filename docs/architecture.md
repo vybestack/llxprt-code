@@ -49,14 +49,15 @@ A typical interaction with the LLxprt Code follows this flow:
 
 ## Provider System Architecture
 
-LLxprt Code's multi-provider architecture enables seamless switching between different LLM providers. This system is built on several key components:
+LLxprt Code's stateless multi-provider architecture enables seamless switching between different LLM providers while giving each runtime (CLI session, subagent, automation harness) an isolated state envelope. This system is built on several key components:
 
 ### Provider Registry
 
 The provider registry (`packages/core/src/providers/`) maintains a collection of provider implementations:
 
-- **Provider Interface:** Each provider implements a common interface for generating completions, handling streaming, and managing tool calls
-- **Dynamic Loading:** Providers are loaded on-demand when selected via `/provider` command or CLI arguments
+- **Provider Interface:** Each provider implements a common interface for generating completions, handling streaming, and managing tool calls.
+- **Runtime Binding:** Providers receive a `ProviderRuntimeContext` instance when they are invoked, giving access to runtime-specific configuration, logging, and telemetry without relying on global singletons.
+- **Dynamic Loading:** Providers are loaded on-demand when selected via `/provider` command, CLI arguments, or subagent configuration.
 - **Provider Types:**
   - `gemini`: Google Gemini models (default)
   - `openai`: OpenAI GPT models with Responses API support
@@ -69,10 +70,65 @@ The provider registry (`packages/core/src/providers/`) maintains a collection of
 
 The provider system supports multiple switching mechanisms:
 
-1. **Runtime Switching:** `/provider <name>` command changes the active provider
-2. **Model Selection:** `/model <name>` switches models within the current provider
-3. **API Key Management:** `/key` and `/keyfile` commands set provider credentials
-4. **Base URL Override:** `/baseurl` allows custom endpoints (local LLMs, proxies)
+1. **Runtime Switching:** `/provider <name>` command changes the active provider for the current runtime context without touching other contexts.
+2. **Model Selection:** `/model <name>` switches models within the current provider.
+3. **API Key Management:** `/key` and `/keyfile` commands set provider credentials that are stored on a per-runtime `SettingsService`.
+4. **Base URL Override:** `/baseurl` allows custom endpoints (local LLMs, proxies) scoped to the active runtime.
+
+### Stateless Provider Runtime
+
+The stateless provider runtime is centred around `ProviderRuntimeContext`, a lightweight container that bundles the `SettingsService`, telemetry emitters, logging channels, and contextual metadata for a single request pipeline. Contexts are created with `createProviderRuntimeContext` and registered with `setActiveProviderRuntimeContext`, and they can be nested or swapped without leaking state between callers.
+
+```mermaid
+flowchart LR
+    CLI[CLI Session] -->|createProviderRuntimeContext| R1((Runtime A))
+    Subagent1[Build Subagent] -->|createProviderRuntimeContext| R2((Runtime B))
+    Subagent2[Test Subagent] -->|createProviderRuntimeContext| R3((Runtime C))
+
+    R1 -->|SettingsService| S1[(settings snapshot)]
+    R2 -->|SettingsService| S2[(settings snapshot)]
+    R3 -->|SettingsService| S3[(settings snapshot)]
+
+    R1 -->|requests| ProviderRegistry
+    R2 -->|requests| ProviderRegistry
+    R3 -->|requests| ProviderRegistry
+```
+
+Each runtime context exposes:
+
+- `settingsService`: a scoped `SettingsService` instance with per-runtime overrides.
+- `metadata`: runtime identifiers (CLI session id, subagent name, automation worker id).
+- `telemetry`: a channel used by providers and tooling to emit runtime-scoped events.
+- `logger`: an adapter that captures provider-level diagnostics without mixing logs across contexts.
+
+### Multi-context Orchestration
+
+Multiple contexts can operate simultaneously—for example when the CLI launches subagents or when automation scripts fan out provider workloads. The helper `withProviderRuntimeContext` (see `packages/cli/src/runtime/runtimeSettings.ts`) wraps asynchronous work, restoring the previous context on completion. Requests issued from different contexts remain isolated, and context switching is constant time.
+
+```ts
+import {
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core';
+import { withProviderRuntime } from '../runtime/runtimeSettings';
+
+await withProviderRuntime(async () => {
+  const runtime = createProviderRuntimeContext({
+    metadata: { origin: 'cli-subagent', agentId: 'reviewer' },
+  });
+  setActiveProviderRuntimeContext(runtime);
+  try {
+    await runSubagentJob(runtime);
+  } finally {
+    clearActiveProviderRuntimeContext();
+  }
+});
+```
+
+The snippet above demonstrates two contexts operating concurrently: the primary CLI context and a reviewer subagent. Each context captures its own provider credentials, tool settings, and telemetry buffers.
+
+> See the [Stateless Provider migration guide](./migration/stateless-provider.md) for integration details and upgrade guidance.
 
 ## Ephemeral Settings System
 

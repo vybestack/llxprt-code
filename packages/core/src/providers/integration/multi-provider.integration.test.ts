@@ -6,7 +6,10 @@
 
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { OpenAIProvider, ProviderManager } from '../../index.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import {
+  getSettingsService,
+  resetSettingsService,
+} from '../../settings/settingsServiceInstance.js';
 
 describe('Multi-Provider Integration Tests', () => {
   let apiKey: string | null = null;
@@ -140,7 +143,10 @@ describe('Multi-Provider Integration Tests', () => {
       'should switch between models within provider',
       async () => {
         if (!apiKey || skipTests) return; // Guard for when test is skipped
+        resetSettingsService();
         const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+        const settingsService = getSettingsService();
+        settingsService.set('activeProvider', openaiProvider.name);
 
         // Get initial model and available models
         const initialModel = openaiProvider.getCurrentModel();
@@ -152,13 +158,23 @@ describe('Multi-Provider Integration Tests', () => {
         // Test switching to a different model (pick first different model from list)
         const differentModel = models.find((m) => m.id !== initialModel);
         if (differentModel) {
-          openaiProvider.setModel(differentModel.id);
+          settingsService.set('model', differentModel.id);
+          settingsService.setProviderSetting(
+            openaiProvider.name,
+            'model',
+            differentModel.id,
+          );
           // Model might be different if defaults changed
           const currentModel = openaiProvider.getCurrentModel();
           expect(currentModel).toBeTruthy();
 
           // Switch back to initial model
-          openaiProvider.setModel(initialModel);
+          settingsService.set('model', initialModel);
+          settingsService.setProviderSetting(
+            openaiProvider.name,
+            'model',
+            initialModel,
+          );
           expect(openaiProvider.getCurrentModel()).toBe(initialModel);
         } else {
           // If only one model available, at least verify the current model works
@@ -213,6 +229,43 @@ describe('Multi-Provider Integration Tests', () => {
       },
     );
 
+    it.skipIf(skipTests)(
+      'should generate chat completion via options signature',
+      async () => {
+        if (!manager || skipTests) return;
+
+        const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+        manager.registerProvider(openaiProvider);
+        manager.setActiveProvider('openai');
+
+        const messages = [
+          {
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'text',
+                text: 'Respond with "Options signature OK".',
+              },
+            ],
+          },
+        ];
+
+        const stream = openaiProvider.generateChatCompletion({
+          contents: messages,
+        });
+
+        const chunks: string[] = [];
+        for await (const message of stream) {
+          const textBlocks = message.blocks.filter((b) => b.type === 'text');
+          for (const block of textBlocks) {
+            chunks.push((block as { type: 'text'; text: string }).text);
+          }
+        }
+
+        expect(chunks.join('').toLowerCase()).toContain('options signature ok');
+      },
+    );
+
     it.skipIf(skipTests)('should handle streaming correctly', async () => {
       if (!apiKey || skipTests) return; // Guard for when test is skipped
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
@@ -258,13 +311,21 @@ describe('Multi-Provider Integration Tests', () => {
 
     it.skip('should work with a specific model', async () => {
       if (!apiKey || skipTests) return; // Guard for when test is skipped
+      resetSettingsService();
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+      const settingsService = getSettingsService();
+      settingsService.set('activeProvider', openaiProvider.name);
 
       // Get available models and pick the first one (or use default)
       const models = await openaiProvider.getModels();
       const testModel =
         models.length > 0 ? models[0].id : openaiProvider.getCurrentModel();
-      openaiProvider.setModel(testModel);
+      settingsService.set('model', testModel);
+      settingsService.setProviderSetting(
+        openaiProvider.name,
+        'model',
+        testModel,
+      );
 
       const messages = [
         {
@@ -387,8 +448,16 @@ describe('Multi-Provider Integration Tests', () => {
   describe('Error Handling', () => {
     it.skipIf(skipTests)('should handle invalid model gracefully', async () => {
       if (!apiKey || skipTests) return; // Guard for when test is skipped
+      resetSettingsService();
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
-      openaiProvider.setModel('invalid-model-xyz');
+      const settingsService = getSettingsService();
+      settingsService.set('activeProvider', openaiProvider.name);
+      settingsService.set('model', 'invalid-model-xyz');
+      settingsService.setProviderSetting(
+        openaiProvider.name,
+        'model',
+        'invalid-model-xyz',
+      );
 
       const messages = [
         {

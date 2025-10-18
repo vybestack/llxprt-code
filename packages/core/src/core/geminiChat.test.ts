@@ -19,6 +19,7 @@ import {
   type StreamEvent,
 } from './geminiChat.js';
 import { Config } from '../config/config.js';
+import { createGeminiChatRuntime } from '../test-utils/runtime.js';
 import { setSimulate429 } from '../utils/testUtils.js';
 
 // Mocks
@@ -72,26 +73,25 @@ describe('GeminiChat', () => {
       ),
     };
 
-    mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getTelemetryLogPromptsEnabled: () => true,
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getContentGeneratorConfig: () => ({
-        authType: 'oauth-personal',
-        model: 'test-model',
-      }),
-      getModel: vi.fn().mockReturnValue('gemini-pro'),
-      setModel: vi.fn(),
-      getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
-      setQuotaErrorOccurred: vi.fn(),
-      flashFallbackHandler: undefined,
-      getEphemeralSettings: vi.fn().mockReturnValue({}),
-      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-      getProviderManager: vi.fn().mockReturnValue({
-        getActiveProvider: vi.fn().mockReturnValue(mockProvider),
-      }),
-    } as unknown as Config;
+    const providerManager = {
+      getActiveProvider: vi.fn(() => mockProvider),
+    };
+
+    const runtimeSetup = createGeminiChatRuntime({
+      provider: mockProvider,
+      providerManager,
+      configOverrides: {
+        getModel: vi.fn().mockReturnValue('gemini-pro'),
+        setModel: vi.fn(),
+        getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
+        setQuotaErrorOccurred: vi.fn(),
+        getEphemeralSettings: vi.fn().mockReturnValue({}),
+        getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+        getProviderManager: vi.fn().mockReturnValue(providerManager),
+      },
+    });
+
+    mockConfig = runtimeSetup.config;
 
     // Disable 429 simulation for tests
     setSimulate429(false);
@@ -134,8 +134,10 @@ describe('GeminiChat', () => {
 
       await chat.sendMessage({ message: 'hello' }, 'prompt-id-1');
 
-      expect(mockProvider.generateChatCompletion).toHaveBeenCalledWith(
-        expect.arrayContaining([
+      const [[callArg]] = vi.mocked(mockProvider.generateChatCompletion).mock
+        .calls;
+      expect(callArg).toMatchObject({
+        contents: expect.arrayContaining([
           expect.objectContaining({
             speaker: 'human',
             blocks: expect.arrayContaining([
@@ -146,8 +148,12 @@ describe('GeminiChat', () => {
             ]),
           }),
         ]),
-        undefined, // no tools
-      );
+        tools: undefined,
+        config: mockConfig,
+      });
+      expect(callArg.runtime).toBeDefined();
+      expect(callArg.runtime?.config).toBe(mockConfig);
+      expect(callArg.runtime?.settingsService).toBeDefined();
     });
   });
 
@@ -181,8 +187,10 @@ describe('GeminiChat', () => {
         // consume stream to trigger internal logic
       }
 
-      expect(mockProvider.generateChatCompletion).toHaveBeenCalledWith(
-        expect.arrayContaining([
+      const [[streamCallArg]] = vi.mocked(mockProvider.generateChatCompletion)
+        .mock.calls;
+      expect(streamCallArg).toMatchObject({
+        contents: expect.arrayContaining([
           expect.objectContaining({
             speaker: 'human',
             blocks: expect.arrayContaining([
@@ -193,8 +201,12 @@ describe('GeminiChat', () => {
             ]),
           }),
         ]),
-        undefined, // no tools
-      );
+        tools: undefined,
+        config: mockConfig,
+      });
+      expect(streamCallArg.runtime).toBeDefined();
+      expect(streamCallArg.runtime?.config).toBe(mockConfig);
+      expect(streamCallArg.runtime?.settingsService).toBeDefined();
     });
   });
 

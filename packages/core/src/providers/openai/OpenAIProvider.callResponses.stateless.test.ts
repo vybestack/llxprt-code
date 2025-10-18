@@ -3,6 +3,10 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { IMessage } from '../IMessage.js';
 import { ITool } from '../ITool.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import {
+  getSettingsService,
+  resetSettingsService,
+} from '../../settings/settingsServiceInstance.js';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -12,8 +16,11 @@ describe.skip('OpenAIProvider.callResponsesEndpoint (stateless)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetSettingsService();
     provider = new OpenAIProvider('test-key');
-    provider.setModel('gpt-4o'); // Use a model that supports responses API
+    const settingsService = getSettingsService();
+    settingsService.set('model', 'gpt-4o'); // Use a model that supports responses API
+    settingsService.setProviderSetting(provider.name, 'model', 'gpt-4o');
   });
 
   function createSSEResponse(chunks: string[]): Response {

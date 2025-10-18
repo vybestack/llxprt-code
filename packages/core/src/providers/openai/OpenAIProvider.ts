@@ -26,9 +26,11 @@ import * as net from 'net';
 import { IContent } from '../../services/history/IContent.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
-import { BaseProvider } from '../BaseProvider.js';
+import {
+  BaseProvider,
+  NormalizedGenerateChatOptions,
+} from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import {
@@ -38,7 +40,7 @@ import {
 } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { IModel } from '../IModel.js';
-import { IProvider } from '../IProvider.js';
+import { IProvider, ProviderToolset } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { retryWithBackoff } from '../../utils/retry.js';
 
@@ -290,16 +292,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Set the model to use for this provider
-   * This updates the model in ephemeral settings so it's immediately available
-   */
-  override setModel(modelId: string): void {
-    const settingsService = getSettingsService();
-    settingsService.set('model', modelId);
-    this.logger.debug(() => `Model set to: ${modelId}`);
-  }
-
-  /**
    * Get the currently selected model
    */
   override getCurrentModel(): string {
@@ -477,21 +469,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Generate chat completion with IContent interface
-   * Internally converts to OpenAI API format, but only yields IContent
-   * @param contents Array of content blocks (text and tool_call)
-   * @param tools Array of available tools
+   * @plan PLAN-20250218-STATELESSPROVIDER.P04
+   * @requirement REQ-SP-001
+   * @pseudocode base-provider.md lines 7-15
+   * @pseudocode provider-invocation.md lines 8-12
    */
-  override async *generateChatCompletion(
-    contents: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
-    }>,
+  protected override async *generateChatCompletionWithOptions(
+    options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    const { contents, tools } = options;
+
     // Debug log what we receive
     if (this.logger.enabled) {
       this.logger.debug(
@@ -603,13 +590,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    */
   private async *generateChatCompletionImpl(
     contents: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
-    }>,
+    tools?: ProviderToolset,
     maxTokens?: number,
     abortSignal?: AbortSignal,
     modelName?: string,
@@ -706,11 +687,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const userMemory = this.globalConfig?.getUserMemory
       ? this.globalConfig.getUserMemory()
       : '';
-    const systemPrompt = await getCoreSystemPromptAsync(
+    const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
       model,
-      undefined,
-    );
+      provider: this.name,
+    });
 
     // Add system prompt as the first message in the array
     const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -1244,36 +1225,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Set tool format override for this provider
-   * @param format The format to use, or null to clear override
-   */
-  override setToolFormatOverride(format: string | null): void {
-    const settingsService = getSettingsService();
-    if (format === null) {
-      settingsService.setProviderSetting(this.name, 'toolFormat', 'auto');
-      this.logger.debug(() => `Tool format override cleared for ${this.name}`);
-    } else {
-      settingsService.setProviderSetting(this.name, 'toolFormat', format);
-      this.logger.debug(
-        () => `Tool format override set to '${format}' for ${this.name}`,
-      );
-    }
-
-    // Clear cached client to ensure new format takes effect
-    this._cachedClient = undefined;
-    this._cachedClientKey = undefined;
-  }
-
-  /**
    * Detects the tool call format based on the model being used
    * @returns The detected tool format ('openai' or 'qwen')
    */
   private detectToolFormat(): ToolFormat {
     try {
       // Check for toolFormat override in provider settings
-      const settingsService = getSettingsService();
-      const currentSettings = settingsService['settings'];
-      const providerSettings = currentSettings?.providers?.[this.name];
+      const settingsService = this.resolveSettingsService();
+      const providerSettings = settingsService.getProviderSettings(this.name);
       const toolFormatOverride = providerSettings?.toolFormat as
         | ToolFormat
         | 'auto'

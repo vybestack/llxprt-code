@@ -15,14 +15,12 @@
 
 ## Implementation Tasks
 
-### Files to Create
-
 - `packages/core/src/runtime/providerRuntimeContext.ts`
   - Define `ProviderRuntimeContext` interface bundling `SettingsService`, `Config`, and optional metadata (e.g., runtime id).
   - Export `createProviderRuntimeContext`/`setActiveProviderRuntimeContext`/`getActiveProviderRuntimeContext` helpers that default to the existing singleton-backed configuration for backward compatibility.
   - Support registration of externally created settings/config instances so the CLI can designate its runtime while future subagents pass their own.
   - MUST include plan/requirement markers referencing pseudocode lines.
-- `packages/core/src/runtime/__tests__/providerRuntimeContext.test.ts`
+- `packages/core/src/runtime/providerRuntimeContext.test.ts`
   - Cover context creation, default singleton fallback, and explicit injection scenarios.
   - Verify no behavioural change occurs when only the default context is used.
 
@@ -51,7 +49,7 @@
 
 ```bash
 grep -r "PLAN-20250218-STATELESSPROVIDER.P03" packages/core/src/runtime packages/core/src/settings packages/core/src/config
-npm run test -- --runTestsByPath packages/core/src/runtime/__tests__/providerRuntimeContext.test.ts
+npx vitest run packages/core/src/runtime/providerRuntimeContext.test.ts
 npm run typecheck
 ```
 
@@ -82,7 +80,7 @@ Phase: P03
 Completed: YYYY-MM-DD HH:MM
 Files Modified:
 - packages/core/src/runtime/providerRuntimeContext.ts (new)
-- packages/core/src/runtime/__tests__/providerRuntimeContext.test.ts (new)
+- packages/core/src/runtime/providerRuntimeContext.test.ts (new)
 - packages/core/src/settings/settingsServiceInstance.ts
 - packages/core/src/config/config.ts
 - packages/core/src/index.ts

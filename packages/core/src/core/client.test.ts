@@ -287,6 +287,7 @@ describe('Gemini Client (client.ts)', () => {
       }),
       getGeminiClient: vi.fn(),
       setFallbackMode: vi.fn(),
+      getProvider: vi.fn().mockReturnValue('gemini'),
       getComplexityAnalyzerSettings: vi.fn().mockReturnValue({
         complexityThreshold: 0.6,
         minTasksForSuggestion: 3,

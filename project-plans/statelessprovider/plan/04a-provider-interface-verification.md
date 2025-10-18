@@ -29,7 +29,7 @@ Include plan/requirement annotations within the verification report.
 
 ```bash
 npm run typecheck
-npm test -- --runTestsByPath packages/core/src/providers/__tests__/providerInterface.compat.test.ts packages/core/src/providers/BaseProvider.test.ts packages/core/src/providers/integration/multi-provider.integration.test.ts
+npx vitest run packages/core/src/providers/providerInterface.compat.test.ts packages/core/src/providers/BaseProvider.test.ts packages/core/src/providers/integration/multi-provider.integration.test.ts
 ```
 
 ### Manual Verification Checklist

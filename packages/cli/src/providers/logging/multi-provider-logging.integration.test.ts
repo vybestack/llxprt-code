@@ -5,7 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { IProvider, IContent } from '@vybestack/llxprt-code-core';
+import {
+  IProvider,
+  IContent,
+  GenerateChatOptions,
+  ProviderToolset,
+} from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 // Interfaces that will be implemented in the next phase
@@ -80,14 +85,8 @@ function createMockProvider(
       },
     ]),
     async *generateChatCompletion(
-      _messages: IContent[],
-      _tools?: Array<{
-        functionDeclarations: Array<{
-          name: string;
-          description?: string;
-          parameters?: unknown;
-        }>;
-      }>,
+      _optionsOrMessages: GenerateChatOptions | IContent[],
+      _tools?: ProviderToolset,
     ) {
       // Simulate provider-specific response patterns
       if (name === 'openai') {
@@ -127,7 +126,6 @@ function createMockProvider(
     invokeServerTool: vi
       .fn()
       .mockResolvedValue({ result: `Tool result from ${name}` }),
-    setModel: vi.fn(),
     getCurrentModel: vi.fn().mockReturnValue(`${name}-model-1`),
     getDefaultModel: vi.fn().mockReturnValue(`${name}-default`),
     getToolFormat: vi

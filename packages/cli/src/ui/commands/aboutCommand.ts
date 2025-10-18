@@ -8,6 +8,10 @@ import { getCliVersion } from '../../utils/version.js';
 import { CommandKind, SlashCommand } from './types.js';
 import process from 'node:process';
 import { MessageType, type HistoryItemAbout } from '../types.js';
+import {
+  getActiveProviderStatus,
+  getEphemeralSetting,
+} from '../../runtime/runtimeSettings.js';
 
 export const aboutCommand: SlashCommand = {
   name: 'about',
@@ -26,29 +30,10 @@ export const aboutCommand: SlashCommand = {
     // Determine the currently selected model. Prefer the active provider's
     // model as the source of truth because it is guaranteed to be up-to-date
     // when users switch models via the /model or /provider commands.
-    let modelVersion = 'Unknown';
-    try {
-      // Dynamically import to avoid a hard dependency for tests that mock the
-      // provider manager.
-      const { getProviderManager } = await import(
-        '../../providers/providerManagerInstance.js'
-      );
-      const providerManager = getProviderManager();
-      const activeProvider = providerManager.getActiveProvider();
-      if (activeProvider) {
-        const providerName = providerManager.getActiveProviderName();
-        const currentModel = activeProvider.getCurrentModel
-          ? activeProvider.getCurrentModel()
-          : context.services.config?.getModel() || 'Unknown';
-        modelVersion = providerName
-          ? `${providerName}:${currentModel}`
-          : currentModel;
-      }
-    } catch {
-      // Fallback to config if the provider manager cannot be resolved (e.g. in
-      // unit tests).
-      modelVersion = context.services.config?.getModel() || 'Unknown';
-    }
+    const providerStatus = getActiveProviderStatus();
+    const modelVersion = providerStatus.providerName
+      ? `${providerStatus.providerName}:${providerStatus.modelName ?? 'Unknown'}`
+      : (providerStatus.modelName ?? 'Unknown');
 
     const cliVersion = await getCliVersion();
     const selectedAuthType =
@@ -60,22 +45,8 @@ export const aboutCommand: SlashCommand = {
       '';
 
     // Determine keyfile path and key status for the active provider (if any)
-    let keyfilePath = '';
+    const keyfilePath = (getEphemeralSetting('auth-keyfile') as string) || '';
     const keyStatus = '';
-    try {
-      const { getProviderManager } = await import(
-        '../../providers/providerManagerInstance.js'
-      );
-      const providerManager = getProviderManager();
-      const providerName = providerManager.getActiveProviderName();
-      if (providerName) {
-        keyfilePath =
-          context.services.settings.getProviderKeyfile?.(providerName) || '';
-        // We don't check for API keys anymore - they're only in profiles
-      }
-    } catch {
-      // Ignore errors and leave defaults
-    }
 
     const aboutItem: Omit<HistoryItemAbout, 'id'> = {
       type: MessageType.ABOUT,

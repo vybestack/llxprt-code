@@ -13,8 +13,15 @@
  *   OPENAI_API_KEY=your-key tsx scripts/benchmark/responses_vs_chat.ts
  */
 
-import { OpenAIProvider } from '../../packages/cli/src/providers/openai/OpenAIProvider.js';
+import { OpenAIProvider } from '../../packages/core/src/providers/openai/OpenAIProvider.js';
 import { IMessage } from '../../packages/cli/src/providers/IMessage.js';
+import {
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
+  ProviderRuntimeContext,
+} from '../../packages/core/src/runtime/providerRuntimeContext.js';
 
 interface BenchmarkResult {
   apiType: string;
@@ -69,6 +76,23 @@ async function runBenchmark() {
     process.exit(1);
   }
 
+  async function withRuntime<T>(
+    metadata: ProviderRuntimeContext['metadata'],
+    task: (runtime: ProviderRuntimeContext) => Promise<T>,
+  ): Promise<T> {
+    const previous = peekActiveProviderRuntimeContext();
+    const runtime = createProviderRuntimeContext({ metadata });
+    setActiveProviderRuntimeContext(runtime);
+    try {
+      return await task(runtime);
+    } finally {
+      clearActiveProviderRuntimeContext();
+      if (previous) {
+        setActiveProviderRuntimeContext(previous);
+      }
+    }
+  }
+
   const testMessages: IMessage[] = [
     {
       role: 'user',
@@ -85,59 +109,56 @@ async function runBenchmark() {
 
   // Test Responses API with gpt-4o
   console.log('Testing Responses API with gpt-4o...');
-  const responsesProvider = new OpenAIProvider(apiKey);
-  responsesProvider.setModel('gpt-4o');
+  await withRuntime({ scenario: 'responses-gpt-4o' }, async (runtime) => {
+    const provider = new OpenAIProvider(apiKey);
+    runtime.settingsService.set('activeProvider', 'openai');
+    runtime.settingsService.set('model', 'gpt-4o');
 
-  try {
-    const responsesResult = await benchmarkAPI(
-      responsesProvider,
-      testMessages,
-      'responses',
-    );
-    results.push(responsesResult);
-    console.log('✓ Responses API test completed\n');
-  } catch (error) {
-    console.error('✗ Responses API test failed:', error);
-  }
+    try {
+      const result = await benchmarkAPI(provider, testMessages, 'responses');
+      results.push(result);
+      console.log('✓ Responses API test completed\n');
+    } catch (error) {
+      console.error('✗ Responses API test failed:', error);
+    }
+  });
 
   // Test Legacy API with gpt-4o (force disable responses)
   console.log(
     'Testing Legacy API with gpt-4o (OPENAI_RESPONSES_DISABLE=true)...',
   );
   process.env.OPENAI_RESPONSES_DISABLE = 'true';
-  const legacyProvider = new OpenAIProvider(apiKey);
-  legacyProvider.setModel('gpt-4o');
+  await withRuntime({ scenario: 'legacy-gpt-4o' }, async (runtime) => {
+    const provider = new OpenAIProvider(apiKey);
+    runtime.settingsService.set('activeProvider', 'openai');
+    runtime.settingsService.set('model', 'gpt-4o');
 
-  try {
-    const legacyResult = await benchmarkAPI(
-      legacyProvider,
-      testMessages,
-      'legacy',
-    );
-    results.push(legacyResult);
-    console.log('✓ Legacy API test completed\n');
-  } catch (error) {
-    console.error('✗ Legacy API test failed:', error);
-  } finally {
-    delete process.env.OPENAI_RESPONSES_DISABLE;
-  }
+    try {
+      const result = await benchmarkAPI(provider, testMessages, 'legacy');
+      results.push(result);
+      console.log('✓ Legacy API test completed\n');
+    } catch (error) {
+      console.error('✗ Legacy API test failed:', error);
+    } finally {
+      delete process.env.OPENAI_RESPONSES_DISABLE;
+    }
+  });
 
   // Test with gpt-3.5-turbo (always uses legacy)
   console.log('Testing Legacy API with gpt-3.5-turbo...');
-  const turboProvider = new OpenAIProvider(apiKey);
-  turboProvider.setModel('gpt-3.5-turbo');
+  await withRuntime({ scenario: 'legacy-gpt-35-turbo' }, async (runtime) => {
+    const provider = new OpenAIProvider(apiKey);
+    runtime.settingsService.set('activeProvider', 'openai');
+    runtime.settingsService.set('model', 'gpt-3.5-turbo');
 
-  try {
-    const turboResult = await benchmarkAPI(
-      turboProvider,
-      testMessages,
-      'legacy',
-    );
-    results.push(turboResult);
-    console.log('✓ gpt-3.5-turbo test completed\n');
-  } catch (error) {
-    console.error('✗ gpt-3.5-turbo test failed:', error);
-  }
+    try {
+      const result = await benchmarkAPI(provider, testMessages, 'legacy');
+      results.push(result);
+      console.log('✓ gpt-3.5-turbo test completed\n');
+    } catch (error) {
+      console.error('✗ gpt-3.5-turbo test failed:', error);
+    }
+  });
 
   // Display results
   console.log('\n' + '='.repeat(80) + '\n');

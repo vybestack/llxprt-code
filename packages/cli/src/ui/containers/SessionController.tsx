@@ -14,7 +14,7 @@ import React, {
 } from 'react';
 import { HistoryItem, MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { getActiveProviderStatus } from '../../runtime/runtimeSettings.js';
 import {
   Config,
   isProQuotaExceededError,
@@ -40,30 +40,15 @@ import {
 
 // Helper functions
 function getDisplayModelName(config: Config): string {
-  try {
-    const providerManager = getProviderManager();
-    if (providerManager.hasActiveProvider()) {
-      const provider = providerManager.getActiveProvider();
-      const model = provider.getCurrentModel?.() || 'unknown';
-      return `${provider.name}:${model}`;
-    }
-  } catch (_e) {
-    // Fall back to config model if provider manager fails
+  const status = getActiveProviderStatus();
+  if (status.providerName && status.modelName) {
+    return `${status.providerName}:${status.modelName}`;
   }
-  return config.getModel();
+  return status.modelName ?? config.getModel();
 }
 
 function getProviderPaymentMode(): boolean | undefined {
-  try {
-    const providerManager = getProviderManager();
-    if (providerManager.hasActiveProvider()) {
-      const provider = providerManager.getActiveProvider();
-      return provider.isPaidMode?.();
-    }
-  } catch (_e) {
-    // Return undefined if we can't determine payment mode
-  }
-  return undefined;
+  return getActiveProviderStatus().isPaidMode;
 }
 
 // Context type
@@ -111,14 +96,8 @@ export const SessionController: React.FC<SessionControllerProps> = ({
   isAuthenticating = false,
 }) => {
   // Initialize state with current values
-  const getInitialProvider = () => {
-    try {
-      const providerManager = getProviderManager();
-      return providerManager.getActiveProvider().name;
-    } catch (_e) {
-      return undefined;
-    }
-  };
+  const getInitialProvider = () =>
+    getActiveProviderStatus().providerName ?? undefined;
 
   // Get initial state for the provider
   const initialState: SessionState = {
@@ -156,15 +135,8 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   const checkPaymentModeChange = useCallback(
     (forcePreviousProvider?: string) => {
       const newPaymentMode = getProviderPaymentMode();
-      let currentProviderName: string | undefined;
-
-      try {
-        const providerManager = getProviderManager();
-        const provider = providerManager.getActiveProvider();
-        currentProviderName = provider.name;
-      } catch (_e) {
-        // ignore
-      }
+      const status = getActiveProviderStatus();
+      const currentProviderName = status.providerName ?? undefined;
 
       const previousProvider =
         forcePreviousProvider || sessionState.lastProvider;
@@ -181,42 +153,32 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         dispatch({ type: 'SET_PAID_MODE', payload: newPaymentMode });
         dispatch({ type: 'SET_LAST_PROVIDER', payload: currentProviderName });
 
-        try {
-          const providerManager = getProviderManager();
-          const provider = providerManager.getActiveProvider();
-
-          // Only show payment mode warnings for Gemini provider
-          if (provider.name === 'gemini') {
-            if (newPaymentMode === true) {
-              dispatch({
-                type: 'SET_TRANSIENT_WARNINGS',
-                payload: [
-                  `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
-                ],
-              });
-            } else if (newPaymentMode === false) {
-              dispatch({
-                type: 'SET_TRANSIENT_WARNINGS',
-                payload: [
-                  `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
-                ],
-              });
-            }
+        if (status.providerName === 'gemini') {
+          if (newPaymentMode === true) {
+            dispatch({
+              type: 'SET_TRANSIENT_WARNINGS',
+              payload: [
+                `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
+              ],
+            });
+          } else if (newPaymentMode === false) {
+            dispatch({
+              type: 'SET_TRANSIENT_WARNINGS',
+              payload: [
+                `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+              ],
+            });
           }
-
-          // Clear warning timer if exists
-          if (warningTimerRef.current) {
-            clearTimeout(warningTimerRef.current);
-          }
-
-          // Clear the warning after 10 seconds
-          warningTimerRef.current = setTimeout(() => {
-            dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
-            warningTimerRef.current = null;
-          }, 10000);
-        } catch (_e) {
-          // ignore
         }
+
+        if (warningTimerRef.current) {
+          clearTimeout(warningTimerRef.current);
+        }
+
+        warningTimerRef.current = setTimeout(() => {
+          dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
+          warningTimerRef.current = null;
+        }, 10000);
       }
     },
     [
@@ -298,42 +260,33 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
           sessionState.isPaidMode !== undefined &&
           history.length > 0
         ) {
-          try {
-            const providerManager = getProviderManager();
-            const provider = providerManager.getActiveProvider();
-
-            // Only show payment mode warnings for Gemini provider
-            if (provider.name === 'gemini') {
-              if (paymentMode === true) {
-                dispatch({
-                  type: 'SET_TRANSIENT_WARNINGS',
-                  payload: [
-                    `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
-                  ],
-                });
-              } else if (paymentMode === false) {
-                dispatch({
-                  type: 'SET_TRANSIENT_WARNINGS',
-                  payload: [
-                    `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
-                  ],
-                });
-              }
+          const status = getActiveProviderStatus();
+          if (status.providerName === 'gemini') {
+            if (paymentMode === true) {
+              dispatch({
+                type: 'SET_TRANSIENT_WARNINGS',
+                payload: [
+                  `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
+                ],
+              });
+            } else if (paymentMode === false) {
+              dispatch({
+                type: 'SET_TRANSIENT_WARNINGS',
+                payload: [
+                  `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+                ],
+              });
             }
-
-            // Clear warning timer if exists
-            if (warningTimerRef.current) {
-              clearTimeout(warningTimerRef.current);
-            }
-
-            // Clear the warning after 10 seconds
-            warningTimerRef.current = setTimeout(() => {
-              dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
-              warningTimerRef.current = null;
-            }, 10000);
-          } catch (_e) {
-            // ignore
           }
+
+          if (warningTimerRef.current) {
+            clearTimeout(warningTimerRef.current);
+          }
+
+          warningTimerRef.current = setTimeout(() => {
+            dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
+            warningTimerRef.current = null;
+          }, 10000);
         }
       }
     };

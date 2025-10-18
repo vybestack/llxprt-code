@@ -11,28 +11,8 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { MessageType } from '../types.js';
-import { AuthType } from '@vybestack/llxprt-code-core';
-
-/**
- * Get SettingsService instance for provider switching
- */
-async function getSettingsServiceForProvider() {
-  try {
-    const { getSettingsService } = await import('@vybestack/llxprt-code-core');
-
-    return getSettingsService();
-  } catch (error) {
-    if (process.env.DEBUG) {
-      console.warn(
-        'Failed to get SettingsService for provider switching:',
-        error,
-      );
-    }
-    throw error;
-  }
-}
+import { switchActiveProvider } from '../../runtime/runtimeSettings.js';
 
 export const providerCommand: SlashCommand = {
   name: 'provider',
@@ -43,7 +23,6 @@ export const providerCommand: SlashCommand = {
     context: CommandContext,
     args: string,
   ): Promise<OpenDialogActionReturn | MessageActionReturn | void> => {
-    const providerManager = getProviderManager();
     const providerName = args?.trim();
 
     if (!providerName) {
@@ -55,168 +34,26 @@ export const providerCommand: SlashCommand = {
     }
 
     try {
-      const currentProvider = providerManager.getActiveProviderName();
+      const result = await switchActiveProvider(providerName);
 
-      // Handle switching to same provider
-      if (providerName === currentProvider) {
+      if (!result.changed) {
         return {
           type: 'message',
           messageType: 'info',
-          content: `Already using provider: ${currentProvider}`,
+          content: `Already using provider: ${result.nextProvider}`,
         };
       }
 
-      const fromProvider = currentProvider || 'none';
-
-      // Use conversion context to track available models
-      // const conversionContextJSON = {
-      //   availableModels: await providerManager.getAllAvailableModels(),
-      // };
-
-      // Clear auth and base-url ephemeral settings BEFORE switching providers
-      // This prevents cached auth from the old provider affecting the new provider
-      const config = context.services.config;
-      if (config) {
-        // Clear auth settings to ensure clean auth state
-        config.setEphemeralSetting('auth-key', undefined);
-        config.setEphemeralSetting('auth-keyfile', undefined);
-        config.setEphemeralSetting('base-url', undefined);
-      }
-
-      // Get the target provider to clear its caches before activating it
-      // This is important for providers like qwen that might have stale auth
-      // Access the providers Map directly since there's no getAllProviders method
-      const providersMap = (
-        providerManager as unknown as { providers?: Map<string, unknown> }
-      ).providers;
-      if (providersMap && providersMap instanceof Map) {
-        const targetProvider = providersMap.get(providerName) as
-          | { clearState?: () => void }
-          | undefined;
-        if (targetProvider && targetProvider.clearState) {
-          targetProvider.clearState();
-        }
-      }
-
-      // Switch provider (this will clear state from previous provider via ProviderManager)
-      providerManager.setActiveProvider(providerName);
-
-      // Also clear base URL on the new provider if it has the method
-      const newProvider = providerManager.getActiveProvider();
-      if (newProvider && newProvider.setBaseUrl) {
-        newProvider.setBaseUrl(undefined);
-      }
-
-      // Use SettingsService for provider switching
-      try {
-        const settingsService = await getSettingsServiceForProvider();
-        await settingsService.switchProvider(providerName);
-
-        // Also set the default model for this provider
-        const activeProvider = providerManager.getActiveProvider();
-        const defaultModel = activeProvider.getDefaultModel();
-        settingsService.setProviderSetting(providerName, 'model', defaultModel);
-
-        // Don't return early - continue with the rest of the setup
-      } catch (error) {
-        if (process.env.DEBUG) {
-          console.warn(
-            'SettingsService provider switch failed, falling back to legacy method:',
-            error,
-          );
-        }
-      }
-
-      // Update config if available
-      if (context.services.config) {
-        // Clear ephemeral settings when switching providers
-        // Get current ephemeral settings and clear them one by one
-        const ephemeralKeys = [
-          'auth-key',
-          'auth-keyfile',
-          'base-url',
-          'context-limit',
-          'compression-threshold',
-          'tool-format',
-          'api-version',
-          'custom-headers',
-        ];
-        for (const key of ephemeralKeys) {
-          context.services.config.setEphemeralSetting(key, undefined);
-        }
-
-        // Clear model parameters on the new provider
-        const newProvider = providerManager.getActiveProvider();
-        if (newProvider.setModelParams) {
-          newProvider.setModelParams({});
-        }
-
-        // Ensure provider manager is set on config
-        context.services.config.setProviderManager(providerManager);
-
-        // Update the provider in config
-        context.services.config.setProvider(providerName);
-
-        // Get the active provider and ensure it uses a valid default model
-        const activeProvider = providerManager.getActiveProvider();
-
-        // Get the default model from the provider
-        const defaultModel = activeProvider.getDefaultModel();
-        let baseUrl: string | undefined;
-
-        // Set base URL for specific providers
-        if (providerName === 'qwen') {
-          baseUrl = 'https://portal.qwen.ai/v1';
-        }
-
-        // Set the base URL if needed (for qwen)
-        if (baseUrl) {
-          context.services.config.setEphemeralSetting('base-url', baseUrl);
-          // Also set it directly on the provider if it has the method
-          if (
-            'setBaseUrl' in activeProvider &&
-            typeof activeProvider.setBaseUrl === 'function'
-          ) {
-            const providerWithSetBaseUrl = activeProvider as {
-              setBaseUrl: (url: string) => void;
-            };
-            providerWithSetBaseUrl.setBaseUrl(baseUrl);
-          }
-        }
-
-        // Set the model on both the provider and config
-        if (defaultModel) {
-          if (activeProvider.setModel) {
-            activeProvider.setModel(defaultModel);
-          }
-          context.services.config.setModel(defaultModel);
-        }
-
-        // With HistoryService and ContentConverters, we can now keep conversation history
-        // when switching providers as the conversion handles format differences
-
-        // Keep the current auth type - auth only affects GeminiProvider internally
-        const currentAuthType =
-          context.services.config.getContentGeneratorConfig()?.authType ||
-          AuthType.LOGIN_WITH_GOOGLE;
-
-        // Refresh auth to ensure provider manager is attached
-        await context.services.config.refreshAuth(currentAuthType);
-
-        // Show info about API key if needed for non-Gemini providers
-        if (providerName !== 'gemini') {
+      for (const info of result.infoMessages) {
+        if (context.ui?.addItem) {
           context.ui.addItem(
             {
               type: MessageType.INFO,
-              text: `Switched to ${providerName}. Use /key to set API key if needed.`,
+              text: info,
             },
             Date.now(),
           );
         }
-
-        // Note: We no longer clear UI history when switching providers
-        // The whole point of provider switching is to maintain conversation context
-        // Tool call ID conversion is handled by the content converters
       }
 
       // Trigger payment mode check if available
@@ -225,7 +62,10 @@ export const providerCommand: SlashCommand = {
       };
       if (extendedContext.checkPaymentModeChange) {
         setTimeout(
-          () => extendedContext.checkPaymentModeChange!(fromProvider),
+          () =>
+            extendedContext.checkPaymentModeChange!(
+              result.previousProvider ?? undefined,
+            ),
           100,
         );
       }
@@ -233,7 +73,7 @@ export const providerCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'info',
-        content: `Switched from ${fromProvider} to ${providerName}`,
+        content: `Switched from ${result.previousProvider ?? 'none'} to ${result.nextProvider}`,
       };
     } catch (error) {
       return {

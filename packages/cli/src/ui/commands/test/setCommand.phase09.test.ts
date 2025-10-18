@@ -4,12 +4,35 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as fc from 'fast-check';
 import { createCompletionHandler } from '../schema/index.js';
 import type { CommandContext } from '../types.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
+vi.mock('../../../runtime/runtimeSettings.js', () => {
+  const getEphemeralSettings = vi.fn(() => ({
+    'context-limit': 100_000,
+    'compression-threshold': 0.7,
+    streaming: 'enabled',
+    'socket-timeout': 60_000,
+  }));
+  const getActiveModelParams = vi.fn(() => ({
+    temperature: 0.7,
+    max_tokens: 1000,
+  }));
+  return {
+    getEphemeralSettings,
+    getActiveModelParams,
+    setEphemeralSetting: vi.fn(),
+    setActiveModelParam: vi.fn(),
+    clearActiveModelParam: vi.fn(),
+  };
+});
+import {
+  getActiveModelParams,
+  getEphemeralSettings,
+} from '../../../runtime/runtimeSettings.js';
 import { setCommand } from '../setCommand.js';
 
 /**
@@ -59,6 +82,16 @@ describe('setCommand schema integration', () => {
   let handler: ReturnType<typeof createCompletionHandler>;
 
   beforeEach(() => {
+    vi.mocked(getEphemeralSettings).mockReturnValue({
+      'context-limit': 100_000,
+      'compression-threshold': 0.7,
+      streaming: 'enabled',
+      'socket-timeout': 60_000,
+    });
+    vi.mocked(getActiveModelParams).mockReturnValue({
+      temperature: 0.7,
+      max_tokens: 1000,
+    });
     handler = createCompletionHandler(commandSchema);
   });
 
@@ -118,6 +151,10 @@ describe('setCommand schema integration', () => {
     });
 
     it('should handle modelparam parameter completion via async completer @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', async () => {
+      vi.mocked(getActiveModelParams).mockReturnValue({
+        temperature: 0.7,
+        max_tokens: 1000,
+      });
       const result = await handler(mockContext, '', '/set modelparam ');
 
       expect(result.suggestions).toEqual(
@@ -189,35 +226,23 @@ describe('setCommand schema integration', () => {
             maxLength: 5,
           }),
           async (paramNames) => {
-            const contextWithDynamicParams: CommandContext =
-              createMockCommandContext({
-                services: {
-                  config: {
-                    getProviderManager: () => ({
-                      getActiveProvider: () => ({
-                        name: 'dynamic-provider',
-                        getModelParams: () =>
-                          Object.fromEntries(
-                            paramNames.map((name) => [name, 'value']),
-                          ),
-                      }),
-                    }),
-                  } as unknown as Config,
-                },
-              });
-
-            const localHandler = createCompletionHandler(commandSchema);
-            const result = await localHandler(
-              contextWithDynamicParams,
-              '',
-              '/set modelparam ',
+            const dynamicParams = Object.fromEntries(
+              paramNames.map((name) => [name, 'value']),
             );
+            vi.mocked(getActiveModelParams).mockReturnValue(dynamicParams);
+
+            const result = await handler(mockContext, '', '/set modelparam ');
 
             expect(result.suggestions.map((s) => s.value)).toEqual(
               expect.arrayContaining(paramNames),
             );
             expect(result.hint).toBe('parameter name');
             expect(result.position).toBe(1);
+
+            vi.mocked(getActiveModelParams).mockReturnValue({
+              temperature: 0.7,
+              max_tokens: 1000,
+            });
           },
         ),
       );

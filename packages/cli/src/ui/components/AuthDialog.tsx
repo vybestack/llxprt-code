@@ -94,10 +94,10 @@ export function AuthDialog({
 
       // Use the actual oauthManager to toggle the provider
       // This will call the same code as /auth gemini enable/disable
-      const { getOAuthManager } = await import(
-        '../../providers/providerManagerInstance.js'
+      const { getCliOAuthManager } = await import(
+        '../../runtime/runtimeSettings.js'
       );
-      const oauthManager = getOAuthManager();
+      const oauthManager = getCliOAuthManager();
 
       if (oauthManager) {
         try {

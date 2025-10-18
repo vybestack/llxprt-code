@@ -5,9 +5,12 @@ import { IModel } from '../IModel.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
-import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
+import {
+  BaseProvider,
+  BaseProviderConfig,
+  NormalizedGenerateChatOptions,
+} from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import {
   IContent,
   ContentBlock,
@@ -26,7 +29,7 @@ export class AnthropicProvider extends BaseProvider {
   private anthropic: Anthropic;
   private toolFormatter: ToolFormatter;
   toolFormat: ToolFormat = 'anthropic';
-  private _cachedAuthKey?: string; // Track cached auth key for client recreation
+  private _cachedAuthSignature?: string; // Track cached auth token+endpoint for client recreation
 
   // Model patterns for max output tokens
   private modelTokenPatterns: Array<{ pattern: RegExp; tokens: number }> = [
@@ -92,13 +95,13 @@ export class AnthropicProvider extends BaseProvider {
       );
     }
 
-    // Only recreate client if auth changed
-    if (this._cachedAuthKey !== resolvedToken) {
+    const baseURL = this.getBaseURL();
+    const cacheSignature = `${resolvedToken}::${baseURL ?? 'default'}`;
+
+    // Only recreate client if auth or endpoint changed
+    if (this._cachedAuthSignature !== cacheSignature) {
       // Check if this is an OAuth token (starts with sk-ant-oat)
       const isOAuthToken = resolvedToken.startsWith('sk-ant-oat');
-
-      // Use the unified getBaseURL() method from BaseProvider
-      const baseURL = this.getBaseURL();
 
       if (isOAuthToken) {
         // For OAuth tokens, use authToken field which sends Bearer token
@@ -123,7 +126,7 @@ export class AnthropicProvider extends BaseProvider {
       }
 
       // Track the key to avoid unnecessary client recreation
-      this._cachedAuthKey = resolvedToken;
+      this._cachedAuthSignature = cacheSignature;
     }
   }
 
@@ -214,51 +217,10 @@ export class AnthropicProvider extends BaseProvider {
     }
   }
 
-  override setApiKey(apiKey: string): void {
-    // Call base provider implementation
-    super.setApiKey(apiKey);
-
-    // Create a new Anthropic client with the updated API key
-    const resolvedBaseURL =
-      this.providerConfig?.baseUrl || this.baseProviderConfig.baseURL;
-    this.anthropic = new Anthropic({
-      apiKey,
-      baseURL: resolvedBaseURL,
-      dangerouslyAllowBrowser: true,
-    });
-  }
-
-  override setBaseUrl(baseUrl?: string): void {
-    // Call base provider implementation which stores in ephemeral settings
-    super.setBaseUrl?.(baseUrl);
-
-    // Create a new Anthropic client with the updated (or cleared) base URL
-    // Will be updated with actual token in updateClientWithResolvedAuth
-    const resolvedBaseURL = this.getBaseURL();
-    this.anthropic = new Anthropic({
-      apiKey: '', // Empty string, will be replaced when auth is resolved
-      baseURL: resolvedBaseURL,
-      dangerouslyAllowBrowser: true,
-    });
-  }
-
-  override setModel(modelId: string): void {
-    // Update SettingsService as the source of truth
-    try {
-      const settingsService = getSettingsService();
-      settingsService.setProviderSetting(this.name, 'model', modelId);
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to persist model to SettingsService: ${error}`,
-      );
-    }
-    // No local caching - always look up from SettingsService
-  }
-
   override getCurrentModel(): string {
     // Try to get from SettingsService first (source of truth)
     try {
-      const settingsService = getSettingsService();
+      const settingsService = this.resolveSettingsService();
       const providerSettings = settingsService.getProviderSettings(this.name);
       if (providerSettings.model) {
         return providerSettings.model as string;
@@ -365,57 +327,12 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Set model parameters that will be merged into API calls
-   * @param params Parameters to merge with existing, or undefined to clear all
-   */
-  override setModelParams(params: Record<string, unknown> | undefined): void {
-    const settingsService = getSettingsService();
-
-    if (params === undefined) {
-      // Clear all model params
-      settingsService.setProviderSetting(this.name, 'temperature', undefined);
-      settingsService.setProviderSetting(this.name, 'max_tokens', undefined);
-      settingsService.setProviderSetting(this.name, 'top_p', undefined);
-      settingsService.setProviderSetting(this.name, 'top_k', undefined);
-    } else {
-      // Set each param individually
-      if ('temperature' in params) {
-        settingsService.setProviderSetting(
-          this.name,
-          'temperature',
-          params.temperature,
-        );
-      }
-      if ('max_tokens' in params) {
-        settingsService.setProviderSetting(
-          this.name,
-          'max_tokens',
-          params.max_tokens,
-        );
-      }
-      if ('top_p' in params) {
-        settingsService.setProviderSetting(this.name, 'top_p', params.top_p);
-      }
-      if ('top_k' in params) {
-        settingsService.setProviderSetting(this.name, 'top_k', params.top_k);
-      }
-      if ('stop_sequences' in params) {
-        settingsService.setProviderSetting(
-          this.name,
-          'stop_sequences',
-          params.stop_sequences,
-        );
-      }
-    }
-  }
-
-  /**
    * Get current model parameters
    * @returns Current parameters or undefined if not set
    */
   override getModelParams(): Record<string, unknown> | undefined {
     // Always get from SettingsService
-    const settingsService = getSettingsService();
+    const settingsService = this.resolveSettingsService();
     const providerSettings = settingsService.getProviderSettings(this.name);
 
     if (!providerSettings) {
@@ -442,7 +359,7 @@ export class AnthropicProvider extends BaseProvider {
    */
   override clearAuthCache(): void {
     super.clearAuthCache();
-    this._cachedAuthKey = undefined;
+    this._cachedAuthSignature = undefined;
   }
 
   /**
@@ -459,12 +376,11 @@ export class AnthropicProvider extends BaseProvider {
    */
   detectToolFormat(): ToolFormat {
     try {
-      const settingsService = getSettingsService();
+      const settingsService = this.resolveSettingsService();
 
       // First check SettingsService for toolFormat override in provider settings
       // Note: This is synchronous access to cached settings, not async
-      const currentSettings = settingsService['settings'];
-      const providerSettings = currentSettings?.providers?.[this.name];
+      const providerSettings = settingsService.getProviderSettings(this.name);
       const toolFormatOverride = providerSettings?.toolFormat as
         | ToolFormat
         | 'auto'
@@ -513,26 +429,6 @@ export class AnthropicProvider extends BaseProvider {
   override getToolFormat(): ToolFormat {
     // Use the same detection logic as detectToolFormat()
     return this.detectToolFormat();
-  }
-
-  /**
-   * Set tool format override for this provider
-   * @param format The format to use, or null to clear override
-   */
-  override setToolFormatOverride(format: string | null): void {
-    const settingsService = getSettingsService();
-    if (format === null) {
-      settingsService.setProviderSetting(this.name, 'toolFormat', 'auto');
-      this.logger.debug(() => `Tool format override cleared for ${this.name}`);
-    } else {
-      settingsService.setProviderSetting(this.name, 'toolFormat', format);
-      this.logger.debug(
-        () => `Tool format override set to '${format}' for ${this.name}`,
-      );
-    }
-
-    // Clear cached auth key to ensure new format takes effect
-    this._cachedAuthKey = undefined;
   }
 
   /**
@@ -587,19 +483,15 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Generate chat completion with IContent interface
-   * Convert IContent directly to Anthropic API format
+   * @plan PLAN-20250218-STATELESSPROVIDER.P04
+   * @requirement REQ-SP-001
+   * @pseudocode base-provider.md lines 7-15
+   * @pseudocode provider-invocation.md lines 8-12
    */
-  async *generateChatCompletion(
-    content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
-    }>,
+  protected override async *generateChatCompletionWithOptions(
+    options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    const { contents: content, tools } = options;
     // Convert IContent directly to Anthropic API format (no IMessage!)
     const anthropicMessages: Array<{
       role: 'user' | 'assistant';
@@ -941,11 +833,11 @@ export class AnthropicProvider extends BaseProvider {
 
     // For OAuth mode, inject core system prompt as the first human message
     if (isOAuth) {
-      const corePrompt = await getCoreSystemPromptAsync(
+      const corePrompt = await getCoreSystemPromptAsync({
         userMemory,
-        currentModel,
-        undefined,
-      );
+        model: currentModel,
+        provider: this.name,
+      });
       if (corePrompt) {
         anthropicMessages.unshift({
           role: 'user',
@@ -955,7 +847,11 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     const systemPrompt = !isOAuth
-      ? await getCoreSystemPromptAsync(userMemory, currentModel, undefined)
+      ? await getCoreSystemPromptAsync({
+          userMemory,
+          model: currentModel,
+          provider: this.name,
+        })
       : undefined;
     const requestBody = {
       model: currentModel,

@@ -23,12 +23,55 @@ import type {
   ProviderContext,
   ProviderComparison,
 } from './types.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import type { SettingsService } from '../settings/SettingsService.js';
+import {
+  getActiveProviderRuntimeContext,
+  type ProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
+
+const PROVIDER_CAPABILITY_HINTS: Record<
+  string,
+  Partial<ProviderCapabilities>
+> = {
+  gemini: {
+    hasModelSelection: true,
+    hasApiKeyConfig: true,
+    hasBaseUrlConfig: false,
+  },
+  openai: {
+    hasModelSelection: true,
+    hasApiKeyConfig: true,
+    hasBaseUrlConfig: true,
+  },
+  'openai-responses': {
+    hasModelSelection: false,
+    hasApiKeyConfig: true,
+    hasBaseUrlConfig: true,
+  },
+  anthropic: {
+    hasModelSelection: true,
+    hasApiKeyConfig: true,
+    hasBaseUrlConfig: true,
+  },
+};
+
+interface ProviderManagerInit {
+  runtime?: ProviderRuntimeContext;
+  config?: Config;
+  settingsService?: SettingsService;
+}
 
 export class ProviderManager implements IProviderManager {
   private providers: Map<string, IProvider>;
   private serverToolsProvider: IProvider | null;
   private config?: Config;
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P05
+   * @requirement REQ-SP-001
+   * @pseudocode provider-invocation.md lines 8-15
+   */
+  private settingsService: SettingsService;
+  private runtime?: ProviderRuntimeContext;
   private providerCapabilities: Map<string, ProviderCapabilities> = new Map();
   private sessionTokenUsage: {
     input: number;
@@ -46,9 +89,61 @@ export class ProviderManager implements IProviderManager {
     total: 0,
   };
 
-  constructor() {
+  constructor(init?: ProviderManagerInit | ProviderRuntimeContext) {
+    const resolved = this.resolveInit(init);
     this.providers = new Map<string, IProvider>();
     this.serverToolsProvider = null;
+    this.settingsService = resolved.settingsService;
+    this.config = resolved.config ?? this.config;
+    this.runtime = resolved.runtime;
+  }
+
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P05
+   * @requirement REQ-SP-001
+   * @pseudocode provider-invocation.md lines 8-15
+   */
+  private resolveInit(init?: ProviderManagerInit | ProviderRuntimeContext): {
+    settingsService: SettingsService;
+    config?: Config;
+    runtime?: ProviderRuntimeContext;
+  } {
+    const fallback = getActiveProviderRuntimeContext();
+    if (!init) {
+      return {
+        settingsService: fallback.settingsService,
+        config: fallback.config,
+        runtime: fallback,
+      };
+    }
+
+    if (
+      typeof init === 'object' &&
+      init !== null &&
+      'settingsService' in init &&
+      ('runtimeId' in init || 'metadata' in init)
+    ) {
+      const context = init as ProviderRuntimeContext;
+      return {
+        settingsService: context.settingsService,
+        config: context.config ?? fallback.config,
+        runtime: context,
+      };
+    }
+
+    const initObj = init as ProviderManagerInit;
+    const runtime = initObj.runtime;
+    const settingsService =
+      initObj.settingsService ??
+      runtime?.settingsService ??
+      fallback.settingsService;
+    const config = initObj.config ?? runtime?.config ?? fallback.config;
+
+    return {
+      settingsService,
+      config,
+      runtime: runtime ?? fallback,
+    };
   }
 
   setConfig(config: Config): void {
@@ -57,6 +152,9 @@ export class ProviderManager implements IProviderManager {
     const newLoggingEnabled = config.getConversationLoggingEnabled();
 
     this.config = config;
+    this.runtime = this.runtime
+      ? { ...this.runtime, config }
+      : { settingsService: this.settingsService, config };
 
     // If logging state changed, update provider wrapping
     if (oldLoggingEnabled !== newLoggingEnabled) {
@@ -75,13 +173,15 @@ export class ProviderManager implements IProviderManager {
         baseProvider = provider.wrappedProvider as IProvider;
       }
 
+      this.syncProviderRuntime(baseProvider);
+
       // ALWAYS wrap with LoggingProviderWrapper for token tracking
       let finalProvider = baseProvider;
       if (this.config) {
-        baseProvider.setConfig?.(this.config);
         finalProvider = new LoggingProviderWrapper(baseProvider, this.config);
-        finalProvider.setConfig?.(this.config);
       }
+
+      this.syncProviderRuntime(finalProvider);
 
       this.providers.set(name, finalProvider);
 
@@ -92,18 +192,28 @@ export class ProviderManager implements IProviderManager {
     }
   }
 
-  registerProvider(provider: IProvider): void {
-    if (this.config) {
-      provider.setConfig?.(this.config);
-    }
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P05
+   * @requirement REQ-SP-001
+   * @pseudocode provider-invocation.md lines 8-15
+   */
+  private syncProviderRuntime(provider: IProvider): void {
+    const runtimeAware = provider as IProvider & {
+      setRuntimeSettingsService?: (settingsService: SettingsService) => void;
+    };
+    runtimeAware.setRuntimeSettingsService?.(this.settingsService);
+  }
 
+  registerProvider(provider: IProvider): void {
+    this.syncProviderRuntime(provider);
     // ALWAYS wrap provider to enable token tracking
     // (LoggingProviderWrapper handles both token tracking AND conversation logging)
     let finalProvider = provider;
     if (this.config) {
       finalProvider = new LoggingProviderWrapper(provider, this.config);
-      finalProvider.setConfig?.(this.config);
     }
+
+    this.syncProviderRuntime(finalProvider);
 
     this.providers.set(provider.name, finalProvider);
 
@@ -121,12 +231,11 @@ export class ProviderManager implements IProviderManager {
     }
 
     // If this is the default provider and no provider is active, set it as active
-    const settingsService = getSettingsService();
-    const currentActiveProvider = settingsService.get(
+    const currentActiveProvider = this.settingsService.get(
       'activeProvider',
     ) as string;
     if (provider.isDefault && !currentActiveProvider) {
-      settingsService.set('activeProvider', provider.name);
+      this.settingsService.set('activeProvider', provider.name);
     }
 
     // If registering Gemini and we don't have a serverToolsProvider, use it
@@ -146,9 +255,8 @@ export class ProviderManager implements IProviderManager {
     }
 
     // Store reference to the current active provider before switching
-    const settingsService = getSettingsService();
     const previousProviderName =
-      (settingsService.get('activeProvider') as string) || '';
+      (this.settingsService.get('activeProvider') as string) || '';
 
     // Only clear state from the provider we're switching FROM
     // BUT never clear the serverToolsProvider's state
@@ -180,7 +288,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     // Update SettingsService as the single source of truth
-    settingsService.set('activeProvider', name);
+    this.settingsService.set('activeProvider', name);
 
     // If switching to Gemini, use it as both active and serverTools provider
     // BUT only if we don't already have a Gemini serverToolsProvider with auth state
@@ -201,14 +309,12 @@ export class ProviderManager implements IProviderManager {
   }
 
   clearActiveProvider(): void {
-    const settingsService = getSettingsService();
-    settingsService.set('activeProvider', '');
+    this.settingsService.set('activeProvider', '');
   }
 
   getActiveProvider(): IProvider {
-    const settingsService = getSettingsService();
     const activeProviderName =
-      (settingsService.get('activeProvider') as string) || '';
+      (this.settingsService.get('activeProvider') as string) || '';
 
     if (!activeProviderName) {
       throw new Error('No active provider set');
@@ -247,14 +353,12 @@ export class ProviderManager implements IProviderManager {
   }
 
   getActiveProviderName(): string {
-    const settingsService = getSettingsService();
-    return (settingsService.get('activeProvider') as string) || '';
+    return (this.settingsService.get('activeProvider') as string) || '';
   }
 
   hasActiveProvider(): boolean {
-    const settingsService = getSettingsService();
     const activeProviderName =
-      (settingsService.get('activeProvider') as string) || '';
+      (this.settingsService.get('activeProvider') as string) || '';
     return activeProviderName !== '' && this.providers.has(activeProviderName);
   }
 
@@ -305,35 +409,59 @@ export class ProviderManager implements IProviderManager {
     return capabilityScore > 0.7;
   }
 
+  private getStoredModelName(provider: IProvider): string {
+    const providerSettings = this.settingsService.getProviderSettings(
+      provider.name,
+    );
+    const storedModel = providerSettings.model as string | undefined;
+    if (storedModel && typeof storedModel === 'string' && storedModel.trim()) {
+      return storedModel;
+    }
+
+    if (
+      this.config &&
+      typeof this.config.getProvider === 'function' &&
+      this.config.getProvider() === provider.name
+    ) {
+      const configModel = this.config.getModel();
+      if (configModel) {
+        return configModel;
+      }
+    }
+
+    return provider.getDefaultModel?.() ?? '';
+  }
+
   private captureProviderCapabilities(
     provider: IProvider,
   ): ProviderCapabilities {
+    const hints = PROVIDER_CAPABILITY_HINTS[provider.name] ?? {};
+
     return {
       supportsStreaming: true, // All current providers support streaming
       supportsTools: provider.getServerTools().length > 0,
       supportsVision: this.detectVisionSupport(provider),
       maxTokens: this.getProviderMaxTokens(provider),
       supportedFormats: this.getSupportedToolFormats(provider),
-      hasModelSelection: typeof provider.setModel === 'function',
-      hasApiKeyConfig: typeof provider.setApiKey === 'function',
-      hasBaseUrlConfig: typeof provider.setBaseUrl === 'function',
+      hasModelSelection: hints.hasModelSelection ?? true,
+      hasApiKeyConfig: hints.hasApiKeyConfig ?? true,
+      hasBaseUrlConfig: hints.hasBaseUrlConfig ?? true,
       supportsPaidMode: typeof provider.isPaidMode === 'function',
     };
   }
 
   private detectVisionSupport(provider: IProvider): boolean {
     // Provider-specific vision detection logic
+    const model = this.getStoredModelName(provider).toLowerCase();
     switch (provider.name) {
       case 'gemini': {
         return true;
       }
       case 'openai': {
-        const model = provider.getCurrentModel?.() || '';
         return model.includes('vision') || model.includes('gpt-4');
       }
       case 'anthropic': {
-        const claudeModel = provider.getCurrentModel?.() || '';
-        return claudeModel.includes('claude-3');
+        return model.includes('claude-3');
       }
       default:
         return false;
@@ -341,7 +469,7 @@ export class ProviderManager implements IProviderManager {
   }
 
   private getProviderMaxTokens(provider: IProvider): number {
-    const model = provider.getCurrentModel?.() || '';
+    const model = this.getStoredModelName(provider).toLowerCase();
 
     switch (provider.name) {
       case 'gemini':
@@ -377,10 +505,15 @@ export class ProviderManager implements IProviderManager {
     provider: IProvider,
     capabilities: ProviderCapabilities,
   ): ProviderContext {
+    const providerSettings = this.settingsService.getProviderSettings(
+      provider.name,
+    );
+    const toolFormatSetting =
+      (providerSettings.toolFormat as string | undefined) ?? 'auto';
     return {
       providerName: provider.name,
-      currentModel: provider.getCurrentModel?.() || 'unknown',
-      toolFormat: provider.getToolFormat?.() || 'unknown',
+      currentModel: this.getStoredModelName(provider) || 'unknown',
+      toolFormat: toolFormatSetting,
       isPaidMode: provider.isPaidMode?.() || false,
       capabilities,
       sessionStartTime: Date.now(),
@@ -514,9 +647,10 @@ export class ProviderManager implements IProviderManager {
   getProviderCapabilities(
     providerName?: string,
   ): ProviderCapabilities | undefined {
-    const settingsService = getSettingsService();
     const name =
-      providerName || (settingsService.get('activeProvider') as string) || '';
+      providerName ||
+      (this.settingsService.get('activeProvider') as string) ||
+      '';
     return this.providerCapabilities.get(name);
   }
 

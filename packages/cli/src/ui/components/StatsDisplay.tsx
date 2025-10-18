@@ -25,7 +25,10 @@ import {
   USER_AGREEMENT_RATE_MEDIUM,
 } from '../utils/displayUtils.js';
 import { computeSessionStats } from '../utils/computeStats.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import {
+  getActiveProviderMetrics,
+  getSessionTokenUsage,
+} from '../../runtime/runtimeSettings.js';
 
 // A more flexible and powerful StatRow component
 interface StatRowProps {
@@ -168,19 +171,13 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
   const computed = computeSessionStats(metrics);
 
   // Get token tracking metrics from provider manager
-  const providerManager = getProviderManager();
-  const providerMetrics = providerManager?.getProviderMetrics?.() || {
+  const providerMetrics = getActiveProviderMetrics() ?? {
     tokensPerMinute: 0,
     throttleWaitTimeMs: 0,
+    totalTokens: 0,
+    totalRequests: 0,
   };
-  const sessionUsage = providerManager?.getSessionTokenUsage?.() || {
-    input: 0,
-    output: 0,
-    cache: 0,
-    tool: 0,
-    thought: 0,
-    total: 0,
-  };
+  const sessionUsage = getSessionTokenUsage();
 
   const successThresholds = {
     green: TOOL_SUCCESS_RATE_HIGH,

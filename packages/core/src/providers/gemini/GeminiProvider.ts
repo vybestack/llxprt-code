@@ -25,9 +25,12 @@ import {
   type GenerateContentParameters,
   type GenerateContentResponse,
 } from '@google/genai';
-import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
+import {
+  BaseProvider,
+  BaseProviderConfig,
+  NormalizedGenerateChatOptions,
+} from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P12
@@ -347,6 +350,8 @@ export class GeminiProvider extends BaseProvider {
    * Sets the config instance for reading OAuth credentials
    */
   override setConfig(config: Config): void {
+    this.refreshCachedSettings();
+
     // Sync with config model if user hasn't explicitly set a model
     // This ensures consistency between config and provider state
     const configModel = config.getModel();
@@ -451,27 +456,6 @@ export class GeminiProvider extends BaseProvider {
     ];
   }
 
-  override setApiKey(apiKey: string): void {
-    // Call base provider implementation
-    super.setApiKey(apiKey);
-
-    // Set the API key as an environment variable so it can be used by the core library
-    // CRITICAL FIX: When clearing the key (empty string), delete the env var instead of setting to empty
-    if (apiKey && apiKey.trim() !== '') {
-      process.env.GEMINI_API_KEY = apiKey;
-    } else {
-      delete process.env.GEMINI_API_KEY;
-    }
-
-    // Clear auth cache when API key changes
-    this.clearAuthCache();
-  }
-
-  override setBaseUrl(baseUrl?: string): void {
-    // Call base provider implementation which stores in ephemeral settings
-    super.setBaseUrl?.(baseUrl);
-  }
-
   /**
    * Gets the current authentication mode
    */
@@ -495,13 +479,63 @@ export class GeminiProvider extends BaseProvider {
     }
   }
 
+  private refreshCachedSettings(): void {
+    try {
+      const settingsService = this.resolveSettingsService();
+      const providerSettings = settingsService.getProviderSettings(this.name);
+
+      const modelSetting = providerSettings?.model;
+      if (typeof modelSetting === 'string' && modelSetting.trim() !== '') {
+        this.currentModel = modelSetting;
+        this.modelExplicitlySet = true;
+      } else {
+        this.modelExplicitlySet = false;
+      }
+
+      const reservedKeys = new Set([
+        'enabled',
+        'apiKey',
+        'api-key',
+        'apiKeyfile',
+        'api-keyfile',
+        'baseUrl',
+        'base-url',
+        'model',
+        'toolFormat',
+        'tool-format',
+        'toolFormatOverride',
+        'tool-format-override',
+        'defaultModel',
+      ]);
+
+      const params: Record<string, unknown> = {};
+      if (providerSettings) {
+        for (const [key, value] of Object.entries(providerSettings)) {
+          if (reservedKeys.has(key) || value === undefined || value === null) {
+            continue;
+          }
+          params[key] = value;
+        }
+      }
+
+      this.modelParams = Object.keys(params).length > 0 ? params : undefined;
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Failed to refresh Gemini provider settings from SettingsService: ${error}`,
+      );
+    }
+  }
+
   /**
    * Gets the current model ID
    */
   override getCurrentModel(): string {
+    this.refreshCachedSettings();
+
     // Try to get from SettingsService first (source of truth)
     try {
-      const settingsService = getSettingsService();
+      const settingsService = this.resolveSettingsService();
       const providerSettings = settingsService.getProviderSettings(this.name);
       if (providerSettings.model) {
         return providerSettings.model as string;
@@ -523,45 +557,10 @@ export class GeminiProvider extends BaseProvider {
   }
 
   /**
-   * Sets the current model ID
-   */
-  override setModel(modelId: string): void {
-    // Update SettingsService as the source of truth
-    try {
-      const settingsService = getSettingsService();
-      settingsService.setProviderSetting(this.name, 'model', modelId);
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to persist model to SettingsService: ${error}`,
-      );
-    }
-
-    // Keep local cache for performance
-    this.currentModel = modelId;
-    this.modelExplicitlySet = true;
-
-    // Always update config if available, not just in OAuth mode
-    // This ensures the model is properly synchronized
-    if (this.globalConfig) {
-      this.globalConfig.setModel(modelId);
-    }
-  }
-
-  /**
-   * Sets additional model parameters to include in requests
-   */
-  override setModelParams(params: Record<string, unknown> | undefined): void {
-    if (params === undefined) {
-      this.modelParams = undefined;
-    } else {
-      this.modelParams = { ...this.modelParams, ...params };
-    }
-  }
-
-  /**
    * Gets the current model parameters
    */
   override getModelParams(): Record<string, unknown> | undefined {
+    this.refreshCachedSettings();
     return this.modelParams;
   }
 
@@ -943,20 +942,17 @@ export class GeminiProvider extends BaseProvider {
   }
 
   /**
-   * Generate chat completion with IContent interface
-   * Direct implementation for Gemini API with IContent interface
+   * @plan PLAN-20250218-STATELESSPROVIDER.P04
+   * @requirement REQ-SP-001
+   * @pseudocode base-provider.md lines 7-15
+   * @pseudocode provider-invocation.md lines 8-12
    */
-  async *generateChatCompletion(
-    content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
-    }>,
-    _toolFormat?: string,
+  protected override async *generateChatCompletionWithOptions(
+    options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    this.refreshCachedSettings();
+
+    const { contents: content, tools } = options;
     // Determine best auth method
     const authToken = await this.determineBestAuth();
 
@@ -1079,10 +1075,11 @@ export class GeminiProvider extends BaseProvider {
       const userMemory = this.globalConfig?.getUserMemory
         ? this.globalConfig.getUserMemory()
         : '';
-      const systemInstruction = await getCoreSystemPromptAsync(
+      const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
-        this.currentModel,
-      );
+        model: this.currentModel,
+        provider: this.name,
+      });
 
       // For OAuth/CodeAssist mode, inject system prompt as first user message
       // This ensures the CodeAssist endpoint receives the full context
@@ -1128,10 +1125,11 @@ export class GeminiProvider extends BaseProvider {
       const userMemory = this.globalConfig?.getUserMemory
         ? this.globalConfig.getUserMemory()
         : '';
-      const systemInstruction = await getCoreSystemPromptAsync(
+      const systemInstruction = await getCoreSystemPromptAsync({
         userMemory,
-        this.currentModel,
-      );
+        model: this.currentModel,
+        provider: this.name,
+      });
 
       const request = {
         model: this.currentModel,

@@ -129,7 +129,12 @@ import { SettingsDialog } from './components/SettingsDialog.js';
 import { ProQuotaDialog } from './components/ProQuotaDialog.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
-import { getProviderManager } from '../providers/providerManagerInstance.js';
+import {
+  getActiveModelName,
+  listAvailableModels,
+  getActiveProviderMetrics,
+  getSessionTokenUsage,
+} from '../runtime/runtimeSettings.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
@@ -566,7 +571,6 @@ const App = (props: AppInternalProps) => {
     exitEditorDialog,
   } = useEditorSettings(settings, appState, addItem);
 
-  const providerManager = getProviderManager(config, false, settings, addItem);
   const {
     showDialog: isProviderDialogOpen,
     openDialog: openProviderDialog,
@@ -600,33 +604,30 @@ const App = (props: AppInternalProps) => {
 
   const openProviderModelDialog = useCallback(async () => {
     try {
-      const activeProvider = providerManager.getActiveProvider();
-      if (activeProvider) {
-        const models = await activeProvider.getModels();
-        setProviderModels(models);
-      }
+      const models = await listAvailableModels();
+      setProviderModels(models);
     } catch (e) {
       console.error('Failed to load models:', e);
       setProviderModels([]);
     }
     await openProviderModelDialogRaw();
-  }, [providerManager, openProviderModelDialogRaw]);
+  }, [openProviderModelDialogRaw]);
 
   // Watch for model changes from config
   useEffect(() => {
     const checkModelChange = () => {
       const configModel = config.getModel();
-      const activeProvider = providerManager.getActiveProvider();
+      const providerModel = getActiveModelName();
+      const effectiveModel =
+        providerModel && providerModel.trim() !== ''
+          ? providerModel
+          : configModel;
 
-      // Get the actual current model from provider
-      const providerModel = activeProvider?.getCurrentModel?.() || configModel;
-
-      // Update UI if different from what we're showing
-      if (providerModel !== currentModel) {
+      if (effectiveModel !== currentModel) {
         console.debug(
-          `[Model Update] Updating footer from ${currentModel} to ${providerModel}`,
+          `[Model Update] Updating footer from ${currentModel} to ${effectiveModel}`,
         );
-        setCurrentModel(providerModel);
+        setCurrentModel(effectiveModel);
       }
     };
 
@@ -637,7 +638,7 @@ const App = (props: AppInternalProps) => {
     const interval = setInterval(checkModelChange, 500);
 
     return () => clearInterval(interval);
-  }, [config, providerManager, currentModel]); // Include currentModel in dependencies
+  }, [config, currentModel]); // Include currentModel in dependencies
 
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
@@ -742,35 +743,20 @@ const App = (props: AppInternalProps) => {
   // Poll for token metrics updates
   useEffect(() => {
     const updateTokenMetrics = () => {
-      const providerManager = getProviderManager();
-      if (providerManager) {
-        const metrics = providerManager.getProviderMetrics?.();
-        const usage = providerManager.getSessionTokenUsage?.();
+      const metrics = getActiveProviderMetrics();
+      const usage = getSessionTokenUsage();
 
-        const newMetrics = {
-          tokensPerMinute: metrics?.tokensPerMinute || 0,
-          throttleWaitTimeMs: metrics?.throttleWaitTimeMs || 0,
-          sessionTokenTotal: usage?.total || 0,
-        };
+      setTokenMetrics({
+        tokensPerMinute: metrics?.tokensPerMinute ?? 0,
+        throttleWaitTimeMs: metrics?.throttleWaitTimeMs ?? 0,
+        sessionTokenTotal: usage.total,
+      });
 
-        setTokenMetrics(newMetrics);
-
-        // Also update the telemetry service for other components
-        if (usage) {
-          uiTelemetryService.setTokenTrackingMetrics({
-            tokensPerMinute: metrics?.tokensPerMinute || 0,
-            throttleWaitTimeMs: metrics?.throttleWaitTimeMs || 0,
-            sessionTokenUsage: {
-              input: usage.input || 0,
-              output: usage.output || 0,
-              cache: usage.cache || 0,
-              tool: usage.tool || 0,
-              thought: usage.thought || 0,
-              total: usage.total || 0,
-            },
-          });
-        }
-      }
+      uiTelemetryService.setTokenTrackingMetrics({
+        tokensPerMinute: metrics?.tokensPerMinute ?? 0,
+        throttleWaitTimeMs: metrics?.throttleWaitTimeMs ?? 0,
+        sessionTokenUsage: usage,
+      });
     };
 
     // Update immediately
@@ -1046,10 +1032,10 @@ You can switch authentication methods by typing /auth or switch to a different m
 
     if (provider === 'anthropic') {
       // Get the OAuth manager from provider manager
-      const { getOAuthManager } = await import(
-        '../providers/providerManagerInstance.js'
+      const { getCliOAuthManager } = await import(
+        '../runtime/runtimeSettings.js'
       );
-      const oauthManager = getOAuthManager();
+      const oauthManager = getCliOAuthManager();
 
       if (oauthManager) {
         const anthropicProvider = oauthManager.getProvider('anthropic');

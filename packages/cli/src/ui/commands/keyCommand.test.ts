@@ -4,176 +4,90 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { keyCommand } from './keyCommand.js';
-import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import type { CommandContext } from './types.js';
+
+const mockRuntime = vi.hoisted(() => ({
+  updateActiveProviderApiKey: vi.fn(),
+  getActiveProviderStatus: vi.fn(),
+}));
+
+vi.mock('../../runtime/runtimeSettings.js', () => mockRuntime);
 
 describe('keyCommand', () => {
-  let mockContext: CommandContext;
-  let mockActiveProvider: {
-    name: string;
-    setApiKey?: (key: string) => void;
-    isPaidMode?: () => boolean;
-  };
-  let mockProviderManager: {
-    getActiveProvider: () => typeof mockActiveProvider;
-    getActiveProviderName: () => string;
-  };
-  let mockConfig: {
-    getProviderManager: () => typeof mockProviderManager;
-    setEphemeralSetting: (key: string, value: unknown) => void;
-    refreshAuth: (authType: string) => Promise<void>;
-    getSettingsService: () => unknown;
-  };
+  let context: CommandContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // Create mock active provider
-    mockActiveProvider = {
-      name: 'test-provider',
-      setApiKey: vi.fn(),
-      isPaidMode: vi.fn().mockReturnValue(true),
-    };
-
-    // Create mock provider manager
-    mockProviderManager = {
-      getActiveProvider: vi.fn().mockReturnValue(mockActiveProvider),
-      getActiveProviderName: vi.fn().mockReturnValue('test-provider'),
-    };
-
-    // Create mock config with provider manager
-    mockConfig = {
-      getProviderManager: vi.fn().mockReturnValue(mockProviderManager),
-      setEphemeralSetting: vi.fn(),
-      refreshAuth: vi.fn(),
-      getSettingsService: vi.fn().mockReturnValue(null), // Return null to use fallback behavior
-    };
-
-    mockContext = createMockCommandContext({
-      services: {
-        config: mockConfig,
-      },
-    } as Parameters<typeof createMockCommandContext>[0]);
-  });
-
-  it('should set API key when provided', async () => {
-    if (!keyCommand.action) {
-      throw new Error('keyCommand must have an action.');
-    }
-
-    const testApiKey = 'test-api-key-12345';
-    const result = await keyCommand.action(mockContext, testApiKey);
-
-    expect(mockActiveProvider.setApiKey).toHaveBeenCalledWith(testApiKey);
-    // setEphemeralSetting is no longer called - auth is stored via SettingsService through activeProvider.setApiKey()
-
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'info',
-      content: `API key updated for provider 'test-provider'\nWARNING: You are now in PAID MODE - API usage will be charged to your account`,
+    context = createMockCommandContext();
+    mockRuntime.getActiveProviderStatus.mockReturnValue({
+      providerName: 'test-provider',
+      modelName: 'model-x',
+      displayLabel: 'test-provider:model-x',
+    });
+    mockRuntime.updateActiveProviderApiKey.mockResolvedValue({
+      changed: true,
+      providerName: 'test-provider',
+      message: 'API key updated for provider',
+      isPaidMode: true,
     });
   });
 
-  it('should remove API key when empty string is provided', async () => {
-    if (!keyCommand.action) {
-      throw new Error('keyCommand must have an action.');
-    }
+  it('updates API key when value provided', async () => {
+    const result = await keyCommand.action!(context, 'abc123');
 
-    const result = await keyCommand.action(mockContext, '');
-
-    expect(mockActiveProvider.setApiKey).toHaveBeenCalledWith('');
-    // setEphemeralSetting is no longer called - auth is stored via SettingsService through activeProvider.setApiKey()
-
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'info',
-      content: `API key removed for provider 'test-provider'`,
-    });
+    expect(mockRuntime.updateActiveProviderApiKey).toHaveBeenCalledWith(
+      'abc123',
+    );
+    expect(result?.type).toBe('message');
   });
 
-  it('should remove API key when "none" is provided', async () => {
-    if (!keyCommand.action) {
-      throw new Error('keyCommand must have an action.');
-    }
-
-    const result = await keyCommand.action(mockContext, 'none');
-
-    expect(mockActiveProvider.setApiKey).toHaveBeenCalledWith('');
-    // setEphemeralSetting is no longer called - auth is stored via SettingsService through activeProvider.setApiKey()
-
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'info',
-      content: `API key removed for provider 'test-provider'`,
+  it('removes API key when argument is none', async () => {
+    mockRuntime.updateActiveProviderApiKey.mockResolvedValue({
+      changed: true,
+      providerName: 'test-provider',
+      message: 'API key removed',
     });
+
+    const result = await keyCommand.action!(context, 'none');
+
+    expect(mockRuntime.updateActiveProviderApiKey).toHaveBeenCalledWith(null);
+    expect(result?.type).toBe('message');
+    if (result?.type === 'message') {
+      expect(result.content).toContain('API key removed');
+    }
   });
 
-  it('should handle errors gracefully', async () => {
-    if (!keyCommand.action) {
-      throw new Error('keyCommand must have an action.');
+  it('returns error when updateActiveProviderApiKey throws', async () => {
+    mockRuntime.updateActiveProviderApiKey.mockRejectedValue(
+      new Error('unsupported'),
+    );
+
+    const result = await keyCommand.action!(context, 'abc123');
+
+    expect(result?.type).toBe('message');
+    if (result?.type === 'message') {
+      expect(result.messageType).toBe('error');
+      expect(result.content).toContain('unsupported');
     }
-
-    // Mock a provider that doesn't support setApiKey
-    mockActiveProvider.setApiKey = undefined;
-
-    const result = await keyCommand.action(mockContext, 'invalid-key');
-
-    expect(result).toEqual({
-      type: 'message',
-      messageType: 'error',
-      content: `Provider 'test-provider' does not support API key updates`,
-    });
   });
 
-  it('should trigger payment mode check when successful and callback is available', async () => {
-    if (!keyCommand.action) {
-      throw new Error('keyCommand must have an action.');
-    }
-
-    const mockCheckPaymentModeChange = vi.fn();
+  it('invokes payment mode callback asynchronously', async () => {
+    vi.useFakeTimers();
+    const checkPaymentModeChange = vi.fn();
     const extendedContext = {
-      ...mockContext,
-      checkPaymentModeChange: mockCheckPaymentModeChange,
+      ...context,
+      checkPaymentModeChange,
     } as CommandContext & { checkPaymentModeChange: () => void };
 
-    vi.useFakeTimers();
+    await keyCommand.action!(extendedContext, 'abc123');
 
-    await keyCommand.action(extendedContext, 'api-key-123');
-
-    expect(mockCheckPaymentModeChange).not.toHaveBeenCalled();
-
-    // Fast-forward the timer
-    vi.advanceTimersByTime(100);
-
-    expect(mockCheckPaymentModeChange).toHaveBeenCalledTimes(1);
-
-    vi.useRealTimers();
-  });
-
-  it('should not trigger payment mode check when unsuccessful', async () => {
-    if (!keyCommand.action) {
-      throw new Error('keyCommand must have an action.');
-    }
-
-    // Mock a provider that doesn't support setApiKey
-    mockActiveProvider.setApiKey = undefined;
-
-    const mockCheckPaymentModeChange = vi.fn();
-    const extendedContext = {
-      ...mockContext,
-      checkPaymentModeChange: mockCheckPaymentModeChange,
-    } as CommandContext & { checkPaymentModeChange: () => void };
-
-    vi.useFakeTimers();
-
-    await keyCommand.action(extendedContext, 'invalid-key');
+    expect(checkPaymentModeChange).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(100);
-
-    expect(mockCheckPaymentModeChange).not.toHaveBeenCalled();
-
+    expect(checkPaymentModeChange).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
 });

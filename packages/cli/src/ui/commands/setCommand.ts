@@ -17,6 +17,13 @@ import type {
   TokenInfo,
   ValueArgument,
 } from './schema/types.js';
+import {
+  getActiveModelParams,
+  getEphemeralSettings,
+  setEphemeralSetting,
+  setActiveModelParam,
+  clearActiveModelParam,
+} from '../../runtime/runtimeSettings.js';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
 
@@ -238,11 +245,8 @@ const setSchema: CommandArgumentSchema = [
         kind: 'value',
         name: 'key',
         description: 'setting key to remove',
-        completer: async (ctx, partial) => {
-          const config = ctx.services.config;
-          if (!config) return [];
-
-          const ephemeralSettings = config.getEphemeralSettings();
+        completer: async (_ctx, partial) => {
+          const ephemeralSettings = getEphemeralSettings();
           const ephemeralKeys = Object.keys(ephemeralSettings).filter(
             (key) => ephemeralSettings[key] !== undefined,
           );
@@ -279,35 +283,18 @@ const setSchema: CommandArgumentSchema = [
               const key = tokens.tokens[1];
 
               if (key === 'modelparam') {
-                const config = ctx.services.config;
-                if (!config) return [];
-
-                const providerManager = config.getProviderManager();
-                const activeProvider = providerManager?.getActiveProvider();
-
-                if (
-                  activeProvider &&
-                  'getModelParams' in activeProvider &&
-                  typeof activeProvider.getModelParams === 'function'
-                ) {
-                  const modelParams = activeProvider.getModelParams();
-                  if (modelParams) {
-                    const paramNames = Object.keys(modelParams);
-                    return paramNames
-                      .filter((name) => name.startsWith(partial))
-                      .map((name) => ({
-                        value: name,
-                        description: `Parameter: ${name}`,
-                      }));
-                  }
-                }
+                const params = getActiveModelParams();
+                const paramNames = Object.keys(params);
+                return paramNames
+                  .filter((name) => name.startsWith(partial))
+                  .map((name) => ({
+                    value: name,
+                    description: `Parameter: ${name}`,
+                  }));
               }
 
               if (key === 'custom-headers') {
-                const config = ctx.services.config;
-                if (!config) return [];
-
-                const headers = config.getEphemeralSetting('custom-headers') as
+                const headers = getEphemeralSettings()['custom-headers'] as
                   | Record<string, string>
                   | undefined;
                 if (headers) {
@@ -337,27 +324,18 @@ const setSchema: CommandArgumentSchema = [
         name: 'param-name',
         description: 'parameter name',
         hint: 'parameter name',
-        completer: async (ctx, partial) => {
-          const config = ctx.services.config;
-          if (!config) return [];
-
-          const providerManager = config.getProviderManager();
-          const activeProvider = providerManager?.getActiveProvider();
-
-          if (
-            activeProvider &&
-            'getModelParams' in activeProvider &&
-            typeof activeProvider.getModelParams === 'function'
-          ) {
-            const modelParams = activeProvider.getModelParams();
-            if (modelParams) {
-              const paramNames = Object.keys(modelParams);
-              return paramNames
-                .filter((name) => name.startsWith(partial))
-                .map((name) => ({
-                  value: name,
-                  description: `Parameter: ${name}`,
-                }));
+        completer: async (_ctx, partial) => {
+          const modelParams = getActiveModelParams();
+          if (modelParams && Object.keys(modelParams).length > 0) {
+            const paramNames = Object.keys(modelParams);
+            const matches = paramNames.filter((name) =>
+              name.startsWith(partial),
+            );
+            if (matches.length > 0) {
+              return matches.map((name) => ({
+                value: name,
+                description: `Parameter: ${name}`,
+              }));
             }
           }
 
@@ -484,19 +462,16 @@ const setSchema: CommandArgumentSchema = [
           }
 
           if (setting === 'custom-headers') {
-            const config = ctx.services.config;
-            if (config) {
-              const headers = config.getEphemeralSetting('custom-headers') as
-                | Record<string, string>
-                | undefined;
-              if (headers) {
-                return Object.keys(headers)
-                  .filter((name) => name.startsWith(partial))
-                  .map((name) => ({
-                    value: name,
-                    description: `header: ${name}`,
-                  }));
-              }
+            const headers = getEphemeralSettings()['custom-headers'] as
+              | Record<string, string>
+              | undefined;
+            if (headers) {
+              return Object.keys(headers)
+                .filter((name) => name.startsWith(partial))
+                .map((name) => ({
+                  value: name,
+                  description: `header: ${name}`,
+                }));
             }
           }
 
@@ -530,6 +505,127 @@ export const setCommand: SlashCommand = {
 
     const parts = trimmedArgs.split(/\s+/);
     const key = parts[0];
+
+    if (key === 'modelparam') {
+      if (parts.length < 3) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content:
+            'Usage: /set modelparam <key> <value>\nExample: /set modelparam temperature 0.7',
+        };
+      }
+
+      const paramName = parts[1];
+      const rawValue = parts.slice(2).join(' ');
+      const parsedParamValue = parseValue(rawValue);
+
+      try {
+        setActiveModelParam(paramName, parsedParamValue);
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to set model parameter: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+
+      const formattedValue =
+        typeof parsedParamValue === 'string'
+          ? parsedParamValue
+          : typeof parsedParamValue === 'number' ||
+              typeof parsedParamValue === 'boolean' ||
+              parsedParamValue === null
+            ? String(parsedParamValue)
+            : JSON.stringify(parsedParamValue);
+
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Model parameter '${paramName}' set to ${formattedValue}`,
+      };
+    }
+
+    if (key === 'unset') {
+      if (parts.length < 2) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content:
+            'Usage: /set unset <ephemeral-key|modelparam> [subkey]\nExample: /set unset base-url',
+        };
+      }
+
+      const targetKey = parts[1];
+      const subKey = parts[2];
+
+      if (targetKey === 'modelparam') {
+        if (!subKey) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content:
+              'Usage: /set unset modelparam <key>\nExample: /set unset modelparam temperature',
+          };
+        }
+
+        try {
+          clearActiveModelParam(subKey);
+        } catch (error) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Failed to clear model parameter: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Model parameter '${subKey}' cleared`,
+        };
+      }
+
+      const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
+      if (!validEphemeralKeys.includes(targetKey)) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Invalid setting key: ${targetKey}. Valid keys are: ${validEphemeralKeys.join(', ')}`,
+        };
+      }
+
+      if (targetKey === 'custom-headers' && subKey) {
+        const currentHeaders = getEphemeralSettings()['custom-headers'] as
+          | Record<string, unknown>
+          | undefined;
+        if (currentHeaders && subKey in currentHeaders) {
+          const nextHeaders = { ...currentHeaders };
+          delete nextHeaders[subKey];
+          setEphemeralSetting(
+            targetKey,
+            Object.keys(nextHeaders).length > 0 ? nextHeaders : undefined,
+          );
+          return {
+            type: 'message',
+            messageType: 'info',
+            content: `Custom header '${subKey}' cleared`,
+          };
+        }
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `No custom header named '${subKey}' found`,
+        };
+      }
+
+      setEphemeralSetting(targetKey, undefined);
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Ephemeral setting '${targetKey}' cleared`,
+      };
+    }
 
     // If only key is provided, show help for that key
     if (parts.length === 1) {
@@ -727,9 +823,6 @@ export const setCommand: SlashCommand = {
       };
     }
 
-    const settingsService = config.getSettingsService();
-    const useSettingsService = settingsService !== null;
-
     // Store compression settings as ephemeral settings
     // They will be read by geminiChat.ts when compression is needed
     if (key === 'context-limit' || key === 'compression-threshold') {
@@ -744,14 +837,7 @@ export const setCommand: SlashCommand = {
     // They will be saved only when user explicitly saves a profile
     // Note: SettingsService doesn't currently support ephemeral settings,
     // so we continue to use the config directly for these session-only settings
-    if (useSettingsService) {
-      // When SettingsService is available, we still use config for ephemeral settings
-      // as they are session-only and not persisted to the settings file
-      config.setEphemeralSetting(key, parsedValue);
-    } else {
-      // Fallback to direct config usage
-      config.setEphemeralSetting(key, parsedValue);
-    }
+    setEphemeralSetting(key, parsedValue);
 
     return {
       type: 'message',

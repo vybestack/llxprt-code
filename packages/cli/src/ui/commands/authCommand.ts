@@ -17,9 +17,10 @@ import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
 import {
-  getOAuthManager,
-  getProviderManager,
-} from '../../providers/providerManagerInstance.js';
+  getCliOAuthManager,
+  getCliProviderManager,
+  registerCliProviderInfrastructure,
+} from '../../runtime/runtimeSettings.js';
 
 export class AuthCommandExecutor {
   constructor(private oauthManager: OAuthManager) {}
@@ -262,9 +263,7 @@ export class AuthCommandExecutor {
    */
   private clearProviderCache(provider: string): void {
     try {
-      // Get the provider manager
-      const providerManager = getProviderManager();
-      if (!providerManager) return;
+      const providerManager = getCliProviderManager();
 
       // Get the provider instance
       const providerInstance = providerManager.getProviderByName(provider);
@@ -313,12 +312,11 @@ export const authCommand: SlashCommand = {
     'toggle OAuth enablement for providers (gemini, qwen, anthropic)',
   kind: CommandKind.BUILT_IN,
   action: async (context, args) => {
-    // Ensure provider manager is initialized (which creates the OAuth manager)
-    // Pass settings to ensure OAuth state is properly initialized
-    getProviderManager(undefined, false, context.services.settings);
+    // Ensure provider manager is initialized (throws if bootstrap skipped registration)
+    const providerManager = getCliProviderManager();
 
     // Get the shared OAuth manager instance
-    let oauthManager = getOAuthManager();
+    let oauthManager = getCliOAuthManager();
 
     // If for some reason it doesn't exist yet, create it
     if (!oauthManager) {
@@ -330,6 +328,8 @@ export const authCommand: SlashCommand = {
       oauthManager.registerProvider(new GeminiOAuthProvider());
       oauthManager.registerProvider(new QwenOAuthProvider());
       oauthManager.registerProvider(new AnthropicOAuthProvider());
+
+      registerCliProviderInfrastructure(providerManager, oauthManager);
     }
 
     const executor = new AuthCommandExecutor(oauthManager);

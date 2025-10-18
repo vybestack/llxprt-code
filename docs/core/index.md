@@ -4,6 +4,8 @@ LLxprt Code's core package (`packages/core`) is the backend portion of LLxprt Co
 
 ## Navigating this section
 
+- **[Provider runtime context](./provider-runtime-context.md):** Details on `ProviderRuntimeContext` lifecycle helpers and runtime isolation semantics.
+- **[Provider interface](./provider-interface.md):** API reference for implementing providers against the stateless runtime.
 - **[Core tools API](./tools-api.md):** Information on how tools are defined, registered, and used by the core.
 - **[Memory Import Processor](./memport.md):** Documentation for the modular LLXPRT.md import feature using @file.md syntax.
 

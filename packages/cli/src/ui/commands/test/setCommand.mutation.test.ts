@@ -8,32 +8,21 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setCommand } from '../setCommand.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type { CommandContext } from '../types.js';
+vi.mock('../../../runtime/runtimeSettings.js', () => ({
+  getActiveModelParams: vi.fn(() => ({})),
+  getEphemeralSettings: vi.fn(() => ({})),
+  setEphemeralSetting: vi.fn(),
+  setActiveModelParam: vi.fn(),
+  clearActiveModelParam: vi.fn(),
+}));
+import { setEphemeralSetting } from '../../../runtime/runtimeSettings.js';
 
 describe('setCommand action mutation coverage', () => {
   let context: CommandContext;
-  let setEphemeralSetting: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    setEphemeralSetting = vi.fn();
-
-    context = createMockCommandContext({
-      services: {
-        config: {
-          getProviderManager: vi.fn(() => ({
-            getActiveProvider: vi.fn(() => ({
-              name: 'test-provider',
-              getModelParams: vi.fn(() => ({ temperature: 0.3 })),
-              setModelParams: vi.fn(),
-            })),
-          })),
-          setEphemeralSetting,
-          getEphemeralSetting: vi.fn(() => undefined),
-          getEphemeralSettings: vi.fn(() => ({})),
-          getGeminiClient: vi.fn(() => null),
-          getSettingsService: vi.fn(() => null),
-        },
-      },
-    });
+    vi.clearAllMocks();
+    context = createMockCommandContext();
   });
 
   it('stores numeric context-limit values', async () => {

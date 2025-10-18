@@ -27,12 +27,12 @@ Include plan/requirement annotations inside the report.
 
 ```bash
 npm run typecheck
-npm test -- --runTestsByPath \
-  packages/cli/src/runtime/__tests__/providerConfigUtils.test.ts \
+npx vitest run \
+  packages/cli/src/runtime/providerConfigUtils.test.ts \
   packages/cli/src/integration-tests/base-url-behavior.integration.test.ts \
   packages/cli/src/integration-tests/provider-switching.integration.test.ts \
   packages/core/src/auth/precedence.test.ts \
-  packages/core/src/auth/__tests__/precedence.adapter.test.ts
+  packages/core/src/auth/precedence.adapter.test.ts
 ```
 
 ## Manual Verification Checklist

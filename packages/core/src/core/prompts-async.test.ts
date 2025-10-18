@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
-import { getCoreSystemPromptAsync, initializePromptSystem } from './prompts.js';
+import {
+  getCoreSystemPromptAsync,
+  initializePromptSystem,
+  type CoreSystemPromptOptions,
+} from './prompts.js';
 import process from 'node:process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -14,6 +18,15 @@ import path from 'node:path';
 describe('prompts async integration', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let tempDir: string;
+  const baseOptions: CoreSystemPromptOptions = {
+    provider: 'gemini',
+    model: 'gemini-1.5-pro',
+  };
+
+  const callPrompt = (
+    overrides: Partial<CoreSystemPromptOptions> = {},
+  ): Promise<string> =>
+    getCoreSystemPromptAsync({ ...baseOptions, ...overrides });
 
   beforeAll(async () => {
     // Create a temporary directory for test prompts
@@ -41,7 +54,7 @@ describe('prompts async integration', () => {
 
   describe('getCoreSystemPromptAsync', () => {
     it('should return a valid prompt string', async () => {
-      const prompt = await getCoreSystemPromptAsync();
+      const prompt = await callPrompt();
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
       expect(prompt.length).toBeGreaterThan(100);
@@ -52,7 +65,7 @@ describe('prompts async integration', () => {
 
     it('should include user memory when provided', async () => {
       const userMemory = 'Remember: The user prefers concise responses.';
-      const prompt = await getCoreSystemPromptAsync(userMemory);
+      const prompt = await callPrompt({ userMemory });
 
       // Debug: log what we actually get
       if (!prompt.includes(userMemory)) {
@@ -69,10 +82,7 @@ describe('prompts async integration', () => {
     });
 
     it.skip('should handle different models', async () => {
-      const prompt = await getCoreSystemPromptAsync(
-        undefined,
-        'gemini-2.5-flash',
-      );
+      const prompt = await callPrompt({ model: 'gemini-2.5-flash' });
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
 
@@ -103,11 +113,7 @@ describe('prompts async integration', () => {
 
     it('should handle custom tools list', async () => {
       const tools = ['read_file', 'write_file', 'list_directory'];
-      const prompt = await getCoreSystemPromptAsync(
-        undefined,
-        undefined,
-        tools,
-      );
+      const prompt = await callPrompt({ tools });
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
       // Should still contain core content
@@ -117,7 +123,7 @@ describe('prompts async integration', () => {
     it('should handle git repository environment', async () => {
       // Mock isGitRepository to return true
       process.env.GIT_DIR = '.git';
-      const prompt = await getCoreSystemPromptAsync();
+      const prompt = await callPrompt();
       expect(prompt).toBeTruthy();
       // Note: The git detection in buildPromptContext uses isGitRepository
       // which checks the actual file system, not env vars
@@ -125,7 +131,7 @@ describe('prompts async integration', () => {
 
     it('should handle sandbox environment', async () => {
       process.env.SANDBOX = 'true';
-      const prompt = await getCoreSystemPromptAsync();
+      const prompt = await callPrompt();
       expect(prompt).toBeTruthy();
       expect(prompt).toContain('Sandbox');
     });
@@ -133,7 +139,7 @@ describe('prompts async integration', () => {
     it('should handle different environments based on initial setup', async () => {
       // This test just verifies the prompt system works
       // We can't test environment changes without reset functionality
-      const prompt = await getCoreSystemPromptAsync();
+      const prompt = await callPrompt();
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
       expect(prompt.length).toBeGreaterThan(100);
@@ -142,7 +148,7 @@ describe('prompts async integration', () => {
 
   describe('prompt content validation', () => {
     it('should include all required tool references', async () => {
-      const prompt = await getCoreSystemPromptAsync();
+      const prompt = await callPrompt();
 
       // Check for tool references (they should be replaced with actual tool names)
       expect(prompt).toContain('Ls');
@@ -156,7 +162,7 @@ describe('prompts async integration', () => {
 
     it('should properly format user memory with separator', async () => {
       const userMemory = 'Custom user preferences here';
-      const prompt = await getCoreSystemPromptAsync(userMemory);
+      const prompt = await callPrompt({ userMemory });
 
       // Should have the separator before user memory
       expect(prompt).toMatch(/---\s*Custom user preferences here/);

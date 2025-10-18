@@ -27,7 +27,7 @@ Include plan/requirement annotations inside the report.
 
 ```bash
 npm run typecheck
-npm test -- --runTestsByPath packages/cli/src/runtime/__tests__/runtimeSettings.test.ts packages/cli/src/integration-tests/cli-args.integration.test.ts packages/cli/src/integration-tests/model-params-isolation.integration.test.ts packages/cli/src/integration-tests/base-url-behavior.integration.test.ts
+npx vitest run packages/cli/src/runtime/runtimeSettings.test.ts packages/cli/src/integration-tests/cli-args.integration.test.ts packages/cli/src/integration-tests/model-params-isolation.integration.test.ts packages/cli/src/integration-tests/base-url-behavior.integration.test.ts
 ```
 
 ## Manual Verification Checklist

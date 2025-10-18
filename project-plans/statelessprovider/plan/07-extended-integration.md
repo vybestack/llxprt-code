@@ -38,11 +38,11 @@
 
 ### Files to Create / Tests
 
-- `packages/cli/src/runtime/__tests__/providerConfigUtils.test.ts`
+- `packages/cli/src/runtime/providerConfigUtils.test.ts`
   - Cover runtime helper interactions within provider configuration utilities.
-- `packages/core/src/auth/__tests__/precedence.adapter.test.ts`
+- `packages/core/src/auth/precedence.adapter.test.ts`
   - Verify adapter path for injected settings services.
-- `packages/core/src/providers/openai/__tests__/getOpenAIProviderInfo.context.test.ts`
+- `packages/core/src/providers/openai/getOpenAIProviderInfo.context.test.ts`
   - Add coverage to prove the helper works with injected settings and without legacy getters.
 - Update existing OpenAI provider info tests (or add the new suite above) to assert context-driven behaviour.
 
@@ -60,13 +60,13 @@ Annotate updated sections with plan/requirement/pseudocode markers tied to `cli-
 
 ```bash
 npm run typecheck
-npm test -- --runTestsByPath \
-  packages/cli/src/runtime/__tests__/providerConfigUtils.test.ts \
+npx vitest run \
+  packages/cli/src/runtime/providerConfigUtils.test.ts \
   packages/cli/src/integration-tests/base-url-behavior.integration.test.ts \
   packages/cli/src/integration-tests/provider-switching.integration.test.ts \
   packages/core/src/auth/precedence.test.ts \
-  packages/core/src/auth/__tests__/precedence.adapter.test.ts \
-  packages/core/src/providers/openai/__tests__/getOpenAIProviderInfo.context.test.ts
+  packages/core/src/auth/precedence.adapter.test.ts \
+  packages/core/src/providers/openai/getOpenAIProviderInfo.context.test.ts
 ```
 
 ## Manual Verification Checklist
@@ -104,10 +104,10 @@ Files Modified:
 - packages/cli/src/providers/provider-gemini-switching.test.ts
 - packages/core/src/auth/precedence.test.ts
 - packages/core/src/config/profileManager.ts
-- packages/cli/src/runtime/__tests__/providerConfigUtils.test.ts
-- packages/core/src/auth/__tests__/precedence.adapter.test.ts
+- packages/cli/src/runtime/providerConfigUtils.test.ts
+- packages/core/src/auth/precedence.adapter.test.ts
 - packages/core/src/providers/openai/getOpenAIProviderInfo.ts
-- packages/core/src/providers/openai/__tests__/getOpenAIProviderInfo.context.test.ts
+- packages/core/src/providers/openai/getOpenAIProviderInfo.context.test.ts
 Verification:
 - <paste outputs>
 ```

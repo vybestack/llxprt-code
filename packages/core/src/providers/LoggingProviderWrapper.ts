@@ -5,7 +5,13 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-import { IProvider, IModel, ITool } from './IProvider.js';
+import {
+  IProvider,
+  IModel,
+  ITool,
+  GenerateChatOptions,
+  ProviderToolset,
+} from './IProvider.js';
 import { IContent, UsageStats } from '../services/history/IContent.js';
 import { Config, RedactionConfig } from '../config/config.js';
 import {
@@ -20,6 +26,7 @@ import {
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
+import type { SettingsService } from '../settings/SettingsService.js';
 
 export interface ConversationDataRedactor {
   redactMessage(content: IContent, provider: string): IContent;
@@ -232,48 +239,64 @@ export class LoggingProviderWrapper implements IProvider {
     return this.wrapped.getDefaultModel();
   }
 
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P04
+   * @requirement REQ-SP-001
+   * @pseudocode base-provider.md lines 7-15
+   * @pseudocode provider-invocation.md lines 11-15
+   */
   // Only method that includes logging - everything else is passthrough
-  async *generateChatCompletion(
+  generateChatCompletion(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent>;
+  generateChatCompletion(
     content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
+    tools?: ProviderToolset,
+  ): AsyncIterableIterator<IContent>;
+  async *generateChatCompletion(
+    contentOrOptions: IContent[] | GenerateChatOptions,
+    maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
+    const normalizedOptions: GenerateChatOptions = Array.isArray(
+      contentOrOptions,
+    )
+      ? { contents: contentOrOptions, tools: maybeTools }
+      : { ...contentOrOptions };
+
+    normalizedOptions.config = normalizedOptions.config ?? this.config;
+    const activeConfig = normalizedOptions.config;
+
     const promptId = this.generatePromptId();
     this.turnNumber++;
 
     // Log request if logging is enabled
-    if (this.config.getConversationLoggingEnabled()) {
-      await this.logRequest(content, tools, promptId);
+    if (activeConfig?.getConversationLoggingEnabled()) {
+      await this.logRequest(
+        activeConfig,
+        normalizedOptions.contents,
+        normalizedOptions.tools,
+        promptId,
+      );
     }
 
-    // Get stream from wrapped provider
-    const stream = this.wrapped.generateChatCompletion(content, tools);
+    // Get stream from wrapped provider using normalized options object
+    const stream = this.wrapped.generateChatCompletion(normalizedOptions);
 
     // Always process stream to extract token metrics
     // If logging not enabled, process for metrics only
-    if (!this.config.getConversationLoggingEnabled()) {
-      yield* this.processStreamForMetrics(stream);
+    if (!activeConfig?.getConversationLoggingEnabled()) {
+      yield* this.processStreamForMetrics(activeConfig, stream);
       return;
     }
 
     // Log the response stream (which also processes metrics)
-    yield* this.logResponseStream(stream, promptId);
+    yield* this.logResponseStream(activeConfig, stream, promptId);
   }
 
   private async logRequest(
+    config: Config,
     content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
+    tools?: ProviderToolset,
     promptId?: string,
   ): Promise<void> {
     try {
@@ -294,11 +317,11 @@ export class LoggingProviderWrapper implements IProvider {
         'default', // toolFormat is no longer passed in
       );
 
-      logConversationRequest(this.config, event);
+      logConversationRequest(config, event);
 
       // Also write to disk
       const fileWriter = getConversationFileWriter(
-        this.config.getConversationLogPath(),
+        config.getConversationLogPath(),
       );
       fileWriter.writeRequest(this.wrapped.name, redactedContent, {
         conversationId: this.conversationId,
@@ -318,6 +341,7 @@ export class LoggingProviderWrapper implements IProvider {
    * @plan PLAN-20250909-TOKTRACK
    */
   private async *processStreamForMetrics(
+    config: Config | undefined,
     stream: AsyncIterableIterator<IContent>,
   ): AsyncIterableIterator<IContent> {
     const startTime = performance.now();
@@ -343,7 +367,7 @@ export class LoggingProviderWrapper implements IProvider {
           this.extractTokenCountsFromTokenUsage(latestTokenUsage);
 
         // Accumulate token usage for session tracking
-        this.accumulateTokenUsage(tokenCounts);
+        this.accumulateTokenUsage(tokenCounts, config);
 
         // Record performance metrics (TPM tracks output tokens only)
         const outputTokens = tokenCounts.output_token_count;
@@ -363,6 +387,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async *logResponseStream(
+    config: Config,
     stream: AsyncIterableIterator<IContent>,
     promptId: string,
   ): AsyncIterableIterator<IContent> {
@@ -393,6 +418,7 @@ export class LoggingProviderWrapper implements IProvider {
     } catch (error) {
       const errorTime = performance.now();
       await this.logResponse(
+        config,
         '',
         promptId,
         errorTime - startTime,
@@ -406,6 +432,7 @@ export class LoggingProviderWrapper implements IProvider {
     if (responseComplete) {
       const totalTime = performance.now() - startTime;
       await this.logResponse(
+        config,
         responseContent,
         promptId,
         totalTime,
@@ -439,6 +466,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async logResponse(
+    config: Config,
     content: string,
     promptId: string,
     duration: number,
@@ -458,7 +486,7 @@ export class LoggingProviderWrapper implements IProvider {
         : this.extractTokenCountsFromResponse(content);
 
       // Accumulate token usage for session tracking
-      this.accumulateTokenUsage(tokenCounts);
+      this.accumulateTokenUsage(tokenCounts, config);
 
       // Record performance metrics (TPM tracks output tokens only)
       const outputTokens = tokenCounts.output_token_count;
@@ -474,7 +502,7 @@ export class LoggingProviderWrapper implements IProvider {
 
       // Log token usage to telemetry
       logTokenUsage(
-        this.config,
+        config,
         new TokenUsageEvent(
           this.wrapped.name,
           this.conversationId,
@@ -498,11 +526,11 @@ export class LoggingProviderWrapper implements IProvider {
         error ? String(error) : undefined,
       );
 
-      logConversationResponse(this.config, event);
+      logConversationResponse(config, event);
 
       // Also write to disk
       const fileWriter = getConversationFileWriter(
-        this.config.getConversationLogPath(),
+        config.getConversationLogPath(),
       );
       fileWriter.writeResponse(this.wrapped.name, redactedContent, {
         conversationId: this.conversationId,
@@ -632,13 +660,16 @@ export class LoggingProviderWrapper implements IProvider {
   /**
    * Accumulate token usage for session tracking
    */
-  private accumulateTokenUsage(tokenCounts: {
-    input_token_count: number;
-    output_token_count: number;
-    cached_content_token_count: number;
-    thoughts_token_count: number;
-    tool_token_count: number;
-  }): void {
+  private accumulateTokenUsage(
+    tokenCounts: {
+      input_token_count: number;
+      output_token_count: number;
+      cached_content_token_count: number;
+      thoughts_token_count: number;
+      tool_token_count: number;
+    },
+    config: Config | undefined,
+  ): void {
     // Map token counts to expected format
     const usage = {
       input: tokenCounts.input_token_count || 0,
@@ -649,7 +680,7 @@ export class LoggingProviderWrapper implements IProvider {
     };
 
     // Call accumulateSessionTokens if providerManager is available
-    const providerManager = this.config.getProviderManager();
+    const providerManager = config?.getProviderManager();
     if (providerManager) {
       try {
         console.debug(
@@ -667,6 +698,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async logToolCall(
+    config: Config,
     toolName: string,
     params: unknown,
     result: unknown,
@@ -690,7 +722,7 @@ export class LoggingProviderWrapper implements IProvider {
 
       // Write to disk
       const fileWriter = getConversationFileWriter(
-        this.config.getConversationLogPath(),
+        config.getConversationLogPath(),
       );
       fileWriter.writeToolCall(this.wrapped.name, toolName, {
         conversationId: this.conversationId,
@@ -711,28 +743,24 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   // All other methods are simple passthroughs to wrapped provider
-  setModel?(modelId: string): void {
-    this.wrapped.setModel?.(modelId);
-  }
-
   getCurrentModel?(): string {
     return this.wrapped.getCurrentModel?.() ?? '';
   }
 
-  setApiKey?(apiKey: string): void {
-    this.wrapped.setApiKey?.(apiKey);
-  }
-
-  setBaseUrl?(baseUrl?: string): void {
-    this.wrapped.setBaseUrl?.(baseUrl);
+  setRuntimeSettingsService?(settingsService: SettingsService): void {
+    /**
+     * @plan PLAN-20250218-STATELESSPROVIDER.P05
+     * @requirement REQ-SP-001
+     * @pseudocode provider-invocation.md lines 8-15
+     */
+    const runtimeAware = this.wrapped as IProvider & {
+      setRuntimeSettingsService?: (settings: SettingsService) => void;
+    };
+    runtimeAware.setRuntimeSettingsService?.(settingsService);
   }
 
   getToolFormat?(): string {
     return this.wrapped.getToolFormat?.() ?? '';
-  }
-
-  setToolFormatOverride?(format: string | null): void {
-    this.wrapped.setToolFormatOverride?.(format);
   }
 
   isPaidMode?(): boolean {
@@ -770,21 +798,32 @@ export class LoggingProviderWrapper implements IProvider {
 
       // Log tool call if logging is enabled and result has metadata
       if (this.config.getConversationLoggingEnabled()) {
-        await this.logToolCall(toolName, params, result, startTime, true);
+        await this.logToolCall(
+          this.config,
+          toolName,
+          params,
+          result,
+          startTime,
+          true,
+        );
       }
 
       return result;
     } catch (error) {
       // Log failed tool call if logging is enabled
       if (this.config.getConversationLoggingEnabled()) {
-        await this.logToolCall(toolName, params, null, startTime, false, error);
+        await this.logToolCall(
+          this.config,
+          toolName,
+          params,
+          null,
+          startTime,
+          false,
+          error,
+        );
       }
       throw error;
     }
-  }
-
-  setModelParams?(params: Record<string, unknown> | undefined): void {
-    this.wrapped.setModelParams?.(params);
   }
 
   getModelParams?(): Record<string, unknown> | undefined {

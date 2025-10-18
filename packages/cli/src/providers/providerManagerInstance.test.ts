@@ -4,16 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   sanitizeForByteString,
   needsSanitization,
 } from '@vybestack/llxprt-code-core';
 import { MockFileSystem } from './IFileSystem.js';
-import {
-  setFileSystem,
-  resetProviderManager,
-} from './providerManagerInstance.js';
+import { setFileSystem } from './providerManagerInstance.js';
 
 // Mock os module and set homedir before imports
 vi.mock('os', async (importOriginal) => {
@@ -51,10 +48,6 @@ describe('API key sanitization regression tests', () => {
     vi.clearAllMocks();
     mockFileSystem = new MockFileSystem();
     setFileSystem(mockFileSystem);
-  });
-
-  afterEach(() => {
-    resetProviderManager();
   });
 
   it('should sanitize API keys containing Unicode replacement characters', () => {

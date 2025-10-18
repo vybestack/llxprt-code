@@ -19,7 +19,8 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import type { SettingsService } from '../settings/SettingsService.js';
+import { getActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 export interface AuthPrecedenceConfig {
   // Environment variable names to check
@@ -42,10 +43,45 @@ export interface OAuthManager {
 export class AuthPrecedenceResolver {
   private config: AuthPrecedenceConfig;
   private oauthManager?: OAuthManager;
+  private settingsService?: SettingsService;
 
-  constructor(config: AuthPrecedenceConfig, oauthManager?: OAuthManager) {
+  constructor(
+    config: AuthPrecedenceConfig,
+    oauthManager?: OAuthManager,
+    settingsService?: SettingsService,
+  ) {
     this.config = config;
     this.oauthManager = oauthManager;
+    this.settingsService = settingsService;
+  }
+
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P05
+   * @requirement REQ-SP-001
+   * @pseudocode provider-invocation.md lines 8-15
+   */
+  setSettingsService(
+    settingsService: SettingsService | null | undefined,
+  ): void {
+    if (!settingsService) {
+      this.settingsService = undefined;
+      return;
+    }
+    this.settingsService = settingsService;
+  }
+
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P05
+   * @requirement REQ-SP-001
+   * @pseudocode provider-invocation.md lines 8-15
+   */
+  private resolveSettingsService(): SettingsService {
+    if (this.settingsService) {
+      return this.settingsService;
+    }
+    const context = getActiveProviderRuntimeContext();
+    this.settingsService = context.settingsService;
+    return this.settingsService;
   }
 
   /**
@@ -53,7 +89,7 @@ export class AuthPrecedenceResolver {
    * Returns the first available authentication method or null if none found
    */
   async resolveAuthentication(): Promise<string | null> {
-    const settingsService = getSettingsService();
+    const settingsService = this.resolveSettingsService();
 
     // 1. Check /key command key (highest priority) - stored in SettingsService
     const authKey = settingsService.get('auth-key');
@@ -123,7 +159,11 @@ export class AuthPrecedenceResolver {
   async hasNonOAuthAuthentication(): Promise<boolean> {
     // Check all precedence levels except OAuth
     const tempConfig = { ...this.config, isOAuthEnabled: false };
-    const tempResolver = new AuthPrecedenceResolver(tempConfig, undefined);
+    const tempResolver = new AuthPrecedenceResolver(
+      tempConfig,
+      undefined,
+      this.resolveSettingsService(),
+    );
     const auth = await tempResolver.resolveAuthentication();
     return auth !== null;
   }
@@ -144,7 +184,7 @@ export class AuthPrecedenceResolver {
    * Get authentication method name for debugging/logging
    */
   async getAuthMethodName(): Promise<string | null> {
-    const settingsService = getSettingsService();
+    const settingsService = this.resolveSettingsService();
 
     // Check precedence levels and return method name
     const authKey = settingsService.get('auth-key');

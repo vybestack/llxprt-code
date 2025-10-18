@@ -31,7 +31,8 @@ import type {
   ToolResponseBlock,
   UsageStats,
 } from '../services/history/IContent.js';
-import type { IProvider } from '../providers/IProvider.js';
+import type { IProvider, ProviderToolset } from '../providers/IProvider.js';
+import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 // import { estimateTokens } from '../utils/toolOutputLimiter.js'; // Unused after retry stream refactor
 import {
   logApiRequest,
@@ -668,18 +669,20 @@ export class GeminiChat {
         );
 
         // Call the provider directly with IContent
-        const streamResponse = provider.generateChatCompletion!(
-          iContents,
-          tools as
-            | Array<{
-                functionDeclarations: Array<{
-                  name: string;
-                  description?: string;
-                  parametersJsonSchema?: unknown;
-                }>;
-              }>
-            | undefined,
-        );
+        const streamResponse = provider.generateChatCompletion!({
+          contents: iContents,
+          tools: tools as ProviderToolset | undefined,
+          config: this.config,
+          runtime: createProviderRuntimeContext({
+            settingsService: this.config.getSettingsService(),
+            config: this.config,
+            runtimeId: 'geminiChat.trySendMessage',
+            metadata: {
+              source: 'GeminiChat.trySendMessage',
+              toolCount: tools?.length ?? 0,
+            },
+          }),
+        });
 
         // Collect all chunks from the stream
         let lastResponse: IContent | undefined;
@@ -1008,12 +1011,23 @@ export class GeminiChat {
                 }>)
               : undefined;
 
-          const streamResponse = provider.generateChatCompletion(
-            userIContents,
-            toolsFromConfig && toolsFromConfig.length > 0
-              ? toolsFromConfig
-              : undefined,
-          );
+          const streamResponse = provider.generateChatCompletion({
+            contents: userIContents,
+            tools:
+              toolsFromConfig && toolsFromConfig.length > 0
+                ? (toolsFromConfig as ProviderToolset)
+                : undefined,
+            config: this.config,
+            runtime: createProviderRuntimeContext({
+              settingsService: this.config.getSettingsService(),
+              config: this.config,
+              runtimeId: 'geminiChat.streamGeneration',
+              metadata: {
+                source: 'GeminiChat.streamGeneration',
+                toolCount: toolsFromConfig?.length ?? 0,
+              },
+            }),
+          });
 
           let lastResponse: IContent | undefined;
           for await (const iContent of streamResponse) {
@@ -1159,18 +1173,20 @@ export class GeminiChat {
       const tools = this.generationConfig.tools;
 
       // Call the provider directly with IContent
-      const streamResponse = provider.generateChatCompletion!(
-        requestContents,
-        tools as
-          | Array<{
-              functionDeclarations: Array<{
-                name: string;
-                description?: string;
-                parametersJsonSchema?: unknown;
-              }>;
-            }>
-          | undefined,
-      );
+      const streamResponse = provider.generateChatCompletion!({
+        contents: requestContents,
+        tools: tools as ProviderToolset | undefined,
+        config: this.config,
+        runtime: createProviderRuntimeContext({
+          settingsService: this.config.getSettingsService(),
+          config: this.config,
+          runtimeId: 'geminiChat.generatorRequest',
+          metadata: {
+            source: 'GeminiChat.generateRequest',
+            historyLength: requestContents.length,
+          },
+        }),
+      });
 
       // Convert the IContent stream to GenerateContentResponse stream
       return (async function* (instance) {
@@ -1451,10 +1467,20 @@ export class GeminiChat {
     ];
 
     // Direct provider call without tools for compression
-    const stream = provider.generateChatCompletion!(
-      compressionRequest,
-      undefined, // no tools for compression
-    );
+    const stream = provider.generateChatCompletion!({
+      contents: compressionRequest,
+      tools: undefined,
+      config: this.config,
+      runtime: createProviderRuntimeContext({
+        settingsService: this.config.getSettingsService(),
+        config: this.config,
+        runtimeId: 'geminiChat.directCompression',
+        metadata: {
+          source: 'GeminiChat.directCompression',
+          historyLength: compressionRequest.length,
+        },
+      }),
+    });
 
     // Collect response
     let summary = '';

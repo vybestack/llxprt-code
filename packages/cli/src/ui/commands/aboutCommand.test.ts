@@ -11,10 +11,6 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import * as versionUtils from '../../utils/version.js';
 import { MessageType } from '../types.js';
 import { MockFileSystem } from '../../providers/IFileSystem.js';
-import {
-  setFileSystem,
-  resetProviderManager,
-} from '../../providers/providerManagerInstance.js';
 import { USER_SETTINGS_PATH } from '../../config/settings.js';
 
 import { IdeClient } from '../../../../core/src/ide/ide-client.js';
@@ -23,17 +19,14 @@ vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
 }));
 
-vi.mock('../../providers/providerManagerInstance.js', async () => {
-  const actual = await vi.importActual(
-    '../../providers/providerManagerInstance.js',
-  );
-  return {
-    ...actual,
-    getProviderManager: vi.fn(() => {
-      throw new Error('Provider manager not available in test');
-    }),
-  };
-});
+vi.mock('../../runtime/runtimeSettings.js', () => ({
+  getActiveProviderStatus: vi.fn().mockReturnValue({
+    providerName: 'test-provider',
+    modelName: 'test-model',
+    displayLabel: 'test-provider:test-model',
+  }),
+  getEphemeralSetting: vi.fn().mockReturnValue(''),
+}));
 
 describe('aboutCommand', () => {
   let mockContext: CommandContext;
@@ -42,10 +35,8 @@ describe('aboutCommand', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    // Reset provider manager and set up mock file system
-    resetProviderManager();
+    // Set up mock file system
     mockFileSystem = new MockFileSystem();
-    setFileSystem(mockFileSystem);
 
     // Set up mock settings file with controlled content
     mockFileSystem.setMockFile(
@@ -92,7 +83,6 @@ describe('aboutCommand', () => {
     });
     process.env = originalEnv;
     vi.clearAllMocks();
-    resetProviderManager();
   });
 
   it('should have the correct name and description', () => {
@@ -114,7 +104,7 @@ describe('aboutCommand', () => {
         cliVersion: 'test-version',
         osVersion: 'test-os',
         sandboxEnv: 'no sandbox',
-        modelVersion: 'test-model',
+        modelVersion: 'test-provider:test-model',
         selectedAuthType: 'test-auth',
         gcpProject: 'test-gcp-project',
         keyfile: '',
@@ -176,7 +166,7 @@ describe('aboutCommand', () => {
         cliVersion: 'test-version',
         osVersion: 'test-os',
         sandboxEnv: 'no sandbox',
-        modelVersion: 'test-model',
+        modelVersion: 'test-provider:test-model',
         selectedAuthType: 'test-auth',
         gcpProject: 'test-gcp-project',
         ideClient: '',

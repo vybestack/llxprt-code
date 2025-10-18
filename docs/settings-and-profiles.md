@@ -5,6 +5,7 @@ This guide covers how to configure LLxprt Code using ephemeral settings, model p
 ## Table of Contents
 
 - [Overview](#overview)
+- [Runtime contexts and SettingsService instances](#runtime-contexts-and-settingsservice-instances)
 - [Ephemeral Settings](#ephemeral-settings)
 - [Model Parameters](#model-parameters)
 - [Profile Management](#profile-management)
@@ -19,6 +20,16 @@ LLxprt Code uses three types of settings:
 1. **Persistent Settings**: Saved to `~/.llxprt/settings.json` (theme, default provider, etc.)
 2. **Ephemeral Settings**: Session-only settings that aren't saved unless explicitly stored in a profile
 3. **Model Parameters**: Provider-specific parameters passed directly to the AI model
+
+## Runtime contexts and SettingsService instances
+
+Every runtime that talks to LLxprt Code now receives its own `ProviderRuntimeContext`. Each context wraps a dedicated `SettingsService` instance, meaning CLI sessions, `/subagent` workers, scripted automations, and IDE extensions all operate on isolated configuration layers.
+
+- The CLI bootstrap calls `setCliRuntimeContext()` (see `packages/cli/src/runtime/runtimeSettings.ts`) to register its runtime during startup.
+- Subagents and background jobs build fresh contexts with `createProviderRuntimeContext()` so that credentials, model selections, and tool overrides stay scoped to the worker that issued them.
+- When nested workflows finish, `clearActiveProviderRuntimeContext()` restores the previous context, preventing leaks between parent and child runs.
+
+Because `SettingsService` is no longer a global singleton, you can inject it into tests, mock it for UI hooks, and snapshot per-runtime overrides without worrying about cross-talk between concurrent conversations.
 
 ## Ephemeral Settings
 
@@ -88,6 +99,17 @@ Ephemeral settings are runtime configurations that last only for your current se
 # Remove a specific header
 /set unset custom-headers X-Organization
 ```
+
+### CLI helper workflows
+
+The CLI surfaces runtime-aware helpers through `packages/cli/src/runtime/runtimeSettings.ts` so commands never reach into singletons directly:
+
+- `switchActiveProvider()` powers `/provider`, wiping transient overrides before asking the `ProviderManager` to activate the new implementation for the current runtime.
+- `updateActiveProviderApiKey()` and `updateActiveProviderBaseUrl()` back `/key`, `/keyfile`, and `/baseurl`, storing secrets on the runtime-scoped `SettingsService`.
+- `setActiveModel()` and `setActiveModelParam()` synchronise `/model` and `/set modelparam …` with the runtime as well as persisted profiles.
+- `getCliRuntimeServices()` returns `{ settingsService, config, providerManager }` to UI components so hooks can react to changes without importing static instances.
+
+Nested runs (for example `/subagent` tasks) create temporary contexts with `createProviderRuntimeContext()` and reuse the same helpers; when the job finishes, `clearActiveProviderRuntimeContext()` restores the parent's configuration untouched.
 
 ## Model Parameters
 

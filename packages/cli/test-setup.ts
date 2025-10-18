@@ -85,5 +85,4 @@ if (typeof globalThis !== 'undefined') {
   // @ts-expect-error - ReactSharedInternals global assignment for React DOM compatibility
   globalThis.ReactSharedInternals = sharedInternals;
 }
-
 import './src/test-utils/customMatchers.js';

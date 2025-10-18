@@ -11,8 +11,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { AuthType } from '@vybestack/llxprt-code-core';
+import { setActiveModel } from '../../runtime/runtimeSettings.js';
 
 export const modelCommand: SlashCommand = {
   name: 'model',
@@ -23,7 +22,6 @@ export const modelCommand: SlashCommand = {
     args: string,
   ): Promise<OpenDialogActionReturn | MessageActionReturn | void> => {
     const modelName = args?.trim();
-    const providerManager = getProviderManager();
 
     // Always use provider model dialog if no model specified
     if (!modelName) {
@@ -35,67 +33,13 @@ export const modelCommand: SlashCommand = {
 
     // Switch model in provider
     try {
-      const activeProvider = providerManager.getActiveProvider();
-      const currentModel = activeProvider.getCurrentModel
-        ? activeProvider.getCurrentModel()
-        : 'unknown';
+      const result = await setActiveModel(modelName);
 
-      if (activeProvider.setModel) {
-        const config = context.services.config;
-        const settingsService = config?.getSettingsService();
-        const useSettingsService = settingsService !== null;
-
-        activeProvider.setModel(modelName);
-
-        if (useSettingsService && settingsService && config) {
-          // Use SettingsService to update provider settings
-          try {
-            // Ensure activeProvider is set in SettingsService
-            settingsService.set('activeProvider', activeProvider.name);
-            await settingsService.updateSettings(activeProvider.name, {
-              model: modelName,
-            });
-          } catch (error) {
-            console.error('SettingsService error, using fallback:', error);
-            // Keep config model in sync so /about shows correct model
-            config.setModel(modelName);
-          }
-        } else if (config) {
-          // Fallback to direct config update
-          config.setModel(modelName);
-        }
-
-        // Check if the provider needs authentication after model switch
-        // This is important for providers like Anthropic that support OAuth
-        if (activeProvider.name === 'anthropic' && config) {
-          // Check if provider has isAuthenticated method (BaseProvider does)
-          const providerWithAuth = activeProvider as unknown as {
-            isAuthenticated?: () => Promise<boolean>;
-          };
-          if (typeof providerWithAuth.isAuthenticated === 'function') {
-            const hasAuth = await providerWithAuth.isAuthenticated();
-            if (!hasAuth) {
-              // Trigger auth refresh for Anthropic (will prompt for OAuth if no other auth available)
-              const currentAuthType =
-                config.getContentGeneratorConfig()?.authType ||
-                AuthType.LOGIN_WITH_GOOGLE;
-              await config.refreshAuth(currentAuthType);
-            }
-          }
-        }
-
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Switched from ${currentModel} to ${modelName} in provider '${activeProvider.name}'`,
-        };
-      } else {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Provider '${activeProvider.name}' does not support model switching`,
-        };
-      }
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Switched from ${result.previousModel ?? 'unknown'} to ${result.nextModel} in provider '${result.providerName}'`,
+      };
     } catch (error) {
       return {
         type: 'message',

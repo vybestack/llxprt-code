@@ -3,6 +3,7 @@ import { AnthropicProvider } from './AnthropicProvider.js';
 import { ITool } from '../ITool.js';
 import { IContent } from '../../services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import { createProviderWithRuntime } from '../../test-utils/runtime.js';
 
 type AnthropicContentBlock =
   | { type: 'text'; text: string }
@@ -221,11 +222,20 @@ describe('AnthropicProvider', () => {
     vi.clearAllMocks();
 
     // Create provider with test API key
-    provider = new AnthropicProvider(
-      'test-api-key',
-      undefined,
-      TEST_PROVIDER_CONFIG,
-    );
+    ({ provider } = createProviderWithRuntime<AnthropicProvider>(
+      ({ settingsService }) => {
+        settingsService.set('auth-key', 'test-api-key');
+        return new AnthropicProvider(
+          'test-api-key',
+          undefined,
+          TEST_PROVIDER_CONFIG,
+        );
+      },
+      {
+        runtimeId: 'anthropic.provider.test',
+        metadata: { source: 'AnthropicProvider.test.ts' },
+      },
+    ));
 
     // Use the shared mock instance
     mockAnthropicInstance = {

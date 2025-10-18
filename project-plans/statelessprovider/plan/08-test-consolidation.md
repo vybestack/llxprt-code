@@ -20,15 +20,15 @@
   - Ensure tests exercise multiple contexts simultaneously.
 - `packages/cli/src/integration-tests/*.ts`
   - Consolidate overlapping scenarios (provider/model/profile/base-url) into table-driven suites.
-- `packages/cli/src/ui/commands/__tests__/*.test.ts`
+- `packages/cli/src/ui/commands/*.test.ts`
   - Update mocks to leverage runtime helpers instead of provider setters.
 - `packages/core/test/settings/SettingsService.spec.ts`
   - Add cases for multiple instances and profile import/export with new adapters.
-- `packages/core/src/core/__tests__/geminiChat.runtime.test.ts`
+- `packages/core/src/core/geminiChat.runtime.test.ts`
   - Expand coverage for streaming, retries, and tool invocations under multiple contexts.
 - `packages/core/src/auth/precedence.test.ts`
   - Validate precedence under scenarios with explicit context injection.
-- `packages/cli/src/runtime/__tests__/runtimeSettings.test.ts`
+- `packages/cli/src/runtime/runtimeSettings.test.ts`
   - Add regression coverage reflecting CLI behaviours updated in P07.
 
 ### Files to Create

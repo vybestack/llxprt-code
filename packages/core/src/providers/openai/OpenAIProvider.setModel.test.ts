@@ -3,36 +3,31 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import * as settingsServiceInstance from '../../settings/settingsServiceInstance.js';
+import { SettingsService } from '../../settings/SettingsService.js';
+import { createProviderWithRuntime } from '../../test-utils/runtime.js';
 
-describe('OpenAIProvider.setModel', () => {
+describe('OpenAIProvider model resolution', () => {
   let provider: OpenAIProvider;
-  let mockSettingsService: {
-    set: ReturnType<typeof vi.fn>;
-    get: ReturnType<typeof vi.fn>;
-  };
+  let settingsService: SettingsService;
 
   beforeEach(() => {
-    // Mock the settings service
-    mockSettingsService = {
-      set: vi.fn(),
-      get: vi.fn(),
-    };
+    settingsService = new SettingsService();
 
-    vi.spyOn(settingsServiceInstance, 'getSettingsService').mockReturnValue(
-      mockSettingsService as unknown as ReturnType<
-        typeof settingsServiceInstance.getSettingsService
-      >,
-    );
-
-    provider = new OpenAIProvider('test-api-key');
+    ({ provider } = createProviderWithRuntime<OpenAIProvider>(
+      () => new OpenAIProvider('test-api-key'),
+      {
+        settingsService,
+        runtimeId: 'openai.provider.setModel.test',
+        metadata: { source: 'OpenAIProvider.setModel.test.ts' },
+      },
+    ));
   });
 
-  it('should set the model using setModel', () => {
+  it('uses SettingsService global model override when present', () => {
     const modelId = 'gpt-4-turbo';
-    provider.setModel(modelId);
+    settingsService.set('model', modelId);
 
-    expect(mockSettingsService.set).toHaveBeenCalledWith('model', modelId);
+    expect(provider.getCurrentModel()).toBe(modelId);
   });
 
   it('should get the current model using getCurrentModel', () => {
@@ -45,18 +40,10 @@ describe('OpenAIProvider.setModel', () => {
     expect(currentModel).toBe(expectedModel);
   });
 
-  it('should update model and retrieve it correctly', () => {
-    const newModel = 'gpt-4o';
+  it('prefers provider-specific model setting when global override absent', () => {
+    settingsService.set('model', undefined);
+    settingsService.setProviderSetting('openai', 'model', 'gpt-4o');
 
-    // Set the model
-    provider.setModel(newModel);
-    expect(mockSettingsService.set).toHaveBeenCalledWith('model', newModel);
-
-    // Mock getModel to return the new model
-    vi.spyOn(provider, 'getModel').mockReturnValue(newModel);
-
-    // Get the current model
-    const currentModel = provider.getCurrentModel();
-    expect(currentModel).toBe(newModel);
+    expect(provider.getCurrentModel()).toBe('gpt-4o');
   });
 });

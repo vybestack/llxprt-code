@@ -27,7 +27,7 @@ Add plan/requirement annotations within the verification report.
 
 ```bash
 npm run typecheck
-npm test -- --runTestsByPath packages/core/src/core/__tests__/geminiChat.runtime.test.ts packages/core/src/providers/__tests__/providerManager.context.test.ts packages/core/src/providers/BaseProvider.test.ts packages/core/src/providers/integration/multi-provider.integration.test.ts
+npx vitest run packages/core/src/core/geminiChat.runtime.test.ts packages/core/src/providers/providerManager.context.test.ts packages/core/src/providers/BaseProvider.test.ts packages/core/src/providers/integration/multi-provider.integration.test.ts
 ```
 
 Capture command output and include in the report.

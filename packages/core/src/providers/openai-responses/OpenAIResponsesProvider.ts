@@ -27,7 +27,6 @@ import {
   ToolCallBlock,
   ToolResponseBlock,
 } from '../../services/history/IContent.js';
-import { ToolFormat } from '../../tools/IToolFormatter.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { ConversationCache } from '../openai/ConversationCache.js';
@@ -35,8 +34,12 @@ import {
   parseResponsesStream,
   parseErrorResponse,
 } from '../openai/parseResponsesStream.js';
-import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import {
+  BaseProvider,
+  BaseProviderConfig,
+  NormalizedGenerateChatOptions,
+} from '../BaseProvider.js';
+import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
@@ -228,21 +231,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
     }));
   }
 
-  override setModel(modelId: string): void {
-    // Update SettingsService as the source of truth
-    this.setModelInSettings(modelId).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist model to SettingsService: ${error}`,
-      );
-    });
-    // Keep local cache for performance
-    this.currentModel = modelId;
-  }
-
   override getCurrentModel(): string {
     // Try to get from SettingsService first (source of truth)
     try {
-      const settingsService = getSettingsService();
+      const settingsService = this.resolveSettingsService();
       const providerSettings = settingsService.getProviderSettings(this.name);
       if (providerSettings.model) {
         return providerSettings.model as string;
@@ -261,46 +253,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
     return 'o3-mini';
   }
 
-  override setApiKey(apiKey: string): void {
-    // Call base provider implementation
-    super.setApiKey?.(apiKey);
-
-    // Persist to SettingsService if available
-    this.setApiKeyInSettings(apiKey).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist API key to SettingsService: ${error}`,
-      );
-    });
-  }
-
-  override setBaseUrl(baseUrl?: string): void {
-    // Call base provider implementation which stores in ephemeral settings
-    super.setBaseUrl?.(baseUrl);
-
-    // Also persist to SettingsService if available
-    const urlToStore =
-      baseUrl && baseUrl.trim() !== '' ? baseUrl : 'https://api.openai.com/v1';
-    this.setBaseUrlInSettings(urlToStore).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist base URL to SettingsService: ${error}`,
-      );
-    });
-  }
-
   override setConfig(config: IProviderConfig): void {
     // Update the providerConfig reference but don't store it locally
     // The parent class will manage it through the protected property
     super.setConfig?.(config);
-  }
-
-  override setToolFormatOverride(format: ToolFormat | null): void {
-    // Responses API only supports OpenAI format
-    if (format && format !== 'openai') {
-      this.logger.debug(
-        () =>
-          `Warning: Responses API only supports OpenAI tool format, ignoring override to ${format}`,
-      );
-    }
   }
 
   /**
@@ -341,24 +297,6 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   /**
-   * Set model parameters to be included in API calls
-   */
-  override setModelParams(params: Record<string, unknown> | undefined): void {
-    if (params === undefined) {
-      this.modelParams = undefined;
-    } else {
-      this.modelParams = { ...this.modelParams, ...params };
-    }
-
-    // Persist to SettingsService if available
-    this.setModelParamsInSettings(this.modelParams).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist model params to SettingsService: ${error}`,
-      );
-    });
-  }
-
-  /**
    * Get current model parameters
    */
   override getModelParams(): Record<string, unknown> | undefined {
@@ -369,37 +307,43 @@ export class OpenAIResponsesProvider extends BaseProvider {
    * Initialize provider configuration from SettingsService
    */
   private async initializeFromSettings(): Promise<void> {
+    await this.refreshCachedSettings();
+  }
+
+  /**
+   * Refresh cached settings from the runtime SettingsService to reflect the latest
+   * model selection, base URL, and model parameters.
+   */
+  private async refreshCachedSettings(): Promise<void> {
     try {
-      // Load saved model if available
-      const savedModel = await this.getModelFromSettings();
+      const [savedModel, savedBaseUrl, savedParams] = await Promise.all([
+        this.getModelFromSettings(),
+        this.getBaseUrlFromSettings(),
+        this.getModelParamsFromSettings(),
+      ]);
+
       if (
         savedModel &&
-        RESPONSES_API_MODELS.some((m) => savedModel.startsWith(m))
+        RESPONSES_API_MODELS.some((model) => savedModel.startsWith(model))
       ) {
         this.currentModel = savedModel;
       }
 
-      // Load saved base URL if available
-      const savedBaseUrl = await this.getBaseUrlFromSettings();
       if (savedBaseUrl !== undefined) {
         this.baseProviderConfig.baseURL =
           savedBaseUrl || 'https://api.openai.com/v1';
       }
 
-      // Load saved model parameters if available
-      const savedParams = await this.getModelParamsFromSettings();
-      if (savedParams) {
-        this.modelParams = savedParams;
-      }
+      this.modelParams = savedParams ?? undefined;
 
       this.logger.debug(
         () =>
-          `Initialized from SettingsService - model: ${this.currentModel}, baseURL: ${this.baseProviderConfig.baseURL}, params: ${JSON.stringify(this.modelParams)}`,
+          `Refreshed SettingsService cache - model: ${this.currentModel}, baseURL: ${this.baseProviderConfig.baseURL}, params: ${JSON.stringify(this.modelParams)}`,
       );
     } catch (error) {
       this.logger.debug(
         () =>
-          `Failed to initialize OpenAI Responses provider from SettingsService: ${error}`,
+          `Failed to refresh OpenAI Responses settings from SettingsService: ${error}`,
       );
     }
   }
@@ -412,35 +356,32 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   /**
-   * Generate chat completion with IContent interface
-   * Direct implementation for OpenAI Responses API with IContent interface
+   * @plan PLAN-20250218-STATELESSPROVIDER.P04
+   * @requirement REQ-SP-001
+   * @pseudocode base-provider.md lines 7-15
+   * @pseudocode provider-invocation.md lines 8-12
    */
-  async *generateChatCompletion(
-    content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
-    _toolFormat?: string,
+  protected override async *generateChatCompletionWithOptions(
+    options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    const { contents: content, tools } = options;
     // Check if API key is available
     const apiKey = await this.getAuthToken();
     if (!apiKey) {
       throw new Error('OpenAI API key is required to generate completions');
     }
 
+    await this.refreshCachedSettings();
+
     // Get the system prompt
     const userMemory = this.globalConfig?.getUserMemory
       ? this.globalConfig.getUserMemory()
       : '';
-    const systemPrompt = await getCoreSystemPromptAsync(
+    const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
-      this.currentModel,
-      undefined,
-    );
+      model: this.currentModel,
+      provider: this.name,
+    });
 
     // Build Responses API input array directly from IContent
     // For the Responses API, we send system, user and assistant messages

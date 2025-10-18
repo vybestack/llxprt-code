@@ -51,9 +51,9 @@
 
 ### Files to Create / Update Tests
 
-- `packages/core/src/core/__tests__/geminiChat.runtime.test.ts`
+- `packages/core/src/core/geminiChat.runtime.test.ts`
   - Add coverage ensuring the orchestrator passes the runtime context and still handles retries/tools correctly.
-- `packages/core/src/providers/__tests__/providerManager.context.test.ts`
+- `packages/core/src/providers/providerManager.context.test.ts`
   - Verify manager construction with explicit contexts and legacy wrapper.
 - Update or add provider-focused tests (e.g., `packages/core/src/providers/BaseProvider.test.ts`, provider-specific suites) to exercise context-driven model/base-url/auth resolution.
 
@@ -80,7 +80,7 @@ Add plan/requirement/pseudocode annotations to modified sections, e.g.:
 
 ```bash
 npm run typecheck
-npm test -- --runTestsByPath packages/core/src/core/__tests__/geminiChat.runtime.test.ts packages/core/src/providers/__tests__/providerManager.context.test.ts packages/core/src/providers/BaseProvider.test.ts packages/core/src/providers/integration/multi-provider.integration.test.ts
+npx vitest run packages/core/src/core/geminiChat.runtime.test.ts packages/core/src/providers/providerManager.context.test.ts packages/core/src/providers/BaseProvider.test.ts packages/core/src/providers/integration/multi-provider.integration.test.ts
 ```
 
 ## Manual Verification Checklist
@@ -127,8 +127,8 @@ Files Modified:
 - packages/core/src/core/client.ts
 - packages/core/src/core/prompts.ts
 - packages/core/src/index.ts
-- packages/core/src/core/__tests__/geminiChat.runtime.test.ts
-- packages/core/src/providers/__tests__/providerManager.context.test.ts
+- packages/core/src/core/geminiChat.runtime.test.ts
+- packages/core/src/providers/providerManager.context.test.ts
 Verification:
 - <paste outputs>
 ```

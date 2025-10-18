@@ -11,21 +11,25 @@ import {
   OpenDialogActionReturn,
   CommandKind,
 } from './types.js';
-import { ProfileManager, Profile, AuthType } from '@vybestack/llxprt-code-core';
-import type { EphemeralSettings } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../config/settings.js';
 import {
   type CommandArgumentSchema,
   type CompleterFn,
 } from './schema/types.js';
+import {
+  saveProfileSnapshot,
+  loadProfileByName,
+  deleteProfileByName,
+  listSavedProfiles,
+  setDefaultProfileName,
+} from '../../runtime/runtimeSettings.js';
 
 const profileSuggestionDescription = 'Saved profile';
 const normalizeProfilePartial = (partial: string): string =>
   partial.startsWith('"') ? partial.slice(1) : partial;
 
 async function listProfiles(): Promise<string[]> {
-  const profileManager = new ProfileManager();
-  return profileManager.listProfiles();
+  return listSavedProfiles();
 }
 
 function filterProfiles(partialArg: string, profiles: string[]): string[] {
@@ -158,111 +162,7 @@ const saveCommand: SlashCommand = {
     }
 
     try {
-      // Check if config is available
-      if (!context.services.config) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: 'No configuration available',
-        };
-      }
-
-      // Get current provider and model
-      const providerName = context.services.config.getProvider();
-
-      // Get the provider manager and active provider
-      const providerManager = context.services.config.getProviderManager();
-      const activeProvider = providerManager?.getActiveProvider();
-
-      // Get the model from the provider first (source of truth), fallback to config
-      const providerModel = activeProvider?.getCurrentModel?.();
-      const configModel = context.services.config.getModel();
-      const modelName = providerModel || configModel;
-
-      // Get model params from provider
-      let modelParams: Record<string, unknown> = {};
-      if (
-        activeProvider &&
-        'getModelParams' in activeProvider &&
-        activeProvider.getModelParams
-      ) {
-        modelParams = activeProvider.getModelParams() || {};
-      }
-
-      // Get ephemeral settings from config
-      const allEphemeralSettings =
-        context.services.config.getEphemeralSettings();
-      const ephemeralKeys = [
-        'context-limit',
-        'compression-threshold',
-        'base-url',
-        'tool-format',
-        'api-version',
-        'custom-headers',
-        'disabled-tools',
-        'tool-output-max-items',
-        'tool-output-max-tokens',
-        'tool-output-truncate-mode',
-        'tool-output-item-size-limit',
-        'max-prompt-tokens',
-        'shell-replacement',
-        'todo-continuation',
-        'socket-timeout',
-        'socket-keepalive',
-        'socket-nodelay',
-        'streaming',
-        'retries',
-        'retrywait',
-      ] as const;
-
-      const ephemeralSettings: Partial<EphemeralSettings> = {};
-      for (const key of ephemeralKeys) {
-        const value = allEphemeralSettings[key];
-        if (value !== undefined) {
-          (ephemeralSettings as Record<string, unknown>)[key] = value;
-        }
-      }
-
-      // Get auth-keyfile from ephemeral settings (set by /keyfile command)
-      const ephemeralKeyfile = allEphemeralSettings['auth-keyfile'];
-      if (ephemeralKeyfile) {
-        (ephemeralSettings as Record<string, unknown>)['auth-keyfile'] =
-          ephemeralKeyfile;
-        // Don't save auth-key if using keyfile
-      } else {
-        // Get auth-key from ephemeral settings (set by /key command)
-        const ephemeralApiKey = allEphemeralSettings['auth-key'];
-        if (ephemeralApiKey) {
-          (ephemeralSettings as Record<string, unknown>)['auth-key'] =
-            ephemeralApiKey;
-        }
-      }
-
-      // Fallback: Check persistent settings for base-url if not in ephemeral
-      // This handles the case where base-url was set with the old command
-      if (!ephemeralSettings['base-url']) {
-        const allSettings = context.services.settings.merged || {};
-        const providerBaseUrls =
-          (allSettings.providerBaseUrls as Record<string, string>) || {};
-        if (providerName && providerBaseUrls[providerName]) {
-          (ephemeralSettings as Record<string, unknown>)['base-url'] =
-            providerBaseUrls[providerName];
-        }
-      }
-
-      // Create profile object
-      const profile: Profile = {
-        version: 1,
-        provider: providerName || '',
-        model: modelName || '',
-        modelParams,
-        ephemeralSettings: ephemeralSettings as EphemeralSettings,
-      };
-
-      // Save profile
-      const profileManager = new ProfileManager();
-      await profileManager.saveProfile(profileName, profile);
-
+      await saveProfileSnapshot(profileName);
       return {
         type: 'message',
         messageType: 'info',
@@ -323,163 +223,14 @@ const loadCommand: SlashCommand = {
     }
 
     try {
-      // Check if config is available
-      if (!context.services.config) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: 'No configuration available',
-        };
-      }
-
-      // Load the profile
-      const profileManager = new ProfileManager();
-      const profile = await profileManager.loadProfile(profileName);
-
-      // Apply settings in the correct order:
-      // 1. Set provider first
-      const providerManager = context.services.config.getProviderManager();
-      if (providerManager) {
-        providerManager.setActiveProvider(profile.provider);
-
-        // Ensure provider manager is set on config
-        context.services.config.setProviderManager(providerManager);
-
-        // Update the provider in config
-        context.services.config.setProvider(profile.provider);
-      }
-
-      // 2. Set model second
-      context.services.config.setModel(profile.model);
-
-      // Also set model on the provider
-      const activeProviderForModel = providerManager?.getActiveProvider();
-      if (activeProviderForModel && activeProviderForModel.setModel) {
-        activeProviderForModel.setModel(profile.model);
-      }
-
-      // 3. Clear existing ephemeral settings first
-      const ephemeralKeys = [
-        'auth-key',
-        'auth-keyfile',
-        'context-limit',
-        'compression-threshold',
-        'base-url',
-        'tool-format',
-        'api-version',
-        'custom-headers',
-        'disabled-tools',
-        'socket-timeout',
-        'socket-keepalive',
-        'socket-nodelay',
-        'streaming',
-        'retries',
-        'retrywait',
-        'todo-continuation',
-        'shell-replacement',
-        'tool-output-max-items',
-        'tool-output-max-tokens',
-        'tool-output-truncate-mode',
-        'tool-output-item-size-limit',
-        'max-prompt-tokens',
-      ];
-
-      // Clear all known ephemeral settings
-      for (const key of ephemeralKeys) {
-        context.services.config.setEphemeralSetting(key, undefined);
-      }
-
-      // Reset compression ephemeral settings
-      context.services.config.setEphemeralSetting(
-        'compression-threshold',
-        undefined,
-      );
-      context.services.config.setEphemeralSetting('context-limit', undefined);
-
-      // Clear model parameters on the provider
-      const activeProvider = providerManager?.getActiveProvider();
-      if (
-        activeProvider &&
-        'setModelParams' in activeProvider &&
-        activeProvider.setModelParams
-      ) {
-        // Clear all existing model params by passing undefined
-        activeProvider.setModelParams(undefined);
-      }
-
-      // 4. Apply ephemeral settings from profile
-      for (const [key, value] of Object.entries(profile.ephemeralSettings)) {
-        // Store in ephemeral settings
-        context.services.config.setEphemeralSetting(key, value);
-
-        // Special handling for auth-key, auth-keyfile, and base-url
-        if (key === 'auth-key' && typeof value === 'string') {
-          // Directly set API key on the provider without saving to persistent settings
-          const activeProvider = providerManager?.getActiveProvider();
-          if (activeProvider && activeProvider.setApiKey) {
-            activeProvider.setApiKey(value);
-          }
-        } else if (key === 'auth-keyfile' && typeof value === 'string') {
-          // Just store the keyfile path in ephemeral settings
-          // The AuthPrecedenceResolver will read from the file when needed
-          // DO NOT read the file and call setApiKey here - that defeats the purpose
-        } else if (key === 'base-url' && typeof value === 'string') {
-          // Directly set base URL on the provider without saving to persistent settings
-          const activeProvider = providerManager?.getActiveProvider();
-          if (activeProvider && activeProvider.setBaseUrl) {
-            // Handle "none" as clearing the base URL
-            if (value === 'none') {
-              activeProvider.setBaseUrl(undefined);
-            } else {
-              activeProvider.setBaseUrl(value);
-            }
-          }
-        }
-      }
-
-      // Apply compression settings if they exist in the profile
-      const contextLimit = profile.ephemeralSettings['context-limit'] as
-        | number
-        | undefined;
-      const compressionThreshold = profile.ephemeralSettings[
-        'compression-threshold'
-      ] as number | undefined;
-      // Apply compression settings via ephemeral settings
-      // Always set them (even if undefined) to ensure proper reset
-      context.services.config.setEphemeralSetting(
-        'compression-threshold',
-        compressionThreshold,
-      );
-      context.services.config.setEphemeralSetting(
-        'context-limit',
-        contextLimit,
-      );
-
-      // 5. Call provider.setModelParams() with the profile's model params
-      if (
-        activeProvider &&
-        'setModelParams' in activeProvider &&
-        activeProvider.setModelParams
-      ) {
-        if (
-          profile.modelParams &&
-          Object.keys(profile.modelParams).length > 0
-        ) {
-          activeProvider.setModelParams(profile.modelParams);
-        }
-      }
-
-      // 6. Refresh auth to ensure provider is properly initialized
-      const currentAuthType =
-        context.services.config.getContentGeneratorConfig()?.authType ||
-        AuthType.LOGIN_WITH_GOOGLE;
-
-      await context.services.config.refreshAuth(currentAuthType);
-
+      const result = await loadProfileByName(profileName);
+      const infoMessages = result.infoMessages
+        .map((message) => `\n- ${message}`)
+        .join('');
       return {
         type: 'message',
         messageType: 'info',
-        content: `Profile '${profileName}' loaded`,
+        content: `Profile '${profileName}' loaded${infoMessages}`,
       };
     } catch (error) {
       // Handle specific error messages
@@ -566,9 +317,7 @@ const deleteCommand: SlashCommand = {
     }
 
     try {
-      // Delete the profile
-      const profileManager = new ProfileManager();
-      await profileManager.deleteProfile(profileName);
+      await deleteProfileByName(profileName);
 
       return {
         type: 'message',
@@ -649,6 +398,7 @@ const setDefaultCommand: SlashCommand = {
 
       if (profileName.toLowerCase() === 'none') {
         // Clear the default profile
+        setDefaultProfileName(null);
         context.services.settings.setValue(
           SettingScope.User,
           'defaultProfile',
@@ -663,8 +413,7 @@ const setDefaultCommand: SlashCommand = {
       }
 
       // Verify profile exists
-      const profileManager = new ProfileManager();
-      const profiles = await profileManager.listProfiles();
+      const profiles = await listSavedProfiles();
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',
@@ -674,6 +423,7 @@ const setDefaultCommand: SlashCommand = {
       }
 
       // Set the default profile
+      setDefaultProfileName(profileName);
       context.services.settings.setValue(
         SettingScope.User,
         'defaultProfile',
@@ -707,8 +457,7 @@ const listCommand: SlashCommand = {
     _args: string,
   ): Promise<MessageActionReturn> => {
     try {
-      const profileManager = new ProfileManager();
-      const profiles = await profileManager.listProfiles();
+      const profiles = await listSavedProfiles();
 
       if (profiles.length === 0) {
         return {

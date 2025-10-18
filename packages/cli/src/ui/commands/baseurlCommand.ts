@@ -10,6 +10,10 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
+import {
+  updateActiveProviderBaseUrl,
+  getActiveProviderStatus,
+} from '../../runtime/runtimeSettings.js';
 
 export const baseurlCommand: SlashCommand = {
   name: 'baseurl',
@@ -19,63 +23,20 @@ export const baseurlCommand: SlashCommand = {
     context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
-    const config = context.services.config;
-    if (!config) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'No configuration available',
-      };
-    }
-
-    const providerManager = config.getProviderManager();
-    if (!providerManager) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'No provider manager available',
-      };
-    }
-
-    const activeProvider = providerManager.getActiveProvider();
-    const providerName = activeProvider.name;
     const baseUrl = args?.trim();
-
-    if (!baseUrl || baseUrl === '') {
-      // Clear base URL to provider default
-      if (activeProvider.setBaseUrl) {
-        activeProvider.setBaseUrl(undefined);
-        config.setEphemeralSetting('base-url', undefined);
-
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Base URL cleared, provider '${providerName}' now uses default URL`,
-        };
-      } else {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Provider '${providerName}' does not support base URL updates`,
-        };
-      }
-    }
-
-    // Update the provider's base URL
-    if (activeProvider.setBaseUrl) {
-      activeProvider.setBaseUrl(baseUrl);
-      config.setEphemeralSetting('base-url', baseUrl);
-
+    try {
+      const result = await updateActiveProviderBaseUrl(baseUrl ?? null);
       return {
         type: 'message',
         messageType: 'info',
-        content: `Base URL updated to '${baseUrl}' for provider '${providerName}'`,
+        content: result.message,
       };
-    } else {
+    } catch (error) {
+      const status = getActiveProviderStatus();
       return {
         type: 'message',
         messageType: 'error',
-        content: `Provider '${providerName}' does not support base URL updates`,
+        content: `Failed to update base URL for provider '${status.providerName ?? 'unknown'}': ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   },
