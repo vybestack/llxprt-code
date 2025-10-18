@@ -343,6 +343,16 @@ export class GeminiProvider extends BaseProvider {
     // Other Vertex AI env vars are already set, no need to duplicate
   }
 
+  private createHttpOptions(): { headers: Record<string, string> } {
+    const customHeaders = this.getCustomHeaders();
+    return {
+      headers: {
+        'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
+        ...(customHeaders ?? {}),
+      },
+    };
+  }
+
   /**
    * Sets the config instance for reading OAuth credentials
    */
@@ -639,11 +649,7 @@ export class GeminiProvider extends BaseProvider {
       const { GoogleGenAI } = await import('@google/genai');
 
       // Create the appropriate client based on auth mode
-      const httpOptions = {
-        headers: {
-          'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
-        },
-      };
+      const httpOptions = this.createHttpOptions();
 
       let genAI: InstanceType<typeof GoogleGenAI>;
 
@@ -826,11 +832,7 @@ export class GeminiProvider extends BaseProvider {
       const prompt = (params as { prompt: string }).prompt;
 
       // Create the appropriate client based on auth mode
-      const httpOptions = {
-        headers: {
-          'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
-        },
-      };
+      const httpOptions = this.createHttpOptions();
 
       let genAI: InstanceType<typeof GoogleGenAI>;
 
@@ -1061,11 +1063,7 @@ export class GeminiProvider extends BaseProvider {
       tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
 
     // Create appropriate client and generate content
-    const httpOptions = {
-      headers: {
-        'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
-      },
-    };
+    const httpOptions = this.createHttpOptions();
 
     let stream: AsyncIterable<GenerateContentResponse>;
 

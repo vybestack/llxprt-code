@@ -49,6 +49,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   private _cachedClient?: OpenAI;
   private _cachedClientKey?: string;
+  private modelParams?: Record<string, unknown>;
 
   constructor(
     apiKey: string | undefined,
@@ -89,6 +90,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Setup debug logger
     this.logger = new DebugLogger('llxprt:provider:openai');
+
+    this.loadModelParamsFromSettings().catch((error) => {
+      this.logger.debug(
+        () =>
+          `Failed to initialize model params from SettingsService: ${error}`,
+      );
+    });
   }
 
   /**
@@ -157,6 +165,24 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     return { httpAgent, httpsAgent };
+  }
+
+  private async loadModelParamsFromSettings(): Promise<void> {
+    const params = await this.getModelParamsFromSettings();
+    this.modelParams = params;
+  }
+
+  private async resolveModelParams(): Promise<
+    Record<string, unknown> | undefined
+  > {
+    if (this.modelParams) {
+      return this.modelParams;
+    }
+    const params = await this.getModelParamsFromSettings();
+    if (params) {
+      this.modelParams = params;
+    }
+    return params;
   }
 
   /**
@@ -728,6 +754,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       stream: streamingEnabled,
     };
 
+    const modelParams = await this.resolveModelParams();
+    if (modelParams) {
+      Object.assign(requestBody, modelParams);
+    }
+
     // Debug log request summary for Cerebras/Qwen
     if (
       this.logger.enabled &&
@@ -795,10 +826,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       initialDelayMs,
     });
 
+    const customHeaders = this.getCustomHeaders();
+
     try {
       response = await retryWithBackoff(
         () =>
-          client.chat.completions.create(requestBody, { signal: abortSignal }),
+          client.chat.completions.create(requestBody, {
+            ...(abortSignal ? { signal: abortSignal } : {}),
+            ...(customHeaders ? { headers: customHeaders } : {}),
+          }),
         {
           maxAttempts: maxRetries,
           initialDelayMs,
@@ -1220,6 +1256,43 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         } as IContent;
       }
     }
+  }
+
+  /**
+   * Update model parameters and persist them in the SettingsService.
+   */
+  override setModelParams(params: Record<string, unknown> | undefined): void {
+    if (params === undefined) {
+      this.modelParams = undefined;
+      this.setModelParamsInSettings(undefined).catch((error) => {
+        this.logger.debug(
+          () => `Failed to clear model params in SettingsService: ${error}`,
+        );
+      });
+      return;
+    }
+
+    const updated = { ...(this.modelParams ?? {}) };
+
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null) {
+        delete updated[key];
+      } else {
+        updated[key] = value;
+      }
+    }
+
+    this.modelParams = Object.keys(updated).length > 0 ? updated : undefined;
+
+    this.setModelParamsInSettings(this.modelParams).catch((error) => {
+      this.logger.debug(
+        () => `Failed to persist model params to SettingsService: ${error}`,
+      );
+    });
+  }
+
+  override getModelParams(): Record<string, unknown> | undefined {
+    return this.modelParams;
   }
 
   /**

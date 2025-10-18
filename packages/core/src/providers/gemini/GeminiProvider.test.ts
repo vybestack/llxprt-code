@@ -5,6 +5,42 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { GeminiProvider } from './GeminiProvider.js';
+import { IContent } from '../../services/history/IContent.js';
+
+const generateContentStreamMock = vi.hoisted(() => vi.fn());
+
+const googleGenAIConstructor = vi.hoisted(() =>
+  vi.fn().mockImplementation(() => ({
+    models: {
+      generateContentStream: generateContentStreamMock,
+    },
+  })),
+);
+
+vi.mock('@google/genai', () => ({
+  GoogleGenAI: googleGenAIConstructor,
+  Type: { OBJECT: 'object' },
+}));
+
+vi.mock('../../core/prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('system prompt'),
+}));
+
+vi.mock('../../code_assist/codeAssist.js', () => ({
+  createCodeAssistContentGenerator: vi.fn(),
+}));
+
+const mockSettingsService = vi.hoisted(() => ({
+  set: vi.fn(),
+  get: vi.fn(),
+  getProviderSettings: vi.fn().mockReturnValue({}),
+  updateSettings: vi.fn(),
+}));
+
+vi.mock('../../settings/settingsServiceInstance.js', () => ({
+  getSettingsService: vi.fn(() => mockSettingsService),
+}));
 
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P11
@@ -13,13 +49,16 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
  */
 describe('GeminiProvider', () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
+    generateContentStreamMock.mockReset();
+    delete process.env.GEMINI_API_KEY;
   });
 
   // Clean up global state after each test
   afterEach(() => {
     delete global.__oauth_needs_code;
     delete global.__oauth_provider;
+    delete process.env.GEMINI_API_KEY;
   });
 
   /**
@@ -90,5 +129,68 @@ describe('GeminiProvider', () => {
   it('should handle concurrent OAuth requests from different providers', async () => {
     // This will require mocking concurrent requests in a later phase
     expect(true).toBe(true);
+  });
+
+  it('should pass custom headers to GoogleGenAI http options', async () => {
+    const customHeaders = {
+      'X-Custom-Header': 'custom-value',
+      'X-Trace-Id': 'trace-abc',
+    };
+
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'hello' }],
+              },
+            },
+          ],
+        };
+      },
+    };
+
+    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+
+    process.env.GEMINI_API_KEY = 'resolved-key';
+
+    const provider = new GeminiProvider('test-api-key');
+
+    (
+      provider as unknown as {
+        providerConfig: {
+          getEphemeralSettings?: () => Record<string, unknown>;
+          customHeaders?: Record<string, string>;
+        };
+      }
+    ).providerConfig = {
+      getEphemeralSettings: () => ({
+        'custom-headers': customHeaders,
+      }),
+      customHeaders: {
+        'X-Provider-Header': 'provider-value',
+      },
+    };
+
+    const generator = provider.generateChatCompletion([
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
+      },
+    ] as IContent[]);
+
+    await generator.next();
+
+    expect(googleGenAIConstructor).toHaveBeenCalledTimes(1);
+
+    const callArgs = googleGenAIConstructor.mock.calls[0]?.[0];
+    expect(callArgs).toBeDefined();
+    expect(callArgs?.httpOptions).toBeDefined();
+    expect(callArgs.httpOptions?.headers).toMatchObject({
+      ...customHeaders,
+      'X-Provider-Header': 'provider-value',
+      'User-Agent': expect.any(String),
+    });
   });
 });
