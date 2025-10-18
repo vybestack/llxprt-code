@@ -887,6 +887,32 @@ export abstract class BaseProvider implements IProvider {
       }
     }
   }
+
+  /**
+   * Get custom headers from provider configuration and ephemeral settings
+   */
+  protected getCustomHeaders(): Record<string, string> | undefined {
+    const baseHeaders =
+      this.providerConfig?.customHeaders &&
+      typeof this.providerConfig.customHeaders === 'object'
+        ? { ...this.providerConfig.customHeaders }
+        : undefined;
+
+    const ephemeralSettings = this.providerConfig?.getEphemeralSettings?.();
+    const ephemeralValue =
+      ephemeralSettings && typeof ephemeralSettings === 'object'
+        ? (ephemeralSettings['custom-headers'] as
+            | Record<string, string>
+            | undefined)
+        : undefined;
+
+    const combined = {
+      ...(baseHeaders ?? {}),
+      ...(ephemeralValue ?? {}),
+    };
+
+    return Object.keys(combined).length > 0 ? combined : undefined;
+  }
 }
 
 // Import ProviderSettings type to avoid circular dependency

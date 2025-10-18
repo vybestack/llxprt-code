@@ -971,9 +971,15 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     // Make the API call directly with type assertion
-    const response = await client.messages.create(
-      requestBody as Parameters<typeof client.messages.create>[0],
-    );
+    const customHeaders = this.getCustomHeaders();
+    const response = customHeaders
+      ? await client.messages.create(
+          requestBody as Parameters<typeof client.messages.create>[0],
+          { headers: customHeaders },
+        )
+      : await client.messages.create(
+          requestBody as Parameters<typeof client.messages.create>[0],
+        );
 
     if (streamingEnabled) {
       // Handle streaming response - response is already a Stream when streaming is enabled

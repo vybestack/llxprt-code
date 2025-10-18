@@ -291,6 +291,55 @@ describe('AnthropicProvider', () => {
   });
 
   describe('generateChatCompletion', () => {
+    it('should pass custom headers provided via configuration to the Anthropic client', async () => {
+      const customHeaders = {
+        'X-Custom-Header': 'custom-value',
+        'X-Trace-Id': 'trace-123',
+      };
+
+      const providerWithHeaders = new AnthropicProvider(
+        'test-api-key',
+        undefined,
+        {
+          ...TEST_PROVIDER_CONFIG,
+          getEphemeralSettings: () => ({
+            streaming: 'disabled',
+            'custom-headers': customHeaders,
+          }),
+          customHeaders: {
+            'X-Provider-Header': 'provider-value',
+          },
+        },
+      );
+
+      mockMessagesCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'hello' }],
+        usage: {
+          input_tokens: 1,
+          output_tokens: 1,
+        },
+      });
+
+      const generator = providerWithHeaders.generateChatCompletion([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello there' }],
+        },
+      ]);
+
+      await generator.next();
+
+      const call = mockMessagesCreate.mock.calls[0];
+      expect(call).toBeDefined();
+
+      const options = call?.[1];
+      expect(options).toBeDefined();
+      expect(options?.headers).toMatchObject({
+        ...customHeaders,
+        'X-Provider-Header': 'provider-value',
+      });
+    });
+
     it('should stream content from Anthropic API', async () => {
       // Mock streaming response
       const mockStream = {

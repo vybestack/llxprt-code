@@ -467,6 +467,16 @@ export class GeminiProvider extends BaseProvider {
     // Other Vertex AI env vars are already set, no need to duplicate
   }
 
+  private createHttpOptions(): { headers: Record<string, string> } {
+    const customHeaders = this.getCustomHeaders();
+    return {
+      headers: {
+        'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
+        ...(customHeaders ?? {}),
+      },
+    };
+  }
+
   /**
    * Sets the config instance for reading OAuth credentials
    */
@@ -760,11 +770,7 @@ export class GeminiProvider extends BaseProvider {
       const { GoogleGenAI } = await import('@google/genai');
 
       // Create the appropriate client based on auth mode
-      const httpOptions = {
-        headers: {
-          'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
-        },
-      };
+      const httpOptions = this.createHttpOptions();
 
       let genAI: InstanceType<typeof GoogleGenAI>;
 
@@ -946,11 +952,7 @@ export class GeminiProvider extends BaseProvider {
       const prompt = (params as { prompt: string }).prompt;
 
       // Create the appropriate client based on auth mode
-      const httpOptions = {
-        headers: {
-          'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
-        },
-      };
+      const httpOptions = this.createHttpOptions();
 
       let genAI: InstanceType<typeof GoogleGenAI>;
 
@@ -1195,11 +1197,7 @@ export class GeminiProvider extends BaseProvider {
 
     // Create appropriate client and generate content
     const baseURL = options.resolved.baseURL ?? this.getBaseURL();
-    const httpOptions = {
-      headers: {
-        'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
-      },
-    };
+    const httpOptions = this.createHttpOptions();
 
     const mapResponseToChunks = (
       response: GenerateContentResponse,
