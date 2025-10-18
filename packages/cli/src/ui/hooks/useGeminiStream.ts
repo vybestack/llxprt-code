@@ -89,6 +89,12 @@ enum StreamProcessingStatus {
   Error,
 }
 
+interface QueuedSubmission {
+  query: PartListUnion;
+  options?: { isContinuation: boolean };
+  promptId?: string;
+}
+
 function showCitations(settings: LoadedSettings, config: Config): boolean {
   // Try settings service first (consistent with core/turn.ts)
   try {
@@ -146,6 +152,15 @@ export const useGeminiStream = (
   const [pendingHistoryItemRef, setPendingHistoryItem] =
     useStateAndRef<HistoryItemWithoutId | null>(null);
   const processedMemoryToolsRef = useRef<Set<string>>(new Set());
+  const queuedSubmissionsRef = useRef<QueuedSubmission[]>([]);
+  const submitQueryRef = useRef<
+    | ((
+        query: PartListUnion,
+        options?: { isContinuation: boolean },
+        prompt_id?: string,
+      ) => Promise<void>)
+    | null
+  >(null);
   const { startNewPrompt, getPromptCount } = useSessionStats();
   const storage = config.storage;
 
@@ -337,6 +352,7 @@ export const useGeminiStream = (
     setPendingHistoryItem(null);
     onCancelSubmit();
     setIsResponding(false);
+    queuedSubmissionsRef.current = [];
   }, [
     streamingState,
     addItem,
@@ -354,6 +370,21 @@ export const useGeminiStream = (
     },
     { isActive: streamingState === StreamingState.Responding },
   );
+
+  const scheduleNextQueuedSubmission = useCallback(() => {
+    if (queuedSubmissionsRef.current.length === 0) {
+      return;
+    }
+
+    const next = queuedSubmissionsRef.current.shift();
+    if (!next) {
+      return;
+    }
+
+    setTimeout(() => {
+      void submitQueryRef.current?.(next.query, next.options, next.promptId);
+    }, 0);
+  }, []);
 
   const prepareQueryForGemini = useCallback(
     async (
@@ -608,6 +639,7 @@ export const useGeminiStream = (
         userMessageTimestamp,
       );
       setIsResponding(false);
+      queuedSubmissionsRef.current = [];
       setThought(null); // Reset thought when user cancels
     },
     [
@@ -848,8 +880,14 @@ export const useGeminiStream = (
         (streamingState === StreamingState.Responding ||
           streamingState === StreamingState.WaitingForConfirmation) &&
         !options?.isContinuation
-      )
+      ) {
+        queuedSubmissionsRef.current.push({
+          query,
+          options,
+          promptId: prompt_id,
+        });
         return;
+      }
 
       const userMessageTimestamp = Date.now();
 
@@ -875,6 +913,7 @@ export const useGeminiStream = (
       );
 
       if (!shouldProceed || queryToSend === null) {
+        scheduleNextQueuedSubmission();
         return;
       }
 
@@ -930,6 +969,9 @@ export const useGeminiStream = (
         }
       } finally {
         setIsResponding(false);
+        if (!turnCancelledRef.current) {
+          scheduleNextQueuedSubmission();
+        }
       }
     },
     [
@@ -948,8 +990,19 @@ export const useGeminiStream = (
       getPromptCount,
       handleLoopDetectedEvent,
       flushPendingHistoryItem,
+      scheduleNextQueuedSubmission,
     ],
   );
+
+  useEffect(() => {
+    submitQueryRef.current = submitQuery;
+  }, [submitQuery]);
+
+  useEffect(() => {
+    if (streamingState === StreamingState.Idle) {
+      scheduleNextQueuedSubmission();
+    }
+  }, [streamingState, scheduleNextQueuedSubmission]);
 
   const handleCompletedTools = useCallback(
     async (completedToolCallsFromScheduler: TrackedToolCall[]) => {
