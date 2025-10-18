@@ -34,7 +34,7 @@ import {
   AnyToolInvocation,
   ToolErrorType, // <-- Import ToolErrorType
 } from '@vybestack/llxprt-code-core';
-import { Part, PartListUnion } from '@google/genai';
+import { Part, PartListUnion, FinishReason } from '@google/genai';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
   HistoryItem,
@@ -1102,6 +1102,124 @@ describe('useGeminiStream', () => {
 
       // Nothing should happen because the state is not `Responding`
       expect(abortSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Submission queue', () => {
+    it('queues prompts submitted while a turn is active', async () => {
+      const streamResolvers: Array<() => void> = [];
+      mockSendMessageStream.mockImplementation(() =>
+        (async function* () {
+          await new Promise<void>((resolve) => {
+            streamResolvers.push(resolve);
+          });
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: FinishReason.STOP },
+          } as any;
+        })(),
+      );
+
+      const { result } = renderTestHook();
+
+      act(() => {
+        void result.current.submitQuery('first prompt');
+      });
+
+      await waitFor(() =>
+        expect(result.current.streamingState).toBe(StreamingState.Responding),
+      );
+
+      act(() => {
+        void result.current.submitQuery('second prompt');
+      });
+
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+
+      await waitFor(() => expect(streamResolvers.length).toBeGreaterThan(0));
+
+      act(() => {
+        streamResolvers[0]?.();
+      });
+
+      await waitFor(() =>
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(2),
+      );
+
+      await waitFor(() => expect(streamResolvers.length).toBeGreaterThan(1));
+
+      act(() => {
+        streamResolvers[1]?.();
+      });
+
+      await waitFor(() =>
+        expect(result.current.streamingState).toBe(StreamingState.Idle),
+      );
+    });
+
+    it('drops queued prompts when the active turn is cancelled', async () => {
+      const streamResolvers: Array<() => void> = [];
+      mockSendMessageStream.mockImplementation(() =>
+        (async function* () {
+          await new Promise<void>((resolve) => {
+            streamResolvers.push(resolve);
+          });
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: FinishReason.STOP },
+          } as any;
+        })(),
+      );
+
+      const { result } = renderTestHook();
+
+      act(() => {
+        void result.current.submitQuery('first prompt');
+      });
+
+      await waitFor(() =>
+        expect(result.current.streamingState).toBe(StreamingState.Responding),
+      );
+
+      act(() => {
+        void result.current.submitQuery('second prompt');
+      });
+
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+
+      await waitFor(() => expect(streamResolvers.length).toBeGreaterThan(0));
+
+      await act(async () => {
+        result.current.cancelOngoingRequest();
+      });
+
+      act(() => {
+        streamResolvers[0]?.();
+      });
+
+      await waitFor(() =>
+        expect(result.current.streamingState).toBe(StreamingState.Idle),
+      );
+
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        void result.current.submitQuery('third prompt');
+      });
+
+      await waitFor(() =>
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(2),
+      );
+
+      await waitFor(() => expect(streamResolvers.length).toBeGreaterThan(1));
+
+      act(() => {
+        streamResolvers[1]?.();
+      });
+
+      await waitFor(() =>
+        expect(result.current.streamingState).toBe(StreamingState.Idle),
+      );
     });
   });
 
