@@ -920,6 +920,15 @@ export class AnthropicProvider extends BaseProvider {
         }>
       | undefined;
 
+    const flattenedToolNames =
+      tools?.flatMap((group) =>
+        group.functionDeclarations
+          .map((decl) => decl.name)
+          .filter((name): name is string => !!name),
+      ) ?? [];
+    const toolNamesArg =
+      tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
+
     // Ensure authentication
     await this.updateClientWithResolvedAuth();
 
@@ -944,7 +953,7 @@ export class AnthropicProvider extends BaseProvider {
       const corePrompt = await getCoreSystemPromptAsync(
         userMemory,
         currentModel,
-        undefined,
+        toolNamesArg,
       );
       if (corePrompt) {
         anthropicMessages.unshift({
@@ -955,7 +964,7 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     const systemPrompt = !isOAuth
-      ? await getCoreSystemPromptAsync(userMemory, currentModel, undefined)
+      ? await getCoreSystemPromptAsync(userMemory, currentModel, toolNamesArg)
       : undefined;
     const requestBody = {
       model: currentModel,

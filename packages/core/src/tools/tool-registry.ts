@@ -176,6 +176,7 @@ export class ToolRegistry {
   private config: Config;
   private mcpClientManager: McpClientManager;
   private logger = new DebugLogger('llxprt:tool-registry');
+  private discoveryLock: Promise<void> | null = null;
 
   constructor(config: Config, eventEmitter?: EventEmitter) {
     this.config = config;
@@ -195,18 +196,7 @@ export class ToolRegistry {
    * @param tool - The tool object containing schema and execution logic.
    */
   registerTool(tool: AnyDeclarativeTool): void {
-    if (this.tools.has(tool.name)) {
-      if (tool instanceof DiscoveredMCPTool) {
-        tool = tool.asFullyQualifiedTool();
-      } else {
-        // Decide on behavior: throw error, log warning, or allow overwrite
-        this.logger.warn(
-          () =>
-            `Tool with name "${tool.name}" is already registered. Overwriting.`,
-        );
-      }
-    }
-    this.tools.set(tool.name, tool);
+    this.registerToolIntoMap(tool, this.tools);
   }
 
   /**
@@ -244,41 +234,21 @@ export class ToolRegistry {
    * Uses truly atomic updates to prevent race conditions.
    */
   async discoverAllTools(): Promise<void> {
-    // Build new tool map starting with core tools (non-discovered)
-    const newTools = this.buildCoreToolsMap();
+    await this.withDiscoveryLock(async () => {
+      const newTools = this.buildCoreToolsMap();
 
-    await this.config.getPromptRegistry().clear();
+      await this.config.getPromptRegistry().clear();
+      await this.discoverAndRegisterToolsFromCommand(newTools);
 
-    // Create a temporary registry that adds to newTools, not this.tools
-    const tempRegistry = {
-      registerTool: (tool: AnyDeclarativeTool) => {
-        newTools.set(tool.name, tool);
-      },
-    };
-
-    // Discover command tools into newTools
-    // For now, we'll use the existing method but need to modify it to accept a registry
-    const discoveryCmd = this.config.getToolDiscoveryCommand();
-    if (discoveryCmd) {
-      const oldRegisterTool = this.registerTool.bind(this);
-      this.registerTool = tempRegistry.registerTool;
+      const previousTools = this.tools;
       try {
-        await this.discoverAndRegisterToolsFromCommand();
-      } finally {
-        this.registerTool = oldRegisterTool;
+        this.tools = newTools;
+        await this.mcpClientManager.discoverAllMcpTools(this.config);
+      } catch (error) {
+        this.tools = previousTools;
+        throw error;
       }
-    }
-
-    // Temporarily swap tools to newTools so MCP tools get registered to the right map
-    this.tools = newTools;
-
-    // Discover MCP tools into newTools
-    await this.mcpClientManager.discoverAllMcpTools(this.config);
-
-    // The tools are now already in the right place (this.tools === newTools)
-    // No need to swap again
-
-    // At this point, the update is truly atomic from the perspective of getFunctionDeclarations()
+    });
   }
 
   /**
@@ -288,46 +258,36 @@ export class ToolRegistry {
    * Uses truly atomic updates to prevent race conditions.
    */
   async discoverMcpTools(): Promise<void> {
-    // Build new tool map starting with core tools (non-discovered)
-    const newTools = this.buildCoreToolsMap();
+    await this.withDiscoveryLock(async () => {
+      const newTools = this.buildCoreToolsMap();
 
-    // Re-add command-discovered tools if they exist
-    for (const [name, tool] of this.tools.entries()) {
-      if (
-        tool instanceof DiscoveredTool &&
-        !(tool instanceof DiscoveredMCPTool)
-      ) {
-        newTools.set(name, tool);
+      for (const tool of this.tools.values()) {
+        if (
+          tool instanceof DiscoveredTool &&
+          !(tool instanceof DiscoveredMCPTool)
+        ) {
+          this.registerToolIntoMap(tool, newTools);
+        }
       }
-    }
 
-    await this.config.getPromptRegistry().clear();
+      await this.config.getPromptRegistry().clear();
 
-    // Create a temporary registry that adds to newTools
-    const tempRegistry = {
-      registerTool: (tool: AnyDeclarativeTool) => {
-        newTools.set(tool.name, tool);
-      },
-    };
-
-    // Discover MCP tools into newTools
-    const oldRegisterTool = this.registerTool.bind(this);
-    this.registerTool = tempRegistry.registerTool;
-    await this.mcpClientManager.discoverAllMcpTools(this.config);
-    this.registerTool = oldRegisterTool;
-
-    // Only NOW do we atomically swap the reference
-    // This ensures getFunctionDeclarations() never sees a partial tool map
-    this.tools = newTools;
-
-    // At this point, the update is truly atomic from the perspective of getFunctionDeclarations()
+      const previousTools = this.tools;
+      try {
+        this.tools = newTools;
+        await this.mcpClientManager.discoverAllMcpTools(this.config);
+      } catch (error) {
+        this.tools = previousTools;
+        throw error;
+      }
+    });
   }
 
   /**
    * Restarts all MCP servers and re-discovers tools.
    */
   async restartMcpServers(): Promise<void> {
-    await this.mcpClientManager.discoverAllMcpTools(this.config);
+    await this.discoverMcpTools();
   }
 
   /**
@@ -336,45 +296,48 @@ export class ToolRegistry {
    * @param serverName - The name of the server to discover tools from.
    */
   async discoverToolsForServer(serverName: string): Promise<void> {
-    // Build new tool map with all tools except those from the target server
-    const newTools = new Map<string, AnyDeclarativeTool>();
-    for (const [name, tool] of this.tools.entries()) {
-      if (
-        !(tool instanceof DiscoveredMCPTool && tool.serverName === serverName)
-      ) {
-        newTools.set(name, tool);
+    await this.withDiscoveryLock(async () => {
+      const newTools = new Map<string, AnyDeclarativeTool>();
+      for (const tool of this.tools.values()) {
+        if (
+          !(tool instanceof DiscoveredMCPTool && tool.serverName === serverName)
+        ) {
+          this.registerToolIntoMap(tool, newTools);
+        }
       }
-    }
 
-    await this.config.getPromptRegistry().removePromptsByServer(serverName);
-    const mcpServers = this.config.getMcpServers() ?? {};
-    const serverConfig = mcpServers[serverName];
-    if (serverConfig) {
-      // Create a temporary registry that adds to newTools
-      const tempRegistry = Object.create(this);
-      tempRegistry.registerTool = (tool: AnyDeclarativeTool) => {
-        newTools.set(tool.name, tool);
-      };
+      await this.config.getPromptRegistry().removePromptsByServer(serverName);
+      const mcpServers = this.config.getMcpServers() ?? {};
+      const serverConfig = mcpServers[serverName];
 
-      await connectAndDiscover(
-        serverName,
-        serverConfig,
-        tempRegistry,
-        this.config.getPromptRegistry(),
-        this.config.getDebugMode(),
-        this.config.getWorkspaceContext(),
-        this.config,
-      );
-    }
-
-    // Only NOW do we atomically swap the reference
-    // This ensures getFunctionDeclarations() never sees a partial tool map
-    this.tools = newTools;
-
-    // At this point, the update is truly atomic from the perspective of getFunctionDeclarations()
+      const previousTools = this.tools;
+      try {
+        this.tools = newTools;
+        if (serverConfig) {
+          const tempRegistry = Object.create(this) as ToolRegistry;
+          tempRegistry.registerTool = (tool: AnyDeclarativeTool) => {
+            this.registerToolIntoMap(tool, newTools);
+          };
+          await connectAndDiscover(
+            serverName,
+            serverConfig,
+            tempRegistry,
+            this.config.getPromptRegistry(),
+            this.config.getDebugMode(),
+            this.config.getWorkspaceContext(),
+            this.config,
+          );
+        }
+      } catch (error) {
+        this.tools = previousTools;
+        throw error;
+      }
+    });
   }
 
-  private async discoverAndRegisterToolsFromCommand(): Promise<void> {
+  private async discoverAndRegisterToolsFromCommand(
+    targetMap: Map<string, AnyDeclarativeTool>,
+  ): Promise<void> {
     const discoveryCmd = this.config.getToolDiscoveryCommand();
     if (!discoveryCmd) {
       return;
@@ -479,13 +442,14 @@ export class ToolRegistry {
           !Array.isArray(func.parametersJsonSchema)
             ? func.parametersJsonSchema
             : {};
-        this.registerTool(
+        this.registerToolIntoMap(
           new DiscoveredTool(
             this.config,
             func.name,
             func.description ?? '',
             parameters as Record<string, unknown>,
           ),
+          targetMap,
         );
       }
     } catch (e) {
@@ -616,5 +580,43 @@ export class ToolRegistry {
       }
     }
     return tool;
+  }
+
+  private registerToolIntoMap(
+    tool: AnyDeclarativeTool,
+    targetMap: Map<string, AnyDeclarativeTool>,
+  ): void {
+    let toolToRegister = tool;
+
+    if (targetMap.has(toolToRegister.name)) {
+      if (toolToRegister instanceof DiscoveredMCPTool) {
+        toolToRegister = toolToRegister.asFullyQualifiedTool();
+      } else {
+        this.logger.warn(
+          () =>
+            `Tool with name "${toolToRegister.name}" is already registered. Overwriting.`,
+        );
+      }
+    }
+
+    targetMap.set(toolToRegister.name, toolToRegister);
+  }
+
+  private async withDiscoveryLock<T>(task: () => Promise<T>): Promise<T> {
+    while (this.discoveryLock) {
+      await this.discoveryLock;
+    }
+
+    let release: () => void = () => {};
+    this.discoveryLock = new Promise<void>((resolve) => {
+      release = () => resolve();
+    });
+
+    try {
+      return await task();
+    } finally {
+      release();
+      this.discoveryLock = null;
+    }
   }
 }

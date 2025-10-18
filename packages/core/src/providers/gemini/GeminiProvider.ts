@@ -1051,6 +1051,15 @@ export class GeminiProvider extends BaseProvider {
         }))
       : undefined;
 
+    const flattenedToolNames =
+      tools?.flatMap((group) =>
+        group.functionDeclarations
+          .map((decl) => decl.name)
+          .filter((name): name is string => !!name),
+      ) ?? [];
+    const toolNamesArg =
+      tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
+
     // Create appropriate client and generate content
     const httpOptions = {
       headers: {
@@ -1082,6 +1091,7 @@ export class GeminiProvider extends BaseProvider {
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
         this.currentModel,
+        toolNamesArg,
       );
 
       // For OAuth/CodeAssist mode, inject system prompt as first user message
@@ -1131,6 +1141,7 @@ export class GeminiProvider extends BaseProvider {
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
         this.currentModel,
+        toolNamesArg,
       );
 
       const request = {
