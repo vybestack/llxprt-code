@@ -1187,7 +1187,7 @@ describe('App UI', () => {
       });
 
       mockConfig.getGeminiClient.mockReturnValue({
-        isInitialized: vi.fn(() => true),
+        isInitialized: vi.fn(() => false),
         getUserTier: vi.fn(),
       } as unknown as LLxprtClient);
 
