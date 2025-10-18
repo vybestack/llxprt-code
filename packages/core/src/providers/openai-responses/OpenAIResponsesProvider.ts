@@ -433,13 +433,22 @@ export class OpenAIResponsesProvider extends BaseProvider {
     }
 
     // Get the system prompt
+    const flattenedToolNames =
+      tools?.flatMap((group) =>
+        group.functionDeclarations
+          .map((decl) => decl.name)
+          .filter((name): name is string => !!name),
+      ) ?? [];
+    const toolNamesArg =
+      tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
+
     const userMemory = this.globalConfig?.getUserMemory
       ? this.globalConfig.getUserMemory()
       : '';
     const systemPrompt = await getCoreSystemPromptAsync(
       userMemory,
       this.currentModel,
-      undefined,
+      toolNamesArg,
     );
 
     // Build Responses API input array directly from IContent
