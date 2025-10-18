@@ -792,6 +792,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const streamingEnabled = streamingSetting !== 'disabled';
 
     // Get the system prompt
+    const flattenedToolNames =
+      tools?.flatMap((group) =>
+        group.functionDeclarations
+          .map((decl) => decl.name)
+          .filter((name): name is string => !!name),
+      ) ?? [];
+    const toolNamesArg =
+      tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
+
     const userMemory = this.globalConfig?.getUserMemory
       ? this.globalConfig.getUserMemory()
       : '';
@@ -799,6 +808,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       userMemory,
       model,
       provider: this.name,
+      tools: toolNamesArg,
     });
 
     // Add system prompt as the first message in the array

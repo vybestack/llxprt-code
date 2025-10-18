@@ -890,7 +890,20 @@ export class AnthropicProvider extends BaseProvider {
         }>
       | undefined;
 
-    const authToken = options.resolved.authToken;
+    const toolNamesForPrompt =
+      tools === undefined
+        ? undefined
+        : Array.from(
+            new Set(
+              tools.flatMap((group) =>
+                group.functionDeclarations
+                  .map((decl) => decl.name)
+                  .filter((name): name is string => Boolean(name)),
+              ),
+            ),
+          );
+
+    const authToken = options.resolved.authToken ?? '';
     const isOAuth = authToken.startsWith('sk-ant-oat');
 
     // Get streaming setting from ephemeral settings (default: enabled)
@@ -911,6 +924,7 @@ export class AnthropicProvider extends BaseProvider {
         userMemory,
         model: currentModel,
         provider: this.name,
+        tools: toolNamesForPrompt,
       });
       if (corePrompt) {
         anthropicMessages.unshift({
@@ -925,6 +939,7 @@ export class AnthropicProvider extends BaseProvider {
           userMemory,
           model: currentModel,
           provider: this.name,
+          tools: toolNamesForPrompt,
         })
       : undefined;
     const requestBody = {

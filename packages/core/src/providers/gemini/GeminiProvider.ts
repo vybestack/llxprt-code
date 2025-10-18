@@ -1171,6 +1171,19 @@ export class GeminiProvider extends BaseProvider {
         }))
       : undefined;
 
+    const toolNamesForPrompt =
+      tools === undefined
+        ? undefined
+        : Array.from(
+            new Set(
+              tools.flatMap((group) =>
+                group.functionDeclarations
+                  .map((decl) => decl.name)
+                  .filter((name): name is string => Boolean(name)),
+              ),
+            ),
+          );
+
     const serverTools = ['web_search', 'web_fetch'];
     const requestConfig: Record<string, unknown> = {
       serverTools,
@@ -1332,6 +1345,7 @@ export class GeminiProvider extends BaseProvider {
         userMemory,
         model: currentModel,
         provider: this.name,
+        tools: toolNamesForPrompt,
       });
 
       const contentsWithSystemPrompt = [
@@ -1442,6 +1456,7 @@ export class GeminiProvider extends BaseProvider {
         userMemory,
         model: currentModel,
         provider: this.name,
+        tools: toolNamesForPrompt,
       });
 
       const apiRequest = {

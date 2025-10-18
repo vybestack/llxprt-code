@@ -373,6 +373,18 @@ export class OpenAIResponsesProvider extends BaseProvider {
     }
 
     const resolvedModel = options.resolved.model || this.getDefaultModel();
+    const toolNamesForPrompt =
+      tools === undefined
+        ? undefined
+        : Array.from(
+            new Set(
+              tools.flatMap((group) =>
+                group.functionDeclarations
+                  .map((decl) => decl.name)
+                  .filter((name): name is string => Boolean(name)),
+              ),
+            ),
+          );
     const userMemory = this.globalConfig?.getUserMemory
       ? this.globalConfig.getUserMemory()
       : '';
@@ -380,6 +392,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       userMemory,
       model: resolvedModel,
       provider: this.name,
+      tools: toolNamesForPrompt,
     });
 
     const input: Array<{

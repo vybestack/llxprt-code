@@ -405,6 +405,7 @@ export class GeminiClient {
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
+    const enabledToolNames = this.getEnabledToolNamesForPrompt();
 
     // CRITICAL: Reuse stored HistoryService if available to preserve UI conversation display
     // This is essential for maintaining conversation history across provider switches
@@ -446,6 +447,7 @@ export class GeminiClient {
         userMemory,
         model,
         provider: providerName,
+        tools: enabledToolNames,
       });
 
       // Add environment context to system instruction
@@ -873,6 +875,7 @@ export class GeminiClient {
         userMemory,
         model: modelToUse,
         provider: providerName,
+        tools: this.getEnabledToolNamesForPrompt(),
       });
       const requestConfig = {
         abortSignal,
@@ -1017,6 +1020,7 @@ export class GeminiClient {
         userMemory,
         model: modelToUse,
         provider: providerName,
+        tools: this.getEnabledToolNamesForPrompt(),
       });
 
       const requestConfig = {
@@ -1264,6 +1268,25 @@ export class GeminiClient {
       newTokenCount,
       compressionStatus: CompressionStatus.COMPRESSED,
     };
+  }
+
+  private getEnabledToolNamesForPrompt(): string[] {
+    const toolRegistry = this.config.getToolRegistry();
+    if (
+      !toolRegistry ||
+      typeof (toolRegistry as { getEnabledTools?: unknown }).getEnabledTools !==
+        'function'
+    ) {
+      return [];
+    }
+    return Array.from(
+      new Set(
+        toolRegistry
+          .getEnabledTools()
+          .map((tool) => tool.name)
+          .filter(Boolean),
+      ),
+    );
   }
 
   /**

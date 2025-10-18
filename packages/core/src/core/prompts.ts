@@ -113,12 +113,9 @@ async function buildPromptContext(options: {
 
   // Map tools to PascalCase names
   const toolMapping = getToolNameMapping();
-  const enabledTools =
-    tools?.map((toolName) => toolMapping[toolName] || toolName) || [];
-
-  // Default to all core tools if none specified
-  if (enabledTools.length === 0) {
-    enabledTools.push(
+  let enabledTools: string[];
+  if (tools === undefined) {
+    enabledTools = [
       'Ls',
       'Edit',
       'Glob',
@@ -132,7 +129,14 @@ async function buildPromptContext(options: {
       'TodoWrite',
       'WebFetch',
       'WebSearch',
-    );
+    ];
+  } else if (tools.length > 0) {
+    const mappedTools = tools
+      .map((toolName) => toolMapping[toolName] || toolName)
+      .filter(Boolean);
+    enabledTools = Array.from(new Set(mappedTools));
+  } else {
+    enabledTools = [];
   }
 
   // Use provider if explicitly passed, otherwise get from settings or default to gemini
