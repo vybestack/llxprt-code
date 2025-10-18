@@ -290,6 +290,36 @@ jobs:
             echo "Skipping feature summary (LLxprt generation failed)"
           fi
 
+          # Gather contributor acknowledgements (exclude maintainer acoliver)
+          echo "Collecting contributor acknowledgements..."
+          PR_NUMBERS=$(git log "$LAST_STABLE_TAG"..HEAD --merges --pretty='%s' | sed -n 's/.*#\([0-9]\+\).*/\1/p' | sort -u)
+          CONTRIBUTORS=""
+          for PR_NUMBER in $PR_NUMBERS; do
+            if [ -z "$PR_NUMBER" ]; then
+              continue
+            fi
+            LOGIN=$(gh pr view "$PR_NUMBER" --json author --jq '.author.login' 2>/dev/null || echo "")
+            if [ -n "$LOGIN" ] && [ "$LOGIN" != "acoliver" ]; then
+              CONTRIBUTORS="${CONTRIBUTORS}"$'\n'"$LOGIN"
+            fi
+          done
+
+          CONTRIBUTORS=$(printf "%s\n" "$CONTRIBUTORS" | sed '/^$/d' | sort -u)
+          if [ -n "$CONTRIBUTORS" ]; then
+            {
+              echo "### Thanks"
+              echo ""
+              echo "Huge thanks to the following contributors for their pull requests in this release:"
+              echo ""
+            } >> release-notes.md
+            while IFS= read -r contributor; do
+              echo "- @$contributor" >> release-notes.md
+            done <<< "$CONTRIBUTORS"
+            echo "" >> release-notes.md
+          else
+            echo "No external contributors to acknowledge for this release."
+          fi
+
           # Always add the full commit list
           {
             echo "### All Changes"
