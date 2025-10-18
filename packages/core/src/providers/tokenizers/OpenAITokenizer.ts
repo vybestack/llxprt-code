@@ -24,6 +24,7 @@ export class OpenAITokenizer implements ITokenizer {
     string,
     ReturnType<typeof encoding_for_model>
   >();
+  private readonly isWindows = process.platform === 'win32';
 
   async countTokens(text: string, model: string): Promise<number> {
     try {
@@ -58,6 +59,11 @@ export class OpenAITokenizer implements ITokenizer {
    * Clean up encoder resources
    */
   dispose(): void {
+    if (this.isWindows) {
+      this.encoderCache.clear();
+      return;
+    }
+
     for (const encoder of this.encoderCache.values()) {
       encoder.free();
     }

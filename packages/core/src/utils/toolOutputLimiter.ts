@@ -18,6 +18,7 @@ export const ESCAPE_BUFFER_PERCENTAGE = 0.8; // Use 80% of limit to leave 20% bu
 let cachedEncoder: ReturnType<typeof encoding_for_model> | null = null;
 let encoderInitFailed = false;
 const utf8Decoder = new TextDecoder();
+const isWindows = process.platform === 'win32';
 
 function getEncoder(): ReturnType<typeof encoding_for_model> | null {
   if (encoderInitFailed) {
@@ -27,9 +28,11 @@ function getEncoder(): ReturnType<typeof encoding_for_model> | null {
   if (!cachedEncoder) {
     try {
       cachedEncoder = encoding_for_model('gpt-4o');
-      process.once('exit', () => {
-        cachedEncoder?.free();
-      });
+      if (!isWindows) {
+        process.once('exit', () => {
+          cachedEncoder?.free();
+        });
+      }
     } catch (_error) {
       encoderInitFailed = true;
       return null;
