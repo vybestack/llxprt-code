@@ -580,12 +580,16 @@ export class OpenAIResponsesProvider extends BaseProvider {
       type: 'application/json; charset=utf-8',
     });
 
+    const customHeaders = this.getCustomHeaders();
+    const headers = {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json; charset=utf-8',
+      ...(customHeaders ?? {}),
+    };
+
     const response = await fetch(responsesURL, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json; charset=utf-8',
-      },
+      headers,
       body: bodyBlob,
     });
 
