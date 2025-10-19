@@ -43,6 +43,9 @@ jobs:
     environment:
       name: production-release
       url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.RELEASE_TAG }}
+    env:
+      REGISTRY: ghcr.io
+      SANDBOX_IMAGE_NAME: ${{ github.repository }}/sandbox
     if: github.repository == 'vybestack/llxprt-code'
     permissions:
       contents: write
@@ -185,6 +188,43 @@ jobs:
         run: npm publish --workspace=@vybestack/llxprt-code --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Prepare sandbox package tarballs
+        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        run: |
+          mkdir -p packages/cli/dist packages/core/dist
+          rm -f packages/cli/dist/vybestack-llxprt-code-*.tgz packages/core/dist/vybestack-llxprt-code-core-*.tgz
+          npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
+          npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist
+
+      - name: Log in to Container Registry
+        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # ratchet:docker/login-action@v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract sandbox image metadata
+        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        id: sandbox_meta
+        uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # ratchet:docker/metadata-action@v5.5.1
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.SANDBOX_IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.RELEASE_VERSION }}
+            type=raw,value=latest,enable=${{ steps.vars.outputs.is_nightly != 'true' }}
+
+      - name: Build and push sandbox image
+        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # ratchet:docker/build-push-action@v6.9.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.sandbox_meta.outputs.tags }}
+          labels: ${{ steps.sandbox_meta.outputs.labels }}
+          build-args: |
+            CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
 
       - name: Generate Release Notes
         if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
