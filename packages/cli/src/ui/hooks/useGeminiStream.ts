@@ -143,6 +143,7 @@ export const useGeminiStream = (
   setModelSwitchedFromQuotaError: React.Dispatch<React.SetStateAction<boolean>>,
   onEditorClose: () => void,
   onCancelSubmit: () => void,
+  onTodoPause?: () => void,
 ) => {
   const [initError, setInitError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -1032,6 +1033,14 @@ export const useGeminiStream = (
           },
         );
 
+      const todoPauseTriggered = completedAndReadyToSubmitTools.some(
+        (tc) => tc.request.name === 'todo_pause' && tc.status === 'success',
+      );
+
+      if (todoPauseTriggered) {
+        onTodoPause?.();
+      }
+
       // Finalize any client-initiated tools as soon as they are done.
       const clientTools = completedAndReadyToSubmitTools.filter(
         (t) => t.request.isClientInitiated,
@@ -1123,6 +1132,7 @@ export const useGeminiStream = (
       geminiClient,
       performMemoryRefresh,
       modelSwitchedFromQuotaError,
+      onTodoPause,
     ],
   );
 
