@@ -65,6 +65,10 @@ import { HistoryItemDisplay } from './components/HistoryItemDisplay.js';
 import { ContextSummaryDisplay } from './components/ContextSummaryDisplay.js';
 import { useHistory } from './hooks/useHistoryManager.js';
 import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
+import {
+  useTodoPausePreserver,
+  TodoPausePreserver,
+} from './hooks/useTodoPausePreserver.js';
 import process from 'node:process';
 import {
   getErrorMessage,
@@ -220,6 +224,10 @@ const App = (props: AppInternalProps) => {
   const nightly = version.includes('nightly');
   const { history, addItem, clearItems, loadHistory } = useHistory();
   const { updateTodos } = useTodoContext();
+  const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
+  const registerTodoPause = useCallback(() => {
+    todoPauseController.registerTodoPause();
+  }, [todoPauseController]);
 
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = config.getIdeClient()?.getCurrentIde();
@@ -1086,6 +1094,7 @@ You can switch authentication methods by typing /auth or switch to a different m
     setModelSwitchedFromQuotaError,
     refreshStatic,
     handleUserCancel,
+    registerTodoPause,
   );
 
   const pendingHistoryItems = useMemo(
@@ -1126,14 +1135,11 @@ You can switch authentication methods by typing /auth or switch to a different m
     [submitQuery, inputHistoryStore],
   );
 
-  const handleUserInputSubmit = useCallback(
-    (submittedValue: string) => {
-      // Clear todos only when user types and submits
-      updateTodos([]);
-      handleFinalSubmit(submittedValue);
-    },
-    [handleFinalSubmit, updateTodos],
-  );
+  const { handleUserInputSubmit } = useTodoPausePreserver({
+    controller: todoPauseController,
+    updateTodos,
+    handleFinalSubmit,
+  });
 
   const handleIdePromptComplete = useCallback(
     (result: IdeIntegrationNudgeResult) => {
