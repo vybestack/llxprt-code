@@ -1,8 +1,6 @@
 name: Build and Push Sandbox Image
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
