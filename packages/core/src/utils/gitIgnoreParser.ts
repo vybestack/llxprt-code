@@ -113,7 +113,7 @@ export class GitIgnoreParser implements GitIgnoreFilter {
 
     const patterns = (content ?? '')
       .split('\n')
-      .map((p) => p.trim())
+      .map((p) => p.trimStart())
       .filter((p) => p !== '' && !p.startsWith('#'))
       .map((p) => {
         // Handle escaped special chars at the start: \! or \#
