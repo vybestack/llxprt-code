@@ -184,7 +184,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
     private readonly cliConfig?: Config,
   ) {
     super(
-      nameOverride ?? generateValidName(serverToolName),
+      nameOverride ?? generateMcpToolName(serverName, serverToolName),
       `${serverToolName} (${serverName} MCP Server)`,
       description,
       Kind.Other,
@@ -369,4 +369,16 @@ export function generateValidName(name: string) {
       validToolname.slice(0, 28) + '___' + validToolname.slice(-32);
   }
   return validToolname;
+}
+
+/**
+ * Generates a valid MCP tool name that includes server and tool information
+ * while ensuring it meets API requirements.
+ */
+export function generateMcpToolName(
+  serverName: string,
+  toolName: string,
+): string {
+  const fullName = `mcp__${serverName}__${toolName}`;
+  return generateValidName(fullName);
 }
