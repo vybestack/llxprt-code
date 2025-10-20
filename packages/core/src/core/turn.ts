@@ -124,6 +124,7 @@ export interface ServerToolCallConfirmationDetails {
 export type ServerGeminiContentEvent = {
   type: GeminiEventType.Content;
   value: string;
+  traceId?: string;
 };
 
 export type ServerGeminiSystemNoticeEvent = {
@@ -134,6 +135,7 @@ export type ServerGeminiSystemNoticeEvent = {
 export type ServerGeminiThoughtEvent = {
   type: GeminiEventType.Thought;
   value: ThoughtSummary;
+  traceId?: string;
 };
 
 export type ServerGeminiToolCallRequestEvent = {
@@ -339,6 +341,8 @@ export class Turn {
 
         this.debugResponses.push(resp);
 
+        const traceId = resp.responseId;
+
         // Check ALL parts for thinking, not just parts[0]
         // Bug fix: Previously only checked parts[0], missing thoughts in other positions
         // @plan PLAN-20251202-THINKING.P16
@@ -351,13 +355,14 @@ export class Turn {
             yield {
               type: GeminiEventType.Thought,
               value: thought,
+              traceId,
             };
           }
         }
 
         const text = getResponseText(resp);
         if (text) {
-          yield { type: GeminiEventType.Content, value: text };
+          yield { type: GeminiEventType.Content, value: text, traceId };
 
           // Emit citation event if conditions are met
           // Based on upstream implementation - emit citation after content
