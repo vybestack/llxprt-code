@@ -694,7 +694,7 @@ export async function discoverTools(
             funcDecl.description ?? '',
             funcDecl.parametersJsonSchema ?? { type: 'object', properties: {} },
             mcpServerConfig.trust,
-            `mcp__${mcpServerName}__${funcDecl.name!}`,
+            undefined,
             cliConfig,
           ),
         );

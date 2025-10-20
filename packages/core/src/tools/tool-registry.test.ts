@@ -248,9 +248,16 @@ describe('ToolRegistry', () => {
       const toolsFromServer1 = toolRegistry.getToolsByServer(server1Name);
       const toolNames = toolsFromServer1.map((t) => t.name);
 
+      // Expected names with the mcp__ prefix
+      const expectedNames = [
+        `mcp__${server1Name}__apple-tool`,
+        `mcp__${server1Name}__banana-tool`,
+        `mcp__${server1Name}__zebra-tool`,
+      ];
+
       // Assert that the array has the correct tools and is sorted by name
       expect(toolsFromServer1).toHaveLength(3);
-      expect(toolNames).toEqual(['apple-tool', 'banana-tool', 'zebra-tool']);
+      expect(toolNames).toEqual(expectedNames);
 
       // Assert that all returned tools are indeed from the correct server
       for (const tool of toolsFromServer1) {
@@ -260,7 +267,9 @@ describe('ToolRegistry', () => {
       // Assert that the other server's tools are returned correctly
       const toolsFromServer2 = toolRegistry.getToolsByServer(server2Name);
       expect(toolsFromServer2).toHaveLength(1);
-      expect(toolsFromServer2[0].name).toBe(mcpTool2.name);
+      expect(toolsFromServer2[0].name).toBe(
+        `mcp__${server2Name}__tool-on-server2`,
+      );
     });
   });
 
