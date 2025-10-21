@@ -5,7 +5,12 @@
  */
 
 import { getErrorMessage, isNodeError } from './errors.js';
+<<<<<<< HEAD
 import { URL } from 'url';
+=======
+import { URL } from 'node:url';
+import { ProxyAgent, setGlobalDispatcher } from 'undici';
+>>>>>>> e72c00cf9 (fix(proxy): Add error handling to proxy agent creation (#11538))
 
 const PRIVATE_IP_RANGES = [
   /^10\./,
@@ -79,5 +84,13 @@ export async function fetchWithTimeout(
     if (signal) {
       signal.removeEventListener('abort', onAbort);
     }
+  }
+}
+
+export function setGlobalProxy(proxy: string) {
+  try {
+    setGlobalDispatcher(new ProxyAgent(proxy));
+  } catch (e) {
+    console.error(`Failed to set proxy: ${getErrorMessage(e)}`);
   }
 }
