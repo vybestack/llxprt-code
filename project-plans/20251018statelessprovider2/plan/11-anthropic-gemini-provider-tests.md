@@ -16,13 +16,11 @@
 
 ### Files to Modify
 
-- `packages/core/src/providers/anthropic/__tests__/anthropic.stateless.stub.test.ts`
-  - Rename to `anthropic.stateless.test.ts`
+- `packages/core/src/providers/anthropic/__tests__/anthropic.stateless.test.ts`
   - Implement tests for per-call settings, auth handling, and client reuse keyed by runtime
   - Reference pseudocode line numbers in each test case
 
-- `packages/core/src/providers/gemini/__tests__/gemini.stateless.stub.test.ts`
-  - Rename to `gemini.stateless.test.ts`
+- `packages/core/src/providers/gemini/__tests__/gemini.stateless.test.ts`
   - Add tests covering streaming sessions, tool availability, and session isolation
 
 - Update pseudocode document if numbering adjusted

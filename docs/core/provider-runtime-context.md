@@ -1,5 +1,7 @@
 # Provider Runtime Context
 
+<!-- @plan:PLAN-20251018-STATELESSPROVIDER2.P20 @requirement:REQ-SP2-005 -->
+
 `ProviderRuntimeContext` encapsulates the state LLxprt Code needs to execute provider calls without relying on global singletons. Each runtime (CLI session, subagent, automation worker) owns one context.
 
 ```ts
@@ -42,6 +44,12 @@ export interface ProviderRuntimeContext {
 
 > **Note:** `getActiveProviderRuntimeContext()` lazily initialises a "legacy-singleton" context if nothing else is registered. Modern code should always create an explicit context during bootstrap and avoid relying on the fallback.
 
+## Runtime metadata & auth scope
+
+- The auth precedence resolver (`auth/precedence.ts`) mutates `context.metadata.runtimeAuthScope` with cache diagnostics whenever credentials are requested. Consumers should treat this metadata as read-only diagnostics.
+- Provide a stable `runtimeId` when creating contexts so scoped caches can invalidate the correct credentials. Omitted `runtimeId` values fall back to `legacy-singleton`, which mixes credentials and should be avoided outside tests.
+- When contexts are disposed, call `clearActiveProviderRuntimeContext()` so downstream code does not continue to read stale metadata.
+
 ## Nested runtimes
 
 The runtime helpers support stacking contexts—useful when launching subagents or parallel automation tasks:
@@ -63,4 +71,4 @@ try {
 }
 ```
 
-Each context maintains its own `SettingsService` instance, preventing provider switches or credential updates in one workflow from leaking into another.
+Each context maintains its own `SettingsService` instance, preventing provider switches or credential updates in one workflow from leaking into another. Because the auth cache keys off `runtimeId`, nested contexts receive independent credential buckets that are revoked automatically when settings change.

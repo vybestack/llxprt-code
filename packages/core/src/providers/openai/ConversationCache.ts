@@ -8,36 +8,63 @@ interface CacheEntry {
   promptTokensAccum: number;
 }
 
+interface CacheScopeState {
+  cache: Map<string, CacheEntry>;
+  accessOrder: string[];
+}
+
 export class ConversationCache {
-  private cache: Map<string, CacheEntry> = new Map();
-  private accessOrder: string[] = [];
+  private static readonly scopes: Map<string | symbol, CacheScopeState> =
+    new Map();
   private readonly maxSize: number;
   private readonly ttlMs: number;
+  private readonly scopeKey: string | symbol;
 
-  constructor(maxSize: number = 100, ttlHours: number = 2) {
+  constructor(
+    maxSize: number = 100,
+    ttlHours: number = 2,
+    scopeKey?: string | symbol,
+  ) {
     this.maxSize = maxSize;
     this.ttlMs = ttlHours * 60 * 60 * 1000;
+    this.scopeKey =
+      typeof scopeKey === 'string' && scopeKey.trim() !== ''
+        ? scopeKey.trim()
+        : (scopeKey ?? Symbol('conversation-cache-scope'));
+  }
+
+  private getOrCreateScope(): CacheScopeState {
+    let scope = ConversationCache.scopes.get(this.scopeKey);
+    if (!scope) {
+      scope = { cache: new Map(), accessOrder: [] };
+      ConversationCache.scopes.set(this.scopeKey, scope);
+    }
+    return scope;
+  }
+
+  private peekScope(): CacheScopeState | undefined {
+    return ConversationCache.scopes.get(this.scopeKey);
   }
 
   private generateKey(conversationId: string, parentId: string): string {
     return `${conversationId}:${parentId}`;
   }
 
-  private evictIfNeeded(): void {
-    while (this.accessOrder.length > this.maxSize) {
-      const oldestKey = this.accessOrder.shift();
+  private evictIfNeeded(scope: CacheScopeState): void {
+    while (scope.accessOrder.length > this.maxSize) {
+      const oldestKey = scope.accessOrder.shift();
       if (oldestKey) {
-        this.cache.delete(oldestKey);
+        scope.cache.delete(oldestKey);
       }
     }
   }
 
-  private updateAccessOrder(key: string): void {
-    const index = this.accessOrder.indexOf(key);
+  private updateAccessOrder(scope: CacheScopeState, key: string): void {
+    const index = scope.accessOrder.indexOf(key);
     if (index > -1) {
-      this.accessOrder.splice(index, 1);
+      scope.accessOrder.splice(index, 1);
     }
-    this.accessOrder.push(key);
+    scope.accessOrder.push(key);
   }
 
   private isExpired(entry: CacheEntry): boolean {
@@ -50,6 +77,7 @@ export class ConversationCache {
     messages: IContent[],
     promptTokensAccum: number = 0,
   ): void {
+    const scope = this.getOrCreateScope();
     const key = this.generateKey(conversationId, parentId);
 
     const entry: CacheEntry = {
@@ -60,45 +88,61 @@ export class ConversationCache {
       promptTokensAccum,
     };
 
-    this.cache.set(key, entry);
-    this.updateAccessOrder(key);
-    this.evictIfNeeded();
+    scope.cache.set(key, entry);
+    this.updateAccessOrder(scope, key);
+    this.evictIfNeeded(scope);
   }
 
   get(conversationId: string, parentId: string): IContent[] | null {
+    const scope = this.peekScope();
+    if (!scope) {
+      return null;
+    }
+
     const key = this.generateKey(conversationId, parentId);
-    const entry = this.cache.get(key);
+    const entry = scope.cache.get(key);
 
     if (!entry) {
       return null;
     }
 
     if (this.isExpired(entry)) {
-      this.cache.delete(key);
-      const index = this.accessOrder.indexOf(key);
+      scope.cache.delete(key);
+      const index = scope.accessOrder.indexOf(key);
       if (index > -1) {
-        this.accessOrder.splice(index, 1);
+        scope.accessOrder.splice(index, 1);
+      }
+      if (scope.cache.size === 0) {
+        ConversationCache.scopes.delete(this.scopeKey);
       }
       return null;
     }
 
-    this.updateAccessOrder(key);
+    this.updateAccessOrder(scope, key);
     return entry.messages;
   }
 
   has(conversationId: string, parentId: string): boolean {
+    const scope = this.peekScope();
+    if (!scope) {
+      return false;
+    }
+
     const key = this.generateKey(conversationId, parentId);
-    const entry = this.cache.get(key);
+    const entry = scope.cache.get(key);
 
     if (!entry) {
       return false;
     }
 
     if (this.isExpired(entry)) {
-      this.cache.delete(key);
-      const index = this.accessOrder.indexOf(key);
+      scope.cache.delete(key);
+      const index = scope.accessOrder.indexOf(key);
       if (index > -1) {
-        this.accessOrder.splice(index, 1);
+        scope.accessOrder.splice(index, 1);
+      }
+      if (scope.cache.size === 0) {
+        ConversationCache.scopes.delete(this.scopeKey);
       }
       return false;
     }
@@ -107,19 +151,40 @@ export class ConversationCache {
   }
 
   clear(): void {
-    this.cache.clear();
-    this.accessOrder = [];
+    const scope = this.peekScope();
+    if (!scope) {
+      return;
+    }
+    scope.cache.clear();
+    scope.accessOrder.length = 0;
+    ConversationCache.scopes.delete(this.scopeKey);
   }
 
   size(): number {
-    return this.cache.size;
+    const scope = this.peekScope();
+    return scope ? scope.cache.size : 0;
   }
 
   getAccumulatedTokens(conversationId: string, parentId: string): number {
+    const scope = this.peekScope();
+    if (!scope) {
+      return 0;
+    }
+
     const key = this.generateKey(conversationId, parentId);
-    const entry = this.cache.get(key);
+    const entry = scope.cache.get(key);
 
     if (!entry || this.isExpired(entry)) {
+      if (entry) {
+        scope.cache.delete(key);
+        const index = scope.accessOrder.indexOf(key);
+        if (index > -1) {
+          scope.accessOrder.splice(index, 1);
+        }
+        if (scope.cache.size === 0) {
+          ConversationCache.scopes.delete(this.scopeKey);
+        }
+      }
       return 0;
     }
 
@@ -131,21 +196,34 @@ export class ConversationCache {
     parentId: string,
     additionalTokens: number,
   ): void {
+    const scope = this.peekScope();
+    if (!scope) {
+      return;
+    }
+
     const key = this.generateKey(conversationId, parentId);
-    const entry = this.cache.get(key);
+    const entry = scope.cache.get(key);
 
     if (entry && !this.isExpired(entry)) {
       entry.promptTokensAccum += additionalTokens;
-      this.updateAccessOrder(key);
+      this.updateAccessOrder(scope, key);
     }
   }
 
   invalidate(conversationId: string, parentId: string): void {
+    const scope = this.peekScope();
+    if (!scope) {
+      return;
+    }
+
     const key = this.generateKey(conversationId, parentId);
-    this.cache.delete(key);
-    const index = this.accessOrder.indexOf(key);
+    scope.cache.delete(key);
+    const index = scope.accessOrder.indexOf(key);
     if (index > -1) {
-      this.accessOrder.splice(index, 1);
+      scope.accessOrder.splice(index, 1);
+    }
+    if (scope.cache.size === 0) {
+      ConversationCache.scopes.delete(this.scopeKey);
     }
   }
 }

@@ -18,7 +18,9 @@ const runtimeMocks = vi.hoisted(() => ({
   getActiveProfileName: vi.fn(),
 }));
 
-vi.mock('../../runtime/runtimeSettings.js', () => runtimeMocks);
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: () => runtimeMocks,
+}));
 
 describe('profileCommand', () => {
   let context: CommandContext;

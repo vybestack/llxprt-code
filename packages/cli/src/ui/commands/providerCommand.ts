@@ -12,7 +12,7 @@ import {
   CommandKind,
 } from './types.js';
 import { MessageType } from '../types.js';
-import { switchActiveProvider } from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const providerCommand: SlashCommand = {
   name: 'provider',
@@ -34,7 +34,8 @@ export const providerCommand: SlashCommand = {
     }
 
     try {
-      const result = await switchActiveProvider(providerName);
+      const runtime = getRuntimeApi();
+      const result = await runtime.switchActiveProvider(providerName);
 
       if (!result.changed) {
         return {

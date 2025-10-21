@@ -5,6 +5,7 @@
  */
 
 import { OAuthToken, AuthStatus, TokenStore } from './types.js';
+import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 
 /**
@@ -321,7 +322,10 @@ export class OAuthManager {
    * @param providerName - Name of the provider
    * @returns Access token string if available, null otherwise
    */
-  async getToken(providerName: string): Promise<string | null> {
+  async getToken(
+    providerName: string,
+    _metadata?: OAuthTokenRequestMetadata,
+  ): Promise<string | null> {
     // Check if OAuth is enabled for this provider
     if (!this.isOAuthEnabled(providerName)) {
       return null;
@@ -372,7 +376,10 @@ export class OAuthManager {
    * @param providerName - Name of the provider
    * @returns OAuth token if available, null otherwise
    */
-  async getOAuthToken(providerName: string): Promise<OAuthToken | null> {
+  async getOAuthToken(
+    providerName: string,
+    _metadata?: OAuthTokenRequestMetadata,
+  ): Promise<OAuthToken | null> {
     if (!providerName || typeof providerName !== 'string') {
       throw new Error('Provider name must be a non-empty string');
     }
@@ -569,7 +576,10 @@ export class OAuthManager {
 
       if (targetProvider) {
         // Clear BaseProvider auth cache
-        if (typeof targetProvider.clearAuthCache === 'function') {
+        if (
+          'clearAuthCache' in targetProvider &&
+          typeof targetProvider.clearAuthCache === 'function'
+        ) {
           targetProvider.clearAuthCache();
         }
 

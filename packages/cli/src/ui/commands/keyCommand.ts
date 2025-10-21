@@ -10,10 +10,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import {
-  updateActiveProviderApiKey,
-  getActiveProviderStatus,
-} from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const keyCommand: SlashCommand = {
   name: 'key',
@@ -24,10 +21,11 @@ export const keyCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn> => {
     const apiKey = args?.trim();
+    const runtime = getRuntimeApi();
     try {
       const targetKey =
         !apiKey || apiKey.toLowerCase() === 'none' ? null : apiKey;
-      const result = await updateActiveProviderApiKey(targetKey);
+      const result = await runtime.updateActiveProviderApiKey(targetKey);
 
       const extendedContext = context as CommandContext & {
         checkPaymentModeChange?: () => void;
@@ -42,7 +40,7 @@ export const keyCommand: SlashCommand = {
         content: result.message,
       };
     } catch (error) {
-      const status = getActiveProviderStatus();
+      const status = runtime.getActiveProviderStatus();
       return {
         type: 'message',
         messageType: 'error',

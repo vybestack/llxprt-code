@@ -30,6 +30,11 @@ export type ProviderToolset = Array<{
   }>;
 }>;
 
+/**
+ * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+ * @requirement REQ-SP2-001
+ * @pseudocode base-provider-call-contract.md lines 1-3
+ */
 export interface GenerateChatOptions {
   contents: IContent[];
   tools?: ProviderToolset;
@@ -39,6 +44,11 @@ export interface GenerateChatOptions {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+ * @requirement REQ-SP2-001
+ * @pseudocode base-provider-call-contract.md lines 3-5
+ */
 export interface IProvider {
   name: string;
   isDefault?: boolean;
@@ -60,16 +70,6 @@ export interface IProvider {
   // Methods for updating provider configuration
   getToolFormat?(): string;
   isPaidMode?(): boolean;
-  // Method to clear any provider-specific state (e.g., conversation cache, tool call tracking)
-  /**
-   * @deprecated PLAN-20250218-STATELESSPROVIDER.P04: Prefer scoped runtime lifecycle hooks.
-   */
-  clearState?(): void;
-  // Method to set the config instance (for providers that need it)
-  /**
-   * @deprecated PLAN-20250218-STATELESSPROVIDER.P04: Use GenerateChatOptions.config instead.
-   */
-  setConfig?(config: unknown): void;
   // ServerTool methods for provider-native tools
   getServerTools(): string[];
   invokeServerTool(
@@ -84,22 +84,6 @@ export interface IProvider {
    * @param params Parameters to merge with existing, or undefined to clear all
    */
   getModelParams?(): Record<string, unknown> | undefined;
-
-  /**
-   * Clear authentication cache (for OAuth logout)
-   */
-  /**
-   * @deprecated PLAN-20250218-STATELESSPROVIDER.P04: Authentication cache is managed per runtime context.
-   */
-  clearAuthCache?(): void;
-
-  /**
-   * Clear authentication settings (keys and keyfiles)
-   */
-  /**
-   * @deprecated PLAN-20250218-STATELESSPROVIDER.P04: Use runtime scoped authentication handlers.
-   */
-  clearAuth?(): void;
 }
 
 // Re-export the interfaces for convenience

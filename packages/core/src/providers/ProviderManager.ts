@@ -102,18 +102,29 @@ export class ProviderManager implements IProviderManager {
    * @plan PLAN-20250218-STATELESSPROVIDER.P05
    * @requirement REQ-SP-001
    * @pseudocode provider-invocation.md lines 8-15
+   * @plan:PLAN-20251018-STATELESSPROVIDER2.P03
+   * @requirement:REQ-SP2-002
+   * @pseudocode multi-runtime-baseline.md lines 3-4
    */
   private resolveInit(init?: ProviderManagerInit | ProviderRuntimeContext): {
     settingsService: SettingsService;
     config?: Config;
     runtime?: ProviderRuntimeContext;
   } {
-    const fallback = getActiveProviderRuntimeContext();
+    let fallback: ProviderRuntimeContext | null = null;
+    const ensureFallback = (): ProviderRuntimeContext => {
+      if (!fallback) {
+        fallback = getActiveProviderRuntimeContext();
+      }
+      return fallback;
+    };
+
     if (!init) {
+      const resolved = ensureFallback();
       return {
-        settingsService: fallback.settingsService,
-        config: fallback.config,
-        runtime: fallback,
+        settingsService: resolved.settingsService,
+        config: resolved.config,
+        runtime: resolved,
       };
     }
 
@@ -126,23 +137,33 @@ export class ProviderManager implements IProviderManager {
       const context = init as ProviderRuntimeContext;
       return {
         settingsService: context.settingsService,
-        config: context.config ?? fallback.config,
+        config: context.config,
         runtime: context,
       };
     }
 
     const initObj = init as ProviderManagerInit;
     const runtime = initObj.runtime;
-    const settingsService =
-      initObj.settingsService ??
-      runtime?.settingsService ??
-      fallback.settingsService;
-    const config = initObj.config ?? runtime?.config ?? fallback.config;
+    let settingsService =
+      initObj.settingsService ?? runtime?.settingsService ?? null;
+    let config: Config | undefined =
+      initObj.config ?? runtime?.config ?? undefined;
+
+    if (!settingsService || !config) {
+      const resolved = ensureFallback();
+      settingsService = settingsService ?? resolved.settingsService;
+      config = config ?? resolved.config;
+      return {
+        settingsService,
+        config,
+        runtime: runtime ?? resolved,
+      };
+    }
 
     return {
       settingsService,
       config,
-      runtime: runtime ?? fallback,
+      runtime,
     };
   }
 
@@ -162,6 +183,11 @@ export class ProviderManager implements IProviderManager {
     }
   }
 
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 3-5
+   */
   private updateProviderWrapping(): void {
     // Re-wrap all providers (ALWAYS wrap for token tracking)
     const providers = new Map(this.providers);
@@ -182,7 +208,6 @@ export class ProviderManager implements IProviderManager {
       }
 
       this.syncProviderRuntime(finalProvider);
-
       this.providers.set(name, finalProvider);
 
       // Update server tools provider reference if needed
@@ -204,6 +229,11 @@ export class ProviderManager implements IProviderManager {
     runtimeAware.setRuntimeSettingsService?.(this.settingsService);
   }
 
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 3-5
+   */
   registerProvider(provider: IProvider): void {
     this.syncProviderRuntime(provider);
     // ALWAYS wrap provider to enable token tracking
@@ -249,6 +279,11 @@ export class ProviderManager implements IProviderManager {
     }
   }
 
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 3-5
+   */
   setActiveProvider(name: string): void {
     if (!this.providers.has(name)) {
       throw new Error('Provider not found');
@@ -262,11 +297,13 @@ export class ProviderManager implements IProviderManager {
     // BUT never clear the serverToolsProvider's state
     if (previousProviderName && previousProviderName !== name) {
       const previousProvider = this.providers.get(previousProviderName);
-      if (previousProvider && previousProvider.clearState) {
-        // Don't clear state if this provider is also the serverToolsProvider
-        if (previousProvider !== this.serverToolsProvider) {
-          previousProvider.clearState();
-        }
+      if (
+        previousProvider &&
+        previousProvider !== this.serverToolsProvider &&
+        'clearState' in previousProvider
+      ) {
+        const candidate = previousProvider as { clearState?: () => void };
+        candidate.clearState?.();
       }
     }
 
@@ -316,10 +353,35 @@ export class ProviderManager implements IProviderManager {
     const activeProviderName =
       (this.settingsService.get('activeProvider') as string) || '';
 
-    if (!activeProviderName) {
+    let resolvedName = activeProviderName;
+
+    if (!resolvedName) {
+      const preferredFromConfig = this.config?.getProvider?.();
+      if (preferredFromConfig && this.providers.has(preferredFromConfig)) {
+        resolvedName = preferredFromConfig;
+      } else if (this.providers.has('openai')) {
+        resolvedName = 'openai';
+      } else {
+        const firstProvider = this.providers.keys().next();
+        resolvedName = firstProvider.done ? '' : firstProvider.value;
+      }
+
+      if (resolvedName) {
+        try {
+          this.setActiveProvider(resolvedName);
+        } catch (error) {
+          throw new Error(
+            `Unable to set default provider '${resolvedName}': ${String(error)}`,
+          );
+        }
+      }
+    }
+
+    if (!resolvedName) {
       throw new Error('No active provider set');
     }
-    const provider = this.providers.get(activeProviderName);
+
+    const provider = this.providers.get(resolvedName);
     if (!provider) {
       throw new Error('Active provider not found');
     }

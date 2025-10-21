@@ -1,5 +1,7 @@
 # CLI Runtime Helper APIs
 
+<!-- @plan:PLAN-20251018-STATELESSPROVIDER2.P20 @requirement:REQ-SP2-005 -->
+
 LLxprt Code exposes a runtime helper bundle in `packages/cli/src/runtime/runtimeSettings.ts`. The helpers give commands, React hooks, tests, and automation a stable way to manipulate provider configuration without importing global singletons.
 
 ## Accessing the active runtime
@@ -36,6 +38,7 @@ import {
 | `updateActiveProviderApiKey(value)` | Backs `/key` and `/keyfile`. Stores the secret on the runtime `SettingsService` and refreshes authentication. |
 | `updateActiveProviderBaseUrl(url)`  | Backs `/baseurl`. Persists overrides and clears them when called with `null` or `'none'`.                     |
 | `getActiveToolFormatState()`        | Reports the effective tool format and overrides for diagnostics.                                              |
+| `getCliOAuthManager()`              | Returns the runtime-scoped OAuth manager used to mint or revoke tokens for the active provider.               |
 
 ## Models and parameters
 
@@ -65,7 +68,12 @@ import {
 | --------------------------------- | ----------------------------------------------------------------------------------------- |
 | `getRuntimeDiagnosticsSnapshot()` | Captures provider, model, and ephemeral settings for `/diagnostics`.                      |
 | `getCliProviderManager(options?)` | Returns the provider manager, optionally wiring history callbacks for transcript logging. |
-| `getCliOAuthManager()`            | Exposes the OAuth manager that was registered with the runtime, or `null` if none exists. |
+
+## Runtime scopes & authentication
+
+- `activateIsolatedRuntimeContext(handle, options)` uses `enterRuntimeScope` to push runtime metadata (runtime id, subagent descriptors) before activating helpers. Downstream credential requests inherit this scope, so the auth cache can separate CLI, automation, and nested job tokens.
+- `registerCliProviderInfrastructure(manager, oauthManager)` wires `ProviderManager` and `OAuthManager` instances into the runtime registry. When a runtime shuts down, `resetCliProviderInfrastructure(runtimeId?)` clears both to force fresh connections on the next activation.
+- OAuth flows and device logins run through the runtime-specific `OAuthManager`, which tags requests with the runtime scope. When you call `/provider`, `/key`, or `/profile load`, the auth precedence resolver receives a flush notification for the current scope and removes cached tokens that no longer match.
 
 ## Nested contexts
 

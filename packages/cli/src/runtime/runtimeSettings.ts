@@ -20,10 +20,26 @@ import type {
   Profile,
   IModel,
   ModelParams,
+  RuntimeAuthScopeFlushResult,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import type { LoadedSettings } from '../config/settings.js';
+import {
+  createIsolatedRuntimeContext as createIsolatedRuntimeContextInternal,
+  registerIsolatedRuntimeBindings,
+  type IsolatedRuntimeActivationOptions,
+  type IsolatedRuntimeContextHandle,
+  getCurrentRuntimeScope,
+  enterRuntimeScope,
+} from './runtimeContextFactory.js';
+
+export { createIsolatedRuntimeContextInternal as createIsolatedRuntimeContext };
+export type {
+  IsolatedRuntimeActivationOptions,
+  IsolatedRuntimeContextHandle,
+  IsolatedRuntimeContextOptions,
+} from './runtimeContextFactory.js';
 
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P06
@@ -37,20 +53,129 @@ import type { LoadedSettings } from '../config/settings.js';
 
 const logger = new DebugLogger('llxprt:runtime:settings');
 
+/**
+ * @plan PLAN-20251018-STATELESSPROVIDER2.P15
+ * @requirement REQ-SP2-003
+ * @pseudocode cli-runtime-isolation.md lines 1-3
+ * Runtime registry that scopes Config/SettingsService/ProviderManager instances per runtimeId.
+ */
+interface RuntimeRegistryEntry {
+  runtimeId: string;
+  settingsService: SettingsService | null;
+  config: Config | null;
+  providerManager: ProviderManager | null;
+  oauthManager: OAuthManager | null;
+  metadata: Record<string, unknown>;
+}
+
+const runtimeRegistry = new Map<string, RuntimeRegistryEntry>();
+const LEGACY_RUNTIME_ID = 'legacy-singleton';
+
+function resolveActiveRuntimeIdentity(): {
+  runtimeId: string;
+  metadata: Record<string, unknown>;
+} {
+  const scope = getCurrentRuntimeScope();
+  if (scope) {
+    return scope;
+  }
+
+  const context = getActiveProviderRuntimeContext();
+  const runtimeId =
+    typeof context.runtimeId === 'string' && context.runtimeId.trim() !== ''
+      ? context.runtimeId
+      : LEGACY_RUNTIME_ID;
+  const metadata =
+    (context.metadata as Record<string, unknown> | undefined) ?? {};
+
+  return { runtimeId, metadata };
+}
+
+function upsertRuntimeEntry(
+  runtimeId: string,
+  update: Partial<Omit<RuntimeRegistryEntry, 'runtimeId'>>,
+): RuntimeRegistryEntry {
+  const current = runtimeRegistry.get(runtimeId);
+  const next: RuntimeRegistryEntry = {
+    runtimeId,
+    settingsService: Object.prototype.hasOwnProperty.call(
+      update,
+      'settingsService',
+    )
+      ? (update.settingsService ?? null)
+      : (current?.settingsService ?? null),
+    config: Object.prototype.hasOwnProperty.call(update, 'config')
+      ? (update.config ?? null)
+      : (current?.config ?? null),
+    providerManager: Object.prototype.hasOwnProperty.call(
+      update,
+      'providerManager',
+    )
+      ? (update.providerManager ?? null)
+      : (current?.providerManager ?? null),
+    oauthManager: Object.prototype.hasOwnProperty.call(update, 'oauthManager')
+      ? (update.oauthManager ?? null)
+      : (current?.oauthManager ?? null),
+    metadata:
+      update.metadata !== undefined
+        ? { ...(current?.metadata ?? {}), ...update.metadata }
+        : (current?.metadata ?? {}),
+  };
+  runtimeRegistry.set(runtimeId, next);
+  return next;
+}
+
+function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {
+  const entry = runtimeRegistry.get(runtimeId);
+  if (entry) {
+    return entry;
+  }
+
+  throw new Error(
+    `[cli-runtime] Runtime ${runtimeId} has not been initialised. Ensure setCliRuntimeContext() was called before consuming CLI helpers.`,
+  );
+}
+
+function disposeCliRuntime(
+  runtimeId: string,
+  context?: RuntimeAuthScopeFlushResult,
+): void {
+  if (context?.revokedTokens?.length) {
+    logger.debug(
+      () =>
+        `[cli-runtime] Revoked ${context.revokedTokens.length} scoped OAuth token(s) for runtime ${runtimeId}.`,
+    );
+  }
+  runtimeRegistry.delete(runtimeId);
+}
+
 export interface CliRuntimeServices {
   settingsService: SettingsService;
   config: Config;
   providerManager: ProviderManager;
 }
 
-let cliProviderManager: ProviderManager | null = null;
-let cliOAuthManager: OAuthManager | null = null;
-
 /**
  * Acquire the active provider runtime context that CLI bootstrap registered.
  * Throws if the runtime has not yet been initialised.
  */
 export function getCliRuntimeContext(): ProviderRuntimeContext {
+  const identity = resolveActiveRuntimeIdentity();
+  const entry = runtimeRegistry.get(identity.runtimeId);
+
+  if (entry && entry.config) {
+    const settingsService =
+      entry.settingsService ??
+      entry.config.getSettingsService() ??
+      new SettingsService();
+    return createProviderRuntimeContext({
+      settingsService,
+      config: entry.config,
+      runtimeId: identity.runtimeId,
+      metadata: identity.metadata,
+    });
+  }
+
   const context = getActiveProviderRuntimeContext();
   if (!context.config) {
     throw new Error(
@@ -64,18 +189,27 @@ export function getCliRuntimeContext(): ProviderRuntimeContext {
  * Obtain the services that CLI surfaces through the runtime context.
  */
 export function getCliRuntimeServices(): CliRuntimeServices {
+  const { runtimeId } = resolveActiveRuntimeIdentity();
+  const entry = requireRuntimeEntry(runtimeId);
   const context = getCliRuntimeContext();
-  const { settingsService } = context;
-  const config = context.config;
+  const config = entry.config ?? context.config;
   if (!config) {
-    throw new Error('[cli-runtime] Config has not been initialised.');
-  }
-  if (!cliProviderManager) {
     throw new Error(
-      '[cli-runtime] Provider manager has not been registered. Ensure bootstrap called registerCliProviderInfrastructure().',
+      `[cli-runtime] Config has not been initialised for runtime ${runtimeId}.`,
     );
   }
-  const providerManager = cliProviderManager;
+  const settingsService = entry.settingsService ?? context.settingsService;
+  if (!settingsService) {
+    throw new Error(
+      `[cli-runtime] Settings service is unavailable for runtime ${runtimeId}.`,
+    );
+  }
+  const providerManager = entry.providerManager;
+  if (!providerManager) {
+    throw new Error(
+      `[cli-runtime] Provider manager has not been registered for runtime ${runtimeId}. Ensure registerCliProviderInfrastructure() ran within the activation scope.`,
+    );
+  }
   return { settingsService, config, providerManager };
 }
 
@@ -90,9 +224,13 @@ export function getCliProviderManager(
   } = {},
 ): ProviderManager {
   const services = getCliRuntimeServices();
-  if (options.addItem && cliOAuthManager) {
+  const { runtimeId } = resolveActiveRuntimeIdentity();
+  const entry = requireRuntimeEntry(runtimeId);
+  const oauthManager = entry.oauthManager;
+
+  if (options.addItem && oauthManager) {
     const providersMap = (
-      cliOAuthManager as unknown as {
+      oauthManager as unknown as {
         providers?: Map<string, unknown>;
       }
     ).providers;
@@ -116,26 +254,67 @@ export function getCliProviderManager(
   return services.providerManager;
 }
 
+/**
+ * @plan:PLAN-20251018-STATELESSPROVIDER2.P03
+ * @requirement:REQ-SP2-002
+ * @pseudocode multi-runtime-baseline.md lines 7-7
+ * Delegate helper that activates an isolated runtime while merging metadata overrides per Step 6.
+ */
+export async function activateIsolatedRuntimeContext(
+  handle: IsolatedRuntimeContextHandle,
+  options: IsolatedRuntimeActivationOptions = {},
+): Promise<void> {
+  const runtimeId = options.runtimeId ?? handle.runtimeId;
+  const mergedMetadata = {
+    ...(handle.metadata ?? {}),
+    ...(options.metadata ?? {}),
+  };
+  const overrides: IsolatedRuntimeActivationOptions = {
+    ...options,
+    runtimeId,
+    metadata: mergedMetadata,
+  };
+
+  enterRuntimeScope({ runtimeId, metadata: mergedMetadata });
+  upsertRuntimeEntry(runtimeId, { metadata: mergedMetadata });
+
+  await handle.activate(overrides);
+}
+
 export function registerCliProviderInfrastructure(
   manager: ProviderManager,
   oauthManager: OAuthManager,
 ): void {
-  cliProviderManager = manager;
-  cliOAuthManager = oauthManager;
+  const { runtimeId, metadata } = resolveActiveRuntimeIdentity();
+  const entry = upsertRuntimeEntry(runtimeId, {
+    providerManager: manager,
+    oauthManager,
+    metadata,
+  });
 
   const context = getActiveProviderRuntimeContext();
-  if (context.config) {
-    context.config.setProviderManager(manager);
+  const config = entry.config ?? context.config ?? null;
+  if (config) {
+    config.setProviderManager(manager);
+    upsertRuntimeEntry(runtimeId, { config });
   }
 }
 
-export function resetCliProviderInfrastructure(): void {
-  cliProviderManager = null;
-  cliOAuthManager = null;
+export function resetCliProviderInfrastructure(runtimeId?: string): void {
+  const targetRuntimeId = runtimeId ?? resolveActiveRuntimeIdentity().runtimeId;
+  if (!runtimeRegistry.has(targetRuntimeId)) {
+    return;
+  }
+
+  upsertRuntimeEntry(targetRuntimeId, {
+    providerManager: null,
+    oauthManager: null,
+  });
 }
 
 export function getCliOAuthManager(): OAuthManager | null {
-  return cliOAuthManager;
+  const { runtimeId } = resolveActiveRuntimeIdentity();
+  return runtimeRegistry.get(runtimeId)?.oauthManager ?? null;
 }
 
 const RESERVED_PROVIDER_SETTING_KEYS = new Set([
@@ -467,6 +646,15 @@ export async function applyProfileSnapshot(
 ): Promise<ProfileLoadResult> {
   const { config, settingsService } = getCliRuntimeServices();
 
+  const previousEphemeral = new Map<string, unknown>();
+  for (const key of PROFILE_EPHEMERAL_KEYS) {
+    const existing = config.getEphemeralSetting(key);
+    if (existing !== undefined) {
+      previousEphemeral.set(key, existing);
+    }
+  }
+
+  const hostModelBeforeSnapshot = config.getModel();
   const providerSwitch = await switchActiveProvider(profile.provider);
   const modelResult = await setActiveModel(profile.model);
 
@@ -520,6 +708,24 @@ export async function applyProfileSnapshot(
 
   const authType =
     providerSwitch.authType ?? config.getContentGeneratorConfig()?.authType;
+
+  if (hostModelBeforeSnapshot !== undefined) {
+    const preservedEphemeral = new Map<string, unknown>();
+    for (const key of PROFILE_EPHEMERAL_KEYS) {
+      preservedEphemeral.set(key, config.getEphemeralSetting(key));
+    }
+    config.setModel(hostModelBeforeSnapshot);
+    for (const [key, value] of preservedEphemeral.entries()) {
+      config.setEphemeralSetting(key, value);
+    }
+  }
+
+  const profileEphemeral = profile.ephemeralSettings ?? {};
+  for (const [key, value] of previousEphemeral.entries()) {
+    if (!(key in profileEphemeral)) {
+      config.setEphemeralSetting(key, value);
+    }
+  }
 
   return {
     profileName: options.profileName,
@@ -632,11 +838,12 @@ export function setCliRuntimeContext(
 ): void {
   const runtimeId =
     options.runtimeId ?? `cli-runtime-${process.pid.toString(16)}`;
+  const metadata = { source: 'cli-runtime', ...(options.metadata ?? {}) };
   const nextContext = createProviderRuntimeContext({
     settingsService,
     config,
     runtimeId,
-    metadata: { source: 'cli-runtime', ...(options.metadata ?? {}) },
+    metadata,
   });
   logger.debug(() => {
     const providerLabel =
@@ -646,7 +853,23 @@ export function setCliRuntimeContext(
     return `[cli-runtime] Registering runtime context ${runtimeId}${providerLabel}`;
   });
   setActiveProviderRuntimeContext(nextContext);
+
+  upsertRuntimeEntry(runtimeId, {
+    settingsService,
+    config: config ?? null,
+    metadata,
+  });
 }
+
+registerIsolatedRuntimeBindings({
+  resetInfrastructure: resetCliProviderInfrastructure,
+  setRuntimeContext: setCliRuntimeContext,
+  registerInfrastructure: registerCliProviderInfrastructure,
+  linkProviderManager: (config, manager) => {
+    config.setProviderManager(manager);
+  },
+  disposeRuntime: disposeCliRuntime,
+}); // Step 5 (multi-runtime-baseline.md line 6) wires CLI activation hooks for isolated runtimes.
 
 const PROVIDER_SWITCH_EPHEMERAL_KEYS: readonly string[] = [
   'auth-key',

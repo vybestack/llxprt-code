@@ -14,7 +14,9 @@ const mockRuntime = vi.hoisted(() => ({
   getActiveProviderStatus: vi.fn(),
 }));
 
-vi.mock('../../runtime/runtimeSettings.js', () => mockRuntime);
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: () => mockRuntime,
+}));
 
 describe('keyCommand', () => {
   let context: CommandContext;

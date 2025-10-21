@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 import { DebugLogger } from '../../debug/index.js';
@@ -24,12 +25,33 @@ import {
 } from '../../tools/doubleEscapeUtils.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 
+const runtimeClientCache = new Map<string, Anthropic>();
+const runtimeClientKeyIndex = new Map<string, Set<string>>();
+const defaultRuntimeKey = 'anthropic.runtime.unscoped';
+
+function rememberClientKey(runtimeKey: string, cacheKey: string): void {
+  let keys = runtimeClientKeyIndex.get(runtimeKey);
+  if (!keys) {
+    keys = new Set<string>();
+    runtimeClientKeyIndex.set(runtimeKey, keys);
+  }
+  keys.add(cacheKey);
+}
+
+function forgetRuntimeKeys(runtimeKey: string): void {
+  const keys = runtimeClientKeyIndex.get(runtimeKey);
+  if (!keys) {
+    return;
+  }
+  for (const key of keys) {
+    runtimeClientCache.delete(key);
+  }
+  runtimeClientKeyIndex.delete(runtimeKey);
+}
+
 export class AnthropicProvider extends BaseProvider {
   private logger: DebugLogger;
-  private anthropic: Anthropic;
-  private toolFormatter: ToolFormatter;
   toolFormat: ToolFormat = 'anthropic';
-  private _cachedAuthSignature?: string; // Track cached auth token+endpoint for client recreation
 
   // Model patterns for max output tokens
   private modelTokenPatterns: Array<{ pattern: RegExp; tokens: number }> = [
@@ -63,14 +85,6 @@ export class AnthropicProvider extends BaseProvider {
     super(baseConfig, config);
 
     this.logger = new DebugLogger('llxprt:anthropic:provider');
-
-    this.anthropic = new Anthropic({
-      apiKey: apiKey || '', // Empty string if OAuth will be used
-      baseURL: config?.baseUrl || baseURL,
-      dangerouslyAllowBrowser: true,
-    });
-
-    this.toolFormatter = new ToolFormatter();
   }
 
   /**
@@ -83,51 +97,119 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * @plan:PLAN-20250823-AUTHFIXES.P15
-   * @requirement:REQ-004
-   * Update the Anthropic client with resolved authentication if needed
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P12
+   * @requirement REQ-SP2-001
+   * @pseudocode anthropic-gemini-stateless.md lines 1-2
    */
-  private async updateClientWithResolvedAuth(): Promise<void> {
-    const resolvedToken = await this.getAuthToken();
-    if (!resolvedToken) {
+  private resolveRuntimeKey(options: NormalizedGenerateChatOptions): string {
+    if (options.runtime?.runtimeId) {
+      const runtimeId = options.runtime.runtimeId.trim();
+      if (runtimeId) {
+        return runtimeId;
+      }
+    }
+
+    const metadataRuntimeId = options.metadata?.runtimeId;
+    if (typeof metadataRuntimeId === 'string' && metadataRuntimeId.trim()) {
+      return metadataRuntimeId.trim();
+    }
+
+    const callId = options.settings.get('call-id');
+    if (typeof callId === 'string' && callId.trim()) {
+      return `call:${callId.trim()}`;
+    }
+
+    return defaultRuntimeKey;
+  }
+
+  private normalizeBaseURL(baseURL?: string): string {
+    if (!baseURL || baseURL.trim() === '') {
+      return 'default-endpoint';
+    }
+    return baseURL.replace(/\/+$/, '');
+  }
+
+  private buildClientCacheKey(
+    runtimeKey: string,
+    baseURL: string | undefined,
+    authToken: string,
+  ): string {
+    const normalizedBase = this.normalizeBaseURL(baseURL);
+    const hashedToken =
+      authToken && authToken.length > 0
+        ? createHash('sha256').update(authToken).digest('hex')
+        : 'no-auth';
+    return `${runtimeKey}::${normalizedBase}::${hashedToken}`;
+  }
+
+  private instantiateClient(authToken: string, baseURL?: string): Anthropic {
+    const isOAuthToken = authToken.startsWith('sk-ant-oat');
+    const clientConfig: Record<string, unknown> = {
+      dangerouslyAllowBrowser: true,
+    };
+
+    if (baseURL && baseURL.trim() !== '') {
+      clientConfig.baseURL = baseURL;
+    }
+
+    if (isOAuthToken) {
+      clientConfig.authToken = authToken;
+      clientConfig.defaultHeaders = {
+        'anthropic-beta': 'oauth-2025-04-20',
+      };
+    } else {
+      clientConfig.apiKey = authToken || '';
+    }
+
+    return new Anthropic(clientConfig as ClientOptions);
+  }
+
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P12
+   * @requirement REQ-SP2-001
+   * @pseudocode anthropic-gemini-stateless.md lines 1-3
+   */
+  private async getClientForCall(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<Anthropic> {
+    const runtimeKey = this.resolveRuntimeKey(options);
+    const authToken = options.resolved.authToken || (await this.getAuthToken());
+    if (!authToken) {
       throw new Error(
         'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
       );
     }
 
-    const baseURL = this.getBaseURL();
-    const cacheSignature = `${resolvedToken}::${baseURL ?? 'default'}`;
+    const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
+    const cacheKey = this.buildClientCacheKey(runtimeKey, baseURL, authToken);
 
-    // Only recreate client if auth or endpoint changed
-    if (this._cachedAuthSignature !== cacheSignature) {
-      // Check if this is an OAuth token (starts with sk-ant-oat)
-      const isOAuthToken = resolvedToken.startsWith('sk-ant-oat');
-
-      if (isOAuthToken) {
-        // For OAuth tokens, use authToken field which sends Bearer token
-        // Don't pass apiKey at all - just authToken
-        const oauthConfig: Record<string, unknown> = {
-          authToken: resolvedToken, // Use authToken for OAuth Bearer tokens
-          baseURL,
-          dangerouslyAllowBrowser: true,
-          defaultHeaders: {
-            'anthropic-beta': 'oauth-2025-04-20', // Still need the beta header
-          },
-        };
-
-        this.anthropic = new Anthropic(oauthConfig as ClientOptions);
-      } else {
-        // Regular API key auth
-        this.anthropic = new Anthropic({
-          apiKey: resolvedToken,
-          baseURL,
-          dangerouslyAllowBrowser: true,
-        });
-      }
-
-      // Track the key to avoid unnecessary client recreation
-      this._cachedAuthSignature = cacheSignature;
+    const cached = runtimeClientCache.get(cacheKey);
+    if (cached) {
+      return cached;
     }
+
+    const client = this.instantiateClient(authToken, baseURL);
+    runtimeClientCache.set(cacheKey, client);
+    rememberClientKey(runtimeKey, cacheKey);
+    return client;
+  }
+
+  private createToolFormatter(): ToolFormatter {
+    return new ToolFormatter();
+  }
+
+  clearClientCache(runtimeKey?: string): void {
+    if (runtimeKey && runtimeKey.trim()) {
+      forgetRuntimeKeys(runtimeKey.trim());
+      return;
+    }
+    runtimeClientCache.clear();
+    runtimeClientKeyIndex.clear();
+  }
+
+  override clearAuthCache(): void {
+    super.clearAuthCache();
+    this.clearClientCache();
   }
 
   override async getModels(): Promise<IModel[]> {
@@ -137,9 +219,6 @@ export class AnthropicProvider extends BaseProvider {
         'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
       );
     }
-
-    // Update client with resolved auth (handles OAuth vs API key)
-    await this.updateClientWithResolvedAuth();
 
     // Check if using OAuth - the models.list endpoint doesn't work with OAuth tokens
     const isOAuthToken = authToken.startsWith('sk-ant-oat');
@@ -180,9 +259,11 @@ export class AnthropicProvider extends BaseProvider {
     try {
       // Fetch models from Anthropic API (beta endpoint) - only for API keys
       const models: IModel[] = [];
+      const baseURL = this.getBaseURL();
+      const client = this.instantiateClient(authToken, baseURL);
 
       // Handle pagination
-      for await (const model of this.anthropic.beta.models.list()) {
+      for await (const model of client.beta.models.list()) {
         models.push({
           id: model.id,
           name: model.display_name || model.id,
@@ -355,14 +436,6 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Override clearAuthCache to also clear cached auth key
-   */
-  override clearAuthCache(): void {
-    super.clearAuthCache();
-    this._cachedAuthSignature = undefined;
-  }
-
-  /**
    * Check if the provider is authenticated using any available method
    * Uses the base provider's isAuthenticated implementation
    */
@@ -483,6 +556,9 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P12
+   * @requirement REQ-SP2-001
+   * @pseudocode anthropic-gemini-stateless.md lines 1-8
    * @plan PLAN-20250218-STATELESSPROVIDER.P04
    * @requirement REQ-SP-001
    * @pseudocode base-provider.md lines 7-15
@@ -491,6 +567,8 @@ export class AnthropicProvider extends BaseProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    const client = await this.getClientForCall(options);
+    const callFormatter = this.createToolFormatter();
     const { contents: content, tools } = options;
     // Convert IContent directly to Anthropic API format (no IMessage!)
     const anthropicMessages: Array<{
@@ -513,9 +591,9 @@ export class AnthropicProvider extends BaseProvider {
     // let systemMessage: string | undefined;
 
     // Filter out orphaned tool responses at the beginning of the conversation
-    // TODO: Investigate post-0.2.2 - These shouldn't be truly orphaned since the same
-    // history works with OpenAI/Cerebras. Likely Anthropic has stricter formatting
-    // requirements for tool responses that we're not fully meeting yet.
+    // NOTE: These shouldn't be truly orphaned since the same history works with
+    // OpenAI/Cerebras. Likely Anthropic has stricter formatting requirements
+    // for tool responses that we're not fully meeting yet.
     let startIndex = 0;
     while (
       startIndex < content.length &&
@@ -797,7 +875,7 @@ export class AnthropicProvider extends BaseProvider {
     const needsQwenParameterProcessing = detectedFormat === 'qwen';
 
     // Convert Gemini format tools to anthropic format (always for Anthropic API)
-    const anthropicTools = this.toolFormatter.convertGeminiToFormat(
+    const anthropicTools = callFormatter.convertGeminiToFormat(
       tools,
       'anthropic', // Always use anthropic format for the API structure
     ) as
@@ -812,12 +890,8 @@ export class AnthropicProvider extends BaseProvider {
         }>
       | undefined;
 
-    // Ensure authentication
-    await this.updateClientWithResolvedAuth();
-
-    // Check OAuth mode
-    const authToken = await this.getAuthToken();
-    const isOAuth = authToken && authToken.startsWith('sk-ant-oat');
+    const authToken = options.resolved.authToken;
+    const isOAuth = authToken.startsWith('sk-ant-oat');
 
     // Get streaming setting from ephemeral settings (default: enabled)
     const streamingSetting =
@@ -825,7 +899,7 @@ export class AnthropicProvider extends BaseProvider {
     const streamingEnabled = streamingSetting !== 'disabled';
 
     // Build request with proper typing
-    const currentModel = this.getCurrentModel();
+    const currentModel = options.resolved.model;
     // Get the system prompt for non-OAuth mode
     const userMemory = this.globalConfig?.getUserMemory
       ? this.globalConfig.getUserMemory()
@@ -882,8 +956,8 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     // Make the API call directly with type assertion
-    const response = await this.anthropic.messages.create(
-      requestBody as Parameters<typeof this.anthropic.messages.create>[0],
+    const response = await client.messages.create(
+      requestBody as Parameters<typeof client.messages.create>[0],
     );
 
     if (streamingEnabled) {

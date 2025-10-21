@@ -8,10 +8,7 @@ import { getCliVersion } from '../../utils/version.js';
 import { CommandKind, SlashCommand } from './types.js';
 import process from 'node:process';
 import { MessageType, type HistoryItemAbout } from '../types.js';
-import {
-  getActiveProviderStatus,
-  getEphemeralSetting,
-} from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const aboutCommand: SlashCommand = {
   name: 'about',
@@ -30,7 +27,8 @@ export const aboutCommand: SlashCommand = {
     // Determine the currently selected model. Prefer the active provider's
     // model as the source of truth because it is guaranteed to be up-to-date
     // when users switch models via the /model or /provider commands.
-    const providerStatus = getActiveProviderStatus();
+    const runtime = getRuntimeApi();
+    const providerStatus = runtime.getActiveProviderStatus();
     const modelVersion = providerStatus.providerName
       ? `${providerStatus.providerName}:${providerStatus.modelName ?? 'Unknown'}`
       : (providerStatus.modelName ?? 'Unknown');
@@ -45,7 +43,8 @@ export const aboutCommand: SlashCommand = {
       '';
 
     // Determine keyfile path and key status for the active provider (if any)
-    const keyfilePath = (getEphemeralSetting('auth-keyfile') as string) || '';
+    const keyfilePath =
+      (runtime.getEphemeralSetting('auth-keyfile') as string) || '';
     const keyStatus = '';
 
     const aboutItem: Omit<HistoryItemAbout, 'id'> = {

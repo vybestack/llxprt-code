@@ -382,7 +382,8 @@ export async function main() {
   if (
     serverToolsProvider &&
     serverToolsProvider.name === 'gemini' &&
-    serverToolsProvider.setConfig
+    'setConfig' in serverToolsProvider &&
+    typeof serverToolsProvider.setConfig === 'function'
   ) {
     serverToolsProvider.setConfig(config);
   }

@@ -823,6 +823,18 @@ export async function loadCliConfig(
     // For other providers, let them use their own default models (empty string means use provider default)
     (finalProvider === 'gemini' ? DEFAULT_GEMINI_MODEL : '');
 
+  // Ensure SettingsService reflects the selected model so Config#getModel picks it up
+  if (finalModel && finalModel.trim() !== '') {
+    const targetProviderForModel = finalProvider;
+    const settingsServiceForModel =
+      runtimeOverrides.settingsService ?? getSettingsService();
+    settingsServiceForModel.setProviderSetting(
+      targetProviderForModel,
+      'model',
+      finalModel,
+    );
+  }
+
   // The screen reader argument takes precedence over the accessibility setting.
   const screenReader =
     argv.screenReader !== undefined

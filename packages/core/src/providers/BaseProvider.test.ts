@@ -10,7 +10,10 @@ import {
   BaseProviderConfig,
   NormalizedGenerateChatOptions,
 } from './BaseProvider.js';
-import { OAuthManager } from '../auth/precedence.js';
+import {
+  OAuthManager,
+  type OAuthTokenRequestMetadata,
+} from '../auth/precedence.js';
 import { IModel } from './IModel.js';
 import { IContent, TextBlock } from '../services/history/IContent.js';
 import type { Config } from '../config/config.js';
@@ -22,7 +25,10 @@ import {
 
 // Mock OAuth manager for testing
 const mockOAuthManager: OAuthManager = {
-  getToken: vi.fn(),
+  getToken: vi.fn<
+    [string, OAuthTokenRequestMetadata | undefined],
+    Promise<string | null>
+  >(),
   isAuthenticated: vi.fn(),
 };
 
@@ -120,6 +126,9 @@ class NonOAuthTestProvider extends BaseProvider {
 describe('BaseProvider', () => {
   let originalEnv: NodeJS.ProcessEnv;
 
+  // @plan:PLAN-20251018-STATELESSPROVIDER2.P04 @requirement:REQ-SP2-001
+  // NOTE: Stateless contract coverage will migrate into baseProvider.stateless.stub.test.ts.
+
   beforeEach(() => {
     vi.clearAllMocks();
     originalEnv = { ...process.env };
@@ -210,7 +219,10 @@ describe('BaseProvider', () => {
       expect(getContentText(response.value as IContent)).toContain(
         'oauth-toke',
       );
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('test');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'test',
+        expect.anything(),
+      );
     });
 
     it('should return empty string when no authentication available', async () => {
@@ -351,7 +363,10 @@ describe('BaseProvider', () => {
       await provider.generateChatCompletion([userMessage('test')]).next();
 
       // Then: OAuth should be called
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('test');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'test',
+        expect.anything(),
+      );
     });
 
     it('should cache auth token to avoid repeated OAuth calls', async () => {

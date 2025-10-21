@@ -9,6 +9,7 @@ import {
   AuthPrecedenceResolver,
   AuthPrecedenceConfig,
   OAuthManager,
+  type OAuthTokenRequestMetadata,
 } from './precedence.js';
 import {
   getSettingsService,
@@ -29,8 +30,13 @@ vi.mock('node:fs/promises', () => ({
 const mockFs = await import('node:fs/promises');
 
 // Mock OAuth manager for testing
+const mockOAuthManagerGetToken = vi.fn<
+  [string, OAuthTokenRequestMetadata | undefined],
+  Promise<string | null>
+>();
+
 const mockOAuthManager: OAuthManager = {
-  getToken: vi.fn(),
+  getToken: mockOAuthManagerGetToken,
   isAuthenticated: vi.fn(),
 };
 
@@ -174,7 +180,10 @@ describe('AuthPrecedenceResolver', () => {
 
       // Then: Should use OAuth (lowest priority)
       expect(result).toBe('oauth-token-abc');
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.any(Object),
+      );
     });
 
     it('should return null when no authentication methods available', async () => {
@@ -458,7 +467,10 @@ describe('AuthPrecedenceResolver', () => {
       // Then: Should use updated OAuth manager
       const result = await resolver.resolveAuthentication();
       expect(result).toBe('new-oauth-token');
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.any(Object),
+      );
     });
   });
 

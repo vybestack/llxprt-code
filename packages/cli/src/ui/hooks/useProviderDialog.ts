@@ -9,11 +9,7 @@ import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
 import { Config } from '@vybestack/llxprt-code-core';
-import {
-  getActiveProviderName,
-  listProviders,
-  switchActiveProvider,
-} from '../../runtime/runtimeSettings.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface UseProviderDialogParams {
   addMessage: (msg: {
@@ -35,14 +31,15 @@ export const useProviderDialog = ({
   onClear,
 }: UseProviderDialogParams) => {
   const appDispatch = useAppDispatch();
+  const runtime = useRuntimeApi();
   const showDialog = appState.openDialogs.provider;
   const [providers, setProviders] = useState<string[]>([]);
   const [currentProvider, setCurrentProvider] = useState<string>('');
 
   const openDialog = useCallback(() => {
     try {
-      setProviders(listProviders());
-      setCurrentProvider(getActiveProviderName());
+      setProviders(runtime.listProviders());
+      setCurrentProvider(runtime.getActiveProviderName());
       appDispatch({ type: 'OPEN_DIALOG', payload: 'provider' });
     } catch (e) {
       addMessage({
@@ -51,7 +48,7 @@ export const useProviderDialog = ({
         timestamp: new Date(),
       });
     }
-  }, [addMessage, appDispatch]);
+  }, [addMessage, appDispatch, runtime]);
 
   const closeDialog = useCallback(
     () => appDispatch({ type: 'CLOSE_DIALOG', payload: 'provider' }),
@@ -61,13 +58,13 @@ export const useProviderDialog = ({
   const handleSelect = useCallback(
     async (providerName: string) => {
       try {
-        const prev = getActiveProviderName();
+        const prev = runtime.getActiveProviderName();
         /**
          * @plan:PLAN-20250218-STATELESSPROVIDER.P06
          * @requirement:REQ-SP-005
          * @pseudocode:cli-runtime.md line 9
          */
-        const result = await switchActiveProvider(providerName);
+        const result = await runtime.switchActiveProvider(providerName);
 
         // Clear UI history to prevent tool call ID mismatches
         if (onClear) {
@@ -99,7 +96,7 @@ export const useProviderDialog = ({
       }
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'provider' });
     },
-    [addMessage, onProviderChange, appDispatch, onClear],
+    [addMessage, onProviderChange, appDispatch, onClear, runtime],
   );
 
   return {

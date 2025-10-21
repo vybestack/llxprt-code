@@ -27,7 +27,7 @@ interface MockConfig {
 interface MockOAuthManager {
   toggleOAuthEnabled(provider: string): Promise<boolean>;
   isOAuthEnabled(provider: string): Promise<boolean>;
-  getToken(provider: string): Promise<string | null>;
+  getToken(provider: string, metadata?: unknown): Promise<string | null>;
   getHigherPriorityAuth(provider: string): Promise<string | null>;
   getAuthStatus(): Promise<
     Array<{
@@ -183,7 +183,10 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
 
       // Then: Should use OAuth token (lowest precedence)
       expect(resolvedAuth).toBe('oauth-token-789');
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
     });
   });
 
@@ -300,7 +303,10 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
 
         // Then: Should succeed with OAuth
         expect(firstCallResult).toBe('api-call-success-with-oauth');
-        expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+        expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+          'qwen',
+          expect.anything(),
+        );
 
         // When: Make second API call (should use cached token)
         const secondCallResult = await mockQwenProvider.makeApiCall();
@@ -339,7 +345,10 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       }
 
       // Then: OAuth should not have been triggered
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
       // No OAuth flow should have been initiated since it's disabled
     });
   });
@@ -378,8 +387,14 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       expect(geminiAuth).toBe(null);
 
       // And: OAuth manager called for each provider independently
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('gemini');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'gemini',
+        expect.anything(),
+      );
     });
 
     /**
@@ -516,8 +531,14 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       expect(geminiAuth).toBe('env-api-key-for-gemini'); // Env var for Gemini
 
       // And: OAuth manager only called for OAuth-enabled provider
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
-      expect(mockOAuthManager.getToken).not.toHaveBeenCalledWith('gemini');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalledWith(
+        'gemini',
+        expect.anything(),
+      );
     });
   });
 });

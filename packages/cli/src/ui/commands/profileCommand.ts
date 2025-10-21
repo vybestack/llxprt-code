@@ -16,20 +16,14 @@ import {
   type CommandArgumentSchema,
   type CompleterFn,
 } from './schema/types.js';
-import {
-  saveProfileSnapshot,
-  loadProfileByName,
-  deleteProfileByName,
-  listSavedProfiles,
-  setDefaultProfileName,
-} from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 const profileSuggestionDescription = 'Saved profile';
 const normalizeProfilePartial = (partial: string): string =>
   partial.startsWith('"') ? partial.slice(1) : partial;
 
 async function listProfiles(): Promise<string[]> {
-  return listSavedProfiles();
+  return getRuntimeApi().listSavedProfiles();
 }
 
 function filterProfiles(partialArg: string, profiles: string[]): string[] {
@@ -162,7 +156,8 @@ const saveCommand: SlashCommand = {
     }
 
     try {
-      await saveProfileSnapshot(profileName);
+      const runtime = getRuntimeApi();
+      await runtime.saveProfileSnapshot(profileName);
       return {
         type: 'message',
         messageType: 'info',
@@ -223,7 +218,8 @@ const loadCommand: SlashCommand = {
     }
 
     try {
-      const result = await loadProfileByName(profileName);
+      const runtime = getRuntimeApi();
+      const result = await runtime.loadProfileByName(profileName);
       const infoMessages = result.infoMessages
         .map((message) => `\n- ${message}`)
         .join('');
@@ -317,7 +313,8 @@ const deleteCommand: SlashCommand = {
     }
 
     try {
-      await deleteProfileByName(profileName);
+      const runtime = getRuntimeApi();
+      await runtime.deleteProfileByName(profileName);
 
       return {
         type: 'message',
@@ -398,7 +395,7 @@ const setDefaultCommand: SlashCommand = {
 
       if (profileName.toLowerCase() === 'none') {
         // Clear the default profile
-        setDefaultProfileName(null);
+        getRuntimeApi().setDefaultProfileName(null);
         context.services.settings.setValue(
           SettingScope.User,
           'defaultProfile',
@@ -413,7 +410,7 @@ const setDefaultCommand: SlashCommand = {
       }
 
       // Verify profile exists
-      const profiles = await listSavedProfiles();
+      const profiles = await listProfiles();
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',
@@ -423,7 +420,7 @@ const setDefaultCommand: SlashCommand = {
       }
 
       // Set the default profile
-      setDefaultProfileName(profileName);
+      getRuntimeApi().setDefaultProfileName(profileName);
       context.services.settings.setValue(
         SettingScope.User,
         'defaultProfile',
@@ -457,7 +454,7 @@ const listCommand: SlashCommand = {
     _args: string,
   ): Promise<MessageActionReturn> => {
     try {
-      const profiles = await listSavedProfiles();
+      const profiles = await listProfiles();
 
       if (profiles.length === 0) {
         return {

@@ -177,9 +177,12 @@ describe('Base URL Runtime Helper Integration', () => {
   });
 });
 
-function createMockProvider(name: string): IProvider & { baseUrl?: string } {
+function createMockProvider(
+  name: string,
+): IProvider & { baseUrl?: string; clearState?: () => void } {
   const provider: IProvider & {
     baseUrl?: string;
+    clearState?: () => void;
   } = {
     name,
     baseUrl: undefined,

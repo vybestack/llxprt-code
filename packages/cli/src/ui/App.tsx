@@ -130,11 +130,9 @@ import { ProQuotaDialog } from './components/ProQuotaDialog.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
 import {
-  getActiveModelName,
-  listAvailableModels,
-  getActiveProviderMetrics,
-  getSessionTokenUsage,
-} from '../runtime/runtimeSettings.js';
+  RuntimeContextProvider,
+  useRuntimeApi,
+} from './contexts/RuntimeContext.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
@@ -183,7 +181,9 @@ export const AppWrapper = (props: AppProps) => {
         <VimModeProvider settings={props.settings}>
           <ToolCallProvider sessionId={props.config.getSessionId()}>
             <TodoProvider sessionId={props.config.getSessionId()}>
-              <AppWithState {...props} />
+              <RuntimeContextProvider>
+                <AppWithState {...props} />
+              </RuntimeContextProvider>
             </TodoProvider>
           </ToolCallProvider>
         </VimModeProvider>
@@ -217,6 +217,7 @@ const App = (props: AppInternalProps) => {
     appState,
     appDispatch,
   } = props;
+  const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
@@ -604,20 +605,20 @@ const App = (props: AppInternalProps) => {
 
   const openProviderModelDialog = useCallback(async () => {
     try {
-      const models = await listAvailableModels();
+      const models = await runtime.listAvailableModels();
       setProviderModels(models);
     } catch (e) {
       console.error('Failed to load models:', e);
       setProviderModels([]);
     }
     await openProviderModelDialogRaw();
-  }, [openProviderModelDialogRaw]);
+  }, [openProviderModelDialogRaw, runtime]);
 
   // Watch for model changes from config
   useEffect(() => {
     const checkModelChange = () => {
       const configModel = config.getModel();
-      const providerModel = getActiveModelName();
+      const providerModel = runtime.getActiveModelName();
       const effectiveModel =
         providerModel && providerModel.trim() !== ''
           ? providerModel
@@ -638,7 +639,7 @@ const App = (props: AppInternalProps) => {
     const interval = setInterval(checkModelChange, 500);
 
     return () => clearInterval(interval);
-  }, [config, currentModel]); // Include currentModel in dependencies
+  }, [config, currentModel, runtime]); // Include currentModel in dependencies
 
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
@@ -743,8 +744,8 @@ const App = (props: AppInternalProps) => {
   // Poll for token metrics updates
   useEffect(() => {
     const updateTokenMetrics = () => {
-      const metrics = getActiveProviderMetrics();
-      const usage = getSessionTokenUsage();
+      const metrics = runtime.getActiveProviderMetrics();
+      const usage = runtime.getSessionTokenUsage();
 
       setTokenMetrics({
         tokensPerMinute: metrics?.tokensPerMinute ?? 0,
@@ -766,7 +767,7 @@ const App = (props: AppInternalProps) => {
     const interval = setInterval(updateTokenMetrics, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [runtime]);
 
   // Set up Flash fallback handler
   useEffect(() => {
@@ -1026,28 +1027,26 @@ You can switch authentication methods by typing /auth or switch to a different m
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
   }, [appDispatch]);
 
-  const handleOAuthCodeSubmit = useCallback(async (code: string) => {
-    const provider = (global as unknown as { __oauth_provider?: string })
-      .__oauth_provider;
+  const handleOAuthCodeSubmit = useCallback(
+    async (code: string) => {
+      const provider = (global as unknown as { __oauth_provider?: string })
+        .__oauth_provider;
 
-    if (provider === 'anthropic') {
-      // Get the OAuth manager from provider manager
-      const { getCliOAuthManager } = await import(
-        '../runtime/runtimeSettings.js'
-      );
-      const oauthManager = getCliOAuthManager();
+      if (provider === 'anthropic') {
+        const oauthManager = runtime.getCliOAuthManager();
 
-      if (oauthManager) {
-        const anthropicProvider = oauthManager.getProvider('anthropic');
-        if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
-          // This will resolve the promise in initiateAuth
-          (
-            anthropicProvider as { submitAuthCode: (code: string) => void }
-          ).submitAuthCode(code);
+        if (oauthManager) {
+          const anthropicProvider = oauthManager.getProvider('anthropic');
+          if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
+            (
+              anthropicProvider as { submitAuthCode: (code: string) => void }
+            ).submitAuthCode(code);
+          }
         }
       }
-    }
-  }, []);
+    },
+    [runtime],
+  );
 
   const {
     streamingState,

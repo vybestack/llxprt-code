@@ -8,14 +8,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setCommand } from '../setCommand.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type { CommandContext } from '../types.js';
-vi.mock('../../../runtime/runtimeSettings.js', () => ({
+
+const mockRuntime = {
   getActiveModelParams: vi.fn(() => ({})),
   getEphemeralSettings: vi.fn(() => ({})),
   setEphemeralSetting: vi.fn(),
   setActiveModelParam: vi.fn(),
   clearActiveModelParam: vi.fn(),
+};
+
+vi.mock('../../contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: () => mockRuntime,
 }));
-import { setEphemeralSetting } from '../../../runtime/runtimeSettings.js';
 
 describe('setCommand action mutation coverage', () => {
   let context: CommandContext;
@@ -28,7 +32,10 @@ describe('setCommand action mutation coverage', () => {
   it('stores numeric context-limit values', async () => {
     const result = await setCommand.action!(context, 'context-limit 32000');
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith('context-limit', 32000);
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'context-limit',
+      32000,
+    );
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
@@ -53,7 +60,10 @@ describe('setCommand action mutation coverage', () => {
   it('normalizes boolean settings', async () => {
     const result = await setCommand.action!(context, 'socket-keepalive true');
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith('socket-keepalive', true);
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'socket-keepalive',
+      true,
+    );
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
@@ -68,7 +78,10 @@ describe('setCommand action mutation coverage', () => {
       type: 'message',
       messageType: 'info',
     });
-    expect(setEphemeralSetting).toHaveBeenCalledWith('streaming', 'enabled');
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'streaming',
+      'enabled',
+    );
 
     const failure = await setCommand.action!(context, 'streaming maybe');
     expect(failure).toEqual({
@@ -88,7 +101,7 @@ describe('setCommand action mutation coverage', () => {
       type: 'message',
       messageType: 'info',
     });
-    expect(setEphemeralSetting).toHaveBeenCalledWith(
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
       'compression-threshold',
       0.75,
     );
@@ -111,7 +124,10 @@ describe('setCommand action mutation coverage', () => {
       type: 'message',
       messageType: 'info',
     });
-    expect(setEphemeralSetting).toHaveBeenCalledWith('maxTurnsPerPrompt', -1);
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'maxTurnsPerPrompt',
+      -1,
+    );
   });
 
   it('guards positive integer validations', async () => {
@@ -123,7 +139,7 @@ describe('setCommand action mutation coverage', () => {
       type: 'message',
       messageType: 'info',
     });
-    expect(setEphemeralSetting).toHaveBeenCalledWith(
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
       'tool-output-max-items',
       25,
     );
@@ -142,7 +158,10 @@ describe('setCommand action mutation coverage', () => {
   it('lowercases emojifilter values', async () => {
     await setCommand.action!(context, 'emojifilter AUTO');
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith('emojifilter', 'auto');
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'emojifilter',
+      'auto',
+    );
   });
 
   it('accepts truncate mode enumerations', async () => {
@@ -155,7 +174,7 @@ describe('setCommand action mutation coverage', () => {
       type: 'message',
       messageType: 'info',
     });
-    expect(setEphemeralSetting).toHaveBeenCalledWith(
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
       'tool-output-truncate-mode',
       'sample',
     );
@@ -164,7 +183,10 @@ describe('setCommand action mutation coverage', () => {
   it('normalizes socket flags independently', async () => {
     await setCommand.action!(context, 'socket-nodelay false');
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith('socket-nodelay', false);
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'socket-nodelay',
+      false,
+    );
   });
 
   it('parses JSON payloads for custom headers', async () => {
@@ -173,9 +195,12 @@ describe('setCommand action mutation coverage', () => {
       'custom-headers {"Authorization":"Bearer token"}',
     );
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith('custom-headers', {
-      Authorization: 'Bearer token',
-    });
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'custom-headers',
+      {
+        Authorization: 'Bearer token',
+      },
+    );
   });
 
   it('stores malformed JSON payloads as literal strings', async () => {
@@ -184,7 +209,7 @@ describe('setCommand action mutation coverage', () => {
       'custom-headers {"Authorization":"Bearer token"',
     );
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith(
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
       'custom-headers',
       '{"Authorization":"Bearer token"',
     );

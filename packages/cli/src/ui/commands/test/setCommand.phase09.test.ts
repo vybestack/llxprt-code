@@ -10,29 +10,28 @@ import { createCompletionHandler } from '../schema/index.js';
 import type { CommandContext } from '../types.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-vi.mock('../../../runtime/runtimeSettings.js', () => {
-  const getEphemeralSettings = vi.fn(() => ({
+
+const mockRuntime = {
+  getEphemeralSettings: vi.fn(() => ({
     'context-limit': 100_000,
     'compression-threshold': 0.7,
     streaming: 'enabled',
     'socket-timeout': 60_000,
-  }));
-  const getActiveModelParams = vi.fn(() => ({
-    temperature: 0.7,
-    max_tokens: 1000,
-  }));
-  return {
-    getEphemeralSettings,
-    getActiveModelParams,
-    setEphemeralSetting: vi.fn(),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-  };
-});
-import {
-  getActiveModelParams,
-  getEphemeralSettings,
-} from '../../../runtime/runtimeSettings.js';
+  })),
+  getActiveModelParams: vi.fn(
+    (): Record<string, unknown> => ({
+      temperature: 0.7,
+      max_tokens: 1000,
+    }),
+  ),
+  setEphemeralSetting: vi.fn(),
+  setActiveModelParam: vi.fn(),
+  clearActiveModelParam: vi.fn(),
+};
+
+vi.mock('../../contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: () => mockRuntime,
+}));
 import { setCommand } from '../setCommand.js';
 
 /**
@@ -82,13 +81,13 @@ describe('setCommand schema integration', () => {
   let handler: ReturnType<typeof createCompletionHandler>;
 
   beforeEach(() => {
-    vi.mocked(getEphemeralSettings).mockReturnValue({
+    mockRuntime.getEphemeralSettings.mockReturnValue({
       'context-limit': 100_000,
       'compression-threshold': 0.7,
       streaming: 'enabled',
       'socket-timeout': 60_000,
     });
-    vi.mocked(getActiveModelParams).mockReturnValue({
+    mockRuntime.getActiveModelParams.mockReturnValue({
       temperature: 0.7,
       max_tokens: 1000,
     });
@@ -151,7 +150,7 @@ describe('setCommand schema integration', () => {
     });
 
     it('should handle modelparam parameter completion via async completer @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', async () => {
-      vi.mocked(getActiveModelParams).mockReturnValue({
+      mockRuntime.getActiveModelParams.mockReturnValue({
         temperature: 0.7,
         max_tokens: 1000,
       });
@@ -229,7 +228,7 @@ describe('setCommand schema integration', () => {
             const dynamicParams = Object.fromEntries(
               paramNames.map((name) => [name, 'value']),
             );
-            vi.mocked(getActiveModelParams).mockReturnValue(dynamicParams);
+            mockRuntime.getActiveModelParams.mockReturnValue(dynamicParams);
 
             const result = await handler(mockContext, '', '/set modelparam ');
 
@@ -239,7 +238,7 @@ describe('setCommand schema integration', () => {
             expect(result.hint).toBe('parameter name');
             expect(result.position).toBe(1);
 
-            vi.mocked(getActiveModelParams).mockReturnValue({
+            mockRuntime.getActiveModelParams.mockReturnValue({
               temperature: 0.7,
               max_tokens: 1000,
             });

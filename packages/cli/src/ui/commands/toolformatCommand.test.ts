@@ -14,7 +14,9 @@ const mockRuntime = {
   setActiveToolFormatOverride: vi.fn(),
 };
 
-vi.mock('../../runtime/runtimeSettings.js', () => mockRuntime);
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: () => mockRuntime,
+}));
 
 describe('toolformatCommand', () => {
   let mockContext: CommandContext;

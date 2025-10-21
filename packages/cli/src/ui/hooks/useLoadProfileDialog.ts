@@ -10,10 +10,7 @@ import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
-import {
-  listSavedProfiles,
-  loadProfileByName,
-} from '../../runtime/runtimeSettings.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface UseLoadProfileDialogParams {
   addMessage: (msg: {
@@ -33,6 +30,7 @@ export const useLoadProfileDialog = ({
   settings: _settings,
 }: UseLoadProfileDialogParams) => {
   const appDispatch = useAppDispatch();
+  const runtime = useRuntimeApi();
   const showDialog = appState.openDialogs.loadProfile;
   const [profiles, setProfiles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -46,7 +44,7 @@ export const useLoadProfileDialog = ({
     appDispatch({ type: 'OPEN_DIALOG', payload: 'loadProfile' });
 
     try {
-      const availableProfiles = await listSavedProfiles();
+      const availableProfiles = await runtime.listSavedProfiles();
       setProfiles(availableProfiles);
     } catch (e) {
       addMessage({
@@ -59,7 +57,7 @@ export const useLoadProfileDialog = ({
     } finally {
       setIsLoading(false);
     }
-  }, [addMessage, appDispatch]);
+  }, [addMessage, appDispatch, runtime]);
 
   const closeDialog = useCallback(
     () => appDispatch({ type: 'CLOSE_DIALOG', payload: 'loadProfile' }),
@@ -69,7 +67,7 @@ export const useLoadProfileDialog = ({
   const handleSelect = useCallback(
     async (profileName: string) => {
       try {
-        const result = await loadProfileByName(profileName);
+        const result = await runtime.loadProfileByName(profileName);
         const extra = result.infoMessages
           .map((message) => `\n- ${message}`)
           .join('');
@@ -116,7 +114,7 @@ export const useLoadProfileDialog = ({
       }
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'loadProfile' });
     },
-    [addMessage, appDispatch],
+    [addMessage, appDispatch, runtime],
   );
 
   return {

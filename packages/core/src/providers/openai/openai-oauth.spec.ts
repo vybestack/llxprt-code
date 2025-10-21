@@ -27,7 +27,7 @@ const skipInCI = process.env.CI === 'true';
 
 // Mock OAuth manager interface for testing
 interface MockOAuthManager {
-  getToken(provider: string): Promise<string | null>;
+  getToken(provider: string, metadata?: unknown): Promise<string | null>;
   isAuthenticated(provider: string): Promise<boolean>;
   refreshToken?(provider: string): Promise<string | null>;
 }
@@ -244,7 +244,10 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       expect(isAuthenticated).toBe(true);
 
       // OAuth manager should have been called to get token
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
     });
 
     /**
@@ -296,7 +299,10 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       expect(isAuthenticated).toBe(true);
 
       // This token would be passed to OpenAI SDK constructor as apiKey
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
     });
 
     /**
@@ -417,7 +423,10 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       // Then: Should validate as Qwen-compatible endpoint and be authenticated via OAuth
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
     });
 
     /**
@@ -542,7 +551,10 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
 
       // Then: Should support OAuth based on provider name, not base URL
       expect(isAuthenticated).toBe(true);
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
     });
 
     /**
@@ -594,7 +606,10 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       expect(isAuthenticated).toBe(true);
 
       // Verify OAuth manager was called
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
     });
 
     /**
@@ -648,7 +663,10 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       expect(isAuthenticated).toBe(false);
 
       // Verify OAuth manager was called but returned null
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
     });
   });
 

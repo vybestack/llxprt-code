@@ -27,7 +27,7 @@ import {
 } from '../runtime/runtimeSettings.js';
 import { createTempDirectory, cleanupTempDirectory } from './test-utils.js';
 
-function createStubProvider(name: string): IProvider {
+function createStubProvider(name: string): IProvider & { clearState(): void } {
   return {
     name,
     async getModels() {

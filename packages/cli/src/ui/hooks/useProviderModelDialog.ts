@@ -9,12 +9,7 @@ import type { IModel } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
-import {
-  listAvailableModels,
-  getActiveModelName,
-  setActiveModel,
-  getActiveProviderStatus,
-} from '../../runtime/runtimeSettings.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface UseProviderModelDialogParams {
   addMessage: (msg: {
@@ -32,15 +27,16 @@ export const useProviderModelDialog = ({
   appState,
 }: UseProviderModelDialogParams) => {
   const appDispatch = useAppDispatch();
+  const runtime = useRuntimeApi();
   const showDialog = appState.openDialogs.providerModel;
   const [models, setModels] = useState<IModel[]>([]);
   const [currentModel, setCurrentModel] = useState<string>('');
 
   const openDialog = useCallback(async () => {
     try {
-      const list = await listAvailableModels();
+      const list = await runtime.listAvailableModels();
       setModels(list);
-      setCurrentModel(getActiveModelName());
+      setCurrentModel(runtime.getActiveModelName());
       appDispatch({ type: 'OPEN_DIALOG', payload: 'providerModel' });
     } catch (e) {
       addMessage({
@@ -49,7 +45,7 @@ export const useProviderModelDialog = ({
         timestamp: new Date(),
       });
     }
-  }, [addMessage, appDispatch]);
+  }, [addMessage, appDispatch, runtime]);
 
   const closeDialog = useCallback(
     () => appDispatch({ type: 'CLOSE_DIALOG', payload: 'providerModel' }),
@@ -59,7 +55,7 @@ export const useProviderModelDialog = ({
   const handleSelect = useCallback(
     async (modelId: string) => {
       try {
-        const result = await setActiveModel(modelId);
+        const result = await runtime.setActiveModel(modelId);
         addMessage({
           type: MessageType.INFO,
           content: `Switched from ${result.previousModel ?? 'unknown'} to ${result.nextModel} in provider '${result.providerName}'`,
@@ -67,7 +63,7 @@ export const useProviderModelDialog = ({
         });
         onModelChange?.();
       } catch (e) {
-        const status = getActiveProviderStatus();
+        const status = runtime.getActiveProviderStatus();
         addMessage({
           type: MessageType.ERROR,
           content: `Failed to switch model for provider '${status.providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
@@ -76,7 +72,7 @@ export const useProviderModelDialog = ({
       }
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'providerModel' });
     },
-    [addMessage, onModelChange, appDispatch],
+    [addMessage, onModelChange, appDispatch, runtime],
   );
 
   return {

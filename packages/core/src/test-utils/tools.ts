@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -66,7 +65,7 @@ export class MockTool extends BaseDeclarativeTool<
   { [key: string]: unknown },
   ToolResult
 > {
-  executeFn = vi.fn();
+  executeFn: ReturnType<ReturnType<typeof requireVi>['fn']>;
   shouldConfirm = false;
 
   constructor(
@@ -79,6 +78,7 @@ export class MockTool extends BaseDeclarativeTool<
     },
   ) {
     super(name, displayName ?? name, description, Kind.Other, params);
+    this.executeFn = requireVi().fn();
   }
 
   protected createInvocation(params: {
@@ -164,4 +164,13 @@ export class MockModifiableTool
   ): ToolInvocation<Record<string, unknown>, ToolResult> {
     return new MockModifiableToolInvocation(this, params);
   }
+}
+function requireVi() {
+  const viGlobal = (globalThis as { vi?: (typeof import('vitest'))['vi'] }).vi;
+  if (!viGlobal) {
+    throw new Error(
+      'Vitest APIs unavailable. core test-utils tools must run within Vitest.',
+    );
+  }
+  return viGlobal;
 }

@@ -14,7 +14,7 @@ import React, {
 } from 'react';
 import { HistoryItem, MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
-import { getActiveProviderStatus } from '../../runtime/runtimeSettings.js';
+import { useRuntimeApi, getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   Config,
   isProQuotaExceededError,
@@ -37,19 +37,6 @@ import {
   AppAction,
   AppState,
 } from '../reducers/appReducer.js';
-
-// Helper functions
-function getDisplayModelName(config: Config): string {
-  const status = getActiveProviderStatus();
-  if (status.providerName && status.modelName) {
-    return `${status.providerName}:${status.modelName}`;
-  }
-  return status.modelName ?? config.getModel();
-}
-
-function getProviderPaymentMode(): boolean | undefined {
-  return getActiveProviderStatus().isPaidMode;
-}
 
 // Context type
 export interface SessionContextType {
@@ -95,15 +82,16 @@ export const SessionController: React.FC<SessionControllerProps> = ({
   config,
   isAuthenticating = false,
 }) => {
-  // Initialize state with current values
-  const getInitialProvider = () =>
-    getActiveProviderStatus().providerName ?? undefined;
+  const runtime = useRuntimeApi();
+  const statusSnapshot = runtime.getActiveProviderStatus();
 
-  // Get initial state for the provider
   const initialState: SessionState = {
-    currentModel: getDisplayModelName(config),
-    isPaidMode: getProviderPaymentMode(),
-    lastProvider: getInitialProvider(),
+    currentModel:
+      statusSnapshot.providerName && statusSnapshot.modelName
+        ? `${statusSnapshot.providerName}:${statusSnapshot.modelName}`
+        : (statusSnapshot.modelName ?? config.getModel()),
+    isPaidMode: statusSnapshot.isPaidMode,
+    lastProvider: statusSnapshot.providerName ?? undefined,
     modelSwitchedFromQuotaError: false,
     userTier: undefined,
     transientWarnings: [],
@@ -134,8 +122,9 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   // Check payment mode change function
   const checkPaymentModeChange = useCallback(
     (forcePreviousProvider?: string) => {
-      const newPaymentMode = getProviderPaymentMode();
-      const status = getActiveProviderStatus();
+      const runtime = getRuntimeApi();
+      const status = runtime.getActiveProviderStatus();
+      const newPaymentMode = status.isPaidMode;
       const currentProviderName = status.providerName ?? undefined;
 
       const previousProvider =
@@ -246,12 +235,17 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   // Watch for model changes
   useEffect(() => {
     const checkModelChange = () => {
-      const displayModel = getDisplayModelName(config);
+      const runtime = getRuntimeApi();
+      const status = runtime.getActiveProviderStatus();
+      const displayModel =
+        status.providerName && status.modelName
+          ? `${status.providerName}:${status.modelName}`
+          : (status.modelName ?? config.getModel());
       if (displayModel !== sessionState.currentModel) {
         dispatch({ type: 'SET_CURRENT_MODEL', payload: displayModel });
       }
 
-      const paymentMode = getProviderPaymentMode();
+      const paymentMode = status.isPaidMode;
       if (paymentMode !== sessionState.isPaidMode) {
         dispatch({ type: 'SET_PAID_MODE', payload: paymentMode });
 
@@ -260,7 +254,6 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
           sessionState.isPaidMode !== undefined &&
           history.length > 0
         ) {
-          const status = getActiveProviderStatus();
           if (status.providerName === 'gemini') {
             if (paymentMode === true) {
               dispatch({

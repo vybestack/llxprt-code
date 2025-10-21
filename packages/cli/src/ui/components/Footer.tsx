@@ -19,7 +19,7 @@ import {
 import { ConsoleSummaryDisplay } from './ConsoleSummaryDisplay.js';
 import process from 'node:process';
 import Gradient from 'ink-gradient';
-import { getActiveProviderStatus } from '../../runtime/runtimeSettings.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugProfiler } from './DebugProfiler.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { truncateMiddle } from '../utils/responsive.js';
@@ -249,6 +249,7 @@ export const Footer = React.memo<FooterProps>(
     hideModelInfo = false,
   }) => {
     const { breakpoint } = useResponsive();
+    const runtime = useRuntimeApi();
 
     // Define what to show at each breakpoint
     const showTimestamp = breakpoint === 'WIDE';
@@ -418,7 +419,7 @@ export const Footer = React.memo<FooterProps>(
               {/* Show paid/free mode for Gemini provider */}
               {isPaidMode !== undefined &&
                 (() => {
-                  const status = getActiveProviderStatus();
+                  const status = runtime.getActiveProviderStatus();
                   if (status.providerName === 'gemini') {
                     return (
                       <>

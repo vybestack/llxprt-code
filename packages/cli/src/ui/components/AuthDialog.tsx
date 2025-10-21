@@ -12,6 +12,7 @@ import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod as _validateAuthMethod } from '../../config/auth.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface AuthDialogProps {
   onSelect: (authMethod: AuthType | undefined, scope: SettingScope) => void;
@@ -27,6 +28,7 @@ export function AuthDialog({
   settings,
   initialErrorMessage,
 }: AuthDialogProps): React.JSX.Element {
+  const runtime = useRuntimeApi();
   const [errorMessage, setErrorMessage] = useState<string | null>(
     initialErrorMessage || null,
   );
@@ -94,10 +96,7 @@ export function AuthDialog({
 
       // Use the actual oauthManager to toggle the provider
       // This will call the same code as /auth gemini enable/disable
-      const { getCliOAuthManager } = await import(
-        '../../runtime/runtimeSettings.js'
-      );
-      const oauthManager = getCliOAuthManager();
+      const oauthManager = runtime.getCliOAuthManager();
 
       if (oauthManager) {
         try {
@@ -118,7 +117,7 @@ export function AuthDialog({
 
       // Don't close the dialog - let user continue toggling
     },
-    [onSelect, enabledProviders],
+    [onSelect, enabledProviders, runtime],
   );
 
   useKeypress(

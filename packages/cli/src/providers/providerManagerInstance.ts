@@ -178,7 +178,12 @@ export function createProviderManager(
     oauthManager,
   );
   if (config) {
-    geminiProvider.setConfig(config);
+    if (
+      'setConfig' in geminiProvider &&
+      typeof geminiProvider.setConfig === 'function'
+    ) {
+      geminiProvider.setConfig(config);
+    }
   }
   manager.registerProvider(geminiProvider);
 

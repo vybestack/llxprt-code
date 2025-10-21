@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createHash } from 'node:crypto';
 import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
 import {
@@ -16,7 +17,6 @@ import { Config } from '../../config/config.js';
 import { AuthType } from '../../core/contentGenerator.js';
 import { AuthenticationRequiredError } from '../errors.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
-import { createCodeAssistContentGenerator } from '../../code_assist/codeAssist.js';
 import {
   Type,
   type Part,
@@ -31,6 +31,41 @@ import {
   NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
+
+type GeminiClientCacheEntry =
+  | {
+      kind: 'api';
+      client: unknown;
+      authMode: 'gemini-api-key' | 'vertex-ai';
+    }
+  | {
+      kind: 'oauth';
+      generator: CodeAssistContentGenerator;
+    };
+
+const runtimeClientCache = new Map<string, GeminiClientCacheEntry>();
+const runtimeClientKeyIndex = new Map<string, Set<string>>();
+const defaultRuntimeKey = 'gemini.runtime.unscoped';
+
+function rememberClientKey(runtimeKey: string, cacheKey: string): void {
+  let keys = runtimeClientKeyIndex.get(runtimeKey);
+  if (!keys) {
+    keys = new Set<string>();
+    runtimeClientKeyIndex.set(runtimeKey, keys);
+  }
+  keys.add(cacheKey);
+}
+
+function forgetRuntimeKeys(runtimeKey: string): void {
+  const keys = runtimeClientKeyIndex.get(runtimeKey);
+  if (!keys) {
+    return;
+  }
+  for (const key of keys) {
+    runtimeClientCache.delete(key);
+  }
+  runtimeClientKeyIndex.delete(runtimeKey);
+}
 
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P12
@@ -57,6 +92,12 @@ interface GeminiUsageMetadata {
 interface GeminiResponseWithUsage {
   usageMetadata?: GeminiUsageMetadata;
 }
+
+type CodeAssistGeneratorFactory =
+  (typeof import('../../code_assist/codeAssist.js'))['createCodeAssistContentGenerator'];
+type CodeAssistContentGenerator = Awaited<
+  ReturnType<CodeAssistGeneratorFactory>
+>;
 
 export class GeminiProvider extends BaseProvider {
   /**
@@ -169,6 +210,86 @@ export class GeminiProvider extends BaseProvider {
 
     // Do not determine auth mode on instantiation.
     // This will be done lazily when a chat completion is requested.
+  }
+
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P12
+   * @requirement REQ-SP2-001
+   * @pseudocode anthropic-gemini-stateless.md lines 1-2
+   */
+  private resolveRuntimeKey(options: NormalizedGenerateChatOptions): string {
+    if (options.runtime?.runtimeId) {
+      const runtimeId = options.runtime.runtimeId.trim();
+      if (runtimeId) {
+        return runtimeId;
+      }
+    }
+
+    const metadataRuntimeId = options.metadata?.runtimeId;
+    if (typeof metadataRuntimeId === 'string' && metadataRuntimeId.trim()) {
+      return metadataRuntimeId.trim();
+    }
+
+    const callId = options.settings.get('call-id');
+    if (typeof callId === 'string' && callId.trim()) {
+      return `call:${callId.trim()}`;
+    }
+
+    return defaultRuntimeKey;
+  }
+
+  private normalizeBaseURL(baseURL?: string): string {
+    if (!baseURL || baseURL.trim() === '') {
+      return 'default-endpoint';
+    }
+    return baseURL.replace(/\/+$/, '');
+  }
+
+  private buildClientCacheKey(
+    runtimeKey: string,
+    baseURL: string | undefined,
+    authToken: string,
+    authMode: GeminiAuthMode,
+  ): string {
+    const normalizedBase = this.normalizeBaseURL(baseURL);
+    const hashedToken =
+      authToken && authToken.length > 0
+        ? createHash('sha256').update(authToken).digest('hex')
+        : 'no-auth';
+    return `${runtimeKey}::${normalizedBase}::${authMode}::${hashedToken}`;
+  }
+
+  private getStreamingPreference(
+    _options: NormalizedGenerateChatOptions,
+  ): boolean {
+    const streamingSetting =
+      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
+    return streamingSetting !== 'disabled';
+  }
+
+  protected async createOAuthContentGenerator(
+    httpOptions: Record<string, unknown>,
+    config: Config,
+    baseURL?: string,
+  ): Promise<CodeAssistContentGenerator> {
+    const { createCodeAssistContentGenerator } = await import(
+      '../../code_assist/codeAssist.js'
+    );
+    return createCodeAssistContentGenerator(
+      httpOptions,
+      AuthType.LOGIN_WITH_GOOGLE,
+      config,
+      baseURL,
+    );
+  }
+
+  clearClientCache(runtimeKey?: string): void {
+    if (runtimeKey && runtimeKey.trim()) {
+      forgetRuntimeKeys(runtimeKey.trim());
+      return;
+    }
+    runtimeClientCache.clear();
+    runtimeClientKeyIndex.clear();
   }
 
   /**
@@ -603,6 +724,7 @@ export class GeminiProvider extends BaseProvider {
   override clearAuthCache(): void {
     // Call the base implementation to clear the cached token
     super.clearAuthCache();
+    this.clearClientCache();
     // Don't clear the auth mode itself, just allow re-determination next time
   }
 
@@ -766,9 +888,8 @@ export class GeminiProvider extends BaseProvider {
             // For OAuth, use the code assist content generator
             // Note: Detailed logging is now handled by DebugLogger in codeAssist.ts with namespace llxprt:code:assist
             const oauthContentGenerator =
-              await createCodeAssistContentGenerator(
+              await this.createOAuthContentGenerator(
                 httpOptions,
-                AuthType.LOGIN_WITH_GOOGLE,
                 configForOAuth!,
               );
             this.logger.debug(
@@ -904,10 +1025,10 @@ export class GeminiProvider extends BaseProvider {
 
         case 'oauth': {
           // For OAuth, use the code assist content generator
-          const oauthContentGenerator = await createCodeAssistContentGenerator(
+          const oauthContentGenerator = await this.createOAuthContentGenerator(
             httpOptions,
-            AuthType.LOGIN_WITH_GOOGLE,
             this.globalConfig!,
+            this.getBaseURL(),
           );
 
           // For web fetch, always use gemini-2.5-flash regardless of the active model
@@ -942,6 +1063,9 @@ export class GeminiProvider extends BaseProvider {
   }
 
   /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P12
+   * @requirement REQ-SP2-001
+   * @pseudocode anthropic-gemini-stateless.md lines 1-8
    * @plan PLAN-20250218-STATELESSPROVIDER.P04
    * @requirement REQ-SP-001
    * @pseudocode base-provider.md lines 7-15
@@ -951,13 +1075,13 @@ export class GeminiProvider extends BaseProvider {
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
     this.refreshCachedSettings();
-
+    const runtimeKey = this.resolveRuntimeKey(options);
+    const streamingEnabled = this.getStreamingPreference(options);
     const { contents: content, tools } = options;
     // Determine best auth method
     const authToken = await this.determineBestAuth();
-
-    // Import necessary modules
-    const { GoogleGenAI } = await import('@google/genai');
+    const currentModel = options.resolved.model;
+    this.currentModel = currentModel;
 
     // Convert IContent directly to Gemini format
     const contents: Array<{ role: string; parts: Part[] }> = [];
@@ -1047,105 +1171,27 @@ export class GeminiProvider extends BaseProvider {
         }))
       : undefined;
 
+    const serverTools = ['web_search', 'web_fetch'];
+    const requestConfig: Record<string, unknown> = {
+      serverTools,
+      ...(this.modelParams ?? {}),
+    };
+    if (geminiTools) {
+      requestConfig.tools = geminiTools;
+    }
+
     // Create appropriate client and generate content
+    const baseURL = options.resolved.baseURL ?? this.getBaseURL();
     const httpOptions = {
       headers: {
         'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
       },
     };
 
-    let stream: AsyncIterable<GenerateContentResponse>;
-
-    if (this.authMode === 'oauth') {
-      // OAuth mode
-      const configForOAuth = this.globalConfig || {
-        getProxy: () => undefined,
-        isBrowserLaunchSuppressed: () => false,
-        getNoBrowser: () => false,
-        getUserMemory: () => '',
-      };
-
-      const contentGenerator = await createCodeAssistContentGenerator(
-        httpOptions,
-        AuthType.LOGIN_WITH_GOOGLE,
-        configForOAuth as Config,
-        this.getBaseURL(),
-      );
-
-      const userMemory = this.globalConfig?.getUserMemory
-        ? this.globalConfig.getUserMemory()
-        : '';
-      const systemInstruction = await getCoreSystemPromptAsync({
-        userMemory,
-        model: this.currentModel,
-        provider: this.name,
-      });
-
-      // For OAuth/CodeAssist mode, inject system prompt as first user message
-      // This ensures the CodeAssist endpoint receives the full context
-      // Similar to how AnthropicProvider handles OAuth mode
-      const contentsWithSystemPrompt = [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: `<system>\n${systemInstruction}\n</system>\n\nUser provided conversation begins here:`,
-            },
-          ],
-        },
-        ...contents,
-      ];
-
-      const request = {
-        model: this.currentModel,
-        contents: contentsWithSystemPrompt,
-        // Still pass systemInstruction for SDK compatibility
-        systemInstruction,
-        config: {
-          tools: geminiTools,
-          ...this.modelParams,
-        },
-      };
-
-      stream = await contentGenerator.generateContentStream(
-        request,
-        'oauth-session',
-      );
-    } else {
-      // API key mode
-      const genAI = new GoogleGenAI({
-        apiKey: authToken,
-        vertexai: this.authMode === 'vertex-ai',
-        httpOptions: this.getBaseURL()
-          ? { ...httpOptions, baseUrl: this.getBaseURL() }
-          : httpOptions,
-      });
-
-      const contentGenerator = genAI.models;
-      const userMemory = this.globalConfig?.getUserMemory
-        ? this.globalConfig.getUserMemory()
-        : '';
-      const systemInstruction = await getCoreSystemPromptAsync({
-        userMemory,
-        model: this.currentModel,
-        provider: this.name,
-      });
-
-      const request = {
-        model: this.currentModel,
-        contents,
-        systemInstruction,
-        config: {
-          tools: geminiTools,
-          ...this.modelParams,
-        },
-      };
-
-      stream = await contentGenerator.generateContentStream(request);
-    }
-
-    // Stream responses as IContent
-    for await (const response of stream) {
+    const mapResponseToChunks = (
+      response: GenerateContentResponse,
+    ): IContent[] => {
+      const chunks: IContent[] = [];
       const text =
         response.candidates?.[0]?.content?.parts
           ?.filter((part: Part) => 'text' in part)
@@ -1160,17 +1206,14 @@ export class GeminiProvider extends BaseProvider {
               (part as { functionCall: FunctionCall }).functionCall,
           ) || [];
 
-      // Extract usage metadata from response
       const usageMetadata = (response as GeminiResponseWithUsage).usageMetadata;
 
-      // Yield text if present
       if (text) {
         const textContent: IContent = {
           speaker: 'ai',
           blocks: [{ type: 'text', text }],
         };
 
-        // Add usage metadata if present
         if (usageMetadata) {
           textContent.metadata = {
             usage: {
@@ -1184,10 +1227,9 @@ export class GeminiProvider extends BaseProvider {
           };
         }
 
-        yield textContent;
+        chunks.push(textContent);
       }
 
-      // Yield tool calls if present
       if (functionCalls.length > 0) {
         const blocks: ToolCallBlock[] = functionCalls.map(
           (call: FunctionCall) => ({
@@ -1205,7 +1247,6 @@ export class GeminiProvider extends BaseProvider {
           blocks,
         };
 
-        // Add usage metadata if present
         if (usageMetadata) {
           toolCallContent.metadata = {
             usage: {
@@ -1219,12 +1260,11 @@ export class GeminiProvider extends BaseProvider {
           };
         }
 
-        yield toolCallContent;
+        chunks.push(toolCallContent);
       }
 
-      // If we have usage metadata but no content blocks, emit a metadata-only response
       if (usageMetadata && !text && functionCalls.length === 0) {
-        yield {
+        chunks.push({
           speaker: 'ai',
           blocks: [],
           metadata: {
@@ -1237,8 +1277,223 @@ export class GeminiProvider extends BaseProvider {
                   (usageMetadata.candidatesTokenCount || 0),
             },
           },
+        } as IContent);
+      }
+
+      if (!usageMetadata && !text && functionCalls.length === 0) {
+        chunks.push({
+          speaker: 'ai',
+          blocks: [],
+        } as IContent);
+      }
+
+      return chunks;
+    };
+
+    let stream: AsyncIterable<GenerateContentResponse> | null = null;
+    let emitted = false;
+
+    if (this.authMode === 'oauth') {
+      const configForOAuth = this.globalConfig || {
+        getProxy: () => undefined,
+        isBrowserLaunchSuppressed: () => false,
+        getNoBrowser: () => false,
+        getUserMemory: () => '',
+      };
+
+      const cacheKey = this.buildClientCacheKey(
+        runtimeKey,
+        baseURL,
+        authToken,
+        'oauth',
+      );
+      const cached = runtimeClientCache.get(cacheKey);
+      let contentGenerator: CodeAssistContentGenerator | null = null;
+      if (cached?.kind === 'oauth') {
+        contentGenerator = cached.generator;
+      }
+      if (!contentGenerator) {
+        contentGenerator = await this.createOAuthContentGenerator(
+          httpOptions,
+          configForOAuth as Config,
+          baseURL,
+        );
+        runtimeClientCache.set(cacheKey, {
+          kind: 'oauth',
+          generator: contentGenerator,
+        });
+        rememberClientKey(runtimeKey, cacheKey);
+      }
+
+      const userMemory = this.globalConfig?.getUserMemory
+        ? this.globalConfig.getUserMemory()
+        : '';
+      const systemInstruction = await getCoreSystemPromptAsync({
+        userMemory,
+        model: currentModel,
+        provider: this.name,
+      });
+
+      const contentsWithSystemPrompt = [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `<system>\n${systemInstruction}\n</system>\n\nUser provided conversation begins here:`,
+            },
+          ],
+        },
+        ...contents,
+      ];
+
+      const oauthConfig = { ...requestConfig };
+      const oauthRequest = {
+        model: currentModel,
+        contents: contentsWithSystemPrompt,
+        systemInstruction,
+        config: oauthConfig,
+      };
+
+      const sessionId = `oauth-session:${runtimeKey}:${Math.random()
+        .toString(36)
+        .slice(2)}`;
+      const generatorWithStream = contentGenerator as {
+        generateContentStream: (
+          params: GenerateContentParameters,
+          sessionId?: string,
+        ) =>
+          | AsyncIterable<GenerateContentResponse>
+          | Promise<AsyncIterable<GenerateContentResponse>>;
+        generateContent?: (
+          params: GenerateContentParameters,
+          sessionId?: string,
+        ) => Promise<GenerateContentResponse>;
+      };
+
+      if (!streamingEnabled && generatorWithStream.generateContent) {
+        const response = await generatorWithStream.generateContent(
+          oauthRequest,
+          sessionId,
+        );
+        let yielded = false;
+        for (const chunk of mapResponseToChunks(
+          response as GenerateContentResponse,
+        )) {
+          yielded = true;
+          yield chunk;
+        }
+        if (!yielded) {
+          yield { speaker: 'ai', blocks: [] } as IContent;
+        }
+        return;
+      }
+
+      const oauthStream = await generatorWithStream.generateContentStream(
+        oauthRequest,
+        sessionId,
+      );
+      stream = oauthStream as AsyncIterable<GenerateContentResponse>;
+      if (streamingEnabled) {
+        emitted = true;
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            session: sessionId,
+            runtime: runtimeKey,
+            authMode: 'oauth',
+          },
         } as IContent;
       }
+    } else {
+      const { GoogleGenAI } = await import('@google/genai');
+      const cacheKey = this.buildClientCacheKey(
+        runtimeKey,
+        baseURL,
+        authToken,
+        this.authMode,
+      );
+      const cached = runtimeClientCache.get(cacheKey);
+      let genAI: InstanceType<typeof GoogleGenAI> | null = null;
+      if (cached?.kind === 'api') {
+        genAI = cached.client as InstanceType<typeof GoogleGenAI>;
+      }
+      if (!genAI) {
+        genAI = new GoogleGenAI({
+          apiKey: authToken,
+          vertexai: this.authMode === 'vertex-ai',
+          httpOptions: baseURL
+            ? { ...httpOptions, baseUrl: baseURL }
+            : httpOptions,
+        });
+        runtimeClientCache.set(cacheKey, {
+          kind: 'api',
+          client: genAI,
+          authMode: this.authMode as 'gemini-api-key' | 'vertex-ai',
+        });
+        rememberClientKey(runtimeKey, cacheKey);
+      }
+
+      const contentGenerator = genAI.models;
+      const userMemory = this.globalConfig?.getUserMemory
+        ? this.globalConfig.getUserMemory()
+        : '';
+      const systemInstruction = await getCoreSystemPromptAsync({
+        userMemory,
+        model: currentModel,
+        provider: this.name,
+      });
+
+      const apiRequest = {
+        model: currentModel,
+        contents,
+        systemInstruction,
+        config: { ...requestConfig },
+      };
+
+      if (streamingEnabled) {
+        stream = await contentGenerator.generateContentStream(apiRequest);
+      } else {
+        const response = await contentGenerator.generateContent(apiRequest);
+        let yielded = false;
+        for (const chunk of mapResponseToChunks(response)) {
+          yielded = true;
+          yield chunk;
+        }
+        if (!yielded) {
+          yield { speaker: 'ai', blocks: [] } as IContent;
+        }
+        return;
+      }
+    }
+
+    if (stream) {
+      const iterator: AsyncIterator<GenerateContentResponse> =
+        typeof (stream as AsyncIterable<GenerateContentResponse>)[
+          Symbol.asyncIterator
+        ] === 'function'
+          ? (stream as AsyncIterable<GenerateContentResponse>)[
+              Symbol.asyncIterator
+            ]()
+          : (stream as unknown as AsyncIterator<GenerateContentResponse>);
+      while (true) {
+        const { value, done } = await iterator.next();
+        if (done) {
+          break;
+        }
+        const mapped = mapResponseToChunks(value);
+        if (mapped.length === 0) {
+          continue;
+        }
+        emitted = true;
+        for (const chunk of mapped) {
+          yield chunk;
+        }
+      }
+    }
+
+    if (!emitted) {
+      yield { speaker: 'ai', blocks: [] } as IContent;
     }
   }
 }

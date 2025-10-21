@@ -30,6 +30,7 @@ import {
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { ConversationCache } from '../openai/ConversationCache.js';
+import { peekActiveProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -43,6 +44,8 @@ import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
+  // TODO(P08) @plan:PLAN-20251018-STATELESSPROVIDER2.P07 @requirement:REQ-SP2-001
+  // Align per-call stateless flow with openai-responses-stateless.md steps.
   /**
    * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
    */
@@ -107,9 +110,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   private logger: DebugLogger;
-  private currentModel: string = 'o3-mini';
-  private conversationCache: ConversationCache;
-  private modelParams?: Record<string, unknown>;
+  private static readonly cacheScopePrefix = 'openai-responses.runtime:';
+  // TODO(@plan:PLAN-20251018-STATELESSPROVIDER2.P07 @requirement:REQ-SP2-001):
+  // Align stateless responses flow with project-plans/20251018statelessprovider2/analysis/pseudocode/openai-responses-stateless.md.
 
   constructor(
     apiKey: string | undefined,
@@ -133,29 +136,37 @@ export class OpenAIResponsesProvider extends BaseProvider {
       () =>
         `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, apiKey: ${apiKey?.substring(0, 10) || 'none'}`,
     );
-    this.conversationCache = new ConversationCache();
-
-    // Initialize from SettingsService
-    this.initializeFromSettings().catch((error) => {
-      this.logger.debug(
-        () => `Failed to initialize from SettingsService: ${error}`,
-      );
-    });
-
-    // Set default model for responses API
-    if (
-      process.env.LLXPRT_DEFAULT_MODEL &&
-      RESPONSES_API_MODELS.some((m) =>
-        process.env.LLXPRT_DEFAULT_MODEL!.startsWith(m),
-      )
-    ) {
-      this.currentModel = process.env.LLXPRT_DEFAULT_MODEL;
-    }
   }
 
   /**
    * This provider does not support OAuth
    */
+
+  private resolveRuntimeScope(options?: NormalizedGenerateChatOptions): string {
+    if (options?.runtime?.runtimeId) {
+      return `${OpenAIResponsesProvider.cacheScopePrefix}${options.runtime.runtimeId}`;
+    }
+
+    const activeRuntime = peekActiveProviderRuntimeContext();
+    if (activeRuntime?.runtimeId) {
+      return `${OpenAIResponsesProvider.cacheScopePrefix}${activeRuntime.runtimeId}`;
+    }
+
+    const settings = options?.settings ?? this.resolveSettingsService();
+    const callId = settings.get('call-id');
+    if (typeof callId === 'string' && callId.trim()) {
+      return `${OpenAIResponsesProvider.cacheScopePrefix}call:${callId.trim()}`;
+    }
+
+    return `${OpenAIResponsesProvider.cacheScopePrefix}default`;
+  }
+
+  private createScopedConversationCache(
+    runtimeScope: string,
+  ): ConversationCache {
+    return new ConversationCache(100, 2, runtimeScope);
+  }
+
   protected supportsOAuth(): boolean {
     return false;
   }
@@ -232,20 +243,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   override getCurrentModel(): string {
-    // Try to get from SettingsService first (source of truth)
-    try {
-      const settingsService = this.resolveSettingsService();
-      const providerSettings = settingsService.getProviderSettings(this.name);
-      if (providerSettings.model) {
-        return providerSettings.model as string;
-      }
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to get model from SettingsService: ${error}`,
-      );
-    }
-    // Fall back to cached value or default
-    return this.currentModel || this.getDefaultModel();
+    return this.getModel();
   }
 
   override getDefaultModel(): string {
@@ -263,7 +261,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
    * Get the conversation cache instance
    */
   getConversationCache(): ConversationCache {
-    return this.conversationCache;
+    const scope = this.resolveRuntimeScope();
+    return this.createScopedConversationCache(scope);
   }
 
   /**
@@ -274,8 +273,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   override clearState(): void {
-    // Clear the conversation cache to prevent tool call ID mismatches
-    this.conversationCache.clear();
+    super.clearState?.();
   }
 
   /**
@@ -299,52 +297,43 @@ export class OpenAIResponsesProvider extends BaseProvider {
   /**
    * Get current model parameters
    */
+
   override getModelParams(): Record<string, unknown> | undefined {
-    return this.modelParams;
-  }
-
-  /**
-   * Initialize provider configuration from SettingsService
-   */
-  private async initializeFromSettings(): Promise<void> {
-    await this.refreshCachedSettings();
-  }
-
-  /**
-   * Refresh cached settings from the runtime SettingsService to reflect the latest
-   * model selection, base URL, and model parameters.
-   */
-  private async refreshCachedSettings(): Promise<void> {
     try {
-      const [savedModel, savedBaseUrl, savedParams] = await Promise.all([
-        this.getModelFromSettings(),
-        this.getBaseUrlFromSettings(),
-        this.getModelParamsFromSettings(),
-      ]);
+      const providerSettings =
+        this.resolveSettingsService().getProviderSettings(this.name) as Record<
+          string,
+          unknown
+        >;
 
-      if (
-        savedModel &&
-        RESPONSES_API_MODELS.some((model) => savedModel.startsWith(model))
-      ) {
-        this.currentModel = savedModel;
+      const {
+        temperature,
+        maxTokens,
+        max_tokens: maxTokensSnake,
+        enabled: _enabled,
+        apiKey: _apiKey,
+        baseUrl: _baseUrl,
+        model: _model,
+        ...custom
+      } = providerSettings;
+
+      const params: Record<string, unknown> = { ...custom };
+      if (temperature !== undefined) {
+        params.temperature = temperature;
       }
 
-      if (savedBaseUrl !== undefined) {
-        this.baseProviderConfig.baseURL =
-          savedBaseUrl || 'https://api.openai.com/v1';
+      const resolvedMaxTokens =
+        maxTokens !== undefined ? maxTokens : maxTokensSnake;
+      if (resolvedMaxTokens !== undefined) {
+        params.max_tokens = resolvedMaxTokens;
       }
 
-      this.modelParams = savedParams ?? undefined;
-
-      this.logger.debug(
-        () =>
-          `Refreshed SettingsService cache - model: ${this.currentModel}, baseURL: ${this.baseProviderConfig.baseURL}, params: ${JSON.stringify(this.modelParams)}`,
-      );
+      return Object.keys(params).length > 0 ? params : undefined;
     } catch (error) {
       this.logger.debug(
-        () =>
-          `Failed to refresh OpenAI Responses settings from SettingsService: ${error}`,
+        () => `Failed to compute model params from SettingsService: ${error}`,
       );
+      return undefined;
     }
   }
 
@@ -360,37 +349,44 @@ export class OpenAIResponsesProvider extends BaseProvider {
    * @requirement REQ-SP-001
    * @pseudocode base-provider.md lines 7-15
    * @pseudocode provider-invocation.md lines 8-12
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
+   * @requirement REQ-SP2-001
+   * @pseudocode openai-responses-stateless.md lines 1-8
+   */
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P04
+   * @requirement REQ-SP-001
+   * @pseudocode base-provider.md lines 7-15
+   * @pseudocode provider-invocation.md lines 8-12
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
+   * @requirement REQ-SP2-001
+   * @pseudocode openai-responses-stateless.md lines 1-8
    */
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
     const { contents: content, tools } = options;
-    // Check if API key is available
-    const apiKey = await this.getAuthToken();
+
+    const apiKey = options.resolved.authToken;
     if (!apiKey) {
       throw new Error('OpenAI API key is required to generate completions');
     }
 
-    await this.refreshCachedSettings();
-
-    // Get the system prompt
+    const resolvedModel = options.resolved.model || this.getDefaultModel();
     const userMemory = this.globalConfig?.getUserMemory
       ? this.globalConfig.getUserMemory()
       : '';
     const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
-      model: this.currentModel,
+      model: resolvedModel,
       provider: this.name,
     });
 
-    // Build Responses API input array directly from IContent
-    // For the Responses API, we send system, user and assistant messages
     const input: Array<{
       role: 'user' | 'assistant' | 'system';
       content?: string;
     }> = [];
 
-    // Add system prompt as the first message if available
     if (systemPrompt) {
       input.push({
         role: 'system',
@@ -404,14 +400,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
           | TextBlock
           | undefined;
         if (textBlock?.text) {
-          input.push({
-            role: 'user',
-            content: textBlock.text,
-          });
+          input.push({ role: 'user', content: textBlock.text });
         }
       } else if (c.speaker === 'ai') {
-        // For AI messages, we only include the text content
-        // Tool calls are part of the history but not sent to the API
         const textBlocks = c.blocks.filter(
           (b) => b.type === 'text',
         ) as TextBlock[];
@@ -420,30 +411,24 @@ export class OpenAIResponsesProvider extends BaseProvider {
         ) as ToolCallBlock[];
 
         const contentText = textBlocks.map((b) => b.text).join('');
-
-        // If there's text content or it's a pure tool call response, include it
         if (contentText || toolCallBlocks.length > 0) {
           const assistantMsg: { role: 'assistant'; content?: string } = {
             role: 'assistant',
           };
 
-          // Include text content if present
           if (contentText) {
             assistantMsg.content = contentText;
-          } else if (toolCallBlocks.length > 0) {
-            // For tool-only responses, add a brief description
+          } else {
             assistantMsg.content = `[Called ${toolCallBlocks.length} tool${toolCallBlocks.length > 1 ? 's' : ''}: ${toolCallBlocks.map((tc) => tc.name).join(', ')}]`;
           }
 
           input.push(assistantMsg);
         }
       } else if (c.speaker === 'tool') {
-        // Tool responses are converted to assistant messages with the result
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock | undefined;
         if (toolResponseBlock) {
-          // Add tool result as an assistant message
           const result =
             typeof toolResponseBlock.result === 'string'
               ? toolResponseBlock.result
@@ -456,19 +441,14 @@ export class OpenAIResponsesProvider extends BaseProvider {
       }
     }
 
-    // Convert Gemini format tools to Responses API format directly
-    // Based on the ToolFormatter.toResponsesTool format
     const responsesTools = tools
       ? tools[0].functionDeclarations.map((decl) => {
-          // Support both old 'parameters' and new 'parametersJsonSchema' formats
-          // DeclarativeTool uses parametersJsonSchema, while legacy tools use parameters
           const toolParameters =
             'parametersJsonSchema' in decl
               ? (decl as { parametersJsonSchema?: unknown })
                   .parametersJsonSchema
               : decl.parameters;
 
-          // Convert parameters from Gemini format to standard format
           const convertedParams = toolParameters
             ? (this.convertGeminiSchemaToStandard(toolParameters) as Record<
                 string,
@@ -486,7 +466,14 @@ export class OpenAIResponsesProvider extends BaseProvider {
         })
       : undefined;
 
-    // Build the request directly for Responses API
+    const modelParams = await this.getModelParamsFromSettings();
+
+    const baseURLCandidate =
+      options.resolved.baseURL ??
+      this.getBaseURL() ??
+      'https://api.openai.com/v1';
+    const baseURL = baseURLCandidate.replace(/\/+$/u, '');
+
     const request: {
       model: string;
       input: typeof input;
@@ -494,25 +481,22 @@ export class OpenAIResponsesProvider extends BaseProvider {
       stream: boolean;
       [key: string]: unknown;
     } = {
-      model: this.currentModel,
+      model: resolvedModel,
       input,
       stream: true,
-      ...(this.modelParams || {}),
+      ...(modelParams || {}),
     };
 
     if (responsesTools && responsesTools.length > 0) {
       request.tools = responsesTools;
     }
 
-    // Make the API call
-    const baseURL = this.getBaseURL() || 'https://api.openai.com/v1';
-    const responsesURL = `${baseURL}/responses`;
     const requestBody = JSON.stringify(request);
     const bodyBlob = new Blob([requestBody], {
       type: 'application/json; charset=utf-8',
     });
 
-    const response = await fetch(responsesURL, {
+    const response = await fetch(`${baseURL}/responses`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -521,16 +505,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
       body: bodyBlob,
     });
 
-    // Handle errors
     if (!response.ok) {
       const errorBody = await response.text();
       throw parseErrorResponse(response.status, errorBody, this.name);
     }
 
-    // Stream the response directly as IContent
     if (response.body) {
       for await (const message of parseResponsesStream(response.body)) {
-        // The parseResponsesStream now returns IContent directly
         yield message;
       }
     }

@@ -1,5 +1,7 @@
 # Settings and Profile Management
 
+<!-- @plan:PLAN-20251018-STATELESSPROVIDER2.P20 @requirement:REQ-SP2-005 -->
+
 This guide covers how to configure LLxprt Code using ephemeral settings, model parameters, and profiles.
 
 ## Table of Contents
@@ -30,6 +32,17 @@ Every runtime that talks to LLxprt Code now receives its own `ProviderRuntimeCon
 - When nested workflows finish, `clearActiveProviderRuntimeContext()` restores the previous context, preventing leaks between parent and child runs.
 
 Because `SettingsService` is no longer a global singleton, you can inject it into tests, mock it for UI hooks, and snapshot per-runtime overrides without worrying about cross-talk between concurrent conversations.
+
+## Runtime-Scoped Auth Alignment
+
+Runtime-scoped authentication runs on top of the same per-runtime settings overlays:
+
+- **Credential overlays** – Provider secrets live exclusively on the runtime `SettingsService`. The auth precedence resolver listens for provider-setting mutations and profile switches, invalidating scoped OAuth tokens or API keys when the active runtime changes configuration.
+- **Profiles remain clean** – Profiles persist the values returned by `buildRuntimeProfileSnapshot()`. Secrets tagged as runtime-only (for example the `/key` command) are excluded by default, so saving a profile does not leak ephemeral credentials across runtimes.
+- **Runtime metadata** – Each `ProviderRuntimeContext` exposes `metadata.runtimeAuthScope`, allowing UI surfaces and automation logs to display which runtime minted or revoked credentials. CLI helpers surface the same metadata through `getRuntimeDiagnosticsSnapshot()`.
+- **Isolated OAuth managers** – `registerCliProviderInfrastructure()` tracks an `OAuthManager` per runtime. Device flows and browser-based logins attach the runtime scope to callback payloads, so revoking a profile or ending a CLI session tears down the correct token cache.
+
+For a deeper look at the handshake sequence and cache eviction hooks, see `docs/auth/runtime-scoped-auth.stub.md`.
 
 ## Ephemeral Settings
 

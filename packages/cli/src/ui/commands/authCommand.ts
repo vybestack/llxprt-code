@@ -16,11 +16,7 @@ import { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
 import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
-import {
-  getCliOAuthManager,
-  getCliProviderManager,
-  registerCliProviderInfrastructure,
-} from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export class AuthCommandExecutor {
   constructor(private oauthManager: OAuthManager) {}
@@ -263,7 +259,7 @@ export class AuthCommandExecutor {
    */
   private clearProviderCache(provider: string): void {
     try {
-      const providerManager = getCliProviderManager();
+      const providerManager = getRuntimeApi().getCliProviderManager();
 
       // Get the provider instance
       const providerInstance = providerManager.getProviderByName(provider);
@@ -312,11 +308,12 @@ export const authCommand: SlashCommand = {
     'toggle OAuth enablement for providers (gemini, qwen, anthropic)',
   kind: CommandKind.BUILT_IN,
   action: async (context, args) => {
+    const runtime = getRuntimeApi();
     // Ensure provider manager is initialized (throws if bootstrap skipped registration)
-    const providerManager = getCliProviderManager();
+    const providerManager = runtime.getCliProviderManager();
 
     // Get the shared OAuth manager instance
-    let oauthManager = getCliOAuthManager();
+    let oauthManager = runtime.getCliOAuthManager();
 
     // If for some reason it doesn't exist yet, create it
     if (!oauthManager) {
@@ -329,7 +326,7 @@ export const authCommand: SlashCommand = {
       oauthManager.registerProvider(new QwenOAuthProvider());
       oauthManager.registerProvider(new AnthropicOAuthProvider());
 
-      registerCliProviderInfrastructure(providerManager, oauthManager);
+      runtime.registerCliProviderInfrastructure(providerManager, oauthManager);
     }
 
     const executor = new AuthCommandExecutor(oauthManager);

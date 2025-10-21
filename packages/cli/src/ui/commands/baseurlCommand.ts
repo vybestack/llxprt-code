@@ -10,10 +10,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import {
-  updateActiveProviderBaseUrl,
-  getActiveProviderStatus,
-} from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const baseurlCommand: SlashCommand = {
   name: 'baseurl',
@@ -24,15 +21,16 @@ export const baseurlCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn> => {
     const baseUrl = args?.trim();
+    const runtime = getRuntimeApi();
     try {
-      const result = await updateActiveProviderBaseUrl(baseUrl ?? null);
+      const result = await runtime.updateActiveProviderBaseUrl(baseUrl ?? null);
       return {
         type: 'message',
         messageType: 'info',
         content: result.message,
       };
     } catch (error) {
-      const status = getActiveProviderStatus();
+      const status = runtime.getActiveProviderStatus();
       return {
         type: 'message',
         messageType: 'error',

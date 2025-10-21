@@ -8,6 +8,7 @@
  * Base provider class with authentication precedence logic
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   IProvider,
   GenerateChatOptions,
@@ -51,6 +52,12 @@ export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
   config?: Config;
   runtime?: ProviderRuntimeContext;
   tools?: ProviderToolset;
+  metadata: Record<string, unknown>;
+  resolved: {
+    model: string;
+    baseURL?: string;
+    authToken: string;
+  };
 }
 
 /**
@@ -62,20 +69,26 @@ export abstract class BaseProvider implements IProvider {
   protected authResolver: AuthPrecedenceResolver;
   protected baseProviderConfig: BaseProviderConfig;
   protected providerConfig?: IProviderConfig;
-  protected globalConfig?: Config;
-  protected cachedAuthToken?: string;
-  protected authCacheTimestamp?: number;
-  protected readonly AUTH_CACHE_DURATION = 60000; // 1 minute in milliseconds
   /**
    * @plan PLAN-20250218-STATELESSPROVIDER.P05
    * @requirement REQ-SP-001
    * @pseudocode provider-invocation.md lines 8-15
    */
-  private baseSettingsService: SettingsService;
-  private activeSettingsOverride?: SettingsService;
+  private defaultSettingsService: SettingsService;
+  private defaultConfig?: Config;
+  private readonly activeCallContext =
+    new AsyncLocalStorage<NormalizedGenerateChatOptions>();
 
   // Callback for tracking throttle wait times (set by LoggingProviderWrapper)
   protected throttleTracker?: (waitTimeMs: number) => void;
+
+  protected get globalConfig(): Config | undefined {
+    return this.defaultConfig;
+  }
+
+  protected set globalConfig(config: Config | undefined) {
+    this.defaultConfig = config;
+  }
 
   constructor(
     config: BaseProviderConfig,
@@ -86,12 +99,12 @@ export abstract class BaseProvider implements IProvider {
     this.name = config.name;
     this.baseProviderConfig = config;
     this.providerConfig = providerConfig;
-    this.globalConfig = globalConfig;
+    this.defaultConfig = globalConfig;
     const defaultRuntime =
       peekActiveProviderRuntimeContext() ?? getActiveProviderRuntimeContext();
-    this.baseSettingsService =
+    const fallbackSettingsService =
       settingsService ?? defaultRuntime.settingsService;
-    this.activeSettingsOverride = undefined;
+    this.defaultSettingsService = fallbackSettingsService;
 
     // Initialize auth precedence resolver
     // OAuth enablement will be checked dynamically through the manager
@@ -100,19 +113,21 @@ export abstract class BaseProvider implements IProvider {
       isOAuthEnabled: config.isOAuthEnabled ?? false, // Use the config value, which can be updated
       supportsOAuth: this.supportsOAuth(),
       oauthProvider: config.oauthProvider,
+      providerId: this.name,
     };
 
     this.authResolver = new AuthPrecedenceResolver(
       precedenceConfig,
       config.oauthManager,
-      this.baseSettingsService,
+      fallbackSettingsService,
     );
   }
 
   /**
-   * @plan PLAN-20250218-STATELESSPROVIDER.P05
-   * @requirement REQ-SP-001
-   * @pseudocode provider-invocation.md lines 8-15
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @plan:PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 1-2
    */
   setRuntimeSettingsService(
     settingsService: SettingsService | null | undefined,
@@ -120,19 +135,28 @@ export abstract class BaseProvider implements IProvider {
     if (!settingsService) {
       return;
     }
-    this.baseSettingsService = settingsService;
-    if (!this.activeSettingsOverride) {
-      this.authResolver.setSettingsService(this.baseSettingsService);
-    }
+    this.defaultSettingsService = settingsService;
+    this.authResolver.setSettingsService(settingsService);
   }
 
   /**
-   * @plan PLAN-20250218-STATELESSPROVIDER.P05
-   * @requirement REQ-SP-001
-   * @pseudocode provider-invocation.md lines 8-15
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 1-3
    */
   protected resolveSettingsService(): SettingsService {
-    return this.activeSettingsOverride ?? this.baseSettingsService;
+    const activeOptions = this.activeCallContext.getStore();
+    if (activeOptions) {
+      return activeOptions.settings;
+    }
+
+    const activeRuntime =
+      peekActiveProviderRuntimeContext() ?? getActiveProviderRuntimeContext();
+    if (activeRuntime?.settingsService) {
+      return activeRuntime.settingsService;
+    }
+
+    return this.defaultSettingsService;
   }
 
   /**
@@ -146,6 +170,9 @@ export abstract class BaseProvider implements IProvider {
   }
 
   /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 2-3
    * Gets the base URL with proper precedence:
    * 1. Ephemeral settings (highest priority - from /baseurl or profile)
    * 2. Provider-specific settings in SettingsService
@@ -154,38 +181,18 @@ export abstract class BaseProvider implements IProvider {
    * 5. undefined (use provider default)
    */
   protected getBaseURL(): string | undefined {
+    const activeOptions = this.activeCallContext.getStore();
+    if (activeOptions) {
+      return activeOptions.resolved.baseURL;
+    }
     const settingsService = this.resolveSettingsService();
-
-    // 1. Check ephemeral settings first (from /baseurl command or profile)
-    const ephemeralBaseUrl = settingsService.get('base-url') as
-      | string
-      | undefined;
-    if (ephemeralBaseUrl && ephemeralBaseUrl !== 'none') {
-      return ephemeralBaseUrl;
-    }
-
-    // 2. Check provider-specific settings
-    const providerSettings = settingsService.getProviderSettings(this.name);
-    const providerBaseUrl = providerSettings?.baseUrl as string | undefined;
-    if (providerBaseUrl && providerBaseUrl !== 'none') {
-      return providerBaseUrl;
-    }
-
-    // 2. Check provider config (from IProviderConfig)
-    if (this.providerConfig?.baseUrl) {
-      return this.providerConfig.baseUrl;
-    }
-
-    // 3. Check base provider config (constructor value)
-    if (this.baseProviderConfig.baseURL) {
-      return this.baseProviderConfig.baseURL;
-    }
-
-    // 4. Return undefined to use provider's default
-    return undefined;
+    return this.computeBaseURL(settingsService);
   }
 
   /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 2-3
    * Gets the current model with proper precedence:
    * 1. Ephemeral settings (highest priority)
    * 2. Provider-specific settings in SettingsService
@@ -193,69 +200,76 @@ export abstract class BaseProvider implements IProvider {
    * 4. Default model
    */
   protected getModel(): string {
+    const activeOptions = this.activeCallContext.getStore();
+    if (activeOptions) {
+      return activeOptions.resolved.model;
+    }
     const settingsService = this.resolveSettingsService();
+    return this.computeModel(settingsService);
+  }
 
-    // 1. Check ephemeral settings first
+  private computeBaseURL(settingsService: SettingsService): string | undefined {
+    const ephemeralBaseUrl = settingsService.get('base-url') as
+      | string
+      | undefined;
+    if (ephemeralBaseUrl && ephemeralBaseUrl !== 'none') {
+      return ephemeralBaseUrl;
+    }
+
+    const providerSettings = settingsService.getProviderSettings(this.name);
+    const providerBaseUrl = providerSettings?.baseUrl as string | undefined;
+    if (providerBaseUrl && providerBaseUrl !== 'none') {
+      return providerBaseUrl;
+    }
+
+    if (this.providerConfig?.baseUrl) {
+      return this.providerConfig.baseUrl;
+    }
+
+    if (this.baseProviderConfig.baseURL) {
+      return this.baseProviderConfig.baseURL;
+    }
+
+    return undefined;
+  }
+
+  private computeModel(settingsService: SettingsService): string {
     const ephemeralModel = settingsService.get('model') as string | undefined;
     if (ephemeralModel) {
       return ephemeralModel;
     }
 
-    // 2. Check provider-specific settings
     const providerSettings = settingsService.getProviderSettings(this.name);
     const providerModel = providerSettings?.model as string | undefined;
     if (providerModel) {
       return providerModel;
     }
 
-    // 3. Check provider config
     if (this.providerConfig?.defaultModel) {
       return this.providerConfig.defaultModel;
     }
 
-    // 4. Return default
     return this.getDefaultModel();
   }
 
   /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 1-3
    * Gets authentication token using the precedence chain
    * This method implements lazy OAuth triggering - only triggers OAuth when actually making API calls
    * Returns empty string if no auth is available (for local/self-hosted endpoints)
    */
   protected async getAuthToken(): Promise<string> {
-    // Check cache first (short-lived cache to avoid repeated OAuth calls)
-    if (
-      this.cachedAuthToken &&
-      this.authCacheTimestamp &&
-      Date.now() - this.authCacheTimestamp < this.AUTH_CACHE_DURATION
-    ) {
-      return this.cachedAuthToken;
+    const activeOptions = this.activeCallContext.getStore();
+    if (activeOptions) {
+      return activeOptions.resolved.authToken;
     }
 
-    // Clear stale cache
-    this.cachedAuthToken = undefined;
-    this.authCacheTimestamp = undefined;
-
-    // Resolve authentication using precedence chain
-    const token = await this.authResolver.resolveAuthentication();
-
-    if (!token) {
-      // Return empty string for local/self-hosted endpoints that don't require auth
-      // Individual providers can decide how to handle this
-      return '';
-    }
-
-    // Cache the token briefly
-    this.cachedAuthToken = token;
-    this.authCacheTimestamp = Date.now();
-
-    if (process.env.DEBUG) {
-      const authMethod = await this.authResolver.getAuthMethodName();
-      console.log(
-        `[${this.name}] Authentication resolved using: ${authMethod}`,
-      );
-    }
-
+    const token =
+      (await this.authResolver.resolveAuthentication({
+        settingsService: this.resolveSettingsService(),
+      })) ?? '';
     return token;
   }
 
@@ -290,24 +304,39 @@ export abstract class BaseProvider implements IProvider {
   protected abstract supportsOAuth(): boolean;
 
   /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 1-3
    * Checks if authentication is available without triggering OAuth
    */
   async hasNonOAuthAuthentication(): Promise<boolean> {
-    return this.authResolver.hasNonOAuthAuthentication();
+    return this.authResolver.hasNonOAuthAuthentication({
+      settingsService: this.resolveSettingsService(),
+    });
   }
 
   /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 1-3
    * Checks if OAuth is the only available authentication method
    */
   async isOAuthOnlyAvailable(): Promise<boolean> {
-    return this.authResolver.isOAuthOnlyAvailable();
+    return this.authResolver.isOAuthOnlyAvailable({
+      settingsService: this.resolveSettingsService(),
+    });
   }
 
   /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 1-3
    * Gets the current authentication method name for debugging
    */
   async getAuthMethodName(): Promise<string | null> {
-    return this.authResolver.getAuthMethodName();
+    return this.authResolver.getAuthMethodName({
+      settingsService: this.resolveSettingsService(),
+    });
   }
 
   /**
@@ -349,8 +378,7 @@ export abstract class BaseProvider implements IProvider {
    * Clears the authentication token cache
    */
   clearAuthCache(): void {
-    this.cachedAuthToken = undefined;
-    this.authCacheTimestamp = undefined;
+    // Legacy no-op retained for compatibility with existing logout flows.
   }
 
   /**
@@ -358,8 +386,11 @@ export abstract class BaseProvider implements IProvider {
    */
   async isAuthenticated(): Promise<boolean> {
     try {
-      const token = await this.authResolver.resolveAuthentication();
-      return token !== null;
+      const token =
+        (await this.authResolver.resolveAuthentication({
+          settingsService: this.resolveSettingsService(),
+        })) ?? '';
+      return token !== '';
     } catch {
       return false;
     }
@@ -380,77 +411,82 @@ export abstract class BaseProvider implements IProvider {
     contents: IContent[],
     tools?: ProviderToolset,
   ): AsyncIterableIterator<IContent>;
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 1-5
+   */
   generateChatCompletion(
     contentsOrOptions: IContent[] | GenerateChatOptions,
     maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
-    const normalized = this.normalizeGenerateChatOptions(
+    const normalizedPromise = this.normalizeGenerateChatOptions(
       contentsOrOptions,
       maybeTools,
     );
-    /**
-     * @plan PLAN-20250218-STATELESSPROVIDER.P05
-     * @requirement REQ-SP-001
-     * @pseudocode provider-invocation.md lines 8-15
-     */
-    const previousSettingsOverride = this.activeSettingsOverride;
-    this.activeSettingsOverride = normalized.settings;
-    this.authResolver.setSettingsService(normalized.settings);
+    const previousRuntimeContext = peekActiveProviderRuntimeContext();
 
-    const previousContext = peekActiveProviderRuntimeContext();
-    const configBeforeCall = this.globalConfig;
+    let preparedIteratorPromise: Promise<void> | null = null;
+    let normalizedOptions: NormalizedGenerateChatOptions | undefined;
+    let underlyingIterator: AsyncIterableIterator<IContent> | undefined;
 
-    const needsContextSwap =
-      !previousContext ||
-      previousContext.settingsService !== normalized.settings ||
-      (normalized.config && previousContext.config !== normalized.config);
-
-    const runtimeContext: ProviderRuntimeContext = normalized.runtime
-      ? {
-          ...normalized.runtime,
-          settingsService: normalized.settings,
-          config: normalized.config ?? normalized.runtime.config,
-        }
-      : {
-          settingsService: normalized.settings,
-          config: normalized.config ?? previousContext?.config,
-          runtimeId:
-            previousContext?.runtimeId ?? 'base-provider.normalized-call',
-          metadata: {
-            ...(previousContext?.metadata ?? {}),
-            source: 'BaseProvider.generateChatCompletion',
-          },
-        };
-
-    const invoke = async function* (
-      this: BaseProvider,
-    ): AsyncIterableIterator<IContent> {
-      if (needsContextSwap) {
-        setActiveProviderRuntimeContext(runtimeContext);
+    const prepareIterator = async (): Promise<void> => {
+      if (!preparedIteratorPromise) {
+        preparedIteratorPromise = (async () => {
+          normalizedOptions = await normalizedPromise;
+          underlyingIterator = this.invokeWithNormalizedOptions(
+            normalizedOptions,
+            previousRuntimeContext ?? null,
+          );
+        })();
       }
-
-      if (normalized.config) {
-        this.globalConfig = normalized.config;
-      }
-
-      try {
-        const iterator = this.generateChatCompletionWithOptions(normalized);
-        for await (const chunk of iterator) {
-          yield chunk;
-        }
-      } finally {
-        this.globalConfig = configBeforeCall;
-        this.activeSettingsOverride = previousSettingsOverride;
-        const resolverReset =
-          previousSettingsOverride ?? this.baseSettingsService;
-        this.authResolver.setSettingsService(resolverReset);
-        if (needsContextSwap) {
-          setActiveProviderRuntimeContext(previousContext ?? null);
-        }
-      }
+      await preparedIteratorPromise;
     };
 
-    return invoke.call(this);
+    const withContext = <T>(operation: () => Promise<T>): Promise<T> => {
+      if (!normalizedOptions) {
+        throw new Error('Normalized options are not prepared');
+      }
+      return this.activeCallContext.run(normalizedOptions, operation);
+    };
+
+    const adapter: AsyncIterableIterator<IContent> = {
+      next: async (...args) => {
+        await prepareIterator();
+        const iterator = underlyingIterator;
+        if (!iterator) {
+          throw new Error('Provider iterator not initialised');
+        }
+        return withContext(() => iterator.next(...args));
+      },
+      return: async (value?: unknown) => {
+        await prepareIterator();
+        const iterator = underlyingIterator;
+        if (!iterator) {
+          throw new Error('Provider iterator not initialised');
+        }
+        if (iterator.return) {
+          return withContext(() => iterator.return!(value));
+        }
+        return { done: true, value: undefined } as IteratorResult<IContent>;
+      },
+      throw: async (error?: unknown) => {
+        await prepareIterator();
+        const iterator = underlyingIterator;
+        if (!iterator) {
+          throw new Error('Provider iterator not initialised');
+        }
+        if (iterator.throw) {
+          return withContext(() => iterator.throw!(error));
+        }
+        throw error;
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+    };
+
+    return adapter;
   }
 
   /**
@@ -463,14 +499,79 @@ export abstract class BaseProvider implements IProvider {
   ): AsyncIterableIterator<IContent>;
 
   /**
-   * @plan PLAN-20250218-STATELESSPROVIDER.P05
-   * @requirement REQ-SP-001
-   * @pseudocode provider-invocation.md lines 8-15
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 3-5
    */
-  private normalizeGenerateChatOptions(
+  private invokeWithNormalizedOptions(
+    normalized: NormalizedGenerateChatOptions,
+    previousContext: ProviderRuntimeContext | null,
+  ): AsyncIterableIterator<IContent> {
+    const needsContextSwap =
+      !previousContext ||
+      previousContext.settingsService !== normalized.settings ||
+      (normalized.config && previousContext.config !== normalized.config);
+
+    const mergedMetadata: Record<string, unknown> = normalized.runtime
+      ? {
+          ...(normalized.runtime.metadata ?? {}),
+          ...normalized.metadata,
+        }
+      : {
+          ...(previousContext?.metadata ?? {}),
+          ...normalized.metadata,
+        };
+
+    if (!('source' in mergedMetadata)) {
+      mergedMetadata.source = 'BaseProvider.generateChatCompletion';
+    }
+
+    const runtimeContext: ProviderRuntimeContext = normalized.runtime
+      ? {
+          ...normalized.runtime,
+          settingsService: normalized.settings,
+          config: normalized.config ?? normalized.runtime.config,
+          metadata: mergedMetadata,
+        }
+      : {
+          settingsService: normalized.settings,
+          config: normalized.config ?? previousContext?.config,
+          runtimeId:
+            previousContext?.runtimeId ?? 'base-provider.normalized-call',
+          metadata: mergedMetadata,
+        };
+
+    return async function* (
+      this: BaseProvider,
+    ): AsyncIterableIterator<IContent> {
+      if (needsContextSwap) {
+        setActiveProviderRuntimeContext(runtimeContext);
+      }
+
+      try {
+        const iterator = this.generateChatCompletionWithOptions(normalized);
+        for await (const chunk of iterator) {
+          yield chunk;
+        }
+      } finally {
+        if (needsContextSwap) {
+          setActiveProviderRuntimeContext(previousContext ?? null);
+        }
+        normalized.resolved.authToken = '';
+        this.authResolver.setSettingsService(this.defaultSettingsService);
+      }
+    }.call(this);
+  }
+
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 1-3
+   */
+  private async normalizeGenerateChatOptions(
     contentsOrOptions: IContent[] | GenerateChatOptions,
     maybeTools?: ProviderToolset,
-  ): NormalizedGenerateChatOptions {
+  ): Promise<NormalizedGenerateChatOptions> {
     const providedOptions: GenerateChatOptions = Array.isArray(
       contentsOrOptions,
     )
@@ -485,10 +586,10 @@ export abstract class BaseProvider implements IProvider {
     const settings =
       providedOptions.settings ??
       runtimeCandidate?.settingsService ??
-      this.baseSettingsService;
+      this.defaultSettingsService;
 
     const config =
-      providedOptions.config ?? runtimeCandidate?.config ?? this.globalConfig;
+      providedOptions.config ?? runtimeCandidate?.config ?? this.defaultConfig;
 
     const runtime: ProviderRuntimeContext | undefined = providedOptions.runtime
       ? {
@@ -504,6 +605,18 @@ export abstract class BaseProvider implements IProvider {
           }
         : undefined;
 
+    const metadata: Record<string, unknown> = {
+      ...(runtimeCandidate?.metadata ?? {}),
+      ...(providedOptions.metadata ?? {}),
+    };
+
+    const resolvedModel = this.computeModel(settings);
+    const resolvedBaseURL = this.computeBaseURL(settings);
+    const resolvedAuth =
+      (await this.authResolver.resolveAuthentication({
+        settingsService: settings,
+      })) ?? '';
+
     return {
       ...providedOptions,
       contents: providedOptions.contents,
@@ -511,6 +624,12 @@ export abstract class BaseProvider implements IProvider {
       settings,
       config,
       runtime,
+      metadata,
+      resolved: {
+        model: resolvedModel,
+        baseURL: resolvedBaseURL,
+        authToken: resolvedAuth,
+      },
     };
   }
 
@@ -542,7 +661,7 @@ export abstract class BaseProvider implements IProvider {
       typeof maybeConfig.getUserMemory === 'function' &&
       typeof maybeConfig.getModel === 'function'
     ) {
-      this.globalConfig = config as Config;
+      this.defaultConfig = config as Config;
       return;
     }
 

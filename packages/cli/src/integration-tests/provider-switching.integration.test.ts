@@ -175,10 +175,12 @@ describe('Runtime Provider Switching Integration', () => {
 function createMockProvider(name: string): IProvider & {
   apiKey?: string;
   baseUrl?: string;
+  clearState?: () => void;
 } {
   const provider: IProvider & {
     apiKey?: string;
     baseUrl?: string;
+    clearState?: () => void;
   } = {
     name,
     async getModels() {

@@ -1,6 +1,8 @@
 # LLxprt Code Architecture Overview
 
-This document provides a high-level overview of the LLxprt Code's architecture.
+<!-- @plan:PLAN-20251018-STATELESSPROVIDER2.P20 @requirement:REQ-SP2-005 -->
+
+This document explains how LLxprt Code's stateless provider runtime, authentication, and tooling layers fit together after the PLAN-20251018-STATELESSPROVIDER2 rollout.
 
 ## Core components
 
@@ -97,9 +99,20 @@ flowchart LR
 Each runtime context exposes:
 
 - `settingsService`: a scoped `SettingsService` instance with per-runtime overrides.
-- `metadata`: runtime identifiers (CLI session id, subagent name, automation worker id).
+- `metadata`: runtime identifiers (CLI session id, subagent name, automation worker id) plus runtime-auth scope diagnostics.
 - `telemetry`: a channel used by providers and tooling to emit runtime-scoped events.
 - `logger`: an adapter that captures provider-level diagnostics without mixing logs across contexts.
+
+### Runtime-scoped Authentication
+
+Runtime isolation now extends to provider authentication. The auth precedence resolver (`packages/core/src/auth/precedence.ts`) derives a `runtimeAuthScopeId` from each context's `runtimeId`, then caches credentials per `{runtimeAuthScopeId, providerId, profileId}` tuple. Scope metadata is attached to `ProviderRuntimeContext.metadata.runtimeAuthScope`, giving downstream tools enough data to emit audits or flush tokens.
+
+- **Credential lifecycle** – When CLI helpers or providers request credentials, the resolver first checks the scoped cache. Cache misses invoke provider-specific authenticators (API keys, OAuth, device flow) annotated with runtime metadata so audit logs can track which actor minted a token.
+- **Automatic revocation** – `SettingsService` event listeners monitor provider switches, profile swaps, and settings clears. Matching scoped tokens are invalidated immediately, ensuring credentials from subagents or temporary automations do not leak back to the CLI.
+- **Nested runtimes** – `activateIsolatedRuntimeContext` in `runtimeSettings.ts` calls `enterRuntimeScope` to push a child runtime. Nested scopes inherit metadata, but each receives a distinct `runtimeAuthScopeId` so revocation remains precise.
+- **OAuth managers** – The CLI registers an `OAuthManager` per runtime. Providers fetch tokens via the manager, which stores refresh state inside the runtime registry rather than global singletons.
+
+For a full walkthrough of the authentication handshake see `docs/auth/runtime-scoped-auth.stub.md`; the migration guide below summarises integration requirements.
 
 ### Multi-context Orchestration
 
@@ -126,9 +139,9 @@ await withProviderRuntime(async () => {
 });
 ```
 
-The snippet above demonstrates two contexts operating concurrently: the primary CLI context and a reviewer subagent. Each context captures its own provider credentials, tool settings, and telemetry buffers.
+The snippet above demonstrates two contexts operating concurrently: the primary CLI context and a reviewer subagent. Each context captures its own provider credentials, tool settings, and telemetry buffers, and the runtime-scoped auth cache keeps those credentials segregated.
 
-> See the [Stateless Provider migration guide](./migration/stateless-provider.md) for integration details and upgrade guidance.
+> See the [Stateless Provider v2 migration guide](./migration/stateless-provider-v2.md) for integration details and upgrade guidance.
 
 ## Ephemeral Settings System
 

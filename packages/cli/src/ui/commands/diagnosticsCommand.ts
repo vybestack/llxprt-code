@@ -13,7 +13,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import { getRuntimeDiagnosticsSnapshot } from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import process from 'node:process';
 
 function maskSensitive(value: string): string {
@@ -44,7 +44,7 @@ export const diagnosticsCommand: SlashCommand = {
         };
       }
 
-      const snapshot = getRuntimeDiagnosticsSnapshot();
+      const snapshot = getRuntimeApi().getRuntimeDiagnosticsSnapshot();
       const diagnostics: string[] = ['# LLxprt Diagnostics\n'];
 
       diagnostics.push('## Provider Information');

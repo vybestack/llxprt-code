@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
 import type { Config } from '../config/config.js';
 import type { IProvider } from '../providers/IProvider.js';
 import type { ProviderManager } from '../providers/ProviderManager.js';
@@ -62,6 +61,16 @@ export function createProviderWithRuntime<P>(
   }
 }
 
+function requireVi() {
+  const viGlobal = (globalThis as { vi?: (typeof import('vitest'))['vi'] }).vi;
+  if (!viGlobal) {
+    throw new Error(
+      'Vitest APIs unavailable. core test-utils runtime helpers must run within Vitest.',
+    );
+  }
+  return viGlobal;
+}
+
 interface GeminiChatConfigShape {
   getSessionId: () => string;
   getTelemetryLogPromptsEnabled: () => boolean;
@@ -71,15 +80,15 @@ interface GeminiChatConfigShape {
     authType?: string;
     model?: string;
   };
-  getModel: ReturnType<typeof vi.fn>;
-  setModel: ReturnType<typeof vi.fn>;
-  getQuotaErrorOccurred: ReturnType<typeof vi.fn>;
-  setQuotaErrorOccurred: ReturnType<typeof vi.fn>;
+  getModel: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  setModel: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  getQuotaErrorOccurred: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  setQuotaErrorOccurred: ReturnType<ReturnType<typeof requireVi>['fn']>;
   flashFallbackHandler?: unknown;
-  getEphemeralSettings: ReturnType<typeof vi.fn>;
-  getEphemeralSetting: ReturnType<typeof vi.fn>;
-  getProviderManager: ReturnType<typeof vi.fn>;
-  getSettingsService: ReturnType<typeof vi.fn>;
+  getEphemeralSettings: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  getEphemeralSetting: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  getProviderManager: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  getSettingsService: ReturnType<ReturnType<typeof requireVi>['fn']>;
 }
 
 interface GeminiChatRuntimeOptions {
@@ -100,6 +109,7 @@ interface GeminiChatRuntimeResult {
 }
 
 function createDefaultProvider(): IProvider {
+  const vi = requireVi();
   return {
     name: 'test-provider',
     isDefault: true,
@@ -121,6 +131,7 @@ function createDefaultProvider(): IProvider {
 export function createGeminiChatRuntime(
   options: GeminiChatRuntimeOptions = {},
 ): GeminiChatRuntimeResult {
+  const vi = requireVi();
   const settingsService = options.settingsService ?? new SettingsService();
   const runtime = createProviderRuntimeContext({
     settingsService,

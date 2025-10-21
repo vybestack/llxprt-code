@@ -240,6 +240,9 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 3-4
    * @plan PLAN-20250218-STATELESSPROVIDER.P04
    * @requirement REQ-SP-001
    * @pseudocode base-provider.md lines 7-15
@@ -768,14 +771,23 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   clearState?(): void {
-    this.wrapped.clearState?.();
+    if ('clearState' in this.wrapped) {
+      const candidate = (this.wrapped as { clearState?: () => void })
+        .clearState;
+      candidate?.();
+    }
     // Reset conversation logging state
     this.conversationId = this.generateConversationId();
     this.turnNumber = 0;
   }
 
   setConfig?(config: unknown): void {
-    this.wrapped.setConfig?.(config);
+    if ('setConfig' in this.wrapped) {
+      const candidate = (
+        this.wrapped as { setConfig?: (value: unknown) => void }
+      ).setConfig;
+      candidate?.(config);
+    }
   }
 
   getServerTools(): string[] {

@@ -19,13 +19,17 @@ vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
 }));
 
-vi.mock('../../runtime/runtimeSettings.js', () => ({
+const runtimeApi = {
   getActiveProviderStatus: vi.fn().mockReturnValue({
     providerName: 'test-provider',
     modelName: 'test-model',
     displayLabel: 'test-provider:test-model',
   }),
   getEphemeralSetting: vi.fn().mockReturnValue(''),
+};
+
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: () => runtimeApi,
 }));
 
 describe('aboutCommand', () => {
@@ -37,6 +41,13 @@ describe('aboutCommand', () => {
   beforeEach(() => {
     // Set up mock file system
     mockFileSystem = new MockFileSystem();
+
+    runtimeApi.getActiveProviderStatus.mockReturnValue({
+      providerName: 'test-provider',
+      modelName: 'test-model',
+      displayLabel: 'test-provider:test-model',
+    });
+    runtimeApi.getEphemeralSetting.mockReturnValue('');
 
     // Set up mock settings file with controlled content
     mockFileSystem.setMockFile(

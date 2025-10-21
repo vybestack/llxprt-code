@@ -10,11 +10,8 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import {
-  getActiveToolFormatState,
-  setActiveToolFormatOverride,
-  type ToolFormatOverrideLiteral,
-} from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { ToolFormatOverrideLiteral } from '../../runtime/runtimeSettings.js';
 
 const STRUCTURED_FORMATS = ['openai', 'anthropic', 'deepseek', 'qwen', 'gemma'];
 const TEXT_FORMATS = ['hermes', 'xml', 'llama'];
@@ -32,7 +29,8 @@ export const toolformatCommand: SlashCommand = {
     const formatName = args?.trim();
     let state;
     try {
-      state = await getActiveToolFormatState();
+      const runtime = getRuntimeApi();
+      state = await runtime.getActiveToolFormatState();
     } catch (error) {
       return {
         type: 'message',
@@ -51,7 +49,8 @@ export const toolformatCommand: SlashCommand = {
     }
 
     if (formatName === 'auto') {
-      const updated = await setActiveToolFormatOverride(null);
+      const runtime = getRuntimeApi();
+      const updated = await runtime.setActiveToolFormatOverride(null);
       return {
         type: 'message',
         messageType: 'info',
@@ -69,7 +68,8 @@ export const toolformatCommand: SlashCommand = {
 
     try {
       const normalized = formatName as ToolFormatOverrideLiteral;
-      const updated = await setActiveToolFormatOverride(normalized);
+      const runtime = getRuntimeApi();
+      const updated = await runtime.setActiveToolFormatOverride(normalized);
       return {
         type: 'message',
         messageType: 'info',

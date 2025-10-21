@@ -13,11 +13,7 @@ import {
 import { promises as fs } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
-import {
-  updateActiveProviderApiKey,
-  getActiveProviderStatus,
-  setEphemeralSetting,
-} from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const keyfileCommand: SlashCommand = {
   name: 'keyfile',
@@ -28,7 +24,8 @@ export const keyfileCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn> => {
     const filePath = args?.trim();
-    const status = getActiveProviderStatus();
+    const runtime = getRuntimeApi();
+    const status = runtime.getActiveProviderStatus();
     const providerName = status.providerName;
 
     if (!providerName) {
@@ -81,8 +78,8 @@ export const keyfileCommand: SlashCommand = {
       }
 
       if (filePath === 'none') {
-        await updateActiveProviderApiKey(null);
-        setEphemeralSetting('auth-keyfile', undefined);
+        await runtime.updateActiveProviderApiKey(null);
+        runtime.setEphemeralSetting('auth-keyfile', undefined);
         context.services.settings.removeProviderKeyfile?.(providerName);
 
         return {
@@ -103,8 +100,8 @@ export const keyfileCommand: SlashCommand = {
         };
       }
 
-      const result = await updateActiveProviderApiKey(apiKey);
-      setEphemeralSetting('auth-keyfile', resolvedPath);
+      const result = await runtime.updateActiveProviderApiKey(apiKey);
+      runtime.setEphemeralSetting('auth-keyfile', resolvedPath);
       context.services.settings.setProviderKeyfile?.(
         providerName,
         resolvedPath,

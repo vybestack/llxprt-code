@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.1] - 2025-10-20
+
+### Added
+
+- Runtime-scoped authentication guide and migration article (`docs/migration/stateless-provider-v2.md`) covering PLAN-20251018-STATELESSPROVIDER2 upgrades.
+- Q4 2025 release notes outlining provider runtime changes and CLI scope helpers.
+
+### Changed
+
+- Architecture, settings, CLI runtime helper, and provider runtime context documentation now describe scoped auth caches, nested runtime orchestration, and OAuth manager registration.
+- `CHANGELOG.md` entry summarises stateless provider v2 deliverables and migration expectations.
+
+### Migration
+
+- Follow the [Stateless Provider v2 migration guide](docs/migration/stateless-provider-v2.md) alongside the earlier [Stateless Provider migration guide](docs/migration/stateless-provider.md) to adopt runtime-scoped auth.
+
 ## [0.5.0] - 2025-10-18
 
 ### Added

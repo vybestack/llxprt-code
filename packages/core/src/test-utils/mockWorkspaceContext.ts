@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
+function requireVi() {
+  const viGlobal = (globalThis as { vi?: (typeof import('vitest'))['vi'] }).vi;
+  if (!viGlobal) {
+    throw new Error(
+      'Vitest APIs unavailable. createMockWorkspaceContext is only supported inside Vitest.',
+    );
+  }
+  return viGlobal;
+}
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 
 /**
@@ -17,6 +25,7 @@ export function createMockWorkspaceContext(
   rootDir: string,
   additionalDirs: string[] = [],
 ): WorkspaceContext {
+  const vi = requireVi();
   const allDirs = [rootDir, ...additionalDirs];
 
   const mockWorkspaceContext = {

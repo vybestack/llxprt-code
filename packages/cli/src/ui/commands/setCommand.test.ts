@@ -9,23 +9,17 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import type { CommandContext } from './types.js';
 import { setCommand } from './setCommand.js';
 
-vi.mock('../../runtime/runtimeSettings.js', () => {
-  const getEphemeralSettings = vi.fn(() => ({}));
-  return {
-    getActiveModelParams: vi.fn(() => ({})),
-    getEphemeralSettings,
-    setEphemeralSetting: vi.fn(),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-  };
-});
+const mockRuntime = {
+  getActiveModelParams: vi.fn(() => ({})),
+  getEphemeralSettings: vi.fn(() => ({})),
+  setEphemeralSetting: vi.fn(),
+  setActiveModelParam: vi.fn(),
+  clearActiveModelParam: vi.fn(),
+};
 
-import {
-  clearActiveModelParam,
-  getEphemeralSettings,
-  setActiveModelParam,
-  setEphemeralSetting,
-} from '../../runtime/runtimeSettings.js';
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: () => mockRuntime,
+}));
 
 describe('setCommand runtime integration', () => {
   let context: CommandContext;
@@ -49,7 +43,10 @@ describe('setCommand runtime integration', () => {
   it('stores numeric ephemeral settings via runtime helper', async () => {
     const result = await setCommand.action!(context, 'context-limit 32000');
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith('context-limit', 32000);
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'context-limit',
+      32000,
+    );
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
@@ -63,7 +60,7 @@ describe('setCommand runtime integration', () => {
       'custom-headers {"Authorization":"Bearer token","X-Test":"value"}';
     const result = await setCommand.action!(context, payload);
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith(
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
       'custom-headers',
       expect.objectContaining({
         Authorization: 'Bearer token',
@@ -95,7 +92,7 @@ describe('setCommand runtime integration', () => {
       'compression-threshold 1.5',
     );
 
-    expect(setEphemeralSetting).not.toHaveBeenCalled();
+    expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
     expect(result).toEqual({
       type: 'message',
       messageType: 'error',
@@ -110,7 +107,10 @@ describe('setCommand runtime integration', () => {
       'modelparam temperature 0.7',
     );
 
-    expect(setActiveModelParam).toHaveBeenCalledWith('temperature', 0.7);
+    expect(mockRuntime.setActiveModelParam).toHaveBeenCalledWith(
+      'temperature',
+      0.7,
+    );
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
@@ -127,11 +127,11 @@ describe('setCommand runtime integration', () => {
       content:
         'Usage: /set modelparam <key> <value>\nExample: /set modelparam temperature 0.7',
     });
-    expect(setActiveModelParam).not.toHaveBeenCalled();
+    expect(mockRuntime.setActiveModelParam).not.toHaveBeenCalled();
   });
 
   it('surfaces runtime errors from model parameter helper', async () => {
-    vi.mocked(setActiveModelParam).mockImplementationOnce(() => {
+    mockRuntime.setActiveModelParam.mockImplementationOnce(() => {
       throw new Error('Provider error');
     });
 
@@ -150,7 +150,10 @@ describe('setCommand runtime integration', () => {
   it('clears ephemeral settings via unset', async () => {
     const result = await setCommand.action!(context, 'unset base-url');
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith('base-url', undefined);
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'base-url',
+      undefined,
+    );
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
@@ -164,7 +167,9 @@ describe('setCommand runtime integration', () => {
       'unset modelparam temperature',
     );
 
-    expect(clearActiveModelParam).toHaveBeenCalledWith('temperature');
+    expect(mockRuntime.clearActiveModelParam).toHaveBeenCalledWith(
+      'temperature',
+    );
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
@@ -181,11 +186,11 @@ describe('setCommand runtime integration', () => {
       content:
         'Usage: /set unset modelparam <key>\nExample: /set unset modelparam temperature',
     });
-    expect(clearActiveModelParam).not.toHaveBeenCalled();
+    expect(mockRuntime.clearActiveModelParam).not.toHaveBeenCalled();
   });
 
   it('handles nested custom header removal when header exists', async () => {
-    vi.mocked(getEphemeralSettings).mockReturnValueOnce({
+    mockRuntime.getEphemeralSettings.mockReturnValueOnce({
       'custom-headers': {
         Authorization: 'Bearer token',
         'X-Test': 'value',
@@ -197,9 +202,12 @@ describe('setCommand runtime integration', () => {
       'unset custom-headers Authorization',
     );
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith('custom-headers', {
-      'X-Test': 'value',
-    });
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'custom-headers',
+      {
+        'X-Test': 'value',
+      },
+    );
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
@@ -208,7 +216,7 @@ describe('setCommand runtime integration', () => {
   });
 
   it('returns informational message when nested custom header missing', async () => {
-    vi.mocked(getEphemeralSettings).mockReturnValueOnce({
+    mockRuntime.getEphemeralSettings.mockReturnValueOnce({
       'custom-headers': {},
     });
 
@@ -217,7 +225,7 @@ describe('setCommand runtime integration', () => {
       'unset custom-headers Authorization',
     );
 
-    expect(setEphemeralSetting).not.toHaveBeenCalled();
+    expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',

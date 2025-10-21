@@ -11,7 +11,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import { setActiveModel } from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const modelCommand: SlashCommand = {
   name: 'model',
@@ -33,7 +33,8 @@ export const modelCommand: SlashCommand = {
 
     // Switch model in provider
     try {
-      const result = await setActiveModel(modelName);
+      const runtime = getRuntimeApi();
+      const result = await runtime.setActiveModel(modelName);
 
       return {
         type: 'message',

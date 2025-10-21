@@ -60,6 +60,15 @@ export * from './utils/partUtils.js';
 export * from './utils/ide-trust.js';
 
 // Export auth system
+export {
+  AuthPrecedenceResolver,
+  type AuthPrecedenceConfig,
+  type OAuthManager,
+  flushRuntimeAuthScope,
+  type RuntimeAuthScopeFlushResult,
+  type RuntimeAuthScopeCacheEntrySummary,
+  type OAuthTokenRequestMetadata,
+} from './auth/precedence.js';
 export * from './auth/token-store.js';
 export * from './auth/types.js';
 export * from './auth/qwen-device-flow.js';
@@ -243,8 +252,7 @@ export { Storage } from './config/storage.js';
 
 // Export models
 export * from './config/models.js';
-
-// Export test utils
+// Export test utils (note: vi globals accessed lazily inside helpers)
 export * from './test-utils/index.js';
 
 // --- Subagent Feature: PLAN-20250117-SUBAGENTCONFIG ---

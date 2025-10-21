@@ -20,6 +20,7 @@
  */
 
 import OpenAI from 'openai';
+import { createHash } from 'node:crypto';
 import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
@@ -40,17 +41,37 @@ import {
 } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { IModel } from '../IModel.js';
-import { IProvider, ProviderToolset } from '../IProvider.js';
+import { IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { retryWithBackoff } from '../../utils/retry.js';
+
+const runtimeClientCache: Map<string, OpenAI> = new Map();
+const runtimeClientKeyIndex: Map<string, Set<string>> = new Map();
+const defaultRuntimeKey = 'openai.runtime.unscoped';
+
+function rememberClientKey(runtimeKey: string, cacheKey: string): void {
+  let keys = runtimeClientKeyIndex.get(runtimeKey);
+  if (!keys) {
+    keys = new Set();
+    runtimeClientKeyIndex.set(runtimeKey, keys);
+  }
+  keys.add(cacheKey);
+}
+
+function forgetRuntimeKeys(runtimeKey: string): void {
+  const keys = runtimeClientKeyIndex.get(runtimeKey);
+  if (!keys) {
+    return;
+  }
+  for (const key of keys) {
+    runtimeClientCache.delete(key);
+  }
+  runtimeClientKeyIndex.delete(runtimeKey);
+}
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   override readonly name: string = 'openai';
   private logger: DebugLogger;
-  private toolFormatter: ToolFormatter;
-
-  private _cachedClient?: OpenAI;
-  private _cachedClientKey?: string;
 
   constructor(
     apiKey: string | undefined,
@@ -85,9 +106,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       },
       config,
     );
-
-    this.toolFormatter = new ToolFormatter();
-    // new DebugLogger('llxprt:core:toolformatter'), // TODO: Fix ToolFormatter constructor
 
     // Setup debug logger
     this.logger = new DebugLogger('llxprt:provider:openai');
@@ -162,57 +180,120 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Get or create OpenAI client instance
-   * Will use the API key from resolved auth
-   * @returns OpenAI client instance
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
+   * @plan:PLAN-20251018-STATELESSPROVIDER2.P09
+   * @requirement REQ-SP2-001
+   * @pseudocode openai-responses-stateless.md lines 1-3
    */
-  private async getClient(): Promise<OpenAI> {
-    const resolvedKey = await this.getAuthToken();
-    // Use the unified getBaseURL() method from BaseProvider
-    const baseURL = this.getBaseURL();
-    const clientKey = `${baseURL}-${resolvedKey}`;
-
-    // Clear cache if we have no valid auth (e.g., after logout)
-    if (!resolvedKey && this._cachedClient) {
-      this._cachedClient = undefined;
-      this._cachedClientKey = undefined;
+  private resolveRuntimeKey(options: NormalizedGenerateChatOptions): string {
+    if (options.runtime?.runtimeId) {
+      return options.runtime.runtimeId;
     }
 
-    // Return cached client if available and auth hasn't changed
-    if (this._cachedClient && this._cachedClientKey === clientKey) {
-      return this._cachedClient;
+    const metadataRuntimeId = options.metadata?.runtimeId;
+    if (typeof metadataRuntimeId === 'string' && metadataRuntimeId.trim()) {
+      return metadataRuntimeId.trim();
     }
 
-    // Create HTTP agents with socket configuration (if configured)
-    const agents = this.createHttpAgents();
+    const callId = options.settings.get('call-id');
+    if (typeof callId === 'string' && callId.trim()) {
+      return `call:${callId.trim()}`;
+    }
 
-    // Build client options - OpenAI SDK accepts httpAgent/httpsAgent at runtime
-    // even though they're not in the TypeScript definitions
-    const baseOptions = {
-      apiKey: resolvedKey || '',
-      baseURL,
-      // CRITICAL: Disable OpenAI SDK's built-in retries so our retry logic can handle them
-      // This allows us to track throttle wait times properly
+    return defaultRuntimeKey;
+  }
+
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
+   * @plan:PLAN-20251018-STATELESSPROVIDER2.P09
+   * @requirement REQ-SP2-001
+   * @pseudocode openai-responses-stateless.md lines 2-4
+   */
+  private normalizeBaseURL(baseURL?: string): string {
+    if (!baseURL || baseURL.trim() === '') {
+      return 'default-endpoint';
+    }
+    return baseURL.replace(/\/+$/, '');
+  }
+
+  private buildClientCacheKey(
+    runtimeKey: string,
+    baseURL: string | undefined,
+    authToken: string,
+  ): string {
+    const normalizedBase = this.normalizeBaseURL(baseURL);
+    const hashedToken =
+      authToken && authToken.length > 0
+        ? createHash('sha256').update(authToken).digest('hex')
+        : 'no-auth';
+    return `${runtimeKey}::${normalizedBase}::${hashedToken}`;
+  }
+
+  /**
+   * Tool formatter instances cannot be shared between stateless calls,
+   * so construct a fresh one for every invocation.
+   *
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
+   * @plan:PLAN-20251018-STATELESSPROVIDER2.P09
+   * @requirement REQ-SP2-001
+   * @pseudocode openai-responses-stateless.md lines 5-6
+   */
+  private createToolFormatter(): ToolFormatter {
+    return new ToolFormatter();
+  }
+
+  private instantiateClient(
+    authToken: string,
+    baseURL?: string,
+    agents?: { httpAgent: http.Agent; httpsAgent: https.Agent },
+  ): OpenAI {
+    const clientOptions: Record<string, unknown> = {
+      apiKey: authToken || '',
       maxRetries: 0,
     };
 
-    // Add socket configuration if available
-    const clientOptions = agents
-      ? {
-          ...baseOptions,
-          httpAgent: agents.httpAgent,
-          httpsAgent: agents.httpsAgent,
-        }
-      : baseOptions;
+    if (baseURL && baseURL.trim() !== '') {
+      clientOptions.baseURL = baseURL;
+    }
 
-    // Create new client with current auth and optional socket configuration
-    // Cast to unknown then to the expected type to bypass TypeScript's structural checking
-    this._cachedClient = new OpenAI(
+    if (agents) {
+      clientOptions.httpAgent = agents.httpAgent;
+      clientOptions.httpsAgent = agents.httpsAgent;
+    }
+
+    return new OpenAI(
       clientOptions as unknown as ConstructorParameters<typeof OpenAI>[0],
     );
-    this._cachedClientKey = clientKey;
+  }
 
-    return this._cachedClient;
+  /**
+   * Resolves or creates an OpenAI client scoped to the active runtime metadata.
+   *
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
+   * @plan:PLAN-20251018-STATELESSPROVIDER2.P09
+   * @requirement REQ-SP2-001
+   * @pseudocode openai-responses-stateless.md lines 1-4
+   */
+  private async getClientForCall(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<OpenAI> {
+    const runtimeKey = this.resolveRuntimeKey(options);
+    const authToken = options.resolved.authToken;
+    const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
+
+    const cacheKey = this.buildClientCacheKey(runtimeKey, baseURL, authToken);
+    const cached = runtimeClientCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const agents = this.createHttpAgents();
+    const client = this.instantiateClient(authToken, baseURL, agents);
+
+    runtimeClientCache.set(cacheKey, client);
+    rememberClientKey(runtimeKey, cacheKey);
+
+    return client;
   }
 
   /**
@@ -246,7 +327,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     try {
       // Always try to fetch models, regardless of auth status
       // Local endpoints often work without authentication
-      const client = await this.getClient();
+      const authToken = await this.getAuthToken();
+      const baseURL = this.getBaseURL();
+      const agents = this.createHttpAgents();
+      const client = this.instantiateClient(authToken, baseURL, agents);
       const response = await client.models.list();
       const models: IModel[] = [];
 
@@ -299,13 +383,21 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Clear the cached OpenAI client
-   * Should be called when authentication state changes (e.g., after logout)
+   * Clears cached clients either globally or for a specific runtime scope.
+   *
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
+   * @plan:PLAN-20251018-STATELESSPROVIDER2.P09
+   * @requirement REQ-SP2-001
+   * @pseudocode openai-responses-stateless.md lines 3-4
    */
   // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
-  public clearClientCache(): void {
-    this._cachedClient = undefined;
-    this._cachedClientKey = undefined;
+  public clearClientCache(runtimeKey?: string): void {
+    if (runtimeKey && runtimeKey.trim()) {
+      forgetRuntimeKeys(runtimeKey.trim());
+      return;
+    }
+    runtimeClientCache.clear();
+    runtimeClientKeyIndex.clear();
   }
 
   /**
@@ -347,19 +439,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       forceQwenOAuth?: boolean;
     };
     if (this.name === 'qwen' && config?.forceQwenOAuth) {
-      // Check cache first (short-lived cache to avoid repeated OAuth calls)
-      if (
-        this.cachedAuthToken &&
-        this.authCacheTimestamp &&
-        Date.now() - this.authCacheTimestamp < this.AUTH_CACHE_DURATION
-      ) {
-        return this.cachedAuthToken;
-      }
-
-      // Clear stale cache
-      this.cachedAuthToken = undefined;
-      this.authCacheTimestamp = undefined;
-
       // For qwen, skip directly to OAuth without checking SettingsService
       // Use 'qwen' as the provider name even if baseProviderConfig.oauthProvider is not set
       const oauthProviderName = this.baseProviderConfig.oauthProvider || 'qwen';
@@ -370,9 +449,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               oauthProviderName,
             );
           if (token) {
-            // Cache the token briefly
-            this.cachedAuthToken = token;
-            this.authCacheTimestamp = Date.now();
             return token;
           }
         } catch (error) {
@@ -477,7 +553,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    const { contents, tools } = options;
+    const callFormatter = this.createToolFormatter();
+    const client = await this.getClientForCall(options);
+    const runtimeKey = this.resolveRuntimeKey(options);
+    const { tools } = options;
 
     // Debug log what we receive
     if (this.logger.enabled) {
@@ -490,17 +569,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           isArray: Array.isArray(tools),
           firstToolName: tools?.[0]?.functionDeclarations?.[0]?.name,
           toolsStructure: tools ? 'available' : 'undefined',
+          runtimeKey,
         },
       );
     }
 
-    // Pass tools directly in Gemini format - they'll be converted in generateChatCompletionImpl
+    // Pass tools directly in Gemini format - they'll be converted per call
     const generator = this.generateChatCompletionImpl(
-      contents,
-      tools,
-      undefined,
-      undefined,
-      undefined,
+      options,
+      callFormatter,
+      client,
     );
 
     for await (const item of generator) {
@@ -589,14 +667,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Internal implementation for chat completion
    */
   private async *generateChatCompletionImpl(
-    contents: IContent[],
-    tools?: ProviderToolset,
-    maxTokens?: number,
-    abortSignal?: AbortSignal,
-    modelName?: string,
+    options: NormalizedGenerateChatOptions,
+    toolFormatter: ToolFormatter,
+    client: OpenAI,
   ): AsyncGenerator<IContent, void, unknown> {
-    // Always look up model from SettingsService
-    const model = modelName || this.getModel() || this.getDefaultModel();
+    const { contents, tools, metadata } = options;
+    const model = options.resolved.model || this.getDefaultModel();
+    const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
+    const ephemeralSettings =
+      this.providerConfig?.getEphemeralSettings?.() || {};
 
     // Convert IContent to OpenAI messages format
     const messages = this.convertToOpenAIMessages(contents);
@@ -616,7 +695,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     );
 
     // Convert Gemini format tools to the detected format
-    let formattedTools = this.toolFormatter.convertGeminiToFormat(
+    let formattedTools = toolFormatter.convertGeminiToFormat(
       tools,
       detectedFormat,
     ) as
@@ -663,8 +742,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Get streaming setting from ephemeral settings (default: enabled)
-    const streamingSetting =
-      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
+    const streamingSetting = ephemeralSettings['streaming'];
     let streamingEnabled = streamingSetting !== 'disabled';
 
     // WORKAROUND: Disable streaming for Cerebras/Qwen when tools are present
@@ -699,50 +777,47 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       ...messages,
     ];
 
+    const maxTokens =
+      (metadata?.maxTokens as number | undefined) ??
+      (ephemeralSettings['max-tokens'] as number | undefined);
+
     // Build request - only include tools if they exist and are not empty
     // IMPORTANT: Create a deep copy of tools to prevent mutation issues
     const requestBody: OpenAI.Chat.ChatCompletionCreateParams = {
       model,
       messages: messagesWithSystem,
-      ...(formattedTools && formattedTools.length > 0
-        ? {
-            // Deep clone the tools array to prevent any mutation issues
-            tools: JSON.parse(JSON.stringify(formattedTools)),
-            // Add tool_choice for Qwen/Cerebras to ensure proper tool calling
-            tool_choice: 'auto',
-          }
-        : {}),
-      max_tokens: maxTokens,
       stream: streamingEnabled,
     };
 
-    // Debug log request summary for Cerebras/Qwen
-    if (
-      this.logger.enabled &&
-      (model.toLowerCase().includes('qwen') ||
-        this.getBaseURL()?.includes('cerebras'))
-    ) {
-      this.logger.debug(
-        () => `Request to ${this.getBaseURL()} for model ${model}:`,
-        {
-          baseURL: this.getBaseURL(),
-          model,
-          streamingEnabled,
-          hasTools: 'tools' in requestBody,
-          toolCount: formattedTools?.length || 0,
-          messageCount: messages.length,
-          toolsInRequest:
-            'tools' in requestBody ? requestBody.tools?.length : 'not included',
-        },
-      );
+    if (formattedTools && formattedTools.length > 0) {
+      requestBody.tools = JSON.parse(JSON.stringify(formattedTools));
+      requestBody.tool_choice = 'auto';
     }
 
-    // Get OpenAI client
-    const client = await this.getClient();
+    if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
+      requestBody.max_tokens = maxTokens;
+    }
+
+    // Debug log request summary for Cerebras/Qwen
+    const baseURL = options.resolved.baseURL ?? this.getBaseURL();
+
+    if (
+      this.logger.enabled &&
+      (model.toLowerCase().includes('qwen') || baseURL?.includes('cerebras'))
+    ) {
+      this.logger.debug(() => `Request to ${baseURL} for model ${model}:`, {
+        baseURL,
+        model,
+        streamingEnabled,
+        hasTools: 'tools' in requestBody,
+        toolCount: formattedTools?.length || 0,
+        messageCount: messages.length,
+        toolsInRequest:
+          'tools' in requestBody ? requestBody.tools?.length : 'not included',
+      });
+    }
 
     // Get retry settings from ephemeral settings
-    const ephemeralSettings =
-      this.providerConfig?.getEphemeralSettings?.() || {};
     const maxRetries =
       (ephemeralSettings['retries'] as number | undefined) ?? 6; // Default for OpenAI
     const initialDelayMs =

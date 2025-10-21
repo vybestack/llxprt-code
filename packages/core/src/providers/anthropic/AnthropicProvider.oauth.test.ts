@@ -3,7 +3,10 @@ import { AnthropicProvider } from './AnthropicProvider.js';
 import { IContent } from '../../services/history/IContent.js';
 import { ITool } from '../ITool.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
-import { OAuthManager } from '../../auth/precedence.js';
+import {
+  OAuthManager,
+  type OAuthTokenRequestMetadata,
+} from '../../auth/precedence.js';
 import { createProviderWithRuntime } from '../../test-utils/runtime.js';
 import { SettingsService } from '../../settings/SettingsService.js';
 
@@ -166,8 +169,12 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
     settingsService.clear();
 
     // Create mock OAuth manager
+    const getTokenMock = vi.fn<
+      [string, OAuthTokenRequestMetadata | undefined],
+      Promise<string | null>
+    >();
     mockOAuthManager = {
-      getToken: vi.fn(),
+      getToken: getTokenMock,
       getOAuthToken: vi.fn(),
       isAuthenticated: vi.fn(),
       hasProvider: vi.fn().mockReturnValue(true),
@@ -251,7 +258,10 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       ]);
 
       // Should have attempted to get OAuth token
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('anthropic');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'anthropic',
+        expect.anything(),
+      );
     });
 
     it('should throw error when no authentication is available', async () => {
@@ -353,7 +363,10 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       );
 
       // Should have attempted to get OAuth token
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('anthropic');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'anthropic',
+        expect.anything(),
+      );
     });
 
     it('should return empty array when no authentication is available', async () => {

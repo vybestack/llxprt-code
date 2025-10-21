@@ -17,13 +17,7 @@ import type {
   TokenInfo,
   ValueArgument,
 } from './schema/types.js';
-import {
-  getActiveModelParams,
-  getEphemeralSettings,
-  setEphemeralSetting,
-  setActiveModelParam,
-  clearActiveModelParam,
-} from '../../runtime/runtimeSettings.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
 
@@ -246,7 +240,7 @@ const setSchema: CommandArgumentSchema = [
         name: 'key',
         description: 'setting key to remove',
         completer: async (_ctx, partial) => {
-          const ephemeralSettings = getEphemeralSettings();
+          const ephemeralSettings = getRuntimeApi().getEphemeralSettings();
           const ephemeralKeys = Object.keys(ephemeralSettings).filter(
             (key) => ephemeralSettings[key] !== undefined,
           );
@@ -283,7 +277,7 @@ const setSchema: CommandArgumentSchema = [
               const key = tokens.tokens[1];
 
               if (key === 'modelparam') {
-                const params = getActiveModelParams();
+                const params = getRuntimeApi().getActiveModelParams();
                 const paramNames = Object.keys(params);
                 return paramNames
                   .filter((name) => name.startsWith(partial))
@@ -294,9 +288,9 @@ const setSchema: CommandArgumentSchema = [
               }
 
               if (key === 'custom-headers') {
-                const headers = getEphemeralSettings()['custom-headers'] as
-                  | Record<string, string>
-                  | undefined;
+                const headers = getRuntimeApi().getEphemeralSettings()[
+                  'custom-headers'
+                ] as Record<string, string> | undefined;
                 if (headers) {
                   return Object.keys(headers)
                     .filter((name) => name.startsWith(partial))
@@ -325,7 +319,7 @@ const setSchema: CommandArgumentSchema = [
         description: 'parameter name',
         hint: 'parameter name',
         completer: async (_ctx, partial) => {
-          const modelParams = getActiveModelParams();
+          const modelParams = getRuntimeApi().getActiveModelParams();
           if (modelParams && Object.keys(modelParams).length > 0) {
             const paramNames = Object.keys(modelParams);
             const matches = paramNames.filter((name) =>
@@ -462,9 +456,9 @@ const setSchema: CommandArgumentSchema = [
           }
 
           if (setting === 'custom-headers') {
-            const headers = getEphemeralSettings()['custom-headers'] as
-              | Record<string, string>
-              | undefined;
+            const headers = getRuntimeApi().getEphemeralSettings()[
+              'custom-headers'
+            ] as Record<string, string> | undefined;
             if (headers) {
               return Object.keys(headers)
                 .filter((name) => name.startsWith(partial))
@@ -492,6 +486,7 @@ export const setCommand: SlashCommand = {
     context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn> => {
+    const runtime = getRuntimeApi();
     // This handles direct ephemeral settings: /set <ephemeral-key> <value>
     const trimmedArgs = args?.trim();
     if (!trimmedArgs) {
@@ -521,7 +516,7 @@ export const setCommand: SlashCommand = {
       const parsedParamValue = parseValue(rawValue);
 
       try {
-        setActiveModelParam(paramName, parsedParamValue);
+        runtime.setActiveModelParam(paramName, parsedParamValue);
       } catch (error) {
         return {
           type: 'message',
@@ -570,7 +565,7 @@ export const setCommand: SlashCommand = {
         }
 
         try {
-          clearActiveModelParam(subKey);
+          runtime.clearActiveModelParam(subKey);
         } catch (error) {
           return {
             type: 'message',
@@ -596,13 +591,13 @@ export const setCommand: SlashCommand = {
       }
 
       if (targetKey === 'custom-headers' && subKey) {
-        const currentHeaders = getEphemeralSettings()['custom-headers'] as
-          | Record<string, unknown>
-          | undefined;
+        const currentHeaders = runtime.getEphemeralSettings()[
+          'custom-headers'
+        ] as Record<string, unknown> | undefined;
         if (currentHeaders && subKey in currentHeaders) {
           const nextHeaders = { ...currentHeaders };
           delete nextHeaders[subKey];
-          setEphemeralSetting(
+          runtime.setEphemeralSetting(
             targetKey,
             Object.keys(nextHeaders).length > 0 ? nextHeaders : undefined,
           );
@@ -619,7 +614,7 @@ export const setCommand: SlashCommand = {
         };
       }
 
-      setEphemeralSetting(targetKey, undefined);
+      runtime.setEphemeralSetting(targetKey, undefined);
       return {
         type: 'message',
         messageType: 'info',
@@ -837,7 +832,7 @@ export const setCommand: SlashCommand = {
     // They will be saved only when user explicitly saves a profile
     // Note: SettingsService doesn't currently support ephemeral settings,
     // so we continue to use the config directly for these session-only settings
-    setEphemeralSetting(key, parsedValue);
+    runtime.setEphemeralSetting(key, parsedValue);
 
     return {
       type: 'message',
