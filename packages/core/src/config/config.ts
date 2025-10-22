@@ -365,6 +365,7 @@ export interface ConfigParameters {
   continueOnFailedApiCall?: boolean;
   enableShellOutputEfficiency?: boolean;
   continueSession?: boolean;
+  disableYoloMode?: boolean;
 }
 
 export class Config {
@@ -526,6 +527,7 @@ export class Config {
   private readonly continueOnFailedApiCall: boolean;
   private readonly enableShellOutputEfficiency: boolean;
   private readonly continueSession: boolean;
+  private readonly disableYoloMode: boolean;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -675,6 +677,7 @@ export class Config {
     this.messageBus = new MessageBus(this.policyEngine, this.debugMode);
 
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
+    this.disableYoloMode = params.disableYoloMode ?? false;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -1051,6 +1054,10 @@ export class Config {
 
   getPolicyEngine(): PolicyEngine {
     return this.policyEngine;
+  }
+
+  isYoloModeDisabled(): boolean {
+    return this.disableYoloMode || !this.isTrustedFolder();
   }
 
   getShowMemoryUsage(): boolean {

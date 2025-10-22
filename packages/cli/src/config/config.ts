@@ -1068,6 +1068,21 @@ export async function loadCliConfig(
       argv.yolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
   }
 
+  // Override approval mode if disableYoloMode is set.
+  if (settings.security?.disableYoloMode) {
+    if (approvalMode === ApprovalMode.YOLO) {
+      debugLogger.error('YOLO mode is disabled by the "disableYolo" setting.');
+      throw new FatalConfigError(
+        'Cannot start in YOLO mode when it is disabled by settings',
+      );
+    }
+    approvalMode = ApprovalMode.DEFAULT;
+  } else if (approvalMode === ApprovalMode.YOLO) {
+    debugLogger.warn(
+      'YOLO mode is enabled. All tool calls will be automatically approved.',
+    );
+  }
+
   // Force approval mode to default if the folder is not trusted.
   if (!trustedFolder && approvalMode !== ApprovalMode.DEFAULT) {
     logger.log(
@@ -1273,6 +1288,7 @@ export async function loadCliConfig(
     approvalMode,
     showMemoryUsage:
       argv.showMemoryUsage || effectiveSettings.ui?.showMemoryUsage || false,
+    disableYoloMode: effectiveSettings.security?.disableYoloMode,
     accessibility: {
       ...effectiveSettings.accessibility,
       screenReader,
