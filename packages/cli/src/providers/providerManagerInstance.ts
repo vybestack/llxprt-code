@@ -23,9 +23,7 @@ import {
 import stripJsonComments from 'strip-json-comments';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { MultiProviderTokenStore } from '../auth/types.js';
-import { GeminiOAuthProvider } from '../auth/gemini-oauth-provider.js';
-import { QwenOAuthProvider } from '../auth/qwen-oauth-provider.js';
-import { AnthropicOAuthProvider } from '../auth/anthropic-oauth-provider.js';
+import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
 import { HistoryItemWithoutId } from '../ui/types.js';
 
 /**
@@ -139,14 +137,9 @@ export function getProviderManager(
     const oauthManager = new OAuthManager(tokenStore, loadedSettings);
     oauthManagerInstance = oauthManager;
 
-    // Register OAuth providers with TokenStore for persistence
-    const geminiOAuthProvider = new GeminiOAuthProvider(tokenStore);
-    const qwenOAuthProvider = new QwenOAuthProvider(tokenStore);
-    const anthropicOAuthProvider = new AnthropicOAuthProvider(tokenStore);
-
-    oauthManager.registerProvider(geminiOAuthProvider);
-    oauthManager.registerProvider(qwenOAuthProvider);
-    oauthManager.registerProvider(anthropicOAuthProvider);
+    // CRITICAL FIX: Don't register OAuth providers upfront
+    // They should be registered on-demand when actually needed
+    // This prevents premature OAuth initialization during MCP operations
 
     // Set config BEFORE registering providers so logging wrapper works
     if (config) {
@@ -155,7 +148,8 @@ export function getProviderManager(
       config.setProviderManager(providerManagerInstance);
     }
 
-    // Always register GeminiProvider with OAuth manager
+    // Register OAuth providers on-demand when creating actual providers
+    // Gemini Provider
     const geminiProvider = new GeminiProvider(
       undefined,
       undefined,
@@ -167,6 +161,16 @@ export function getProviderManager(
       geminiProvider.setConfig(config);
     }
     providerManagerInstance.registerProvider(geminiProvider);
+
+    // Register Gemini OAuth provider when Gemini provider is created
+    if (oauthManager && tokenStore) {
+      void ensureOAuthProviderRegistered(
+        'gemini',
+        oauthManager,
+        tokenStore,
+        addItem,
+      );
+    }
 
     // Gemini auth configuration removed - use explicit --key/--keyfile, /key//keyfile commands, profiles, env vars, or OAuth only
 
@@ -228,6 +232,16 @@ export function getProviderManager(
     });
     providerManagerInstance.registerProvider(qwenProvider);
 
+    // Register Qwen OAuth provider when Qwen provider is created
+    if (oauthManager && tokenStore) {
+      void ensureOAuthProviderRegistered(
+        'qwen',
+        oauthManager,
+        tokenStore,
+        addItem,
+      );
+    }
+
     // Register OpenAI Responses provider (for o1, o3 models)
     // This provider exclusively uses the /responses endpoint
     const openaiResponsesProvider = new OpenAIResponsesProvider(
@@ -254,9 +268,19 @@ export function getProviderManager(
       anthropicApiKey || undefined, // Pass undefined instead of empty string to allow OAuth fallback
       anthropicBaseUrl,
       anthropicProviderConfig,
-      oauthManager,
+      anthropicApiKey ? undefined : oauthManager, // Only pass OAuthManager if no API key
     );
     providerManagerInstance.registerProvider(anthropicProvider);
+
+    // Register Anthropic OAuth provider only if no API key is available
+    if (!anthropicApiKey && oauthManager && tokenStore) {
+      void ensureOAuthProviderRegistered(
+        'anthropic',
+        oauthManager,
+        tokenStore,
+        addItem,
+      );
+    }
 
     // Set default provider to gemini
     providerManagerInstance.setActiveProvider('gemini');

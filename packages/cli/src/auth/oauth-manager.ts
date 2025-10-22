@@ -80,17 +80,10 @@ export class OAuthManager {
 
     this.providers.set(provider.name, provider);
 
-    // Trigger lazy initialization of the provider in the background to preload any stored tokens
-    // This ensures the provider is ready for use but doesn't block registration
-    // Use fire-and-forget pattern but with proper error handling
-    void provider.getToken().catch((error) => {
-      // Initialization failures shouldn't prevent registration
-      // The provider will work in memory-only mode
-      console.debug(
-        `Provider ${provider.name} initialization failed during registration:`,
-        error,
-      );
-    });
+    // CRITICAL FIX: Remove automatic OAuth provider initialization
+    // OAuth providers should only initialize when actually needed
+    // The "lazy initialization pattern" should be controlled by usage, not registration
+    // This fixes issue 308 where OAuth was being initialized during MCP operations
   }
 
   /**
