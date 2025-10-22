@@ -28,6 +28,7 @@ import { AnthropicTokenizer } from '../../providers/tokenizers/AnthropicTokenize
 import { TokensUpdatedEvent } from './HistoryEvents.js';
 import { DebugLogger } from '../../debug/index.js';
 import { randomUUID } from 'crypto';
+import { estimateTokens as estimateTextTokens } from '../../utils/toolOutputLimiter.js';
 
 /**
  * Typed EventEmitter for HistoryService events
@@ -330,6 +331,85 @@ export class HistoryService
     for (const content of contents) {
       this.add(content, modelName);
     }
+  }
+
+  /**
+   * Estimate total tokens for hypothetical contents without mutating history.
+   */
+  async estimateTokensForContents(
+    contents: IContent[],
+    modelName?: string,
+  ): Promise<number> {
+    if (contents.length === 0) {
+      return 0;
+    }
+
+    let total = 0;
+    for (const content of contents) {
+      const effectiveModel = content.metadata?.model || modelName || 'gpt-4.1';
+      try {
+        total += await this.estimateContentTokens(content, effectiveModel);
+      } catch (error) {
+        this.logger.debug(
+          'Error estimating tokens for content, using fallback:',
+          error,
+        );
+        let serialized = '';
+        try {
+          serialized = JSON.stringify(content);
+        } catch (stringifyError) {
+          this.logger.debug(
+            'Failed to stringify content for fallback token estimate:',
+            stringifyError,
+          );
+        }
+
+        if (serialized) {
+          total += estimateTextTokens(serialized);
+        } else {
+          const blockStrings = content.blocks
+            ?.map((block) => {
+              switch (block.type) {
+                case 'text':
+                  return block.text;
+                case 'tool_call':
+                  return JSON.stringify({
+                    name: block.name,
+                    parameters: block.parameters,
+                  });
+                case 'tool_response':
+                  return JSON.stringify({
+                    callId: block.callId,
+                    toolName: block.toolName,
+                    result: block.result,
+                    error: block.error,
+                  });
+                case 'thinking':
+                  return block.thought;
+                case 'code':
+                  return block.code;
+                case 'media':
+                  return block.caption ?? '';
+                default:
+                  return '';
+              }
+            })
+            .join('\n');
+          if (blockStrings) {
+            total += estimateTextTokens(blockStrings);
+          }
+        }
+      }
+    }
+
+    return total;
+  }
+
+  /**
+   * Wait for any in-flight token updates to complete.
+   */
+  async waitForTokenUpdates(): Promise<void> {
+    await this.tokenizerLock;
   }
 
   /**

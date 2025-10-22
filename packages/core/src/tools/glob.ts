@@ -176,20 +176,28 @@ class GlobToolInvocation extends BaseToolInvocation<
       let gitIgnoredCount = 0;
 
       if (respectGitIgnore) {
-        const relativePaths = entries.map((p) =>
-          path.relative(this.config.getTargetDir(), p.fullpath()),
+        const toCanonicalPath = (filePath: string): string => {
+          try {
+            return fs.realpathSync(filePath);
+          } catch (_error) {
+            return path.normalize(filePath);
+          }
+        };
+
+        const canonicalPaths = entries.map((entry) =>
+          toCanonicalPath(entry.fullpath()),
         );
-        const filteredRelativePaths = fileDiscovery.filterFiles(relativePaths, {
-          respectGitIgnore,
-        });
-        const filteredAbsolutePaths = new Set(
-          filteredRelativePaths.map((p) =>
-            path.resolve(this.config.getTargetDir(), p),
-          ),
+        const filteredCanonicalPaths = new Set(
+          fileDiscovery
+            .filterFiles(canonicalPaths, {
+              respectGitIgnore,
+              respectLlxprtIgnore: false,
+            })
+            .map((p) => toCanonicalPath(p)),
         );
 
         filteredEntries = entries.filter((entry) =>
-          filteredAbsolutePaths.has(entry.fullpath()),
+          filteredCanonicalPaths.has(toCanonicalPath(entry.fullpath())),
         );
         gitIgnoredCount = entries.length - filteredEntries.length;
       }

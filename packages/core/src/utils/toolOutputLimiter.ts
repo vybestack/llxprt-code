@@ -4,15 +4,71 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { encoding_for_model } from '@dqbd/tiktoken';
+import { TextDecoder } from 'node:util';
 import { Config } from '../config/config.js';
 
 // Default limits
 export const DEFAULT_MAX_TOKENS = 50000;
 export const DEFAULT_TRUNCATE_MODE = 'warn';
 
-// Simple token estimation - roughly 4 characters per token
+// Escape overhead buffer to account for JSON stringification inflation
+export const ESCAPE_BUFFER_PERCENTAGE = 0.8; // Use 80% of limit to leave 20% buffer
+
+let cachedEncoder: ReturnType<typeof encoding_for_model> | null = null;
+let encoderInitFailed = false;
+const utf8Decoder = new TextDecoder();
+const isWindows = process.platform === 'win32';
+
+function getEncoder(): ReturnType<typeof encoding_for_model> | null {
+  if (encoderInitFailed) {
+    return null;
+  }
+
+  if (!cachedEncoder) {
+    try {
+      cachedEncoder = encoding_for_model('gpt-4o');
+      if (!isWindows) {
+        process.once('exit', () => {
+          cachedEncoder?.free();
+        });
+      }
+    } catch (_error) {
+      encoderInitFailed = true;
+      return null;
+    }
+  }
+
+  return cachedEncoder;
+}
+
+function encodeText(text: string): Uint32Array | null {
+  const encoder = getEncoder();
+  if (!encoder) {
+    return null;
+  }
+
+  try {
+    return encoder.encode(text);
+  } catch (_error) {
+    return null;
+  }
+}
+
+// Token estimation using tiktoken for better accuracy
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
+  const encoded = encodeText(text);
+
+  if (encoded) {
+    return encoded.length;
+  }
+
+  // Fallback to simple heuristic if tiktoken fails.
+  return Math.ceil(text.length / 3);
+}
+
+export function getEffectiveTokenLimit(maxTokens: number): number {
+  return Math.floor(maxTokens * ESCAPE_BUFFER_PERCENTAGE);
 }
 
 export interface OutputLimitConfig {
@@ -48,6 +104,7 @@ export function getOutputLimits(config: Config): OutputLimitConfig {
 
 /**
  * Check if content exceeds token limit and handle according to truncate mode
+ * Uses escape buffer to account for JSON stringification inflation
  */
 export function limitOutputTokens(
   content: string,
@@ -55,16 +112,20 @@ export function limitOutputTokens(
   toolName: string,
 ): TruncatedOutput {
   const limits = getOutputLimits(config);
-  const tokens = estimateTokens(content);
+  const maxTokens = limits.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const effectiveLimit = getEffectiveTokenLimit(maxTokens);
 
-  if (!limits.maxTokens || tokens <= limits.maxTokens) {
+  const encodedContent = encodeText(content);
+  const tokens = encodedContent?.length ?? Math.ceil(content.length / 3);
+
+  if (!maxTokens || tokens <= effectiveLimit) {
     return {
       content,
       wasTruncated: false,
     };
   }
 
-  // Content exceeds limit
+  // Content exceeds limit (after accounting for escape buffer)
   const originalTokens = tokens;
 
   if (limits.truncateMode === 'warn') {
@@ -73,34 +134,49 @@ export function limitOutputTokens(
       content: '',
       wasTruncated: true,
       originalTokens,
-      message: `${toolName} output exceeded token limit (${originalTokens} > ${limits.maxTokens}). The results were found but are too large to display. Please:
+      message: `${toolName} output exceeded token limit (${originalTokens} > ${effectiveLimit}). The results were found but are too large to display. Please:
 1. Use more specific search patterns or file paths to narrow results
 2. Search for specific function/class names instead of generic terms
 3. Look in specific directories rather than the entire codebase
 4. Use exact match patterns when possible`,
     };
   } else if (limits.truncateMode === 'truncate') {
-    // Truncate content to fit within limit
-    const maxChars = limits.maxTokens * 4; // Rough estimate
-    const truncatedContent = content.substring(0, maxChars);
+    // Truncate content to fit within effective limit (accounting for escape buffer)
+    const encoder = getEncoder();
+    const targetTokenCount = Math.max(0, Math.min(effectiveLimit, tokens));
+
+    let truncatedContent = '';
+    let truncatedTokenCount = 0;
+
+    if (encodedContent && encoder) {
+      const truncatedTokens = encodedContent.subarray(0, targetTokenCount);
+      truncatedContent = utf8Decoder.decode(encoder.decode(truncatedTokens));
+      truncatedTokenCount = truncatedTokens.length;
+    } else {
+      const ratio =
+        originalTokens > 0 ? Math.min(1, targetTokenCount / originalTokens) : 0;
+      const approxChars = Math.floor(content.length * ratio);
+      truncatedContent = content.slice(0, approxChars);
+      truncatedTokenCount = Math.ceil(truncatedContent.length / 3);
+    }
 
     return {
-      content: truncatedContent + '\n\n[Output truncated due to token limit]',
+      content: `${truncatedContent}\n\n[Output truncated due to token limit]`,
       wasTruncated: true,
       originalTokens,
-      message: `Output truncated from ${originalTokens} to ${limits.maxTokens} tokens`,
+      message: `Output truncated from ${originalTokens} to ${truncatedTokenCount} tokens`,
     };
   } else {
     // 'sample' mode - for line-based content, sample evenly
     const lines = content.split('\n');
     if (lines.length > 1) {
-      const targetLines = Math.floor(limits.maxTokens / 10); // Rough estimate of tokens per line
+      const targetLines = Math.max(1, Math.floor(effectiveLimit / 10)); // Rough estimate of tokens per line
       const step = Math.ceil(lines.length / targetLines);
       const sampledLines: string[] = [];
 
       for (let i = 0; i < lines.length; i += step) {
         sampledLines.push(lines[i]);
-        if (estimateTokens(sampledLines.join('\n')) > limits.maxTokens * 0.9) {
+        if (estimateTokens(sampledLines.join('\n')) > effectiveLimit) {
           break;
         }
       }
@@ -114,15 +190,32 @@ export function limitOutputTokens(
         message: `Output sampled to fit within ${limits.maxTokens} token limit`,
       };
     } else {
-      // Single line or non-line content, fall back to truncate
-      const maxChars = limits.maxTokens * 4; // Rough estimate
-      const truncatedContent = content.substring(0, maxChars);
+      // Single line or non-line content, fall back to truncate with escape buffer
+      const encoder = getEncoder();
+      const targetTokenCount = Math.max(0, Math.min(effectiveLimit, tokens));
+
+      let truncatedContent = '';
+      let truncatedTokenCount = 0;
+
+      if (encodedContent && encoder) {
+        const truncatedTokens = encodedContent.subarray(0, targetTokenCount);
+        truncatedContent = utf8Decoder.decode(encoder.decode(truncatedTokens));
+        truncatedTokenCount = truncatedTokens.length;
+      } else {
+        const ratio =
+          originalTokens > 0
+            ? Math.min(1, targetTokenCount / originalTokens)
+            : 0;
+        const approxChars = Math.floor(content.length * ratio);
+        truncatedContent = content.slice(0, approxChars);
+        truncatedTokenCount = Math.ceil(truncatedContent.length / 3);
+      }
 
       return {
-        content: truncatedContent + '\n\n[Output truncated due to token limit]',
+        content: `${truncatedContent}\n\n[Output truncated due to token limit]`,
         wasTruncated: true,
         originalTokens,
-        message: `Output truncated from ${originalTokens} to ${limits.maxTokens} tokens`,
+        message: `Output truncated from ${originalTokens} to ${truncatedTokenCount} tokens`,
       };
     }
   }

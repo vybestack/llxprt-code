@@ -18,24 +18,38 @@ export function useTerminalSize(): { columns: number; rows: number } {
   }));
 
   useEffect(() => {
+    let resizeTimeout: NodeJS.Timeout | undefined;
+
     function updateSize() {
-      setSize({
-        columns: stdout?.columns || process.stdout.columns || 80,
-        rows: stdout?.rows || process.stdout.rows || 24,
-      });
+      // Clear previous timeout
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+
+      // Set new timeout to update size only after changes stop
+      resizeTimeout = setTimeout(() => {
+        const newSize = {
+          columns: stdout?.columns || process.stdout.columns || 80,
+          rows: stdout?.rows || process.stdout.rows || 24,
+        };
+
+        // Only update state if the size actually changed
+        if (size.columns !== newSize.columns || size.rows !== newSize.rows) {
+          setSize(newSize);
+        }
+      }, 150); // 150ms debounce delay
     }
 
     // Listen to resize events on process.stdout
     process.stdout.on('resize', updateSize);
 
-    // Also check size periodically in case resize event doesn't fire
-    const interval = setInterval(updateSize, 100);
-
     return () => {
       process.stdout.off('resize', updateSize);
-      clearInterval(interval);
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
     };
-  }, [stdout]);
+  }, [stdout, size.columns, size.rows]);
 
   return size;
 }

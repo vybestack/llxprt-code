@@ -235,31 +235,26 @@ ${finalExclusionPatternsForDescription
       const entries = Array.from(allEntries);
 
       const gitFilteredEntries = fileFilteringOptions.respectGitIgnore
-        ? fileDiscovery
-            .filterFiles(
-              entries.map((p) => path.relative(this.config.getTargetDir(), p)),
-              {
-                respectGitIgnore: true,
-                respectLlxprtIgnore: false,
-              },
-            )
-            .map((p) => path.resolve(this.config.getTargetDir(), p))
-        : entries;
+        ? fileDiscovery.filterFiles(entries, {
+            respectGitIgnore: true,
+            respectLlxprtIgnore: false,
+          })
+        : [...entries];
 
       // Apply llxprt ignore filtering if enabled
       const finalFilteredEntries = fileFilteringOptions.respectLlxprtIgnore
-        ? fileDiscovery
-            .filterFiles(
-              gitFilteredEntries.map((p) =>
-                path.relative(this.config.getTargetDir(), p),
-              ),
-              {
-                respectGitIgnore: false,
-                respectLlxprtIgnore: true,
-              },
-            )
-            .map((p) => path.resolve(this.config.getTargetDir(), p))
+        ? fileDiscovery.filterFiles(gitFilteredEntries, {
+            respectGitIgnore: false,
+            respectLlxprtIgnore: true,
+          })
         : gitFilteredEntries;
+
+      const gitFilteredSet = new Set(
+        gitFilteredEntries.map((entry) => path.normalize(entry)),
+      );
+      const finalFilteredSet = new Set(
+        finalFilteredEntries.map((entry) => path.normalize(entry)),
+      );
 
       let gitIgnoredCount = 0;
       let llxprtIgnoredCount = 0;
@@ -278,10 +273,12 @@ ${finalExclusionPatternsForDescription
           continue;
         }
 
+        const normalizedPath = path.normalize(absoluteFilePath);
+
         // Check if this file was filtered out by git ignore
         if (
           fileFilteringOptions.respectGitIgnore &&
-          !gitFilteredEntries.includes(absoluteFilePath)
+          !gitFilteredSet.has(normalizedPath)
         ) {
           gitIgnoredCount++;
           continue;
@@ -290,13 +287,13 @@ ${finalExclusionPatternsForDescription
         // Check if this file was filtered out by llxprt ignore
         if (
           fileFilteringOptions.respectLlxprtIgnore &&
-          !finalFilteredEntries.includes(absoluteFilePath)
+          !finalFilteredSet.has(normalizedPath)
         ) {
           llxprtIgnoredCount++;
           continue;
         }
 
-        filesToConsider.add(absoluteFilePath);
+        filesToConsider.add(normalizedPath);
       }
 
       // Add info about git-ignored files if any were filtered

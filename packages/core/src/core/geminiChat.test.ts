@@ -155,6 +155,51 @@ describe('GeminiChat', () => {
       expect(callArg.runtime?.config).toBe(mockConfig);
       expect(callArg.runtime?.settingsService).toBeDefined();
     });
+
+    it('should trigger compression when pending tokens exceed threshold', async () => {
+      const historyService = chat.getHistoryService();
+      vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(30000);
+      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+        35000,
+      );
+
+      const compressionSpy = vi
+        .spyOn(
+          chat as unknown as {
+            performCompression(prompt_id: string): Promise<void>;
+          },
+          'performCompression',
+        )
+        .mockResolvedValue();
+
+      await chat.sendMessage(
+        { message: 'hello compression' },
+        'prompt-id-compress',
+      );
+
+      expect(compressionSpy).toHaveBeenCalledWith('prompt-id-compress');
+    });
+
+    it('should not trigger compression when pending tokens stay under threshold', async () => {
+      const historyService = chat.getHistoryService();
+      vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(1000);
+      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+        500,
+      );
+
+      const compressionSpy = vi
+        .spyOn(
+          chat as unknown as {
+            performCompression(prompt_id: string): Promise<void>;
+          },
+          'performCompression',
+        )
+        .mockResolvedValue();
+
+      await chat.sendMessage({ message: 'hello safe' }, 'prompt-id-safe');
+
+      expect(compressionSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('sendMessageStream', () => {
