@@ -32,6 +32,7 @@ import {
   NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
+import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import {
@@ -114,6 +115,25 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Setup debug logger
     this.logger = new DebugLogger('llxprt:provider:openai');
 
+    const settingsService = getSettingsService();
+    if (settingsService) {
+      this.setRuntimeSettingsService(settingsService);
+      settingsService
+        .getSettings(this.name)
+        .then((settings) => {
+          const extracted = this.extractModelParamsFromSettings(settings);
+          if (extracted) {
+            this.modelParams = extracted;
+          }
+        })
+        .catch((error) => {
+          this.logger.debug(
+            () =>
+              `Failed to preload model params from SettingsService: ${error}`,
+          );
+        });
+    }
+
     this.loadModelParamsFromSettings().catch((error) => {
       this.logger.debug(
         () =>
@@ -195,17 +215,68 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     this.modelParams = params;
   }
 
+  private extractModelParamsFromSettings(
+    settings: unknown,
+  ): Record<string, unknown> | undefined {
+    if (!settings || typeof settings !== 'object') {
+      return undefined;
+    }
+
+    const {
+      enabled: _enabled,
+      apiKey: _apiKey,
+      baseUrl: _baseUrl,
+      model: _model,
+      maxTokens,
+      temperature,
+      ...rest
+    } = settings as Record<string, unknown> & {
+      maxTokens?: unknown;
+      temperature?: unknown;
+    };
+
+    const params: Record<string, unknown> = { ...rest };
+
+    if (temperature !== undefined) {
+      params.temperature = temperature;
+    }
+
+    const restRecord = rest as Record<string, unknown>;
+    const maxTokensValue = maxTokens ?? restRecord.max_tokens;
+    if (maxTokensValue !== undefined) {
+      params.max_tokens = maxTokensValue;
+      delete params.maxTokens;
+    }
+
+    return Object.keys(params).length > 0 ? params : undefined;
+  }
+
   private async resolveModelParams(): Promise<
     Record<string, unknown> | undefined
   > {
-    if (this.modelParams) {
-      return this.modelParams;
-    }
     const params = await this.getModelParamsFromSettings();
     if (params) {
       this.modelParams = params;
+      return params;
     }
-    return params;
+
+    const settingsService = getSettingsService();
+    if (settingsService) {
+      try {
+        const settings = await settingsService.getSettings(this.name);
+        const extracted = this.extractModelParamsFromSettings(settings);
+        if (extracted) {
+          this.modelParams = extracted;
+          return extracted;
+        }
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `Failed to resolve model params via SettingsService fallback: ${error}`,
+        );
+      }
+    }
+    return this.modelParams;
   }
 
   /**
@@ -323,6 +394,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     rememberClientKey(runtimeKey, cacheKey);
 
     return client;
+  }
+
+  /**
+   * Exposed for testing and shared call sites; delegates to runtime-scoped client resolution.
+   */
+  protected async getClient(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<OpenAI> {
+    return this.getClientForCall(options);
   }
 
   /**
@@ -612,7 +692,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
     const callFormatter = this.createToolFormatter();
-    const client = await this.getClientForCall(options);
+    const client = await this.getClient(options);
     const runtimeKey = this.resolveRuntimeKey(options);
     const { tools } = options;
 

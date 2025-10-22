@@ -367,7 +367,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
   ): AsyncIterableIterator<IContent> {
     const { contents: content, tools } = options;
 
-    const apiKey = options.resolved.authToken;
+    const apiKey =
+      (await this.getAuthToken()) ?? options.resolved.authToken ?? '';
     if (!apiKey) {
       throw new Error('OpenAI API key is required to generate completions');
     }

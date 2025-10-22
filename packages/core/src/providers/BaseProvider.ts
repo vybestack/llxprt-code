@@ -31,6 +31,7 @@ import {
 } from '../runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import type { SettingsService } from '../settings/SettingsService.js';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
 
 export interface BaseProviderConfig {
   // Basic provider config
@@ -103,7 +104,9 @@ export abstract class BaseProvider implements IProvider {
     const defaultRuntime =
       peekActiveProviderRuntimeContext() ?? getActiveProviderRuntimeContext();
     const fallbackSettingsService =
-      settingsService ?? defaultRuntime.settingsService;
+      settingsService ??
+      defaultRuntime?.settingsService ??
+      getSettingsService();
     this.defaultSettingsService = fallbackSettingsService;
 
     // Initialize auth precedence resolver
@@ -146,7 +149,7 @@ export abstract class BaseProvider implements IProvider {
    */
   protected resolveSettingsService(): SettingsService {
     const activeOptions = this.activeCallContext.getStore();
-    if (activeOptions) {
+    if (activeOptions?.settings) {
       return activeOptions.settings;
     }
 
@@ -165,7 +168,9 @@ export abstract class BaseProvider implements IProvider {
       return fallbackRuntime.settingsService;
     }
 
-    throw new Error('SettingsService unavailable for provider runtime context');
+    const globalService = getSettingsService();
+    this.defaultSettingsService = globalService;
+    return globalService;
   }
 
   /**
