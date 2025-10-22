@@ -17,6 +17,7 @@ import {
   type CompleterFn,
 } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const profileSuggestionDescription = 'Saved profile';
 const normalizeProfilePartial = (partial: string): string =>
@@ -176,6 +177,8 @@ const saveCommand: SlashCommand = {
 /**
  * Profile load subcommand
  */
+const logger = new DebugLogger('llxprt:ui:profile-command');
+
 const loadCommand: SlashCommand = {
   name: 'load',
   description: 'load configuration from a saved profile',
@@ -219,16 +222,97 @@ const loadCommand: SlashCommand = {
 
     try {
       const runtime = getRuntimeApi();
+      const statusBefore = runtime.getActiveProviderStatus();
       const result = await runtime.loadProfileByName(profileName);
-      const infoMessages = result.infoMessages
+      if (result.providerName) {
+        try {
+          await runtime.switchActiveProvider(result.providerName);
+          logger.debug(
+            () =>
+              `[profile] switchActiveProvider invoked for '${result.providerName}'`,
+          );
+        } catch (error) {
+          logger.error(
+            () =>
+              `[profile] failed to switch provider via runtime API: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+      const infoMessages = (result.infoMessages ?? [])
         .map((message) => `\n- ${message}`)
         .join('');
+      const warningMessages = (result.warnings ?? [])
+        .map((warning) => `\n⚠ ${warning}`)
+        .join('');
+
+      const configService = context.services.config;
+      if (configService) {
+        const providerManager = configService.getProviderManager?.();
+        if (providerManager && result.providerName) {
+          logger.debug(
+            () =>
+              `[profile] forcing config provider manager switch to '${result.providerName}'`,
+          );
+          try {
+            providerManager.setActiveProvider(result.providerName);
+            logger.debug(() => {
+              let activeName = 'unknown';
+              try {
+                activeName = providerManager.getActiveProvider().name;
+              } catch (readError) {
+                logger.debug(
+                  () =>
+                    `[profile] unable to read active provider: ${readError instanceof Error ? readError.message : String(readError)}`,
+                );
+              }
+              return `[profile] config manager active provider after switch: ${activeName}`;
+            });
+          } catch (error) {
+            logger.error(
+              () =>
+                `[profile] failed to set provider on config manager: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          configService.setProvider?.(result.providerName);
+        }
+      }
+
+      try {
+        const status = runtime.getActiveProviderStatus();
+        logger.debug(
+          () =>
+            `[profile] runtime provider status after load: provider=${status.providerName}, model=${status.modelName}`,
+        );
+      } catch (error) {
+        logger.error(
+          () =>
+            `[profile] failed to read runtime provider status: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      const extendedContext = context as CommandContext & {
+        checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
+      };
+      if (extendedContext.checkPaymentModeChange) {
+        setTimeout(
+          () =>
+            extendedContext.checkPaymentModeChange?.(
+              statusBefore.providerName ?? undefined,
+            ),
+          100,
+        );
+      }
+
       return {
         type: 'message',
         messageType: 'info',
-        content: `Profile '${profileName}' loaded${infoMessages}`,
+        content: `Profile '${profileName}' loaded${infoMessages}${warningMessages}`,
       };
     } catch (error) {
+      logger.error(
+        () =>
+          `[profile] failed to load '${profileName}': ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+      );
       // Handle specific error messages
       if (error instanceof Error) {
         if (error.message.includes('not found')) {

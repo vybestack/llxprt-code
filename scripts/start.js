@@ -21,10 +21,12 @@ import { spawn, execSync } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
+import { parseBootstrapArgs } from '../packages/cli/src/config/profileBootstrap.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
+const bootstrapSnapshot = parseBootstrapArgs();
 
 // check build status, write warnings to file for app to display if needed
 execSync('node ./scripts/check-build-status.js', {
@@ -63,6 +65,14 @@ const env = {
   CLI_VERSION: pkg.version,
   DEV: 'true',
 };
+
+if (bootstrapSnapshot.bootstrapArgs.profileName) {
+  env.LLXPRT_BOOTSTRAP_PROFILE = bootstrapSnapshot.bootstrapArgs.profileName;
+}
+if (bootstrapSnapshot.bootstrapArgs.providerOverride) {
+  env.LLXPRT_BOOTSTRAP_PROVIDER =
+    bootstrapSnapshot.bootstrapArgs.providerOverride;
+}
 
 if (process.env.DEBUG) {
   // If this is not set, the debugger will pause on the outer process rather

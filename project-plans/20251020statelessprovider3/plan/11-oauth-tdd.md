@@ -19,7 +19,7 @@
 
 ## Verification Commands
 ```bash
-npm test -- --run tests --grep "PLAN-20251020statelessprovider3.P11"
+npm run test --workspace @vybestack/llxprt-code -- --run packages/cli/src/auth/__tests__/oauthManager.safety.test.ts
 ```
 Expect failures caused by NotYetImplemented helper.
 

@@ -183,8 +183,25 @@ export async function createMockApiServer(): Promise<MockApiServer> {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(
         JSON.stringify({
-          success: true,
-          message: 'Mock response',
+          id: 'mock-chat-completion',
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model: 'gpt-4o-mini',
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: 'Mock response from integration test',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 8,
+            completion_tokens: 12,
+            total_tokens: 20,
+          },
         }),
       );
     });

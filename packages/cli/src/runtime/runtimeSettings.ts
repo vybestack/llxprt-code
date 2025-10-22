@@ -33,6 +33,12 @@ import {
   getCurrentRuntimeScope,
   enterRuntimeScope,
 } from './runtimeContextFactory.js';
+// @plan:PLAN-20251020-STATELESSPROVIDER3.P07
+import { applyProfileWithGuards } from './profileApplication.js';
+
+type ProfileApplicationResult = Awaited<
+  ReturnType<typeof applyProfileWithGuards>
+>;
 
 export { createIsolatedRuntimeContextInternal as createIsolatedRuntimeContext };
 export type {
@@ -337,15 +343,15 @@ function resolveActiveProviderName(
   settingsService: SettingsService,
   config: Config,
 ): string | null {
+  if (typeof config.getProvider === 'function') {
+    const provider = config.getProvider();
+    if (provider && provider.trim() !== '') {
+      return provider;
+    }
+  }
   const fromSettings = settingsService.get('activeProvider');
   if (typeof fromSettings === 'string' && fromSettings.trim() !== '') {
     return fromSettings;
-  }
-  if (typeof config.getProvider === 'function') {
-    const fallback = config.getProvider();
-    if (fallback) {
-      return fallback;
-    }
   }
   return null;
 }
@@ -628,8 +634,12 @@ export interface ProfileLoadResult {
   providerName: string;
   modelName: string;
   infoMessages: string[];
+  warnings: string[];
   providerChanged: boolean;
   authType?: AuthType;
+  baseUrl?: string;
+  didFallback: boolean;
+  requestedProvider: string | null;
 }
 
 export interface RuntimeDiagnosticsSnapshot {
@@ -644,46 +654,10 @@ export async function applyProfileSnapshot(
   profile: Profile,
   options: ProfileLoadOptions = {},
 ): Promise<ProfileLoadResult> {
-  const { config, settingsService } = getCliRuntimeServices();
+  const { settingsService } = getCliRuntimeServices();
 
-  const previousEphemeral = new Map<string, unknown>();
-  for (const key of PROFILE_EPHEMERAL_KEYS) {
-    const existing = config.getEphemeralSetting(key);
-    if (existing !== undefined) {
-      previousEphemeral.set(key, existing);
-    }
-  }
-
-  const hostModelBeforeSnapshot = config.getModel();
-  const providerSwitch = await switchActiveProvider(profile.provider);
-  const modelResult = await setActiveModel(profile.model);
-
-  for (const key of PROFILE_EPHEMERAL_KEYS) {
-    config.setEphemeralSetting(key, undefined);
-  }
-
-  const appliedMessages: string[] = [...providerSwitch.infoMessages];
-  const entries = Object.entries(profile.ephemeralSettings ?? {});
-  for (const [key, value] of entries) {
-    if (key === 'auth-key' && typeof value === 'string') {
-      const result = await updateActiveProviderApiKey(value);
-      if (result.message) {
-        appliedMessages.push(result.message);
-      }
-      continue;
-    }
-
-    if (key === 'base-url' && typeof value === 'string') {
-      const result = await updateActiveProviderBaseUrl(value);
-      if (result.message) {
-        appliedMessages.push(result.message);
-      }
-      continue;
-    }
-
-    // auth-keyfile is retained for future reference; do not attempt to load file here
-    config.setEphemeralSetting(key, value);
-  }
+  const applicationResult: ProfileApplicationResult =
+    await applyProfileWithGuards(profile, options);
 
   if (typeof settingsService.setCurrentProfileName === 'function') {
     settingsService.setCurrentProfileName(options.profileName ?? null);
@@ -691,49 +665,17 @@ export async function applyProfileSnapshot(
     settingsService.set('currentProfile', options.profileName ?? null);
   }
 
-  const provider = getActiveProviderOrThrow();
-
-  const existingParams = getActiveModelParams();
-  const profileParams = profile.modelParams ?? {};
-
-  for (const [key, value] of Object.entries(profileParams)) {
-    setActiveModelParam(key, value);
-  }
-
-  for (const key of Object.keys(existingParams)) {
-    if (!(key in profileParams)) {
-      clearActiveModelParam(key);
-    }
-  }
-
-  const authType =
-    providerSwitch.authType ?? config.getContentGeneratorConfig()?.authType;
-
-  if (hostModelBeforeSnapshot !== undefined) {
-    const preservedEphemeral = new Map<string, unknown>();
-    for (const key of PROFILE_EPHEMERAL_KEYS) {
-      preservedEphemeral.set(key, config.getEphemeralSetting(key));
-    }
-    config.setModel(hostModelBeforeSnapshot);
-    for (const [key, value] of preservedEphemeral.entries()) {
-      config.setEphemeralSetting(key, value);
-    }
-  }
-
-  const profileEphemeral = profile.ephemeralSettings ?? {};
-  for (const [key, value] of previousEphemeral.entries()) {
-    if (!(key in profileEphemeral)) {
-      config.setEphemeralSetting(key, value);
-    }
-  }
-
   return {
     profileName: options.profileName,
-    providerName: provider.name,
-    modelName: modelResult.nextModel,
-    infoMessages: appliedMessages,
-    providerChanged: providerSwitch.changed,
-    authType,
+    providerName: applicationResult.providerName,
+    modelName: applicationResult.modelName,
+    infoMessages: applicationResult.infoMessages,
+    warnings: applicationResult.warnings,
+    providerChanged: applicationResult.providerChanged,
+    authType: applicationResult.authType,
+    baseUrl: applicationResult.baseUrl,
+    didFallback: applicationResult.didFallback,
+    requestedProvider: applicationResult.requestedProvider,
   };
 }
 
@@ -977,6 +919,12 @@ export async function switchActiveProvider(
 
   config.setProviderManager(providerManager);
   config.setProvider(name);
+  logger.debug(() => `[cli-runtime] set config provider=${name}`);
+  config.setEphemeralSetting('activeProvider', name);
+  logger.debug(
+    () =>
+      `[cli-runtime] config ephemeral activeProvider=${config.getEphemeralSetting('activeProvider')}`,
+  );
 
   const activeProvider = providerManager.getActiveProvider();
   const providerSettings = getProviderSettingsSnapshot(settingsService, name);
@@ -1000,6 +948,10 @@ export async function switchActiveProvider(
   }
 
   await settingsService.switchProvider(name);
+  logger.debug(
+    () =>
+      `[cli-runtime] settingsService activeProvider now=${settingsService.get('activeProvider')}`,
+  );
   config.setModel(resolvedDefaultModel);
 
   let providerBaseUrl: string | undefined;
@@ -1066,6 +1018,11 @@ export async function updateActiveProviderApiKey(
   const providerName = provider.name;
   const trimmed = apiKey?.trim();
 
+  logger.debug(() => {
+    const masked = trimmed ? `***redacted*** (len=${trimmed.length})` : 'null';
+    return `[runtime] updateActiveProviderApiKey provider='${providerName}' value=${masked}`;
+  });
+
   let authType: AuthType | undefined;
   if (!trimmed) {
     settingsService.setProviderSetting(providerName, 'apiKey', undefined);
@@ -1078,6 +1035,10 @@ export async function updateActiveProviderApiKey(
     }
 
     const isPaidMode = provider.isPaidMode?.();
+    logger.debug(
+      () =>
+        `[runtime] api key removed for '${providerName}', paidMode=${String(isPaidMode)}`,
+    );
     return {
       changed: true,
       providerName,
@@ -1101,6 +1062,10 @@ export async function updateActiveProviderApiKey(
   }
 
   const isPaidMode = provider.isPaidMode?.();
+  logger.debug(
+    () =>
+      `[runtime] api key updated for '${providerName}', paidMode=${String(isPaidMode)}`,
+  );
   return {
     changed: true,
     providerName,

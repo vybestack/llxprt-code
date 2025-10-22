@@ -28,7 +28,7 @@ Add implementation comments:
 
 ## Verification Commands
 ```bash
-npm test -- --grep "PLAN-20251020statelessprovider3.P11"
+npm run test --workspace @vybestack/llxprt-code -- --run packages/cli/src/auth/__tests__/oauthManager.safety.test.ts
 ```
 Expect tests to pass.
 

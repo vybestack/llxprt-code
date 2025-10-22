@@ -1,0 +1,4 @@
+@plan:PLAN-20251020-STATELESSPROVIDER3.P04a
+Command: node -e "import('./packages/cli/src/config/profileBootstrap.js').catch((err) => console.log(err.message))"
+Follow-up: node -e "import('./packages/cli/src/config/profileBootstrap.js').then((m) => m.parseBootstrapArgs()).catch((err) => console.log(err.message))"
+NotYetImplemented: PLAN-20251020-STATELESSPROVIDER3.P04

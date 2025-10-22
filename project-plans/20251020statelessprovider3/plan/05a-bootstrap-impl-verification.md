@@ -11,7 +11,7 @@
 
 ### Files to Update
 - `project-plans/20251020statelessprovider3/verification/bootstrap-red-output.md`
-  - Capture `npm test -- --grep "PLAN-20251020-STATELESSPROVIDER3.P05"` failure output.
+  - Capture `npm run test --workspace @vybestack/llxprt-code -- --run packages/cli/src/config/__tests__/profileBootstrap.test.ts` failure output.
   - Annotate with `@plan:PLAN-20251020-STATELESSPROVIDER3.P05a`.
 
 ## Verification Commands

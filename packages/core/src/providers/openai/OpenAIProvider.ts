@@ -677,6 +677,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const ephemeralSettings =
       this.providerConfig?.getEphemeralSettings?.() || {};
 
+    if (this.logger.enabled) {
+      const resolved = options.resolved;
+      this.logger.debug(() => `[OpenAIProvider] Resolved request context`, {
+        provider: this.name,
+        model,
+        resolvedModel: resolved.model,
+        resolvedBaseUrl: resolved.baseURL,
+        authTokenPresent: Boolean(resolved.authToken),
+        messageCount: contents.length,
+        toolCount: tools?.length ?? 0,
+        metadataKeys: Object.keys(metadata ?? {}),
+      });
+    }
+
     // Convert IContent to OpenAI messages format
     const messages = this.convertToOpenAIMessages(contents);
 
@@ -848,6 +862,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Wrap the API call with retry logic using centralized retry utility
+    if (this.logger.enabled) {
+      this.logger.debug(() => `[OpenAIProvider] Sending chat request`, {
+        model,
+        baseURL: baseURL ?? this.getBaseURL(),
+        streamingEnabled,
+        toolCount: formattedTools?.length ?? 0,
+        hasAuthToken: Boolean(options.resolved.authToken),
+        requestHasSystemPrompt: Boolean(systemPrompt?.length),
+        messageCount: messagesWithSystem.length,
+      });
+    }
     let response;
 
     // Debug log throttle tracker status
@@ -896,6 +921,28 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         throw enhancedError;
       }
       // Re-throw other errors as-is
+      const capturedErrorMessage =
+        error instanceof Error ? error.message : String(error);
+      const status =
+        typeof error === 'object' &&
+        error !== null &&
+        'status' in error &&
+        typeof (error as { status: unknown }).status === 'number'
+          ? (error as { status: number }).status
+          : undefined;
+
+      this.logger.error(
+        () =>
+          `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
+        {
+          model,
+          baseURL: baseURL ?? this.getBaseURL(),
+          streamingEnabled,
+          hasTools: formattedTools?.length ?? 0,
+          requestHasSystemPrompt: !!systemPrompt,
+          status,
+        },
+      );
       throw error;
     }
 

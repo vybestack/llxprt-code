@@ -52,6 +52,7 @@ describe('profileCommand', () => {
         providerName: 'openai',
         modelName: 'gpt-4',
         infoMessages: ['message one'],
+        warnings: ['fallback provider used'],
         providerChanged: true,
       });
 
@@ -60,6 +61,7 @@ describe('profileCommand', () => {
       expect(result?.type).toBe('message');
       if (result?.type === 'message') {
         expect(result.content).toContain('message one');
+        expect(result.content).toContain('fallback provider used');
       }
     });
   });

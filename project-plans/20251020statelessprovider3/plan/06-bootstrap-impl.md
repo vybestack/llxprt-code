@@ -29,7 +29,7 @@ Add block comments around new logic:
 
 ## Verification Commands
 ```bash
-npm test -- --grep "PLAN-20251020-STATELESSPROVIDER3.P05"
+npm run test --workspace @vybestack/llxprt-code -- --run packages/cli/src/config/__tests__/profileBootstrap.test.ts
 ```
 Tests should now pass.
 

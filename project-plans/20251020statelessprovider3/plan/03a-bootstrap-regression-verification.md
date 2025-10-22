@@ -12,12 +12,12 @@
 ### Files to Create
 - `project-plans/20251020statelessprovider3/verification/bootstrap-regression-output.md`
   - Paste the failing test output from Phase 03.
-  - Include the exact `Cannot set properties of undefined (setting 'authMode')` message.
+  - Include the `Error when talking to openai API` stderr line observed from the non-interactive bootstrap.
   - Tag with `@plan:PLAN-20251020-STATELESSPROVIDER3.P03a`.
 
 ## Verification Commands
 ```bash
-grep "Cannot set properties of undefined" project-plans/20251020statelessprovider3/verification/bootstrap-regression-output.md
+grep "Error when talking to openai API" project-plans/20251020statelessprovider3/verification/bootstrap-regression-output.md
 ```
 
 ## Manual Verification Checklist

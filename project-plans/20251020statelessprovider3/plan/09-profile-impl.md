@@ -30,7 +30,7 @@ Wrap new logic in comments:
 
 ## Verification Commands
 ```bash
-npm test -- --grep "PLAN-20251020-STATELESSPROVIDER3.P08"
+npm run test --workspace @vybestack/llxprt-code -- --run packages/cli/src/runtime/__tests__/profileApplication.test.ts
 ```
 Tests should pass.
 

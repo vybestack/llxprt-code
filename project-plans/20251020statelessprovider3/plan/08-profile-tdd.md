@@ -19,7 +19,7 @@
 
 ## Verification Commands
 ```bash
-npm test -- --run tests --grep "PLAN-20251020-STATELESSPROVIDER3.P08"
+npm run test --workspace @vybestack/llxprt-code -- --run packages/cli/src/runtime/__tests__/profileApplication.test.ts
 ```
 Expect failures due to NotYetImplemented.
 

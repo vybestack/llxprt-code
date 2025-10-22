@@ -427,6 +427,7 @@ describe('runtimeSettings helpers', () => {
     });
 
     expect(result.providerName).toBe('anthropic');
+    expect(result.warnings).toEqual([]);
     expect(activeProviderName).toBe('anthropic');
     const { settingsService } = getCliRuntimeServices() as unknown as {
       settingsService: StubSettingsServiceInstance;

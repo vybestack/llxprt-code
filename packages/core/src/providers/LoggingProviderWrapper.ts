@@ -215,7 +215,9 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   /**
-   * Access to the wrapped provider for unwrapping if needed
+   * @plan PLAN-20251020-STATELESSPROVIDER3.P12
+   * @requirement REQ-SP3-003
+   * Access to the wrapped provider for unwrapping if needed.
    */
   get wrappedProvider(): IProvider {
     return this.wrapped;
@@ -774,7 +776,7 @@ export class LoggingProviderWrapper implements IProvider {
     if ('clearState' in this.wrapped) {
       const candidate = (this.wrapped as { clearState?: () => void })
         .clearState;
-      candidate?.();
+      candidate?.call(this.wrapped);
     }
     // Reset conversation logging state
     this.conversationId = this.generateConversationId();

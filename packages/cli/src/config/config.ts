@@ -25,11 +25,11 @@ import {
   TelemetryTarget,
   FileFilteringOptions,
   ProfileManager,
+  type Profile,
   ShellTool,
   EditTool,
   WriteFileTool,
   MCPServerConfig,
-  getSettingsService,
   SettingsService,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
@@ -44,6 +44,18 @@ import { resolvePath } from '../utils/resolvePath.js';
 import { appEvents } from '../utils/events.js';
 
 import { isWorkspaceTrusted } from './trustedFolders.js';
+// @plan:PLAN-20251020-STATELESSPROVIDER3.P04
+import {
+  parseBootstrapArgs,
+  prepareRuntimeForProfile,
+  createBootstrapResult,
+} from './profileBootstrap.js';
+import {
+  applyProfileSnapshot,
+  getCliRuntimeContext,
+  registerCliProviderInfrastructure,
+  setCliRuntimeContext,
+} from '../runtime/runtimeSettings.js';
 
 const LLXPRT_DIR = '.llxprt';
 
@@ -531,23 +543,61 @@ export async function loadCliConfig(
   cwd: string = process.cwd(),
   runtimeOverrides: { settingsService?: SettingsService } = {},
 ): Promise<Config> {
+  /**
+   * @plan PLAN-20251020-STATELESSPROVIDER3.P06
+   * @requirement REQ-SP3-001
+   * @pseudocode bootstrap-order.md lines 1-9
+   */
+  const bootstrapParsed = parseBootstrapArgs();
+  const parsedWithOverrides = {
+    bootstrapArgs: bootstrapParsed.bootstrapArgs,
+    runtimeMetadata: {
+      ...bootstrapParsed.runtimeMetadata,
+      settingsService:
+        runtimeOverrides.settingsService ??
+        bootstrapParsed.runtimeMetadata.settingsService,
+    },
+  };
+  const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
+  const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
+
   // Handle --load flag early to apply profile settings
   let effectiveSettings = settings;
   let profileModel: string | undefined;
   let profileProvider: string | undefined;
   let profileModelParams: Record<string, unknown> | undefined;
+  let profileBaseUrl: string | undefined;
+  let loadedProfile: Profile | null = null;
+  const profileWarnings: string[] = [];
+
+  const normaliseProfileName = (
+    value: string | null | undefined,
+  ): string | undefined => {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
 
   // Check for profile to load - either from CLI arg, env var, or default profile setting
   // BUT skip default profile if --provider is explicitly specified
   const profileToLoad =
-    argv.profileLoad ||
-    process.env.LLXPRT_PROFILE ||
-    (argv.provider === undefined ? settings.defaultProfile : undefined);
+    normaliseProfileName(bootstrapArgs.profileName) ??
+    normaliseProfileName(process.env.LLXPRT_PROFILE) ??
+    (argv.provider === undefined
+      ? normaliseProfileName(
+          typeof settings.defaultProfile === 'string'
+            ? settings.defaultProfile
+            : undefined,
+        )
+      : undefined);
 
   if (profileToLoad) {
     try {
       const profileManager = new ProfileManager();
       const profile = await profileManager.loadProfile(profileToLoad);
+      loadedProfile = profile;
 
       // Store profile values to apply after Config creation
       // Only use profile provider/model if --provider is not explicitly specified
@@ -556,6 +606,10 @@ export async function loadCliConfig(
         argv.provider !== undefined ? undefined : profile.provider;
       profileModel = argv.provider !== undefined ? undefined : profile.model;
       profileModelParams = profile.modelParams;
+      profileBaseUrl =
+        typeof profile.ephemeralSettings?.['base-url'] === 'string'
+          ? profile.ephemeralSettings['base-url']
+          : undefined;
 
       const loadSummary = `Loaded profile ${profileToLoad}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`;
       logger.debug(() => loadSummary);
@@ -604,6 +658,7 @@ export async function loadCliConfig(
         return failureSummary;
       });
       console.error(failureSummary);
+      profileWarnings.push(failureSummary);
       // Continue without the profile settings
     }
   }
@@ -826,8 +881,7 @@ export async function loadCliConfig(
   // Ensure SettingsService reflects the selected model so Config#getModel picks it up
   if (finalModel && finalModel.trim() !== '') {
     const targetProviderForModel = finalProvider;
-    const settingsServiceForModel =
-      runtimeOverrides.settingsService ?? getSettingsService();
+    const settingsServiceForModel = runtimeState.runtime.settingsService;
     settingsServiceForModel.setProviderSetting(
       targetProviderForModel,
       'model',
@@ -932,10 +986,96 @@ export async function loadCliConfig(
 
   const enhancedConfig = config;
 
+  const bootstrapRuntimeId =
+    runtimeState.runtime.runtimeId ?? 'cli.runtime.bootstrap';
+  const baseBootstrapMetadata = {
+    ...(runtimeState.runtime.metadata ?? {}),
+    stage: 'post-config',
+  };
+
+  setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
+    runtimeId: bootstrapRuntimeId,
+    metadata: baseBootstrapMetadata,
+  });
+  if (runtimeState.oauthManager) {
+    registerCliProviderInfrastructure(
+      runtimeState.providerManager,
+      runtimeState.oauthManager,
+    );
+  }
+
+  let appliedProfileResult: Awaited<
+    ReturnType<typeof applyProfileSnapshot>
+  > | null = null;
+
+  logger.debug(
+    () =>
+      `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
+  );
+  if (loadedProfile && profileToLoad && argv.provider === undefined) {
+    const applyMetadata = {
+      ...baseBootstrapMetadata,
+      stage: 'profile-apply',
+      profileName: profileToLoad,
+    };
+
+    setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
+      runtimeId: bootstrapRuntimeId,
+      metadata: applyMetadata,
+    });
+    if (runtimeState.oauthManager) {
+      registerCliProviderInfrastructure(
+        runtimeState.providerManager,
+        runtimeState.oauthManager,
+      );
+    }
+
+    appliedProfileResult = await applyProfileSnapshot(loadedProfile, {
+      profileName: profileToLoad,
+    });
+
+    profileProvider = appliedProfileResult.providerName;
+    profileModel = appliedProfileResult.modelName;
+    if (appliedProfileResult.baseUrl) {
+      profileBaseUrl = appliedProfileResult.baseUrl;
+    }
+    if (appliedProfileResult.warnings.length > 0) {
+      profileWarnings.push(...appliedProfileResult.warnings);
+    }
+    logger.debug(
+      () =>
+        `[bootstrap] Applied profile '${profileToLoad}' -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
+    );
+  } else if (profileToLoad && argv.provider !== undefined) {
+    logger.debug(
+      () =>
+        `[bootstrap] Skipping profile application for '${profileToLoad}' because --provider was specified.`,
+    );
+  }
+
+  const bootstrapRuntimeContext = getCliRuntimeContext();
+  const bootstrapResult = createBootstrapResult({
+    runtime: bootstrapRuntimeContext,
+    providerManager: runtimeState.providerManager,
+    oauthManager: runtimeState.oauthManager,
+    bootstrapArgs,
+    profileApplication: {
+      providerName: profileProvider ?? finalProvider,
+      modelName: profileModel ?? finalModel,
+      ...(profileBaseUrl ? { baseUrl: profileBaseUrl } : {}),
+      warnings: profileWarnings.slice(),
+    },
+  });
+
+  if (bootstrapResult.profile.warnings.length > 0) {
+    for (const warning of bootstrapResult.profile.warnings) {
+      logger.warn(() => `[bootstrap] ${warning}`);
+    }
+  }
+
   // Apply emojifilter setting from settings.json to SettingsService
   // Only set if there isn't already an ephemeral setting (from /set command)
-  const settingsService =
-    runtimeOverrides.settingsService ?? getSettingsService();
+  const settingsService = runtimeState.runtime.settingsService;
   if (!runtimeOverrides.settingsService) {
     /**
      * @plan:PLAN-20250218-STATELESSPROVIDER.P06
@@ -944,7 +1084,7 @@ export async function loadCliConfig(
      * runtime helpers. Remove once all callers supply a scoped SettingsService.
      */
     logger.warn(
-      '[cli-runtime] loadCliConfig called without runtime SettingsService override; falling back to singleton instance (deprecated).',
+      '[cli-runtime] loadCliConfig called without runtime SettingsService override; using bootstrap-scoped instance (temporary compatibility path).',
     );
   }
   if (effectiveSettings.emojifilter && !settingsService.get('emojifilter')) {

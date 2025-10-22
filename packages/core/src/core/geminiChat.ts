@@ -561,10 +561,51 @@ export class GeminiChat {
     // DO NOT add user content to history yet - use send-then-commit pattern
 
     // Get the active provider
-    const provider = this.getActiveProvider();
+    let provider = this.getActiveProvider();
     if (!provider) {
       throw new Error('No active provider configured');
     }
+
+    const providerManager = this.config.getProviderManager?.();
+    const desiredProviderName = this.config.getProvider();
+    if (
+      providerManager &&
+      desiredProviderName &&
+      provider.name !== desiredProviderName &&
+      providerManager.listProviders().includes(desiredProviderName)
+    ) {
+      const previousProviderName = provider.name;
+      try {
+        providerManager.setActiveProvider(desiredProviderName);
+        const updatedProvider = providerManager.getActiveProvider();
+        if (updatedProvider) {
+          provider = updatedProvider;
+        }
+        this.logger.debug(
+          () =>
+            `[GeminiChat] enforced provider switch to '${desiredProviderName}' (previous '${previousProviderName}')`,
+        );
+      } catch (error) {
+        this.logger.error(
+          () =>
+            `[GeminiChat] failed to enforce provider '${desiredProviderName}': ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    const activeAuthType = this.config.getContentGeneratorConfig()?.authType;
+    const providerBaseUrl = this.resolveProviderBaseUrl(provider);
+
+    this.logger.debug(
+      () => '[GeminiChat] Active provider snapshot before stream/send',
+      {
+        providerName: provider.name,
+        providerDefaultModel: provider.getDefaultModel?.(),
+        configModel: this.config.getModel(),
+        baseUrl: providerBaseUrl,
+        authType: activeAuthType,
+      },
+    );
 
     // Check if provider supports IContent interface
     if (!this.providerSupportsIContent(provider)) {
@@ -669,6 +710,16 @@ export class GeminiChat {
         );
 
         // Call the provider directly with IContent
+        this.logger.debug(
+          () => '[GeminiChat] Calling provider.generateChatCompletion',
+          {
+            providerName: provider.name,
+            model: this.config.getModel(),
+            toolCount: tools?.length ?? 0,
+            baseUrl: this.resolveProviderBaseUrl(provider),
+            authType: this.config.getContentGeneratorConfig()?.authType,
+          },
+        );
         const streamResponse = provider.generateChatCompletion!({
           contents: iContents,
           tools: tools as ProviderToolset | undefined,
@@ -1011,6 +1062,22 @@ export class GeminiChat {
                 }>)
               : undefined;
 
+          const baseUrlForCall = this.resolveProviderBaseUrl(provider);
+          const activeAuthType =
+            this.config.getContentGeneratorConfig()?.authType;
+
+          this.logger.debug(
+            () =>
+              '[GeminiChat] Calling provider.generateChatCompletion (non-stream retry path)',
+            {
+              providerName: provider.name,
+              model: this.config.getModel(),
+              toolCount: toolsFromConfig?.length ?? 0,
+              baseUrl: baseUrlForCall,
+              authType: activeAuthType,
+            },
+          );
+
           const streamResponse = provider.generateChatCompletion({
             contents: userIContents,
             tools:
@@ -1110,10 +1177,48 @@ export class GeminiChat {
     userContent: Content | Content[],
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     // Get the active provider
-    const provider = this.getActiveProvider();
+    let provider = this.getActiveProvider();
     if (!provider) {
       throw new Error('No active provider configured');
     }
+
+    const desiredProviderName = this.config.getProvider();
+    const providerManager = this.config.getProviderManager?.();
+    if (
+      desiredProviderName &&
+      providerManager &&
+      provider.name !== desiredProviderName &&
+      providerManager.listProviders().includes(desiredProviderName)
+    ) {
+      const previousProviderName = provider.name;
+      try {
+        providerManager.setActiveProvider(desiredProviderName);
+        provider = providerManager.getActiveProvider();
+        this.logger.debug(
+          () =>
+            `[GeminiChat] enforced provider switch (stream path) to '${desiredProviderName}' (previous '${previousProviderName}')`,
+        );
+      } catch (error) {
+        this.logger.error(
+          () =>
+            `[GeminiChat] failed to enforce provider '${desiredProviderName}' (stream path): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    const activeAuthType = this.config.getContentGeneratorConfig()?.authType;
+    const providerBaseUrl = this.resolveProviderBaseUrl(provider);
+
+    this.logger.debug(
+      () => '[GeminiChat] Active provider snapshot before stream request',
+      {
+        providerName: provider.name,
+        providerDefaultModel: provider.getDefaultModel?.(),
+        configModel: this.config.getModel(),
+        baseUrl: providerBaseUrl,
+        authType: activeAuthType,
+      },
+    );
 
     // Check if provider supports IContent interface
     if (!this.providerSupportsIContent(provider)) {
@@ -1173,6 +1278,18 @@ export class GeminiChat {
       const tools = this.generationConfig.tools;
 
       // Call the provider directly with IContent
+      this.logger.debug(
+        () =>
+          '[GeminiChat] Calling provider.generateChatCompletion (generatorRequest)',
+        {
+          providerName: provider.name,
+          model: this.config.getModel(),
+          historyLength: requestContents.length,
+          toolCount: tools?.length ?? 0,
+          baseUrl: providerBaseUrl,
+          authType: activeAuthType,
+        },
+      );
       const streamResponse = provider.generateChatCompletion!({
         contents: requestContents,
         tools: tools as ProviderToolset | undefined,
@@ -1435,10 +1552,40 @@ export class GeminiChat {
     historyToCompress: IContent[],
     _prompt_id: string,
   ): Promise<string> {
-    const provider = this.getActiveProvider();
-    if (!provider || !this.providerSupportsIContent(provider)) {
+    let provider = this.getActiveProvider();
+    if (!provider) {
+      throw new Error('No active provider configured');
+    }
+
+    const providerManager = this.config.getProviderManager?.();
+    const desiredProviderName = this.config.getProvider();
+    if (
+      desiredProviderName &&
+      providerManager &&
+      provider.name !== desiredProviderName &&
+      providerManager.listProviders().includes(desiredProviderName)
+    ) {
+      try {
+        providerManager.setActiveProvider(desiredProviderName);
+        provider = providerManager.getActiveProvider();
+        this.logger.debug(
+          () =>
+            `[GeminiChat] enforced provider switch (compression) to '${desiredProviderName}'`,
+        );
+      } catch (error) {
+        this.logger.error(
+          () =>
+            `[GeminiChat] failed to enforce provider '${desiredProviderName}' (compression): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    if (!this.providerSupportsIContent(provider)) {
       throw new Error('Provider does not support compression');
     }
+
+    const activeAuthType = this.config.getContentGeneratorConfig()?.authType;
+    const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     // Build compression request with system prompt and user history
     const compressionRequest: IContent[] = [
@@ -1467,6 +1614,17 @@ export class GeminiChat {
     ];
 
     // Direct provider call without tools for compression
+    this.logger.debug(
+      () =>
+        '[GeminiChat] Calling provider.generateChatCompletion (directCompression)',
+      {
+        providerName: provider.name,
+        model: this.config.getModel(),
+        historyLength: compressionRequest.length,
+        baseUrl: providerBaseUrl,
+        authType: activeAuthType,
+      },
+    );
     const stream = provider.generateChatCompletion!({
       contents: compressionRequest,
       tools: undefined,
@@ -2123,6 +2281,23 @@ export class GeminiChat {
       typeof (provider as { generateChatCompletion?: unknown })
         .generateChatCompletion === 'function'
     );
+  }
+
+  private resolveProviderBaseUrl(provider: IProvider): string | undefined {
+    const candidate = provider as {
+      getBaseURL?: () => string;
+      baseURL?: string;
+    };
+
+    try {
+      if (typeof candidate.getBaseURL === 'function') {
+        return candidate.getBaseURL();
+      }
+    } catch {
+      // Ignore failures from provider-specific base URL accessors
+    }
+
+    return candidate.baseURL;
   }
 }
 

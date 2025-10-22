@@ -16,11 +16,24 @@ import {
   FatalTurnLimitedError,
   EmojiFilter,
   type EmojiFilterMode,
+  type IContent,
 } from '@vybestack/llxprt-code-core';
 import { Content, Part, FunctionCall } from '@google/genai';
 
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
+
+function partsToPlainText(parts: Part[]): string {
+  return parts
+    .map((part) => {
+      if (part && typeof part === 'object' && 'text' in part) {
+        const textValue = (part as { text?: unknown }).text;
+        return typeof textValue === 'string' ? textValue : '';
+      }
+      return '';
+    })
+    .join('');
+}
 
 export async function runNonInteractive(
   config: Config,
@@ -72,6 +85,79 @@ export async function runNonInteractive(
       throw new FatalInputError(
         'Exiting due to an error processing the @ command.',
       );
+    }
+
+    const providerManager = config.getProviderManager?.();
+    const activeProvider =
+      providerManager && typeof providerManager.getActiveProvider === 'function'
+        ? providerManager.getActiveProvider()
+        : null;
+    const useGeminiPipeline =
+      !activeProvider || activeProvider.name === 'gemini';
+
+    if (!useGeminiPipeline) {
+      const userText = partsToPlainText(processedQuery as Part[]);
+      const humanContent: IContent = {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: userText }],
+      };
+
+      const pendingToolCalls: FunctionCall[] = [];
+      const responseIterator = activeProvider.generateChatCompletion([
+        humanContent,
+      ]);
+
+      for await (const content of responseIterator) {
+        for (const block of content.blocks ?? []) {
+          if (block.type === 'text') {
+            let outputValue = block.text ?? '';
+            if (emojiFilter) {
+              const filterResult = emojiFilter.filterStreamChunk(outputValue);
+              if (filterResult.blocked) {
+                process.stderr.write(
+                  '[Error: Response blocked due to emoji detection]\n',
+                );
+                continue;
+              }
+
+              outputValue =
+                typeof filterResult.filtered === 'string'
+                  ? (filterResult.filtered as string)
+                  : '';
+
+              if (filterResult.systemFeedback) {
+                process.stderr.write(
+                  `Warning: ${filterResult.systemFeedback}\n`,
+                );
+              }
+            }
+
+            if (outputValue) {
+              process.stdout.write(outputValue);
+            }
+          } else if (block.type === 'tool_call') {
+            pendingToolCalls.push({
+              name: block.name,
+              args: block.parameters as Record<string, unknown>,
+              id: block.id,
+            });
+          }
+        }
+      }
+
+      const remainingBuffered = emojiFilter?.flushBuffer?.();
+      if (remainingBuffered) {
+        process.stdout.write(remainingBuffered);
+      }
+
+      if (pendingToolCalls.length > 0) {
+        console.warn(
+          '[bootstrap] Tool calls returned during non-interactive execution are not yet supported; ignoring.',
+        );
+      }
+
+      process.stdout.write('\n');
+      return;
     }
 
     let currentMessages: Content[] = [

@@ -18,6 +18,7 @@ class MockOAuthProvider implements OAuthProvider {
   readonly name: string;
   private token: OAuthToken | null = null;
   private authInitiated = false;
+  private getTokenCalls = 0;
 
   constructor(
     name: string,
@@ -42,6 +43,7 @@ class MockOAuthProvider implements OAuthProvider {
   }
 
   async getToken(): Promise<OAuthToken | null> {
+    this.getTokenCalls++;
     return this.token;
   }
 
@@ -74,6 +76,10 @@ class MockOAuthProvider implements OAuthProvider {
 
   wasAuthInitiated(): boolean {
     return this.authInitiated;
+  }
+
+  getTokenCallCount(): number {
+    return this.getTokenCalls;
   }
 }
 
@@ -174,6 +180,20 @@ describe.skipIf(skipInCI)(
 
         const providers = manager.getSupportedProviders();
         expect(providers).toEqual(['gemini', 'qwen']); // Should be sorted
+      });
+
+      /**
+       * @requirement REQ-003.1
+       * @scenario Lazy auth on registration
+       * @given OAuth provider with lazy token retrieval
+       * @when registerProvider() called
+       * @then Provider.getToken is not invoked
+       */
+      it('should not fetch tokens during provider registration', () => {
+        manager.registerProvider(qwenProvider);
+
+        expect(qwenProvider.getTokenCallCount()).toBe(0);
+        expect(qwenProvider.wasAuthInitiated()).toBe(false);
       });
     });
 

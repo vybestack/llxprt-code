@@ -13,7 +13,8 @@
 - `packages/cli/src/integration-tests/profile-bootstrap.integration.test.ts`
   - Add a new suite tagged with `@plan:PLAN-20251020-STATELESSPROVIDER3.P03` and `@requirement:REQ-SP3-001`/`REQ-SP3-002`.
   - Test should execute `DEBUG=llxprt:* node scripts/start.js --profile-load synthetic --prompt "say hello"` (via helper) and expect **success** (no error thrown, output contains response stub).
-  - The test must currently fail by capturing the `Cannot set properties of undefined (setting 'authMode')` error.
+  - Reference the synthetic keyfile by path (default `/Users/acoliver/.synthetic_key`) when spawning the CLI. Allow override via `process.env.SYNTHETIC_KEYFILE_PATH` so we never embed key contents in the repo.
+  - The test must currently fail by capturing the non-interactive regression: stderr includes `Error when talking to openai API` because the synthetic base URL/keyfile are dropped. (Interactive `/profile load synthetic` still throws `Cannot set properties of undefined (setting 'authMode')` and will be covered later.)
 
 ### Required Code Markers
 Include inline comments referencing reproduction:
@@ -27,13 +28,13 @@ Include inline comments referencing reproduction:
 
 ## Verification Commands
 ```bash
-npm test -- --run integration --grep "PLAN-20251020-STATELESSPROVIDER3.P03"
+npm run test:integration --workspace @vybestack/llxprt-code -- --run src/integration-tests/profile-bootstrap.integration.test.ts
 ```
-The command should fail with the existing `authMode` error.
+The command should fail with the observed OpenAI API error message.
 
 ## Manual Verification Checklist
 - [ ] Integration test captures the real failure output.
-- [ ] Failure message matches observed CLI error.
+- [ ] Failure message matches observed CLI error (`Error when talking to openai API`).
 - [ ] No code changes applied to fix behaviour yet.
 
 ## Success Criteria

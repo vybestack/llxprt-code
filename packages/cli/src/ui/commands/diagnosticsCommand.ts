@@ -14,6 +14,7 @@ import {
   CommandKind,
 } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 import process from 'node:process';
 
 function maskSensitive(value: string): string {
@@ -35,6 +36,7 @@ export const diagnosticsCommand: SlashCommand = {
     try {
       const config = context.services.config;
       const settings = context.services.settings;
+      const logger = new DebugLogger('llxprt:ui:diagnostics');
 
       if (!config) {
         return {
@@ -45,6 +47,10 @@ export const diagnosticsCommand: SlashCommand = {
       }
 
       const snapshot = getRuntimeApi().getRuntimeDiagnosticsSnapshot();
+      logger.debug(
+        () =>
+          `[diagnostics] snapshot provider=${snapshot.providerName ?? 'unknown'}`,
+      );
       const diagnostics: string[] = ['# LLxprt Diagnostics\n'];
 
       diagnostics.push('## Provider Information');
@@ -65,6 +71,10 @@ export const diagnosticsCommand: SlashCommand = {
 
       diagnostics.push('\n## Ephemeral Settings');
       const ephemeralSettings = snapshot.ephemeralSettings;
+      logger.debug(
+        () =>
+          `[diagnostics] ephemeral settings ${JSON.stringify(ephemeralSettings)}`,
+      );
       if (Object.keys(ephemeralSettings).length === 0) {
         diagnostics.push('- No ephemeral settings configured');
       } else {

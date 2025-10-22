@@ -28,7 +28,7 @@ it('description @plan:PLAN-20251020-STATELESSPROVIDER3.P05 @requirement:REQ-SP3-
 
 ## Verification Commands
 ```bash
-npm test -- --run tests --grep "PLAN-20251020-STATELESSPROVIDER3.P05"
+npm run test --workspace @vybestack/llxprt-code -- --run packages/cli/src/config/__tests__/profileBootstrap.test.ts
 ```
 Expect failures because stubs throw NotYetImplemented.
 

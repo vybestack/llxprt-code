@@ -18,7 +18,7 @@
 
 ### Verification Commands
 ```bash
-npm test -- --run integration --grep "PLAN-20251020statelessprovider3.P13"
+npm run test:integration --workspace @vybestack/llxprt-code -- --run src/integration-tests/profile-bootstrap.integration.test.ts
 ```
 
 ## Manual Verification Checklist

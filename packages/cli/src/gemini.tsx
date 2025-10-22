@@ -70,6 +70,7 @@ import {
   setActiveModelParam,
   clearActiveModelParam,
   getActiveModelParams,
+  loadProfileByName,
 } from './runtime/runtimeSettings.js';
 import { writeFileSync } from 'node:fs';
 
@@ -370,6 +371,25 @@ export async function main() {
     { config, allowBrowserEnvironment: false, settings },
   );
   registerCliProviderInfrastructure(providerManager, oauthManager);
+
+  const bootstrapProfileName =
+    typeof process.env.LLXPRT_BOOTSTRAP_PROFILE === 'string'
+      ? process.env.LLXPRT_BOOTSTRAP_PROFILE.trim()
+      : '';
+  if (
+    !argv.provider &&
+    bootstrapProfileName !== '' &&
+    runtimeSettingsService.getCurrentProfileName?.() !== null
+  ) {
+    try {
+      await loadProfileByName(bootstrapProfileName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[bootstrap] Failed to reapply profile '${bootstrapProfileName}' after provider manager initialization: ${message}`,
+      );
+    }
+  }
 
   // Initialize git stats service for tracking file changes when logging is enabled
   if (config.getConversationLoggingEnabled()) {
