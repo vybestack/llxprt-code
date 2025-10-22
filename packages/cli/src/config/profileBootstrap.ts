@@ -1,5 +1,8 @@
-// @plan:PLAN-20251020-STATELESSPROVIDER3.P06
-// @requirement:REQ-SP3-001
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 import {
   createProviderRuntimeContext,
@@ -22,7 +25,7 @@ export interface BootstrapProfileArgs {
 
 export interface RuntimeBootstrapMetadata {
   settingsService?: SettingsService;
-  config?: unknown;
+  config?: ProviderRuntimeContext['config'];
   runtimeId?: string;
   metadata?: Record<string, unknown>;
 }
@@ -154,7 +157,7 @@ export async function prepareRuntimeForProfile(
 
   const runtime = createProviderRuntimeContext({
     settingsService,
-    config: runtimeInit.config as ProviderRuntimeContext['config'],
+    config: runtimeInit.config,
     runtimeId: runtimeInit.runtimeId ?? DEFAULT_RUNTIME_ID,
     metadata: {
       ...(runtimeInit.metadata ?? {}),
@@ -164,7 +167,7 @@ export async function prepareRuntimeForProfile(
 
   setActiveProviderRuntimeContext(runtime);
 
-  const { manager, oauthManager } = createProviderManager(
+  const { manager: providerManager, oauthManager } = createProviderManager(
     {
       settingsService: runtime.settingsService,
       config: runtime.config,
@@ -176,11 +179,11 @@ export async function prepareRuntimeForProfile(
     },
   );
 
-  registerCliProviderInfrastructure(manager, oauthManager);
+  registerCliProviderInfrastructure(providerManager, oauthManager);
 
   return {
     runtime,
-    providerManager: manager,
+    providerManager,
     oauthManager,
   };
 }
@@ -199,26 +202,19 @@ export function createBootstrapResult(input: {
 }): BootstrapResult {
   const runtimeMetadata = {
     ...(input.runtime.metadata ?? {}),
-    ...(input.bootstrapArgs.profileName
-      ? { profileName: input.bootstrapArgs.profileName }
-      : {}),
+    stage: 'bootstrap-complete',
+  };
+
+  const runtime: ProviderRuntimeContext = {
+    ...input.runtime,
+    metadata: runtimeMetadata,
   };
 
   return {
-    runtime: {
-      ...input.runtime,
-      metadata: runtimeMetadata,
-    },
+    runtime,
     providerManager: input.providerManager,
     oauthManager: input.oauthManager,
     bootstrapArgs: input.bootstrapArgs,
-    profile: {
-      providerName: input.profileApplication.providerName,
-      modelName: input.profileApplication.modelName,
-      ...(input.profileApplication.baseUrl
-        ? { baseUrl: input.profileApplication.baseUrl }
-        : {}),
-      warnings: [...input.profileApplication.warnings],
-    },
+    profile: input.profileApplication,
   };
 }

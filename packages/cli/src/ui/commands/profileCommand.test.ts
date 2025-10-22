@@ -16,6 +16,8 @@ const runtimeMocks = vi.hoisted(() => ({
   listSavedProfiles: vi.fn(),
   setDefaultProfileName: vi.fn(),
   getActiveProfileName: vi.fn(),
+  switchActiveProvider: vi.fn(),
+  getActiveProviderStatus: vi.fn(),
 }));
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
@@ -29,6 +31,11 @@ describe('profileCommand', () => {
     vi.clearAllMocks();
     context = createMockCommandContext();
     runtimeMocks.listSavedProfiles.mockResolvedValue(['alpha', 'beta']);
+    runtimeMocks.switchActiveProvider.mockResolvedValue(undefined);
+    runtimeMocks.getActiveProviderStatus.mockReturnValue({
+      providerName: 'gemini',
+      modelName: 'gemini-1.5-pro',
+    });
   });
 
   describe('save subcommand', () => {
@@ -58,6 +65,7 @@ describe('profileCommand', () => {
 
       const result = await load.action!(context, 'demo');
       expect(runtimeMocks.loadProfileByName).toHaveBeenCalledWith('demo');
+      expect(runtimeMocks.switchActiveProvider).toHaveBeenCalledWith('openai');
       expect(result?.type).toBe('message');
       if (result?.type === 'message') {
         expect(result.content).toContain('message one');

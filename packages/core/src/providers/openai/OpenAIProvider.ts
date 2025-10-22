@@ -92,6 +92,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         baseURL.includes('api.qwen.com') ||
         baseURL.includes('qwen'))
     );
+    const forceQwenOAuth = Boolean(
+      (config as { forceQwenOAuth?: boolean } | undefined)?.forceQwenOAuth,
+    );
 
     // Initialize base provider with auth configuration
     super(
@@ -100,8 +103,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         apiKey: normalizedApiKey,
         baseURL,
         envKeyNames: ['OPENAI_API_KEY'], // Support environment variable fallback
-        isOAuthEnabled: isQwenEndpoint && !!oauthManager,
-        oauthProvider: isQwenEndpoint ? 'qwen' : undefined,
+        isOAuthEnabled: (isQwenEndpoint || forceQwenOAuth) && !!oauthManager,
+        oauthProvider: isQwenEndpoint || forceQwenOAuth ? 'qwen' : undefined,
         oauthManager,
       },
       config,
@@ -301,6 +304,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Qwen endpoints support OAuth, standard OpenAI does not
    */
   protected supportsOAuth(): boolean {
+    const providerConfig = this.providerConfig as IProviderConfig & {
+      forceQwenOAuth?: boolean;
+    };
+    if (providerConfig?.forceQwenOAuth) {
+      return true;
+    }
     // CRITICAL FIX: Check provider name first for cases where base URL is changed by profiles
     // This handles the cerebrasqwen3 profile case where base-url is changed to cerebras.ai
     // but the provider name is still 'qwen' due to Object.defineProperty override
@@ -407,22 +416,45 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const config = this.providerConfig as IProviderConfig & {
       forceQwenOAuth?: boolean;
     };
-    if (this.name === 'qwen' && config?.forceQwenOAuth) {
-      // For qwen with forceQwenOAuth, check OAuth directly
-      if (this.baseProviderConfig.oauthManager) {
-        try {
-          const oauthProviderName =
-            this.baseProviderConfig.oauthProvider || 'qwen';
-          const token =
-            await this.baseProviderConfig.oauthManager.getToken(
-              oauthProviderName,
-            );
-          return token !== null;
-        } catch {
-          return false;
-        }
+
+    const directApiKey = this.baseProviderConfig.apiKey;
+    if (typeof directApiKey === 'string' && directApiKey.trim() !== '') {
+      return true;
+    }
+
+    try {
+      const nonOAuthToken = await this.authResolver.resolveAuthentication({
+        settingsService: this.resolveSettingsService(),
+        includeOAuth: false,
+      });
+      if (typeof nonOAuthToken === 'string' && nonOAuthToken.trim() !== '') {
+        return true;
       }
-      return false;
+    } catch (error) {
+      if (process.env.DEBUG) {
+        this.logger.debug(
+          () =>
+            `[openai] non-OAuth authentication resolution failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    if (this.name === 'qwen' && config?.forceQwenOAuth) {
+      try {
+        const token = await this.authResolver.resolveAuthentication({
+          settingsService: this.resolveSettingsService(),
+          includeOAuth: true,
+        });
+        return typeof token === 'string' && token.trim() !== '';
+      } catch (error) {
+        if (process.env.DEBUG) {
+          this.logger.debug(
+            () =>
+              `[openai] forced OAuth authentication failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        return false;
+      }
     }
 
     // For non-qwen providers, use the normal check

@@ -22,6 +22,52 @@ interface ProviderRuntimeOptions {
   metadata?: Record<string, unknown>;
 }
 
+type SpyFn = ((...args: unknown[]) => unknown) & {
+  calls: unknown[][];
+  mockImplementation: (fn: (...args: unknown[]) => unknown) => SpyFn;
+  mockReturnValue: (value: unknown) => SpyFn;
+  mockReturnValueOnce: (value: unknown) => SpyFn;
+  mockClear: () => SpyFn;
+};
+
+function createSpy(impl?: (...args: unknown[]) => unknown): SpyFn {
+  const calls: unknown[][] = [];
+  let implementation = impl ?? (() => undefined);
+
+  const spy = ((...args: unknown[]) => {
+    calls.push(args);
+    return implementation(...args);
+  }) as SpyFn;
+
+  spy.calls = calls;
+  spy.mockImplementation = (fn: (...fnArgs: unknown[]) => unknown) => {
+    implementation = fn;
+    return spy;
+  };
+  spy.mockReturnValue = (value: unknown) => {
+    implementation = () => value;
+    return spy;
+  };
+  spy.mockReturnValueOnce = (value: unknown) => {
+    let called = false;
+    implementation = (..._fnArgs: unknown[]) => {
+      if (called) {
+        return value;
+      }
+      called = true;
+      return value;
+    };
+    return spy;
+  };
+  spy.mockClear = () => {
+    calls.length = 0;
+    implementation = impl ?? (() => undefined);
+    return spy;
+  };
+
+  return spy;
+}
+
 interface ProviderWithRuntimeResult<P> {
   provider: P;
   runtime: ProviderRuntimeContext;
@@ -63,12 +109,13 @@ export function createProviderWithRuntime<P>(
 
 function requireVi() {
   const viGlobal = (globalThis as { vi?: (typeof import('vitest'))['vi'] }).vi;
-  if (!viGlobal) {
-    throw new Error(
-      'Vitest APIs unavailable. core test-utils runtime helpers must run within Vitest.',
-    );
+  if (viGlobal) {
+    return viGlobal;
   }
-  return viGlobal;
+
+  return {
+    fn: (impl?: (...args: unknown[]) => unknown) => createSpy(impl),
+  } as unknown as (typeof import('vitest'))['vi'];
 }
 
 interface GeminiChatConfigShape {
@@ -87,6 +134,8 @@ interface GeminiChatConfigShape {
   flashFallbackHandler?: unknown;
   getEphemeralSettings: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getEphemeralSetting: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  getProvider: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  setProvider: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getProviderManager: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getSettingsService: ReturnType<ReturnType<typeof requireVi>['fn']>;
 }
@@ -149,6 +198,13 @@ export function createGeminiChatRuntime(
     ({
       getActiveProvider: vi.fn().mockReturnValue(provider),
     } as Pick<ProviderManager, 'getActiveProvider'>);
+  let currentProviderName = provider.name;
+  const getProviderSpy = vi.fn().mockImplementation(() => currentProviderName);
+  const setProviderSpy = vi.fn().mockImplementation((next: unknown) => {
+    if (typeof next === 'string') {
+      currentProviderName = next;
+    }
+  });
 
   const baseConfig: GeminiChatConfigShape = {
     getSessionId: () => 'test-session-id',
@@ -166,6 +222,8 @@ export function createGeminiChatRuntime(
     flashFallbackHandler: undefined,
     getEphemeralSettings: vi.fn().mockReturnValue({}),
     getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+    getProvider: getProviderSpy,
+    setProvider: setProviderSpy,
     getProviderManager: vi.fn().mockReturnValue(providerManager),
     getSettingsService: vi.fn().mockReturnValue(settingsService),
   };

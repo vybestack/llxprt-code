@@ -150,13 +150,22 @@ export abstract class BaseProvider implements IProvider {
       return activeOptions.settings;
     }
 
-    const activeRuntime =
-      peekActiveProviderRuntimeContext() ?? getActiveProviderRuntimeContext();
+    const activeRuntime = peekActiveProviderRuntimeContext();
     if (activeRuntime?.settingsService) {
       return activeRuntime.settingsService;
     }
 
-    return this.defaultSettingsService;
+    if (this.defaultSettingsService) {
+      return this.defaultSettingsService;
+    }
+
+    const fallbackRuntime = getActiveProviderRuntimeContext();
+    if (fallbackRuntime?.settingsService) {
+      this.defaultSettingsService = fallbackRuntime.settingsService;
+      return fallbackRuntime.settingsService;
+    }
+
+    throw new Error('SettingsService unavailable for provider runtime context');
   }
 
   /**
@@ -270,7 +279,17 @@ export abstract class BaseProvider implements IProvider {
       (await this.authResolver.resolveAuthentication({
         settingsService: this.resolveSettingsService(),
       })) ?? '';
-    return token;
+
+    if (typeof token === 'string' && token.trim() !== '') {
+      return token;
+    }
+
+    const directApiKey = this.baseProviderConfig.apiKey;
+    if (typeof directApiKey === 'string' && directApiKey.trim() !== '') {
+      return directApiKey;
+    }
+
+    return '';
   }
 
   /**
@@ -612,10 +631,18 @@ export abstract class BaseProvider implements IProvider {
 
     const resolvedModel = this.computeModel(settings);
     const resolvedBaseURL = this.computeBaseURL(settings);
-    const resolvedAuth =
+    let resolvedAuth =
       (await this.authResolver.resolveAuthentication({
         settingsService: settings,
       })) ?? '';
+
+    if (
+      (typeof resolvedAuth !== 'string' || resolvedAuth.trim() === '') &&
+      typeof this.baseProviderConfig.apiKey === 'string' &&
+      this.baseProviderConfig.apiKey.trim() !== ''
+    ) {
+      resolvedAuth = this.baseProviderConfig.apiKey;
+    }
 
     return {
       ...providedOptions,
@@ -719,6 +746,10 @@ export abstract class BaseProvider implements IProvider {
       await settingsService.updateSettings(this.name, {
         [key]: value,
       });
+      const updatedSettings = await settingsService.getSettings(this.name);
+      if (updatedSettings[key] !== value) {
+        settingsService.set(`providers.${this.name}.${String(key)}`, value);
+      }
     } catch (error) {
       if (process.env.DEBUG) {
         console.error(

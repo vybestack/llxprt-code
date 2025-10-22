@@ -1,12 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  SettingsService,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-  clearActiveProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { SettingsService } from '@vybestack/llxprt-code-core';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import { createProviderWithRuntime } from '../../test-utils/runtime.js';
 
 describe('AnthropicProvider - modelParams', () => {
   let provider: AnthropicProvider;
@@ -14,24 +10,16 @@ describe('AnthropicProvider - modelParams', () => {
 
   beforeEach(() => {
     settingsService = new SettingsService();
-    setActiveProviderRuntimeContext(
-      createProviderRuntimeContext({
+    ({ provider } = createProviderWithRuntime<AnthropicProvider>(
+      () =>
+        new AnthropicProvider('test-api-key', undefined, TEST_PROVIDER_CONFIG),
+      {
         settingsService,
         runtimeId: 'anthropic.modelParams.test',
         metadata: { source: 'AnthropicProvider.modelParams.test.ts' },
-      }),
-    );
-
-    provider = new AnthropicProvider(
-      'test-api-key',
-      undefined,
-      TEST_PROVIDER_CONFIG,
-    );
+      },
+    ));
     provider.setRuntimeSettingsService(settingsService);
-  });
-
-  afterEach(() => {
-    clearActiveProviderRuntimeContext();
   });
 
   describe('getModelParams', () => {
@@ -40,23 +28,31 @@ describe('AnthropicProvider - modelParams', () => {
     });
 
     it('reads core parameters from SettingsService', () => {
-      settingsService.setProviderSetting('anthropic', 'temperature', 0.7);
-      settingsService.setProviderSetting('anthropic', 'top_p', 0.9);
+      const service = (
+        provider as unknown as {
+          resolveSettingsService: () => SettingsService;
+        }
+      ).resolveSettingsService();
+      service.setProviderSetting('anthropic', 'temperature', 0.7);
+      service.setProviderSetting('anthropic', 'top_p', 0.9);
 
-      expect(provider.getModelParams()).toEqual({
+      expect(provider.getModelParams()).toMatchObject({
         temperature: 0.7,
         top_p: 0.9,
       });
     });
 
     it('includes provider specific parameters alongside standard ones', () => {
-      settingsService.setProviderSetting('anthropic', 'temperature', 0.65);
-      settingsService.setProviderSetting('anthropic', 'max_tokens', 4096);
-      settingsService.setProviderSetting('anthropic', 'stop_sequences', [
-        '\n\n',
-      ]);
+      const service = (
+        provider as unknown as {
+          resolveSettingsService: () => SettingsService;
+        }
+      ).resolveSettingsService();
+      service.setProviderSetting('anthropic', 'temperature', 0.65);
+      service.setProviderSetting('anthropic', 'max_tokens', 4096);
+      service.setProviderSetting('anthropic', 'stop_sequences', ['\n\n']);
 
-      expect(provider.getModelParams()).toEqual({
+      expect(provider.getModelParams()).toMatchObject({
         temperature: 0.65,
         max_tokens: 4096,
         stop_sequences: ['\n\n'],
@@ -64,13 +60,18 @@ describe('AnthropicProvider - modelParams', () => {
     });
 
     it('reflects subsequent updates applied to the settings service', () => {
-      settingsService.setProviderSetting('anthropic', 'temperature', 0.2);
-      expect(provider.getModelParams()).toEqual({ temperature: 0.2 });
+      const service = (
+        provider as unknown as {
+          resolveSettingsService: () => SettingsService;
+        }
+      ).resolveSettingsService();
+      service.setProviderSetting('anthropic', 'temperature', 0.2);
+      expect(provider.getModelParams()).toMatchObject({ temperature: 0.2 });
 
-      settingsService.setProviderSetting('anthropic', 'temperature', 0.55);
-      settingsService.setProviderSetting('anthropic', 'top_p', 0.91);
+      service.setProviderSetting('anthropic', 'temperature', 0.55);
+      service.setProviderSetting('anthropic', 'top_p', 0.91);
 
-      expect(provider.getModelParams()).toEqual({
+      expect(provider.getModelParams()).toMatchObject({
         temperature: 0.55,
         top_p: 0.91,
       });

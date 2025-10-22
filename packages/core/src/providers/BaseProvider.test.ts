@@ -29,6 +29,7 @@ const mockOAuthManager: OAuthManager = {
     [string, OAuthTokenRequestMetadata | undefined],
     Promise<string | null>
   >(),
+  getOAuthToken: vi.fn(),
   isAuthenticated: vi.fn(),
 };
 
@@ -399,12 +400,25 @@ describe('BaseProvider', () => {
         oauthManager: mockOAuthManager,
       };
 
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token');
-
       // Mock Date.now to control cache expiration
       const originalNow = Date.now;
       let mockTime = 1000;
       vi.spyOn(Date, 'now').mockImplementation(() => mockTime);
+
+      vi.mocked(mockOAuthManager.getToken)
+        .mockResolvedValueOnce('oauth-token')
+        .mockResolvedValueOnce('oauth-token-2');
+      vi.mocked(mockOAuthManager.getOAuthToken)
+        .mockResolvedValueOnce({
+          access_token: 'oauth-token',
+          token_type: 'Bearer',
+          expiry: Math.floor((mockTime + 30_000) / 1000),
+        })
+        .mockResolvedValueOnce({
+          access_token: 'oauth-token-2',
+          token_type: 'Bearer',
+          expiry: Math.floor((mockTime + 120_000) / 1000),
+        });
 
       const provider = new TestProvider(config);
 

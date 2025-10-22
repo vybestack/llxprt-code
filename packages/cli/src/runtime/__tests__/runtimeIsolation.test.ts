@@ -196,7 +196,7 @@ describe('CLI runtime isolation', () => {
     expect(runtimeA.handle.config.getProvider()).toBe(
       runtimeA.secondaryProvider,
     );
-    expect(runtimeA.handle.config.getModel()).toBe('alpha-secondary-tuned');
+    expect(runtimeA.handle.config.getModel()).toBe('alpha-profile-model');
     expect(runtimeA.handle.config.getEphemeralSetting('base-url')).toBe(
       'https://alpha.isolated.example.com',
     );
@@ -222,7 +222,7 @@ describe('CLI runtime isolation', () => {
     expect(runtimeB.handle.config.getProvider()).toBe(
       runtimeB.secondaryProvider,
     );
-    expect(runtimeB.handle.config.getModel()).toBe('beta-secondary-tuned');
+    expect(runtimeB.handle.config.getModel()).toBe('beta-profile-model');
     expect(runtimeB.handle.config.getEphemeralSetting('base-url')).toBe(
       'https://beta.isolated.example.com',
     );

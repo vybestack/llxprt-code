@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'http';
 import { AddressInfo } from 'net';
 import { randomBytes, createHash } from 'crypto';
@@ -110,10 +110,17 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       };
 
       const realDeviceFlow = new QwenDeviceFlow(realConfig);
-      // This will fail with a real network request, which is expected
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response('Bad Request', {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
       await expect(realDeviceFlow.initiateDeviceFlow()).rejects.toThrow(
         'HTTP 400: Bad Request',
       );
+      fetchMock.mockRestore();
 
       // Verify the configuration contains the correct endpoint
       expect(realConfig.authorizationEndpoint).toBe(

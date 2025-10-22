@@ -304,6 +304,7 @@ describe('CoreToolScheduler with payload', () => {
       );
     }
 
+    await waitForStatus(onToolCallsUpdate, 'success');
     expect(onAllToolCallsComplete).toHaveBeenCalled();
     const completedCalls = onAllToolCallsComplete.mock
       .calls[0][0] as ToolCall[];
@@ -902,6 +903,7 @@ describe('CoreToolScheduler YOLO mode', () => {
 
     // Act
     await scheduler.schedule([request], abortController.signal);
+    await waitForStatus(onToolCallsUpdate, 'success');
 
     // Assert
     // 1. The tool's execute method was called directly.

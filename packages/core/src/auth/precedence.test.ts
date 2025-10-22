@@ -15,7 +15,7 @@ import {
   getSettingsService,
   resetSettingsService,
 } from '../settings/settingsServiceInstance.js';
-import type { SettingsService } from '../settings/SettingsService.js';
+import { SettingsService } from '../settings/SettingsService.js';
 import {
   createProviderRuntimeContext,
   getActiveProviderRuntimeContext,
@@ -481,13 +481,19 @@ describe('AuthPrecedenceResolver', () => {
 
     const createStubSettingsService = (
       values: Record<string, unknown>,
-    ): SettingsService =>
-      ({
-        get: vi.fn((key: string) => values[key]),
-        set: vi.fn((key: string, value: unknown) => {
-          values[key] = value;
-        }),
-      }) as unknown as SettingsService;
+    ): SettingsService => {
+      const service = new SettingsService();
+      for (const [key, value] of Object.entries(values)) {
+        service.set(key, value);
+      }
+      vi.spyOn(service, 'get').mockImplementation((key: string) =>
+        SettingsService.prototype.get.call(service, key),
+      );
+      vi.spyOn(service, 'set').mockImplementation((key: string, value) =>
+        SettingsService.prototype.set.call(service, key, value),
+      );
+      return service;
+    };
 
     beforeEach(() => {
       try {

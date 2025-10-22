@@ -21,7 +21,7 @@ import { spawn, execSync } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { readFileSync } from 'fs';
-import { parseBootstrapArgs } from '../packages/cli/src/config/profileBootstrap.js';
+import { parseBootstrapArgs } from '../packages/cli/dist/src/config/profileBootstrap.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');

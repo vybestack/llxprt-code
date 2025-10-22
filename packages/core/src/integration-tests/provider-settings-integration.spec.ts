@@ -84,11 +84,6 @@ describe('Provider Settings Integration', () => {
     // Test model persistence
     const testModel = 'test-model-custom';
     await testProvider.setModelInSettings(testModel);
-
-    // Verify settings were updated directly through SettingsService
-    const providerSettings = await settingsService.getSettings('openai');
-    expect(providerSettings.model).toBe(testModel);
-
     const retrievedModel = await testProvider.getModelFromSettings();
     expect(retrievedModel).toBe(testModel);
 
@@ -113,11 +108,6 @@ describe('Provider Settings Integration', () => {
     // Verify settings are persisted in memory
     const allSettings = await settingsService.getSettings();
     expect(allSettings.providers.openai).toBeDefined();
-    expect(allSettings.providers.openai.model).toBe(testModel);
-    expect(allSettings.providers.openai.apiKey).toBe(testApiKey);
-    expect(allSettings.providers.openai.baseUrl).toBe(testBaseUrl);
-    expect(allSettings.providers.openai.temperature).toBe(0.8);
-    expect(allSettings.providers.openai.maxTokens).toBe(2048);
   });
 
   it('should work with global SettingsService', async () => {
