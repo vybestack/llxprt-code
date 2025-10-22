@@ -210,6 +210,14 @@ jobs:
           npm run bundle
           npm run prepare:package
 
+      - name: Sync VS Code extension version
+        if: ${{ steps.vars.outputs.should_publish_vscode == 'true' && steps.vars.outputs.should_run_standard_release == 'false' }}
+        run: |
+          npm version ${{ steps.version.outputs.RELEASE_VERSION }} \
+            --workspace=llxprt-code-vscode-ide-companion \
+            --no-git-tag-version \
+            --allow-same-version
+
       - name: Package VS Code extension
         id: vscode_package
         if: ${{ steps.vars.outputs.should_publish_vscode == 'true' }}
