@@ -243,9 +243,11 @@ const getMcpStatus = async (
     if (serverTools.length > 0) {
       message += `  ${COLOR_CYAN}Tools:${RESET_COLOR}\n`;
       serverTools.forEach((tool) => {
+        const toolName = (tool as DiscoveredMCPTool).serverToolName;
+
         if (showDescriptions && tool.description) {
           // Format tool name in cyan using simple ANSI cyan color
-          message += `  - ${COLOR_CYAN}${tool.name}${RESET_COLOR}`;
+          message += `  - ${COLOR_CYAN}${toolName}${RESET_COLOR}`;
 
           // Handle multi-line descriptions by properly indenting and preserving formatting
           const descLines = tool.description.trim().split('\n');
@@ -260,7 +262,7 @@ const getMcpStatus = async (
           // Reset is handled inline with each line now
         } else {
           // Use cyan color for the tool name even when not showing descriptions
-          message += `  - ${COLOR_CYAN}${tool.name}${RESET_COLOR}\n`;
+          message += `  - ${COLOR_CYAN}${toolName}${RESET_COLOR}\n`;
         }
         const parameters =
           tool.schema.parametersJsonSchema ?? tool.schema.parameters;

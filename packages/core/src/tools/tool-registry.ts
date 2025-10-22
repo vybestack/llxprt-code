@@ -586,20 +586,18 @@ export class ToolRegistry {
     tool: AnyDeclarativeTool,
     targetMap: Map<string, AnyDeclarativeTool>,
   ): void {
-    let toolToRegister = tool;
-
-    if (targetMap.has(toolToRegister.name)) {
-      if (toolToRegister instanceof DiscoveredMCPTool) {
-        toolToRegister = toolToRegister.asFullyQualifiedTool();
-      } else {
+    if (targetMap.has(tool.name)) {
+      // For non-MCP tools, log warning and overwrite
+      if (!(tool instanceof DiscoveredMCPTool)) {
         this.logger.warn(
           () =>
-            `Tool with name "${toolToRegister.name}" is already registered. Overwriting.`,
+            `Tool with name "${tool.name}" is already registered. Overwriting.`,
         );
       }
+      // For MCP tools, we assume they already have unique names from mcp__${serverName}__${toolName}
+      // so we simply overwrite (this should not happen in normal operation)
     }
-
-    targetMap.set(toolToRegister.name, toolToRegister);
+    targetMap.set(tool.name, tool);
   }
 
   private async withDiscoveryLock<T>(task: () => Promise<T>): Promise<T> {
