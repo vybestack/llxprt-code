@@ -733,5 +733,50 @@ describe('HistoryService - Behavioral Tests', () => {
         ).toBeUndefined();
       });
     });
+
+    describe('Base token offset', () => {
+      it('updates totals and emits delta when base token offset changes', () => {
+        const emissions: Array<{ totalTokens: number; addedTokens: number }> =
+          [];
+        service.on('tokensUpdated', (event) => emissions.push(event));
+
+        service.setBaseTokenOffset(120);
+        expect(service.getTotalTokens()).toBe(120);
+        expect(emissions).toHaveLength(1);
+        expect(emissions[0].totalTokens).toBe(120);
+        expect(emissions[0].addedTokens).toBe(120);
+
+        service.setBaseTokenOffset(180);
+        expect(service.getTotalTokens()).toBe(180);
+        expect(emissions).toHaveLength(2);
+        expect(emissions[1].addedTokens).toBe(60);
+
+        service.setBaseTokenOffset(180);
+        expect(emissions).toHaveLength(2);
+      });
+
+      it('retains base offset after clearing history', async () => {
+        service.setBaseTokenOffset(50);
+        service.add(
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello world' }],
+          },
+          'gpt-4o',
+        );
+        await service.waitForTokenUpdates();
+        expect(service.getTotalTokens()).toBeGreaterThan(50);
+
+        service.clear();
+        expect(service.getTotalTokens()).toBe(50);
+      });
+
+      it('estimates tokens for raw text input', async () => {
+        const tokens = await service.estimateTokensForText(
+          'hello world from llxprt',
+        );
+        expect(tokens).toBeGreaterThan(0);
+      });
+    });
   });
 });

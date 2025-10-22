@@ -20,6 +20,7 @@ import {
 } from './geminiChat.js';
 import { Config } from '../config/config.js';
 import { setSimulate429 } from '../utils/testUtils.js';
+import * as tokenLimitsModule from './tokenLimits.js';
 
 // Mocks
 const mockModelsModule = {
@@ -40,6 +41,7 @@ describe('GeminiChat', () => {
     generateContent: ReturnType<typeof vi.fn>;
     generateContentStream: ReturnType<typeof vi.fn>;
     generateChatCompletion: ReturnType<typeof vi.fn>;
+    getModelParams?: ReturnType<typeof vi.fn>;
   };
   let mockContentGenerator: {
     generateContent: ReturnType<typeof vi.fn>;
@@ -70,6 +72,7 @@ describe('GeminiChat', () => {
           };
         })(),
       ),
+      getModelParams: vi.fn().mockReturnValue(undefined),
     };
 
     mockConfig = {
@@ -191,6 +194,64 @@ describe('GeminiChat', () => {
         .mockResolvedValue();
 
       await chat.sendMessage({ message: 'hello safe' }, 'prompt-id-safe');
+
+      expect(compressionSpy).not.toHaveBeenCalled();
+    });
+
+    it('throws before sending when projected tokens exceed model limit even after compression', async () => {
+      const historyService = chat.getHistoryService();
+      vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(900);
+      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+        50,
+      );
+      vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(
+        undefined,
+      );
+
+      const compressionSpy = vi
+        .spyOn(
+          chat as unknown as {
+            performCompression(prompt_id: string): Promise<void>;
+          },
+          'performCompression',
+        )
+        .mockResolvedValue();
+
+      vi.spyOn(tokenLimitsModule, 'tokenLimit').mockReturnValue(1000);
+
+      await expect(
+        chat.sendMessage({ message: 'too big' }, 'prompt-id-limit'),
+      ).rejects.toThrow(/context window/i);
+
+      expect(compressionSpy).toHaveBeenCalledWith('prompt-id-limit');
+    });
+
+    it('uses provider maxOutputTokens when evaluating projected tokens', async () => {
+      const historyService = chat.getHistoryService();
+      vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(900);
+      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
+        50,
+      );
+      vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(
+        undefined,
+      );
+
+      const compressionSpy = vi
+        .spyOn(
+          chat as unknown as {
+            performCompression(prompt_id: string): Promise<void>;
+          },
+          'performCompression',
+        )
+        .mockResolvedValue();
+
+      mockProvider.getModelParams = vi
+        .fn()
+        .mockReturnValue({ maxOutputTokens: 100 });
+
+      vi.spyOn(tokenLimitsModule, 'tokenLimit').mockReturnValue(4096);
+
+      await chat.sendMessage({ message: 'within budget' }, 'prompt-id-ok');
 
       expect(compressionSpy).not.toHaveBeenCalled();
     });

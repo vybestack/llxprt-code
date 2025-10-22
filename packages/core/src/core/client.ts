@@ -48,6 +48,7 @@ import { ideContext, IdeContext, File } from '../ide/ideContext.js';
 import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
+import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
@@ -438,6 +439,22 @@ export class GeminiClient {
       if (envContextText) {
         systemInstruction = `${envContextText}\n\n${systemInstruction}`;
       }
+
+      let systemPromptTokens = 0;
+      try {
+        systemPromptTokens = await historyService.estimateTokensForText(
+          systemInstruction,
+          model,
+        );
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `Failed to count system instruction tokens for model ${model}, using fallback`,
+          { error },
+        );
+        systemPromptTokens = estimateTextTokens(systemInstruction);
+      }
+      historyService.setBaseTokenOffset(systemPromptTokens);
 
       logger.debug(
         () =>

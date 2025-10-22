@@ -53,6 +53,7 @@ import {
   COMPRESSION_PRESERVE_THRESHOLD,
 } from './compression-config.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
+import { tokenLimit } from './tokenLimits.js';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */
@@ -334,6 +335,8 @@ export class EmptyStreamError extends Error {
  * The session maintains all the turns between user and model.
  */
 export class GeminiChat {
+  private static readonly TOKEN_SAFETY_MARGIN = 256;
+  private static readonly DEFAULT_COMPLETION_BUDGET = 65_536;
   // A promise to represent the current state of the message being sent to the
   // model.
   private sendPromise: Promise<void> = Promise.resolve();
@@ -562,6 +565,8 @@ export class GeminiChat {
     if (!provider) {
       throw new Error('No active provider configured');
     }
+
+    await this.enforceContextWindow(pendingTokens, prompt_id, provider);
 
     // Check if provider supports IContent interface
     if (!this.providerSupportsIContent(provider)) {
@@ -899,6 +904,7 @@ export class GeminiChat {
             const stream = await instance.makeApiCallAndProcessStream(
               params,
               prompt_id,
+              pendingTokens,
               userContent,
             );
 
@@ -942,7 +948,8 @@ export class GeminiChat {
 
   private async makeApiCallAndProcessStream(
     _params: SendMessageParameters,
-    _prompt_id: string,
+    promptId: string,
+    pendingTokens: number,
     userContent: Content | Content[],
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     // Get the active provider
@@ -950,6 +957,8 @@ export class GeminiChat {
     if (!provider) {
       throw new Error('No active provider configured');
     }
+
+    await this.enforceContextWindow(pendingTokens, promptId, provider);
 
     // Check if provider supports IContent interface
     if (!this.providerSupportsIContent(provider)) {
@@ -1253,6 +1262,133 @@ export class GeminiChat {
       }
       return fallback;
     }
+  }
+
+  private asNumber(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return undefined;
+  }
+
+  private extractCompletionBudgetFromParams(
+    params: Record<string, unknown> | undefined,
+  ): number | undefined {
+    if (!params) {
+      return undefined;
+    }
+
+    const candidateKeys = [
+      'maxOutputTokens',
+      'maxTokens',
+      'max_output_tokens',
+      'max_tokens',
+    ];
+
+    for (const key of candidateKeys) {
+      if (key in params) {
+        const value = this.asNumber(params[key]);
+        if (value !== undefined) {
+          return value;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private getCompletionBudget(provider?: IProvider): number {
+    const generationBudget = this.asNumber(
+      (this.generationConfig as { maxOutputTokens?: unknown }).maxOutputTokens,
+    );
+
+    const providerParams = provider?.getModelParams?.();
+    const providerBudget = this.extractCompletionBudgetFromParams(
+      providerParams as Record<string, unknown> | undefined,
+    );
+
+    let configBudget: number | undefined;
+    if (typeof this.config.getEphemeralSetting === 'function') {
+      const candidateKeys = ['maxOutputTokens', 'max-output-tokens'];
+      for (const key of candidateKeys) {
+        const value = this.asNumber(this.config.getEphemeralSetting(key));
+        if (value !== undefined) {
+          configBudget = value;
+          break;
+        }
+      }
+    }
+
+    return (
+      generationBudget ??
+      providerBudget ??
+      configBudget ??
+      GeminiChat.DEFAULT_COMPLETION_BUDGET
+    );
+  }
+
+  private async enforceContextWindow(
+    pendingTokens: number,
+    promptId: string,
+    provider?: IProvider,
+  ): Promise<void> {
+    await this.historyService.waitForTokenUpdates();
+
+    const completionBudget = Math.max(0, this.getCompletionBudget(provider));
+    const limit = tokenLimit(this.config.getModel());
+    const marginAdjustedLimit = Math.max(
+      0,
+      limit - GeminiChat.TOKEN_SAFETY_MARGIN,
+    );
+
+    const projected =
+      this.historyService.getTotalTokens() +
+      Math.max(0, pendingTokens) +
+      completionBudget;
+
+    if (projected <= marginAdjustedLimit) {
+      return;
+    }
+
+    this.logger.warn(
+      () =>
+        `[GeminiChat] Projected token usage exceeds context limit, attempting compression`,
+      {
+        projected,
+        marginAdjustedLimit,
+        completionBudget,
+        pendingTokens,
+      },
+    );
+
+    await this.performCompression(promptId);
+    await this.historyService.waitForTokenUpdates();
+
+    const recomputed =
+      this.historyService.getTotalTokens() +
+      Math.max(0, pendingTokens) +
+      completionBudget;
+
+    if (recomputed <= marginAdjustedLimit) {
+      this.logger.debug(
+        () => '[GeminiChat] Compression reduced tokens below limit',
+        {
+          recomputed,
+          marginAdjustedLimit,
+        },
+      );
+      return;
+    }
+
+    throw new Error(
+      `Request would exceed the ${limit} token context window even after compression (projected ${recomputed} tokens including system prompt and a ${completionBudget} token completion budget). Reduce earlier history or lower maxOutputTokens.`,
+    );
   }
 
   /**
