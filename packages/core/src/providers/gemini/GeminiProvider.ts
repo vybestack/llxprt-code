@@ -357,6 +357,8 @@ export class GeminiProvider extends BaseProvider {
    * Sets the config instance for reading OAuth credentials
    */
   override setConfig(config: Config): void {
+    // Call base provider implementation
+    super.setConfig?.(config);
     // Sync with config model if user hasn't explicitly set a model
     // This ensures consistency between config and provider state
     const configModel = config.getModel();
