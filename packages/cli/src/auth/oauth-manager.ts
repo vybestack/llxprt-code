@@ -120,8 +120,7 @@ export class OAuthManager {
     }
 
     this.providers.set(provider.name, provider);
-    // IMPORTANT: Do not call provider.getToken() here.
-    // OAuth flows must remain lazily evaluated so that registration never prompts for credentials.
+    // IMPORTANT: Do not call provider.getToken() here. OAuth registration must stay lazy to avoid prompting during setup.
   }
 
   /**
@@ -179,9 +178,20 @@ export class OAuthManager {
 
     // Get all registered providers and check their status
     for (const [providerName, _provider] of this.providers) {
+      const oauthEnabled = this.isOAuthEnabled(providerName);
+
+      if (!oauthEnabled) {
+        statuses.push({
+          provider: providerName,
+          authenticated: false,
+          authType: 'none',
+          oauthEnabled,
+        });
+        continue;
+      }
+
       try {
         const token = await this.tokenStore.getToken(providerName);
-        const oauthEnabled = this.isOAuthEnabled(providerName);
 
         if (token) {
           // Provider is authenticated, calculate time until expiry
@@ -206,7 +216,6 @@ export class OAuthManager {
         }
       } catch (_error) {
         // If we can't get token status, consider it unauthenticated
-        const oauthEnabled = this.isOAuthEnabled(providerName);
         statuses.push({
           provider: providerName,
           authenticated: false,

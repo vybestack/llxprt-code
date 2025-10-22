@@ -25,9 +25,7 @@ import {
 import stripJsonComments from 'strip-json-comments';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import { MultiProviderTokenStore } from '../auth/types.js';
-import { GeminiOAuthProvider } from '../auth/gemini-oauth-provider.js';
-import { QwenOAuthProvider } from '../auth/qwen-oauth-provider.js';
-import { AnthropicOAuthProvider } from '../auth/anthropic-oauth-provider.js';
+import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
 import { HistoryItemWithoutId } from '../ui/types.js';
 
 /**
@@ -106,39 +104,30 @@ function resolveLoadedSettings(
     : undefined;
 }
 
-function registerOAuthProviders(
+function attachAddItemToOAuthProviders(
   oauthManager: OAuthManager,
-  tokenStore: MultiProviderTokenStore,
   addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,
   ) => number,
 ): void {
-  const geminiOAuthProvider = new GeminiOAuthProvider(tokenStore);
-  const qwenOAuthProvider = new QwenOAuthProvider(tokenStore);
-  const anthropicOAuthProvider = new AnthropicOAuthProvider(tokenStore);
+  if (!addItem) {
+    return;
+  }
 
-  oauthManager.registerProvider(geminiOAuthProvider);
-  oauthManager.registerProvider(qwenOAuthProvider);
-  oauthManager.registerProvider(anthropicOAuthProvider);
+  const providersMap = (
+    oauthManager as unknown as { providers?: Map<string, unknown> }
+  ).providers;
 
-  if (addItem) {
-    const providersMap = (
-      oauthManager as unknown as {
-        providers?: Map<string, unknown>;
-      }
-    ).providers;
-    if (providersMap instanceof Map) {
-      for (const provider of providersMap.values()) {
-        const p = provider as {
-          name?: string;
-          setAddItem?: (callback: typeof addItem) => void;
-        };
-        if (p.name && p.setAddItem) {
-          p.setAddItem(addItem);
-        }
-      }
-    }
+  if (!(providersMap instanceof Map)) {
+    return;
+  }
+
+  for (const provider of providersMap.values()) {
+    const candidate = provider as {
+      setAddItem?: (callback: typeof addItem) => void;
+    };
+    candidate.setAddItem?.(addItem);
   }
 }
 
@@ -162,9 +151,8 @@ export function createProviderManager(
 
   const tokenStore = new MultiProviderTokenStore();
   const oauthManager = new OAuthManager(tokenStore, loadedSettings);
-  registerOAuthProviders(oauthManager, tokenStore, options.addItem);
 
-  const { config, allowBrowserEnvironment = false } = options;
+  const { config, allowBrowserEnvironment = false, addItem } = options;
 
   if (config) {
     manager.setConfig(config);
@@ -177,15 +165,23 @@ export function createProviderManager(
     config,
     oauthManager,
   );
-  if (config) {
-    if (
-      'setConfig' in geminiProvider &&
-      typeof geminiProvider.setConfig === 'function'
-    ) {
-      geminiProvider.setConfig(config);
-    }
+
+  if (
+    config &&
+    'setConfig' in geminiProvider &&
+    typeof geminiProvider.setConfig === 'function'
+  ) {
+    geminiProvider.setConfig(config);
   }
+
   manager.registerProvider(geminiProvider);
+
+  void ensureOAuthProviderRegistered(
+    'gemini',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
 
   let openaiApiKey: string | undefined;
   if (process.env.OPENAI_API_KEY) {
@@ -213,34 +209,69 @@ export function createProviderManager(
   };
 
   const openaiProvider = new OpenAIProvider(
-    openaiApiKey,
+    openaiApiKey ?? undefined,
     openaiBaseUrl,
     openaiProviderConfig,
     oauthManager,
   );
   manager.registerProvider(openaiProvider);
 
+  const qwenProviderConfig = {
+    ...openaiProviderConfig,
+    forceQwenOAuth: true,
+  };
+  const qwenProvider = new OpenAIProvider(
+    undefined,
+    'https://portal.qwen.ai/v1',
+    qwenProviderConfig,
+    oauthManager,
+  );
+  Object.defineProperty(qwenProvider, 'name', {
+    value: 'qwen',
+    writable: false,
+    enumerable: true,
+    configurable: true,
+  });
+  manager.registerProvider(qwenProvider);
+
+  void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
+
   if (settingsData.openaiResponsesEnabled) {
     const openaiResponsesProvider = new OpenAIResponsesProvider(
-      openaiApiKey,
+      openaiApiKey ?? undefined,
       openaiBaseUrl,
       openaiProviderConfig,
     );
     manager.registerProvider(openaiResponsesProvider);
   }
 
-  const anthropicApiKey = process.env.ANTHROPIC_API_KEY
-    ? sanitizeApiKey(process.env.ANTHROPIC_API_KEY)
-    : undefined;
+  let anthropicApiKey: string | undefined;
+  if (process.env.ANTHROPIC_API_KEY) {
+    anthropicApiKey = sanitizeApiKey(process.env.ANTHROPIC_API_KEY);
+  }
   const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
-
+  const anthropicProviderConfig = {
+    allowBrowserEnvironment,
+  };
   const anthropicProvider = new AnthropicProvider(
-    anthropicApiKey,
+    anthropicApiKey ?? undefined,
     anthropicBaseUrl,
-    undefined,
-    oauthManager,
+    anthropicProviderConfig,
+    anthropicApiKey ? undefined : oauthManager,
   );
   manager.registerProvider(anthropicProvider);
+
+  if (!anthropicApiKey) {
+    void ensureOAuthProviderRegistered(
+      'anthropic',
+      oauthManager,
+      tokenStore,
+      addItem,
+    );
+  }
+
+  manager.setActiveProvider('gemini');
+  attachAddItemToOAuthProviders(oauthManager, addItem);
 
   return { manager, oauthManager };
 }
