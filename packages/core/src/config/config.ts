@@ -452,7 +452,7 @@ export class Config {
     this.folderTrust = params.folderTrust ?? false;
     this.ideMode = params.ideMode ?? false;
     this.complexityAnalyzerSettings = params.complexityAnalyzer ?? {
-      complexityThreshold: 0.6,
+      complexityThreshold: 0.5,
       minTasksForSuggestion: 3,
       suggestionCooldownMs: 300000, // 5 minutes
     };

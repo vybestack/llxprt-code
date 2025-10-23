@@ -16,7 +16,7 @@ export interface ComplexityAnalysisResult {
 }
 
 export interface ComplexityAnalyzerOptions {
-  /** Threshold for considering a task complex (default: 0.6) */
+  /** Threshold for considering a task complex (default: 0.5) */
   complexityThreshold?: number;
   /** Minimum number of tasks to suggest todos (default: 3) */
   minTasksForSuggestion?: number;
@@ -76,7 +76,7 @@ export class ComplexityAnalyzer {
     /(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]+/g;
 
   constructor(options: ComplexityAnalyzerOptions = {}) {
-    this.complexityThreshold = options.complexityThreshold ?? 0.6;
+    this.complexityThreshold = options.complexityThreshold ?? 0.5;
     this.minTasksForSuggestion = options.minTasksForSuggestion ?? 3;
   }
 
@@ -117,7 +117,7 @@ export class ComplexityAnalyzer {
     );
 
     const isComplex =
-      complexityScore > this.complexityThreshold || narrativeComplexity;
+      complexityScore >= this.complexityThreshold || narrativeComplexity;
     const shouldSuggestTodos =
       isComplex &&
       (detectedTasks.length >= this.minTasksForSuggestion ||
@@ -288,20 +288,16 @@ export class ComplexityAnalyzer {
     }
 
     const trimmed = message.trim();
-    if (trimmed.length < 600) {
-      return false;
-    }
-
     const sentences = trimmed
       .split(/[.!?]+/)
       .map((sentence) => sentence.trim())
       .filter((sentence) => sentence.length > 0);
 
-    if (sentences.length < 5) {
-      return false;
+    if (trimmed.length >= 600) {
+      return true;
     }
 
-    return true;
+    return sentences.length >= 5;
   }
 
   /**

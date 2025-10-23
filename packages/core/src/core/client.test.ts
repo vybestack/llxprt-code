@@ -290,7 +290,7 @@ describe('Gemini Client (client.ts)', () => {
       getGeminiClient: vi.fn(),
       setFallbackMode: vi.fn(),
       getComplexityAnalyzerSettings: vi.fn().mockReturnValue({
-        complexityThreshold: 0.6,
+        complexityThreshold: 0.5,
         minTasksForSuggestion: 3,
         suggestionCooldownMs: 300000,
       }),
@@ -1401,6 +1401,152 @@ describe('Gemini Client (client.ts)', () => {
       expect(reminderEntry).toMatchObject({
         parts: [{ text: expect.stringContaining('strong-reminder') }],
       });
+    });
+
+    it('injects a reminder after four tool calls even without complexity trigger', async () => {
+      // Arrange
+      (
+        client as unknown as { complexityAnalyzer: ComplexityAnalyzer }
+      ).complexityAnalyzer = {
+        analyzeComplexity: vi.fn().mockReturnValue({
+          complexityScore: 0.2,
+          isComplex: false,
+          detectedTasks: [],
+          sequentialIndicators: [],
+          questionCount: 0,
+          shouldSuggestTodos: false,
+        }),
+      } as unknown as ComplexityAnalyzer;
+
+      const getComplexTaskSuggestion = vi
+        .fn()
+        .mockReturnValue('tool-call-reminder');
+      const getEscalatedComplexTaskSuggestion = vi.fn();
+
+      (
+        client as unknown as { todoReminderService: TodoReminderService }
+      ).todoReminderService = {
+        getComplexTaskSuggestion,
+        getEscalatedComplexTaskSuggestion,
+      } as unknown as TodoReminderService;
+
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          for (let i = 0; i < 4; i++) {
+            yield {
+              type: GeminiEventType.ToolCallRequest,
+              value: { name: 'shell_execute' },
+            };
+          }
+        })(),
+      );
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Run tools until complete.' }],
+        new AbortController().signal,
+        'prompt-id-tool-reminder',
+      );
+      for await (const _event of stream) {
+        // consume
+      }
+
+      const reminderEntry = vi
+        .mocked(mockChat.addHistory)
+        .mock.calls.find((call) =>
+          JSON.stringify(call[0]).includes('tool-call-reminder'),
+        )?.[0];
+
+      expect(reminderEntry).toBeDefined();
+      expect(getComplexTaskSuggestion).toHaveBeenCalled();
+      expect(getEscalatedComplexTaskSuggestion).not.toHaveBeenCalled();
+    });
+
+    it('escalates to a strong reminder after more than four tool calls', async () => {
+      // Arrange
+      (
+        client as unknown as { complexityAnalyzer: ComplexityAnalyzer }
+      ).complexityAnalyzer = {
+        analyzeComplexity: vi.fn().mockReturnValue({
+          complexityScore: 0.2,
+          isComplex: false,
+          detectedTasks: [],
+          sequentialIndicators: [],
+          questionCount: 0,
+          shouldSuggestTodos: false,
+        }),
+      } as unknown as ComplexityAnalyzer;
+
+      const getComplexTaskSuggestion = vi
+        .fn()
+        .mockReturnValue('tool-call-reminder');
+      const getEscalatedComplexTaskSuggestion = vi
+        .fn()
+        .mockReturnValue('tool-call-reminder-strong');
+
+      (
+        client as unknown as { todoReminderService: TodoReminderService }
+      ).todoReminderService = {
+        getComplexTaskSuggestion,
+        getEscalatedComplexTaskSuggestion,
+      } as unknown as TodoReminderService;
+
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          for (let i = 0; i < 5; i++) {
+            yield {
+              type: GeminiEventType.ToolCallRequest,
+              value: { name: 'shell_execute' },
+            };
+          }
+        })(),
+      );
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Keep invoking tools until resolved.' }],
+        new AbortController().signal,
+        'prompt-id-tool-escalate',
+      );
+      for await (const _event of stream) {
+        // consume
+      }
+
+      const historyCalls = vi.mocked(mockChat.addHistory).mock.calls;
+      const strongEntry = historyCalls
+        .reverse()
+        .find((call) =>
+          JSON.stringify(call[0]).includes('tool-call-reminder-strong'),
+        )?.[0];
+
+      expect(strongEntry).toBeDefined();
+      expect(getEscalatedComplexTaskSuggestion).toHaveBeenCalled();
     });
 
     it('should add context if ideMode is enabled and there are open files but no active file', async () => {

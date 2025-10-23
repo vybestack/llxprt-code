@@ -135,6 +135,8 @@ export class GeminiClient {
   private lastTodoToolTurn?: number;
   private consecutiveComplexTurns = 0;
   private lastComplexitySuggestionTurn?: number;
+  private toolActivityCount = 0;
+  private toolCallReminderLevel: 'none' | 'base' | 'escalated' = 'none';
 
   /**
    * At any point in this conversation, was compression triggered without
@@ -271,6 +273,26 @@ export class GeminiClient {
     }
     const normalized = name.toLowerCase();
     return normalized === 'todo_write' || normalized === 'todo_read';
+  }
+
+  private recordModelActivity(event: ServerGeminiStreamEvent): void {
+    if (
+      event.type !== GeminiEventType.Content &&
+      event.type !== GeminiEventType.ToolCallRequest
+    ) {
+      return;
+    }
+
+    this.toolActivityCount += 1;
+
+    if (this.toolActivityCount > 4) {
+      this.toolCallReminderLevel = 'escalated';
+    } else if (
+      this.toolActivityCount === 4 &&
+      this.toolCallReminderLevel === 'none'
+    ) {
+      this.toolCallReminderLevel = 'base';
+    }
   }
 
   async addHistory(content: Content) {
@@ -781,6 +803,8 @@ export class GeminiClient {
       this.lastPromptId = prompt_id;
     }
     this.sessionTurnCount++;
+    this.toolActivityCount = 0;
+    this.toolCallReminderLevel = 'none';
     if (
       this.config.getMaxSessionTurns() > 0 &&
       this.sessionTurnCount > this.config.getMaxSessionTurns()
@@ -882,6 +906,7 @@ export class GeminiClient {
         yield { type: GeminiEventType.LoopDetected };
         return turn;
       }
+      this.recordModelActivity(event);
       yield event;
       if (
         event.type === GeminiEventType.ToolCallRequest &&
@@ -893,6 +918,23 @@ export class GeminiClient {
       if (event.type === GeminiEventType.Error) {
         return turn;
       }
+    }
+    if (this.toolCallReminderLevel !== 'none') {
+      const reminderText =
+        this.toolCallReminderLevel === 'escalated'
+          ? this.todoReminderService.getEscalatedComplexTaskSuggestion([])
+          : this.todoReminderService.getComplexTaskSuggestion([]);
+
+      this.getChat().addHistory({
+        role: 'user',
+        parts: [{ text: reminderText }],
+      });
+      const currentTime = Date.now();
+      this.lastComplexitySuggestionTime = currentTime;
+      this.lastComplexitySuggestionTurn = this.sessionTurnCount;
+      this.consecutiveComplexTurns = 0;
+      this.toolCallReminderLevel = 'none';
+      this.toolActivityCount = 0;
     }
     if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
       // Check if model was switched during the call (likely due to quota error)
