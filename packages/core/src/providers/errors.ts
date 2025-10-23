@@ -18,3 +18,15 @@ export class AuthenticationRequiredError extends Error {
     this.requiredAuth = requiredAuth;
   }
 }
+
+/**
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P03
+ * @requirement:REQ-SP4-001
+ * @pseudocode base-provider-runtime-guard.md lines 10-14
+ */
+export class MissingProviderRuntimeError extends Error {
+  constructor(message = 'Provider runtime context is missing.') {
+    super(message);
+    this.name = 'MissingProviderRuntimeError';
+  }
+}

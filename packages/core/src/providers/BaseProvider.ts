@@ -665,6 +665,22 @@ export abstract class BaseProvider implements IProvider {
     };
   }
 
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P03
+   * @requirement:REQ-SP4-001
+   * @pseudocode base-provider-runtime-guard.md lines 10-14
+   */
+  protected assertRuntimeContext(
+    runtime: ProviderRuntimeContext | undefined,
+  ): ProviderRuntimeContext | undefined {
+    return (
+      runtime ??
+      peekActiveProviderRuntimeContext() ??
+      getActiveProviderRuntimeContext() ??
+      undefined
+    );
+  }
+
   // Optional methods with default implementations
   getCurrentModel?(): string {
     // Use the same logic as getModel() to check ephemeral settings
