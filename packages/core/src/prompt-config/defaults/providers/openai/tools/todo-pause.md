@@ -1,4 +1,4 @@
-# todo_pause Tool
+# {{TOOL_NAME}} Tool
 
 **Purpose**: Pause the AI continuation loop when encountering errors or blockers.
 

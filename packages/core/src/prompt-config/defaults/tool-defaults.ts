@@ -239,9 +239,11 @@ export const TOOL_DEFAULTS: Record<string, string> = {
   'tools/glob.md': loadMarkdownFile('tools/glob.md'),
   'tools/ls.md': loadMarkdownFile('tools/ls.md'),
   'tools/memory.md': loadMarkdownFile('tools/memory.md'),
+  'tools/save-memory.md': loadMarkdownFile('tools/save-memory.md'),
   'tools/read-many-files.md': loadMarkdownFile('tools/read-many-files.md'),
   'tools/todo-read.md': loadMarkdownFile('tools/todo-read.md'),
   'tools/todo-write.md': loadMarkdownFile('tools/todo-write.md'),
+  'tools/todo-pause.md': loadMarkdownFile('tools/todo-pause.md'),
   'tools/web-fetch.md': loadMarkdownFile('tools/web-fetch.md'),
   'tools/web-search.md': loadMarkdownFile('tools/web-search.md'),
 };

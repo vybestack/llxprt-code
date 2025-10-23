@@ -745,9 +745,11 @@ describe('PromptService', () => {
       expect(tools).toContain('Grep');
       expect(tools).toContain('Ls');
       expect(tools).toContain('Memory');
+      expect(tools).toContain('SaveMemory');
       expect(tools).toContain('ReadFile');
       expect(tools).toContain('ReadManyFiles');
       expect(tools).toContain('Shell');
+      expect(tools).toContain('TodoPause');
       expect(tools).toContain('TodoRead');
       expect(tools).toContain('TodoWrite');
       expect(tools).toContain('WebFetch');
