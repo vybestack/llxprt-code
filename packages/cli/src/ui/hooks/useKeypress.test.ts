@@ -6,11 +6,10 @@
 
 import React from 'react';
 import { renderHook, act } from '@testing-library/react';
-import { useKeypress, Key } from './useKeypress.js';
+import { useKeypress } from './useKeypress.js';
 import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
-import type { Mock } from 'vitest';
 
 // Mock the 'ink' module to control stdin
 vi.mock('ink', async (importOriginal) => {

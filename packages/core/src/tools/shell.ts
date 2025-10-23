@@ -48,7 +48,7 @@ import {
   isCommandAllowed,
   stripShellWrapper,
 } from '../utils/shell-utils.js';
-import { doesToolInvocationMatch, isShellInvocationAllowlisted } from '../utils/tool-utils.js';
+import { isShellInvocationAllowlisted } from '../utils/tool-utils.js';
 
 export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
 
