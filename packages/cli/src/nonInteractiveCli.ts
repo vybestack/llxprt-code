@@ -19,6 +19,9 @@ import {
   JsonStreamEventType,
   StreamJsonFormatter,
   uiTelemetryService,
+  coreEvents,
+  CoreEvent,
+  type UserFeedbackPayload,
   type EmojiFilterMode,
   type ServerGeminiThoughtEvent,
 } from '@vybestack/llxprt-code-core';
@@ -51,8 +54,25 @@ export async function runNonInteractive(
     debugMode: jsonOutput ? false : config.getDebugMode(),
   });
 
+  const handleUserFeedback = (payload: UserFeedbackPayload) => {
+    const prefix = payload.severity.toUpperCase();
+    process.stderr.write(`[${prefix}] ${payload.message}
+`);
+    if (payload.error && config.getDebugMode()) {
+      const errorToLog =
+        payload.error instanceof Error
+          ? payload.error.stack || payload.error.message
+          : String(payload.error);
+      process.stderr.write(`${errorToLog}
+`);
+    }
+  };
+
   try {
     consolePatcher.patch();
+    coreEvents.on(CoreEvent.UserFeedback, handleUserFeedback);
+    coreEvents.drainFeedbackBacklog();
+
     // Handle EPIPE errors when the output is piped to a command that closes early.
     process.stdout.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EPIPE') {
@@ -400,6 +420,7 @@ export async function runNonInteractive(
     throw error;
   } finally {
     consolePatcher.cleanup();
+    coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
     if (isTelemetrySdkInitialized()) {
       await shutdownTelemetry(config);
     }

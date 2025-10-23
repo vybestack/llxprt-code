@@ -71,6 +71,9 @@ import {
   type IContent,
   type ToolCallBlock,
   type ToolResponseBlock,
+  coreEvents,
+  CoreEvent,
+  type UserFeedbackPayload,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { validateAuthMethod } from '../config/auth.js';
@@ -281,6 +284,30 @@ export const AppContainer = (props: AppContainerProps) => {
     settings,
     onConsoleMessage: handleNewMessage,
   });
+
+  // Handle core event system for surfacing internal errors
+  useEffect(() => {
+    const handleUserFeedback = (payload: UserFeedbackPayload) => {
+      const messageType =
+        payload.severity === 'error'
+          ? 'error'
+          : payload.severity === 'warning'
+            ? 'warn'
+            : 'info';
+      handleNewMessage({
+        type: messageType,
+        content: payload.message,
+        count: 1,
+      });
+    };
+
+    coreEvents.on(CoreEvent.UserFeedback, handleUserFeedback);
+    coreEvents.drainFeedbackBacklog();
+
+    return () => {
+      coreEvents.off(CoreEvent.UserFeedback, handleUserFeedback);
+    };
+  }, [handleNewMessage]);
 
   useEffect(() => {
     const consolePatcher = new ConsolePatcher({
