@@ -14,3 +14,6 @@
 - [x] Pseudocode lines 10-14 retain the `MissingProviderRuntimeError` enforcement without conflicting assumptions; no additional corrections required. @plan:PLAN-20251023-STATELESS-HARDENING.P01 @requirement:REQ-SP4-001
 - [x] Phase P02a verification confirms error guard references and requirement tags remain intact for stateless coverage. @plan:PLAN-20251023-STATELESS-HARDENING.P02 @requirement:REQ-SP4-001 @requirement:REQ-SP4-002
 - [x] Stub guard scaffolding compiles cleanly; `BaseProvider.guard.stub.test.ts` skip annotated to hand off runtime enforcement to @plan:PLAN-20251023-STATELESS-HARDENING.P04 while preserving fallback behaviour for @requirement:REQ-SP4-001. @plan:PLAN-20251023-STATELESS-HARDENING.P03
+
+## Phase P04a Red State
+- Red: `pnpm test --filter "runtime guard" --runInBand` aborts for every workspace with `CACError: Unknown option --filter`, so BaseProvider guard scenarios (pseudocode lines 10-16) remain unexecuted and continue documenting the missing runtime context guard for @requirement:REQ-SP4-001, @requirement:REQ-SP4-004, and @requirement:REQ-SP4-005. @plan:PLAN-20251023-STATELESS-HARDENING.P04

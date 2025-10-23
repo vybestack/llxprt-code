@@ -213,6 +213,7 @@ const mockProviderManager = {
     total: 15,
   })),
   getAvailableModels: vi.fn(async () => [{ id: 'model-a' }, { id: 'model-b' }]),
+  setConfig: vi.fn(),
 };
 
 vi.mock('../providers/providerManagerInstance.js', () => ({
@@ -457,6 +458,14 @@ describe('runtimeSettings helpers', () => {
     expect(getActiveModelName()).toBe('model-a');
     expect(getSessionTokenUsage().total).toBe(15);
     expect(getCliRuntimeServices().providerManager).toBe(mockProviderManager);
+  });
+
+  it('registerCliProviderInfrastructure wires runtime config into provider manager', () => {
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P04 @requirement:REQ-SP4-005
+    const config = getCliRuntimeConfig();
+    expect(mockProviderManager.setConfig).toHaveBeenCalledWith(
+      config as unknown as Config,
+    );
   });
 
   afterEach(() => {

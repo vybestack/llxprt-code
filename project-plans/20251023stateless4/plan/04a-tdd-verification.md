@@ -32,9 +32,9 @@ pnpm test --filter "runtime guard" --runInBand && exit 1
 ```
 
 ### Manual Verification Checklist
-- [ ] All added tests still red.
-- [ ] Failure messages align with missing runtime context expectations.
-- [ ] No accidental fixes or regressions observed.
+- [ ] All added tests still red. _(Blocked: vitest rejects `--filter`, command exits early before assertions run.)_
+- [ ] Failure messages align with missing runtime context expectations. _(Blocked by CACError preventing guard execution.)_
+- [x] No accidental fixes or regressions observed. _(No implementation changes performed during verification pass.)_
 
 ## Success Criteria
 - Documented failing state ready for implementation phase.

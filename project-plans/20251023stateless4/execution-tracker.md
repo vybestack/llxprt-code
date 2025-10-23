@@ -12,8 +12,8 @@
 | 02a | P02a | ✅ | 2025-10-23T20:19:47Z | 2025-10-23T20:24:23Z | 2025-10-23T20:24:23Z | Pseudocode verification complete |
 | 03 | P03 | ✅ | 2025-10-23T20:35:35Z | 2025-10-23T20:37:49Z | 2025-10-23T20:44:48Z | Stub scaffolding added; lint/typecheck/build recorded |
 | 03a | P03a | ✅ | 2025-10-23T20:42:34Z | 2025-10-23T20:44:48Z | 2025-10-23T20:44:48Z | Stub verification logged (CLI flag follow-up needed) |
-| 04 | P04 | ⬜ | - | - | - | TDD |
-| 04a | P04a | ⬜ | - | - | - | TDD verification |
+| 04 | P04 | ✅ | 2025-10-23T20:54:15Z | 2025-10-23T21:09:52Z | 2025-10-23T21:18:47Z | Runtime guard TDD red cases captured (Vitest flag gap) |
+| 04a | P04a | ✅ | 2025-10-23T21:16:46Z | 2025-10-23T21:18:47Z | 2025-10-23T21:18:47Z | Verification logged; command blocked by `--filter` |
 | 05 | P05 | ⬜ | - | - | - | Base provider implementation |
 | 05a | P05a | ⬜ | - | - | - | Implementation verification |
 | 06 | P06 | ⬜ | - | - | - | Integration stub |
