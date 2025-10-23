@@ -86,4 +86,13 @@ for (const file of promptMdFiles) {
     console.error(`  Failed to copy: ${relativePath}`);
   }
 }
+
+// Copy generated prompt manifest into the bundle root for runtime loading
+const promptManifestPath = join(
+  root,
+  'packages/core/dist/prompt-config/defaults/default-prompts.json',
+);
+if (existsSync(promptManifestPath)) {
+  copyFileSync(promptManifestPath, join(bundleDir, 'default-prompts.json'));
+}
 // Assets copied to bundle/
