@@ -99,72 +99,294 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     });
   }
 
-  /**
-   * Create HTTP/HTTPS agents with socket configuration for local AI servers
-   * Returns undefined if no socket settings are configured
-   */
-  private createHttpAgents():
-    | { httpAgent: http.Agent; httpsAgent: https.Agent }
+  private getSocketSettings():
+    | {
+        timeout: number;
+        keepAlive: boolean;
+        noDelay: boolean;
+      }
     | undefined {
-    // Get socket configuration from ephemeral settings
     const settings = this.providerConfig?.getEphemeralSettings?.() || {};
 
-    // Check if any socket settings are explicitly configured
-    const hasSocketSettings =
-      'socket-timeout' in settings ||
-      'socket-keepalive' in settings ||
-      'socket-nodelay' in settings;
+    const timeoutSetting = settings['socket-timeout'];
+    const keepAliveSetting = settings['socket-keepalive'];
+    const noDelaySetting = settings['socket-nodelay'];
 
-    // Only create custom agents if socket settings are configured
-    if (!hasSocketSettings) {
+    const hasExplicitValue = (setting: unknown): boolean =>
+      setting !== undefined && setting !== null;
+
+    if (
+      !hasExplicitValue(timeoutSetting) &&
+      !hasExplicitValue(keepAliveSetting) &&
+      !hasExplicitValue(noDelaySetting)
+    ) {
       return undefined;
     }
 
-    // Socket configuration with defaults for when settings ARE configured
-    const socketTimeout = (settings['socket-timeout'] as number) || 60000; // 60 seconds default
-    const socketKeepAlive = settings['socket-keepalive'] !== false; // true by default
-    const socketNoDelay = settings['socket-nodelay'] !== false; // true by default
+    const timeout =
+      typeof timeoutSetting === 'number' && Number.isFinite(timeoutSetting)
+        ? timeoutSetting
+        : Number(timeoutSetting) > 0
+          ? Number(timeoutSetting)
+          : 60000;
 
-    // Create HTTP agent with socket options
-    const httpAgent = new http.Agent({
-      keepAlive: socketKeepAlive,
-      keepAliveMsecs: 1000,
-      timeout: socketTimeout,
-    });
+    const keepAlive =
+      keepAliveSetting === undefined || keepAliveSetting === null
+        ? true
+        : keepAliveSetting !== false;
 
-    // Create HTTPS agent with socket options
-    const httpsAgent = new https.Agent({
-      keepAlive: socketKeepAlive,
-      keepAliveMsecs: 1000,
-      timeout: socketTimeout,
-    });
+    const noDelay =
+      noDelaySetting === undefined || noDelaySetting === null
+        ? true
+        : noDelaySetting !== false;
 
-    // Apply TCP_NODELAY if enabled (reduces latency for local servers)
-    if (socketNoDelay) {
-      const originalCreateConnection = httpAgent.createConnection;
-      httpAgent.createConnection = function (options, callback) {
-        const socket = originalCreateConnection.call(this, options, callback);
-        if (socket instanceof net.Socket) {
-          socket.setNoDelay(true);
-        }
-        return socket;
+    return {
+      timeout,
+      keepAlive,
+      noDelay,
+    };
+  }
+
+  private createSocketAwareFetch(config: {
+    timeout: number;
+    keepAlive: boolean;
+    noDelay: boolean;
+  }): typeof fetch {
+    const { timeout, keepAlive, noDelay } = config;
+    const maxRetries = 2;
+    const retryDelay = 1000;
+    const partialResponseThreshold = 2;
+
+    const buildHeaders = (init?: RequestInit): Record<string, string> => {
+      const baseHeaders: Record<string, string> = {
+        Accept: 'text/event-stream',
+        Connection: keepAlive ? 'keep-alive' : 'close',
+        'Cache-Control': 'no-cache',
       };
 
-      const originalHttpsCreateConnection = httpsAgent.createConnection;
-      httpsAgent.createConnection = function (options, callback) {
-        const socket = originalHttpsCreateConnection.call(
-          this,
-          options,
-          callback,
-        );
-        if (socket instanceof net.Socket) {
-          socket.setNoDelay(true);
-        }
-        return socket;
-      };
-    }
+      if (!init?.headers) {
+        return baseHeaders;
+      }
 
-    return { httpAgent, httpsAgent };
+      const appendHeader = (key: string, value: string) => {
+        baseHeaders[key] = value;
+      };
+
+      const headers = init.headers;
+      if (headers instanceof Headers) {
+        headers.forEach((value, key) => {
+          appendHeader(key, value);
+        });
+      } else if (Array.isArray(headers)) {
+        headers.forEach(([key, value]) => {
+          if (typeof value === 'string') {
+            appendHeader(key, value);
+          }
+        });
+      } else if (typeof headers === 'object') {
+        Object.entries(headers).forEach(([key, value]) => {
+          if (typeof value === 'string') {
+            appendHeader(key, value);
+          } else if (Array.isArray(value)) {
+            appendHeader(key, (value as string[]).join(', '));
+          } else if (value !== undefined && value !== null) {
+            appendHeader(key, String(value));
+          }
+        });
+      }
+
+      return baseHeaders;
+    };
+
+    const collectResponseHeaders = (rawHeaders: http.IncomingHttpHeaders) => {
+      const headers = new Headers();
+      for (const [key, value] of Object.entries(rawHeaders)) {
+        if (!key) continue;
+        if (Array.isArray(value)) {
+          headers.append(key, value.join(', '));
+        } else if (value !== undefined) {
+          headers.append(key, value);
+        }
+      }
+      return headers;
+    };
+
+    const writeRequestBody = (req: http.ClientRequest, body: unknown): void => {
+      if (!body) {
+        req.end();
+        return;
+      }
+
+      if (typeof body === 'string' || body instanceof Buffer) {
+        req.write(body);
+        req.end();
+        return;
+      }
+
+      if (body instanceof ArrayBuffer) {
+        req.write(Buffer.from(body));
+        req.end();
+        return;
+      }
+
+      if (ArrayBuffer.isView(body)) {
+        req.write(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
+        req.end();
+        return;
+      }
+
+      try {
+        req.write(body as Parameters<typeof req.write>[0]);
+      } catch {
+        req.write(String(body));
+      }
+      req.end();
+    };
+
+    const delay = (ms: number) =>
+      new Promise((resolve) => {
+        setTimeout(resolve, ms);
+      });
+
+    const makeRequest = async (
+      url: string,
+      init?: RequestInit,
+      attempt = 0,
+    ): Promise<Response> =>
+      new Promise((resolve, reject) => {
+        let parsedUrl: URL;
+        try {
+          parsedUrl = new URL(url);
+        } catch (error) {
+          reject(
+            new Error(
+              `Invalid URL provided to socket-aware fetch: ${url} (${String(error)})`,
+            ),
+          );
+          return;
+        }
+
+        const isHttps = parsedUrl.protocol === 'https:';
+        const httpModule = isHttps ? https : http;
+
+        const options: http.RequestOptions = {
+          hostname: parsedUrl.hostname,
+          port: parsedUrl.port ? Number(parsedUrl.port) : isHttps ? 443 : 80,
+          path: `${parsedUrl.pathname}${parsedUrl.search}`,
+          method: init?.method?.toUpperCase() || 'GET',
+          headers: buildHeaders(init),
+        };
+
+        const req = httpModule.request(options, (res) => {
+          const chunks: Buffer[] = [];
+          let chunkCount = 0;
+
+          res.on('data', (chunk) => {
+            chunkCount += 1;
+            if (typeof chunk === 'string') {
+              chunks.push(Buffer.from(chunk));
+            } else {
+              chunks.push(chunk);
+            }
+          });
+
+          res.on('end', () => {
+            const bodyBuffer = Buffer.concat(chunks);
+            resolve(
+              new Response(bodyBuffer, {
+                status: res.statusCode ?? 0,
+                statusText: res.statusMessage ?? '',
+                headers: collectResponseHeaders(res.headers),
+              }),
+            );
+          });
+
+          res.on('error', async (error) => {
+            if (
+              chunkCount >= partialResponseThreshold &&
+              attempt < maxRetries
+            ) {
+              await delay(retryDelay);
+              try {
+                const retryResponse = await makeRequest(url, init, attempt + 1);
+                resolve(retryResponse);
+                return;
+              } catch (retryError) {
+                reject(retryError);
+                return;
+              }
+            }
+
+            reject(new Error(`Response stream error: ${String(error)}`));
+          });
+        });
+
+        req.on('socket', (socket) => {
+          if (socket instanceof net.Socket) {
+            socket.setTimeout(timeout);
+            socket.setKeepAlive(keepAlive, 1000);
+            socket.setNoDelay(noDelay);
+          }
+        });
+
+        req.setTimeout(timeout, () => {
+          req.destroy(new Error(`Request timed out after ${timeout}ms`));
+        });
+
+        if (init?.signal) {
+          const abortHandler = () => {
+            const abortError = new Error('Request aborted');
+            (abortError as Error & { name: string }).name = 'AbortError';
+            req.destroy(abortError);
+          };
+
+          if (init.signal.aborted) {
+            abortHandler();
+            return;
+          }
+
+          init.signal.addEventListener('abort', abortHandler);
+          req.on('close', () => {
+            init.signal?.removeEventListener('abort', abortHandler);
+          });
+        }
+
+        req.on('error', async (error) => {
+          if (attempt < maxRetries) {
+            await delay(retryDelay);
+            try {
+              const retryResponse = await makeRequest(url, init, attempt + 1);
+              resolve(retryResponse);
+              return;
+            } catch (retryError) {
+              reject(retryError);
+              return;
+            }
+          }
+
+          reject(new Error(`Request failed: ${String(error)}`));
+        });
+
+        writeRequestBody(req, init?.body ?? null);
+      });
+
+    return async (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+
+      if (typeof url !== 'string') {
+        return fetch(input, init);
+      }
+
+      return makeRequest(url, init);
+    };
   }
 
   private async loadModelParamsFromSettings(): Promise<void> {
@@ -194,7 +416,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const resolvedKey = await this.getAuthToken();
     // Use the unified getBaseURL() method from BaseProvider
     const baseURL = this.getBaseURL();
-    const clientKey = `${baseURL}-${resolvedKey}`;
+    const socketSettings = this.getSocketSettings();
+    const socketKey = socketSettings
+      ? JSON.stringify(socketSettings)
+      : 'default';
+    const clientKey = `${baseURL}-${resolvedKey}-${socketKey}`;
 
     // Clear cache if we have no valid auth (e.g., after logout)
     if (!resolvedKey && this._cachedClient) {
@@ -207,12 +433,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return this._cachedClient;
     }
 
-    // Create HTTP agents with socket configuration (if configured)
-    const agents = this.createHttpAgents();
-
-    // Build client options - OpenAI SDK accepts httpAgent/httpsAgent at runtime
-    // even though they're not in the TypeScript definitions
-    const baseOptions = {
+    const baseOptions: ConstructorParameters<typeof OpenAI>[0] & {
+      fetch?: typeof fetch;
+    } = {
       apiKey: resolvedKey || '',
       baseURL,
       // CRITICAL: Disable OpenAI SDK's built-in retries so our retry logic can handle them
@@ -220,19 +443,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       maxRetries: 0,
     };
 
-    // Add socket configuration if available
-    const clientOptions = agents
-      ? {
-          ...baseOptions,
-          httpAgent: agents.httpAgent,
-          httpsAgent: agents.httpsAgent,
-        }
-      : baseOptions;
+    if (socketSettings) {
+      baseOptions.timeout = socketSettings.timeout;
+      baseOptions.fetch = this.createSocketAwareFetch(socketSettings);
+    }
 
     // Create new client with current auth and optional socket configuration
     // Cast to unknown then to the expected type to bypass TypeScript's structural checking
     this._cachedClient = new OpenAI(
-      clientOptions as unknown as ConstructorParameters<typeof OpenAI>[0],
+      baseOptions as unknown as ConstructorParameters<typeof OpenAI>[0],
     );
     this._cachedClientKey = clientKey;
 

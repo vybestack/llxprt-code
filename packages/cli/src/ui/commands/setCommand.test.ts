@@ -171,6 +171,36 @@ describe('setCommand', () => {
     });
   });
 
+  it('should normalize boolean streaming values to enabled/disabled', async () => {
+    const disableResult = await setCommand.action!(context, 'streaming false');
+
+    expect(mockConfig.setEphemeralSetting).toHaveBeenNthCalledWith(
+      1,
+      'streaming',
+      'disabled',
+    );
+    expect(disableResult).toEqual({
+      type: 'message',
+      messageType: 'info',
+      content:
+        'Ephemeral setting \'streaming\' set to "disabled" (session only, use /profile save to persist)',
+    });
+
+    const enableResult = await setCommand.action!(context, 'streaming true');
+
+    expect(mockConfig.setEphemeralSetting).toHaveBeenNthCalledWith(
+      2,
+      'streaming',
+      'enabled',
+    );
+    expect(enableResult).toEqual({
+      type: 'message',
+      messageType: 'info',
+      content:
+        'Ephemeral setting \'streaming\' set to "enabled" (session only, use /profile save to persist)',
+    });
+  });
+
   describe('modelparam behavioral tests', () => {
     it('should call provider.setModelParams with correct parameters', async () => {
       const modelParamCommand = setCommand.subCommands![0];
