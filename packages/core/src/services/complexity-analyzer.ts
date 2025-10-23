@@ -72,6 +72,8 @@ export class ComplexityAnalyzer {
 
   // Task separator patterns for comma-separated lists
   private readonly taskSeparatorPattern = /(?:,\s*(?:and\s+)?|;\s*|\band\s+)/;
+  private readonly fileReferencePattern =
+    /(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]+/g;
 
   constructor(options: ComplexityAnalyzerOptions = {}) {
     this.complexityThreshold = options.complexityThreshold ?? 0.6;
@@ -93,6 +95,13 @@ export class ComplexityAnalyzer {
     const sequentialIndicators = this.findSequentialIndicators(message);
     const questionCount = this.countQuestions(message);
 
+    const fileReferences = this.extractFileReferences(message);
+    for (const reference of fileReferences) {
+      if (!detectedTasks.includes(reference)) {
+        detectedTasks.push(reference);
+      }
+    }
+
     // Calculate complexity score based on multiple factors
     const complexityScore = this.calculateComplexityScore({
       taskCount: detectedTasks.length,
@@ -102,9 +111,17 @@ export class ComplexityAnalyzer {
       messageLength: message.length,
     });
 
-    const isComplex = complexityScore > this.complexityThreshold;
+    const narrativeComplexity = this.isNarrativeComplex(
+      message,
+      detectedTasks.length,
+    );
+
+    const isComplex =
+      complexityScore > this.complexityThreshold || narrativeComplexity;
     const shouldSuggestTodos =
-      isComplex && detectedTasks.length >= this.minTasksForSuggestion;
+      isComplex &&
+      (detectedTasks.length >= this.minTasksForSuggestion ||
+        narrativeComplexity);
 
     const result: ComplexityAnalysisResult = {
       complexityScore,
@@ -207,6 +224,23 @@ export class ComplexityAnalyzer {
   }
 
   /**
+   * Extracts file references from the message to count as tasks.
+   */
+  private extractFileReferences(message: string): string[] {
+    const references: string[] = [];
+    const matches = message.matchAll(this.fileReferencePattern);
+
+    for (const match of matches) {
+      const reference = match[0].trim();
+      if (reference.length > 0 && !references.includes(reference)) {
+        references.push(reference);
+      }
+    }
+
+    return references;
+  }
+
+  /**
    * Finds sequential indicator keywords in the message.
    * @requirement REQ-005.2
    */
@@ -240,6 +274,34 @@ export class ComplexityAnalyzer {
     const questionPattern = /[^.!?]*\?/g;
     const matches = message.match(questionPattern);
     return matches ? matches.length : 0;
+  }
+
+  /**
+   * Determines if a message is narrative-heavy enough to count as complex.
+   */
+  private isNarrativeComplex(
+    message: string,
+    detectedTaskCount: number,
+  ): boolean {
+    if (detectedTaskCount >= this.minTasksForSuggestion) {
+      return false;
+    }
+
+    const trimmed = message.trim();
+    if (trimmed.length < 600) {
+      return false;
+    }
+
+    const sentences = trimmed
+      .split(/[.!?]+/)
+      .map((sentence) => sentence.trim())
+      .filter((sentence) => sentence.length > 0);
+
+    if (sentences.length < 5) {
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -302,16 +364,25 @@ export class ComplexityAnalyzer {
    * @requirement REQ-005.3
    */
   private generateSuggestionReminder(detectedTasks: string[]): string {
-    const taskList = detectedTasks
-      .slice(0, 5)
-      .map((t) => `  - ${t}`)
-      .join('\n');
+    const maxDisplay = Math.min(5, detectedTasks.length);
+    const taskLines =
+      maxDisplay === 0
+        ? [
+            '  - Break this request into discrete todos',
+            '  - Capture each major area using TodoWrite',
+            '  - Update the list as you progress',
+          ]
+        : detectedTasks.slice(0, maxDisplay).map((task) => `  - ${task}`);
 
-    return `I notice you have multiple tasks to complete. Using a todo list would help track progress:\n\n${taskList}${
-      detectedTasks.length > 5
-        ? `\n  ... and ${detectedTasks.length - 5} more tasks`
-        : ''
-    }`;
+    if (detectedTasks.length > maxDisplay && maxDisplay > 0) {
+      taskLines.push(
+        `  ... and ${detectedTasks.length - maxDisplay} more tasks`,
+      );
+    }
+
+    const taskList = taskLines.join('\n');
+
+    return `I notice you have multiple tasks to complete. Using a todo list would help track progress:\n\n${taskList}`;
   }
 
   /**

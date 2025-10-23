@@ -45,10 +45,15 @@ import {
 } from './compression-config.js';
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext, IdeContext, File } from '../ide/ideContext.js';
-import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
+import {
+  ComplexityAnalyzer,
+  type ComplexityAnalysisResult,
+} from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
+
+const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
@@ -127,6 +132,9 @@ export class GeminiClient {
   private readonly complexitySuggestionCooldown: number;
   private lastSentIdeContext: IdeContext | undefined;
   private forceFullIdeContext = true;
+  private lastTodoToolTurn?: number;
+  private consecutiveComplexTurns = 0;
+  private lastComplexitySuggestionTurn?: number;
 
   /**
    * At any point in this conversation, was compression triggered without
@@ -207,6 +215,62 @@ export class GeminiClient {
 
   getUserTier(): UserTierId | undefined {
     return this.contentGenerator?.userTier;
+  }
+
+  private processComplexityAnalysis(
+    analysis: ComplexityAnalysisResult,
+  ): string | undefined {
+    if (!analysis.isComplex || !analysis.shouldSuggestTodos) {
+      this.consecutiveComplexTurns = 0;
+      return undefined;
+    }
+
+    this.consecutiveComplexTurns += 1;
+
+    const alreadySuggestedThisTurn =
+      this.lastComplexitySuggestionTurn === this.sessionTurnCount;
+    const currentTime = Date.now();
+    const withinCooldown =
+      currentTime - this.lastComplexitySuggestionTime <
+      this.complexitySuggestionCooldown;
+
+    if (alreadySuggestedThisTurn || withinCooldown) {
+      return undefined;
+    }
+
+    const reminder = this.shouldEscalateReminder()
+      ? this.todoReminderService.getEscalatedComplexTaskSuggestion(
+          analysis.detectedTasks,
+        )
+      : this.todoReminderService.getComplexTaskSuggestion(
+          analysis.detectedTasks,
+        );
+
+    this.lastComplexitySuggestionTime = currentTime;
+    this.lastComplexitySuggestionTurn = this.sessionTurnCount;
+
+    return reminder;
+  }
+
+  private shouldEscalateReminder(): boolean {
+    if (this.consecutiveComplexTurns < COMPLEXITY_ESCALATION_TURN_THRESHOLD) {
+      return false;
+    }
+
+    const turnsSinceTodo =
+      this.lastTodoToolTurn === undefined
+        ? Number.POSITIVE_INFINITY
+        : this.sessionTurnCount - this.lastTodoToolTurn;
+
+    return turnsSinceTodo >= COMPLEXITY_ESCALATION_TURN_THRESHOLD;
+  }
+
+  private isTodoToolCall(name: unknown): boolean {
+    if (typeof name !== 'string') {
+      return false;
+    }
+    const normalized = name.toLowerCase();
+    return normalized === 'todo_write' || normalized === 'todo_read';
   }
 
   async addHistory(content: Content) {
@@ -774,43 +838,29 @@ export class GeminiClient {
       this.forceFullIdeContext = false;
     }
 
-    // Complexity detection for proactive todo suggestions
-    if (
-      this.sessionTurnCount === 1 && // Only on first user message
-      Array.isArray(request) &&
-      request.length > 0
-    ) {
-      // Extract user message text
+    let complexityReminder: string | undefined;
+    if (Array.isArray(request) && request.length > 0) {
       const userMessage = request
         .filter((part) => typeof part === 'object' && 'text' in part)
         .map((part) => (part as { text: string }).text)
-        .join(' ');
+        .join(' ')
+        .trim();
 
-      if (userMessage) {
+      if (userMessage.length > 0) {
         const analysis = this.complexityAnalyzer.analyzeComplexity(userMessage);
-
-        // Check if we should suggest todos (with cooldown)
-        const currentTime = Date.now();
-        if (
-          analysis.shouldSuggestTodos &&
-          currentTime - this.lastComplexitySuggestionTime >
-            this.complexitySuggestionCooldown
-        ) {
-          // Generate suggestion reminder
-          const suggestionReminder =
-            this.todoReminderService.getComplexTaskSuggestion(
-              analysis.detectedTasks,
-            );
-
-          // Inject reminder into request
-          request = [
-            ...(Array.isArray(request) ? request : [request]),
-            { text: suggestionReminder },
-          ];
-
-          this.lastComplexitySuggestionTime = currentTime;
-        }
+        complexityReminder = this.processComplexityAnalysis(analysis);
+      } else {
+        this.consecutiveComplexTurns = 0;
       }
+    } else {
+      this.consecutiveComplexTurns = 0;
+    }
+
+    if (complexityReminder) {
+      this.getChat().addHistory({
+        role: 'user',
+        parts: [{ text: complexityReminder }],
+      });
     }
 
     // Get provider name for error messages
@@ -833,6 +883,13 @@ export class GeminiClient {
         return turn;
       }
       yield event;
+      if (
+        event.type === GeminiEventType.ToolCallRequest &&
+        this.isTodoToolCall(event.value?.name)
+      ) {
+        this.lastTodoToolTurn = this.sessionTurnCount;
+        this.consecutiveComplexTurns = 0;
+      }
       if (event.type === GeminiEventType.Error) {
         return turn;
       }
