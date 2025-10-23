@@ -2183,51 +2183,57 @@ describe('InputPrompt', () => {
       props.onSubmit = vi.fn();
     });
 
-    it.each([
-      {
-        name: 'should prevent slash commands',
-        bufferText: '/help',
-        shellMode: false,
-        shouldSubmit: false,
-        errorMessage: 'Slash commands cannot be queued',
-      },
-      {
-        name: 'should prevent shell commands',
-        bufferText: 'ls',
-        shellMode: true,
-        shouldSubmit: false,
-        errorMessage: 'Shell commands cannot be queued',
-      },
-      {
-        name: 'should allow regular messages',
-        bufferText: 'regular message',
-        shellMode: false,
-        shouldSubmit: true,
-        errorMessage: null,
-      },
-    ])(
-      '$name',
-      async ({ bufferText, shellMode, shouldSubmit, errorMessage }) => {
-        props.buffer.text = bufferText;
-        props.shellModeActive = shellMode;
+    it('should prevent slash commands', async () => {
+      props.buffer.text = '/help';
+      props.shellModeActive = false;
 
-        const { stdin, unmount } = renderWithProviders(
-          <InputPrompt {...props} />,
-        );
-        await wait();
-        stdin.write('\r');
-        await wait();
+      const { stdin, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+      );
+      await wait();
+      stdin.write('\r');
+      await wait();
 
-        if (shouldSubmit) {
-          expect(props.onSubmit).toHaveBeenCalledWith(bufferText);
-          expect(props.setQueueErrorMessage).not.toHaveBeenCalled();
-        } else {
-          expect(props.onSubmit).not.toHaveBeenCalled();
-          expect(props.setQueueErrorMessage).toHaveBeenCalledWith(errorMessage);
-        }
-        unmount();
-      },
-    );
+      expect(props.onSubmit).not.toHaveBeenCalled();
+      expect(props.setQueueErrorMessage).toHaveBeenCalledWith(
+        'Slash commands cannot be queued',
+      );
+      unmount();
+    });
+
+    it('should prevent shell commands', async () => {
+      props.buffer.text = 'ls';
+      props.shellModeActive = true;
+
+      const { stdin, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+      );
+      await wait();
+      stdin.write('\r');
+      await wait();
+
+      expect(props.onSubmit).not.toHaveBeenCalled();
+      expect(props.setQueueErrorMessage).toHaveBeenCalledWith(
+        'Shell commands cannot be queued',
+      );
+      unmount();
+    });
+
+    it('should allow regular messages', async () => {
+      props.buffer.text = 'regular message';
+      props.shellModeActive = false;
+
+      const { stdin, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+      );
+      await wait();
+      stdin.write('\r');
+      await wait();
+
+      expect(props.onSubmit).toHaveBeenCalledWith('regular message');
+      expect(props.setQueueErrorMessage).not.toHaveBeenCalled();
+      unmount();
+    });
   });
 });
 
