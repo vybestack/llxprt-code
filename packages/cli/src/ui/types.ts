@@ -6,6 +6,7 @@
 
 import {
   CompressionStatus,
+  GeminiCLIExtension,
   ToolCallConfirmationDetails,
   ToolResultDisplay,
   type ThinkingBlock,
@@ -176,6 +177,7 @@ export type HistoryItemCompression = HistoryItemBase & {
 
 export type HistoryItemExtensionsList = HistoryItemBase & {
   type: 'extensions_list';
+  extensions: GeminiCLIExtension[];
 };
 
 export interface ChatDetail {

@@ -4,17 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type React from 'react';
 import { Box, Text } from 'ink';
 import { useUIState } from '../../contexts/UIStateContext.js';
 import { ExtensionUpdateState } from '../../state/extensions.js';
 import { Colors } from '../../colors.js';
+import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 
-export const ExtensionsList = () => {
+interface ExtensionsListProps {
+  extensions: readonly GeminiCLIExtension[];
+}
+
+export const ExtensionsList: React.FC<ExtensionsListProps> = ({ extensions }) => {
   const { commandContext } = useUIState();
   const extensionsUpdateState = commandContext.ui.extensionsUpdateState;
-  const allExtensions = commandContext.services.config!.getExtensions();
 
-  if (allExtensions.length === 0) {
+  if (extensions.length === 0) {
     return <Text color={Colors.Foreground}>No extensions installed.</Text>;
   }
 
@@ -22,7 +27,7 @@ export const ExtensionsList = () => {
     <Box flexDirection="column" marginTop={1} marginBottom={1}>
       <Text color={Colors.Foreground}>Installed extensions:</Text>
       <Box flexDirection="column" paddingLeft={2}>
-        {allExtensions.map((ext) => {
+        {extensions.map((ext) => {
           const state = extensionsUpdateState.get(ext.name);
           const isActive = ext.isActive;
           const activeString = isActive ? 'active' : 'disabled';
