@@ -1,12 +1,72 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TemplateEngine } from './TemplateEngine.js';
-import type { TemplateVariables, TemplateProcessingOptions } from './types.js';
+import type {
+  TemplateVariables,
+  TemplateProcessingOptions,
+  PromptContext,
+} from './types.js';
 
 describe('TemplateEngine', () => {
   let engine: TemplateEngine;
 
   beforeEach(() => {
     engine = new TemplateEngine();
+  });
+
+  describe('createVariablesFromContext environment metadata', () => {
+    it('should expose workspace and sandbox details when provided', () => {
+      const context: PromptContext = {
+        provider: 'anthropic',
+        model: 'claude-3',
+        enabledTools: [],
+        environment: {
+          isGitRepository: true,
+          isSandboxed: true,
+          sandboxType: 'macos-seatbelt',
+          hasIdeCompanion: false,
+          workingDirectory: '/tmp/workspace-project',
+          workspaceName: 'workspace-project',
+          workspaceRoot: '/tmp/workspace-project',
+          workspaceDirectories: ['/tmp/workspace-project', '/tmp/secondary'],
+          folderStructure: 'mock structure',
+        },
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+
+      expect(vars.IS_GIT_REPO).toBe('true');
+      expect(vars.IS_SANDBOXED).toBe('true');
+      expect(vars.SANDBOX_TYPE).toBe('macos-seatbelt');
+      expect(vars.HAS_IDE).toBe('false');
+      expect(vars.WORKSPACE_NAME).toBe('workspace-project');
+      expect(vars.WORKSPACE_ROOT).toBe('/tmp/workspace-project');
+      expect(vars.WORKSPACE_DIRECTORIES).toBe(
+        '/tmp/workspace-project, /tmp/secondary',
+      );
+    });
+
+    it('should provide sensible defaults when metadata is missing', () => {
+      const context: PromptContext = {
+        provider: 'openai',
+        model: 'gpt-4',
+        enabledTools: [],
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+
+      expect(vars.IS_GIT_REPO).toBe('false');
+      expect(vars.IS_SANDBOXED).toBe('false');
+      expect(vars.SANDBOX_TYPE).toBe('none');
+      expect(vars.HAS_IDE).toBe('false');
+      expect(vars.WORKSPACE_NAME).toBe('unknown');
+      expect(vars.WORKSPACE_ROOT).toBe('unknown');
+      expect(vars.WORKSPACE_DIRECTORIES).toBe('unknown');
+    });
   });
 
   describe('basic variable substitution', () => {
