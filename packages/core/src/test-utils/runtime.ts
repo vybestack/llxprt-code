@@ -107,6 +107,60 @@ export function createProviderWithRuntime<P>(
   }
 }
 
+/**
+ * Produces a lightweight Config stub sufficient for provider runtime tests.
+ */
+export function createRuntimeConfigStub(
+  settingsService: SettingsService,
+  overrides: Partial<Record<string, unknown>> = {},
+): Config {
+  const noop = () => {};
+  const base = {
+    getConversationLoggingEnabled: () => false,
+    setConversationLoggingEnabled: noop,
+    getTelemetryLogPromptsEnabled: () => false,
+    setTelemetryLogPromptsEnabled: noop,
+    getUsageStatisticsEnabled: () => false,
+    setUsageStatisticsEnabled: noop,
+    getDebugMode: () => false,
+    setDebugMode: noop,
+    getSessionId: () => 'test-session',
+    setSessionId: noop,
+    getFlashFallbackMode: () => 'off',
+    setFlashFallbackMode: noop,
+    getProvider: () => 'test-provider',
+    setProvider: noop,
+    getSettingsService: () => settingsService,
+    getProviderSettings: () => ({}),
+    setProviderSettings: noop,
+    getProviderConfig: () => ({}),
+    setProviderConfig: noop,
+    resetProvider: noop,
+    resetProviderSettings: noop,
+    resetProviderConfig: noop,
+    getActiveWorkspace: () => undefined as string | undefined,
+    setActiveWorkspace: noop,
+    clearActiveWorkspace: noop,
+    getExtensionConfig: () => ({}),
+    setExtensionConfig: noop,
+    getFeatures: () => ({}),
+    setFeatures: noop,
+    getRedactionConfig: () => ({ replacements: [] }),
+    setProviderManager: noop,
+    getProviderManager: () => undefined as ProviderManager | undefined,
+    getProviderSetting: () => undefined,
+    getEphemeralSettings: () => ({ model: 'test-model' }),
+    getEphemeralSetting: () => undefined,
+    setEphemeralSetting: noop,
+    getModel: () => 'test-model',
+    setModel: noop,
+    getQuotaErrorOccurred: () => false,
+    setQuotaErrorOccurred: noop,
+  };
+
+  return Object.assign(base, overrides) as unknown as Config;
+}
+
 function requireVi() {
   const viGlobal = (globalThis as { vi?: (typeof import('vitest'))['vi'] }).vi;
   if (viGlobal) {

@@ -7,6 +7,8 @@ import { SettingsService } from '../../../settings/SettingsService.js';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import OpenAI from 'openai';
 import { createProviderRuntimeContext } from '../../../runtime/providerRuntimeContext.js';
+import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
+import type { Config } from '../../../config/config.js';
 
 vi.mock('openai', () => {
   class FakeOpenAI {
@@ -95,13 +97,17 @@ describe('OpenAI provider stateless contract tests', () => {
     );
     const settingsA = createSettings({ callId: 'runtime-A' });
     const settingsB = createSettings({ callId: 'runtime-B' });
+    const configA = createRuntimeConfigStub(settingsA) as Config;
+    const configB = createRuntimeConfigStub(settingsB) as Config;
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-A',
       settingsService: settingsA,
+      config: configA,
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-B',
       settingsService: settingsB,
+      config: configB,
     });
 
     const callA = provider.generateChatCompletion({
@@ -131,9 +137,11 @@ describe('OpenAI provider stateless contract tests', () => {
       callId: 'runtime-C',
       baseUrl: 'https://api.openai.com/v1',
     });
+    const config = createRuntimeConfigStub(settings) as Config;
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-C',
       settingsService: settings,
+      config,
     });
 
     await provider

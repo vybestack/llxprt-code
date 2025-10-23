@@ -5,6 +5,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '../../../settings/SettingsService.js';
 import { createProviderRuntimeContext } from '../../../runtime/providerRuntimeContext.js';
+import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
+import type { Config } from '../../../config/config.js';
 import { AnthropicProvider } from '../AnthropicProvider.js';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -109,13 +111,17 @@ describe('Anthropic provider stateless contract tests', () => {
     const baselineInstances = FakeAnthropicClass.created.length;
     const settingsA = createSettings('runtime-A');
     const settingsB = createSettings('runtime-B');
+    const configA = createRuntimeConfigStub(settingsA) as Config;
+    const configB = createRuntimeConfigStub(settingsB) as Config;
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-A',
       settingsService: settingsA,
+      config: configA,
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-B',
       settingsService: settingsB,
+      config: configB,
     });
 
     provider.setAuthToken('sk-shared-token');
@@ -147,13 +153,17 @@ describe('Anthropic provider stateless contract tests', () => {
     const baselineInstances = FakeAnthropicClass.created.length;
     const settingsA = createSettings('runtime-A');
     const settingsB = createSettings('runtime-B');
+    const configA = createRuntimeConfigStub(settingsA) as Config;
+    const configB = createRuntimeConfigStub(settingsB) as Config;
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-A',
       settingsService: settingsA,
+      config: configA,
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-B',
       settingsService: settingsB,
+      config: configB,
     });
 
     provider.setAuthToken('token-A');

@@ -302,6 +302,7 @@ export function registerCliProviderInfrastructure(
   const config = entry.config ?? context.config ?? null;
   if (config) {
     config.setProviderManager(manager);
+    manager.setConfig(config);
     upsertRuntimeEntry(runtimeId, { config });
   }
 }

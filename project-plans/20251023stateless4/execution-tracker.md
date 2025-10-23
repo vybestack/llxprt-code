@@ -14,8 +14,8 @@
 | 03a | P03a | ✅ | 2025-10-23T20:42:34Z | 2025-10-23T20:44:48Z | 2025-10-23T20:44:48Z | Stub verification logged (CLI flag follow-up needed) |
 | 04 | P04 | ✅ | 2025-10-23T20:54:15Z | 2025-10-23T21:09:52Z | 2025-10-23T21:18:47Z | Runtime guard TDD red cases captured (Vitest flag gap) |
 | 04a | P04a | ✅ | 2025-10-23T21:16:46Z | 2025-10-23T21:18:47Z | 2025-10-23T21:18:47Z | Verification logged; command blocked by `--filter` |
-| 05 | P05 | ⬜ | - | - | - | Base provider implementation |
-| 05a | P05a | ⬜ | - | - | - | Implementation verification |
+| 05 | P05 | ✅ | 2025-10-23T21:34:51Z | 2025-10-23T22:26:42Z | 2025-10-23T22:26:42Z | Base provider implementation |
+| 05a | P05a | ✅ | 2025-10-23T22:26:45Z | 2025-10-23T22:27:45Z | 2025-10-23T22:27:45Z | Implementation verification |
 | 06 | P06 | ⬜ | - | - | - | Integration stub |
 | 06a | P06a | ⬜ | - | - | - | Integration stub verification |
 | 07 | P07 | ⬜ | - | - | - | Integration TDD |

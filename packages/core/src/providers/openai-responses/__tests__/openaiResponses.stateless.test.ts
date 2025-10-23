@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '../../../settings/SettingsService.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import { createProviderRuntimeContext } from '../../../runtime/providerRuntimeContext.js';
+import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
+import type { Config } from '../../../config/config.js';
 
 vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -66,13 +68,17 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     );
     const settingsA = createSettings('conversation-A', 'parent-1');
     const settingsB = createSettings('conversation-B', 'parent-2');
+    const configA = createRuntimeConfigStub(settingsA) as Config;
+    const configB = createRuntimeConfigStub(settingsB) as Config;
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-A',
       settingsService: settingsA,
+      config: configA,
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-B',
       settingsService: settingsB,
+      config: configB,
     });
 
     await provider

@@ -27,6 +27,7 @@ import {
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
 import type { SettingsService } from '../settings/SettingsService.js';
+import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 export interface ConversationDataRedactor {
   redactMessage(content: IContent, provider: string): IContent;
@@ -189,6 +190,7 @@ export class LoggingProviderWrapper implements IProvider {
   private turnNumber: number = 0;
   private redactor: ConversationDataRedactor;
   private performanceTracker: ProviderPerformanceTracker;
+  private runtimeContextResolver?: () => ProviderRuntimeContext;
 
   constructor(
     private readonly wrapped: IProvider,
@@ -212,6 +214,16 @@ export class LoggingProviderWrapper implements IProvider {
         this.performanceTracker.trackThrottleWaitTime(waitTimeMs);
       });
     }
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
+   * @requirement:REQ-SP4-001
+   * @pseudocode provider-runtime-handling.md lines 10-15
+   * Registers a resolver so runtime context is injected per invocation.
+   */
+  setRuntimeContextResolver(resolver: () => ProviderRuntimeContext): void {
+    this.runtimeContextResolver = resolver;
   }
 
   /**
@@ -243,7 +255,9 @@ export class LoggingProviderWrapper implements IProvider {
 
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
    * @requirement REQ-SP2-001
+   * @requirement:REQ-SP4-001
    * @pseudocode base-provider-call-contract.md lines 3-4
    * @plan PLAN-20250218-STATELESSPROVIDER.P04
    * @requirement REQ-SP-001
@@ -268,7 +282,35 @@ export class LoggingProviderWrapper implements IProvider {
       ? { contents: contentOrOptions, tools: maybeTools }
       : { ...contentOrOptions };
 
-    normalizedOptions.config = normalizedOptions.config ?? this.config;
+    const injectedRuntime = this.runtimeContextResolver?.();
+    const providedRuntime = normalizedOptions.runtime;
+    if (injectedRuntime) {
+      const mergedMetadata: Record<string, unknown> = {
+        ...(injectedRuntime.metadata ?? {}),
+        ...(providedRuntime?.metadata ?? {}),
+        ...(normalizedOptions.metadata ?? {}),
+        source: 'LoggingProviderWrapper.generateChatCompletion',
+        requirement: 'REQ-SP4-001',
+      };
+
+      normalizedOptions.runtime = {
+        ...injectedRuntime,
+        ...providedRuntime,
+        settingsService:
+          providedRuntime?.settingsService ?? injectedRuntime.settingsService,
+        config: providedRuntime?.config ?? injectedRuntime.config,
+        metadata: mergedMetadata,
+      };
+
+      normalizedOptions.settings =
+        normalizedOptions.settings ?? normalizedOptions.runtime.settingsService;
+      normalizedOptions.metadata = mergedMetadata;
+    }
+
+    normalizedOptions.config =
+      normalizedOptions.config ??
+      normalizedOptions.runtime?.config ??
+      this.config;
     const activeConfig = normalizedOptions.config;
 
     const promptId = this.generatePromptId();
@@ -788,7 +830,7 @@ export class LoggingProviderWrapper implements IProvider {
       const candidate = (
         this.wrapped as { setConfig?: (value: unknown) => void }
       ).setConfig;
-      candidate?.(config);
+      candidate?.call(this.wrapped, config);
     }
   }
 

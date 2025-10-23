@@ -3,7 +3,6 @@ import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import { MissingProviderRuntimeError } from '../errors.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '../../services/history/IContent.js';
 import { SettingsService } from '../../settings/SettingsService.js';
@@ -35,7 +34,6 @@ class HarnessProvider extends BaseProvider {
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
     this.lastNormalizedOptions = options;
-    this.assertRuntimeContext(options.runtime);
     return (async function* () {})();
   }
 }
@@ -82,10 +80,20 @@ describe('BaseProvider runtime guard', () => {
       metadata: { test: true },
     } as GenerateChatOptions);
 
-    await expect(iterator.next()).rejects.toThrow(MissingProviderRuntimeError);
+    await expect(iterator.next()).rejects.toMatchObject({
+      name: 'MissingProviderRuntimeError',
+      providerKey: 'BaseProvider.harness',
+      missingFields: expect.arrayContaining(['settings']),
+      context: {
+        stage: 'normalizeGenerateChatOptions',
+        metadata: expect.objectContaining({
+          requirement: 'REQ-SP4-001',
+        }),
+      },
+    });
   });
 
-  it('raises MissingProviderRuntimeError when config is not supplied', async () => {
+  it('normalizes options when config is not supplied', async () => {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P04 @requirement:REQ-SP4-001
     // Red state: same command exits early with CACError `Unknown option --filter`, so pseudocode lines 10-16
     // covering provider runtime config guard do not execute; implementation must enable the runtime guard path.
@@ -114,7 +122,12 @@ describe('BaseProvider runtime guard', () => {
       metadata: { scenario: 'missing-config' },
     } as GenerateChatOptions);
 
-    const result = iterator.next();
-    await expect(result).rejects.toThrow(MissingProviderRuntimeError);
+    const result = await iterator.next();
+    expect(result).toEqual({ value: undefined, done: true });
+    expect(provider.lastNormalizedOptions?.config ?? null).toBeNull();
+    expect(provider.lastNormalizedOptions?.runtime?.metadata).toMatchObject({
+      requirement: 'REQ-SP4-001',
+      stage: 'normalizeGenerateChatOptions',
+    });
   });
 });

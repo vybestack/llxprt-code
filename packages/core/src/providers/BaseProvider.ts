@@ -26,12 +26,11 @@ import type { Config } from '../config/config.js';
 import { IProviderConfig } from './types/IProviderConfig.js';
 import {
   peekActiveProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
-import type { SettingsService } from '../settings/SettingsService.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import { SettingsService } from '../settings/SettingsService.js';
+import { MissingProviderRuntimeError } from './errors.js';
 
 export interface BaseProviderConfig {
   // Basic provider config
@@ -101,12 +100,7 @@ export abstract class BaseProvider implements IProvider {
     this.baseProviderConfig = config;
     this.providerConfig = providerConfig;
     this.defaultConfig = globalConfig;
-    const defaultRuntime =
-      peekActiveProviderRuntimeContext() ?? getActiveProviderRuntimeContext();
-    const fallbackSettingsService =
-      settingsService ??
-      defaultRuntime?.settingsService ??
-      getSettingsService();
+    const fallbackSettingsService = settingsService ?? new SettingsService();
     this.defaultSettingsService = fallbackSettingsService;
 
     // Initialize auth precedence resolver
@@ -144,7 +138,9 @@ export abstract class BaseProvider implements IProvider {
 
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
    * @requirement REQ-SP2-001
+   * @requirement:REQ-SP4-001
    * @pseudocode base-provider-call-contract.md lines 1-3
    */
   protected resolveSettingsService(): SettingsService {
@@ -153,24 +149,19 @@ export abstract class BaseProvider implements IProvider {
       return activeOptions.settings;
     }
 
-    const activeRuntime = peekActiveProviderRuntimeContext();
-    if (activeRuntime?.settingsService) {
-      return activeRuntime.settingsService;
-    }
-
     if (this.defaultSettingsService) {
       return this.defaultSettingsService;
     }
 
-    const fallbackRuntime = getActiveProviderRuntimeContext();
-    if (fallbackRuntime?.settingsService) {
-      this.defaultSettingsService = fallbackRuntime.settingsService;
-      return fallbackRuntime.settingsService;
-    }
-
-    const globalService = getSettingsService();
-    this.defaultSettingsService = globalService;
-    return globalService;
+    throw new MissingProviderRuntimeError({
+      providerKey: `BaseProvider.${this.name}`,
+      missingFields: ['settings'],
+      stage: 'resolveSettingsService',
+      metadata: {
+        requirement: 'REQ-SP4-001',
+        hint: 'Provider runtime guard expects ProviderManager to set runtime settings.',
+      },
+    });
   }
 
   /**
@@ -589,7 +580,9 @@ export abstract class BaseProvider implements IProvider {
 
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
    * @requirement REQ-SP2-001
+   * @requirement:REQ-SP4-001
    * @pseudocode base-provider-call-contract.md lines 1-3
    */
   private async normalizeGenerateChatOptions(
@@ -602,36 +595,30 @@ export abstract class BaseProvider implements IProvider {
       ? { contents: contentsOrOptions, tools: maybeTools }
       : contentsOrOptions;
 
-    const runtimeCandidate =
-      providedOptions.runtime ??
-      peekActiveProviderRuntimeContext() ??
-      undefined;
-
     const settings =
-      providedOptions.settings ??
-      runtimeCandidate?.settingsService ??
-      this.defaultSettingsService;
+      providedOptions.settings ?? this.defaultSettingsService ?? null;
 
-    const config =
-      providedOptions.config ?? runtimeCandidate?.config ?? this.defaultConfig;
+    if (!settings) {
+      throw new MissingProviderRuntimeError({
+        providerKey: `BaseProvider.${this.name}`,
+        missingFields: ['settings'],
+        stage: 'normalizeGenerateChatOptions',
+        metadata: {
+          hint: 'ProviderManager must supply settings via GenerateChatOptions or setRuntimeSettingsService.',
+          requirement: 'REQ-SP4-001',
+        },
+      });
+    }
 
-    const runtime: ProviderRuntimeContext | undefined = providedOptions.runtime
-      ? {
-          ...providedOptions.runtime,
-          settingsService: settings,
-          config: config ?? providedOptions.runtime.config,
-        }
-      : runtimeCandidate
-        ? {
-            ...runtimeCandidate,
-            settingsService: settings,
-            config: config ?? runtimeCandidate.config,
-          }
-        : undefined;
+    const runtimeConfig = providedOptions.runtime?.config ?? null;
+    const configCandidate =
+      providedOptions.config ?? runtimeConfig ?? this.defaultConfig ?? null;
 
+    const runtimeMetadata = providedOptions.runtime?.metadata ?? {};
+    const metadataFromOptions = providedOptions.metadata ?? {};
     const metadata: Record<string, unknown> = {
-      ...(runtimeCandidate?.metadata ?? {}),
-      ...(providedOptions.metadata ?? {}),
+      ...runtimeMetadata,
+      ...metadataFromOptions,
     };
 
     const resolvedModel = this.computeModel(settings);
@@ -649,36 +636,125 @@ export abstract class BaseProvider implements IProvider {
       resolvedAuth = this.baseProviderConfig.apiKey;
     }
 
+    const resolved = {
+      model: resolvedModel,
+      baseURL: resolvedBaseURL,
+      authToken: resolvedAuth,
+    };
+
+    const guard = this.assertRuntimeContext({
+      providerKey: `BaseProvider.${this.name}`,
+      settings,
+      config: configCandidate,
+      runtime: providedOptions.runtime,
+      metadata,
+      resolved,
+      stage: 'normalizeGenerateChatOptions',
+    });
+    const finalConfig = guard.runtime.config ?? configCandidate ?? undefined;
+
     return {
       ...providedOptions,
       contents: providedOptions.contents,
       tools: providedOptions.tools ?? maybeTools,
       settings,
-      config,
-      runtime,
-      metadata,
-      resolved: {
-        model: resolvedModel,
-        baseURL: resolvedBaseURL,
-        authToken: resolvedAuth,
-      },
+      config: finalConfig,
+      runtime: guard.runtime,
+      metadata: guard.metadata,
+      resolved,
     };
   }
 
   /**
-   * @plan:PLAN-20251023-STATELESS-HARDENING.P03
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
    * @requirement:REQ-SP4-001
-   * @pseudocode base-provider-runtime-guard.md lines 10-14
+   * @pseudocode base-provider-fallback-removal.md lines 11-14
    */
-  protected assertRuntimeContext(
-    runtime: ProviderRuntimeContext | undefined,
-  ): ProviderRuntimeContext | undefined {
-    return (
-      runtime ??
-      peekActiveProviderRuntimeContext() ??
-      getActiveProviderRuntimeContext() ??
-      undefined
-    );
+  protected assertRuntimeContext(input: {
+    providerKey: string;
+    settings?: SettingsService | null;
+    config?: Config | null;
+    runtime?: ProviderRuntimeContext;
+    metadata?: Record<string, unknown>;
+    resolved?: NormalizedGenerateChatOptions['resolved'];
+    stage: string;
+  }): {
+    runtime: ProviderRuntimeContext;
+    metadata: Record<string, unknown>;
+  } {
+    const missing: string[] = [];
+    if (!input.settings) {
+      missing.push('settings');
+    }
+    const resolvedMissing: string[] = [];
+    if (!input.resolved) {
+      resolvedMissing.push('resolved');
+    } else {
+      if (
+        typeof input.resolved.model !== 'string' ||
+        input.resolved.model.trim() === ''
+      ) {
+        resolvedMissing.push('resolved.model');
+      }
+      if (
+        input.resolved.baseURL !== undefined &&
+        input.resolved.baseURL !== null &&
+        typeof input.resolved.baseURL !== 'string'
+      ) {
+        resolvedMissing.push('resolved.baseURL');
+      }
+      if (
+        input.resolved.authToken === undefined ||
+        input.resolved.authToken === null
+      ) {
+        resolvedMissing.push('resolved.authToken');
+      }
+    }
+
+    const missingFields = [...missing, ...resolvedMissing];
+    if (missingFields.length > 0) {
+      throw new MissingProviderRuntimeError({
+        providerKey: input.providerKey,
+        missingFields,
+        stage: input.stage,
+        metadata: {
+          ...(input.metadata ?? {}),
+          requirement: 'REQ-SP4-001',
+        },
+      });
+    }
+
+    const metadata = {
+      ...(input.runtime?.metadata ?? {}),
+      ...(input.metadata ?? {}),
+      requirement: 'REQ-SP4-001',
+      stage: input.stage,
+    };
+
+    const runtimeMetadata = metadata as Record<string, unknown>;
+    const currentRuntimeId =
+      typeof runtimeMetadata.runtimeId === 'string'
+        ? (runtimeMetadata.runtimeId as string)
+        : undefined;
+
+    const runtime: ProviderRuntimeContext = input.runtime
+      ? {
+          ...input.runtime,
+          settingsService: input.settings!,
+          config: input.runtime.config ?? input.config ?? undefined,
+          metadata,
+        }
+      : {
+          settingsService: input.settings!,
+          config: input.config ?? undefined,
+          runtimeId:
+            currentRuntimeId && currentRuntimeId.trim()
+              ? currentRuntimeId
+              : `${input.providerKey}:${input.stage}`,
+          metadata,
+        };
+
+    return { runtime, metadata };
   }
 
   // Optional methods with default implementations

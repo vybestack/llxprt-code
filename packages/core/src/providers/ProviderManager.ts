@@ -28,6 +28,7 @@ import {
   getActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
+import { MissingProviderRuntimeError } from './errors.js';
 
 const PROVIDER_CAPABILITY_HINTS: Record<
   string,
@@ -221,12 +222,97 @@ export class ProviderManager implements IProviderManager {
    * @plan PLAN-20250218-STATELESSPROVIDER.P05
    * @requirement REQ-SP-001
    * @pseudocode provider-invocation.md lines 8-15
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
+   * @requirement:REQ-SP4-001
+   * @pseudocode provider-runtime-handling.md lines 10-15
    */
   private syncProviderRuntime(provider: IProvider): void {
     const runtimeAware = provider as IProvider & {
       setRuntimeSettingsService?: (settingsService: SettingsService) => void;
+      setConfig?: (config: Config) => void;
+      setRuntimeContextResolver?: (
+        resolver: () => ProviderRuntimeContext,
+      ) => void;
     };
     runtimeAware.setRuntimeSettingsService?.(this.settingsService);
+    if (this.config && runtimeAware.setConfig) {
+      runtimeAware.setConfig(this.config);
+    }
+    if (
+      runtimeAware.setRuntimeContextResolver &&
+      typeof runtimeAware.setRuntimeContextResolver === 'function'
+    ) {
+      runtimeAware.setRuntimeContextResolver(() =>
+        this.snapshotRuntimeContext('ProviderManager.syncProviderRuntime'),
+      );
+    }
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
+   * @requirement:REQ-SP4-001
+   * @pseudocode provider-runtime-handling.md lines 10-15
+   */
+  private snapshotRuntimeContext(source: string): ProviderRuntimeContext {
+    const baseRuntime: ProviderRuntimeContext = this.runtime ?? {
+      settingsService: this.settingsService,
+      config: this.config,
+      runtimeId: 'provider-manager.default-runtime',
+      metadata: { source: 'ProviderManager', requirement: 'REQ-SP4-001' },
+    };
+
+    if (!this.runtime) {
+      this.runtime = baseRuntime;
+    } else if (!this.runtime.config && baseRuntime.config) {
+      this.runtime = { ...this.runtime, config: baseRuntime.config };
+    }
+
+    const settingsService = baseRuntime.settingsService;
+    if (!settingsService) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['settings'],
+        stage: source,
+        metadata: {
+          requirement: 'REQ-SP4-001',
+          hint: 'ProviderManager requires a SettingsService to construct runtime contexts.',
+        },
+      });
+    }
+
+    const config = baseRuntime.config ?? this.config;
+    if (!config) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['config'],
+        stage: source,
+        metadata: {
+          requirement: 'REQ-SP4-001',
+          hint: 'Call ProviderManager.setConfig before invoking providers.',
+        },
+      });
+    }
+
+    const baseMetadata = baseRuntime.metadata ?? {};
+    const callMetadata: Record<string, unknown> = {
+      ...baseMetadata,
+      source,
+      requirement: 'REQ-SP4-001',
+      generatedAt: new Date().toISOString(),
+    };
+
+    const baseId = baseRuntime.runtimeId;
+    const callRuntimeId =
+      typeof baseId === 'string' && baseId.trim() !== ''
+        ? `${baseId}:${Math.random().toString(36).slice(2, 10)}`
+        : `provider-manager:${source}:${Date.now().toString(36)}`;
+
+    return {
+      settingsService,
+      config,
+      runtimeId: callRuntimeId,
+      metadata: callMetadata,
+    };
   }
 
   /**

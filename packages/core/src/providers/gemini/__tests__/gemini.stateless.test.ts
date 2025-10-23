@@ -5,6 +5,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '../../../settings/SettingsService.js';
 import { createProviderRuntimeContext } from '../../../runtime/providerRuntimeContext.js';
+import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
+import type { Config } from '../../../config/config.js';
 import type { IContent } from '../../../services/history/IContent.js';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
 import { GeminiProvider } from '../GeminiProvider.js';
@@ -202,9 +204,14 @@ describe('Gemini provider stateless contract tests', () => {
     provider.setEphemeralSettings({ streaming: 'disabled' });
     const settings = new SettingsService();
     settings.set('call-id', 'runtime-stream');
+    const config = createRuntimeConfigStub(settings, {
+      getEphemeralSettings: () => ({ streaming: 'disabled' }),
+    }) as Config;
+    provider.setConfig(config);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-stream',
       settingsService: settings,
+      config,
     });
 
     const chunks = await collectResults(
@@ -251,9 +258,12 @@ describe('Gemini provider stateless contract tests', () => {
     const provider = new TestGeminiProvider();
     const settings = new SettingsService();
     settings.set('call-id', 'runtime-tools');
+    const config = createRuntimeConfigStub(settings) as Config;
+    provider.setConfig(config);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-tools',
       settingsService: settings,
+      config,
     });
 
     await collectResults(
@@ -335,16 +345,21 @@ describe('Gemini provider stateless contract tests', () => {
     const provider = new TestGeminiProvider();
     const settingsA = new SettingsService();
     settingsA.set('call-id', 'runtime-oauth-a');
+    const configA = createRuntimeConfigStub(settingsA) as Config;
+    const settingsB = new SettingsService();
+    settingsB.set('call-id', 'runtime-oauth-b');
+    const configB = createRuntimeConfigStub(settingsB) as Config;
+    provider.setConfig(configA);
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-oauth-a',
       settingsService: settingsA,
+      config: configA,
     });
 
-    const settingsB = new SettingsService();
-    settingsB.set('call-id', 'runtime-oauth-b');
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-oauth-b',
       settingsService: settingsB,
+      config: configB,
     });
 
     const oauthIteratorA = provider.generateChatCompletion({

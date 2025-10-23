@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   Config,
   SettingsService,
@@ -236,6 +236,9 @@ vi.mock('@vybestack/llxprt-code-core', () => {
     DebugLogger: class {
       debug() {}
       warn() {}
+    },
+    Storage: {
+      getGlobalSettingsPath: () => '/tmp/llxprt-settings.json',
     },
     AuthType: {
       USE_PROVIDER: 'USE_PROVIDER',
