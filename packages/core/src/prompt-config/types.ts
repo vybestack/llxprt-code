@@ -22,6 +22,9 @@ export interface PromptEnvironment {
   isSandboxed: boolean;
   hasIdeCompanion: boolean;
   sandboxType?: 'macos-seatbelt' | 'generic';
+  workspaceName?: string;
+  workspaceRoot?: string;
+  workspaceDirectories?: string[];
   workingDirectory?: string;
   folderStructure?: string;
 }

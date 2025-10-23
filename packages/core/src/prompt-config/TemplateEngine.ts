@@ -1,3 +1,4 @@
+import path from 'node:path';
 import {
   TemplateVariables,
   TemplateProcessingOptions,
@@ -140,20 +141,60 @@ export class TemplateEngine {
 
     // Add environment variables
     if (context.environment) {
-      if (context.environment.isGitRepository === true) {
-        variables['IS_GIT_REPO'] = 'true';
-      }
-      if (context.environment.isSandboxed === true) {
-        variables['IS_SANDBOXED'] = 'true';
-      }
-      if (context.environment.hasIdeCompanion === true) {
-        variables['HAS_IDE'] = 'true';
-      }
+      variables['IS_GIT_REPO'] = context.environment.isGitRepository
+        ? 'true'
+        : 'false';
+      variables['IS_SANDBOXED'] = context.environment.isSandboxed
+        ? 'true'
+        : 'false';
+      variables['HAS_IDE'] = context.environment.hasIdeCompanion
+        ? 'true'
+        : 'false';
+
       if (context.environment.workingDirectory) {
         variables['WORKING_DIRECTORY'] = context.environment.workingDirectory;
       }
       if (context.environment.folderStructure) {
         variables['FOLDER_STRUCTURE'] = context.environment.folderStructure;
+      }
+
+      if (context.environment.sandboxType) {
+        variables['SANDBOX_TYPE'] = context.environment.sandboxType;
+      } else {
+        variables['SANDBOX_TYPE'] = context.environment.isSandboxed
+          ? 'unknown'
+          : 'none';
+      }
+
+      const workspaceName =
+        context.environment.workspaceName ||
+        (context.environment.workingDirectory
+          ? path.basename(context.environment.workingDirectory)
+          : '');
+      if (workspaceName) {
+        variables['WORKSPACE_NAME'] = workspaceName;
+      } else {
+        variables['WORKSPACE_NAME'] = 'unknown';
+      }
+
+      const workspaceRoot =
+        context.environment.workspaceRoot ||
+        context.environment.workingDirectory;
+      if (workspaceRoot) {
+        variables['WORKSPACE_ROOT'] = workspaceRoot;
+      } else {
+        variables['WORKSPACE_ROOT'] = 'unknown';
+      }
+
+      const workspaceDirectories =
+        context.environment.workspaceDirectories ||
+        (context.environment.workingDirectory
+          ? [context.environment.workingDirectory]
+          : []);
+      if (workspaceDirectories.length > 0) {
+        variables['WORKSPACE_DIRECTORIES'] = workspaceDirectories.join(', ');
+      } else {
+        variables['WORKSPACE_DIRECTORIES'] = 'unknown';
       }
     }
 

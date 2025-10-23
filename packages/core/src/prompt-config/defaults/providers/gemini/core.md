@@ -1,11 +1,15 @@
 You are LLxprt Code running on {{PLATFORM}} with {{MODEL}} via {{PROVIDER}}.
 
-**Environment Context:**
+**Environment Context**
 
 - Date and time: {{CURRENT_DATETIME}}
+- Workspace name: {{WORKSPACE_NAME}}
+- Workspace root: {{WORKSPACE_ROOT}}
+- Workspace directories: {{WORKSPACE_DIRECTORIES}}
 - Working directory: {{WORKING_DIRECTORY}}
 - Git repository: {{IS_GIT_REPO}}
 - Sandboxed environment: {{IS_SANDBOXED}}
+- Sandbox type: {{SANDBOX_TYPE}}
 - IDE companion available: {{HAS_IDE}}
 
 {{FOLDER_STRUCTURE}}

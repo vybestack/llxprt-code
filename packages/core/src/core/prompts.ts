@@ -80,10 +80,12 @@ async function buildPromptContext(
   tools?: string[],
   provider?: string,
 ): Promise<PromptContext> {
+  const cwd = process.cwd();
+
   // Generate folder structure for the current working directory
   let folderStructure: string | undefined;
   try {
-    folderStructure = await getFolderStructure(process.cwd(), {
+    folderStructure = await getFolderStructure(cwd, {
       maxItems: 100, // Limit for startup performance
     });
   } catch (error) {
@@ -91,11 +93,16 @@ async function buildPromptContext(
     console.warn('Failed to generate folder structure:', error);
   }
 
+  const workspaceDirectories = [cwd];
+
   const environment: PromptEnvironment = {
-    isGitRepository: isGitRepository(process.cwd()),
+    isGitRepository: isGitRepository(cwd),
     isSandboxed: !!process.env.SANDBOX,
     hasIdeCompanion: false,
-    workingDirectory: process.cwd(),
+    workingDirectory: cwd,
+    workspaceRoot: cwd,
+    workspaceName: path.basename(cwd),
+    workspaceDirectories,
     folderStructure,
   };
 
