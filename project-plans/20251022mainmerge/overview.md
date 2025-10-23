@@ -22,4 +22,7 @@ Bring the upstream `main` branch changes onto the current `agentic` branch witho
 - `task-07-oauth-and-gemini-config.md` – Lazy OAuth initialization, Gemini provider base-config call.
 - `task-08-mark-upstream-sync.md` – Final marking commit instructions.
 
+### Upstream Sync Marker
+- Upstream main SHA: `5dcebb0f6` (fix: add super.setConfig call to GeminiProvider.setConfig method)
+- Recorded: 2025-10-22
 
