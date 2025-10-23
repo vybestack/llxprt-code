@@ -169,7 +169,7 @@ class GlobToolInvocation extends BaseToolInvocation<
 
       // Apply git-aware filtering if enabled and in git repository
       let filteredEntries = entries;
-      let gitIgnoredCount = 0;
+      let ignoredCount = 0;
 
       if (respectGitIgnore) {
         const toCanonicalPath = (filePath: string): string => {
@@ -195,7 +195,7 @@ class GlobToolInvocation extends BaseToolInvocation<
         filteredEntries = entries.filter((entry) =>
           filteredCanonicalPaths.has(toCanonicalPath(entry.fullpath())),
         );
-        gitIgnoredCount = entries.length - filteredEntries.length;
+        ignoredCount = entries.length - filteredEntries.length;
       }
 
       if (!filteredEntries || filteredEntries.length === 0) {
@@ -205,8 +205,8 @@ class GlobToolInvocation extends BaseToolInvocation<
         } else {
           message += ` within ${searchDirectories.length} workspace directories`;
         }
-        if (gitIgnoredCount > 0) {
-          message += ` (${gitIgnoredCount} files were git-ignored)`;
+        if (ignoredCount > 0) {
+          message += ` (${ignoredCount} files were ignored)`;
         }
         return {
           llmContent: message,
@@ -247,8 +247,8 @@ class GlobToolInvocation extends BaseToolInvocation<
       } else {
         resultMessage += ` across ${searchDirectories.length} workspace directories`;
       }
-      if (gitIgnoredCount > 0) {
-        resultMessage += ` (${gitIgnoredCount} additional files were git-ignored)`;
+      if (ignoredCount > 0) {
+        resultMessage += ` (${ignoredCount} additional files were ignored)`;
       }
 
       if (totalFileCount > 0) {

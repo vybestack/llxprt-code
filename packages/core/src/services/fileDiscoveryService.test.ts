@@ -193,6 +193,43 @@ describe('FileDiscoveryService', () => {
     });
   });
 
+  describe('filterFilesWithReport', () => {
+    beforeEach(async () => {
+      await fs.mkdir(path.join(projectRoot, '.git'));
+      await createTestFile('.gitignore', 'node_modules/');
+      await createTestFile('.llxprtignore', '*.log');
+    });
+
+    it('should return filtered paths and correct ignored count', () => {
+      const files = [
+        'src/index.ts',
+        'node_modules/package/index.js',
+        'debug.log',
+        'README.md',
+      ].map((f) => path.join(projectRoot, f));
+
+      const service = new FileDiscoveryService(projectRoot);
+      const report = service.filterFilesWithReport(files);
+
+      expect(report.filteredPaths).toEqual(
+        ['src/index.ts', 'README.md'].map((f) => path.join(projectRoot, f)),
+      );
+      expect(report.ignoredCount).toBe(2);
+    });
+
+    it('should handle no ignored files', () => {
+      const files = ['src/index.ts', 'README.md'].map((f) =>
+        path.join(projectRoot, f),
+      );
+
+      const service = new FileDiscoveryService(projectRoot);
+      const report = service.filterFilesWithReport(files);
+
+      expect(report.filteredPaths).toEqual(files);
+      expect(report.ignoredCount).toBe(0);
+    });
+  });
+
   describe('shouldGitIgnoreFile & shouldLlxprtIgnoreFile', () => {
     beforeEach(async () => {
       await fs.mkdir(path.join(projectRoot, '.git'));

@@ -19,6 +19,11 @@ export interface FilterFilesOptions {
   respectLlxprtIgnore?: boolean;
 }
 
+export interface FilterReport {
+  filteredPaths: string[];
+  ignoredCount: number;
+}
+
 export class FileDiscoveryService {
   private gitIgnoreFilter: GitIgnoreFilter | null = null;
   private llxprtIgnoreFilter: GitIgnoreFilter | null = null;
@@ -61,23 +66,39 @@ export class FileDiscoveryService {
       respectLlxprtIgnore: true,
     },
   ): string[] {
-    const respectGitIgnore = options.respectGitIgnore ?? true;
-    const respectLlxprtIgnore = options.respectLlxprtIgnore ?? true;
-
-    const filtered: string[] = [];
-    for (const filePath of filePaths) {
+    return filePaths.filter((filePath) => {
       const absolutePath = this.resolveAbsolutePath(filePath);
-
-      if (respectGitIgnore && this.shouldGitIgnoreFile(absolutePath)) {
-        continue;
+      if (options.respectGitIgnore && this.shouldGitIgnoreFile(absolutePath)) {
+        return false;
       }
-      if (respectLlxprtIgnore && this.shouldLlxprtIgnoreFile(absolutePath)) {
-        continue;
+      if (
+        options.respectLlxprtIgnore &&
+        this.shouldLlxprtIgnoreFile(absolutePath)
+      ) {
+        return false;
       }
-      filtered.push(absolutePath);
-    }
+      return true;
+    });
+  }
 
-    return filtered;
+  /**
+   * Filters a list of file paths based on git ignore rules and returns a report
+   * with counts of ignored files.
+   */
+  filterFilesWithReport(
+    filePaths: string[],
+    opts: FilterFilesOptions = {
+      respectGitIgnore: true,
+      respectLlxprtIgnore: true,
+    },
+  ): FilterReport {
+    const filteredPaths = this.filterFiles(filePaths, opts);
+    const ignoredCount = filePaths.length - filteredPaths.length;
+
+    return {
+      filteredPaths,
+      ignoredCount,
+    };
   }
 
   /**
