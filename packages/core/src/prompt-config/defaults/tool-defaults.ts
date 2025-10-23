@@ -7,6 +7,11 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
+import {
+  getManifestOrigin,
+  loadPromptFromManifest,
+} from './manifest-loader.js';
+import { reportMissingPrompt } from './prompt-warnings.js';
 
 // In bundled environment, use global __dirname if available
 const __dirname =
@@ -46,6 +51,19 @@ function loadMarkdownFile(filename: string): string {
     console.log(
       `[PROMPT_LOADER] CI: ${typeof process !== 'undefined' ? process.env?.CI : 'N/A'}`,
     );
+  }
+
+  const manifestContent = loadPromptFromManifest(filename);
+  if (manifestContent !== null) {
+    if (debugLog) {
+      const origin = getManifestOrigin();
+      console.log(
+        `[PROMPT_LOADER] Loaded ${filename} from manifest${
+          origin ? ` (${origin})` : ''
+        }`,
+      );
+    }
+    return manifestContent;
   }
 
   try {
@@ -203,7 +221,8 @@ function loadMarkdownFile(filename: string): string {
     );
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.warn(
+    reportMissingPrompt(filename, 'tool-defaults', errorMsg);
+    console.error(
       `Warning: Could not load ${filename}, using empty content. Error: ${errorMsg}`,
     );
     if (debugLog) {
