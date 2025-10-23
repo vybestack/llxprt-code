@@ -7,11 +7,14 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
+import { DEFAULT_PROMPT_MANIFEST } from './generated/default-prompts.js';
+import { reportMissingPrompt } from './prompt-warnings.js';
 
 // In bundled environment, use global __dirname if available
 const __dirname =
   ((globalThis as Record<string, unknown>).__dirname as string) ||
   dirname(fileURLToPath(import.meta.url));
+const hasOwn = Object.prototype.hasOwnProperty;
 
 function loadMarkdownFile(filename: string): string {
   // Skip debug logging if process or process.env is unavailable (test environment)
@@ -49,6 +52,15 @@ function loadMarkdownFile(filename: string): string {
   }
 
   try {
+    const manifestKey = filename.replace(/^\.\//, '');
+    if (hasOwn.call(DEFAULT_PROMPT_MANIFEST, manifestKey)) {
+      const manifestContent = DEFAULT_PROMPT_MANIFEST[manifestKey];
+      if (debugLog) {
+        console.log(`[PROMPT_LOADER] Loaded ${filename} from bundled manifest`);
+      }
+      return manifestContent;
+    }
+
     // Check if we're already in a bundle directory FIRST
     // This fixes the Windows CI issue where __dirname is already bundle
     const currentDir = resolve(__dirname);
@@ -203,7 +215,8 @@ function loadMarkdownFile(filename: string): string {
     );
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.warn(
+    reportMissingPrompt(filename, 'tool-defaults', errorMsg);
+    console.error(
       `Warning: Could not load ${filename}, using empty content. Error: ${errorMsg}`,
     );
     if (debugLog) {
