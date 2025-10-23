@@ -198,7 +198,7 @@ function mergeSettings(
   //
   // For properties that are arrays (e.g., includeDirectories), the arrays
   // are concatenated. For objects (e.g., customThemes), they are merged.
-  return {
+  const merged = {
     ...schemaDefaults,
     ...systemDefaults,
     ...user,
@@ -251,6 +251,16 @@ function mergeSettings(
       ],
     },
   };
+
+  const prioritizedTheme =
+    safeWorkspace.theme ??
+    user.theme ??
+    system.theme ??
+    systemDefaults.theme ??
+    (schemaDefaults.theme as string | undefined);
+  merged.theme = prioritizedTheme;
+
+  return merged;
 }
 
 export class LoadedSettings {

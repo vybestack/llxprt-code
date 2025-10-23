@@ -559,7 +559,7 @@ describe('Settings Loading and Merging', () => {
       });
     });
 
-    it('should merge system, user and workspace settings, with system taking precedence over workspace, and workspace over user', () => {
+    it('should merge system, user, and workspace settings with workspace overriding user and user overriding system for theme', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const systemSettingsContent = {
         theme: 'system-theme',
@@ -656,10 +656,11 @@ describe('Settings Loading and Merging', () => {
         ...userSettingsContent,
         ...workspaceSettingsContent,
         ...systemSettingsContent,
+        theme: 'dark',
       });
     });
 
-    it('should merge all settings files with the correct precedence', () => {
+    it('should merge all settings files with the correct precedence, letting user/workspace themes override system', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const systemDefaultsContent = {
         theme: 'default-theme',
@@ -766,7 +767,7 @@ describe('Settings Loading and Merging', () => {
         security: {},
         tools: {},
         useSmartEdit: false,
-        theme: 'system-theme',
+        theme: 'user-theme',
         sandbox: false,
         telemetry: false,
         contextFileName: 'WORKSPACE_CONTEXT.md',
@@ -1777,16 +1778,16 @@ describe('Settings Loading and Merging', () => {
         'utf-8',
       );
 
-      // System theme overrides user and workspace themes
+      // System theme should not override user/workspace themes
       loadedSettings.setValue(SettingScope.System, 'theme', 'ocean');
 
       expect(loadedSettings.system.settings.theme).toBe('ocean');
-      expect(loadedSettings.merged.theme).toBe('ocean');
+      expect(loadedSettings.merged.theme).toBe('matrix');
 
       // SystemDefaults theme is overridden by user, workspace, and system themes
       loadedSettings.setValue(SettingScope.SystemDefaults, 'theme', 'default');
       expect(loadedSettings.systemDefaults.settings.theme).toBe('default');
-      expect(loadedSettings.merged.theme).toBe('ocean');
+      expect(loadedSettings.merged.theme).toBe('matrix');
     });
   });
 
