@@ -113,6 +113,9 @@ jobs:
           should_publish_vscode="true"
           if [[ "$skip_vscode" == "true" ]]; then
             should_publish_vscode="false"
+          elif [[ "$is_nightly" == "true" ]]; then
+            echo "Nightly run detected; skipping VS Code Marketplace publication."
+            should_publish_vscode="false"
           fi
           echo "should_publish_vscode=${should_publish_vscode}" >> "$GITHUB_OUTPUT"
 
