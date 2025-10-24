@@ -20,7 +20,7 @@ describe('parseAndFormatApiError', () => {
     const errorMessage =
       'got status: 400 Bad Request. {"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}';
     const expected =
-      '[API Error: API key not valid. Please pass a valid API key. (Status: INVALID_ARGUMENT)]';
+      '[API Error: API key not valid. Please pass a valid API key. (Status: 400, INVALID_ARGUMENT)]';
     expect(parseAndFormatApiError(errorMessage)).toBe(expected);
   });
 
@@ -34,7 +34,9 @@ describe('parseAndFormatApiError', () => {
       'gemini-2.5-pro',
       DEFAULT_GEMINI_FLASH_MODEL,
     );
-    expect(result).toContain('[API Error: Rate limit exceeded');
+    expect(result).toContain(
+      '[API Error: Rate limit exceeded (Status: 429, RESOURCE_EXHAUSTED)]',
+    );
     expect(result).toContain(
       'Possible quota limitations in place or slow response times detected. Switching to the gemini-2.5-flash model',
     );
@@ -50,7 +52,9 @@ describe('parseAndFormatApiError', () => {
       'gemini-2.5-pro',
       DEFAULT_GEMINI_FLASH_MODEL,
     );
-    expect(result).toContain('[API Error: Rate limit exceeded');
+    expect(result).toContain(
+      '[API Error: Rate limit exceeded (Status: 429, RESOURCE_EXHAUSTED)]',
+    );
     expect(result).toContain(
       'Possible quota limitations in place or slow response times detected. Switching to the gemini-2.5-flash model',
     );
@@ -60,7 +64,9 @@ describe('parseAndFormatApiError', () => {
     const errorMessage =
       'got status: 429 Too Many Requests. {"error":{"code":429,"message":"Rate limit exceeded","status":"RESOURCE_EXHAUSTED"}}';
     const result = parseAndFormatApiError(errorMessage, AuthType.USE_VERTEX_AI);
-    expect(result).toContain('[API Error: Rate limit exceeded');
+    expect(result).toContain(
+      '[API Error: Rate limit exceeded (Status: 429, RESOURCE_EXHAUSTED)]',
+    );
     expect(result).toContain(vertexMessage);
   });
 
@@ -113,7 +119,7 @@ describe('parseAndFormatApiError', () => {
       message: 'A structured error occurred',
       status: 500,
     };
-    const expected = '[API Error: A structured error occurred]';
+    const expected = '[API Error: A structured error occurred (Status: 500)]';
     expect(parseAndFormatApiError(error)).toBe(expected);
   });
 
@@ -123,13 +129,19 @@ describe('parseAndFormatApiError', () => {
       status: 429,
     };
     const result = parseAndFormatApiError(error, AuthType.USE_VERTEX_AI);
-    expect(result).toContain('[API Error: Rate limit exceeded]');
+    expect(result).toContain('[API Error: Rate limit exceeded (Status: 429)]');
     expect(result).toContain(vertexMessage);
   });
 
   it('should handle an unknown error type', () => {
     const error = 12345;
     const expected = '[API Error: An unknown error occurred.]';
+    expect(parseAndFormatApiError(error)).toBe(expected);
+  });
+
+  it('should include status for unknown error types when available', () => {
+    const error = { status: 503 };
+    const expected = '[API Error: An unknown error occurred. (Status: 503)]';
     expect(parseAndFormatApiError(error)).toBe(expected);
   });
 
@@ -164,7 +176,9 @@ describe('parseAndFormatApiError', () => {
       'gemini-2.5-pro',
       DEFAULT_GEMINI_FLASH_MODEL,
     );
-    expect(result).toContain('[API Error: Rate limit exceeded');
+    expect(result).toContain(
+      '[API Error: Rate limit exceeded (Status: 429, RESOURCE_EXHAUSTED)]',
+    );
     expect(result).toContain(
       'Possible quota limitations in place or slow response times detected. Switching to the gemini-2.5-flash model',
     );
@@ -364,7 +378,9 @@ describe('parseAndFormatApiError', () => {
       'gemini-2.5-pro',
       DEFAULT_GEMINI_FLASH_MODEL,
     );
-    expect(result).toContain('[API Error: Rate limit exceeded');
+    expect(result).toContain(
+      '[API Error: Rate limit exceeded (Status: 429, RESOURCE_EXHAUSTED)]',
+    );
     expect(result).toContain(
       'We appreciate you for choosing Gemini Code Assist and the Gemini CLI',
     );

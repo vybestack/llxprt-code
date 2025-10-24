@@ -40,7 +40,10 @@ import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { IModel } from '../IModel.js';
 import { IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
-import { retryWithBackoff } from '../../utils/retry.js';
+import {
+  retryWithBackoff,
+  isNetworkTransientError,
+} from '../../utils/retry.js';
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   override readonly name: string = 'openai';
@@ -1664,14 +1667,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     });
 
     // Retry on 429 rate limit errors or 5xx server errors
-    const shouldRetry = Boolean(
-      status === 429 || (status && status >= 500 && status < 600),
-    );
-
-    if (shouldRetry) {
+    if (status === 429 || (status && status >= 500 && status < 600)) {
       this.logger.debug(() => `Will retry request due to status ${status}`);
+      return true;
     }
 
-    return shouldRetry;
+    if (isNetworkTransientError(error)) {
+      this.logger.debug(
+        () =>
+          'Will retry request due to transient network error signature (connection-level failure).',
+      );
+      return true;
+    }
+
+    return false;
   }
 }
