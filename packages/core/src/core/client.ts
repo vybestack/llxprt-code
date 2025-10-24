@@ -299,8 +299,8 @@ export class GeminiClient {
       return request;
     }
 
-    const newRequest = [...request, { text: TODO_PROMPT_SUFFIX } as Part];
-    return newRequest as PartListUnion;
+    (request as Part[]).push({ text: TODO_PROMPT_SUFFIX } as Part);
+    return request;
   }
 
   private recordModelActivity(event: ServerGeminiStreamEvent): void {
@@ -890,7 +890,7 @@ export class GeminiClient {
       this.forceFullIdeContext = false;
     }
 
-    request = this.appendTodoSuffixToRequest(request);
+    let shouldAppendTodoSuffix = false;
 
     if (Array.isArray(request) && request.length > 0) {
       const userMessage = request
@@ -901,12 +901,19 @@ export class GeminiClient {
 
       if (userMessage.length > 0) {
         const analysis = this.complexityAnalyzer.analyzeComplexity(userMessage);
-        this.processComplexityAnalysis(analysis);
+        const complexityReminder = this.processComplexityAnalysis(analysis);
+        if (complexityReminder) {
+          shouldAppendTodoSuffix = true;
+        }
       } else {
         this.consecutiveComplexTurns = 0;
       }
     } else {
       this.consecutiveComplexTurns = 0;
+    }
+
+    if (shouldAppendTodoSuffix) {
+      request = this.appendTodoSuffixToRequest(request);
     }
 
     // Get provider name for error messages

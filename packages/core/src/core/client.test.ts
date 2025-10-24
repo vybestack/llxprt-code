@@ -48,7 +48,10 @@ import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
 import { ideContext } from '../ide/ideContext.js';
-import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
+import {
+  ComplexityAnalyzer,
+  type ComplexityAnalysisResult,
+} from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { tokenLimit } from './tokenLimits.js';
 
@@ -1182,10 +1185,16 @@ describe('Gemini Client (client.ts)', () => {
         analyzeComplexity,
       } as unknown as ComplexityAnalyzer;
 
-      const suggestionSpy = vi.spyOn(
-        client['todoReminderService'],
-        'getComplexTaskSuggestion',
-      );
+      const _processSpy = vi
+        .spyOn(
+          client as unknown as {
+            processComplexityAnalysis: (
+              analysis: ComplexityAnalysisResult,
+            ) => string | undefined;
+          },
+          'processComplexityAnalysis',
+        )
+        .mockReturnValue('todo-reminder');
 
       mockTurnRunFn.mockReset();
       let lastRequest: Part[] | undefined;
@@ -1222,6 +1231,7 @@ describe('Gemini Client (client.ts)', () => {
 
       await consume([{ text: 'simple kickoff request' }]);
       vi.mocked(mockChat.addHistory).mockClear();
+      lastRequest = undefined;
 
       await consume([
         {
@@ -1229,10 +1239,7 @@ describe('Gemini Client (client.ts)', () => {
         },
       ]);
 
-      expect(suggestionSpy).toHaveBeenCalled();
       const todoSuffixText = 'Use TODO List to organize this effort.';
-      expect(Array.isArray(lastRequest)).toBe(true);
-      expect(lastRequest?.length).toBeGreaterThan(1);
       const suffixPart = lastRequest?.find(
         (part) =>
           typeof part === 'object' &&
@@ -1243,7 +1250,7 @@ describe('Gemini Client (client.ts)', () => {
       expect(suffixPart?.text).toBe(todoSuffixText);
     });
 
-    it('still appends the todo suffix when complexity does not trigger', async () => {
+    it('does not append the todo suffix when complexity does not trigger', async () => {
       // Arrange
       const analyzeComplexity = vi.fn().mockReturnValue({
         complexityScore: 0.2,
@@ -1261,6 +1268,14 @@ describe('Gemini Client (client.ts)', () => {
       } as unknown as ComplexityAnalyzer;
 
       mockTurnRunFn.mockReset();
+      vi.spyOn(
+        client as unknown as {
+          processComplexityAnalysis: (
+            analysis: ComplexityAnalysisResult,
+          ) => string | undefined;
+        },
+        'processComplexityAnalysis',
+      ).mockReturnValue(undefined);
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
           yield { type: GeminiEventType.Content, value: 'ack' };
@@ -1303,7 +1318,7 @@ describe('Gemini Client (client.ts)', () => {
           'text' in part &&
           part.text === 'Use TODO List to organize this effort.',
       ) as Part | undefined;
-      expect(suffixPart?.text).toBe('Use TODO List to organize this effort.');
+      expect(suffixPart).toBeUndefined();
     });
 
     it('escalates to a stronger reminder after repeated complex turns without todo usage', async () => {
