@@ -108,16 +108,16 @@ export abstract class BaseToolInvocation<
    * - `'DENY'`: tool must not execute
    * - `'ASK_USER'`: fall back to legacy tool confirmation UI
    */
-  protected async getMessageBusDecision(
+  protected getMessageBusDecision(
     abortSignal: AbortSignal,
   ): Promise<'ALLOW' | 'DENY' | 'ASK_USER'> {
     if (!this.messageBus) {
       // No bus wired: allow and let per-tool legacy confirmation logic decide.
-      return 'ALLOW';
+      return Promise.resolve('ALLOW');
     }
 
     if (abortSignal.aborted) {
-      return 'DENY';
+      return Promise.resolve('DENY');
     }
 
     const correlationId = randomUUID();
