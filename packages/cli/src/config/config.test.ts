@@ -11,6 +11,7 @@ import {
   ShellTool,
   EditTool,
   WriteFileTool,
+  DEFAULT_FILE_FILTERING_OPTIONS,
   DEFAULT_GEMINI_MODEL,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
@@ -635,6 +636,19 @@ describe('loadCliConfig', () => {
       );
       expect(config.getProxy()).toBe('http://localhost:7890');
     });
+  });
+
+  it('should use default fileFilter options when unconfigured', async () => {
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {};
+    const config = await loadCliConfig(settings, [], 'test-session', argv);
+    expect(config.getFileFilteringRespectGitIgnore()).toBe(
+      DEFAULT_FILE_FILTERING_OPTIONS.respectGitIgnore,
+    );
+    expect(config.getFileFilteringRespectGeminiIgnore()).toBe(
+      DEFAULT_FILE_FILTERING_OPTIONS.respectGeminiIgnore,
+    );
   });
 });
 
