@@ -143,6 +143,20 @@ describe('Config - Ephemeral Settings', () => {
       expect(maxItems).toBe(100);
     });
 
+    it('should normalize legacy boolean streaming values when reading settings', () => {
+      const settingsService = config.getSettingsService();
+
+      settingsService.set('streaming', false);
+
+      expect(config.getEphemeralSetting('streaming')).toBe('disabled');
+      expect(config.getEphemeralSettings().streaming).toBe('disabled');
+
+      settingsService.set('streaming', true);
+
+      expect(config.getEphemeralSetting('streaming')).toBe('enabled');
+      expect(config.getEphemeralSettings().streaming).toBe('enabled');
+    });
+
     it('should return copy of all ephemeral settings', () => {
       // Given multiple ephemeral settings
       config.setEphemeralSetting('todo-continuation', true);

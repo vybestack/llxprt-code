@@ -590,16 +590,31 @@ export const setCommand: SlashCommand = {
     // Validate streaming mode
     if (key === 'streaming') {
       const validModes = ['enabled', 'disabled'];
-      const normalizedValue = (parsedValue as string).toLowerCase();
-      if (!validModes.includes(normalizedValue)) {
+      if (typeof parsedValue === 'boolean') {
+        parsedValue = parsedValue ? 'enabled' : 'disabled';
+      } else if (
+        typeof parsedValue === 'string' &&
+        validModes.includes(parsedValue.toLowerCase())
+      ) {
+        parsedValue = parsedValue.toLowerCase();
+      } else if (
+        typeof parsedValue === 'string' &&
+        validModes.includes(parsedValue.trim().toLowerCase())
+      ) {
+        parsedValue = parsedValue.trim().toLowerCase();
+      } else if (
+        typeof parsedValue === 'string' &&
+        ['true', 'false'].includes(parsedValue.toLowerCase())
+      ) {
+        parsedValue =
+          parsedValue.toLowerCase() === 'true' ? 'enabled' : 'disabled';
+      } else {
         return {
           type: 'message',
           messageType: 'error',
           content: `Invalid streaming mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
         };
       }
-      // Override the parsed value with normalized lowercase version
-      parsedValue = normalizedValue;
     }
 
     // Get the config to apply settings

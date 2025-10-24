@@ -1125,18 +1125,80 @@ export class Config {
     return this.complexityAnalyzerSettings;
   }
 
+  private normalizeStreamingValue(value: unknown): unknown {
+    if (value === undefined || value === null) {
+      return value;
+    }
+
+    if (typeof value === 'boolean') {
+      return value ? 'enabled' : 'disabled';
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true') {
+        return 'enabled';
+      }
+      if (normalized === 'false') {
+        return 'disabled';
+      }
+      if (normalized === 'enabled' || normalized === 'disabled') {
+        return normalized;
+      }
+    }
+
+    return value;
+  }
+
+  private normalizeAndPersistStreaming(value: unknown): unknown {
+    const normalized = this.normalizeStreamingValue(value);
+
+    if (normalized !== value && normalized !== undefined) {
+      this.settingsService.set('streaming', normalized);
+      return normalized;
+    }
+
+    return normalized;
+  }
+
   getEphemeralSetting(key: string): unknown {
-    // Lines 84-85: Direct delegation
-    return this.settingsService.get(key);
+    const rawValue = this.settingsService.get(key);
+    if (key === 'streaming') {
+      return this.normalizeAndPersistStreaming(rawValue);
+    }
+    return rawValue;
   }
 
   setEphemeralSetting(key: string, value: unknown): void {
+    let settingValue = value;
+    if (key === 'streaming') {
+      settingValue = this.normalizeStreamingValue(value);
+    }
+
+    if (
+      key === 'streaming' &&
+      settingValue !== undefined &&
+      typeof settingValue !== 'string'
+    ) {
+      throw new Error(
+        'Streaming setting must resolve to "enabled" or "disabled"',
+      );
+    }
+
     // Line 90: Direct delegation, no local storage
-    this.settingsService.set(key, value);
+    this.settingsService.set(key, settingValue);
 
     // Clear provider caches when auth settings or base-url change
     // This fixes the issue where cached auth tokens persist after clearing auth settings
-    if (key === 'auth-key' || key === 'auth-keyfile' || key === 'base-url') {
+    if (
+      key === 'auth-key' ||
+      key === 'auth-keyfile' ||
+      key === 'base-url' ||
+      key === 'socket-timeout' ||
+      key === 'socket-keepalive' ||
+      key === 'socket-nodelay' ||
+      key === 'streaming'
+    ) {
       if (this.providerManager) {
         const activeProvider = this.providerManager.getActiveProvider();
         if (activeProvider) {
@@ -1174,7 +1236,16 @@ export class Config {
 
   getEphemeralSettings(): Record<string, unknown> {
     // Return a copy of all global settings from the SettingsService
-    return this.settingsService.getAllGlobalSettings();
+    const allSettings = this.settingsService.getAllGlobalSettings();
+    if ('streaming' in allSettings) {
+      const normalized = this.normalizeAndPersistStreaming(
+        allSettings.streaming,
+      );
+      if (normalized !== undefined) {
+        allSettings.streaming = normalized;
+      }
+    }
+    return allSettings;
   }
 
   isInteractive(): boolean {
