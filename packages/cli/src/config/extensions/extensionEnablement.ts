@@ -6,7 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import { coreEvents, type GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 
 export interface ExtensionEnablementConfig {
   overrides: string[];
@@ -125,7 +125,7 @@ export class ExtensionEnablementManager {
       if (
         !extensions.some((ext) => ext.name.toLowerCase() === name.toLowerCase())
       ) {
-        console.error(`Extension not found: ${name}`);
+        coreEvents.emitFeedback('error', `Extension not found: ${name}`);
       }
     }
   }
@@ -184,7 +184,11 @@ export class ExtensionEnablementManager {
       ) {
         return {};
       }
-      console.error('Error reading extension enablement config:', error);
+      coreEvents.emitFeedback(
+        'error',
+        'Failed to read extension enablement config.',
+        error,
+      );
       return {};
     }
   }
