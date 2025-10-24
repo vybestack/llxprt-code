@@ -105,12 +105,40 @@ export class TodoReminderService {
    * Generate proactive todo suggestion for complex tasks
    */
   getComplexTaskSuggestion(detectedTasks: string[]): string {
-    const taskList = detectedTasks
-      .map((task, i) => `${i + 1}. ${task}`)
-      .join('\n');
+    const taskList = this.buildNumberedTaskList(detectedTasks);
 
     const message = `I notice you're asking about multiple tasks. Consider using the TodoWrite tool to track these items:\n${taskList}\n\nThis will help ensure all tasks are completed systematically.`;
 
     return this.formatSystemReminder(message);
+  }
+
+  /**
+   * Generate escalated reminder after sustained complexity without todos
+   */
+  getEscalatedComplexTaskSuggestion(detectedTasks: string[]): string {
+    const taskList = this.buildNumberedTaskList(detectedTasks);
+    const message = `You have handled several complex instructions without creating a todo list. Pause and use the TodoWrite tool now:\n${taskList}\n\nTodoWrite is required so we can track progress and avoid losing steps. Create the list before continuing.`;
+    return this.formatSystemReminder(message);
+  }
+
+  private buildNumberedTaskList(detectedTasks: string[]): string {
+    if (detectedTasks.length === 0) {
+      return [
+        '1. Break this request into discrete todos',
+        '2. Capture each major area using TodoWrite',
+        '3. Update the list as you make progress',
+      ].join('\n');
+    }
+
+    const maxDisplay = Math.min(5, detectedTasks.length);
+    const numbered = detectedTasks
+      .slice(0, maxDisplay)
+      .map((task, index) => `${index + 1}. ${task}`);
+
+    if (detectedTasks.length > maxDisplay) {
+      numbered.push(`... and ${detectedTasks.length - maxDisplay} more tasks`);
+    }
+
+    return numbered.join('\n');
   }
 }
