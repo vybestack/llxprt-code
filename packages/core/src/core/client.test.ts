@@ -24,6 +24,7 @@ import {
   GenerateContentParameters,
   GoogleGenAI,
   Part,
+  PartListUnion,
 } from '@google/genai';
 import { findIndexAfterFraction, GeminiClient } from './client.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
@@ -1154,7 +1155,7 @@ describe('Gemini Client (client.ts)', () => {
       expect(JSON.stringify(contextCall![0])).toContain('selectedText');
     });
 
-    it('adds a complexity reminder as a separate history entry on later complex turns', async () => {
+    it('appends a todo suffix on later complex turns', async () => {
       // Arrange
       const analyzeComplexity = vi
         .fn()
@@ -1175,27 +1176,25 @@ describe('Gemini Client (client.ts)', () => {
           shouldSuggestTodos: true,
         });
 
-      const getComplexTaskSuggestion = vi.fn().mockReturnValue('mock-reminder');
-
       (
         client as unknown as { complexityAnalyzer: ComplexityAnalyzer }
       ).complexityAnalyzer = {
         analyzeComplexity,
       } as unknown as ComplexityAnalyzer;
 
-      (
-        client as unknown as { todoReminderService: TodoReminderService }
-      ).todoReminderService = {
-        getComplexTaskSuggestion,
-        getEscalatedComplexTaskSuggestion: vi.fn(),
-      } as unknown as TodoReminderService;
+      const suggestionSpy = vi.spyOn(
+        client['todoReminderService'],
+        'getComplexTaskSuggestion',
+      );
 
       mockTurnRunFn.mockReset();
-      mockTurnRunFn.mockImplementation(() =>
-        (async function* () {
+      let lastRequest: Part[] | undefined;
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        lastRequest = req as Part[];
+        return (async function* () {
           yield { type: GeminiEventType.Content, value: 'ok' };
-        })(),
-      );
+        })();
+      });
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
@@ -1230,25 +1229,29 @@ describe('Gemini Client (client.ts)', () => {
         },
       ]);
 
-      const reminderEntry = vi
-        .mocked(mockChat.addHistory)
-        .mock.calls.at(-1)?.[0];
-
-      expect(reminderEntry).toMatchObject({
-        role: 'user',
-        parts: [{ text: expect.stringContaining('mock-reminder') }],
-      });
+      expect(suggestionSpy).toHaveBeenCalled();
+      const todoSuffixText = 'Use TODO List to organize this effort.';
+      expect(Array.isArray(lastRequest)).toBe(true);
+      expect(lastRequest?.length).toBeGreaterThan(1);
+      const suffixPart = lastRequest?.find(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          part.text === todoSuffixText,
+      ) as Part | undefined;
+      expect(suffixPart?.text).toBe(todoSuffixText);
     });
 
-    it('preserves the original request when injecting complexity reminders', async () => {
+    it('still appends the todo suffix when complexity does not trigger', async () => {
       // Arrange
       const analyzeComplexity = vi.fn().mockReturnValue({
-        complexityScore: 0.95,
-        isComplex: true,
-        detectedTasks: ['task one', 'task two', 'task three'],
+        complexityScore: 0.2,
+        isComplex: false,
+        detectedTasks: [],
         sequentialIndicators: [],
         questionCount: 0,
-        shouldSuggestTodos: true,
+        shouldSuggestTodos: false,
       });
 
       (
@@ -1256,13 +1259,6 @@ describe('Gemini Client (client.ts)', () => {
       ).complexityAnalyzer = {
         analyzeComplexity,
       } as unknown as ComplexityAnalyzer;
-
-      (
-        client as unknown as { todoReminderService: TodoReminderService }
-      ).todoReminderService = {
-        getComplexTaskSuggestion: vi.fn().mockReturnValue('reminder'),
-        getEscalatedComplexTaskSuggestion: vi.fn(),
-      } as unknown as TodoReminderService;
 
       mockTurnRunFn.mockReset();
       mockTurnRunFn.mockImplementation(() =>
@@ -1286,7 +1282,7 @@ describe('Gemini Client (client.ts)', () => {
 
       const request = [
         {
-          text: 'Complex request with multiple tasks referencing files and steps to cover.',
+          text: 'Simple request without multiple steps.',
         },
       ];
 
@@ -1299,7 +1295,15 @@ describe('Gemini Client (client.ts)', () => {
         // consume
       }
 
-      expect(mockTurnRunFn.mock.calls[0][0]).toBe(request);
+      const forwardedRequest = mockTurnRunFn.mock.calls[0][0] as Part[];
+      const suffixPart = forwardedRequest.find(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          part.text === 'Use TODO List to organize this effort.',
+      ) as Part | undefined;
+      expect(suffixPart?.text).toBe('Use TODO List to organize this effort.');
     });
 
     it('escalates to a stronger reminder after repeated complex turns without todo usage', async () => {
@@ -1394,16 +1398,19 @@ describe('Gemini Client (client.ts)', () => {
         vi.useRealTimers();
       }
 
-      const reminderEntry = vi
-        .mocked(mockChat.addHistory)
-        .mock.calls.at(-1)?.[0];
-
-      expect(reminderEntry).toMatchObject({
-        parts: [{ text: expect.stringContaining('strong-reminder') }],
-      });
+      expect(getEscalatedComplexTaskSuggestion).toHaveBeenCalled();
+      const finalRequest = mockTurnRunFn.mock.calls.at(-1)?.[0] as Part[];
+      const suffixPart = finalRequest?.find(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          part.text === 'Use TODO List to organize this effort.',
+      ) as Part | undefined;
+      expect(suffixPart?.text).toBe('Use TODO List to organize this effort.');
     });
 
-    it('injects a reminder after four tool calls even without complexity trigger', async () => {
+    it('injects a model reminder after four tool calls even without complexity trigger', async () => {
       // Arrange
       (
         client as unknown as { complexityAnalyzer: ComplexityAnalyzer }
@@ -1418,17 +1425,9 @@ describe('Gemini Client (client.ts)', () => {
         }),
       } as unknown as ComplexityAnalyzer;
 
-      const getComplexTaskSuggestion = vi
-        .fn()
-        .mockReturnValue('tool-call-reminder');
-      const getEscalatedComplexTaskSuggestion = vi.fn();
-
       (
         client as unknown as { todoReminderService: TodoReminderService }
-      ).todoReminderService = {
-        getComplexTaskSuggestion,
-        getEscalatedComplexTaskSuggestion,
-      } as unknown as TodoReminderService;
+      ).todoReminderService = new TodoReminderService();
 
       mockTurnRunFn.mockReset();
       mockTurnRunFn.mockImplementation(() =>
@@ -1466,16 +1465,18 @@ describe('Gemini Client (client.ts)', () => {
 
       const reminderEntry = vi
         .mocked(mockChat.addHistory)
-        .mock.calls.find((call) =>
-          JSON.stringify(call[0]).includes('tool-call-reminder'),
+        .mock.calls.find(
+          ([call]) =>
+            call.role === 'model' &&
+            JSON.stringify(call).includes(
+              'After this next tool call I need to call todo_write and create a todo list to organize this effort.',
+            ),
         )?.[0];
 
       expect(reminderEntry).toBeDefined();
-      expect(getComplexTaskSuggestion).toHaveBeenCalled();
-      expect(getEscalatedComplexTaskSuggestion).not.toHaveBeenCalled();
     });
 
-    it('escalates to a strong reminder after more than four tool calls', async () => {
+    it('escalates to a strong model reminder after more than four tool calls', async () => {
       // Arrange
       (
         client as unknown as { complexityAnalyzer: ComplexityAnalyzer }
@@ -1490,19 +1491,9 @@ describe('Gemini Client (client.ts)', () => {
         }),
       } as unknown as ComplexityAnalyzer;
 
-      const getComplexTaskSuggestion = vi
-        .fn()
-        .mockReturnValue('tool-call-reminder');
-      const getEscalatedComplexTaskSuggestion = vi
-        .fn()
-        .mockReturnValue('tool-call-reminder-strong');
-
       (
         client as unknown as { todoReminderService: TodoReminderService }
-      ).todoReminderService = {
-        getComplexTaskSuggestion,
-        getEscalatedComplexTaskSuggestion,
-      } as unknown as TodoReminderService;
+      ).todoReminderService = new TodoReminderService();
 
       mockTurnRunFn.mockReset();
       mockTurnRunFn.mockImplementation(() =>
@@ -1541,12 +1532,15 @@ describe('Gemini Client (client.ts)', () => {
       const historyCalls = vi.mocked(mockChat.addHistory).mock.calls;
       const strongEntry = historyCalls
         .reverse()
-        .find((call) =>
-          JSON.stringify(call[0]).includes('tool-call-reminder-strong'),
+        .find(
+          ([call]) =>
+            call.role === 'model' &&
+            JSON.stringify(call).includes(
+              'Immediately call todo_write after this next tool call to organize the work.',
+            ),
         )?.[0];
 
       expect(strongEntry).toBeDefined();
-      expect(getEscalatedComplexTaskSuggestion).toHaveBeenCalled();
     });
 
     it('should add context if ideMode is enabled and there are open files but no active file', async () => {

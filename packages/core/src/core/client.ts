@@ -8,6 +8,7 @@ import {
   EmbedContentParameters,
   GenerateContentConfig,
   PartListUnion,
+  Part,
   Content,
   Tool,
   GenerateContentResponse,
@@ -54,6 +55,11 @@ import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
+const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
+const TOOL_BASE_TODO_MESSAGE =
+  'After this next tool call I need to call todo_write and create a todo list to organize this effort.';
+const TOOL_ESCALATED_TODO_MESSAGE =
+  'I have already made several tool calls without a todo list. Immediately call todo_write after this next tool call to organize the work.';
 
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
@@ -273,6 +279,28 @@ export class GeminiClient {
     }
     const normalized = name.toLowerCase();
     return normalized === 'todo_write' || normalized === 'todo_read';
+  }
+
+  private appendTodoSuffixToRequest(request: PartListUnion): PartListUnion {
+    if (!Array.isArray(request)) {
+      return request;
+    }
+
+    const suffixAlreadyPresent = request.some(
+      (part) =>
+        typeof part === 'object' &&
+        part !== null &&
+        'text' in part &&
+        typeof part.text === 'string' &&
+        part.text.includes(TODO_PROMPT_SUFFIX),
+    );
+
+    if (suffixAlreadyPresent) {
+      return request;
+    }
+
+    const newRequest = [...request, { text: TODO_PROMPT_SUFFIX } as Part];
+    return newRequest as PartListUnion;
   }
 
   private recordModelActivity(event: ServerGeminiStreamEvent): void {
@@ -862,7 +890,8 @@ export class GeminiClient {
       this.forceFullIdeContext = false;
     }
 
-    let complexityReminder: string | undefined;
+    request = this.appendTodoSuffixToRequest(request);
+
     if (Array.isArray(request) && request.length > 0) {
       const userMessage = request
         .filter((part) => typeof part === 'object' && 'text' in part)
@@ -872,19 +901,12 @@ export class GeminiClient {
 
       if (userMessage.length > 0) {
         const analysis = this.complexityAnalyzer.analyzeComplexity(userMessage);
-        complexityReminder = this.processComplexityAnalysis(analysis);
+        this.processComplexityAnalysis(analysis);
       } else {
         this.consecutiveComplexTurns = 0;
       }
     } else {
       this.consecutiveComplexTurns = 0;
-    }
-
-    if (complexityReminder) {
-      this.getChat().addHistory({
-        role: 'user',
-        parts: [{ text: complexityReminder }],
-      });
     }
 
     // Get provider name for error messages
@@ -922,11 +944,11 @@ export class GeminiClient {
     if (this.toolCallReminderLevel !== 'none') {
       const reminderText =
         this.toolCallReminderLevel === 'escalated'
-          ? this.todoReminderService.getEscalatedComplexTaskSuggestion([])
-          : this.todoReminderService.getComplexTaskSuggestion([]);
+          ? TOOL_ESCALATED_TODO_MESSAGE
+          : TOOL_BASE_TODO_MESSAGE;
 
       this.getChat().addHistory({
-        role: 'user',
+        role: 'model',
         parts: [{ text: reminderText }],
       });
       const currentTime = Date.now();
