@@ -218,6 +218,8 @@ jobs:
           CI: 'true'
           VERBOSE: 'true'
           KEEP_OUTPUT: 'true'
+          # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
+          VITEST_TEST_TIMEOUT: 15000
         run: |-
           npm run test:e2e
 
@@ -276,5 +278,7 @@ jobs:
           CI: 'true'
           VERBOSE: 'true'
           KEEP_OUTPUT: 'true'
+          # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
+          VITEST_TEST_TIMEOUT: 15000
         run: |-
           npm run test:e2e
