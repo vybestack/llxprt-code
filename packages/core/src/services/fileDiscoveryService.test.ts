@@ -42,8 +42,8 @@ describe('FileDiscoveryService', () => {
 
       const service = new FileDiscoveryService(projectRoot);
       // Let's check the effect of the parser instead of mocking it.
-      expect(service.shouldGitIgnoreFile('node_modules/foo.js')).toBe(true);
-      expect(service.shouldGitIgnoreFile('src/foo.js')).toBe(false);
+      expect(service.shouldIgnoreFile('node_modules/foo.js')).toBe(true);
+      expect(service.shouldIgnoreFile('src/foo.js')).toBe(false);
     });
 
     it('should not load git repo patterns when not in a git repo', async () => {
@@ -52,7 +52,7 @@ describe('FileDiscoveryService', () => {
       const service = new FileDiscoveryService(projectRoot);
 
       // .gitignore is not loaded in non-git repos
-      expect(service.shouldGitIgnoreFile('node_modules/foo.js')).toBe(false);
+      expect(service.shouldIgnoreFile('node_modules/foo.js')).toBe(false);
     });
 
     it('should load .llxprtignore patterns even when not in a git repo', async () => {
@@ -251,7 +251,7 @@ describe('FileDiscoveryService', () => {
       const service = new FileDiscoveryService(projectRoot);
 
       expect(
-        service.shouldGitIgnoreFile(path.join(projectRoot, 'src/index.ts')),
+        service.shouldIgnoreFile(path.join(projectRoot, 'src/index.ts')),
       ).toBe(false);
     });
 
@@ -279,10 +279,10 @@ describe('FileDiscoveryService', () => {
       const service = new FileDiscoveryService(relativeRoot);
 
       expect(
-        service.shouldGitIgnoreFile(path.join(projectRoot, 'ignored.txt')),
+        service.shouldIgnoreFile(path.join(projectRoot, 'ignored.txt')),
       ).toBe(true);
       expect(
-        service.shouldGitIgnoreFile(path.join(projectRoot, 'not-ignored.txt')),
+        service.shouldIgnoreFile(path.join(projectRoot, 'not-ignored.txt')),
       ).toBe(false);
     });
 
