@@ -270,8 +270,6 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       getSessionId() {
         return 'test-session-id';
       },
-      setQuotaErrorOccurred: vi.fn(),
-      getQuotaErrorOccurred: vi.fn(() => false),
       getModel: vi.fn(() => 'gemini-2.5-pro'),
       getContentGeneratorConfig: vi
         .fn()
@@ -395,7 +393,6 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},

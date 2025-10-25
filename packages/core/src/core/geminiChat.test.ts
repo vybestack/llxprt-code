@@ -86,9 +86,6 @@ describe('GeminiChat', () => {
       }),
       getModel: vi.fn().mockReturnValue('gemini-pro'),
       setModel: vi.fn(),
-      getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
-      setQuotaErrorOccurred: vi.fn(),
-      flashFallbackHandler: undefined,
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getEphemeralSetting: vi.fn().mockReturnValue(undefined),
       getProviderManager: vi.fn().mockReturnValue({

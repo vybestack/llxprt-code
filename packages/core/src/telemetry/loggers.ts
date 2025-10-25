@@ -14,7 +14,6 @@ import {
   EVENT_CLI_CONFIG,
   EVENT_TOOL_CALL,
   EVENT_USER_PROMPT,
-  EVENT_FLASH_FALLBACK,
   EVENT_NEXT_SPEAKER_CHECK,
   SERVICE_NAME,
   EVENT_SLASH_COMMAND,
@@ -26,7 +25,6 @@ import {
   StartSessionEvent,
   ToolCallEvent,
   UserPromptEvent,
-  FlashFallbackEvent,
   NextSpeakerCheckEvent,
   LoopDetectedEvent,
   SlashCommandEvent,
@@ -180,27 +178,6 @@ export function logApiRequest(config: Config, event: ApiRequestEvent): void {
   const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `API request to ${event.model}.`,
-    attributes,
-  };
-  logger.emit(logRecord);
-}
-
-export function logFlashFallback(
-  config: Config,
-  event: FlashFallbackEvent,
-): void {
-  if (!isTelemetrySdkInitialized()) return;
-
-  const attributes: LogAttributes = {
-    ...getCommonAttributes(config),
-    ...event,
-    'event.name': EVENT_FLASH_FALLBACK,
-    'event.timestamp': new Date().toISOString(),
-  };
-
-  const logger = logs.getLogger(SERVICE_NAME);
-  const logRecord: LogRecord = {
-    body: `Switching to flash as Fallback.`,
     attributes,
   };
   logger.emit(logRecord);

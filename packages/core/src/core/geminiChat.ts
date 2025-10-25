@@ -20,7 +20,7 @@ import {
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
-import { ContentGenerator, AuthType } from './contentGenerator.js';
+import { ContentGenerator } from './contentGenerator.js';
 import { Config } from '../config/config.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
@@ -462,53 +462,6 @@ export class GeminiChat {
     );
   }
 
-  /**
-   * Handles falling back to Flash model when persistent 429 errors occur for OAuth users.
-   * Uses a fallback handler if provided by the config; otherwise, returns null.
-   */
-  private async handleFlashFallback(
-    authType?: string,
-    error?: unknown,
-  ): Promise<string | null> {
-    // Only handle fallback for OAuth users, not for providers
-    if (authType !== AuthType.LOGIN_WITH_GOOGLE) {
-      return null;
-    }
-
-    const currentModel = this.config.getModel();
-    const fallbackModel = DEFAULT_GEMINI_FLASH_MODEL;
-
-    // Don't fallback if already using Flash model
-    if (currentModel === fallbackModel) {
-      return null;
-    }
-
-    // Check if config has a fallback handler (set by CLI package)
-    const fallbackHandler = this.config.flashFallbackHandler;
-    if (typeof fallbackHandler === 'function') {
-      try {
-        const accepted = await fallbackHandler(
-          currentModel,
-          fallbackModel,
-          error,
-        );
-        if (accepted !== false && accepted !== null) {
-          this.config.setModel(fallbackModel);
-          this.config.setFallbackMode(true);
-          return fallbackModel;
-        }
-        // Check if the model was switched manually in the handler
-        if (this.config.getModel() === fallbackModel) {
-          return null; // Model was switched but don't continue with current prompt
-        }
-      } catch (error) {
-        this.logger.warn(() => 'Flash fallback handler failed:', { error });
-      }
-    }
-
-    return null;
-  }
-
   setSystemInstruction(sysInstr: string) {
     this.generationConfig.systemInstruction = sysInstr;
   }
@@ -593,16 +546,6 @@ export class GeminiChat {
     try {
       const apiCall = async () => {
         const modelToUse = this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
-
-        // Prevent Flash model calls immediately after quota error
-        if (
-          this.config.getQuotaErrorOccurred() &&
-          modelToUse === DEFAULT_GEMINI_FLASH_MODEL
-        ) {
-          throw new Error(
-            'Please submit a new query to continue with the Flash model.',
-          );
-        }
 
         // Get tools in the format the provider expects
         const tools = this.generationConfig.tools;
@@ -699,9 +642,6 @@ export class GeminiChat {
           }
           return false; // Don't retry other errors by default
         },
-        onPersistent429: async (authType?: string, error?: unknown) =>
-          await this.handleFlashFallback(authType, error),
-        authType: this.config.getContentGeneratorConfig()?.authType,
       });
       const durationMs = Date.now() - startTime;
       await this._logApiResponse(
@@ -968,20 +908,6 @@ export class GeminiChat {
     }
 
     const apiCall = async () => {
-      const modelToUse = this.config.getModel();
-      const authType = this.config.getContentGeneratorConfig()?.authType;
-
-      // Prevent Flash model calls immediately after quota error (only for Gemini providers)
-      if (
-        authType !== AuthType.USE_PROVIDER &&
-        this.config.getQuotaErrorOccurred() &&
-        modelToUse === DEFAULT_GEMINI_FLASH_MODEL
-      ) {
-        throw new Error(
-          'Please submit a new query to continue with the Flash model.',
-        );
-      }
-
       // Convert user content to IContent first so we can check if it's a tool response
       const idGen = this.historyService.getIdGeneratorCallback();
       const matcher = this.makePositionMatcher();
@@ -1048,9 +974,6 @@ export class GeminiChat {
         }
         return false;
       },
-      onPersistent429: async (authType?: string, error?: unknown) =>
-        await this.handleFlashFallback(authType, error),
-      authType: this.config.getContentGeneratorConfig()?.authType,
     });
 
     return this.processStreamResponse(streamResponse, userContent);

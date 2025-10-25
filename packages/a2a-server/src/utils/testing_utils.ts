@@ -35,7 +35,6 @@ export function createMockConfig(
     getModel: vi.fn().mockReturnValue('gemini-pro'),
     getUsageStatisticsEnabled: vi.fn().mockReturnValue(false),
     getComplexityAnalyzerSettings: vi.fn().mockReturnValue({}),
-    setFlashFallbackHandler: vi.fn(),
     initialize: vi.fn().mockResolvedValue(undefined),
     getProxy: vi.fn().mockReturnValue(undefined),
     getHistory: vi.fn().mockReturnValue([]),

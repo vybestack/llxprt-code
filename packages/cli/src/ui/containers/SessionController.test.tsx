@@ -28,13 +28,7 @@ import {
   type SessionContextType,
 } from './SessionController.js';
 import { MessageType } from '../types.js';
-import {
-  UserTierId,
-  isProQuotaExceededError,
-  isGenericQuotaExceededError,
-  Config,
-  IProvider,
-} from '@vybestack/llxprt-code-core';
+import { Config, IProvider } from '@vybestack/llxprt-code-core';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 
@@ -66,8 +60,6 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
-    isProQuotaExceededError: vi.fn(() => false),
-    isGenericQuotaExceededError: vi.fn(() => false),
   };
 });
 
@@ -105,15 +97,12 @@ describe('SessionController', () => {
       getFolderTrust: vi.fn(() => true),
       setUserMemory: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
-      setFlashFallbackHandler: vi.fn() as ReturnType<typeof vi.fn>,
-      setQuotaErrorOccurred: vi.fn(),
       setModel: vi.fn(),
-      getUserTier: vi.fn(() => Promise.resolve(undefined)),
       shouldLoadMemoryFromIncludeDirectories: vi.fn(() => false),
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: vi.fn(() => [process.cwd()]),
       })),
-    } as unknown as Partial<Config> & { getUserTier: ReturnType<typeof vi.fn> };
+    } as unknown as Partial<Config>;
   });
 
   afterEach(() => {
@@ -352,87 +341,6 @@ describe('SessionController', () => {
     unmount();
   });
 
-  it('should not sync user tier when authenticating', async () => {
-    const { unmount } = render(
-      <SessionController config={mockConfig as Config} isAuthenticating={true}>
-        <div>Test</div>
-      </SessionController>,
-    );
-
-    // Wait for any effects to run
-    vi.runAllTimers();
-    await Promise.resolve();
-
-    expect(
-      (mockConfig as unknown as { getUserTier: ReturnType<typeof vi.fn> })
-        .getUserTier,
-    ).not.toHaveBeenCalled();
-
-    unmount();
-  });
-
-  it('should set up flash fallback handler for quota errors', async () => {
-    type FlashFallbackHandler = (
-      currentModel: string,
-      fallbackModel: string,
-      error?: unknown,
-    ) => Promise<boolean>;
-
-    let flashFallbackHandler: FlashFallbackHandler | undefined;
-    (
-      mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>
-    )?.mockImplementation((handler: FlashFallbackHandler) => {
-      flashFallbackHandler = handler;
-    });
-
-    let contextValue: SessionContextType | undefined;
-
-    const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
-    };
-
-    const { unmount } = render(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    expect(mockConfig.setFlashFallbackHandler).toHaveBeenCalled();
-
-    // Test pro quota error handling with paid tier
-    contextValue!.dispatch({
-      type: 'SET_USER_TIER',
-      payload: UserTierId.STANDARD,
-    });
-
-    const mockError = new Error('Quota exceeded');
-    vi.mocked(isProQuotaExceededError).mockReturnValue(true);
-
-    if (flashFallbackHandler) {
-      await flashFallbackHandler(
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        mockError,
-      );
-    }
-
-    expect(mockAddItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.INFO,
-        text: expect.stringContaining(
-          'You have reached your daily gemini-2.5-pro quota limit',
-        ),
-      }),
-      expect.any(Number),
-    );
-    expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
-    // Model should NOT be switched anymore
-    expect(mockConfig.setModel).not.toHaveBeenCalled();
-
-    unmount();
-  });
-
   it('should handle model changes via polling', async () => {
     const providerModule = await import(
       '../../providers/providerManagerInstance.js'
@@ -511,57 +419,6 @@ describe('SessionController', () => {
     await Promise.resolve();
 
     expect(mockUpdateItem).toHaveBeenCalledWith(itemId, updateData);
-
-    unmount();
-  });
-
-  it('should handle generic quota errors correctly', async () => {
-    type FlashFallbackHandler = (
-      currentModel: string,
-      fallbackModel: string,
-      error?: unknown,
-    ) => Promise<boolean>;
-
-    let flashFallbackHandler: FlashFallbackHandler | undefined;
-    (
-      mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>
-    )?.mockImplementation((handler: FlashFallbackHandler) => {
-      flashFallbackHandler = handler;
-    });
-
-    const TestComponent = () => {
-      React.useContext(SessionContext);
-      return null;
-    };
-
-    const { unmount } = render(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    const mockError = new Error('Generic quota error');
-    vi.mocked(isProQuotaExceededError).mockReturnValue(false);
-    vi.mocked(isGenericQuotaExceededError).mockReturnValue(true);
-
-    if (flashFallbackHandler) {
-      await flashFallbackHandler(
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        mockError,
-      );
-    }
-
-    expect(mockAddItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.INFO,
-        text: expect.stringContaining('quota limit'),
-      }),
-      expect.any(Number),
-    );
-    expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
-    // Model should NOT be switched anymore
-    expect(mockConfig.setModel).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -704,66 +561,6 @@ describe('SessionController', () => {
     );
 
     expect(contextValue!.appState.errors.auth).toBe(null);
-
-    unmount();
-  });
-
-  it('should handle free mode quota errors', async () => {
-    type FlashFallbackHandler = (
-      currentModel: string,
-      fallbackModel: string,
-      error?: unknown,
-    ) => Promise<boolean>;
-
-    let flashFallbackHandler: FlashFallbackHandler | undefined;
-    (
-      mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>
-    )?.mockImplementation((handler: FlashFallbackHandler) => {
-      flashFallbackHandler = handler;
-    });
-
-    let contextValue: SessionContextType | undefined;
-
-    const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
-    };
-
-    const { unmount } = render(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    // Ensure we're in free tier
-    contextValue!.dispatch({
-      type: 'SET_USER_TIER',
-      payload: UserTierId.FREE,
-    });
-
-    const mockError = new Error('Quota exceeded');
-    vi.mocked(isProQuotaExceededError).mockReturnValue(true);
-
-    if (flashFallbackHandler) {
-      await flashFallbackHandler(
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        mockError,
-      );
-    }
-
-    expect(mockAddItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: MessageType.INFO,
-        text: expect.stringContaining(
-          'You have reached your daily gemini-2.5-pro quota limit',
-        ),
-      }),
-      expect.any(Number),
-    );
-    expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
-    // Model should NOT be switched anymore
-    expect(mockConfig.setModel).not.toHaveBeenCalled();
 
     unmount();
   });

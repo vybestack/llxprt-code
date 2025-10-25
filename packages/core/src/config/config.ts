@@ -207,12 +207,6 @@ export interface SandboxConfig {
   image: string;
 }
 
-export type FlashFallbackHandler = (
-  currentModel: string,
-  fallbackModel: string,
-  error?: unknown,
-) => Promise<boolean | string | null>;
-
 export interface ActiveExtension {
   name: string;
   version: string;
@@ -347,8 +341,6 @@ export class Config {
     name: string;
     extensionName: string;
   }>;
-  flashFallbackHandler?: FlashFallbackHandler;
-  private quotaErrorOccurred: boolean = false;
   private providerManager?: ProviderManager;
 
   setProviderManager(providerManager: ProviderManager) {
@@ -688,20 +680,8 @@ export class Config {
     this.inFallbackMode = active;
   }
 
-  setFlashFallbackHandler(handler: FlashFallbackHandler): void {
-    this.flashFallbackHandler = handler;
-  }
-
   getMaxSessionTurns(): number {
     return this.maxSessionTurns;
-  }
-
-  setQuotaErrorOccurred(value: boolean): void {
-    this.quotaErrorOccurred = value;
-  }
-
-  getQuotaErrorOccurred(): boolean {
-    return this.quotaErrorOccurred;
   }
 
   getEmbeddingModel(): string {

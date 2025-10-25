@@ -25,7 +25,6 @@ export {
   logApiRequest,
   logApiError,
   logApiResponse,
-  logFlashFallback,
   logSlashCommand,
   logKittySequenceOverflow,
 } from './loggers.js';
@@ -38,7 +37,6 @@ export {
   ApiErrorEvent,
   ApiResponseEvent,
   TelemetryEvent,
-  FlashFallbackEvent,
   SlashCommandEvent,
   KittySequenceOverflowEvent,
 } from './types.js';
