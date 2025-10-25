@@ -216,7 +216,6 @@ Logs are timestamped records of specific events. The following events are logged
     - `response_text` (if applicable)
     - `auth_type`
 
-- `llxprt_cli.flash_fallback`: This event occurs when LLxprt Code switches to a fallback model.
   - **Attributes**:
     - `auth_type`
 

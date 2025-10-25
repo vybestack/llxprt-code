@@ -15,13 +15,7 @@ import React, {
 import { HistoryItem, MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import {
-  Config,
-  isProQuotaExceededError,
-  isGenericQuotaExceededError,
-  UserTierId,
-  getErrorMessage,
-} from '@vybestack/llxprt-code-core';
+import { Config, getErrorMessage } from '@vybestack/llxprt-code-core';
 import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
 import { loadSettings } from '../../config/settings.js';
 import process from 'node:process';
@@ -125,7 +119,6 @@ export const SessionController: React.FC<SessionControllerProps> = ({
     currentModel: getDisplayModelName(config),
     isPaidMode: getProviderPaymentMode(),
     lastProvider: getInitialProvider(),
-    modelSwitchedFromQuotaError: false,
     userTier: undefined,
     transientWarnings: [],
   };
@@ -354,73 +347,6 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     history.length,
     dispatch,
   ]);
-
-  // Set up Flash fallback handler
-  useEffect(() => {
-    const flashFallbackHandler = async (
-      currentModel: string,
-      fallbackModel: string,
-      error?: unknown,
-    ): Promise<boolean> => {
-      let message: string;
-
-      const isPaidTier =
-        sessionState.userTier === UserTierId.LEGACY ||
-        sessionState.userTier === UserTierId.STANDARD;
-
-      if (error && isProQuotaExceededError(error)) {
-        if (isPaidTier) {
-          message = `You have reached your daily ${currentModel} quota limit.
-To continue using ${currentModel}, you can use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
-Or you can switch to a different model using the /model command`;
-        } else {
-          message = `You have reached your daily ${currentModel} quota limit.
-To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-You can switch authentication methods by typing /auth or switch to a different model using /model`;
-        }
-      } else if (error && isGenericQuotaExceededError(error)) {
-        if (isPaidTier) {
-          message = `You have reached your daily quota limit.
-To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
-Or you can switch to a different model using the /model command`;
-        } else {
-          message = `You have reached your daily quota limit.
-To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-You can switch authentication methods by typing /auth or switch to a different model using /model`;
-        }
-      } else {
-        if (isPaidTier) {
-          message = `You are experiencing capacity issues with ${currentModel}.
-Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
-To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
-Or you can switch to a different model using the /model command`;
-        } else {
-          message = `You are experiencing capacity issues with ${currentModel}.
-Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
-To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-You can switch authentication methods by typing /auth or switch to a different model using /model`;
-        }
-      }
-
-      addItem(
-        {
-          type: MessageType.INFO,
-          text: message,
-        },
-        Date.now(),
-      );
-
-      dispatch({ type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR', payload: true });
-      config.setQuotaErrorOccurred(true);
-      // Don't switch models - let the user decide
-      return false;
-    };
-
-    config.setFlashFallbackHandler(flashFallbackHandler);
-  }, [config, addItem, sessionState.userTier, dispatch]);
 
   // Handle ADD_ITEM actions
   useEffect(() => {

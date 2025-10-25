@@ -32,13 +32,11 @@ import { ContentConverters } from '../services/history/ContentConverters.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
-  AuthType,
   ContentGenerator,
   ContentGeneratorConfig,
   createContentGenerator,
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
-import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { tokenLimit } from './tokenLimits.js';
 import {
   COMPRESSION_TOKEN_THRESHOLD,
@@ -1017,11 +1015,7 @@ export class GeminiClient {
           this.lastPromptId || this.config.getSessionId(),
         );
 
-      const result = await retryWithBackoff(apiCall, {
-        onPersistent429: async (authType?: string, error?: unknown) =>
-          await this.handleFlashFallback(authType, error),
-        authType: this.config.getContentGeneratorConfig()?.authType,
-      });
+      const result = await retryWithBackoff(apiCall);
 
       let text = getResponseText(result);
       if (!text) {
@@ -1151,11 +1145,7 @@ export class GeminiClient {
           this.lastPromptId || this.config.getSessionId(),
         );
 
-      const result = await retryWithBackoff(apiCall, {
-        onPersistent429: async (authType?: string, error?: unknown) =>
-          await this.handleFlashFallback(authType, error),
-        authType: this.config.getContentGeneratorConfig()?.authType,
-      });
+      const result = await retryWithBackoff(apiCall);
       return result;
     } catch (error: unknown) {
       if (abortSignal.aborted) {
@@ -1399,53 +1389,5 @@ export class GeminiClient {
           .filter(Boolean),
       ),
     );
-  }
-
-  /**
-   * Handles falling back to Flash model when persistent 429 errors occur for OAuth users.
-   * Uses a fallback handler if provided by the config; otherwise, returns null.
-   * Note: This only applies to OAuth users with Gemini models, not for other providers.
-   */
-  private async handleFlashFallback(
-    authType?: string,
-    error?: unknown,
-  ): Promise<string | null> {
-    // Only handle fallback for OAuth users with Gemini models, not for providers
-    if (authType !== AuthType.LOGIN_WITH_GOOGLE) {
-      return null;
-    }
-
-    const currentModel = this.config.getModel();
-    const fallbackModel = DEFAULT_GEMINI_FLASH_MODEL;
-
-    // Don't fallback if already using Flash model
-    if (currentModel === fallbackModel) {
-      return null;
-    }
-
-    // Check if config has a fallback handler (set by CLI package)
-    const fallbackHandler = this.config.flashFallbackHandler;
-    if (typeof fallbackHandler === 'function') {
-      try {
-        const accepted = await fallbackHandler(
-          currentModel,
-          fallbackModel,
-          error,
-        );
-        if (accepted !== false && accepted !== null) {
-          this.config.setModel(fallbackModel);
-          this.config.setFallbackMode(true);
-          return fallbackModel;
-        }
-        // Check if the model was switched manually in the handler
-        if (this.config.getModel() === fallbackModel) {
-          return null; // Model was switched but don't continue with current prompt
-        }
-      } catch (error) {
-        this.logger.warn(() => 'Flash fallback handler failed:', { error });
-      }
-    }
-
-    return null;
   }
 }
