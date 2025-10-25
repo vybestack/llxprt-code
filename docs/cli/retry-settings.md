@@ -9,13 +9,13 @@ Retry configuration can be set as ephemeral settings, which means they can be ch
 ### Available Retry Settings
 
 - **`retries`** (number):
-  - **Description:** Maximum number of retry attempts for API calls. This setting controls how many times the CLI will retry a failed API request.
-  - **Default:** `5` (Anthropic and Google providers) or `6` (OpenAI provider)
+  - **Description:** Maximum number of retry attempts for API calls. LLxprt now uses a unified default across providers.
+  - **Default:** `6`
   - **Example:** `/set retries 3`
 
 - **`retrywait`** (number):
   - **Description:** Initial delay in milliseconds between retry attempts. The delay increases exponentially for subsequent retries.
-  - **Default:** `5000` ms (Anthropic and Google providers) or `4000` ms (OpenAI provider)
+  - **Default:** `4000` ms
   - **Example:** `/set retrywait 10000`
 
 ### How to Configure Retry Settings
@@ -34,13 +34,11 @@ These settings will apply to all subsequent API calls during your session and ca
 
 ### Provider-Specific Retry Behavior
 
-Different providers have different default retry configurations:
+The retry logic now uses the same baseline everywhere (6 attempts, 4-second initial delay) and includes:
 
-- **Google/Gemini:** 5 retries with 5000ms initial delay
-- **Anthropic:** 5 retries with 5000ms initial delay
-- **OpenAI:** 6 retries with 4000ms initial delay
-
-The retry logic includes special handling for 429 (rate limit) errors and will automatically adjust behavior based on `Retry-After` headers when present.
+- Special handling for 429 (rate limit) errors (respecting `Retry-After` headers)
+- Automatic detection of transient network issues (socket resets, stream interruptions)
+- Integration with streaming pipelines so SSE disconnects are retried without user intervention
 
 ### Technical Implementation
 

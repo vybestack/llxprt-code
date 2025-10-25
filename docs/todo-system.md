@@ -43,8 +43,14 @@ This built-in tool allows the AI model to pause its automatic workflow continuat
 
 The `todo-continuation` ephemeral setting controls a powerful feature of LLxprt Code: its ability to automatically prompt the AI to continue working.
 
-**Mechanism**: If the `todo-continuation` setting is enabled (it is `true` by default) and the AI completes a response turn without making any tool calls, but the system detects there are still `pending` or `in_progress` todos, LLxprt Code will automatically generate a new prompt like "Continue working on this task: <todo content>" and send it to the model.
+**Mechanism**: When `todo-continuation` is enabled (default `true`), LLxprt monitors each turn for signals of complex, multi-step work:
 
-**Goal**: This creates a seamless, self-directed workflow where the AI can work through a list of tasks without requiring the user to manually prompt it after each step.
+- Consecutive user prompts that contain ordered/sequential keywords ("first", "then", "next", etc.)
+- Detected task lists, file references, or multiple questions extracted by the complexity analyzer
+- Active todos that remain in `pending`/`in_progress`
+
+If the AI finishes a response without making tool calls and the analyzer detects a backlog of tasks, LLxprt automatically emits a follow-up prompt such as "Continue working on this task: <todo content>". If the user never created a todo list, the system now escalates reminders (“Use TodoWrite now…”) once a threshold of complex turns is exceeded.
+
+**Goal**: This creates a seamless, self-directed workflow where the AI can work through a list of tasks without requiring the user to manually prompt it after each step, while nudging the model to formalize todo lists for complex work.
 
 **Control**: You can disable this feature for the current session using `/ephemeral todo-continuation false`.

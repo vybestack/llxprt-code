@@ -776,6 +776,9 @@ Arguments passed directly when running the CLI can override other configurations
 - **`--key <api_key>`**:
   - Provides the API key for the current provider directly.
   - Example: `llxprt --key sk-...`
+- **`--set key=value`** (repeatable):
+  - Apply ephemeral settings at startup (same keys as `/set`). Pass each assignment separately (`--set streaming=disabled --set base-url=https://...`). Values are parsed using the same validation as the interactive command.
+  - Precedence: CLI flags take priority over profiles/settings, which in turn override environment variables and finally OAuth tokens.
 - **`--keyfile <path>`**:
   - Path to a file containing the API key for the current provider.
   - Example: `llxprt --keyfile ~/.openai_key`
