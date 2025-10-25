@@ -326,6 +326,8 @@ jobs:
           NO_COLOR: true
           # Ensure OAuth tests are skipped in CI (they require browser interaction)
           CI: true
+          # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
+          VITEST_TEST_TIMEOUT: 15000
         run: 'npm run test:ci'
 
       - name: 'Publish Test Report (for non-forks)'
