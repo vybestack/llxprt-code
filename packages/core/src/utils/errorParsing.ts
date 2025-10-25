@@ -16,7 +16,7 @@ import {
 } from '../config/models.js';
 import { UserTierId } from '../code_assist/types.js';
 import { AuthType } from '../core/contentGenerator.js';
-import { getErrorStatus } from './retry.js';
+import { getErrorStatus, STREAM_INTERRUPTED_ERROR_CODE } from './retry.js';
 
 // Free Tier message functions
 const getRateLimitErrorMessageGoogleFree = (
@@ -96,6 +96,36 @@ function formatErrorMessageWithStatus(
   return `${message}${suffix}`;
 }
 
+function getErrorCodeFromUnknown(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null) {
+    if (
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string'
+    ) {
+      return (error as { code: string }).code;
+    }
+
+    if (
+      'error' in error &&
+      typeof (error as { error?: unknown }).error === 'object' &&
+      (error as { error?: unknown }).error !== null &&
+      'code' in (error as { error?: { code?: unknown } }).error! &&
+      typeof (
+        (error as { error?: { code?: unknown } }).error as {
+          code?: unknown;
+        }
+      ).code === 'string'
+    ) {
+      return (
+        (error as { error?: { code?: unknown } }).error as {
+          code?: string;
+        }
+      ).code;
+    }
+  }
+  return undefined;
+}
+
 function getRateLimitMessage(
   authType?: AuthType,
   error?: unknown,
@@ -147,6 +177,23 @@ export function parseAndFormatApiError(
   currentModel?: string,
   fallbackModel?: string,
 ): string {
+  const errorCode = getErrorCodeFromUnknown(error);
+  if (errorCode === STREAM_INTERRUPTED_ERROR_CODE) {
+    const baseMessage =
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error &&
+      typeof (error as { message?: unknown }).message === 'string'
+        ? (error as { message: string }).message
+        : 'Streaming parse error: model response contained malformed data.';
+    const formattedMessage = formatErrorMessageWithStatus(
+      baseMessage,
+      undefined,
+      'STREAM_INTERRUPTED',
+    );
+    return `[API Error: ${formattedMessage}]\nStreaming data from the provider became invalid before the response completed. Please retry.`;
+  }
+
   // For provider auth type, don't add Gemini-specific rate limit messages
   if (authType === AuthType.USE_PROVIDER) {
     if (isStructuredError(error)) {

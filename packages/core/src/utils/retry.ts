@@ -36,6 +36,8 @@ const DEFAULT_RETRY_OPTIONS: RetryOptions = {
   shouldRetry: defaultShouldRetry,
 };
 
+export const STREAM_INTERRUPTED_ERROR_CODE = 'LLXPRT_STREAM_INTERRUPTED';
+
 const TRANSIENT_ERROR_PHRASES = [
   'connection error',
   'connection terminated',
@@ -75,6 +77,7 @@ const TRANSIENT_ERROR_CODES = new Set([
   'UND_ERR_CONNECT_TIMEOUT',
   'UND_ERR_HEADERS_TIMEOUT',
   'UND_ERR_BODY_TIMEOUT',
+  STREAM_INTERRUPTED_ERROR_CODE,
 ]);
 
 function collectErrorDetails(error: unknown): {
@@ -134,6 +137,54 @@ function collectErrorDetails(error: unknown): {
   }
 
   return { messages, codes };
+}
+
+export function createStreamInterruptionError(
+  message: string,
+  details?: Record<string, unknown>,
+  cause?: unknown,
+): Error {
+  const error = new Error(message);
+  error.name = 'StreamInterruptionError';
+  (error as { code?: string }).code = STREAM_INTERRUPTED_ERROR_CODE;
+  if (details) {
+    (error as { details?: Record<string, unknown> }).details = details;
+  }
+  if (cause && !(error as { cause?: unknown }).cause) {
+    (error as { cause?: unknown }).cause = cause;
+  }
+  return error;
+}
+
+export function getErrorCode(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null) {
+    if (
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string'
+    ) {
+      return (error as { code: string }).code;
+    }
+
+    if (
+      'error' in error &&
+      typeof (error as { error?: unknown }).error === 'object' &&
+      (error as { error?: unknown }).error !== null &&
+      'code' in (error as { error?: { code?: unknown } }).error! &&
+      typeof (
+        (error as { error?: { code?: unknown } }).error as {
+          code?: unknown;
+        }
+      ).code === 'string'
+    ) {
+      return (
+        (error as { error?: { code?: unknown } }).error as {
+          code?: string;
+        }
+      ).code;
+    }
+  }
+
+  return undefined;
 }
 
 export function isNetworkTransientError(error: unknown): boolean {

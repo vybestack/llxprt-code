@@ -20,6 +20,11 @@ import {
   logDoubleEscapingInChunk,
 } from '../../tools/doubleEscapeUtils.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import {
+  retryWithBackoff,
+  getErrorStatus,
+  isNetworkTransientError,
+} from '../../utils/retry.js';
 
 export class AnthropicProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -996,14 +1001,23 @@ export class AnthropicProvider extends BaseProvider {
 
     // Make the API call directly with type assertion
     const customHeaders = this.getCustomHeaders();
-    const response = customHeaders
-      ? await this.anthropic.messages.create(
-          requestBody as Parameters<typeof this.anthropic.messages.create>[0],
-          { headers: customHeaders },
-        )
-      : await this.anthropic.messages.create(
-          requestBody as Parameters<typeof this.anthropic.messages.create>[0],
-        );
+    const apiCall = () =>
+      customHeaders
+        ? this.anthropic.messages.create(
+            requestBody as Parameters<typeof this.anthropic.messages.create>[0],
+            { headers: customHeaders },
+          )
+        : this.anthropic.messages.create(
+            requestBody as Parameters<typeof this.anthropic.messages.create>[0],
+          );
+
+    const { maxAttempts, initialDelayMs } = this.getRetryConfig();
+    const response = await retryWithBackoff(apiCall, {
+      maxAttempts,
+      initialDelayMs,
+      shouldRetry: this.shouldRetryAnthropicResponse.bind(this),
+      trackThrottleWaitTime: this.throttleTracker,
+    });
 
     if (streamingEnabled) {
       // Handle streaming response - response is already a Stream when streaming is enabled
@@ -1127,5 +1141,35 @@ export class AnthropicProvider extends BaseProvider {
 
       yield result;
     }
+  }
+
+  private getRetryConfig(): { maxAttempts: number; initialDelayMs: number } {
+    const ephemeralSettings =
+      this.providerConfig?.getEphemeralSettings?.() || {};
+    const maxAttempts =
+      (ephemeralSettings['retries'] as number | undefined) ?? 6;
+    const initialDelayMs =
+      (ephemeralSettings['retrywait'] as number | undefined) ?? 4000;
+    return { maxAttempts, initialDelayMs };
+  }
+
+  private shouldRetryAnthropicResponse(error: unknown): boolean {
+    const status = getErrorStatus(error);
+    if (status === 429 || (status && status >= 500 && status < 600)) {
+      this.logger.debug(
+        () => `Will retry Anthropic request due to status ${status}`,
+      );
+      return true;
+    }
+
+    if (isNetworkTransientError(error)) {
+      this.logger.debug(
+        () =>
+          'Will retry Anthropic request due to transient network error signature.',
+      );
+      return true;
+    }
+
+    return false;
   }
 }

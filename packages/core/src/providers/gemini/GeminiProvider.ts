@@ -28,6 +28,11 @@ import {
 import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import {
+  retryWithBackoff,
+  getErrorStatus,
+  isNetworkTransientError,
+} from '../../utils/retry.js';
 
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P12
@@ -1066,96 +1071,106 @@ export class GeminiProvider extends BaseProvider {
 
     // Create appropriate client and generate content
     const httpOptions = this.createHttpOptions();
+    const { maxAttempts, initialDelayMs } = this.getRetryConfig();
 
-    let stream: AsyncIterable<GenerateContentResponse>;
+    const stream: AsyncIterable<GenerateContentResponse> =
+      await retryWithBackoff(
+        async () => {
+          if (this.authMode === 'oauth') {
+            // OAuth mode
+            const configForOAuth = this.globalConfig || {
+              getProxy: () => undefined,
+              isBrowserLaunchSuppressed: () => false,
+              getNoBrowser: () => false,
+              getUserMemory: () => '',
+            };
 
-    if (this.authMode === 'oauth') {
-      // OAuth mode
-      const configForOAuth = this.globalConfig || {
-        getProxy: () => undefined,
-        isBrowserLaunchSuppressed: () => false,
-        getNoBrowser: () => false,
-        getUserMemory: () => '',
-      };
+            const contentGenerator = await createCodeAssistContentGenerator(
+              httpOptions,
+              AuthType.LOGIN_WITH_GOOGLE,
+              configForOAuth as Config,
+              this.getBaseURL(),
+            );
 
-      const contentGenerator = await createCodeAssistContentGenerator(
-        httpOptions,
-        AuthType.LOGIN_WITH_GOOGLE,
-        configForOAuth as Config,
-        this.getBaseURL(),
-      );
+            const userMemory = this.globalConfig?.getUserMemory
+              ? this.globalConfig.getUserMemory()
+              : '';
+            const systemInstruction = await getCoreSystemPromptAsync(
+              userMemory,
+              this.currentModel,
+              toolNamesArg,
+            );
 
-      const userMemory = this.globalConfig?.getUserMemory
-        ? this.globalConfig.getUserMemory()
-        : '';
-      const systemInstruction = await getCoreSystemPromptAsync(
-        userMemory,
-        this.currentModel,
-        toolNamesArg,
-      );
+            // For OAuth/CodeAssist mode, inject system prompt as first user message
+            // This ensures the CodeAssist endpoint receives the full context
+            // Similar to how AnthropicProvider handles OAuth mode
+            const contentsWithSystemPrompt = [
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: `<system>\n${systemInstruction}\n</system>\n\nUser provided conversation begins here:`,
+                  },
+                ],
+              },
+              ...contents,
+            ];
 
-      // For OAuth/CodeAssist mode, inject system prompt as first user message
-      // This ensures the CodeAssist endpoint receives the full context
-      // Similar to how AnthropicProvider handles OAuth mode
-      const contentsWithSystemPrompt = [
+            const request = {
+              model: this.currentModel,
+              contents: contentsWithSystemPrompt,
+              // Still pass systemInstruction for SDK compatibility
+              systemInstruction,
+              config: {
+                tools: geminiTools,
+                ...this.modelParams,
+              },
+            };
+
+            return await contentGenerator.generateContentStream(
+              request,
+              'oauth-session',
+            );
+          } else {
+            // API key mode
+            const genAI = new GoogleGenAI({
+              apiKey: authToken,
+              vertexai: this.authMode === 'vertex-ai',
+              httpOptions: this.getBaseURL()
+                ? { ...httpOptions, baseUrl: this.getBaseURL() }
+                : httpOptions,
+            });
+
+            const contentGenerator = genAI.models;
+            const userMemory = this.globalConfig?.getUserMemory
+              ? this.globalConfig.getUserMemory()
+              : '';
+            const systemInstruction = await getCoreSystemPromptAsync(
+              userMemory,
+              this.currentModel,
+              toolNamesArg,
+            );
+
+            const request = {
+              model: this.currentModel,
+              contents,
+              systemInstruction,
+              config: {
+                tools: geminiTools,
+                ...this.modelParams,
+              },
+            };
+
+            return await contentGenerator.generateContentStream(request);
+          }
+        },
         {
-          role: 'user',
-          parts: [
-            {
-              text: `<system>\n${systemInstruction}\n</system>\n\nUser provided conversation begins here:`,
-            },
-          ],
+          maxAttempts,
+          initialDelayMs,
+          shouldRetry: this.shouldRetryGeminiResponse.bind(this),
+          trackThrottleWaitTime: this.throttleTracker,
         },
-        ...contents,
-      ];
-
-      const request = {
-        model: this.currentModel,
-        contents: contentsWithSystemPrompt,
-        // Still pass systemInstruction for SDK compatibility
-        systemInstruction,
-        config: {
-          tools: geminiTools,
-          ...this.modelParams,
-        },
-      };
-
-      stream = await contentGenerator.generateContentStream(
-        request,
-        'oauth-session',
       );
-    } else {
-      // API key mode
-      const genAI = new GoogleGenAI({
-        apiKey: authToken,
-        vertexai: this.authMode === 'vertex-ai',
-        httpOptions: this.getBaseURL()
-          ? { ...httpOptions, baseUrl: this.getBaseURL() }
-          : httpOptions,
-      });
-
-      const contentGenerator = genAI.models;
-      const userMemory = this.globalConfig?.getUserMemory
-        ? this.globalConfig.getUserMemory()
-        : '';
-      const systemInstruction = await getCoreSystemPromptAsync(
-        userMemory,
-        this.currentModel,
-        toolNamesArg,
-      );
-
-      const request = {
-        model: this.currentModel,
-        contents,
-        systemInstruction,
-        config: {
-          tools: geminiTools,
-          ...this.modelParams,
-        },
-      };
-
-      stream = await contentGenerator.generateContentStream(request);
-    }
 
     // Stream responses as IContent
     for await (const response of stream) {
@@ -1253,5 +1268,35 @@ export class GeminiProvider extends BaseProvider {
         } as IContent;
       }
     }
+  }
+
+  private getRetryConfig(): { maxAttempts: number; initialDelayMs: number } {
+    const ephemeralSettings =
+      this.providerConfig?.getEphemeralSettings?.() || {};
+    const maxAttempts =
+      (ephemeralSettings['retries'] as number | undefined) ?? 6;
+    const initialDelayMs =
+      (ephemeralSettings['retrywait'] as number | undefined) ?? 4000;
+    return { maxAttempts, initialDelayMs };
+  }
+
+  private shouldRetryGeminiResponse(error: unknown): boolean {
+    const status = getErrorStatus(error);
+    if (status === 429 || (status && status >= 500 && status < 600)) {
+      this.logger.debug(
+        () => `Will retry Gemini request due to status ${status}`,
+      );
+      return true;
+    }
+
+    if (isNetworkTransientError(error)) {
+      this.logger.debug(
+        () =>
+          'Will retry Gemini request due to transient network error signature.',
+      );
+      return true;
+    }
+
+    return false;
   }
 }

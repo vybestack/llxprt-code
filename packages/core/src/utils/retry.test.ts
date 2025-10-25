@@ -10,6 +10,7 @@ import {
   retryWithBackoff,
   HttpError,
   isNetworkTransientError,
+  STREAM_INTERRUPTED_ERROR_CODE,
 } from './retry.js';
 import { setSimulate429 } from './testUtils.js';
 
@@ -444,5 +445,11 @@ describe('isNetworkTransientError', () => {
   it('returns false for non-transient client errors', () => {
     const error = new Error('Validation failed');
     expect(isNetworkTransientError(error)).toBe(false);
+  });
+
+  it('returns true for stream interruption code errors', () => {
+    const error = new Error('Streaming parse error');
+    (error as { code?: string }).code = STREAM_INTERRUPTED_ERROR_CODE;
+    expect(isNetworkTransientError(error)).toBe(true);
   });
 });
