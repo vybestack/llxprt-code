@@ -114,6 +114,8 @@ vi.mock('../../utils/retry.js', () => ({
     }
     throw lastError;
   }),
+  getErrorStatus: vi.fn(() => undefined),
+  isNetworkTransientError: vi.fn(() => false),
 }));
 
 // Create a shared mock instance that will be reused

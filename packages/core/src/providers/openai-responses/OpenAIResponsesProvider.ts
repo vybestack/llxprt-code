@@ -38,6 +38,11 @@ import {
 import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import {
+  retryWithBackoff,
+  getErrorStatus,
+  isNetworkTransientError,
+} from '../../utils/retry.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
   /**
@@ -587,17 +592,29 @@ export class OpenAIResponsesProvider extends BaseProvider {
       ...(customHeaders ?? {}),
     };
 
-    const response = await fetch(responsesURL, {
-      method: 'POST',
-      headers,
-      body: bodyBlob,
-    });
+    const { maxAttempts, initialDelayMs } = this.getRetryConfig();
+    const response = await retryWithBackoff(
+      async () => {
+        const res = await fetch(responsesURL, {
+          method: 'POST',
+          headers,
+          body: bodyBlob,
+        });
 
-    // Handle errors
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw parseErrorResponse(response.status, errorBody, this.name);
-    }
+        if (!res.ok) {
+          const errorBody = await res.text();
+          throw parseErrorResponse(res.status, errorBody, this.name);
+        }
+
+        return res;
+      },
+      {
+        maxAttempts,
+        initialDelayMs,
+        shouldRetry: this.shouldRetryResponse.bind(this),
+        trackThrottleWaitTime: this.throttleTracker,
+      },
+    );
 
     // Stream the response directly as IContent
     if (response.body) {
@@ -606,5 +623,35 @@ export class OpenAIResponsesProvider extends BaseProvider {
         yield message;
       }
     }
+  }
+
+  private getRetryConfig(): { maxAttempts: number; initialDelayMs: number } {
+    const ephemeralSettings =
+      this.providerConfig?.getEphemeralSettings?.() || {};
+    const maxAttempts =
+      (ephemeralSettings['retries'] as number | undefined) ?? 6;
+    const initialDelayMs =
+      (ephemeralSettings['retrywait'] as number | undefined) ?? 4000;
+    return { maxAttempts, initialDelayMs };
+  }
+
+  private shouldRetryResponse(error: unknown): boolean {
+    const status = getErrorStatus(error);
+    if (status === 429 || (status && status >= 500 && status < 600)) {
+      this.logger.debug(
+        () => `Will retry OpenAI Responses API request due to status ${status}`,
+      );
+      return true;
+    }
+
+    if (isNetworkTransientError(error)) {
+      this.logger.debug(
+        () =>
+          'Will retry OpenAI Responses API request due to transient network error signature.',
+      );
+      return true;
+    }
+
+    return false;
   }
 }

@@ -3,6 +3,7 @@
  * @requirement REQ-INT-001.1
  */
 import { IContent } from '../../services/history/IContent.js';
+import { createStreamInterruptionError } from '../../utils/retry.js';
 
 // Types for Responses API events
 interface ResponsesEvent {
@@ -117,6 +118,22 @@ export async function* parseResponsesStream(
                       // Use final arguments from event if available, otherwise use accumulated
                       const finalArguments = event.arguments || call.arguments;
 
+                      let parsedArguments: unknown = {};
+                      if (finalArguments) {
+                        try {
+                          parsedArguments = JSON.parse(finalArguments);
+                        } catch (parseError) {
+                          throw createStreamInterruptionError(
+                            'Streaming tool call arguments were malformed JSON.',
+                            {
+                              itemId,
+                              snippet: finalArguments.slice(0, 200),
+                            },
+                            parseError,
+                          );
+                        }
+                      }
+
                       yield {
                         speaker: 'ai',
                         blocks: [
@@ -124,9 +141,7 @@ export async function* parseResponsesStream(
                             type: 'tool_call',
                             id: call.call_id || call.id,
                             name: call.name,
-                            parameters: finalArguments
-                              ? JSON.parse(finalArguments)
-                              : {},
+                            parameters: parsedArguments,
                           },
                         ],
                       };

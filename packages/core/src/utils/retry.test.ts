@@ -6,7 +6,12 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { retryWithBackoff, HttpError } from './retry.js';
+import {
+  retryWithBackoff,
+  HttpError,
+  isNetworkTransientError,
+  STREAM_INTERRUPTED_ERROR_CODE,
+} from './retry.js';
 import { setSimulate429 } from './testUtils.js';
 
 // Helper to create a mock function that fails a certain number of times
@@ -135,6 +140,28 @@ describe('retryWithBackoff', () => {
     // Await the assertion
     await assertionPromise;
 
+    expect(mockFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('should retry on connection error messages without status codes', async () => {
+    let attempt = 0;
+    const mockFn = vi.fn(async () => {
+      attempt++;
+      if (attempt === 1) {
+        throw new Error('Connection error.');
+      }
+      return 'success';
+    });
+
+    const promise = retryWithBackoff(mockFn, {
+      maxAttempts: 2,
+      initialDelayMs: 10,
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result).toBe('success');
     expect(mockFn).toHaveBeenCalledTimes(2);
   });
 
@@ -401,5 +428,28 @@ describe('retryWithBackoff', () => {
       // Should trigger fallback after 2 consecutive 429s (attempts 2-3)
       expect(fallbackCallback).toHaveBeenCalledWith('oauth-personal');
     });
+  });
+});
+
+describe('isNetworkTransientError', () => {
+  it('returns true for direct connection error message', () => {
+    expect(isNetworkTransientError(new Error('Connection error.'))).toBe(true);
+  });
+
+  it('returns true when nested cause includes network error code', () => {
+    const error = new Error('Fetch failed') as Error & { cause?: unknown };
+    error.cause = { code: 'ECONNRESET' };
+    expect(isNetworkTransientError(error)).toBe(true);
+  });
+
+  it('returns false for non-transient client errors', () => {
+    const error = new Error('Validation failed');
+    expect(isNetworkTransientError(error)).toBe(false);
+  });
+
+  it('returns true for stream interruption code errors', () => {
+    const error = new Error('Streaming parse error');
+    (error as { code?: string }).code = STREAM_INTERRUPTED_ERROR_CODE;
+    expect(isNetworkTransientError(error)).toBe(true);
   });
 });

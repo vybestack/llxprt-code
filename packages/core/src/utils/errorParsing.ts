@@ -16,6 +16,7 @@ import {
 } from '../config/models.js';
 import { UserTierId } from '../code_assist/types.js';
 import { AuthType } from '../core/contentGenerator.js';
+import { getErrorStatus, STREAM_INTERRUPTED_ERROR_CODE } from './retry.js';
 
 // Free Tier message functions
 const getRateLimitErrorMessageGoogleFree = (
@@ -56,6 +57,74 @@ const getRateLimitErrorMessageDefault = (
   fallbackModel: string = DEFAULT_GEMINI_FLASH_MODEL,
 ) =>
   `\nPossible quota limitations in place or slow response times detected. Switching to the ${fallbackModel} model for the rest of this session.`;
+
+function buildStatusSuffix(status?: number, statusLabel?: string): string {
+  const parts: string[] = [];
+
+  if (typeof status === 'number' && Number.isFinite(status)) {
+    parts.push(String(status));
+  }
+
+  if (typeof statusLabel === 'string') {
+    const trimmed = statusLabel.trim();
+    if (trimmed.length > 0 && !parts.includes(trimmed)) {
+      parts.push(trimmed);
+    }
+  }
+
+  if (parts.length === 0) {
+    return '';
+  }
+
+  return ` (Status: ${parts.join(', ')})`;
+}
+
+function formatErrorMessageWithStatus(
+  message: string,
+  status?: number,
+  statusLabel?: string,
+): string {
+  if (message.includes('(Status:')) {
+    return message;
+  }
+
+  const suffix = buildStatusSuffix(status, statusLabel);
+  if (!suffix) {
+    return message;
+  }
+
+  return `${message}${suffix}`;
+}
+
+function getErrorCodeFromUnknown(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null) {
+    if (
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string'
+    ) {
+      return (error as { code: string }).code;
+    }
+
+    if (
+      'error' in error &&
+      typeof (error as { error?: unknown }).error === 'object' &&
+      (error as { error?: unknown }).error !== null &&
+      'code' in (error as { error?: { code?: unknown } }).error! &&
+      typeof (
+        (error as { error?: { code?: unknown } }).error as {
+          code?: unknown;
+        }
+      ).code === 'string'
+    ) {
+      return (
+        (error as { error?: { code?: unknown } }).error as {
+          code?: string;
+        }
+      ).code;
+    }
+  }
+  return undefined;
+}
 
 function getRateLimitMessage(
   authType?: AuthType,
@@ -108,11 +177,29 @@ export function parseAndFormatApiError(
   currentModel?: string,
   fallbackModel?: string,
 ): string {
+  const errorCode = getErrorCodeFromUnknown(error);
+  if (errorCode === STREAM_INTERRUPTED_ERROR_CODE) {
+    const baseMessage =
+      typeof error === 'object' &&
+      error !== null &&
+      'message' in error &&
+      typeof (error as { message?: unknown }).message === 'string'
+        ? (error as { message: string }).message
+        : 'Streaming parse error: model response contained malformed data.';
+    const formattedMessage = formatErrorMessageWithStatus(
+      baseMessage,
+      undefined,
+      'STREAM_INTERRUPTED',
+    );
+    return `[API Error: ${formattedMessage}]\nStreaming data from the provider became invalid before the response completed. Please retry.`;
+  }
+
   // For provider auth type, don't add Gemini-specific rate limit messages
   if (authType === AuthType.USE_PROVIDER) {
     if (isStructuredError(error)) {
-      let text = `[API Error: ${error.message}]`;
-      if (error.status === 429) {
+      const status = getErrorStatus(error);
+      let text = `[API Error: ${formatErrorMessageWithStatus(error.message, status)}]`;
+      if (status === 429) {
         text += '\nRate limit exceeded. Please wait and try again later.';
       }
       return text;
@@ -120,8 +207,9 @@ export function parseAndFormatApiError(
   }
 
   if (isStructuredError(error)) {
-    let text = `[API Error: ${error.message}]`;
-    if (error.status === 429) {
+    const status = getErrorStatus(error);
+    let text = `[API Error: ${formatErrorMessageWithStatus(error.message, status)}]`;
+    if (status === 429) {
       text += getRateLimitMessage(
         authType,
         error,
@@ -155,7 +243,15 @@ export function parseAndFormatApiError(
         } catch (_e) {
           // It's not a nested JSON error, so we just use the message as is.
         }
-        let text = `[API Error: ${finalMessage} (Status: ${parsedError.error.status})]`;
+        const statusSuffix = buildStatusSuffix(
+          typeof parsedError.error.code === 'number'
+            ? parsedError.error.code
+            : undefined,
+          typeof parsedError.error.status === 'string'
+            ? parsedError.error.status
+            : undefined,
+        );
+        let text = `[API Error: ${finalMessage}${statusSuffix}]`;
         if (parsedError.error.code === 429) {
           // For provider auth type, use generic rate limit message
           if (authType === AuthType.USE_PROVIDER) {
@@ -176,6 +272,11 @@ export function parseAndFormatApiError(
       // Not a valid JSON, fall through and return the original message.
     }
     return `[API Error: ${error}]`;
+  }
+
+  const fallbackStatusSuffix = buildStatusSuffix(getErrorStatus(error));
+  if (fallbackStatusSuffix) {
+    return `[API Error: An unknown error occurred.${fallbackStatusSuffix}]`;
   }
 
   return '[API Error: An unknown error occurred.]';
