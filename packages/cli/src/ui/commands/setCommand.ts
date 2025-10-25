@@ -10,7 +10,11 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import { IProvider, EmojiFilterMode } from '@vybestack/llxprt-code-core';
+import { IProvider } from '@vybestack/llxprt-code-core';
+import {
+  ephemeralSettingHelp,
+  parseEphemeralSettingValue,
+} from '../../settings/ephemeralSettings.js';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
 const unsetCommand: SlashCommand = {
@@ -295,8 +299,7 @@ const modelParamCommand: SlashCommand = {
       };
     }
 
-    // Parse the value
-    const parsedValue = parseValue(value);
+    const parsedValue = parseModelParamValue(value);
 
     // Set the model parameter
     try {
@@ -342,57 +345,6 @@ const modelParamCommand: SlashCommand = {
   },
 };
 
-/**
- * Implementation for the /set command that handles both:
- * - /set modelparam <key> <value>
- * - /set <ephemeral-key> <value>
- */
-// Help text for ephemeral settings - these are session-only and saved only via profiles
-const ephemeralSettingHelp: Record<string, string> = {
-  'context-limit':
-    'Maximum number of tokens for the context window (e.g., 100000)',
-  'compression-threshold':
-    'Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)',
-  'base-url': 'Base URL for API requests',
-  'tool-format': 'Tool format override for the provider',
-  'api-version': 'API version to use',
-  'custom-headers': 'Custom HTTP headers as JSON object',
-  'stream-options':
-    'Stream options for OpenAI API (default: { include_usage: true })',
-  streaming:
-    'Enable or disable streaming responses (enabled/disabled, default: enabled)',
-  'shell-replacement':
-    'Allow command substitution ($(), <(), backticks) in shell commands (default: false)',
-  // Socket configuration for local AI servers (LM Studio, Ollama, etc.)
-  'socket-timeout':
-    'Request timeout in milliseconds for local AI servers (default: 60000)',
-  'socket-keepalive':
-    'Enable TCP keepalive for local AI server connections (true/false, default: true)',
-  'socket-nodelay':
-    'Enable TCP_NODELAY concept for local AI servers (true/false, default: true)',
-  // Tool output limit settings - apply to all tools that can return large outputs
-  'tool-output-max-items':
-    'Maximum number of items/files/matches returned by tools (default: 50)',
-  'tool-output-max-tokens': 'Maximum tokens in tool output (default: 50000)',
-  'tool-output-truncate-mode':
-    'How to handle exceeding limits: warn, truncate, or sample (default: warn)',
-  'tool-output-item-size-limit':
-    'Maximum size per item/file in bytes (default: 524288 = 512KB)',
-  // Final catch-all to prevent context overflow
-  'max-prompt-tokens':
-    'Maximum tokens allowed in any prompt sent to LLM (default: 200000)',
-  // Emoji filter settings
-  emojifilter: 'Emoji filter mode (allowed, auto, warn, error)',
-  // Retry settings
-  retries:
-    'Maximum number of retry attempts for API calls (default: varies by provider)',
-  retrywait:
-    'Initial delay in milliseconds between retry attempts (default: varies by provider)',
-  // Loop prevention settings
-  maxTurnsPerPrompt:
-    'Maximum number of turns allowed per prompt before stopping (default: 100, -1 for unlimited)',
-};
-
 export const setCommand: SlashCommand = {
   name: 'set',
   description: 'set model parameters or ephemeral settings',
@@ -436,186 +388,18 @@ export const setCommand: SlashCommand = {
       };
     }
 
-    const value = parts.slice(1).join(' '); // Join remaining parts as value
+    const value = parts.slice(1).join(' ');
+    const parseResult = parseEphemeralSettingValue(key, value);
 
-    // List of valid ephemeral settings from the specification
-    const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
-
-    // Check if it's a valid ephemeral key
-    if (!validEphemeralKeys.includes(key)) {
+    if (!parseResult.success) {
       return {
         type: 'message',
         messageType: 'error',
-        content: `Invalid setting key: ${key}. Valid keys are: ${validEphemeralKeys.join(', ')}`,
+        content: parseResult.message,
       };
     }
 
-    // Parse the value
-    let parsedValue = parseValue(value);
-
-    // Validate specific settings
-    if (key === 'compression-threshold') {
-      const numValue = parsedValue as number;
-      if (typeof numValue !== 'number' || numValue <= 0 || numValue > 1) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `compression-threshold must be a decimal between 0 and 1 (e.g., 0.7 for 70%)`,
-        };
-      }
-    }
-
-    if (key === 'context-limit') {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        numValue <= 0 ||
-        !Number.isInteger(numValue)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `context-limit must be a positive integer (e.g., 100000)`,
-        };
-      }
-    }
-
-    // Validate socket configuration settings
-    if (key === 'socket-timeout') {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        numValue <= 0 ||
-        !Number.isInteger(numValue)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `socket-timeout must be a positive integer in milliseconds (e.g., 60000)`,
-        };
-      }
-    }
-
-    if (key === 'socket-keepalive' || key === 'socket-nodelay') {
-      if (typeof parsedValue !== 'boolean') {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be either 'true' or 'false'`,
-        };
-      }
-    }
-
-    // Validate tool output settings
-    if (
-      key === 'tool-output-max-items' ||
-      key === 'tool-output-max-tokens' ||
-      key === 'tool-output-item-size-limit' ||
-      key === 'max-prompt-tokens'
-    ) {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        numValue <= 0 ||
-        !Number.isInteger(numValue)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be a positive integer`,
-        };
-      }
-    }
-
-    // Validate maxTurnsPerPrompt
-    if (key === 'maxTurnsPerPrompt') {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        !Number.isInteger(numValue) ||
-        (numValue !== -1 && numValue <= 0)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be a positive integer or -1 for unlimited`,
-        };
-      }
-    }
-
-    if (key === 'tool-output-truncate-mode') {
-      const validModes = ['warn', 'truncate', 'sample'];
-      if (!validModes.includes(parsedValue as string)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be one of: ${validModes.join(', ')}`,
-        };
-      }
-    }
-
-    // Validate emojifilter mode
-    if (key === 'emojifilter') {
-      const validModes: EmojiFilterMode[] = [
-        'allowed',
-        'auto',
-        'warn',
-        'error',
-      ];
-      const normalizedValue = (
-        parsedValue as string
-      ).toLowerCase() as EmojiFilterMode;
-      if (!validModes.includes(normalizedValue)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Invalid emoji filter mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
-        };
-      }
-      // Override the parsed value with normalized lowercase version
-      parsedValue = normalizedValue;
-    }
-
-    // Validate shell-replacement setting
-    if (key === 'shell-replacement') {
-      if (typeof parsedValue !== 'boolean') {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `shell-replacement must be either 'true' or 'false'`,
-        };
-      }
-    }
-
-    // Validate streaming mode
-    if (key === 'streaming') {
-      const validModes = ['enabled', 'disabled'];
-      if (typeof parsedValue === 'boolean') {
-        parsedValue = parsedValue ? 'enabled' : 'disabled';
-      } else if (
-        typeof parsedValue === 'string' &&
-        validModes.includes(parsedValue.toLowerCase())
-      ) {
-        parsedValue = parsedValue.toLowerCase();
-      } else if (
-        typeof parsedValue === 'string' &&
-        validModes.includes(parsedValue.trim().toLowerCase())
-      ) {
-        parsedValue = parsedValue.trim().toLowerCase();
-      } else if (
-        typeof parsedValue === 'string' &&
-        ['true', 'false'].includes(parsedValue.toLowerCase())
-      ) {
-        parsedValue =
-          parsedValue.toLowerCase() === 'true' ? 'enabled' : 'disabled';
-      } else {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Invalid streaming mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
-        };
-      }
-    }
+    const parsedValue = parseResult.value;
 
     // Get the config to apply settings
     const config = context.services.config;
@@ -731,32 +515,25 @@ export const setCommand: SlashCommand = {
   },
 };
 
-/**
- * Parse a string value into the appropriate type.
- * Handles numbers, booleans, and JSON objects/arrays.
- */
-function parseValue(value: string): unknown {
-  // Try to parse as number
+function parseModelParamValue(value: string): unknown {
   if (/^-?\d+(\.\d+)?$/.test(value)) {
     const num = Number(value);
-    if (!isNaN(num)) {
+    if (!Number.isNaN(num)) {
       return num;
     }
   }
 
-  // Try to parse as boolean
-  if (value.toLowerCase() === 'true') {
+  const lower = value.toLowerCase();
+  if (lower === 'true') {
     return true;
   }
-  if (value.toLowerCase() === 'false') {
+  if (lower === 'false') {
     return false;
   }
 
-  // Try to parse as JSON
   try {
     return JSON.parse(value);
   } catch {
-    // If all parsing fails, return as string
     return value;
   }
 }
