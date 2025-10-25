@@ -43,6 +43,7 @@ import { resolvePath } from '../utils/resolvePath.js';
 import { appEvents } from '../utils/events.js';
 
 import { isWorkspaceTrusted } from './trustedFolders.js';
+import { applyCliSetArguments } from './cliEphemeralSettings.js';
 
 const LLXPRT_DIR = '.llxprt';
 
@@ -83,6 +84,7 @@ export interface CliArgs {
   useSmartEdit: boolean | undefined;
   sessionSummary: string | undefined;
   promptWords: string[] | undefined;
+  set: string[] | undefined;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {
@@ -392,6 +394,20 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         // Handle comma-separated values
         dirs.flatMap((dir) => dir.split(',').map((d) => d.trim())),
     })
+    .option('set', {
+      type: 'array',
+      string: true,
+      description: 'Set an ephemeral setting via key=value (can be repeated)',
+      coerce: (entries: unknown[]) =>
+        entries.map((entry) => {
+          if (typeof entry !== 'string') {
+            throw new Error(
+              `Invalid value for --set: ${String(entry)}. Expected key=value string.`,
+            );
+          }
+          return entry;
+        }),
+    })
     .option('profile-load', {
       type: 'string',
       description: 'Load a saved profile configuration on startup',
@@ -474,6 +490,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     sessionSummary: result.sessionSummary as string | undefined,
     allowedTools: result.allowedTools as string[] | undefined,
     promptWords: result.promptWords as string[] | undefined,
+    set: result.set as string[] | undefined,
   };
 
   return cliArgs;
@@ -941,6 +958,8 @@ export async function loadCliConfig(
       }
     }
   }
+
+  applyCliSetArguments(enhancedConfig, argv.set);
 
   // Store profile model params on the config for later application
   if (profileModelParams) {
