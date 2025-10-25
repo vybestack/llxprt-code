@@ -18,7 +18,6 @@ export {
   MCPServerConfig,
   AuthProviderType,
   type SandboxConfig,
-  type FlashFallbackHandler,
   type ActiveExtension,
   type GeminiCLIExtension,
   type FileFilteringOptions,

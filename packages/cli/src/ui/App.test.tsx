@@ -163,7 +163,6 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         })),
         getCheckpointingEnabled: vi.fn(() => opts.checkpointing ?? true),
         getAllGeminiMdFilenames: vi.fn(() => ['GEMINI.md']),
-        setFlashFallbackHandler: vi.fn(),
         getSessionId: vi.fn(() => 'test-session-id'),
         getUserTier: vi.fn().mockResolvedValue(undefined),
         getIdeMode: vi.fn(() => true),
@@ -1737,14 +1736,13 @@ describe('App UI', () => {
           _history,
           _addItem,
           _config,
+          _settings,
           _onDebugMessage,
           _handleSlashCommand,
           _shellModeActive,
           _getPreferredEditor,
           _onAuthError,
           _performMemoryRefresh,
-          _modelSwitchedFromQuotaError,
-          _setModelSwitchedFromQuotaError,
           _onEditorClose,
           onCancelSubmit, // Capture the cancel callback from App.tsx
         ) => {

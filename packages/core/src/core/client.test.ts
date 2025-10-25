@@ -47,6 +47,7 @@ import { getCoreSystemPrompt as _getCoreSystemPrompt } from './prompts.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
+import { retryWithBackoff } from '../utils/retry.js';
 import { ideContext } from '../ide/ideContext.js';
 import {
   ComplexityAnalyzer,
@@ -271,6 +272,7 @@ describe('Gemini Client (client.ts)', () => {
         .mockReturnValue(contentGeneratorConfig),
       getToolRegistry: vi.fn().mockReturnValue(mockToolRegistry),
       getModel: vi.fn().mockReturnValue('test-model'),
+      setModel: vi.fn(),
       getEmbeddingModel: vi.fn().mockReturnValue('test-embedding-model'),
       getApiKey: vi.fn().mockReturnValue('test-key'),
       getVertexAI: vi.fn().mockReturnValue(false),
@@ -282,8 +284,6 @@ describe('Gemini Client (client.ts)', () => {
       getWorkingDir: vi.fn().mockReturnValue('/test/dir'),
       getFileService: vi.fn().mockReturnValue(fileService),
       getMaxSessionTurns: vi.fn().mockReturnValue(0),
-      getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
-      setQuotaErrorOccurred: vi.fn(),
       getNoBrowser: vi.fn().mockReturnValue(false),
       getUsageStatisticsEnabled: vi.fn().mockReturnValue(true),
       getIdeMode: vi.fn().mockReturnValue(true),
@@ -566,6 +566,40 @@ describe('Gemini Client (client.ts)', () => {
         },
         contents,
       });
+    });
+
+    it('should not change models when consecutive 429 errors occur', async () => {
+      const error429 = new Error('Rate limited') as Error & { status?: number };
+      error429.status = 429;
+
+      mockGenerateContentFn.mockRejectedValue(error429);
+
+      const retrySpy = vi.mocked(retryWithBackoff);
+      const originalImpl = retrySpy.getMockImplementation();
+
+      retrySpy.mockImplementation(async (apiCall) => {
+        await expect(apiCall()).rejects.toThrow('Rate limited');
+        await expect(apiCall()).rejects.toThrow('Rate limited');
+        throw error429;
+      });
+
+      const contents = [{ role: 'user', parts: [{ text: 'throttle?' }] }];
+      const schema = { type: 'string' };
+      const abortSignal = new AbortController().signal;
+
+      await expect(
+        client.generateJson(contents, schema, abortSignal, 'test-model'),
+      ).rejects.toThrow('Rate limited');
+
+      const configInstance = client['config'] as unknown as {
+        setModel: ReturnType<typeof vi.fn>;
+        setFallbackMode: ReturnType<typeof vi.fn>;
+      };
+
+      expect(configInstance.setModel).not.toHaveBeenCalled();
+      expect(configInstance.setFallbackMode).not.toHaveBeenCalled();
+
+      retrySpy.mockImplementation(originalImpl ?? ((apiCall) => apiCall()));
     });
   });
 
@@ -2691,60 +2725,6 @@ describe('Gemini Client (client.ts)', () => {
       client['config'] = mockConfig as unknown as Config;
 
       // Test logic would go here
-    });
-  });
-
-  describe('handleFlashFallback', () => {
-    it('should use current model from config when checking for fallback', async () => {
-      const _initialModel = client['config'].getModel();
-      const _fallbackModel = DEFAULT_GEMINI_FLASH_MODEL;
-
-      // Act
-      // TODO: Implement listAvailableModels method
-      // const models = await client.listAvailableModels();
-      const models: unknown[] = []; // Placeholder - listAvailableModels not implemented
-
-      // Assert - Skip assertion until listAvailableModels is implemented
-      expect(models).toEqual([]);
-    });
-
-    it('should return empty array when API call fails', async () => {
-      // Arrange
-      const mockConfig = {
-        getContentGeneratorConfig: vi.fn().mockReturnValue({
-          authType: AuthType.USE_GEMINI,
-          apiKey: 'test-api-key',
-        }),
-      };
-      client['config'] = mockConfig as unknown as Config;
-
-      // Mock fetch for this test
-      const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
-      global.fetch = mockFetch as typeof fetch;
-
-      // Act
-      // const models = await client.listAvailableModels();
-      const models: unknown[] = []; // Placeholder - listAvailableModels not implemented
-
-      // Assert
-      expect(models).toEqual([]);
-    });
-
-    it('should return empty array for unsupported auth type', async () => {
-      // Arrange
-      const mockConfig = {
-        getContentGeneratorConfig: vi.fn().mockReturnValue({
-          authType: undefined,
-        }),
-      };
-      client['config'] = mockConfig as unknown as Config;
-
-      // Act
-      // const models = await client.listAvailableModels();
-      const models: unknown[] = []; // Placeholder - listAvailableModels not implemented
-
-      // Assert
-      expect(models).toEqual([]);
     });
   });
 

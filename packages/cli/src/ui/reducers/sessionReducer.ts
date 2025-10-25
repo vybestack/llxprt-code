@@ -11,7 +11,6 @@ export interface SessionState {
   currentModel: string;
   isPaidMode: boolean | undefined;
   lastProvider: string | undefined;
-  modelSwitchedFromQuotaError: boolean;
   userTier: UserTierId | undefined;
   transientWarnings: string[];
 }
@@ -21,7 +20,6 @@ export type SessionAction =
   | { type: 'SET_CURRENT_MODEL'; payload: string }
   | { type: 'SET_PAID_MODE'; payload: boolean | undefined }
   | { type: 'SET_LAST_PROVIDER'; payload: string | undefined }
-  | { type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR'; payload: boolean }
   | { type: 'SET_USER_TIER'; payload: UserTierId | undefined }
   | { type: 'SET_TRANSIENT_WARNINGS'; payload: string[] }
   | { type: 'CLEAR_TRANSIENT_WARNINGS' };
@@ -38,8 +36,6 @@ export const sessionReducer = (
       return { ...state, isPaidMode: action.payload };
     case 'SET_LAST_PROVIDER':
       return { ...state, lastProvider: action.payload };
-    case 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR':
-      return { ...state, modelSwitchedFromQuotaError: action.payload };
     case 'SET_USER_TIER':
       return { ...state, userTier: action.payload };
     case 'SET_TRANSIENT_WARNINGS':
