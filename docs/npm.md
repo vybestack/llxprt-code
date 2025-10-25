@@ -60,6 +60,15 @@ npm install -g @vybestack/llxprt-code@nightly
 
 We also run a Google cloud build called [release-docker.yml](../.gcp/release-docker.yaml). Which publishes the sandbox docker to match your release. This will also be moved to GH and combined with the main release file once service account permissions are sorted out.
 
+### VS Code Companion toggle inputs
+
+The release workflow now exposes two additional booleans:
+
+- `publish_vscode_only`: build/publish just the VS Code companion (`llxprt-code-vscode-ide-companion`) without touching npm packages. Use this for hotfixes to the marketplace / Open VSX extension.
+- `skip_vscode_publish`: skip companion publishing entirely (nightly runs set this to `true` so the extension isn’t rebuilt every day).
+
+Make sure these inputs are set appropriately before triggering manual releases; nightly automation defaults to "skip" so the IDE extension matches tagged releases only.
+
 ### After the Release
 
 After the workflow has successfully completed, you can monitor its progress in the [GitHub Actions tab](https://github.com/acoliver/llxprt-code/actions/workflows/release.yml). Once complete, you should:

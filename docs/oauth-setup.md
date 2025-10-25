@@ -18,9 +18,10 @@ OAuth provides secure authentication without requiring API keys, offering better
 
 The system uses the following authentication precedence (highest to lowest):
 
-1. **Command line API key** (`--key` flag)
-2. **Environment variables** (`OPENAI_API_KEY`, `GEMINI_API_KEY`, etc.)
-3. **OAuth tokens** (stored securely in `~/.llxprt/oauth/`)
+1. **Command line API key** (`--key`/`--keyfile` flags or `--set auth-key=...`)
+2. **Profiles / settings files** (values saved via `/profile save` or `settings.json`)
+3. **Environment variables** (`OPENAI_API_KEY`, `GEMINI_API_KEY`, etc.)
+4. **OAuth tokens** (stored securely in `~/.llxprt/oauth/`)
 
 ## Setting Up OAuth
 

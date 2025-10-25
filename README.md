@@ -10,6 +10,14 @@
 
 LLxprt Code is a powerful fork of [Google's Gemini CLI](https://github.com/google-gemini/gemini-cli), enhanced with multi-provider support and improved theming. We thank Google for their excellent foundation and will continue to track and merge upstream changes as long as practical.
 
+## What's new in 0.4.5
+
+- **Startup configuration:** supply ephemeral settings via `--set key=value` (same keys as `/set`), ideal for CI and automation.
+- **Resilient streaming:** unified retry defaults (6 attempts / 4 s) and better handling of transient SSE disconnects.
+- **Smarter todos:** complex request detection now nudges you to create todo lists and escalates reminders when none exist.
+- **Simplified Gemini UX:** the "Paid Mode" badge and flash fallback were removed; monitor usage with `/stats` or provider dashboards instead.
+- **Token budgeting clarity:** `context-limit` now clearly counts system prompts + `LLXPRT.md`, with improved error messaging and docs.
+
 ## Key Features
 
 - **Multi-Provider Support**: Direct access to OpenAI (o3), Anthropic (Claude), Google Gemini, plus OpenRouter, Fireworks, and local models
