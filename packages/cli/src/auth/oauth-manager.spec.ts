@@ -4,8 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OAuthManager, OAuthProvider } from './oauth-manager.js';
 import { OAuthToken, TokenStore } from './types.js';
+import { LoadedSettings } from '../config/settings.js';
+import type { Settings } from '../config/settings.js';
+import {
+  getSettingsService,
+  resetSettingsService,
+} from '@vybestack/llxprt-code-core';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -104,6 +111,20 @@ class MockTokenStore implements TokenStore {
   clear(): void {
     this.tokens.clear();
   }
+}
+
+function createLoadedSettings(
+  overrides: Partial<Settings> = {},
+): LoadedSettings {
+  const emptySettings = {} as Settings;
+  const userSettings = { ...overrides } as Settings;
+  return new LoadedSettings(
+    { path: '', settings: emptySettings },
+    { path: '', settings: emptySettings },
+    { path: '', settings: userSettings },
+    { path: '', settings: emptySettings },
+    true,
+  );
 }
 
 describe.skipIf(skipInCI)(
@@ -675,3 +696,40 @@ describe.skipIf(skipInCI)(
     });
   },
 );
+
+describe('Higher priority auth detection', () => {
+  let tokenStore: MockTokenStore;
+
+  beforeEach(() => {
+    tokenStore = new MockTokenStore();
+    resetSettingsService();
+  });
+
+  afterEach(() => {
+    delete process.env.ANTHROPIC_API_KEY;
+    resetSettingsService();
+  });
+
+  it('reports environment variable precedence when authOnly is disabled', async () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+    const loadedSettings = createLoadedSettings();
+    const manager = new OAuthManager(tokenStore, loadedSettings);
+
+    const result = await manager.getHigherPriorityAuth('anthropic');
+
+    expect(result).toBe('Environment Variable');
+  });
+
+  it('ignores environment variables when authOnly is enabled', async () => {
+    process.env.ANTHROPIC_API_KEY = 'sk-test-key';
+    const loadedSettings = createLoadedSettings();
+    const manager = new OAuthManager(tokenStore, loadedSettings);
+
+    const settingsService = getSettingsService();
+    settingsService.set('authOnly', true);
+
+    const result = await manager.getHigherPriorityAuth('anthropic');
+
+    expect(result).toBeNull();
+  });
+});

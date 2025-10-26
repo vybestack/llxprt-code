@@ -50,4 +50,14 @@ describe('applyCliSetArguments', () => {
       /unknown-setting/,
     );
   });
+
+  it('parses authOnly boolean values', () => {
+    const target = new TestTarget();
+
+    applyCliSetArguments(target, ['authOnly=true']);
+    expect(target.getValue('authOnly')).toBe(true);
+
+    applyCliSetArguments(target, ['authOnly=false']);
+    expect(target.getValue('authOnly')).toBe(false);
+  });
 });

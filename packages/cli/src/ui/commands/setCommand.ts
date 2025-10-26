@@ -508,6 +508,16 @@ export const setCommand: SlashCommand = {
           }
           return values;
         }
+
+        if (key === 'authOnly') {
+          const values = ['true', 'false'];
+          if (parts[1]) {
+            return values.filter((value) =>
+              value.startsWith(parts[1].toLowerCase()),
+            );
+          }
+          return values;
+        }
       }
     }
 

@@ -43,6 +43,8 @@ export const ephemeralSettingHelp: Record<string, string> = {
     'Initial delay in milliseconds between retry attempts (default: varies by provider)',
   maxTurnsPerPrompt:
     'Maximum number of turns allowed per prompt before stopping (default: 100, -1 for unlimited)',
+  authOnly:
+    'Force providers to use OAuth authentication only, ignoring API keys and environment variables',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
@@ -186,6 +188,15 @@ export function parseEphemeralSettingValue(
       return {
         success: false,
         message: `shell-replacement must be either 'true' or 'false'`,
+      };
+    }
+  }
+
+  if (key === 'authOnly') {
+    if (typeof parsedValue !== 'boolean') {
+      return {
+        success: false,
+        message: `authOnly must be either 'true' or 'false'`,
       };
     }
   }

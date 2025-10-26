@@ -39,6 +39,22 @@ export interface OAuthManager {
   getOAuthToken?(provider: string): Promise<OAuthToken | null>;
 }
 
+function isAuthOnlyEnabled(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+  return false;
+}
+
 export class AuthPrecedenceResolver {
   private config: AuthPrecedenceConfig;
   private oauthManager?: OAuthManager;
@@ -54,63 +70,48 @@ export class AuthPrecedenceResolver {
    */
   async resolveAuthentication(): Promise<string | null> {
     const settingsService = getSettingsService();
+    const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
 
-    // 1. Check /key command key (highest priority) - stored in SettingsService
-    const authKey = settingsService.get('auth-key');
-    if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
-      return authKey;
-    }
+    if (!authOnly) {
+      // 1. Check /key command key (highest priority) - stored in SettingsService
+      const authKey = settingsService.get('auth-key');
+      if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
+        return authKey;
+      }
 
-    // 2. Check /keyfile command keyfile - stored in SettingsService
-    const authKeyfile = settingsService.get('auth-keyfile');
-    if (authKeyfile && typeof authKeyfile === 'string') {
-      try {
-        const keyFromFile = await this.readKeyFile(authKeyfile);
-        if (keyFromFile) {
-          return keyFromFile;
+      // 2. Check /keyfile command keyfile - stored in SettingsService
+      const authKeyfile = settingsService.get('auth-keyfile');
+      if (authKeyfile && typeof authKeyfile === 'string') {
+        try {
+          const keyFromFile = await this.readKeyFile(authKeyfile);
+          if (keyFromFile) {
+            return keyFromFile;
+          }
+        } catch (error) {
+          if (process.env.DEBUG) {
+            console.warn(
+              `Failed to read keyfile from SettingsService ${authKeyfile}:`,
+              error,
+            );
+          }
         }
-      } catch (error) {
-        if (process.env.DEBUG) {
-          console.warn(
-            `Failed to read keyfile from SettingsService ${authKeyfile}:`,
-            error,
-          );
+      }
+
+      // 3. Check environment variables
+      if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
+        for (const envVarName of this.config.envKeyNames) {
+          const envValue = process.env[envVarName];
+          if (envValue && envValue.trim() !== '') {
+            return envValue;
+          }
         }
       }
     }
 
-    // 3. Check environment variables
-    if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
-      for (const envVarName of this.config.envKeyNames) {
-        const envValue = process.env[envVarName];
-        if (envValue && envValue.trim() !== '') {
-          return envValue;
-        }
-      }
-    }
-
-    // 4. OAuth (if enabled and supported)
-    if (
-      this.config.isOAuthEnabled &&
-      this.config.supportsOAuth &&
-      this.oauthManager &&
-      this.config.oauthProvider
-    ) {
-      try {
-        const token = await this.oauthManager.getToken(
-          this.config.oauthProvider,
-        );
-        if (token) {
-          return token;
-        }
-      } catch (error) {
-        if (process.env.DEBUG) {
-          console.warn(
-            `Failed to get OAuth token for ${this.config.oauthProvider}:`,
-            error,
-          );
-        }
-      }
+    // 4. OAuth (if enabled and supported, or forced via authOnly)
+    const oauthToken = await this.resolveOAuthAuthentication();
+    if (oauthToken) {
+      return oauthToken;
     }
 
     // No authentication method available
@@ -145,34 +146,71 @@ export class AuthPrecedenceResolver {
    */
   async getAuthMethodName(): Promise<string | null> {
     const settingsService = getSettingsService();
+    const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
 
-    // Check precedence levels and return method name
-    const authKey = settingsService.get('auth-key');
-    if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
-      return 'command-key';
+    if (!authOnly) {
+      // Check precedence levels and return method name
+      const authKey = settingsService.get('auth-key');
+      if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
+        return 'command-key';
+      }
+
+      const authKeyfile = settingsService.get('auth-keyfile');
+      if (authKeyfile && typeof authKeyfile === 'string') {
+        try {
+          const keyFromFile = await this.readKeyFile(authKeyfile);
+          if (keyFromFile) {
+            return 'command-keyfile';
+          }
+        } catch {
+          // Ignore errors for method detection
+        }
+      }
+
+      if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
+        for (const envVarName of this.config.envKeyNames) {
+          const envValue = process.env[envVarName];
+          if (envValue && envValue.trim() !== '') {
+            return `env-${envVarName.toLowerCase()}`;
+          }
+        }
+      }
     }
 
-    const authKeyfile = settingsService.get('auth-keyfile');
-    if (authKeyfile && typeof authKeyfile === 'string') {
+    if (await this.isOAuthAvailable()) {
+      return `oauth-${this.config.oauthProvider}`;
+    }
+
+    return null;
+  }
+
+  private async resolveOAuthAuthentication(): Promise<string | null> {
+    if (
+      this.config.isOAuthEnabled &&
+      this.config.supportsOAuth &&
+      this.oauthManager &&
+      this.config.oauthProvider
+    ) {
       try {
-        const keyFromFile = await this.readKeyFile(authKeyfile);
-        if (keyFromFile) {
-          return 'command-keyfile';
+        const token = await this.oauthManager.getToken(
+          this.config.oauthProvider,
+        );
+        if (token) {
+          return token;
         }
-      } catch {
-        // Ignore errors for method detection
-      }
-    }
-
-    if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
-      for (const envVarName of this.config.envKeyNames) {
-        const envValue = process.env[envVarName];
-        if (envValue && envValue.trim() !== '') {
-          return `env-${envVarName.toLowerCase()}`;
+      } catch (error) {
+        if (process.env.DEBUG) {
+          console.warn(
+            `Failed to get OAuth token for ${this.config.oauthProvider}:`,
+            error,
+          );
         }
       }
     }
+    return null;
+  }
 
+  private async isOAuthAvailable(): Promise<boolean> {
     if (
       this.config.isOAuthEnabled &&
       this.config.supportsOAuth &&
@@ -183,15 +221,12 @@ export class AuthPrecedenceResolver {
         const isAuthenticated = await this.oauthManager.isAuthenticated(
           this.config.oauthProvider,
         );
-        if (isAuthenticated) {
-          return `oauth-${this.config.oauthProvider}`;
-        }
+        return isAuthenticated;
       } catch {
-        // Ignore errors for method detection
+        return false;
       }
     }
-
-    return null;
+    return false;
   }
 
   /**

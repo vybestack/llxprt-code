@@ -268,12 +268,12 @@ export function getProviderManager(
       anthropicApiKey || undefined, // Pass undefined instead of empty string to allow OAuth fallback
       anthropicBaseUrl,
       anthropicProviderConfig,
-      anthropicApiKey ? undefined : oauthManager, // Only pass OAuthManager if no API key
+      oauthManager,
     );
     providerManagerInstance.registerProvider(anthropicProvider);
 
-    // Register Anthropic OAuth provider only if no API key is available
-    if (!anthropicApiKey && oauthManager && tokenStore) {
+    // Always register Anthropic OAuth provider so users can switch between API key and OAuth flows
+    if (oauthManager && tokenStore) {
       void ensureOAuthProviderRegistered(
         'anthropic',
         oauthManager,

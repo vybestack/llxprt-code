@@ -228,6 +228,7 @@ describe('profileCommand', () => {
         'tool-format',
         'api-version',
         'custom-headers',
+        'authOnly',
       ];
 
       expectedClears.forEach((key) => {
@@ -340,6 +341,25 @@ describe('profileCommand', () => {
         content: "Profile 'test-profile' loaded",
       });
     });
+
+    it('should apply authOnly flag when loading a profile', async () => {
+      mockProfileManager.loadProfile.mockResolvedValue({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: {
+          authOnly: true,
+        },
+      });
+
+      await loadCommand.action!(context, 'auth-only-profile');
+
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
+        'authOnly',
+        true,
+      );
+    });
   });
 
   describe('profile save command', () => {
@@ -417,6 +437,27 @@ describe('profileCommand', () => {
             'tool-output-truncate-mode': 'truncate',
             'tool-output-item-size-limit': 1048576,
             'max-prompt-tokens': 150000,
+          },
+        },
+      );
+    });
+
+    it('should include authOnly flag when saving profile', async () => {
+      context.services.config!.getEphemeralSettings = vi.fn().mockReturnValue({
+        authOnly: true,
+      });
+
+      await saveCommand.action!(context, 'auth-only-profile');
+
+      expect(mockProfileManager.saveProfile).toHaveBeenCalledWith(
+        'auth-only-profile',
+        {
+          version: 1,
+          provider: 'openai',
+          model: 'gpt-4',
+          modelParams: {},
+          ephemeralSettings: {
+            authOnly: true,
           },
         },
       );
