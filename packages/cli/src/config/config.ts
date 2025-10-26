@@ -960,7 +960,14 @@ export async function loadCliConfig(
     }
   }
 
-  applyCliSetArguments(enhancedConfig, argv.set);
+  const cliSetResult = applyCliSetArguments(enhancedConfig, argv.set);
+
+  if (Object.keys(cliSetResult.modelParams).length > 0) {
+    const configWithCliParams = enhancedConfig as Config & {
+      _cliModelParams?: Record<string, unknown>;
+    };
+    configWithCliParams._cliModelParams = cliSetResult.modelParams;
+  }
 
   // Store profile model params on the config for later application
   if (profileModelParams) {

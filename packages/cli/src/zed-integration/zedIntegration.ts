@@ -251,19 +251,24 @@ class GeminiAgent {
                 activeProvider.setBaseUrl(baseUrl);
               }
 
-              // Apply profile model params if loaded
+              // Apply model params from profile and CLI overrides if available
               const configWithProfile = sessionConfig as Config & {
                 _profileModelParams?: Record<string, unknown>;
+                _cliModelParams?: Record<string, unknown>;
+              };
+              const mergedModelParams = {
+                ...(configWithProfile._profileModelParams || {}),
+                ...(configWithProfile._cliModelParams || {}),
               };
               if (
-                configWithProfile._profileModelParams &&
+                Object.keys(mergedModelParams).length > 0 &&
                 'setModelParams' in activeProvider &&
                 activeProvider.setModelParams
               ) {
-                this.logger.debug(() => 'Setting model params from profile');
-                activeProvider.setModelParams(
-                  configWithProfile._profileModelParams,
+                this.logger.debug(
+                  () => 'Setting model params from profile/CLI overrides',
                 );
+                activeProvider.setModelParams(mergedModelParams);
               }
             }
           }

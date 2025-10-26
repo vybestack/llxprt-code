@@ -67,9 +67,12 @@ You can apply the same settings at startup via CLI flags:
 
 ```bash
 llxprt --set streaming=disabled --set base-url=https://api.anthropic.com --provider anthropic
+
+# Apply model parameters non-interactively
+llxprt --set modelparam.temperature=0.7 --set modelparam.max_tokens=4096
 ````
 
-The CLI parses each `--set key=value` just like `/set`, so CI jobs and scripts can configure ephemeral behavior without interactive prompts. Command-line values take precedence over profile/settings files.
+The CLI parses each `--set key=value` just like `/set`, so CI jobs and scripts can configure ephemeral behavior without interactive prompts. Command-line values take precedence over profile/settings files. For model parameters, use the dotted syntax `--set modelparam.<name>=<value>` which mirrors `/set modelparam <name> <value>`.
 
 # Configure streaming
 

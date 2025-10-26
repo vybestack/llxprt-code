@@ -15,6 +15,7 @@ import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
 } from '../../settings/ephemeralSettings.js';
+import { parseModelParamValue } from '../../settings/modelParamParser.js';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
 const unsetCommand: SlashCommand = {
@@ -524,26 +525,3 @@ export const setCommand: SlashCommand = {
     return ephemeralKeys;
   },
 };
-
-function parseModelParamValue(value: string): unknown {
-  if (/^-?\d+(\.\d+)?$/.test(value)) {
-    const num = Number(value);
-    if (!Number.isNaN(num)) {
-      return num;
-    }
-  }
-
-  const lower = value.toLowerCase();
-  if (lower === 'true') {
-    return true;
-  }
-  if (lower === 'false') {
-    return false;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
