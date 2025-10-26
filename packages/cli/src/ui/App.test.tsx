@@ -6,6 +6,7 @@
 
 import type { Mock } from 'vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Text } from 'ink';
 // import { waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../test-utils/render.js';
 import { AppWrapper as App } from './App.js';
@@ -297,6 +298,11 @@ vi.mock('./components/Tips.js', () => ({
   Tips: vi.fn(() => null),
 }));
 
+const mockTodoPanel = vi.fn(() => <Text>Mock Todo Panel</Text>);
+vi.mock('./components/TodoPanel.js', () => ({
+  TodoPanel: mockTodoPanel,
+}));
+
 vi.mock('./components/Header.js', () => ({
   Header: vi.fn(() => null),
 }));
@@ -376,6 +382,7 @@ describe('App UI', () => {
     // Reset mock history state
     mockHistoryState = [];
     mockAddItem.mockClear();
+    mockTodoPanel.mockClear();
 
     // Reset core function mocks to default values
     mockedGetAllLlxprtMdFilenames.mockReturnValue(['GEMINI.md']);
@@ -1003,6 +1010,36 @@ describe('App UI', () => {
     currentUnmount = unmount;
     await Promise.resolve();
     expect(vi.mocked(Header)).not.toHaveBeenCalled();
+  });
+
+  it('should render TodoPanel when showTodoPanel is true', async () => {
+    const { unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    expect(mockTodoPanel).toHaveBeenCalled();
+  });
+
+  it('should not render TodoPanel when showTodoPanel is false', async () => {
+    mockSettings = createMockSettings({
+      user: { showTodoPanel: false },
+    });
+
+    const { unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    expect(mockTodoPanel).not.toHaveBeenCalled();
   });
 
   it('should display Footer component by default', async () => {

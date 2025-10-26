@@ -10,9 +10,10 @@ import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { ToolMessage } from './ToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { Colors } from '../../colors.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import { Config, formatTodoListForDisplay } from '@vybestack/llxprt-code-core';
 import { SHELL_COMMAND_NAME } from '../../constants.js';
 import { useTodoContext } from '../../contexts/TodoContext.js';
+import { useToolCallContext } from '../../contexts/ToolCallContext.js';
 
 interface ToolGroupMessageProps {
   groupId: number;
@@ -21,7 +22,57 @@ interface ToolGroupMessageProps {
   terminalWidth: number;
   config: Config;
   isFocused?: boolean;
+  showTodoPanel?: boolean;
 }
+
+const extractCountFromText = (text?: string): number | undefined => {
+  if (!text) {
+    return undefined;
+  }
+  const match = text.match(/(\d+)\s+(tasks?|items?)/i);
+  if (!match) {
+    return undefined;
+  }
+  return Number(match[1]);
+};
+
+const normalizeToolName = (name: string): string =>
+  name.replace(/[^a-z]/gi, '').toLowerCase();
+
+const isTodoReadTool = (name: string): boolean =>
+  normalizeToolName(name) === 'todoread';
+
+const isTodoWriteTool = (name: string): boolean =>
+  normalizeToolName(name) === 'todowrite';
+
+const formatTaskCountLabel = (count: number): string => {
+  const normalized = Math.max(count, 0);
+  return `${normalized} ${normalized === 1 ? 'task' : 'tasks'}`;
+};
+
+const formatTodoWriteSummary = (count: number): string =>
+  `✦ Todo list updated (${formatTaskCountLabel(count)}).`;
+
+const formatTodoReadSummary = (count: number): string =>
+  `Todo list read (${formatTaskCountLabel(count)}).`;
+
+const deriveTodoCount = (
+  tool: IndividualToolCallDisplay,
+  fallbackCount: number,
+): number => {
+  const fromResult =
+    typeof tool.resultDisplay === 'string'
+      ? extractCountFromText(tool.resultDisplay)
+      : undefined;
+  if (fromResult !== undefined) {
+    return fromResult;
+  }
+  const fromDescription = extractCountFromText(tool.description);
+  if (fromDescription !== undefined) {
+    return fromDescription;
+  }
+  return Math.max(fallbackCount, 0);
+};
 
 // Main component renders the border and maps the tools using ToolMessage
 export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
@@ -30,9 +81,19 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   terminalWidth,
   config,
   isFocused = true,
+  showTodoPanel = true,
 }) => {
   const { todos } = useTodoContext();
-  const hasTodoPanel = todos.length > 0;
+  const { getExecutingToolCalls } = useToolCallContext();
+  const isTodoPanelEnabled = showTodoPanel;
+
+  const textualTodoOutput = useMemo(
+    () =>
+      formatTodoListForDisplay(todos, {
+        getLiveToolCalls: (todoId: string) => getExecutingToolCalls(todoId),
+      }),
+    [todos, getExecutingToolCalls],
+  );
 
   // only prompt for tool approval on the first 'confirming' tool in the list
   // note, after the CTA, this automatically moves over to the next 'confirming' tool
@@ -43,25 +104,43 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
 
   // Filter out todo_read completely when panel is visible
   // and minimize todo_write output
-  const filteredToolCalls = useMemo(() => {
-    if (!hasTodoPanel) return toolCalls;
+  const filteredToolCalls = useMemo(
+    () =>
+      toolCalls
+        .map((tool) => {
+          if (isTodoPanelEnabled) {
+            const count = deriveTodoCount(tool, todos.length);
 
-    return toolCalls
-      .map((tool) => {
-        if (tool.name === 'todo_read') {
-          return null; // Don't show todo_read at all when panel is visible
-        }
-        if (tool.name === 'todo_write') {
-          // Minimize todo_write output when panel is visible
-          return {
-            ...tool,
-            resultDisplay: '✦ Todo list updated.',
-          };
-        }
-        return tool;
-      })
-      .filter(Boolean) as IndividualToolCallDisplay[];
-  }, [toolCalls, hasTodoPanel]);
+            if (isTodoReadTool(tool.name)) {
+              return {
+                ...tool,
+                resultDisplay: formatTodoReadSummary(count),
+                renderOutputAsMarkdown: false,
+              };
+            }
+            if (isTodoWriteTool(tool.name)) {
+              return {
+                ...tool,
+                resultDisplay: formatTodoWriteSummary(count),
+                renderOutputAsMarkdown: false,
+              };
+            }
+            return tool;
+          }
+
+          if (isTodoWriteTool(tool.name)) {
+            return {
+              ...tool,
+              resultDisplay: textualTodoOutput,
+              renderOutputAsMarkdown: true,
+            };
+          }
+
+          return tool;
+        })
+        .filter(Boolean) as IndividualToolCallDisplay[],
+    [toolCalls, isTodoPanelEnabled, textualTodoOutput, todos.length],
+  );
 
   // If all tools were filtered out, don't render anything
   if (filteredToolCalls.length === 0) {

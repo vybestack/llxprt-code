@@ -32,6 +32,7 @@ interface HistoryItemDisplayProps {
   config: Config;
   isFocused?: boolean;
   slashCommands?: readonly SlashCommand[]; // For help display
+  showTodoPanel?: boolean;
 }
 
 export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
@@ -42,6 +43,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   config,
   isFocused = true,
   slashCommands = [],
+  showTodoPanel = true,
 }) => (
   <Box flexDirection="column" key={item.id}>
     {/* Render standard message types */}
@@ -90,6 +92,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
         terminalWidth={terminalWidth}
         config={config}
         isFocused={isFocused}
+        showTodoPanel={showTodoPanel}
       />
     )}
     {item.type === 'compression' && (

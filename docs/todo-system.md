@@ -6,8 +6,8 @@ The LLxprt Code features a sophisticated task management system to help AI agent
 
 This built-in tool allows the AI model to read the current state of the todo list for the active session.
 
-**Purpose**: To retrieve the list of tasks, their statuses, and priorities.
-**Returns**: A formatted markdown string containing the list of todos, grouped by status (In Progress, Pending, Completed) and a summary of statistics (e.g., total tasks, tasks by priority).
+**Purpose**: To retrieve the list of tasks, their statuses, priorities, subtasks, and recent tool calls.
+**Returns**: A markdown block that mirrors the Todo panel, including status icons (✔/○/→), priority badges, subtasks, and the five most recent tool calls per todo.
 **Parameters**: None.
 
 ## `todo_write` Tool
@@ -24,7 +24,7 @@ This built-in tool allows the AI model to create, update, or overwrite the entir
   - `priority` (string, enum: "high", "medium", "low", required): The priority level of the task.
 
 **Behavior**:
-The tool completely replaces the current todo list with the one provided in the `todos` array. It also returns a simplified markdown view of the list to the AI for context, while a more detailed view is presented to the user in the CLI's todo panel.
+The tool completely replaces the current todo list with the one provided in the `todos` array. In non-interactive sessions it returns a simplified markdown view of the list to the AI. In interactive sessions the CLI renders the Todo panel by default, but if you disable the panel (see below) LLxprt synthesizes the same structured markdown that `todo_read` now emits so the entire list remains visible in scrollback.
 
 ## `todo_pause` Tool
 
@@ -38,6 +38,16 @@ This built-in tool allows the AI model to pause its automatic workflow continuat
   When called successfully, the AI's execution stream will halt, and the provided reason will be displayed to the user. This prevents the "Todo Continuation" system from automatically sending further prompts.
 
 ---
+
+## Controlling the Todo Panel
+
+Some users prefer all todo updates to remain in the scrollback instead of a separate Ink panel. Open `/settings` (or edit `.llxprt/settings.json`) and toggle **UI → Show Todo Panel**. When this setting is off:
+
+- The Todo panel is hidden immediately—no restart required.
+- `todo_write` tool calls render the full structured todo list inline (status icons, priorities, subtasks, recent tool calls) instead of the `✦ Todo list updated` placeholder.
+- `todo_read` outputs the same formatter, so both tools always share one canonical textual representation.
+
+Re-enable the toggle to restore the rich Ink panel without losing any history.
 
 ## Todo Continuation System
 

@@ -9,6 +9,8 @@ import { Todo } from './todo-schemas.js';
 import { TodoStore } from './todo-store.js';
 import { Type } from '@google/genai';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
+import { formatTodoListForDisplay } from '../todo/todoFormatter.js';
+import { ToolCallTrackerService } from '../services/tool-call-tracker-service.js';
 
 export type TodoReadParams = Record<string, never>;
 
@@ -47,28 +49,20 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     const store = new TodoStore(sessionId, agentId);
     const todos = await store.readTodos();
 
+    const output = formatTodoListForDisplay(todos, {
+      getLiveToolCalls: (todoId: string) =>
+        ToolCallTrackerService.getAllToolCalls(sessionId, todoId),
+    });
+
     if (todos.length === 0) {
-      // Check if this is part of a complex task (will be enhanced in Phase 5)
-      const isComplexTask = false; // Placeholder - will be determined by context
+      const isComplexTask = false;
       const reminder =
         this.reminderService.getReminderForEmptyTodos(isComplexTask);
-
-      const emptyOutput =
-        '## Todo List\n\n' +
-        'No todos found.\n\n' +
-        'Use TodoWrite to create a task list when working on multi-step projects.';
-
       return {
-        llmContent: emptyOutput + (reminder || ''),
-        returnDisplay: emptyOutput,
+        llmContent: output + (reminder || ''),
+        returnDisplay: output,
       };
     }
-
-    // Group and sort todos
-    const groupedTodos = this.groupTodosByStatus(todos);
-
-    // Format output
-    const output = this.formatTodos(groupedTodos, todos);
 
     // Calculate metadata
     const statistics = this.calculateStatistics(todos);
@@ -83,103 +77,6 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
         suggestedAction,
       },
     };
-  }
-
-  private groupTodosByStatus(todos: Todo[]): {
-    inProgress: Todo[];
-    pending: Todo[];
-    completed: Todo[];
-  } {
-    const priorityOrder = { high: 0, medium: 1, low: 2 };
-    const sortByPriority = (a: Todo, b: Todo) =>
-      priorityOrder[a.priority] - priorityOrder[b.priority];
-
-    return {
-      inProgress: todos
-        .filter((t) => t.status === 'in_progress')
-        .sort(sortByPriority),
-      pending: todos.filter((t) => t.status === 'pending').sort(sortByPriority),
-      completed: todos
-        .filter((t) => t.status === 'completed')
-        .sort(sortByPriority),
-    };
-  }
-
-  private formatTodos(
-    groupedTodos: ReturnType<typeof this.groupTodosByStatus>,
-    allTodos: Todo[],
-  ): string {
-    const priorityIndicators = {
-      high: '[HIGH]',
-      medium: '[MEDIUM]',
-      low: '[LOW]',
-    };
-
-    const statusIcons = {
-      in_progress: '[IN_PROGRESS]',
-      pending: '[ ]',
-      completed: '[*]',
-    };
-
-    let output = '## Todo List\n\n';
-
-    // In Progress section
-    if (groupedTodos.inProgress.length > 0) {
-      output += '### In Progress\n\n';
-      for (const todo of groupedTodos.inProgress) {
-        const icon = statusIcons[todo.status];
-        const priorityIcon = priorityIndicators[todo.priority];
-        output += `${icon} **${todo.content}** ${priorityIcon} ${todo.priority}\n`;
-      }
-      output += '\n';
-    }
-
-    // Pending section
-    if (groupedTodos.pending.length > 0) {
-      output += '### Pending\n\n';
-      for (const todo of groupedTodos.pending) {
-        const icon = statusIcons[todo.status];
-        const priorityIcon = priorityIndicators[todo.priority];
-        output += `${icon} **${todo.content}** ${priorityIcon} ${todo.priority}\n`;
-      }
-      output += '\n';
-    }
-
-    // Completed section
-    if (groupedTodos.completed.length > 0) {
-      output += '### Completed\n\n';
-      for (const todo of groupedTodos.completed) {
-        const icon = statusIcons[todo.status];
-        const priorityIcon = priorityIndicators[todo.priority];
-        output += `${icon} **${todo.content}** ${priorityIcon} ${todo.priority}\n`;
-      }
-      output += '\n';
-    }
-
-    // Summary
-    const stats = this.calculateStatistics(allTodos);
-    output += '### Summary\n\n';
-    output += `- Total: ${stats.total} tasks\n`;
-    output += `- In Progress: ${stats.inProgress}\n`;
-    output += `- Pending: ${stats.pending}\n`;
-    output += `- Completed: ${stats.completed}\n\n`;
-    output += `Priority distribution:\n`;
-    output += `- High priority: ${stats.highPriority}\n`;
-    output += `- Medium priority: ${stats.mediumPriority}\n`;
-    output += `- Low priority: ${stats.lowPriority}\n\n`;
-
-    // Suggested Next Action
-    const suggestedAction = this.determineSuggestedAction(allTodos);
-    output += '### Suggested Next Action\n\n';
-    if (suggestedAction.type === 'all-complete') {
-      output += 'All tasks are completed\n';
-    } else if (suggestedAction.type === 'continue') {
-      output += `Continue working on: **${suggestedAction.taskContent}**\n`;
-    } else if (suggestedAction.type === 'start') {
-      output += `Consider starting: **${suggestedAction.taskContent}**\n`;
-    }
-
-    return output;
   }
 
   private calculateStatistics(todos: Todo[]): {

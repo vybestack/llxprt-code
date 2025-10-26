@@ -61,8 +61,9 @@ describe('TodoRead', () => {
 
       const result = await tool.execute({}, abortSignal);
 
+      expect(result.llmContent).toContain('Todo Progress');
       expect(result.llmContent).toContain('No todos found');
-      expect(result.returnDisplay).toContain('No todos found');
+      expect(result.returnDisplay).toContain('Todo Progress');
     });
 
     it('should return todos with proper formatting', async () => {
@@ -70,9 +71,16 @@ describe('TodoRead', () => {
 
       const result = await tool.execute({}, abortSignal);
 
-      expect(result.llmContent).toContain('High priority in progress task');
-      expect(result.llmContent).toContain('Medium priority pending task');
-      expect(result.llmContent).toContain('Low priority completed task');
+      expect(result.llmContent).toContain('Todo Progress');
+      expect(result.llmContent).toContain(
+        '→ High priority in progress task [HIGH]',
+      );
+      expect(result.llmContent).toContain(
+        '○ Medium priority pending task [MEDIUM]',
+      );
+      expect(result.llmContent).toContain(
+        '✔ Low priority completed task [LOW]',
+      );
     });
 
     it('should sort todos by status (in_progress > pending > completed)', async () => {
@@ -85,13 +93,13 @@ describe('TodoRead', () => {
 
       // Find indices of different status todos
       const inProgressIndex = lines.findIndex((line) =>
-        line.includes('High priority in progress task'),
+        line.includes('→ High priority in progress task'),
       );
       const pendingIndex = lines.findIndex((line) =>
-        line.includes('Medium priority pending task'),
+        line.includes('○ Medium priority pending task'),
       );
       const completedIndex = lines.findIndex((line) =>
-        line.includes('Low priority completed task'),
+        line.includes('✔ Low priority completed task'),
       );
 
       expect(inProgressIndex).toBeLessThan(pendingIndex);
@@ -150,7 +158,7 @@ describe('TodoRead', () => {
         llmContent: expect.any(String),
         returnDisplay: expect.any(String),
       });
-      expect(result.llmContent).toContain('#');
+      expect(result.llmContent).toContain('Todo Progress');
     });
 
     it('should include status indicators in output', async () => {
@@ -159,9 +167,9 @@ describe('TodoRead', () => {
       const result = await tool.execute({}, abortSignal);
 
       // Check for status indicators
-      expect(result.llmContent).toMatch(/\[IN_PROGRESS\]/); // in_progress
-      expect(result.llmContent).toMatch(/\[ \]/); // pending
-      expect(result.llmContent).toMatch(/\[\*\]/); // completed
+      expect(result.llmContent).toMatch(/→/); // in_progress
+      expect(result.llmContent).toMatch(/○/); // pending
+      expect(result.llmContent).toMatch(/✔/); // completed
     });
 
     it('should include priority levels in output', async () => {
@@ -169,9 +177,9 @@ describe('TodoRead', () => {
 
       const result = await tool.execute({}, abortSignal);
 
-      expect(result.llmContent).toContain('high');
-      expect(result.llmContent).toContain('medium');
-      expect(result.llmContent).toContain('low');
+      expect(result.llmContent).toContain('[HIGH]');
+      expect(result.llmContent).toContain('[MEDIUM]');
+      expect(result.llmContent).toContain('[LOW]');
     });
   });
 
