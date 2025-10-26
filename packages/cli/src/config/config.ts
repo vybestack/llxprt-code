@@ -949,6 +949,7 @@ export async function loadCliConfig(
       'api-version',
       'custom-headers',
       'shell-replacement',
+      'authOnly',
     ];
 
     for (const key of ephemeralKeys) {

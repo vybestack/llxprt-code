@@ -699,8 +699,13 @@ async function applyProviderCredentials({
   });
 
   const debugMode = config.getDebugMode();
+  const authOnlySetting = config.getEphemeralSetting('authOnly');
+  const authOnly =
+    authOnlySetting === true ||
+    (typeof authOnlySetting === 'string' &&
+      authOnlySetting.toLowerCase() === 'true');
 
-  if (resolved.inlineKey) {
+  if (!authOnly && resolved.inlineKey) {
     const result = await setProviderApiKey(
       providerManager,
       settings,
@@ -719,7 +724,7 @@ async function applyProviderCredentials({
     if (resolved.inlineSource === 'cli') {
       config.setEphemeralSetting('auth-keyfile', undefined);
     }
-  } else if (resolved.keyfilePath) {
+  } else if (!authOnly && resolved.keyfilePath) {
     const resolvedPath = resolved.keyfilePath.replace(/^~/, os.homedir());
     try {
       const apiKey = await fs.readFile(resolvedPath, 'utf-8');
@@ -764,6 +769,14 @@ async function applyProviderCredentials({
         process.exit(1);
       }
     }
+  } else if (
+    authOnly &&
+    debugMode &&
+    (resolved.inlineKey || resolved.keyfilePath)
+  ) {
+    console.debug(
+      'authOnly enabled, skipping CLI/profile API key application in favor of OAuth',
+    );
   }
 
   if (resolved.baseUrl && resolved.baseUrlSource === 'cli') {

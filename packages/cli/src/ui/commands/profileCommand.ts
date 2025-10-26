@@ -130,6 +130,7 @@ const saveCommand: SlashCommand = {
         'streaming',
         'retries',
         'retrywait',
+        'authOnly',
       ] as const;
 
       const ephemeralSettings: Partial<EphemeralSettings> = {};
@@ -313,6 +314,7 @@ const loadCommand: SlashCommand = {
         'tool-output-truncate-mode',
         'tool-output-item-size-limit',
         'max-prompt-tokens',
+        'authOnly',
       ];
 
       // Clear all known ephemeral settings

@@ -190,6 +190,60 @@ describe('AuthPrecedenceResolver', () => {
       expect(result).toBe(null);
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
+
+    it('should force OAuth when authOnly setting is enabled', async () => {
+      // Given: All non-OAuth auth methods available but authOnly is true
+      const settingsService = getSettingsService();
+      settingsService.set('authOnly', true);
+      settingsService.set('auth-key', 'settings-auth-key-123');
+      settingsService.set('auth-keyfile', '/path/to/keyfile');
+
+      vi.mocked(mockFs.readFile).mockResolvedValue('keyfile-content');
+
+      const config: AuthPrecedenceConfig = {
+        envKeyNames: ['TEST_API_KEY'],
+        isOAuthEnabled: true,
+        supportsOAuth: true,
+        oauthProvider: 'anthropic',
+      };
+
+      process.env.TEST_API_KEY = 'env-key-789';
+      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-abc');
+
+      const resolver = new AuthPrecedenceResolver(config, mockOAuthManager);
+
+      // When: Resolve authentication
+      const result = await resolver.resolveAuthentication();
+
+      // Then: Should ignore keys/env and use OAuth
+      expect(result).toBe('oauth-token-abc');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('anthropic');
+    });
+
+    it('should return null when authOnly is enabled but OAuth is unavailable', async () => {
+      // Given: authOnly true but OAuth disabled
+      const settingsService = getSettingsService();
+      settingsService.set('authOnly', true);
+      settingsService.set('auth-key', 'settings-auth-key-123');
+
+      const config: AuthPrecedenceConfig = {
+        envKeyNames: ['TEST_API_KEY'],
+        isOAuthEnabled: false,
+        supportsOAuth: false,
+        oauthProvider: 'anthropic',
+      };
+
+      process.env.TEST_API_KEY = 'env-key-789';
+
+      const resolver = new AuthPrecedenceResolver(config, mockOAuthManager);
+
+      // When: Resolve authentication
+      const result = await resolver.resolveAuthentication();
+
+      // Then: Should not fall back to keys/env
+      expect(result).toBe(null);
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
+    });
   });
 
   describe('OAuth Enablement Checks', () => {

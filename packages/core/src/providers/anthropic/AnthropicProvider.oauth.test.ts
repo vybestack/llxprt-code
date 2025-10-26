@@ -1,9 +1,11 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { IContent } from '../../services/history/IContent.js';
 import { ITool } from '../ITool.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { OAuthManager } from '../../auth/precedence.js';
+import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import Anthropic, { type ClientOptions } from '@anthropic-ai/sdk';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -153,15 +155,17 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
     beta: { models: { list: ReturnType<typeof vi.fn> } };
     apiKey: string;
   };
+  const originalEnvApiKey = process.env.ANTHROPIC_API_KEY;
+  const originalEnvAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
+  let settingsService: ReturnType<typeof getSettingsService>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_AUTH_TOKEN;
 
     // Clear SettingsService to ensure test isolation
-    const { getSettingsService } = await import(
-      '../../settings/settingsServiceInstance.js'
-    );
-    const settingsService = getSettingsService();
+    settingsService = getSettingsService();
     settingsService.clear();
 
     // Create mock OAuth manager
@@ -185,6 +189,19 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
     mockAnthropicInstance = mockAnthropicShared;
   });
 
+  afterEach(() => {
+    if (originalEnvApiKey === undefined) {
+      delete process.env.ANTHROPIC_API_KEY;
+    } else {
+      process.env.ANTHROPIC_API_KEY = originalEnvApiKey;
+    }
+    if (originalEnvAuthToken === undefined) {
+      delete process.env.ANTHROPIC_AUTH_TOKEN;
+    } else {
+      process.env.ANTHROPIC_AUTH_TOKEN = originalEnvAuthToken;
+    }
+  });
+
   describe('constructor with OAuth manager', () => {
     it('should extend BaseProvider and accept oauth manager parameter', () => {
       expect(provider).toBeDefined();
@@ -201,6 +218,48 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
           provider as AnthropicProvider & { supportsOAuth: () => boolean }
         ).supportsOAuth(),
       ).toBe(true);
+    });
+  });
+
+  describe('API key handling', () => {
+    it('initializes SDK with null apiKey when no key is provided', () => {
+      const firstCall = vi.mocked(Anthropic).mock.calls[0]?.[0];
+      expect(firstCall?.apiKey).toBeNull();
+    });
+
+    it('propagates explicit API keys to the SDK client', () => {
+      const providerWithKey = new AnthropicProvider(
+        'test-api-key',
+        undefined,
+        TEST_PROVIDER_CONFIG,
+        mockOAuthManager,
+      );
+      expect(providerWithKey).toBeDefined();
+
+      const lastCall =
+        vi.mocked(Anthropic).mock.calls[
+          vi.mocked(Anthropic).mock.calls.length - 1
+        ]?.[0];
+      expect(lastCall?.apiKey).toBe('test-api-key');
+    });
+
+    it('does not reintroduce env API keys when OAuth tokens are used', async () => {
+      settingsService.set('authOnly', true);
+      process.env.ANTHROPIC_API_KEY = 'env-test-key';
+      const mockToken = 'sk-ant-oat-env-check';
+      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(mockToken);
+
+      await provider.getModels();
+
+      const oauthCall = vi
+        .mocked(Anthropic)
+        .mock.calls.find(
+          ([args]) =>
+            (args as ClientOptions | undefined)?.authToken === mockToken,
+        );
+      const oauthArgs = oauthCall?.[0] as ClientOptions | undefined;
+      expect(oauthArgs?.apiKey).toBeNull();
+      expect(oauthArgs?.authToken).toBe(mockToken);
     });
   });
 

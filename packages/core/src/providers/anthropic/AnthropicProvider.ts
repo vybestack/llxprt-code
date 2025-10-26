@@ -66,8 +66,11 @@ export class AnthropicProvider extends BaseProvider {
 
     this.logger = new DebugLogger('llxprt:anthropic:provider');
 
+    const initialApiKey =
+      typeof apiKey === 'string' && apiKey.trim() !== '' ? apiKey : null;
+
     this.anthropic = new Anthropic({
-      apiKey: apiKey || '', // Empty string if OAuth will be used
+      apiKey: initialApiKey,
       baseURL: config?.baseUrl || baseURL,
       dangerouslyAllowBrowser: true,
     });
@@ -110,6 +113,7 @@ export class AnthropicProvider extends BaseProvider {
         // Don't pass apiKey at all - just authToken
         const oauthConfig: Record<string, unknown> = {
           authToken: resolvedToken, // Use authToken for OAuth Bearer tokens
+          apiKey: null, // Explicitly disable API key fallback when using OAuth
           baseURL,
           dangerouslyAllowBrowser: true,
           defaultHeaders: {
@@ -241,7 +245,7 @@ export class AnthropicProvider extends BaseProvider {
     // Will be updated with actual token in updateClientWithResolvedAuth
     const resolvedBaseURL = this.getBaseURL();
     this.anthropic = new Anthropic({
-      apiKey: '', // Empty string, will be replaced when auth is resolved
+      apiKey: null, // Ensure env variables don't leak into OAuth-only flows
       baseURL: resolvedBaseURL,
       dangerouslyAllowBrowser: true,
     });
