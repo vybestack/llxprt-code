@@ -15,7 +15,7 @@ import {
   Subtask,
   TodoToolCall,
 } from '@vybestack/llxprt-code-core';
-import { groupToolCalls } from './todo-utils.js';
+import { groupToolCalls, type GroupedToolCall } from './todo-utils.js';
 import { truncateEnd } from '../utils/responsive.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 
@@ -295,14 +295,14 @@ const renderTodo = (
 
           // Show only the last 5 tool calls
           const lastFive = grouped.slice(-5);
-          lastFive.forEach((group, index) => {
+          lastFive.forEach((group: GroupedToolCall, index: number) => {
             elements.push(
               renderToolCall(group.toolCall, group.count, '      ', index),
             );
           });
         } else {
           // Show all tool calls if 5 or fewer
-          grouped.forEach((group, index) => {
+          grouped.forEach((group: GroupedToolCall, index: number) => {
             elements.push(
               renderToolCall(group.toolCall, group.count, '      ', index),
             );
@@ -330,12 +330,12 @@ const renderTodo = (
 
       // Show only the last 5 tool calls
       const lastFive = grouped.slice(-5);
-      lastFive.forEach((group, index) => {
+      lastFive.forEach((group: GroupedToolCall, index: number) => {
         elements.push(renderToolCall(group.toolCall, group.count, '  ', index));
       });
     } else {
       // Show all tool calls if 5 or fewer
-      grouped.forEach((group, index) => {
+      grouped.forEach((group: GroupedToolCall, index: number) => {
         elements.push(renderToolCall(group.toolCall, group.count, '  ', index));
       });
     }

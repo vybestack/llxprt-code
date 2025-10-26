@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import React from 'react';
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi } from 'vitest';
 import { Text } from 'ink';
@@ -12,9 +13,14 @@ import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import {
   Config,
   ToolCallConfirmationDetails,
+  Todo,
 } from '@vybestack/llxprt-code-core';
+import { TodoContext } from '../../contexts/TodoContext.js';
+import { ToolCallContext } from '../../contexts/ToolCallContext.js';
 
 // Mock child components to isolate ToolGroupMessage behavior
+const mockToolMessage = vi.fn();
+
 vi.mock('./ToolMessage.js', () => ({
   ToolMessage: function MockToolMessage({
     callId,
@@ -22,13 +28,23 @@ vi.mock('./ToolMessage.js', () => ({
     description,
     status,
     emphasis,
+    resultDisplay,
   }: {
     callId: string;
     name: string;
     description: string;
     status: ToolCallStatus;
     emphasis: string;
+    resultDisplay?: string;
   }) {
+    mockToolMessage({
+      callId,
+      name,
+      description,
+      status,
+      emphasis,
+      resultDisplay,
+    });
     const statusSymbol = {
       [ToolCallStatus.Success]: '✓',
       [ToolCallStatus.Pending]: 'o',
@@ -80,6 +96,56 @@ describe('<ToolGroupMessage />', () => {
     terminalWidth: 80,
     config: mockConfig,
     isFocused: true,
+  };
+
+  const defaultTodo: Todo = {
+    id: 'todo-1',
+    content: 'Implement role-based access control',
+    status: 'in_progress',
+    priority: 'high',
+    subtasks: [
+      {
+        id: 'sub-1',
+        content: 'Define role enum',
+        toolCalls: [
+          {
+            id: 'call-1',
+            name: 'read_file',
+            parameters: { path: 'src/app.ts' },
+            timestamp: new Date('2025-01-01T00:00:00Z'),
+          },
+        ],
+      },
+    ],
+  };
+
+  const renderWithContexts = (
+    component: React.ReactElement,
+    {
+      todos = [],
+      showTodoPanel = true,
+    }: { todos?: Todo[]; showTodoPanel?: boolean } = {},
+  ) => {
+    const todoContextValue = {
+      todos,
+      updateTodos: vi.fn(),
+      refreshTodos: vi.fn(),
+    };
+    const toolCallContextValue = {
+      getExecutingToolCalls: () => [],
+      subscribe: () => () => {},
+    };
+
+    return render(
+      <TodoContext.Provider value={todoContextValue}>
+        <ToolCallContext.Provider value={toolCallContextValue}>
+          {React.cloneElement(
+            component as React.ReactElement<{ showTodoPanel?: boolean }>,
+            { showTodoPanel },
+          )}
+        </ToolCallContext.Provider>
+      </TodoContext.Provider>,
+    );
   };
 
   describe('Golden Snapshots', () => {
@@ -342,6 +408,112 @@ describe('<ToolGroupMessage />', () => {
       );
       // Should only show confirmation for the first tool
       expect(lastFrame()).toMatchSnapshot();
+    });
+  });
+
+  describe('Todo panel toggle behavior', () => {
+    afterEach(() => {
+      mockToolMessage.mockClear();
+    });
+
+    it('minimizes todo tool output when panel is visible', () => {
+      const toolCalls = [
+        createToolCall({
+          callId: 'todo-read',
+          name: 'TodoRead',
+          description: 'Read todos',
+        }),
+        createToolCall({
+          callId: 'todo-write',
+          name: 'TodoWrite',
+          description: 'Write todos',
+          resultDisplay: '',
+        }),
+      ];
+
+      renderWithContexts(
+        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        { todos: [defaultTodo], showTodoPanel: true },
+      );
+
+      const todoReadCall = mockToolMessage.mock.calls.find(
+        ([props]) => props?.name === 'TodoRead',
+      )?.[0];
+      const todoWriteCall = mockToolMessage.mock.calls.find(
+        ([props]) => props?.name === 'TodoWrite',
+      )?.[0];
+      expect(todoReadCall?.resultDisplay).toBe('Todo list read (1 task).');
+      expect(todoWriteCall?.resultDisplay).toBe(
+        '✦ Todo list updated (1 task).',
+      );
+    });
+
+    it('restores textual todo output when panel is disabled', () => {
+      const toolCalls = [
+        createToolCall({
+          callId: 'todo-read',
+          name: 'TodoRead',
+          description: 'Read todos',
+        }),
+        createToolCall({
+          callId: 'todo-write',
+          name: 'TodoWrite',
+          description: 'Write todos',
+          resultDisplay: '',
+        }),
+      ];
+
+      renderWithContexts(
+        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        { todos: [defaultTodo], showTodoPanel: false },
+      );
+
+      const todoReadCall = mockToolMessage.mock.calls.find(
+        ([props]) => props?.name === 'TodoRead',
+      )?.[0];
+      expect(todoReadCall).toBeDefined();
+
+      const todoWriteCall = mockToolMessage.mock.calls.find(
+        ([props]) => props?.name === 'TodoWrite',
+      )?.[0];
+      expect(todoWriteCall?.resultDisplay).toContain('Todo Progress');
+      expect(todoWriteCall?.resultDisplay).toContain(
+        'Implement role-based access control',
+      );
+      expect(todoWriteCall?.resultDisplay).toContain('Define role enum');
+    });
+
+    it('derives task counts even when todo context is empty', () => {
+      const toolCalls = [
+        createToolCall({
+          callId: 'todo-read',
+          name: 'TodoRead',
+          description: 'Read todos',
+          resultDisplay: '## Todo Progress\n\n5 tasks: ...',
+        }),
+        createToolCall({
+          callId: 'todo-write',
+          name: 'TodoWrite',
+          description: 'Update todo list with 5 items',
+        }),
+      ];
+
+      renderWithContexts(
+        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        { todos: [], showTodoPanel: true },
+      );
+
+      const todoReadCall = mockToolMessage.mock.calls.find(
+        ([props]) => props?.name === 'TodoRead',
+      )?.[0];
+      const todoWriteCall = mockToolMessage.mock.calls.find(
+        ([props]) => props?.name === 'TodoWrite',
+      )?.[0];
+
+      expect(todoReadCall?.resultDisplay).toBe('Todo list read (5 tasks).');
+      expect(todoWriteCall?.resultDisplay).toBe(
+        '✦ Todo list updated (5 tasks).',
+      );
     });
   });
 });

@@ -105,6 +105,16 @@ export const SETTINGS_SCHEMA = {
       'Hide the context summary (LLXPRT.md, MCP servers) above the input.',
     showInDialog: true,
   },
+  showTodoPanel: {
+    type: 'boolean',
+    label: 'Show Todo Panel',
+    category: 'UI',
+    requiresRestart: false,
+    default: true,
+    description:
+      'Display the interactive Todo panel. Disable to keep todos in the scrollback view instead.',
+    showInDialog: true,
+  },
   showMemoryUsage: {
     type: 'boolean',
     label: 'Show Memory Usage',

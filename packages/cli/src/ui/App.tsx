@@ -1266,6 +1266,7 @@ const App = (props: AppInternalProps) => {
             isPending={false}
             config={config}
             slashCommands={slashCommands}
+            showTodoPanel={showTodoPanelSetting}
           />
         ))}
       </Box>
@@ -1289,6 +1290,7 @@ const App = (props: AppInternalProps) => {
       ? '  Type your message, @path/to/file or +path/to/file'
       : '  Type your message or @path/to/file';
 
+  const showTodoPanelSetting = settings.merged.showTodoPanel ?? true;
   const hideContextSummary = settings.merged.hideContextSummary ?? false;
 
   return (
@@ -1329,6 +1331,7 @@ const App = (props: AppInternalProps) => {
                 isPending={false}
                 config={config}
                 slashCommands={slashCommands}
+                showTodoPanel={showTodoPanelSetting}
               />
             )),
           ]}
@@ -1351,6 +1354,7 @@ const App = (props: AppInternalProps) => {
                 config={config}
                 isFocused={!isEditorDialogOpen}
                 slashCommands={slashCommands}
+                showTodoPanel={showTodoPanelSetting}
               />
             ))}
             <ShowMoreLines constrainHeight={constrainHeight} />
@@ -1377,7 +1381,7 @@ const App = (props: AppInternalProps) => {
           )}
 
           {/* TodoPanel outside the scrollable area */}
-          <TodoPanel width={inputWidth} />
+          {showTodoPanelSetting && <TodoPanel width={inputWidth} />}
 
           {showWorkspaceMigrationDialog ? (
             <WorkspaceMigrationDialog

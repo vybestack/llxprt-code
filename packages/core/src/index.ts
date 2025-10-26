@@ -116,6 +116,7 @@ export * from './tools/todo-pause.js';
 export * from './tools/todo-schemas.js';
 export * from './tools/todo-store.js';
 export * from './tools/todo-events.js';
+export * from './todo/todoFormatter.js';
 
 // MCP OAuth
 export { MCPOAuthProvider } from './mcp/oauth-provider.js';

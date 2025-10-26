@@ -65,7 +65,7 @@ describe('TodoWrite', () => {
 
       const result = await tool.execute({ todos: validTodos }, abortSignal);
 
-      expect(result.llmContent).toContain('## Todo List (2 tasks)');
+      expect(result.llmContent).toContain('Todo Progress');
       expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
         validTodos,
       );
@@ -135,7 +135,7 @@ describe('TodoWrite', () => {
       expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
         singleTodo,
       );
-      expect(result.llmContent).toContain('## Todo List (1 tasks)');
+      expect(result.llmContent).toContain('Todo Progress');
     });
 
     it('should handle empty todo list', async () => {
@@ -147,7 +147,7 @@ describe('TodoWrite', () => {
       expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
         [],
       );
-      expect(result.llmContent).toContain('## Todo List (0 tasks)');
+      expect(result.llmContent).toContain('No todos found');
     });
 
     it('should return both old and new todos for diff tracking', async () => {
@@ -156,7 +156,7 @@ describe('TodoWrite', () => {
 
       const result = await tool.execute({ todos: validTodos }, abortSignal);
 
-      expect(result.llmContent).toContain('## Todo List (2 tasks)');
+      expect(result.llmContent).toContain('Todo Progress');
     });
   });
 
@@ -206,7 +206,7 @@ describe('TodoWrite', () => {
         llmContent: expect.any(String),
         returnDisplay: expect.any(String),
       });
-      expect(result.llmContent).toContain('## Todo List');
+      expect(result.llmContent).toContain('Todo Progress');
     });
 
     it('should include todos in output', async () => {
@@ -215,8 +215,8 @@ describe('TodoWrite', () => {
 
       const result = await tool.execute({ todos: validTodos }, abortSignal);
 
-      expect(result.llmContent).toContain('- [ ] Test task');
-      expect(result.llmContent).toContain('- [→] ← current Another task');
+      expect(result.llmContent).toContain('○ Test task [HIGH]');
+      expect(result.llmContent).toContain('→ Another task [MEDIUM] ← current');
     });
   });
 
@@ -295,7 +295,7 @@ describe('TodoWrite', () => {
   });
 
   describe('interactive mode', () => {
-    it('should suppress output in interactive mode', async () => {
+    it('should include formatted output in interactive mode', async () => {
       const interactiveTool = Object.assign(
         Object.create(Object.getPrototypeOf(tool)),
         tool,
@@ -313,8 +313,8 @@ describe('TodoWrite', () => {
         abortSignal,
       );
 
-      expect(result.llmContent).toContain('TODO list updated');
-      expect(result.returnDisplay).toBe('');
+      expect(result.llmContent).toContain('Todo Progress');
+      expect(result.returnDisplay).toContain('Todo Progress');
     });
   });
 });

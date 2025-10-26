@@ -11,6 +11,7 @@ import { TodoStore } from './todo-store.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { todoEvents, TodoUpdateEvent } from './todo-events.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
+import { formatTodoListForDisplay } from '../todo/todoFormatter.js';
 
 export interface TodoWriteParams {
   todos: Todo[];
@@ -170,22 +171,14 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
       todoEvents.emitTodoUpdated(event);
     }
 
-    // Generate output based on mode
-    let output: string;
-    if (isInteractive) {
-      // In interactive mode, suppress markdown and return minimal result
-      output = 'TODO list updated';
-    } else {
-      // In non-interactive mode, provide simplified markdown
-      output = this.generateSimplifiedOutput(params.todos);
-    }
+    const formattedOutput = formatTodoListForDisplay(params.todos);
 
     const statistics = this.calculateStatistics(params.todos);
     const nextAction = this.determineNextAction(params.todos);
 
     return {
-      llmContent: output + (reminder || ''),
-      returnDisplay: isInteractive ? '' : output, // Empty to suppress display in interactive mode
+      llmContent: formattedOutput + (reminder || ''),
+      returnDisplay: formattedOutput,
       metadata: {
         stateChanged: this.reminderService.shouldGenerateReminder(stateChange),
         todosAdded: stateChange.added.length,
@@ -195,26 +188,6 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
         nextAction,
       },
     };
-  }
-
-  private generateSimplifiedOutput(todos: Todo[]): string {
-    let output = `## Todo List (${todos.length} tasks)\n`;
-
-    for (const todo of todos) {
-      // Determine status marker
-      let marker = '';
-      if (todo.status === 'completed') {
-        marker = '- [x]';
-      } else if (todo.status === 'pending') {
-        marker = '- [ ]';
-      } else if (todo.status === 'in_progress') {
-        marker = '- [→] ← current';
-      }
-
-      output += `${marker} ${todo.content}\n`;
-    }
-
-    return output;
   }
 
   private calculateStatistics(todos: Todo[]): {
