@@ -456,21 +456,28 @@ export async function main() {
         );
       }
 
-      // Apply profile model params if loaded AND provider was NOT specified via CLI
-      const configWithProfile = config as Config & {
+      // Apply CLI and profile model params before first request
+      const configWithParams = config as Config & {
         _profileModelParams?: Record<string, unknown>;
+        _cliModelParams?: Record<string, unknown>;
       };
+      const mergedModelParams: Record<string, unknown> = {};
+
+      if (!argv.provider && configWithParams._profileModelParams) {
+        Object.assign(mergedModelParams, configWithParams._profileModelParams);
+      }
+
+      if (configWithParams._cliModelParams) {
+        Object.assign(mergedModelParams, configWithParams._cliModelParams);
+      }
+
       if (
-        !argv.provider &&
-        configWithProfile._profileModelParams &&
-        activeProvider
+        activeProvider &&
+        'setModelParams' in activeProvider &&
+        activeProvider.setModelParams &&
+        Object.keys(mergedModelParams).length > 0
       ) {
-        if (
-          'setModelParams' in activeProvider &&
-          activeProvider.setModelParams
-        ) {
-          activeProvider.setModelParams(configWithProfile._profileModelParams);
-        }
+        activeProvider.setModelParams(mergedModelParams);
       }
 
       const includeProfileEphemeral = argv.provider === undefined;

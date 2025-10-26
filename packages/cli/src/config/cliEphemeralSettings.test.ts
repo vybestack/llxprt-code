@@ -60,4 +60,27 @@ describe('applyCliSetArguments', () => {
     applyCliSetArguments(target, ['authOnly=false']);
     expect(target.getValue('authOnly')).toBe(false);
   });
+
+  it('collects model parameter entries and returns them separately', () => {
+    const target = new TestTarget();
+
+    const result = applyCliSetArguments(target, [
+      'modelparam.temperature=0.7',
+      'modelparam.stop_sequences=["END"]',
+    ]);
+
+    expect(result.modelParams).toEqual({
+      temperature: 0.7,
+      stop_sequences: ['END'],
+    });
+    expect(target.getValue('modelparam.temperature')).toBeUndefined();
+  });
+
+  it('requires a name when using the modelparam prefix', () => {
+    const target = new TestTarget();
+
+    expect(() => applyCliSetArguments(target, ['modelparam.=0.7'])).toThrow(
+      /model parameter key/i,
+    );
+  });
 });
