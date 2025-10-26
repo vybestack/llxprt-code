@@ -13,6 +13,7 @@ import {
   GeminiProvider,
   sanitizeForByteString,
   needsSanitization,
+  getSettingsService,
 } from '@vybestack/llxprt-code-core';
 import { IFileSystem, NodeFileSystem } from './IFileSystem.js';
 import {
@@ -47,6 +48,69 @@ function sanitizeApiKey(key: string): string {
 let providerManagerInstance: ProviderManager | null = null;
 let fileSystemInstance: IFileSystem | null = null;
 let oauthManagerInstance: OAuthManager | null = null;
+
+function coerceAuthOnly(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+  return undefined;
+}
+
+function resolveAuthOnlyFlag(
+  config?: Config,
+  loadedSettings?: LoadedSettings,
+): boolean {
+  if (config && typeof config.getEphemeralSettings === 'function') {
+    const authOnlyValue = (
+      config.getEphemeralSettings() as Record<string, unknown>
+    ).authOnly;
+    if (authOnlyValue !== undefined) {
+      const coerced = coerceAuthOnly(authOnlyValue);
+      if (typeof coerced === 'boolean') {
+        return coerced;
+      }
+    }
+  }
+
+  if (loadedSettings?.merged) {
+    const mergedAuthOnly = (loadedSettings.merged as Record<string, unknown>)
+      .authOnly;
+    if (mergedAuthOnly !== undefined) {
+      const coerced = coerceAuthOnly(mergedAuthOnly);
+      if (typeof coerced === 'boolean') {
+        return coerced;
+      }
+    }
+  }
+
+  if (typeof getSettingsService === 'function') {
+    try {
+      const settingsService = getSettingsService();
+      if (settingsService && typeof settingsService.get === 'function') {
+        const serviceValue = settingsService.get('authOnly');
+        if (serviceValue !== undefined) {
+          const coerced = coerceAuthOnly(serviceValue);
+          if (typeof coerced === 'boolean') {
+            return coerced;
+          }
+        }
+      }
+    } catch (_error) {
+      // Ignore SettingsService lookup failures and fall back to default
+    }
+  }
+
+  return false;
+}
 
 /**
  * Set a custom file system implementation (mainly for testing).
@@ -130,6 +194,8 @@ export function getProviderManager(
         : undefined;
     }
 
+    const authOnlyEnabled = resolveAuthOnlyFlag(config, loadedSettings);
+
     // @plan:PLAN-20250823-AUTHFIXES.P15
     // @requirement:REQ-004
     // Create OAuth manager for providers with TokenStore integration
@@ -178,7 +244,7 @@ export function getProviderManager(
     // Priority: Environment variable only - no automatic keyfile loading
     let openaiApiKey: string | undefined;
 
-    if (process.env.OPENAI_API_KEY) {
+    if (!authOnlyEnabled && process.env.OPENAI_API_KEY) {
       openaiApiKey = sanitizeApiKey(process.env.OPENAI_API_KEY);
     }
 
@@ -255,7 +321,7 @@ export function getProviderManager(
     // Priority: Environment variable only - no automatic keyfile loading
     let anthropicApiKey: string | undefined;
 
-    if (process.env.ANTHROPIC_API_KEY) {
+    if (!authOnlyEnabled && process.env.ANTHROPIC_API_KEY) {
       anthropicApiKey = sanitizeApiKey(process.env.ANTHROPIC_API_KEY);
     }
 
