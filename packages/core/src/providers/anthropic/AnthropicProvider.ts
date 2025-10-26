@@ -369,6 +369,7 @@ export class AnthropicProvider extends BaseProvider {
     _toolName: string,
     _params: unknown,
     _config?: unknown,
+    _signal?: AbortSignal,
   ): Promise<unknown> {
     throw new Error('Server tools not supported by Anthropic provider');
   }

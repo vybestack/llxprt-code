@@ -31,6 +31,7 @@ export interface IProvider {
         parametersJsonSchema?: unknown;
       }>;
     }>,
+    signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;
   setModel?(modelId: string): void;
   getCurrentModel?(): string;
@@ -51,6 +52,7 @@ export interface IProvider {
     toolName: string,
     params: unknown,
     config?: unknown,
+    signal?: AbortSignal,
   ): Promise<unknown>;
   // Add other methods as needed, e.g., generateCompletion, getToolDefinitions
 

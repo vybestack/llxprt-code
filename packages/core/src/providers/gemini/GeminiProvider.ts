@@ -964,10 +964,32 @@ export class GeminiProvider extends BaseProvider {
         parametersJsonSchema?: unknown;
       }>;
     }>,
+    signal?: AbortSignal,
     _toolFormat?: string,
   ): AsyncIterableIterator<IContent> {
+    // First critical AbortSignal check for generateChatCompletion
+    if (signal?.aborted) {
+      const error = new Error('Operation was aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
+
+    // AbortSignal check before auth
+    if (signal?.aborted) {
+      const error = new Error('Operation was aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
+
     // Determine best auth method
     const authToken = await this.determineBestAuth();
+
+    // AbortSignal check after auth
+    if (signal?.aborted) {
+      const error = new Error('Operation was aborted');
+      error.name = 'AbortError';
+      throw error;
+    }
 
     // Import necessary modules
     const { GoogleGenAI } = await import('@google/genai');
@@ -1076,6 +1098,13 @@ export class GeminiProvider extends BaseProvider {
     const stream: AsyncIterable<GenerateContentResponse> =
       await retryWithBackoff(
         async () => {
+          // AbortSignal check before client creation
+          if (signal?.aborted) {
+            const error = new Error('Operation was aborted');
+            error.name = 'AbortError';
+            throw error;
+          }
+
           if (this.authMode === 'oauth') {
             // OAuth mode
             const configForOAuth = this.globalConfig || {
@@ -1116,6 +1145,15 @@ export class GeminiProvider extends BaseProvider {
               ...contents,
             ];
 
+            // Streaming request abort check
+            if (signal?.aborted) {
+              const error = new Error('Operation was aborted');
+
+              error.name = 'AbortError';
+
+              throw error;
+            }
+
             const request = {
               model: this.currentModel,
               contents: contentsWithSystemPrompt,
@@ -1133,6 +1171,13 @@ export class GeminiProvider extends BaseProvider {
             );
           } else {
             // API key mode
+            // AbortSignal check before client creation
+            if (signal?.aborted) {
+              const error = new Error('Operation was aborted');
+              error.name = 'AbortError';
+              throw error;
+            }
+
             const genAI = new GoogleGenAI({
               apiKey: authToken,
               vertexai: this.authMode === 'vertex-ai',
@@ -1151,6 +1196,12 @@ export class GeminiProvider extends BaseProvider {
               toolNamesArg,
             );
 
+            // Streaming request abort check
+            if (signal?.aborted) {
+              const error = new Error('Operation was aborted');
+              error.name = 'AbortError';
+              throw error;
+            }
             const request = {
               model: this.currentModel,
               contents,
@@ -1174,6 +1225,13 @@ export class GeminiProvider extends BaseProvider {
 
     // Stream responses as IContent
     for await (const response of stream) {
+      // Critical streaming loop abort check
+      if (signal?.aborted) {
+        const error = new Error('Operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
+
       const text =
         response.candidates?.[0]?.content?.parts
           ?.filter((part: Part) => 'text' in part)
