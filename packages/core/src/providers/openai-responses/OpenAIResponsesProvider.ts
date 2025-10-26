@@ -341,6 +341,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     _toolName: string,
     _params: unknown,
     _config?: unknown,
+    _signal?: AbortSignal,
   ): Promise<unknown> {
     throw new Error('Server tools not supported by OpenAI Responses provider');
   }
@@ -429,6 +430,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
         parameters?: unknown;
       }>;
     }>,
+    _signal?: AbortSignal,
     _toolFormat?: string,
   ): AsyncIterableIterator<IContent> {
     // Check if API key is available

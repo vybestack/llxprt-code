@@ -666,6 +666,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     toolName: string,
     _params: unknown,
     _config?: unknown,
+    _signal?: AbortSignal,
   ): Promise<unknown> {
     // TODO: Implement server tool invocation for OpenAI provider
     throw new Error(
