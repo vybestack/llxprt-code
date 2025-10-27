@@ -1425,7 +1425,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       return Object.keys(params).length > 0 ? params : undefined;
     } catch (error) {
-      this.logger.debug(
+      this.getLogger().debug(
         () =>
           `Failed to get OpenAI provider settings from SettingsService: ${error}`,
       );

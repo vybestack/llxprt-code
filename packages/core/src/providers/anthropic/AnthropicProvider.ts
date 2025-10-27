@@ -461,7 +461,7 @@ export class AnthropicProvider extends BaseProvider {
 
       return Object.keys(params).length > 0 ? params : undefined;
     } catch (error) {
-      this.logger.debug(
+      this.getLogger().debug(
         () =>
           `Failed to get Anthropic provider settings from SettingsService: ${error}`,
       );
