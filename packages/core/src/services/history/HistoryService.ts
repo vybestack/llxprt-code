@@ -66,6 +66,7 @@ export class HistoryService
 {
   private history: IContent[] = [];
   private totalTokens: number = 0;
+  private baseTokenOffset: number = 0;
   private tokenizerCache = new Map<string, ITokenizer>();
   private tokenizerLock: Promise<void> = Promise.resolve();
   private logger = new DebugLogger('llxprt:history:service');
@@ -121,7 +122,49 @@ export class HistoryService
    * Get the current total token count
    */
   getTotalTokens(): number {
-    return this.totalTokens;
+    return this.baseTokenOffset + this.totalTokens;
+  }
+
+  getBaseTokenOffset(): number {
+    return this.baseTokenOffset;
+  }
+
+  async estimateTokensForText(
+    text: string,
+    modelName: string = 'gpt-4.1',
+  ): Promise<number> {
+    if (!text) {
+      return 0;
+    }
+
+    try {
+      const tokenizer = this.getTokenizerForModel(modelName);
+      return await tokenizer.countTokens(text, modelName);
+    } catch (error) {
+      this.logger.debug(
+        'Error counting tokens for raw text, using fallback:',
+        error,
+      );
+      return this.simpleTokenEstimateForText(text);
+    }
+  }
+
+  /**
+   * Set a base offset that is always included in the total token count.
+   * Useful for accounting for system prompts or other fixed overhead.
+   */
+  setBaseTokenOffset(offset: number): void {
+    const normalized = Math.max(0, Math.floor(offset));
+    const delta = normalized - this.baseTokenOffset;
+    this.baseTokenOffset = normalized;
+
+    if (delta !== 0) {
+      this.emit('tokensUpdated', {
+        totalTokens: this.getTotalTokens(),
+        addedTokens: delta,
+        contentId: null,
+      });
+    }
   }
 
   /**
@@ -207,7 +250,7 @@ export class HistoryService
 
       // Emit event with updated count
       const eventData = {
-        totalTokens: this.totalTokens,
+        totalTokens: this.getTotalTokens(),
         addedTokens: contentTokens,
         contentId: content.metadata?.id,
       };
@@ -447,7 +490,7 @@ export class HistoryService
 
     // Emit event with reset count
     this.emit('tokensUpdated', {
-      totalTokens: 0,
+      totalTokens: this.getTotalTokens(),
       addedTokens: -previousTokens, // Negative to indicate removal
       contentId: null,
     });
@@ -618,7 +661,7 @@ export class HistoryService
 
       // Emit event with updated count
       this.emit('tokensUpdated', {
-        totalTokens: this.totalTokens,
+        totalTokens: this.getTotalTokens(),
         addedTokens: this.totalTokens - oldTotal,
         contentId: null,
       });

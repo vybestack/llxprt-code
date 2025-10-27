@@ -4,6 +4,15 @@ import type OpenAI from 'openai';
 import { IContent } from '../../services/history/IContent.js';
 
 const mockChatCreate = vi.hoisted(() => vi.fn());
+const mockOpenAIConstructor = vi.hoisted(() =>
+  vi.fn().mockImplementation(() => ({
+    chat: {
+      completions: {
+        create: mockChatCreate,
+      },
+    },
+  })),
+);
 const mockSettingsService = vi.hoisted(() => ({
   set: vi.fn(),
   get: vi.fn(),
@@ -16,13 +25,7 @@ const mockSettingsService = vi.hoisted(() => ({
 }));
 
 vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: mockChatCreate,
-      },
-    },
-  })),
+  default: mockOpenAIConstructor,
 }));
 
 vi.mock('../../core/prompts.js', () => ({
@@ -145,5 +148,33 @@ describe('OpenAIProvider model params and custom headers', () => {
     });
 
     getClientSpy.mockRestore();
+  });
+
+  it('should configure socket-aware transport when socket settings are present', async () => {
+    const provider = new OpenAIProvider(
+      'test-key',
+      'http://localhost:1234/v1/',
+      {
+        getEphemeralSettings: () => ({
+          streaming: 'disabled',
+          'socket-timeout': 120000,
+          'socket-keepalive': true,
+          'socket-nodelay': true,
+        }),
+      },
+    );
+
+    await (
+      provider as unknown as {
+        getClient: () => Promise<unknown>;
+      }
+    ).getClient();
+
+    const constructorArgs = mockOpenAIConstructor.mock.calls.at(
+      -1,
+    )?.[0] as Record<string, unknown>;
+
+    expect(constructorArgs).toBeDefined();
+    expect(typeof constructorArgs.fetch).toBe('function');
   });
 });

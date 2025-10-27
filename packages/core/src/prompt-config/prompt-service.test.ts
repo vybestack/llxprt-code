@@ -80,6 +80,8 @@ describe('PromptService', () => {
       // Check content is correct
       const content = await fs.readFile(coreDefaultPath, 'utf-8');
       expect(content).toContain('You are an interactive CLI agent');
+      expect(content).toContain('Workspace name: {{WORKSPACE_NAME}}');
+      expect(content).toContain('Sandbox type: {{SANDBOX_TYPE}}');
     });
 
     it('should not reinstall files if already initialized', async () => {
@@ -188,6 +190,48 @@ describe('PromptService', () => {
 
       const prompt = await service.getPrompt(context);
       expect(prompt).toContain('Core prompt for openai gpt-4');
+    });
+
+    it('should render environment metadata placeholders when present', async () => {
+      const baseDir = path.join(tempDir, 'env-metadata-prompts');
+      await fs.mkdir(path.join(baseDir, 'core'), { recursive: true });
+      await fs.writeFile(
+        path.join(baseDir, 'core', 'default.md'),
+        [
+          'Workspace name: {{WORKSPACE_NAME}}',
+          'Workspace directories: {{WORKSPACE_DIRECTORIES}}',
+          'Sandboxed: {{IS_SANDBOXED}}',
+          'Sandbox type: {{SANDBOX_TYPE}}',
+          'IDE companion: {{HAS_IDE}}',
+        ].join('\n'),
+      );
+
+      const localService = new PromptService({ baseDir });
+      const context: PromptContext = {
+        provider: 'gemini',
+        model: 'gemini-2.5',
+        enabledTools: [],
+        environment: {
+          isGitRepository: true,
+          isSandboxed: true,
+          sandboxType: 'generic',
+          hasIdeCompanion: true,
+          workingDirectory: '/tmp/demo',
+          workspaceName: 'demo',
+          workspaceRoot: '/tmp/demo',
+          workspaceDirectories: ['/tmp/demo', '/tmp/secondary'],
+        },
+      };
+
+      const prompt = await localService.getPrompt(context);
+
+      expect(prompt).toContain('Workspace name: demo');
+      expect(prompt).toContain(
+        'Workspace directories: /tmp/demo, /tmp/secondary',
+      );
+      expect(prompt).toContain('Sandboxed: true');
+      expect(prompt).toContain('Sandbox type: generic');
+      expect(prompt).toContain('IDE companion: true');
     });
 
     it('should throw error if context is null', async () => {
@@ -701,9 +745,11 @@ describe('PromptService', () => {
       expect(tools).toContain('Grep');
       expect(tools).toContain('Ls');
       expect(tools).toContain('Memory');
+      expect(tools).toContain('SaveMemory');
       expect(tools).toContain('ReadFile');
       expect(tools).toContain('ReadManyFiles');
       expect(tools).toContain('Shell');
+      expect(tools).toContain('TodoPause');
       expect(tools).toContain('TodoRead');
       expect(tools).toContain('TodoWrite');
       expect(tools).toContain('WebFetch');

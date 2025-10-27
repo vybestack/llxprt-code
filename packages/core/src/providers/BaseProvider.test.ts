@@ -20,8 +20,10 @@ import type { Config } from '../config/config.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import {
   getSettingsService,
+  registerSettingsService,
   resetSettingsService,
 } from '../settings/settingsServiceInstance.js';
+import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 // Mock OAuth manager for testing
 const mockOAuthManager: OAuthManager = {
@@ -138,11 +140,13 @@ describe('BaseProvider', () => {
     delete process.env.ANOTHER_API_KEY;
     // Reset settings service to ensure clean state
     resetSettingsService();
+    registerSettingsService(new SettingsService());
   });
 
   afterEach(() => {
     process.env = originalEnv;
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   describe('Authentication Precedence', () => {

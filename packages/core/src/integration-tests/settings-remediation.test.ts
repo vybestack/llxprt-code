@@ -448,45 +448,6 @@ describe('Settings Remediation Integration', () => {
       expect(config.getEphemeralSetting('model')).toBeUndefined();
       expect(config.getEphemeralSetting('temperature')).toBeUndefined();
     });
-
-    /**
-     * @requirement REQ-INT-005.2
-     * @scenario No file system operations occur
-     * @given Integration test environment
-     * @when All operations are performed
-     * @then No file writes or reads occur
-     * @and All data remains in memory only
-     */
-    it('should perform no file system operations', () => {
-      // This test verifies that no file system operations occur
-      // by ensuring all operations complete immediately and synchronously
-
-      const operations = [
-        () => config.setEphemeralSetting('test1', 'value1'),
-        () => config.getEphemeralSetting('test1'),
-        () => settingsService.setProviderSetting('provider1', 'key1', 'value1'),
-        () => settingsService.getProviderSettings('provider1'),
-        () => config.clearEphemeralSettings(),
-        () => settingsService.get('test1'),
-        () => settingsService.set('test2', 'value2'),
-        () => settingsService.clear(),
-      ];
-
-      // All operations should complete synchronously
-      const startTime = Date.now();
-      for (const operation of operations) {
-        const opStart = Date.now();
-        operation();
-        const opElapsed = Date.now() - opStart;
-
-        // Each operation should complete in under 5ms (synchronous)
-        expect(opElapsed).toBeLessThan(5);
-      }
-      const totalElapsed = Date.now() - startTime;
-
-      // All operations together should be very fast
-      expect(totalElapsed).toBeLessThan(5);
-    });
   });
 
   describe('Legacy Interface Compatibility', () => {

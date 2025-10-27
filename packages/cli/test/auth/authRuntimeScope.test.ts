@@ -12,7 +12,7 @@ import {
 } from '../../../core/src/auth/precedence.js';
 import {
   createProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../../../core/src/runtime/providerRuntimeContext.js';
 import { SettingsService } from '../../../core/src/settings/SettingsService.js';
@@ -26,11 +26,11 @@ const baseConfig: AuthPrecedenceConfig = {
 };
 
 describe('CLI auth runtime scope gaps', () => {
-  let originalContext = getActiveProviderRuntimeContext();
+  let originalContext = peekActiveProviderRuntimeContext();
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    originalContext = getActiveProviderRuntimeContext();
+    originalContext = peekActiveProviderRuntimeContext();
     registerIsolatedRuntimeBindings({
       resetInfrastructure: () => {},
       setRuntimeContext: () => {},

@@ -796,12 +796,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const userMemory = await resolveUserMemory(options.userMemory, () =>
       options.runtime?.config?.getUserMemory?.(),
     );
-    const systemPrompt = await getCoreSystemPromptAsync({
+    const systemPrompt = await getCoreSystemPromptAsync(
       userMemory,
       model,
-      provider: this.name,
-      tools: toolNamesArg,
-    });
+      toolNamesArg,
+    );
 
     // Add system prompt as the first message in the array
     const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [

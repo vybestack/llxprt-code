@@ -8,6 +8,7 @@ import {
   EmbedContentParameters,
   GenerateContentConfig,
   PartListUnion,
+  Part,
   Content,
   Tool,
   GenerateContentResponse,
@@ -32,13 +33,11 @@ import { ContentConverters } from '../services/history/ContentConverters.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
-  AuthType,
   ContentGenerator,
   ContentGeneratorConfig,
   createContentGenerator,
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
-import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { tokenLimit } from './tokenLimits.js';
 import {
   COMPRESSION_TOKEN_THRESHOLD,
@@ -46,9 +45,20 @@ import {
 } from './compression-config.js';
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext, IdeContext, File } from '../ide/ideContext.js';
-import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
+import {
+  ComplexityAnalyzer,
+  type ComplexityAnalysisResult,
+} from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
+import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
+
+const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
+const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
+const TOOL_BASE_TODO_MESSAGE =
+  'After this next tool call I need to call todo_write and create a todo list to organize this effort.';
+const TOOL_ESCALATED_TODO_MESSAGE =
+  'I have already made several tool calls without a todo list. Immediately call todo_write after this next tool call to organize the work.';
 
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
@@ -127,6 +137,11 @@ export class GeminiClient {
   private readonly complexitySuggestionCooldown: number;
   private lastSentIdeContext: IdeContext | undefined;
   private forceFullIdeContext = true;
+  private lastTodoToolTurn?: number;
+  private consecutiveComplexTurns = 0;
+  private lastComplexitySuggestionTurn?: number;
+  private toolActivityCount = 0;
+  private toolCallReminderLevel: 'none' | 'base' | 'escalated' = 'none';
 
   /**
    * At any point in this conversation, was compression triggered without
@@ -207,6 +222,104 @@ export class GeminiClient {
 
   getUserTier(): UserTierId | undefined {
     return this.contentGenerator?.userTier;
+  }
+
+  private processComplexityAnalysis(
+    analysis: ComplexityAnalysisResult,
+  ): string | undefined {
+    if (!analysis.isComplex || !analysis.shouldSuggestTodos) {
+      this.consecutiveComplexTurns = 0;
+      return undefined;
+    }
+
+    this.consecutiveComplexTurns += 1;
+
+    const alreadySuggestedThisTurn =
+      this.lastComplexitySuggestionTurn === this.sessionTurnCount;
+    const currentTime = Date.now();
+    const withinCooldown =
+      currentTime - this.lastComplexitySuggestionTime <
+      this.complexitySuggestionCooldown;
+
+    if (alreadySuggestedThisTurn || withinCooldown) {
+      return undefined;
+    }
+
+    const reminder = this.shouldEscalateReminder()
+      ? this.todoReminderService.getEscalatedComplexTaskSuggestion(
+          analysis.detectedTasks,
+        )
+      : this.todoReminderService.getComplexTaskSuggestion(
+          analysis.detectedTasks,
+        );
+
+    this.lastComplexitySuggestionTime = currentTime;
+    this.lastComplexitySuggestionTurn = this.sessionTurnCount;
+
+    return reminder;
+  }
+
+  private shouldEscalateReminder(): boolean {
+    if (this.consecutiveComplexTurns < COMPLEXITY_ESCALATION_TURN_THRESHOLD) {
+      return false;
+    }
+
+    const turnsSinceTodo =
+      this.lastTodoToolTurn === undefined
+        ? Number.POSITIVE_INFINITY
+        : this.sessionTurnCount - this.lastTodoToolTurn;
+
+    return turnsSinceTodo >= COMPLEXITY_ESCALATION_TURN_THRESHOLD;
+  }
+
+  private isTodoToolCall(name: unknown): boolean {
+    if (typeof name !== 'string') {
+      return false;
+    }
+    const normalized = name.toLowerCase();
+    return normalized === 'todo_write' || normalized === 'todo_read';
+  }
+
+  private appendTodoSuffixToRequest(request: PartListUnion): PartListUnion {
+    if (!Array.isArray(request)) {
+      return request;
+    }
+
+    const suffixAlreadyPresent = request.some(
+      (part) =>
+        typeof part === 'object' &&
+        part !== null &&
+        'text' in part &&
+        typeof part.text === 'string' &&
+        part.text.includes(TODO_PROMPT_SUFFIX),
+    );
+
+    if (suffixAlreadyPresent) {
+      return request;
+    }
+
+    (request as Part[]).push({ text: TODO_PROMPT_SUFFIX } as Part);
+    return request;
+  }
+
+  private recordModelActivity(event: ServerGeminiStreamEvent): void {
+    if (
+      event.type !== GeminiEventType.Content &&
+      event.type !== GeminiEventType.ToolCallRequest
+    ) {
+      return;
+    }
+
+    this.toolActivityCount += 1;
+
+    if (this.toolActivityCount > 4) {
+      this.toolCallReminderLevel = 'escalated';
+    } else if (
+      this.toolActivityCount === 4 &&
+      this.toolCallReminderLevel === 'none'
+    ) {
+      this.toolCallReminderLevel = 'base';
+    }
   }
 
   async addHistory(content: Content) {
@@ -433,22 +546,16 @@ export class GeminiClient {
     try {
       const userMemory = this.config.getUserMemory();
       const model = this.config.getModel();
-      const providerName =
-        this.config
-          .getContentGeneratorConfig()
-          ?.providerManager?.getActiveProviderName() ||
-        this.config.getProvider() ||
-        'gemini';
+      // Provider name removed from prompt call signature
       const logger = new DebugLogger('llxprt:client:start');
       logger.debug(
         () => `DEBUG [client.startChat]: Model from config: ${model}`,
       );
-      let systemInstruction = await getCoreSystemPromptAsync({
+      let systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
         model,
-        provider: providerName,
-        tools: enabledToolNames,
-      });
+        enabledToolNames,
+      );
 
       // Add environment context to system instruction
       const envContextText = envParts
@@ -457,6 +564,22 @@ export class GeminiClient {
       if (envContextText) {
         systemInstruction = `${envContextText}\n\n${systemInstruction}`;
       }
+
+      let systemPromptTokens = 0;
+      try {
+        systemPromptTokens = await historyService.estimateTokensForText(
+          systemInstruction,
+          model,
+        );
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `Failed to count system instruction tokens for model ${model}, using fallback`,
+          { error },
+        );
+        systemPromptTokens = estimateTextTokens(systemInstruction);
+      }
+      historyService.setBaseTokenOffset(systemPromptTokens);
 
       logger.debug(
         () =>
@@ -719,6 +842,8 @@ export class GeminiClient {
       this.lastPromptId = prompt_id;
     }
     this.sessionTurnCount++;
+    this.toolActivityCount = 0;
+    this.toolCallReminderLevel = 'none';
     if (
       this.config.getMaxSessionTurns() > 0 &&
       this.sessionTurnCount > this.config.getMaxSessionTurns()
@@ -776,43 +901,30 @@ export class GeminiClient {
       this.forceFullIdeContext = false;
     }
 
-    // Complexity detection for proactive todo suggestions
-    if (
-      this.sessionTurnCount === 1 && // Only on first user message
-      Array.isArray(request) &&
-      request.length > 0
-    ) {
-      // Extract user message text
+    let shouldAppendTodoSuffix = false;
+
+    if (Array.isArray(request) && request.length > 0) {
       const userMessage = request
         .filter((part) => typeof part === 'object' && 'text' in part)
         .map((part) => (part as { text: string }).text)
-        .join(' ');
+        .join(' ')
+        .trim();
 
-      if (userMessage) {
+      if (userMessage.length > 0) {
         const analysis = this.complexityAnalyzer.analyzeComplexity(userMessage);
-
-        // Check if we should suggest todos (with cooldown)
-        const currentTime = Date.now();
-        if (
-          analysis.shouldSuggestTodos &&
-          currentTime - this.lastComplexitySuggestionTime >
-            this.complexitySuggestionCooldown
-        ) {
-          // Generate suggestion reminder
-          const suggestionReminder =
-            this.todoReminderService.getComplexTaskSuggestion(
-              analysis.detectedTasks,
-            );
-
-          // Inject reminder into request
-          request = [
-            ...(Array.isArray(request) ? request : [request]),
-            { text: suggestionReminder },
-          ];
-
-          this.lastComplexitySuggestionTime = currentTime;
+        const complexityReminder = this.processComplexityAnalysis(analysis);
+        if (complexityReminder) {
+          shouldAppendTodoSuffix = true;
         }
+      } else {
+        this.consecutiveComplexTurns = 0;
       }
+    } else {
+      this.consecutiveComplexTurns = 0;
+    }
+
+    if (shouldAppendTodoSuffix) {
+      request = this.appendTodoSuffixToRequest(request);
     }
 
     // Get provider name for error messages
@@ -834,10 +946,35 @@ export class GeminiClient {
         yield { type: GeminiEventType.LoopDetected };
         return turn;
       }
+      this.recordModelActivity(event);
       yield event;
+      if (
+        event.type === GeminiEventType.ToolCallRequest &&
+        this.isTodoToolCall(event.value?.name)
+      ) {
+        this.lastTodoToolTurn = this.sessionTurnCount;
+        this.consecutiveComplexTurns = 0;
+      }
       if (event.type === GeminiEventType.Error) {
         return turn;
       }
+    }
+    if (this.toolCallReminderLevel !== 'none') {
+      const reminderText =
+        this.toolCallReminderLevel === 'escalated'
+          ? TOOL_ESCALATED_TODO_MESSAGE
+          : TOOL_BASE_TODO_MESSAGE;
+
+      this.getChat().addHistory({
+        role: 'model',
+        parts: [{ text: reminderText }],
+      });
+      const currentTime = Date.now();
+      this.lastComplexitySuggestionTime = currentTime;
+      this.lastComplexitySuggestionTurn = this.sessionTurnCount;
+      this.consecutiveComplexTurns = 0;
+      this.toolCallReminderLevel = 'none';
+      this.toolActivityCount = 0;
     }
     if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
       // Check if model was switched during the call (likely due to quota error)
@@ -865,18 +1002,12 @@ export class GeminiClient {
     const modelToUse = model;
     try {
       const userMemory = this.config.getUserMemory();
-      const providerName =
-        this.config
-          .getContentGeneratorConfig()
-          ?.providerManager?.getActiveProviderName() ||
-        this.config.getProvider() ||
-        'gemini';
-      const systemInstruction = await getCoreSystemPromptAsync({
+      // Provider name removed from prompt call signature
+      const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
-        model: modelToUse,
-        provider: providerName,
-        tools: this.getEnabledToolNamesForPrompt(),
-      });
+        modelToUse,
+        this.getEnabledToolNamesForPrompt(),
+      );
       const requestConfig = {
         abortSignal,
         ...this.generateContentConfig,
@@ -898,11 +1029,7 @@ export class GeminiClient {
           this.lastPromptId || this.config.getSessionId(),
         );
 
-      const result = await retryWithBackoff(apiCall, {
-        onPersistent429: async (authType?: string, error?: unknown) =>
-          await this.handleFlashFallback(authType, error),
-        authType: this.config.getContentGeneratorConfig()?.authType,
-      });
+      const result = await retryWithBackoff(apiCall);
 
       let text = getResponseText(result);
       if (!text) {
@@ -1010,18 +1137,12 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
-      const providerName =
-        this.config
-          .getContentGeneratorConfig()
-          ?.providerManager?.getActiveProviderName() ||
-        this.config.getProvider() ||
-        'gemini';
-      const systemInstruction = await getCoreSystemPromptAsync({
+      // Provider name removed from prompt call signature
+      const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
-        model: modelToUse,
-        provider: providerName,
-        tools: this.getEnabledToolNamesForPrompt(),
-      });
+        modelToUse,
+        this.getEnabledToolNamesForPrompt(),
+      );
 
       const requestConfig = {
         abortSignal,
@@ -1039,11 +1160,7 @@ export class GeminiClient {
           this.lastPromptId || this.config.getSessionId(),
         );
 
-      const result = await retryWithBackoff(apiCall, {
-        onPersistent429: async (authType?: string, error?: unknown) =>
-          await this.handleFlashFallback(authType, error),
-        authType: this.config.getContentGeneratorConfig()?.authType,
-      });
+      const result = await retryWithBackoff(apiCall);
       return result;
     } catch (error: unknown) {
       if (abortSignal.aborted) {
@@ -1287,53 +1404,5 @@ export class GeminiClient {
           .filter(Boolean),
       ),
     );
-  }
-
-  /**
-   * Handles falling back to Flash model when persistent 429 errors occur for OAuth users.
-   * Uses a fallback handler if provided by the config; otherwise, returns null.
-   * Note: This only applies to OAuth users with Gemini models, not for other providers.
-   */
-  private async handleFlashFallback(
-    authType?: string,
-    error?: unknown,
-  ): Promise<string | null> {
-    // Only handle fallback for OAuth users with Gemini models, not for providers
-    if (authType !== AuthType.LOGIN_WITH_GOOGLE) {
-      return null;
-    }
-
-    const currentModel = this.config.getModel();
-    const fallbackModel = DEFAULT_GEMINI_FLASH_MODEL;
-
-    // Don't fallback if already using Flash model
-    if (currentModel === fallbackModel) {
-      return null;
-    }
-
-    // Check if config has a fallback handler (set by CLI package)
-    const fallbackHandler = this.config.flashFallbackHandler;
-    if (typeof fallbackHandler === 'function') {
-      try {
-        const accepted = await fallbackHandler(
-          currentModel,
-          fallbackModel,
-          error,
-        );
-        if (accepted !== false && accepted !== null) {
-          this.config.setModel(fallbackModel);
-          this.config.setFallbackMode(true);
-          return fallbackModel;
-        }
-        // Check if the model was switched manually in the handler
-        if (this.config.getModel() === fallbackModel) {
-          return null; // Model was switched but don't continue with current prompt
-        }
-      } catch (error) {
-        this.logger.warn(() => 'Flash fallback handler failed:', { error });
-      }
-    }
-
-    return null;
   }
 }

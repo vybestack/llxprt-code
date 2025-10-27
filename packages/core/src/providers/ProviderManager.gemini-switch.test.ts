@@ -4,16 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ProviderManager } from './ProviderManager.js';
 import { IProvider } from './IProvider.js';
 import { ContentGeneratorRole } from './ContentGeneratorRole.js';
+import {
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
+import { SettingsService } from '../settings/SettingsService.js';
 
 describe('ProviderManager - Gemini switching', () => {
   let manager: ProviderManager;
   let mockProvider: IProvider;
 
   beforeEach(() => {
+    // Set up runtime context for ProviderManager
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: new SettingsService(),
+        runtimeId: 'test-runtime',
+      }),
+    );
     manager = new ProviderManager();
     mockProvider = {
       name: 'openai',
@@ -28,6 +41,10 @@ describe('ProviderManager - Gemini switching', () => {
         throw new Error('Server tools not supported');
       },
     };
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   it('should start with no active provider', () => {

@@ -20,7 +20,7 @@ import {
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
-import { ContentGenerator, AuthType } from './contentGenerator.js';
+import { ContentGenerator } from './contentGenerator.js';
 import { Config } from '../config/config.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
@@ -54,6 +54,7 @@ import {
   COMPRESSION_PRESERVE_THRESHOLD,
 } from './compression-config.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
+import { tokenLimit } from './tokenLimits.js';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */
@@ -335,6 +336,8 @@ export class EmptyStreamError extends Error {
  * The session maintains all the turns between user and model.
  */
 export class GeminiChat {
+  private static readonly TOKEN_SAFETY_MARGIN = 256;
+  private static readonly DEFAULT_COMPLETION_BUDGET = 65_536;
   // A promise to represent the current state of the message being sent to the
   // model.
   private sendPromise: Promise<void> = Promise.resolve();
@@ -460,53 +463,6 @@ export class GeminiChat {
     );
   }
 
-  /**
-   * Handles falling back to Flash model when persistent 429 errors occur for OAuth users.
-   * Uses a fallback handler if provided by the config; otherwise, returns null.
-   */
-  private async handleFlashFallback(
-    authType?: string,
-    error?: unknown,
-  ): Promise<string | null> {
-    // Only handle fallback for OAuth users, not for providers
-    if (authType !== AuthType.LOGIN_WITH_GOOGLE) {
-      return null;
-    }
-
-    const currentModel = this.config.getModel();
-    const fallbackModel = DEFAULT_GEMINI_FLASH_MODEL;
-
-    // Don't fallback if already using Flash model
-    if (currentModel === fallbackModel) {
-      return null;
-    }
-
-    // Check if config has a fallback handler (set by CLI package)
-    const fallbackHandler = this.config.flashFallbackHandler;
-    if (typeof fallbackHandler === 'function') {
-      try {
-        const accepted = await fallbackHandler(
-          currentModel,
-          fallbackModel,
-          error,
-        );
-        if (accepted !== false && accepted !== null) {
-          this.config.setModel(fallbackModel);
-          this.config.setFallbackMode(true);
-          return fallbackModel;
-        }
-        // Check if the model was switched manually in the handler
-        if (this.config.getModel() === fallbackModel) {
-          return null; // Model was switched but don't continue with current prompt
-        }
-      } catch (error) {
-        this.logger.warn(() => 'Flash fallback handler failed:', { error });
-      }
-    }
-
-    return null;
-  }
-
   setSystemInstruction(sysInstr: string) {
     this.generationConfig.systemInstruction = sysInstr;
   }
@@ -605,6 +561,9 @@ export class GeminiChat {
       },
     );
 
+    // Enforce context window limits before proceeding
+    await this.enforceContextWindow(pendingTokens, prompt_id, provider);
+
     // Check if provider supports IContent interface
     if (!this.providerSupportsIContent(provider)) {
       throw new Error(
@@ -630,16 +589,6 @@ export class GeminiChat {
     try {
       const apiCall = async () => {
         const modelToUse = this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
-
-        // Prevent Flash model calls immediately after quota error
-        if (
-          this.config.getQuotaErrorOccurred() &&
-          modelToUse === DEFAULT_GEMINI_FLASH_MODEL
-        ) {
-          throw new Error(
-            'Please submit a new query to continue with the Flash model.',
-          );
-        }
 
         // Get tools in the format the provider expects
         const tools = this.generationConfig.tools;
@@ -755,9 +704,6 @@ export class GeminiChat {
           }
           return false; // Don't retry other errors by default
         },
-        onPersistent429: async (authType?: string, error?: unknown) =>
-          await this.handleFlashFallback(authType, error),
-        authType: this.config.getContentGeneratorConfig()?.authType,
       });
       const durationMs = Date.now() - startTime;
       await this._logApiResponse(
@@ -960,6 +906,7 @@ export class GeminiChat {
             const stream = await instance.makeApiCallAndProcessStream(
               params,
               prompt_id,
+              pendingTokens,
               userContent,
             );
 
@@ -1032,18 +979,6 @@ export class GeminiChat {
     try {
       const response = await retryWithBackoff(
         async () => {
-          const modelToUse =
-            this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
-
-          if (
-            this.config.getQuotaErrorOccurred() &&
-            modelToUse === DEFAULT_GEMINI_FLASH_MODEL
-          ) {
-            throw new Error(
-              'Please submit a new query to continue with the Flash model.',
-            );
-          }
-
           const toolsFromConfig =
             params.config?.tools && Array.isArray(params.config.tools)
               ? (params.config.tools as Array<{
@@ -1149,9 +1084,6 @@ export class GeminiChat {
             }
             return false;
           },
-          onPersistent429: async (authType?: string, error?: unknown) =>
-            await this.handleFlashFallback(authType, error),
-          authType: this.config.getContentGeneratorConfig()?.authType,
         },
       );
 
@@ -1173,7 +1105,8 @@ export class GeminiChat {
 
   private async makeApiCallAndProcessStream(
     _params: SendMessageParameters,
-    _prompt_id: string,
+    promptId: string,
+    pendingTokens: number,
     userContent: Content | Content[],
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     // Get the active provider
@@ -1220,6 +1153,9 @@ export class GeminiChat {
       },
     );
 
+    // Enforce context window limits before proceeding
+    await this.enforceContextWindow(pendingTokens, promptId, provider);
+
     // Check if provider supports IContent interface
     if (!this.providerSupportsIContent(provider)) {
       throw new Error(
@@ -1228,20 +1164,6 @@ export class GeminiChat {
     }
 
     const apiCall = async () => {
-      const modelToUse = this.config.getModel();
-      const authType = this.config.getContentGeneratorConfig()?.authType;
-
-      // Prevent Flash model calls immediately after quota error (only for Gemini providers)
-      if (
-        authType !== AuthType.USE_PROVIDER &&
-        this.config.getQuotaErrorOccurred() &&
-        modelToUse === DEFAULT_GEMINI_FLASH_MODEL
-      ) {
-        throw new Error(
-          'Please submit a new query to continue with the Flash model.',
-        );
-      }
-
       // Convert user content to IContent first so we can check if it's a tool response
       const idGen = this.historyService.getIdGeneratorCallback();
       const matcher = this.makePositionMatcher();
@@ -1329,9 +1251,6 @@ export class GeminiChat {
         }
         return false;
       },
-      onPersistent429: async (authType?: string, error?: unknown) =>
-        await this.handleFlashFallback(authType, error),
-      authType: this.config.getContentGeneratorConfig()?.authType,
     });
 
     return this.processStreamResponse(streamResponse, userContent);
@@ -1543,6 +1462,133 @@ export class GeminiChat {
       }
       return fallback;
     }
+  }
+
+  private asNumber(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return undefined;
+  }
+
+  private extractCompletionBudgetFromParams(
+    params: Record<string, unknown> | undefined,
+  ): number | undefined {
+    if (!params) {
+      return undefined;
+    }
+
+    const candidateKeys = [
+      'maxOutputTokens',
+      'maxTokens',
+      'max_output_tokens',
+      'max_tokens',
+    ];
+
+    for (const key of candidateKeys) {
+      if (key in params) {
+        const value = this.asNumber(params[key]);
+        if (value !== undefined) {
+          return value;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private getCompletionBudget(provider?: IProvider): number {
+    const generationBudget = this.asNumber(
+      (this.generationConfig as { maxOutputTokens?: unknown }).maxOutputTokens,
+    );
+
+    const providerParams = provider?.getModelParams?.();
+    const providerBudget = this.extractCompletionBudgetFromParams(
+      providerParams as Record<string, unknown> | undefined,
+    );
+
+    let configBudget: number | undefined;
+    if (typeof this.config.getEphemeralSetting === 'function') {
+      const candidateKeys = ['maxOutputTokens', 'max-output-tokens'];
+      for (const key of candidateKeys) {
+        const value = this.asNumber(this.config.getEphemeralSetting(key));
+        if (value !== undefined) {
+          configBudget = value;
+          break;
+        }
+      }
+    }
+
+    return (
+      generationBudget ??
+      providerBudget ??
+      configBudget ??
+      GeminiChat.DEFAULT_COMPLETION_BUDGET
+    );
+  }
+
+  private async enforceContextWindow(
+    pendingTokens: number,
+    promptId: string,
+    provider?: IProvider,
+  ): Promise<void> {
+    await this.historyService.waitForTokenUpdates();
+
+    const completionBudget = Math.max(0, this.getCompletionBudget(provider));
+    const limit = tokenLimit(this.config.getModel());
+    const marginAdjustedLimit = Math.max(
+      0,
+      limit - GeminiChat.TOKEN_SAFETY_MARGIN,
+    );
+
+    const projected =
+      this.historyService.getTotalTokens() +
+      Math.max(0, pendingTokens) +
+      completionBudget;
+
+    if (projected <= marginAdjustedLimit) {
+      return;
+    }
+
+    this.logger.warn(
+      () =>
+        `[GeminiChat] Projected token usage exceeds context limit, attempting compression`,
+      {
+        projected,
+        marginAdjustedLimit,
+        completionBudget,
+        pendingTokens,
+      },
+    );
+
+    await this.performCompression(promptId);
+    await this.historyService.waitForTokenUpdates();
+
+    const recomputed =
+      this.historyService.getTotalTokens() +
+      Math.max(0, pendingTokens) +
+      completionBudget;
+
+    if (recomputed <= marginAdjustedLimit) {
+      this.logger.debug(
+        () => '[GeminiChat] Compression reduced tokens below limit',
+        {
+          recomputed,
+          marginAdjustedLimit,
+        },
+      );
+      return;
+    }
+
+    throw new Error(
+      `Request would exceed the ${limit} token context window even after compression (projected ${recomputed} tokens including system prompt and a ${completionBudget} token completion budget). Reduce earlier history or lower maxOutputTokens.`,
+    );
   }
 
   /**

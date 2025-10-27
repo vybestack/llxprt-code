@@ -268,18 +268,6 @@ export class ApiResponseEvent {
   }
 }
 
-export class FlashFallbackEvent {
-  'event.name': 'flash_fallback';
-  'event.timestamp': string; // ISO 8601
-  auth_type: string;
-
-  constructor(auth_type: string) {
-    this['event.name'] = 'flash_fallback';
-    this['event.timestamp'] = new Date().toISOString();
-    this.auth_type = auth_type;
-  }
-}
-
 export enum LoopType {
   CONSECUTIVE_IDENTICAL_TOOL_CALLS = 'consecutive_identical_tool_calls',
   CHANTING_IDENTICAL_SENTENCES = 'chanting_identical_sentences',
@@ -661,7 +649,6 @@ export type TelemetryEvent =
   | ApiRequestEvent
   | ApiErrorEvent
   | ApiResponseEvent
-  | FlashFallbackEvent
   | LoopDetectedEvent
   | NextSpeakerCheckEvent
   | SlashCommandEvent

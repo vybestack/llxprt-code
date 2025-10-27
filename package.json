@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code",
-  "version": "0.5.0",
+  "version": "0.4.5",
   "engines": {
     "node": ">=20"
   },
@@ -14,7 +14,7 @@
     "url": "git+https://github.com/vybestack/llxprt-code.git"
   },
   "config": {
-    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.5.0"
+    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.1.19"
   },
   "scripts": {
     "start": "node scripts/start.js",
@@ -23,7 +23,7 @@
     "auth:npm": "npx google-artifactregistry-auth",
     "auth:docker": "echo 'For ghcr.io, use: echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin'",
     "auth": "npm run auth:npm && npm run auth:docker",
-    "generate": "node scripts/generate-git-commit-info.js",
+    "generate": "node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js",
     "build": "node scripts/build.js",
     "postinstall": "node scripts/postinstall.cjs",
     "build-and-start": "npm run build && npm run start",
@@ -32,9 +32,7 @@
     "build:packages": "npm run build --workspaces",
     "build:sandbox": "node scripts/build_sandbox.js --skip-npm-install-build",
     "bundle": "npm run generate && node esbuild.config.js && node scripts/copy_bundle_assets.js",
-    "test": "npm run test --workspaces --if-present --",
-    "test:multi-runtime": "npm test -- --run provider-multi-runtime # @plan:PLAN-20251018-STATELESSPROVIDER2.P01 @requirement:REQ-SP2-002",
-    "test:mutation": "npm run test:mutation --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "test:ci": "cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present && npm run test:scripts",
     "test:scripts": "vitest run --config ./scripts/tests/vitest.config.ts",
     "test:e2e": "cross-env VERBOSE=true KEEP_OUTPUT=true npm run test:integration:sandbox:none",
@@ -42,7 +40,7 @@
     "test:integration:sandbox:none": "cross-env LLXPRT_SANDBOX=false vitest run --root ./integration-tests",
     "test:integration:sandbox:docker": "cross-env LLXPRT_SANDBOX=docker npm run build:sandbox && cross-env LLXPRT_SANDBOX=docker vitest run --root ./integration-tests",
     "test:integration:sandbox:podman": "cross-env LLXPRT_SANDBOX=podman vitest run --root ./integration-tests",
-    "lint": "node ./scripts/run-lint.mjs",
+    "lint": "eslint . --ext .ts,.tsx && eslint integration-tests",
     "lint:fix": "eslint . --fix && eslint integration-tests --fix",
     "lint:ci": "eslint . --ext .ts,.tsx --max-warnings 0 && eslint integration-tests --max-warnings 0",
     "lint:all": "./scripts/lint-all.sh",
@@ -71,8 +69,6 @@
   "devDependencies": {
     "@fast-check/vitest": "^0.2.2",
     "@modelcontextprotocol/sdk": "^1.18.0",
-    "@stryker-mutator/core": "^9.2.0",
-    "@stryker-mutator/vitest-runner": "^9.2.0",
     "@types/debug": "^4.1.12",
     "@types/marked": "^5.0.2",
     "@types/mime-types": "^3.0.1",
@@ -107,7 +103,7 @@
   },
   "dependencies": {
     "@lvce-editor/ripgrep": "^1.6.0",
-    "@vybestack/llxprt-code-core": "^0.5.0",
+    "@vybestack/llxprt-code-core": "^0.1.18",
     "ajv-formats": "^3.0.1",
     "execa": "^9.6.0",
     "fast-uri": "^3.0.6",

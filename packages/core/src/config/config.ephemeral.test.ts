@@ -4,9 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Config } from './config.js';
-import { resetSettingsService } from '../settings/settingsServiceInstance.js';
+import {
+  registerSettingsService,
+  resetSettingsService,
+} from '../settings/settingsServiceInstance.js';
+import { SettingsService } from '../settings/SettingsService.js';
+import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 describe('Config - Ephemeral Settings', () => {
   let config: Config;
@@ -14,6 +19,7 @@ describe('Config - Ephemeral Settings', () => {
   beforeEach(() => {
     // Reset SettingsService singleton to ensure clean state between tests
     resetSettingsService();
+    registerSettingsService(new SettingsService());
 
     config = new Config({
       model: 'test-model',
@@ -25,6 +31,10 @@ describe('Config - Ephemeral Settings', () => {
       debugMode: false,
       cwd: '.',
     });
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   describe('todo-continuation setting', () => {
@@ -141,6 +151,20 @@ describe('Config - Ephemeral Settings', () => {
       expect(todoContinuation).toBe(false);
       expect(shellReplacement).toBe(true);
       expect(maxItems).toBe(100);
+    });
+
+    it('should normalize legacy boolean streaming values when reading settings', () => {
+      const settingsService = config.getSettingsService();
+
+      settingsService.set('streaming', false);
+
+      expect(config.getEphemeralSetting('streaming')).toBe('disabled');
+      expect(config.getEphemeralSettings().streaming).toBe('disabled');
+
+      settingsService.set('streaming', true);
+
+      expect(config.getEphemeralSetting('streaming')).toBe('enabled');
+      expect(config.getEphemeralSettings().streaming).toBe('enabled');
     });
 
     it('should return copy of all ephemeral settings', () => {

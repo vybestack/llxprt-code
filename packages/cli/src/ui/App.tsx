@@ -77,19 +77,12 @@ import {
   ApprovalMode,
   isEditorAvailable,
   EditorType,
-  FlashFallbackEvent,
-  logFlashFallback,
-  AuthType,
   type IdeContext,
   ideContext,
   type IModel,
   getSettingsService,
   DebugLogger,
-  isProQuotaExceededError,
-  isGenericQuotaExceededError,
-  UserTierId,
   uiTelemetryService,
-  DEFAULT_GEMINI_FLASH_MODEL,
 } from '@vybestack/llxprt-code-core';
 import {
   IdeIntegrationNudge,
@@ -130,7 +123,6 @@ import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
 import { useSettingsCommand } from './hooks/useSettingsCommand.js';
 import { SettingsDialog } from './components/SettingsDialog.js';
-import { ProQuotaDialog } from './components/ProQuotaDialog.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
 import {
@@ -392,9 +384,6 @@ const App = (props: AppInternalProps) => {
   const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
   const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
-  const [modelSwitchedFromQuotaError, setModelSwitchedFromQuotaError] =
-    useState<boolean>(false);
-  const [userTier, setUserTier] = useState<UserTierId | undefined>(undefined);
   const [ideContextState, setIdeContextState] = useState<
     IdeContext | undefined
   >();
@@ -409,11 +398,6 @@ const App = (props: AppInternalProps) => {
     onWorkspaceMigrationDialogOpen,
     onWorkspaceMigrationDialogClose,
   } = useWorkspaceMigration(settings);
-
-  const [isProQuotaDialogOpen, setIsProQuotaDialogOpen] = useState(false);
-  const [proQuotaDialogResolver, setProQuotaDialogResolver] = useState<
-    ((value: boolean) => void) | null
-  >(null);
 
   useEffect(() => {
     const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
@@ -550,14 +534,6 @@ const App = (props: AppInternalProps) => {
     settings.merged.useExternalAuth,
     setAuthError,
   ]);
-
-  // Sync user tier from config when authentication changes
-  useEffect(() => {
-    // Only sync when not currently authenticating
-    if (!isAuthenticating) {
-      setUserTier(config.getGeminiClient()?.getUserTier());
-    }
-  }, [config, isAuthenticating]);
 
   // Check for OAuth code needed flag
   useEffect(() => {
@@ -777,134 +753,6 @@ const App = (props: AppInternalProps) => {
     return () => clearInterval(interval);
   }, [runtime]);
 
-  // Set up Flash fallback handler
-  useEffect(() => {
-    const flashFallbackHandler = async (
-      currentModel: string,
-      fallbackModel: string,
-      error?: unknown,
-    ): Promise<boolean> => {
-      // Check if we've already switched to the fallback model
-      if (config.isInFallbackMode()) {
-        // If we're already in fallback mode, don't show the dialog again
-        return false;
-      }
-
-      let message: string;
-
-      const contentGenConfig = config.getContentGeneratorConfig();
-      const authType = contentGenConfig?.authType;
-      if (authType === AuthType.LOGIN_WITH_GOOGLE) {
-        // Use actual user tier if available; otherwise, default to FREE tier behavior (safe default)
-        const isPaidTier =
-          userTier === UserTierId.LEGACY || userTier === UserTierId.STANDARD;
-
-        // Check if this is a Pro quota exceeded error
-        if (error && isProQuotaExceededError(error)) {
-          if (isPaidTier) {
-            message = `⚡ You have reached your daily ${currentModel} quota limit.
-⚡ You can choose to authenticate with a paid API key or continue with the fallback model.
-⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
-          } else {
-            message = `⚡ You have reached your daily ${currentModel} quota limit.
-⚡ You can choose to authenticate with a paid API key or continue with the fallback model.
-⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth`;
-          }
-        } else if (error && isGenericQuotaExceededError(error)) {
-          if (isPaidTier) {
-            message = `You have reached your daily quota limit.
-To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
-Or you can switch to a different model using the /model command`;
-          } else {
-            message = `You have reached your daily quota limit.
-To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-You can switch authentication methods by typing /auth or switch to a different model using /model`;
-          }
-        } else {
-          if (isPaidTier) {
-            // Default message for other cases (like consecutive 429s)
-            message = `You are experiencing capacity issues with ${currentModel}.
-Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
-To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
-Or you can switch to a different model using the /model command`;
-          } else {
-            // Default message for other cases (like consecutive 429s)
-            message = `You are experiencing capacity issues with ${currentModel}.
-Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
-To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-You can switch authentication methods by typing /auth or switch to a different model using /model`;
-          }
-        }
-
-        // Add message to UI history
-        if (message) {
-          addItem(
-            {
-              type: MessageType.INFO,
-              text: message,
-            },
-            Date.now(),
-          );
-        }
-
-        // For Pro quota errors, show the dialog and wait for user's choice
-        if (error && isProQuotaExceededError(error)) {
-          // Set the flag to prevent tool continuation
-          setModelSwitchedFromQuotaError(true);
-          // Set global quota error flag to prevent Flash model calls
-          config.setQuotaErrorOccurred(true);
-
-          // Show the ProQuotaDialog and wait for user's choice
-          const shouldContinueWithFallback = await new Promise<boolean>(
-            (resolve) => {
-              setIsProQuotaDialogOpen(true);
-              setProQuotaDialogResolver(() => resolve);
-            },
-          );
-
-          // If user chose to continue with fallback, we don't need to stop the current prompt
-          if (shouldContinueWithFallback) {
-            // Switch to fallback model for future use
-            config.setModel(fallbackModel);
-            config.setFallbackMode(true);
-            logFlashFallback(
-              config,
-              new FlashFallbackEvent(
-                config.getContentGeneratorConfig()?.authType ||
-                  AuthType.USE_PROVIDER,
-              ),
-            );
-            return true; // Continue with current prompt using fallback model
-          }
-
-          // If user chose to authenticate, stop current prompt
-          return false;
-        }
-
-        // For other quota errors, automatically switch to fallback model
-        // Set the flag to prevent tool continuation
-        setModelSwitchedFromQuotaError(true);
-        // Set global quota error flag to prevent Flash model calls
-        config.setQuotaErrorOccurred(true);
-      }
-
-      // Don't switch models - let the user decide
-      // Don't set fallback mode either
-      const contentGenConfigForEvent = config.getContentGeneratorConfig();
-      const authTypeForEvent =
-        contentGenConfigForEvent?.authType || AuthType.USE_PROVIDER;
-      // Still log the event for telemetry
-      logFlashFallback(config, new FlashFallbackEvent(authTypeForEvent));
-      return false; // Don't continue with current prompt
-    };
-
-    config.setFlashFallbackHandler(flashFallbackHandler);
-  }, [config, addItem, userTier]);
-
   // Terminal and UI setup
   const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
   const { stdin, setRawMode } = useStdin();
@@ -1075,8 +923,6 @@ You can switch authentication methods by typing /auth or switch to a different m
     getPreferredEditor,
     onAuthError,
     performMemoryRefresh,
-    modelSwitchedFromQuotaError,
-    setModelSwitchedFromQuotaError,
     refreshStatic,
     handleUserCancel,
     registerTodoPause,
@@ -1158,30 +1004,6 @@ You can switch authentication methods by typing /auth or switch to a different m
     settings.merged.customWittyPhrases,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
-
-  const handleProQuotaChoice = useCallback(
-    (choice: 'auth' | 'continue') => {
-      setIsProQuotaDialogOpen(false);
-      if (!proQuotaDialogResolver) return;
-
-      const resolveValue = choice !== 'auth';
-      proQuotaDialogResolver(resolveValue);
-      setProQuotaDialogResolver(null);
-
-      if (choice === 'auth') {
-        openAuthDialog();
-      } else {
-        addItem(
-          {
-            type: MessageType.INFO,
-            text: 'Switched to fallback model. Tip: Press Ctrl+P to recall your previous prompt and submit it again if you wish.',
-          },
-          Date.now(),
-        );
-      }
-    },
-    [proQuotaDialogResolver, openAuthDialog, addItem],
-  );
 
   const handleExit = useCallback(
     (
@@ -1305,8 +1127,7 @@ You can switch authentication methods by typing /auth or switch to a different m
     (streamingState === StreamingState.Idle ||
       streamingState === StreamingState.Responding) &&
     !initError &&
-    !isProcessing &&
-    !isProQuotaDialogOpen;
+    !isProcessing;
 
   const handleClearScreen = useCallback(() => {
     clearItems();
@@ -1430,6 +1251,7 @@ You can switch authentication methods by typing /auth or switch to a different m
             isPending={false}
             config={config}
             slashCommands={slashCommands}
+            showTodoPanel={showTodoPanelSetting}
           />
         ))}
       </Box>
@@ -1453,6 +1275,7 @@ You can switch authentication methods by typing /auth or switch to a different m
       ? '  Type your message, @path/to/file or +path/to/file'
       : '  Type your message or @path/to/file';
 
+  const showTodoPanelSetting = settings.merged.showTodoPanel ?? true;
   const hideContextSummary = settings.merged.hideContextSummary ?? false;
 
   return (
@@ -1493,6 +1316,7 @@ You can switch authentication methods by typing /auth or switch to a different m
                 isPending={false}
                 config={config}
                 slashCommands={slashCommands}
+                showTodoPanel={showTodoPanelSetting}
               />
             )),
           ]}
@@ -1515,6 +1339,7 @@ You can switch authentication methods by typing /auth or switch to a different m
                 config={config}
                 isFocused={!isEditorDialogOpen}
                 slashCommands={slashCommands}
+                showTodoPanel={showTodoPanelSetting}
               />
             ))}
             <ShowMoreLines constrainHeight={constrainHeight} />
@@ -1541,7 +1366,7 @@ You can switch authentication methods by typing /auth or switch to a different m
           )}
 
           {/* TodoPanel outside the scrollable area */}
-          <TodoPanel width={inputWidth} />
+          {showTodoPanelSetting && <TodoPanel width={inputWidth} />}
 
           {showWorkspaceMigrationDialog ? (
             <WorkspaceMigrationDialog
@@ -1553,12 +1378,6 @@ You can switch authentication methods by typing /auth or switch to a different m
             <IdeIntegrationNudge
               ide={currentIDE}
               onComplete={handleIdePromptComplete}
-            />
-          ) : isProQuotaDialogOpen ? (
-            <ProQuotaDialog
-              currentModel={config.getModel()}
-              fallbackModel={DEFAULT_GEMINI_FLASH_MODEL}
-              onChoice={handleProQuotaChoice}
             />
           ) : showIdeRestartPrompt ? (
             <Box

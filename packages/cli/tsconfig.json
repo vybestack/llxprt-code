@@ -4,12 +4,18 @@
     "outDir": "dist",
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-core": ["../core/src/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"]
+    }
   },
   "include": [
     "index.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
+    "src/**/*.d.ts",
     "src/**/*.json",
     "./package.json"
   ],

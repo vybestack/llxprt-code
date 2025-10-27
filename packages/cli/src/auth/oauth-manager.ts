@@ -7,6 +7,23 @@
 import { OAuthToken, AuthStatus, TokenStore } from './types.js';
 import { type OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
+import { getSettingsService } from '@vybestack/llxprt-code-core';
+
+function isAuthOnlyEnabled(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+  return false;
+}
 
 /**
  * Interface for OAuth provider abstraction
@@ -120,7 +137,9 @@ export class OAuthManager {
     }
 
     this.providers.set(provider.name, provider);
+
     // IMPORTANT: Do not call provider.getToken() here. OAuth registration must stay lazy to avoid prompting during setup.
+    // This fixes issue 308 where OAuth was being initialized during MCP operations.
   }
 
   /**
@@ -552,6 +571,12 @@ export class OAuthManager {
     }
 
     const merged = this.settings.merged;
+    const settingsService = getSettingsService();
+    const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
+
+    if (authOnly) {
+      return null;
+    }
 
     // Check for API keys (highest priority)
     if (merged.providerApiKeys && merged.providerApiKeys[providerName]) {

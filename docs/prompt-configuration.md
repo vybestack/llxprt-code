@@ -70,9 +70,27 @@ Prompts are resolved in the following order (later overrides earlier):
 Prompts support template variables that are automatically replaced:
 
 - `{{enabledTools}}`: List of available tools
-- `{{environment}}`: Current environment details
+- `{{environment}}`: Current environment details (see below)
 - `{{provider}}`: Active provider name
 - `{{model}}`: Current model name
+
+### `{{environment}}` fields
+
+The environment object exposes the same properties as `PromptEnvironment` in code. Common fields include:
+
+| Field                  | Description                                              |
+| ---------------------- | -------------------------------------------------------- |
+| `workspaceName`        | Basename of the current workspace directory              |
+| `workspaceRoot`        | Absolute path to the workspace root                      |
+| `workspaceDirectories` | Array of directories included in the session             |
+| `workingDirectory`     | The cwd the CLI started in                               |
+| `isGitRepository`      | `true` if git metadata was detected                      |
+| `isSandboxed`          | `true` when running inside Docker/Seatbelt/etc.          |
+| `sandboxType`          | `macos-seatbelt`, `generic`, or omitted                  |
+| `hasIdeCompanion`      | Indicates VS Code integration status                     |
+| `folderStructure`      | A summarized folder tree (may be omitted if unavailable) |
+
+Use these fields in custom prompts, e.g., `{{environment.workspaceName}}`.
 
 ### Example Template Usage
 

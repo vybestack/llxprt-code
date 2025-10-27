@@ -4,16 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ProviderManager } from './ProviderManager.js';
 import { IProvider } from './IProvider.js';
 // import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js'; // Not used in tests
-import { resetSettingsService } from '../settings/settingsServiceInstance.js';
+import {
+  registerSettingsService,
+  resetSettingsService,
+} from '../settings/settingsServiceInstance.js';
+import { SettingsService } from '../settings/SettingsService.js';
+import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 describe('ProviderPerformanceTracker', () => {
   let mockProvider: IProvider;
 
   beforeEach(() => {
+    resetSettingsService();
+    registerSettingsService(new SettingsService());
     mockProvider = {
       name: 'test-provider',
       isDefault: false,
@@ -25,9 +32,12 @@ describe('ProviderPerformanceTracker', () => {
     } as unknown as IProvider;
   });
 
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+  });
+
   it('should accumulate session tokens correctly', () => {
     const manager = new ProviderManager();
-    resetSettingsService();
 
     // Register a mock provider
     manager.registerProvider(mockProvider);

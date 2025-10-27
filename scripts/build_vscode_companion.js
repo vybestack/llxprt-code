@@ -24,7 +24,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-execSync('npm --workspace=vscode-ide-companion run package', {
+execSync('npm --workspace=llxprt-code-vscode-ide-companion run package', {
   stdio: 'inherit',
   cwd: root,
 });

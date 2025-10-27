@@ -13,6 +13,7 @@ import {
   ConfigParameters,
   ContentGeneratorConfig,
 } from '@vybestack/llxprt-code-core';
+import type { Settings } from './settings.js';
 
 const TEST_CONTENT_GENERATOR_CONFIG: ContentGeneratorConfig = {
   apiKey: 'test-key',
@@ -380,6 +381,40 @@ describe('Configuration Integration Tests', () => {
         expect(argv.approvalMode).toBeUndefined();
         expect(argv.yolo).toBe(false);
         expect(argv.prompt).toBe('test');
+      } finally {
+        process.argv = originalArgv;
+      }
+    });
+  });
+
+  describe('CLI --set argument parsing', () => {
+    let parseArguments: typeof import('./config').parseArguments;
+
+    beforeEach(async () => {
+      const { parseArguments: parseArgs } = await import('./config');
+      parseArguments = parseArgs;
+    });
+
+    it('collects repeated --set key=value pairs', async () => {
+      const originalArgv = process.argv;
+      const settings: Settings = {};
+
+      try {
+        process.argv = [
+          'node',
+          'script.js',
+          '--set',
+          'context-limit=32000',
+          '--set',
+          'tool-output-max-tokens=4096',
+        ];
+
+        const argv = await parseArguments(settings);
+
+        expect(argv.set).toEqual([
+          'context-limit=32000',
+          'tool-output-max-tokens=4096',
+        ]);
       } finally {
         process.argv = originalArgv;
       }

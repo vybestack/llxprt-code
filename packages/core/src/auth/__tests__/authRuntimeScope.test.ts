@@ -8,7 +8,7 @@ import {
 import { SettingsService } from '../../settings/SettingsService.js';
 import {
   createProviderRuntimeContext,
-  getActiveProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../../runtime/providerRuntimeContext.js';
 
@@ -21,11 +21,11 @@ const baseConfig: AuthPrecedenceConfig = {
 };
 
 describe('auth runtime scope gaps', () => {
-  let originalContext = getActiveProviderRuntimeContext();
+  let originalContext = peekActiveProviderRuntimeContext();
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    originalContext = getActiveProviderRuntimeContext();
+    originalContext = peekActiveProviderRuntimeContext();
   });
 
   afterEach(() => {

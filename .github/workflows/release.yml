@@ -35,6 +35,16 @@ on:
         required: false
         type: boolean
         default: false
+      publish_vscode_only:
+        description: 'Only build and publish the VS Code extension (skips npm packages, container images, and GitHub release).'
+        required: false
+        type: boolean
+        default: false
+      skip_vscode_publish:
+        description: 'Skip building and publishing the VS Code extension.'
+        required: false
+        type: boolean
+        default: false
       # Remove API provider inputs - these will come from repository secrets/variables
 
 jobs:
@@ -82,6 +92,38 @@ jobs:
             is_dry_run="true"
           fi
           echo "is_dry_run=${is_dry_run}" >> "$GITHUB_OUTPUT"
+
+          publish_vscode_only="false"
+          if [[ "${{ github.event.inputs.publish_vscode_only }}" == "true" ]]; then
+            publish_vscode_only="true"
+          fi
+          echo "publish_vscode_only=${publish_vscode_only}" >> "$GITHUB_OUTPUT"
+
+          skip_vscode="false"
+          if [[ "${{ github.event.inputs.skip_vscode_publish }}" == "true" ]]; then
+            skip_vscode="true"
+          fi
+          echo "skip_vscode=${skip_vscode}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$publish_vscode_only" == "true" && "$skip_vscode" == "true" ]]; then
+            echo "publish_vscode_only and skip_vscode_publish cannot both be true." >&2
+            exit 1
+          fi
+
+          should_publish_vscode="true"
+          if [[ "$skip_vscode" == "true" ]]; then
+            should_publish_vscode="false"
+          elif [[ "$is_nightly" == "true" ]]; then
+            echo "Nightly run detected; skipping VS Code Marketplace publication."
+            should_publish_vscode="false"
+          fi
+          echo "should_publish_vscode=${should_publish_vscode}" >> "$GITHUB_OUTPUT"
+
+          should_run_standard_release="true"
+          if [[ "$publish_vscode_only" == "true" ]]; then
+            should_run_standard_release="false"
+          fi
+          echo "should_run_standard_release=${should_run_standard_release}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -140,6 +182,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Create and switch to a release branch
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         id: release_branch
         run: |
           BRANCH_NAME="release/${{ steps.version.outputs.RELEASE_TAG }}"
@@ -147,10 +190,12 @@ jobs:
           echo "BRANCH_NAME=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Update package versions
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         run: |
           npm run release:version ${{ steps.version.outputs.RELEASE_VERSION }}
 
       - name: Commit and Conditionally Push package versions
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         run: |
           git add package.json package-lock.json packages/*/package.json || true
           git commit -m "chore(release): ${{ steps.version.outputs.RELEASE_TAG }}"
@@ -168,7 +213,45 @@ jobs:
           npm run bundle
           npm run prepare:package
 
+      - name: Sync VS Code extension version
+        if: ${{ steps.vars.outputs.should_publish_vscode == 'true' && steps.vars.outputs.should_run_standard_release == 'false' }}
+        run: |
+          npm version ${{ steps.version.outputs.RELEASE_VERSION }} \
+            --workspace=llxprt-code-vscode-ide-companion \
+            --no-git-tag-version \
+            --allow-same-version
+
+      - name: Package VS Code extension
+        id: vscode_package
+        if: ${{ steps.vars.outputs.should_publish_vscode == 'true' }}
+        run: |
+          rm -f packages/vscode-ide-companion/*.vsix
+          npm run build:vscode
+          VSIX_FILE=$(find packages/vscode-ide-companion -maxdepth 1 -type f -name '*.vsix' | head -n 1)
+          if [[ -z "$VSIX_FILE" ]]; then
+            echo "VSIX build did not produce a package." >&2
+            exit 1
+          fi
+          echo "VSIX_PATH=$VSIX_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Publish VS Code extension
+        if: ${{ steps.vars.outputs.should_publish_vscode == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSIX_PATH: ${{ steps.vscode_package.outputs.VSIX_PATH }}
+        run: |
+          if [[ -z "${VSCE_PAT}" ]]; then
+            echo "VSCE_PAT secret is not configured. Set it to publish the VS Code extension." >&2
+            exit 1
+          fi
+          if [[ -z "${VSIX_PATH}" || ! -f "${VSIX_PATH}" ]]; then
+            echo "VSIX package not found at ${VSIX_PATH}." >&2
+            exit 1
+          fi
+          npx @vscode/vsce publish --packagePath "${VSIX_PATH}" --skip-duplicate
+
       - name: Configure npm for publishing
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
@@ -176,21 +259,23 @@ jobs:
           scope: '@vybestack'
 
       - name: Publish @vybestack/llxprt-code-core
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code-core --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Install latest core package
-        if: steps.vars.outputs.is_dry_run == 'false'
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         run: npm install @vybestack/llxprt-code-core@${{ steps.version.outputs.RELEASE_VERSION }} --workspace=@vybestack/llxprt-code --save-exact
 
       - name: Publish @vybestack/llxprt-code
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         run: npm publish --workspace=@vybestack/llxprt-code --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Prepare sandbox package tarballs
-        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         run: |
           mkdir -p packages/cli/dist packages/core/dist
           rm -f packages/cli/dist/vybestack-llxprt-code-*.tgz packages/core/dist/vybestack-llxprt-code-core-*.tgz
@@ -198,7 +283,7 @@ jobs:
           npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist
 
       - name: Log in to Container Registry
-        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # ratchet:docker/login-action@v3.3.0
         with:
           registry: ${{ env.REGISTRY }}
@@ -206,7 +291,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract sandbox image metadata
-        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         id: sandbox_meta
         uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # ratchet:docker/metadata-action@v5.5.1
         with:
@@ -216,7 +301,7 @@ jobs:
             type=raw,value=latest,enable=${{ steps.vars.outputs.is_nightly != 'true' }}
 
       - name: Build and push sandbox image
-        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         uses: docker/build-push-action@4f58ea79222b3b9dc2c8bbdd6debcef730109a75 # ratchet:docker/build-push-action@v6.9.0
         with:
           context: .
@@ -227,7 +312,7 @@ jobs:
             CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
 
       - name: Generate Release Notes
-        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         id: release_notes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -382,16 +467,26 @@ jobs:
           echo "Release notes generated"
 
       - name: Create GitHub Release and Tag
-        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_BRANCH: ${{ steps.release_branch.outputs.BRANCH_NAME }}
+          VSIX_PATH: ${{ steps.vscode_package.outputs.VSIX_PATH }}
         run: |
-          gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
-            bundle/llxprt.js \
-            --target "$RELEASE_BRANCH" \
-            --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
-            --notes-file release-notes.md
+          if [[ -n "${VSIX_PATH}" && -f "${VSIX_PATH}" ]]; then
+            gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
+              bundle/llxprt.js \
+              "${VSIX_PATH}" \
+              --target "$RELEASE_BRANCH" \
+              --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
+              --notes-file release-notes.md
+          else
+            gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
+              bundle/llxprt.js \
+              --target "$RELEASE_BRANCH" \
+              --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
+              --notes-file release-notes.md
+          fi
 
       - name: Create Issue on Failure
         if: failure()

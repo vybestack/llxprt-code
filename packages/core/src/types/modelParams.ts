@@ -74,6 +74,8 @@ export interface EphemeralSettings {
   retries?: number;
   /** Initial delay in milliseconds between retry attempts */
   retrywait?: number;
+  /** Force OAuth authentication and ignore API keys/env vars */
+  authOnly?: boolean;
 }
 
 /**

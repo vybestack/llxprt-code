@@ -9,6 +9,7 @@ import os from 'node:os';
 import process from 'node:process';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import { getFolderStructure } from '../utils/getFolderStructure.js';
 import type {
   PromptContext,
@@ -74,16 +75,17 @@ function getToolNameMapping(): Record<string, string> {
 /**
  * Build PromptContext from current environment and parameters
  */
-async function buildPromptContext(options: {
-  model: string;
-  tools?: string[];
-  provider: string;
-}): Promise<PromptContext> {
-  const { model, tools, provider } = options;
+async function buildPromptContext(
+  model?: string,
+  tools?: string[],
+  provider?: string,
+): Promise<PromptContext> {
+  const cwd = process.cwd();
+
   // Generate folder structure for the current working directory
   let folderStructure: string | undefined;
   try {
-    folderStructure = await getFolderStructure(process.cwd(), {
+    folderStructure = await getFolderStructure(cwd, {
       maxItems: 100, // Limit for startup performance
     });
   } catch (error) {
@@ -91,11 +93,16 @@ async function buildPromptContext(options: {
     console.warn('Failed to generate folder structure:', error);
   }
 
+  const workspaceDirectories = [cwd];
+
   const environment: PromptEnvironment = {
-    isGitRepository: isGitRepository(process.cwd()),
+    isGitRepository: isGitRepository(cwd),
     isSandboxed: !!process.env.SANDBOX,
     hasIdeCompanion: false,
-    workingDirectory: process.cwd(),
+    workingDirectory: cwd,
+    workspaceRoot: cwd,
+    workspaceName: path.basename(cwd),
+    workspaceDirectories,
     folderStructure,
   };
 
@@ -140,9 +147,25 @@ async function buildPromptContext(options: {
   }
 
   // Use provider if explicitly passed, otherwise get from settings or default to gemini
+  let resolvedProvider = provider || 'gemini';
+
+  // If provider wasn't explicitly passed, try to get it from settings
+  if (!provider) {
+    try {
+      const settingsService = getSettingsService();
+      const activeProvider = settingsService.get('activeProvider') as string;
+      if (activeProvider) {
+        resolvedProvider = activeProvider;
+      }
+    } catch (_error) {
+      // If we can't get settings (e.g., during tests), use default
+      // Don't log in production to avoid noise
+    }
+  }
+
   return {
-    provider,
-    model,
+    provider: resolvedProvider,
+    model: model || 'gemini-1.5-pro',
     enabledTools,
     environment,
   };
@@ -151,28 +174,14 @@ async function buildPromptContext(options: {
 /**
  * Async version of getCoreSystemPrompt that uses the new PromptService
  */
-export interface CoreSystemPromptOptions {
-  provider: string;
-  model: string;
-  tools?: string[];
-  userMemory?: string;
-}
-
 export async function getCoreSystemPromptAsync(
-  options: CoreSystemPromptOptions,
+  userMemory?: string,
+  model?: string,
+  tools?: string[],
 ): Promise<string> {
-  /**
-   * @plan PLAN-20250218-STATELESSPROVIDER.P05
-   * @requirement REQ-SP-004
-   * @pseudocode provider-invocation.md lines 8-15
-   */
   const service = await getPromptService();
-  const context = await buildPromptContext({
-    model: options.model,
-    tools: options.tools,
-    provider: options.provider,
-  });
-  return await service.getPrompt(context, options.userMemory);
+  const context = await buildPromptContext(model, tools);
+  return await service.getPrompt(context, userMemory);
 }
 
 /**

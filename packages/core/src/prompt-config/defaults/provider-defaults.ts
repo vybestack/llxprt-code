@@ -8,6 +8,11 @@ import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import { DebugLogger } from '../../debug/index.js';
+import {
+  getManifestOrigin,
+  loadPromptFromManifest,
+} from './manifest-loader.js';
+import { reportMissingPrompt } from './prompt-warnings.js';
 
 // In bundled environment, use global __dirname if available
 const __dirname =
@@ -57,6 +62,18 @@ function loadMarkdownFile(filename: string): string {
       () =>
         `[PROMPT_LOADER] CI: ${typeof process !== 'undefined' ? process.env?.CI : 'N/A'}`,
     );
+  }
+
+  const manifestContent = loadPromptFromManifest(filename);
+  if (manifestContent !== null) {
+    if (debugLog) {
+      const origin = getManifestOrigin();
+      logger.debug(
+        () =>
+          `[PROMPT_LOADER] Loaded ${filename} from manifest${origin ? ` (${origin})` : ''}`,
+      );
+    }
+    return manifestContent;
   }
 
   try {
@@ -228,7 +245,12 @@ function loadMarkdownFile(filename: string): string {
     );
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.warn(
+    const warningDetail =
+      error instanceof Error && error.stack
+        ? error.stack.split('\n')[0]
+        : errorMsg;
+    reportMissingPrompt(filename, 'provider-defaults', warningDetail);
+    console.error(
       `Warning: Could not load ${filename}, using empty content. Error: ${errorMsg}`,
     );
     if (debugLog) {

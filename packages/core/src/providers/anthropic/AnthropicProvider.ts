@@ -885,12 +885,11 @@ export class AnthropicProvider extends BaseProvider {
 
     // For OAuth mode, inject core system prompt as the first human message
     if (isOAuth) {
-      const corePrompt = await getCoreSystemPromptAsync({
+      const corePrompt = await getCoreSystemPromptAsync(
         userMemory,
-        model: currentModel,
-        provider: this.name,
-        tools: toolNamesForPrompt,
-      });
+        currentModel,
+        toolNamesForPrompt,
+      );
       if (corePrompt) {
         anthropicMessages.unshift({
           role: 'user',
@@ -900,12 +899,11 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     const systemPrompt = !isOAuth
-      ? await getCoreSystemPromptAsync({
+      ? await getCoreSystemPromptAsync(
           userMemory,
-          model: currentModel,
-          provider: this.name,
-          tools: toolNamesForPrompt,
-        })
+          currentModel,
+          toolNamesForPrompt,
+        )
       : undefined;
     const requestBody = {
       model: currentModel,

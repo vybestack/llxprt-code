@@ -5,11 +5,6 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-import { AuthType } from '../core/contentGenerator.js';
-import {
-  isProQuotaExceededError,
-  isGenericQuotaExceededError,
-} from './quotaErrorDetection.js';
 import { DebugLogger } from '../debug/index.js';
 
 export interface HttpError extends Error {
@@ -21,11 +16,6 @@ export interface RetryOptions {
   initialDelayMs: number;
   maxDelayMs: number;
   shouldRetry: (error: Error) => boolean;
-  onPersistent429?: (
-    authType?: string,
-    error?: unknown,
-  ) => Promise<string | boolean | null>;
-  authType?: string;
   trackThrottleWaitTime?: (waitTimeMs: number) => void;
 }
 
@@ -35,6 +25,188 @@ const DEFAULT_RETRY_OPTIONS: RetryOptions = {
   maxDelayMs: 30000, // 30 seconds
   shouldRetry: defaultShouldRetry,
 };
+
+export const STREAM_INTERRUPTED_ERROR_CODE = 'LLXPRT_STREAM_INTERRUPTED';
+
+const TRANSIENT_ERROR_PHRASES = [
+  'connection error',
+  'connection terminated',
+  'connection reset',
+  'socket hang up',
+  'socket hung up',
+  'socket closed',
+  'socket timeout',
+  'network timeout',
+  'network error',
+  'fetch failed',
+  'request aborted',
+  'request timeout',
+  'stream closed',
+  'stream prematurely closed',
+  'read econnreset',
+  'write econnreset',
+];
+
+const TRANSIENT_ERROR_REGEXES = [
+  /econn(reset|refused|aborted)/i,
+  /etimedout/i,
+  /und_err_(socket|connect|headers_timeout|body_timeout)/i,
+  /tcp connection.*(reset|closed)/i,
+];
+
+const TRANSIENT_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ECONNABORTED',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'ETIMEDOUT',
+  'EPIPE',
+  'EAI_AGAIN',
+  'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  STREAM_INTERRUPTED_ERROR_CODE,
+]);
+
+function collectErrorDetails(error: unknown): {
+  messages: string[];
+  codes: string[];
+} {
+  const messages: string[] = [];
+  const codes: string[] = [];
+  const stack: unknown[] = [error];
+  const visited = new Set<unknown>();
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current === null || current === undefined) {
+      continue;
+    }
+
+    if (typeof current === 'string') {
+      messages.push(current);
+      continue;
+    }
+
+    if (typeof current !== 'object') {
+      continue;
+    }
+
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+
+    const errorObject = current as {
+      message?: unknown;
+      code?: unknown;
+      cause?: unknown;
+      originalError?: unknown;
+      error?: unknown;
+    };
+
+    if ('message' in errorObject && typeof errorObject.message === 'string') {
+      messages.push(errorObject.message);
+    }
+    if ('code' in errorObject && typeof errorObject.code === 'string') {
+      codes.push(errorObject.code);
+    }
+
+    const possibleNestedErrors = [
+      errorObject.cause,
+      errorObject.originalError,
+      errorObject.error,
+    ];
+    for (const nested of possibleNestedErrors) {
+      if (nested && nested !== current) {
+        stack.push(nested);
+      }
+    }
+  }
+
+  return { messages, codes };
+}
+
+export function createStreamInterruptionError(
+  message: string,
+  details?: Record<string, unknown>,
+  cause?: unknown,
+): Error {
+  const error = new Error(message);
+  error.name = 'StreamInterruptionError';
+  (error as { code?: string }).code = STREAM_INTERRUPTED_ERROR_CODE;
+  if (details) {
+    (error as { details?: Record<string, unknown> }).details = details;
+  }
+  if (cause && !(error as { cause?: unknown }).cause) {
+    (error as { cause?: unknown }).cause = cause;
+  }
+  return error;
+}
+
+export function getErrorCode(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null) {
+    if (
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string'
+    ) {
+      return (error as { code: string }).code;
+    }
+
+    if (
+      'error' in error &&
+      typeof (error as { error?: unknown }).error === 'object' &&
+      (error as { error?: unknown }).error !== null &&
+      'code' in (error as { error?: { code?: unknown } }).error! &&
+      typeof (
+        (error as { error?: { code?: unknown } }).error as {
+          code?: unknown;
+        }
+      ).code === 'string'
+    ) {
+      return (
+        (error as { error?: { code?: unknown } }).error as {
+          code?: string;
+        }
+      ).code;
+    }
+  }
+
+  return undefined;
+}
+
+export function isNetworkTransientError(error: unknown): boolean {
+  const { messages, codes } = collectErrorDetails(error);
+
+  const lowerMessages = messages.map((msg) => msg.toLowerCase());
+  if (
+    lowerMessages.some((msg) =>
+      TRANSIENT_ERROR_PHRASES.some((phrase) => msg.includes(phrase)),
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    messages.some((msg) =>
+      TRANSIENT_ERROR_REGEXES.some((regex) => regex.test(msg)),
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    codes
+      .map((code) => code.toUpperCase())
+      .some((code) => TRANSIENT_ERROR_CODES.has(code))
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
 /**
  * Default predicate function to determine if a retry should be attempted.
@@ -54,6 +226,11 @@ function defaultShouldRetry(error: Error | unknown): boolean {
     if (error.message.includes('429')) return true;
     if (error.message.match(/5\d{2}/)) return true;
   }
+
+  if (isNetworkTransientError(error)) {
+    return true;
+  }
+
   return false;
 }
 
@@ -77,14 +254,7 @@ export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options?: Partial<RetryOptions>,
 ): Promise<T> {
-  const {
-    maxAttempts,
-    initialDelayMs,
-    maxDelayMs,
-    onPersistent429,
-    authType,
-    shouldRetry,
-  } = {
+  const { maxAttempts, initialDelayMs, maxDelayMs, shouldRetry } = {
     ...DEFAULT_RETRY_OPTIONS,
     ...options,
   };
@@ -92,7 +262,6 @@ export async function retryWithBackoff<T>(
   const logger = new DebugLogger('llxprt:retry');
   let attempt = 0;
   let currentDelay = initialDelayMs;
-  let consecutive429Count = 0;
 
   while (attempt < maxAttempts) {
     attempt++;
@@ -100,97 +269,6 @@ export async function retryWithBackoff<T>(
       return await fn();
     } catch (error) {
       const errorStatus = getErrorStatus(error);
-
-      // Check for Pro quota exceeded error first - immediate fallback for OAuth users
-      if (
-        errorStatus === 429 &&
-        authType === AuthType.LOGIN_WITH_GOOGLE &&
-        isProQuotaExceededError(error) &&
-        onPersistent429
-      ) {
-        try {
-          const fallbackModel = await onPersistent429(authType, error);
-          if (fallbackModel !== false && fallbackModel !== null) {
-            // Reset attempt counter and try with new model
-            attempt = 0;
-            consecutive429Count = 0;
-            currentDelay = initialDelayMs;
-            // With the model updated, we continue to the next attempt
-            continue;
-          } else {
-            // Fallback handler returned null/false, meaning don't continue - stop retry process
-            throw error;
-          }
-        } catch (fallbackError) {
-          // If fallback fails, continue with original error
-          logger.debug(
-            () => `Fallback to Flash model failed: ${fallbackError}`,
-          );
-        }
-      }
-
-      // Check for generic quota exceeded error (but not Pro, which was handled above) - immediate fallback for OAuth users
-      if (
-        errorStatus === 429 &&
-        authType === AuthType.LOGIN_WITH_GOOGLE &&
-        !isProQuotaExceededError(error) &&
-        isGenericQuotaExceededError(error) &&
-        onPersistent429
-      ) {
-        try {
-          const fallbackModel = await onPersistent429(authType, error);
-          if (fallbackModel !== false && fallbackModel !== null) {
-            // Reset attempt counter and try with new model
-            attempt = 0;
-            consecutive429Count = 0;
-            currentDelay = initialDelayMs;
-            // With the model updated, we continue to the next attempt
-            continue;
-          } else {
-            // Fallback handler returned null/false, meaning don't continue - stop retry process
-            throw error;
-          }
-        } catch (fallbackError) {
-          // If fallback fails, continue with original error
-          logger.debug(
-            () => `Fallback to Flash model failed: ${fallbackError}`,
-          );
-        }
-      }
-
-      // Track consecutive 429 errors
-      if (errorStatus === 429) {
-        consecutive429Count++;
-      } else {
-        consecutive429Count = 0;
-      }
-
-      // If we have persistent 429s and a fallback callback for OAuth
-      if (
-        consecutive429Count >= 2 &&
-        onPersistent429 &&
-        authType === AuthType.LOGIN_WITH_GOOGLE
-      ) {
-        try {
-          const fallbackModel = await onPersistent429(authType, error);
-          if (fallbackModel !== false && fallbackModel !== null) {
-            // Reset attempt counter and try with new model
-            attempt = 0;
-            consecutive429Count = 0;
-            currentDelay = initialDelayMs;
-            // With the model updated, we continue to the next attempt
-            continue;
-          } else {
-            // Fallback handler returned null/false, meaning don't continue - stop retry process
-            throw error;
-          }
-        } catch (fallbackError) {
-          // If fallback fails, continue with original error
-          logger.debug(
-            () => `Fallback to Flash model failed: ${fallbackError}`,
-          );
-        }
-      }
 
       // Check if we've exhausted retries or shouldn't retry
       if (attempt >= maxAttempts || !shouldRetry(error as Error)) {

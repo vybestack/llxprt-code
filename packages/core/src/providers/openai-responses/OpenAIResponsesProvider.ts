@@ -361,12 +361,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
       options.runtime?.config?.getUserMemory?.(),
     );
 
-    const systemPrompt = await getCoreSystemPromptAsync({
+    const systemPrompt = await getCoreSystemPromptAsync(
       userMemory,
-      model: resolvedModel,
-      provider: this.name,
-      tools: toolNamesForPrompt,
-    });
+      resolvedModel,
+      toolNamesForPrompt,
+    );
 
     const input: Array<{
       role: 'user' | 'assistant' | 'system';

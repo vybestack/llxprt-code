@@ -93,6 +93,16 @@ This means if you're using OpenAI as your main provider but want web search, you
 - **Q: Why don't I see cached token counts in my stats output?**
   - A: Cached token information is only displayed when cached tokens are being used. This feature is available for API key users (Gemini API key or Vertex AI) but not for OAuth users (Google Personal/Enterprise accounts) at this time, as the Code Assist API does not support cached content creation. You can still view your total token usage with the `/stats` command.
 
+## Streaming / Retry issues
+
+- **Message:** `stream interrupted, retrying` (sometimes followed by `attempt 2/6`)
+  - **Cause:** LLxprt detected a transient network problem (SSE disconnect, socket hang-up, etc.) and automatically queued a retry using the global `retries`/`retrywait` settings.
+  - **Resolution:** Normally no action is required; the CLI will retry up to six times with exponential backoff. If you consistently hit this message, consider increasing `/set retrywait <ms>` or `/set retries <n>`, or inspect local proxies/firewalls.
+
+- **Error:** `Request would exceed the <limit> token context window even after compression (… including system prompt and a <completion> token completion budget).`
+  - **Cause:** After PR #315, system prompts and the contents of your loaded `LLXPRT.md` files are counted in `context-limit`. Even after compression there isn’t enough room for the pending turn plus the reserved completion budget.
+  - **Resolution:** Shorten or remove entries from your `LLXPRT.md`, run `/compress`, lower `/set maxOutputTokens <n>` (or provider-specific `max_tokens`), or temporarily disable large memories before trying again.
+
 ## PowerShell @ Symbol Issues
 
 ### Problem
