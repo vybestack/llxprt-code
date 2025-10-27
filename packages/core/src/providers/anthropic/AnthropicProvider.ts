@@ -186,7 +186,7 @@ export class AnthropicProvider extends BaseProvider {
         () => 'No authentication available for Anthropic API calls',
       );
       throw new Error(
-        `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
+        'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
       );
     }
 
