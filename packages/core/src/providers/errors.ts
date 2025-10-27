@@ -91,3 +91,81 @@ export class MissingProviderRuntimeError extends Error {
     };
   }
 }
+
+/**
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+ * @requirement:REQ-SP4-002
+ * @pseudocode provider-runtime-handling.md lines 11-12
+ */
+export class ProviderRuntimeNormalizationError extends Error {
+  readonly providerKey: string;
+  readonly requirement: string;
+  readonly context: {
+    runtimeId?: string;
+    stage?: string;
+    metadata?: Record<string, unknown>;
+  };
+
+  constructor({
+    providerKey,
+    message,
+    requirement = 'REQ-SP4-002',
+    runtimeId,
+    stage,
+    metadata,
+  }: {
+    providerKey: string;
+    message: string;
+    requirement?: string;
+    runtimeId?: string;
+    stage?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    super(message);
+    this.name = 'ProviderRuntimeNormalizationError';
+    this.providerKey = providerKey;
+    this.requirement = requirement;
+    this.context = {
+      runtimeId,
+      stage,
+      metadata,
+    };
+  }
+}
+
+/**
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+ * @requirement:REQ-SP4-004
+ * @pseudocode logging-wrapper-adjustments.md lines 11, 15
+ */
+export class ProviderRuntimeScopeError extends Error {
+  readonly requirement: string;
+  readonly context: {
+    callId?: string;
+    stage?: string;
+    metadata?: Record<string, unknown>;
+  };
+
+  constructor({
+    message,
+    requirement = 'REQ-SP4-004',
+    callId,
+    stage,
+    metadata,
+  }: {
+    message: string;
+    requirement?: string;
+    callId?: string;
+    stage?: string;
+    metadata?: Record<string, unknown>;
+  }) {
+    super(message);
+    this.name = 'ProviderRuntimeScopeError';
+    this.requirement = requirement;
+    this.context = {
+      callId,
+      stage,
+      metadata,
+    };
+  }
+}

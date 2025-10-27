@@ -14,26 +14,9 @@ import {
   createProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
-  setProviderRuntimeContextFallback,
 } from '../runtime/providerRuntimeContext.js';
 
 let settingsServiceInstance: SettingsService | null = null;
-
-function ensureSingletonSettingsService(): SettingsService {
-  if (!settingsServiceInstance) {
-    settingsServiceInstance = new SettingsService();
-  }
-
-  return settingsServiceInstance;
-}
-
-setProviderRuntimeContextFallback(() =>
-  createProviderRuntimeContext({
-    settingsService: ensureSingletonSettingsService(),
-    runtimeId: 'legacy-singleton',
-    metadata: { source: 'singleton-fallback' },
-  }),
-);
 
 /**
  * Get or create the global SettingsService singleton instance.
@@ -46,7 +29,9 @@ export function getSettingsService(): SettingsService {
     return activeContext.settingsService;
   }
 
-  return ensureSingletonSettingsService();
+  throw new Error(
+    '[settings] No SettingsService registered in the active provider runtime context. Call activateIsolatedRuntimeContext() and registerSettingsService() before accessing settings (@plan:PLAN-20251023-STATELESS-HARDENING.P08, @requirement:REQ-SP4-004).',
+  );
 }
 
 /**

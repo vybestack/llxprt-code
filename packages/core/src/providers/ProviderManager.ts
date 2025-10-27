@@ -5,7 +5,7 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-import { IProvider } from './IProvider.js';
+import { IProvider, GenerateChatOptions } from './IProvider.js';
 import { IModel } from './IModel.js';
 import { IProviderManager } from './IProviderManager.js';
 import { Config } from '../config/config.js';
@@ -28,7 +28,10 @@ import {
   getActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
-import { MissingProviderRuntimeError } from './errors.js';
+import {
+  MissingProviderRuntimeError,
+  ProviderRuntimeNormalizationError,
+} from './errors.js';
 
 const PROVIDER_CAPABILITY_HINTS: Record<
   string,
@@ -233,6 +236,12 @@ export class ProviderManager implements IProviderManager {
       setRuntimeContextResolver?: (
         resolver: () => ProviderRuntimeContext,
       ) => void;
+      setOptionsNormalizer?: (
+        normalizer: (
+          options: GenerateChatOptions,
+          providerName: string,
+        ) => GenerateChatOptions,
+      ) => void;
     };
     runtimeAware.setRuntimeSettingsService?.(this.settingsService);
     if (this.config && runtimeAware.setConfig) {
@@ -244,6 +253,14 @@ export class ProviderManager implements IProviderManager {
     ) {
       runtimeAware.setRuntimeContextResolver(() =>
         this.snapshotRuntimeContext('ProviderManager.syncProviderRuntime'),
+      );
+    }
+    if (
+      runtimeAware.setOptionsNormalizer &&
+      typeof runtimeAware.setOptionsNormalizer === 'function'
+    ) {
+      runtimeAware.setOptionsNormalizer((options, providerName) =>
+        this.normalizeRuntimeInputs(options, providerName),
       );
     }
   }
@@ -312,6 +329,165 @@ export class ProviderManager implements IProviderManager {
       config,
       runtimeId: callRuntimeId,
       metadata: callMetadata,
+    };
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * @requirement:REQ-SP4-003
+   * @requirement:REQ-SP4-004
+   * @requirement:REQ-SP4-005
+   * @pseudocode provider-runtime-handling.md lines 10-16
+   *
+   * Normalize runtime inputs per call - no stored settings/config fallbacks.
+   * This method enforces that all runtime context is provided per-call and that
+   * providers cannot rely on stored state.
+   */
+  normalizeRuntimeInputs(
+    rawOptions: GenerateChatOptions,
+    providerName?: string,
+  ): GenerateChatOptions {
+    const runtimeId = rawOptions.runtime?.runtimeId || 'unknown';
+    const targetProvider = providerName || this.getActiveProviderName();
+
+    // REQ-SP4-002: Check for required settings service and config in runtime context
+    const settingsService =
+      rawOptions.settings ?? rawOptions.runtime?.settingsService;
+    const config = rawOptions.config ?? rawOptions.runtime?.config;
+
+    if (!settingsService) {
+      throw new ProviderRuntimeNormalizationError({
+        providerKey: 'ProviderManager',
+        message:
+          'ProviderManager requires call-scoped settings; legacy provider state is disabled.',
+        requirement: 'REQ-SP4-002',
+        runtimeId,
+        stage: 'normalizeRuntimeInputs',
+        metadata: {
+          hint: 'SettingsService must be provided in options.settings or runtime.settingsService',
+        },
+      });
+    }
+
+    if (!config) {
+      throw new ProviderRuntimeNormalizationError({
+        providerKey: 'ProviderManager',
+        message:
+          'ProviderManager requires call-scoped config; legacy provider state is disabled.',
+        requirement: 'REQ-SP4-002',
+        runtimeId,
+        stage: 'normalizeRuntimeInputs',
+        metadata: {
+          hint: 'Config must be provided in options.config or runtime.config',
+        },
+      });
+    }
+
+    // REQ-SP4-003: Compose normalized.resolved with runtime helpers
+    const providerSettings =
+      settingsService.getProviderSettings(targetProvider);
+    const providerInstance = this.providers.get(targetProvider);
+    const resolved = {
+      model:
+        rawOptions.resolved?.model ??
+        config.getModel?.() ??
+        (providerSettings.model as string | undefined) ??
+        (providerInstance
+          ? this.getStoredModelName(providerInstance)
+          : undefined),
+      baseURL:
+        rawOptions.resolved?.baseURL ??
+        (providerSettings.baseURL as string | undefined),
+      authToken:
+        rawOptions.resolved?.authToken ??
+        (providerSettings.apiKey as string | undefined),
+      telemetry: {
+        ...rawOptions.resolved?.telemetry,
+        runtimeId,
+        normalizedAt: new Date().toISOString(),
+        provider: targetProvider,
+      },
+    };
+
+    // REQ-SP4-003: Validate required fields in resolved options
+    const missingFields: string[] = [];
+    if (!resolved.model) missingFields.push('model');
+    // Note: Gemini and some providers don't require baseURL/authToken in all configurations
+    const baseUrlOptionalProviders = new Set([
+      'gemini',
+      'openai',
+      'openai-responses',
+      'anthropic',
+    ]);
+    if (!resolved.baseURL && !baseUrlOptionalProviders.has(targetProvider)) {
+      missingFields.push('baseURL');
+    }
+    if (!resolved.authToken && targetProvider !== 'gemini') {
+      // Check if provider can resolve auth lazily (e.g., via OAuth)
+      // If the provider has getAuthToken(), it can handle its own auth precedence
+      const providerInstance = this.providers.get(targetProvider);
+
+      // Check for getAuthToken on the actual provider
+      // (might be wrapped in LoggingProviderWrapper)
+      interface ProviderWithWrapper {
+        wrappedProvider?: IProvider;
+      }
+      interface ProviderWithAuth {
+        getAuthToken?: () => Promise<string>;
+      }
+
+      let actualProvider: IProvider | undefined = providerInstance;
+      if (providerInstance && 'wrappedProvider' in providerInstance) {
+        actualProvider = (providerInstance as ProviderWithWrapper)
+          .wrappedProvider;
+      }
+
+      const canResolveAuth =
+        actualProvider &&
+        'getAuthToken' in actualProvider &&
+        typeof (actualProvider as ProviderWithAuth).getAuthToken === 'function';
+
+      if (!canResolveAuth) {
+        // Only fail for providers without lazy auth resolution capability
+        missingFields.push('authToken');
+      }
+      // Otherwise let the provider run its multi-modal precedence chain:
+      // 1. Manual key (from /key)
+      // 2. Keyfile (from /keyfile)
+      // 3. Environment variables
+      // 4. OAuth token (if enabled)
+    }
+
+    if (missingFields.length > 0) {
+      throw new ProviderRuntimeNormalizationError({
+        providerKey: 'ProviderManager',
+        message: `Incomplete runtime resolution (${missingFields.join(', ')}) for runtimeId=${runtimeId}`,
+        requirement: 'REQ-SP4-003',
+        runtimeId,
+        stage: 'normalizeRuntimeInputs',
+        metadata: { missingFields, provider: targetProvider },
+      });
+    }
+
+    // REQ-SP4-005: Ensure normalized.userMemory and metadata derive from runtime context
+    const userMemory = rawOptions.userMemory ?? config.getUserMemory?.();
+    const metadata = {
+      ...rawOptions.metadata,
+      ...rawOptions.runtime?.metadata,
+      _normalized: true,
+      _normalizationTime: new Date().toISOString(),
+      _runtimeId: runtimeId,
+      _provider: targetProvider,
+    };
+
+    return {
+      ...rawOptions,
+      settings: settingsService,
+      config,
+      resolved,
+      userMemory,
+      metadata,
     };
   }
 
@@ -800,6 +976,97 @@ export class ProviderManager implements IProviderManager {
       (this.settingsService.get('activeProvider') as string) ||
       '';
     return this.providerCapabilities.get(name);
+  }
+
+  /* @plan:PLAN-20251023-STATELESS-HARDENING.P06 */
+  /* @requirement:REQ-SP4-004 */
+  prepareStatelessProviderInvocation(context?: ProviderRuntimeContext): void {
+    const stage = 'ProviderManager.prepareStatelessProviderInvocation';
+    const runtimeContext = context ?? this.runtime;
+
+    if (!runtimeContext) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['runtime'],
+        requirement: 'REQ-SP4-004',
+        stage,
+        metadata: {
+          hint: 'Register CLI runtime context before invoking providers.',
+        },
+      });
+    }
+
+    if (!runtimeContext.settingsService) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['settings'],
+        requirement: 'REQ-SP4-004',
+        stage,
+        metadata: {
+          runtimeId: runtimeContext.runtimeId,
+          hint: 'ProviderManager requires a SettingsService for stateless invocation.',
+        },
+      });
+    }
+
+    const resolvedConfig = runtimeContext.config ?? this.config;
+    if (!resolvedConfig) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['config'],
+        requirement: 'REQ-SP4-004',
+        stage,
+        metadata: {
+          runtimeId: runtimeContext.runtimeId,
+          hint: 'ProviderManager requires Config before stateless invocation.',
+        },
+      });
+    }
+
+    const statelessMetadata: Record<string, unknown> = {
+      ...(runtimeContext.metadata ?? {}),
+      statelessHardening: 'strict',
+      statelessProviderMode: 'strict',
+      statelessGuards: true,
+      statelessMode: 'strict',
+      requirement: 'REQ-SP4-004',
+      source: stage,
+      preparedAt: new Date().toISOString(),
+    };
+
+    this.runtime = {
+      ...runtimeContext,
+      settingsService: runtimeContext.settingsService,
+      config: resolvedConfig,
+      metadata: statelessMetadata,
+    };
+    this.settingsService = runtimeContext.settingsService;
+    this.config = resolvedConfig;
+
+    for (const provider of this.providers.values()) {
+      this.attachStatelessRuntimeMetadata(provider, statelessMetadata);
+    }
+  }
+
+  private attachStatelessRuntimeMetadata(
+    provider: IProvider,
+    metadata: Record<string, unknown>,
+  ): void {
+    const statelessAware = provider as IProvider & {
+      attachStatelessRuntimeMetadata?: (
+        metadata: Record<string, unknown>,
+      ) => void;
+      wrappedProvider?: IProvider;
+    };
+
+    statelessAware.attachStatelessRuntimeMetadata?.(metadata);
+
+    if (statelessAware.wrappedProvider) {
+      this.attachStatelessRuntimeMetadata(
+        statelessAware.wrappedProvider as IProvider,
+        metadata,
+      );
+    }
   }
 
   compareProviders(provider1: string, provider2: string): ProviderComparison {

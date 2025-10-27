@@ -153,6 +153,12 @@ const providerManagerStub = {
     );
   },
 };
+const isCliStatelessProviderModeEnabledMock = vi
+  .fn<() => boolean>()
+  .mockReturnValue(false);
+const isCliRuntimeStatelessReadyMock = vi
+  .fn<() => boolean>()
+  .mockReturnValue(true);
 
 beforeEach(() => {
   configStub.model = undefined;
@@ -189,6 +195,8 @@ beforeEach(() => {
     providerManager: providerManagerStub,
   });
   getActiveProviderOrThrowMock.mockReturnValue({ name: 'openai' });
+  isCliStatelessProviderModeEnabledMock.mockReturnValue(false);
+  isCliRuntimeStatelessReadyMock.mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -206,6 +214,8 @@ vi.mock('../runtimeSettings.js', () => ({
   setEphemeralSetting: setEphemeralSettingMock,
   getCliRuntimeServices: getCliRuntimeServicesMock,
   getActiveProviderOrThrow: getActiveProviderOrThrowMock,
+  isCliStatelessProviderModeEnabled: isCliStatelessProviderModeEnabledMock,
+  isCliRuntimeStatelessReady: isCliRuntimeStatelessReadyMock,
 }));
 
 const { applyProfileWithGuards, selectAvailableProvider } = await import(
@@ -284,5 +294,35 @@ describe('profileApplication helpers', () => {
     expect(result.warnings).toContain(
       "Provider 'deepseek' unavailable, using 'openai'",
     );
+  });
+
+  it('warns when profile application lacks call-scoped runtime context under stateless hardening @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-005 @pseudocode provider-runtime-handling.md lines 10-16', async () => {
+    isCliStatelessProviderModeEnabledMock.mockReturnValue(true);
+    isCliRuntimeStatelessReadyMock.mockReturnValue(false);
+
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const result = (await applyProfileWithGuards(profile, {
+      profileName: 'stateless-warning',
+    })) as unknown as ProfileApplicationResult;
+
+    const warningMatchesRequirement = result.warnings.some((warning) =>
+      /REQ-SP4-005/i.test(warning),
+    );
+    expect(warningMatchesRequirement).toBe(true);
+
+    isCliStatelessProviderModeEnabledMock.mockReturnValue(false);
+    isCliRuntimeStatelessReadyMock.mockReturnValue(true);
   });
 });

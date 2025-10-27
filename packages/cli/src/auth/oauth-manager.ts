@@ -537,6 +537,10 @@ export class OAuthManager {
     }
   }
 
+  getTokenStore(): TokenStore {
+    return this.tokenStore;
+  }
+
   /**
    * Check for higher priority authentication methods
    * @param providerName - Name of the provider to check

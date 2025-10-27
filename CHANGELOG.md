@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.5.3] - 2025-10-28
+
+### Changed
+
+- CLI runtime guard warnings now route through `packages/cli/src/runtime/messages.ts`, so every `MissingProviderRuntimeError` / `ProviderRuntimeNormalizationError` includes remediation steps (activate isolated runtime, register provider infrastructure, rerun profile bootstrap) and requirement markers (@plan:PLAN-20251023-STATELESS-HARDENING.P10 @requirement:REQ-SP4-004 @requirement:REQ-SP4-005).
+- `ensureStatelessProviderReady()` and related helpers emit strict guard failures instead of silently falling back, aligning CLI behaviour with the stateless enforcement contract (@plan:PLAN-20251023-STATELESS-HARDENING.P10 @requirement:REQ-SP4-001 @requirement:REQ-SP4-003).
+- Provider cache toggles and LLXPRT\_\* compatibility flags are removed from the CLI messaging path, reinforcing that providers must instantiate clients per invocation (@plan:PLAN-20251023-STATELESS-HARDENING.P10 @requirement:REQ-SP4-002).
+
+### Documentation
+
+- Added `docs/release-notes/2025-10.md` summarizing the stateless enforcement, CLI guard changes, and migration checklists (@plan:PLAN-20251023-STATELESS-HARDENING.P10 @requirement:REQ-SP4-001 @requirement:REQ-SP4-002 @requirement:REQ-SP4-003 @requirement:REQ-SP4-004 @requirement:REQ-SP4-005).
+- Updated `dev-docs/codex-workers.md` and `dev-docs/RULES.md` so coordinators know stateless operations are mandatory, legacy LLXPRT flags are gone, and all edits must flow through runtime-aware helpers (@plan:PLAN-20251023-STATELESS-HARDENING.P10 @requirement:REQ-SP4-004 @requirement:REQ-SP4-005).
+
+### Migration
+
+- Coordinators should bootstrap every worker via `activateIsolatedRuntimeContext()` / `registerCliProviderInfrastructure()` and drop any reliance on legacy singleton helpers before executing tests or edits (@plan:PLAN-20251023-STATELESS-HARDENING.P10 @requirement:REQ-SP4-004 @requirement:REQ-SP4-005).
+- CLI users encountering `MissingProviderRuntimeError` should follow the remediation steps embedded in the guard output and review `dev-docs/codex-workers.md` for stateless workflows (@plan:PLAN-20251023-STATELESS-HARDENING.P10 @requirement:REQ-SP4-001 @requirement:REQ-SP4-003).
+
+### Verification
+
+- `rg "PLAN-20251023-STATELESS-HARDENING.P10" docs dev-docs packages/cli/src/runtime`
+- `pnpm lint packages/cli`
+
+## [0.5.2] - 2025-10-25
+
+### Changed
+
+- OpenAI provider now instantiates a fresh API client for every call, drops the temporary runtime caches, and retains `clearClientCache()` solely as a compatibility no-op (PLAN-20251023-STATELESS-HARDENING.P09 / REQ-SP4-002).
+- OpenAI stateless regression tests now assert that repeated invocations within the same runtime still create new clients, matching the hardened runtime guard expectations.
+- ProviderManager documentation references stateless guard enforcement so downstream providers and CLI helpers no longer rely on singleton `getSettingsService()` fallbacks.
+
+### Documentation
+
+- Updated `docs/cli/runtime-helpers.md` with a "Stateless guard behaviour" section describing the CLI runtime registry, normalization guard, and `MissingProviderRuntimeError` escalation path.
+- Extended `docs/core/provider-interface.md` with explicit stateless runtime requirements covering per-call instantiation, `options.resolved` usage, and legacy cache-helper handling.
+
+### Verification
+
+- `rg "getSettingsService" packages/core/src/providers` → matches limited to Vitest suites validating guard behaviour; no production providers import the singleton helper.
+- `rg "runtimeClientCache" packages/core/src/providers` → (no matches)
+- `pnpm lint`
+
 ## [0.5.1] - 2025-10-20
 
 ### Added

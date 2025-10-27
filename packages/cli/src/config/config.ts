@@ -55,6 +55,7 @@ import {
   getCliRuntimeContext,
   registerCliProviderInfrastructure,
   setCliRuntimeContext,
+  switchActiveProvider,
 } from '../runtime/runtimeSettings.js';
 
 const LLXPRT_DIR = '.llxprt';
@@ -1071,6 +1072,17 @@ export async function loadCliConfig(
     for (const warning of bootstrapResult.profile.warnings) {
       logger.warn(() => `[bootstrap] ${warning}`);
     }
+  }
+
+  try {
+    await switchActiveProvider(finalProvider);
+  } catch (error) {
+    logger.warn(
+      () =>
+        `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
   }
 
   // Apply emojifilter setting from settings.json to SettingsService

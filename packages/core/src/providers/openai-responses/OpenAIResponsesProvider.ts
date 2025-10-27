@@ -19,6 +19,9 @@
  * This provider exclusively uses the OpenAI /responses endpoint
  * for models that support it (o1, o3, etc.)
  */
+// @plan:PLAN-20251023-STATELESS-HARDENING.P08
+// @requirement:REQ-SP4-002/REQ-SP4-003
+// Removed ConversationCache and peekActiveProviderRuntime dependencies to enforce stateless operation
 import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
 import {
@@ -29,8 +32,6 @@ import {
 } from '../../services/history/IContent.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
-import { ConversationCache } from '../openai/ConversationCache.js';
-import { peekActiveProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -42,6 +43,9 @@ import {
 } from '../BaseProvider.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { resolveUserMemory } from '../utils/userMemory.js';
+import { resolveRuntimeAuthToken } from '../utils/authToken.js';
+import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
   // TODO(P08) @plan:PLAN-20251018-STATELESSPROVIDER2.P07 @requirement:REQ-SP2-001
@@ -110,9 +114,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   private logger: DebugLogger;
-  private static readonly cacheScopePrefix = 'openai-responses.runtime:';
-  // TODO(@plan:PLAN-20251018-STATELESSPROVIDER2.P07 @requirement:REQ-SP2-001):
-  // Align stateless responses flow with project-plans/20251018statelessprovider2/analysis/pseudocode/openai-responses-stateless.md.
+  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+  // @requirement:REQ-SP4-002/REQ-SP4-003
+  // Removed static cache scope and conversation cache dependencies to achieve stateless operation
 
   constructor(
     apiKey: string | undefined,
@@ -142,30 +146,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
    * This provider does not support OAuth
    */
 
-  private resolveRuntimeScope(options?: NormalizedGenerateChatOptions): string {
-    if (options?.runtime?.runtimeId) {
-      return `${OpenAIResponsesProvider.cacheScopePrefix}${options.runtime.runtimeId}`;
-    }
-
-    const activeRuntime = peekActiveProviderRuntimeContext();
-    if (activeRuntime?.runtimeId) {
-      return `${OpenAIResponsesProvider.cacheScopePrefix}${activeRuntime.runtimeId}`;
-    }
-
-    const settings = options?.settings ?? this.resolveSettingsService();
-    const callId = settings.get('call-id');
-    if (typeof callId === 'string' && callId.trim()) {
-      return `${OpenAIResponsesProvider.cacheScopePrefix}call:${callId.trim()}`;
-    }
-
-    return `${OpenAIResponsesProvider.cacheScopePrefix}default`;
-  }
-
-  private createScopedConversationCache(
-    runtimeScope: string,
-  ): ConversationCache {
-    return new ConversationCache(100, 2, runtimeScope);
-  }
+  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+  // @requirement:REQ-SP4-002/REQ-SP4-003
+  // Removed stateful conversation cache methods to ensure stateless operation
 
   protected supportsOAuth(): boolean {
     return false;
@@ -257,13 +240,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
     super.setConfig?.(config);
   }
 
-  /**
-   * Get the conversation cache instance
-   */
-  getConversationCache(): ConversationCache {
-    const scope = this.resolveRuntimeScope();
-    return this.createScopedConversationCache(scope);
-  }
+  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+  // @requirement:REQ-SP4-002/REQ-SP4-003
+  // Removed getConversationCache method to eliminate stateful conversation handling
 
   /**
    * OpenAI Responses API always requires payment (API key)
@@ -345,22 +324,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   /**
-   * @plan PLAN-20250218-STATELESSPROVIDER.P04
-   * @requirement REQ-SP-001
-   * @pseudocode base-provider.md lines 7-15
-   * @pseudocode provider-invocation.md lines 8-12
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
-   * @requirement REQ-SP2-001
-   * @pseudocode openai-responses-stateless.md lines 1-8
-   */
-  /**
-   * @plan PLAN-20250218-STATELESSPROVIDER.P04
-   * @requirement REQ-SP-001
-   * @pseudocode base-provider.md lines 7-15
-   * @pseudocode provider-invocation.md lines 8-12
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
-   * @requirement REQ-SP2-001
-   * @pseudocode openai-responses-stateless.md lines 1-8
+   * @plan PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement REQ-SP4-002/REQ-SP4-003
+   * Refactored to remove constructor-captured config and global state, sourcing all per-call data from normalized options
    */
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
@@ -368,7 +334,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
     const { contents: content, tools } = options;
 
     const apiKey =
-      (await this.getAuthToken()) ?? options.resolved.authToken ?? '';
+      (await this.getAuthToken()) ??
+      (await resolveRuntimeAuthToken(options.resolved.authToken)) ??
+      '';
     if (!apiKey) {
       throw new Error('OpenAI API key is required to generate completions');
     }
@@ -386,9 +354,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
               ),
             ),
           );
-    const userMemory = this.globalConfig?.getUserMemory
-      ? this.globalConfig.getUserMemory()
-      : '';
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-002/REQ-SP4-003
+    // Source user memory directly from normalized options if available, then fallback to runtime config
+    const userMemory = await resolveUserMemory(options.userMemory, () =>
+      options.runtime?.config?.getUserMemory?.(),
+    );
+
     const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
       model: resolvedModel,
@@ -480,8 +452,31 @@ export class OpenAIResponsesProvider extends BaseProvider {
         })
       : undefined;
 
-    const modelParams = await this.getModelParamsFromSettings();
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-002/REQ-SP4-003
+    // Source per-call request overrides from normalized options (ephemeral settings take precedence)
+    const runtimeConfigEphemeralSettings =
+      options.runtime?.config?.getEphemeralSettings?.();
+    const settingsServiceModelParams = options.settings?.getProviderSettings(
+      this.name,
+    );
 
+    const filteredSettingsParams = filterOpenAIRequestParams(
+      settingsServiceModelParams as Record<string, unknown> | undefined,
+    );
+    const filteredEphemeralParams = filterOpenAIRequestParams(
+      runtimeConfigEphemeralSettings as Record<string, unknown> | undefined,
+    );
+
+    // Include both ephemeral and persistent settings, with ephemeral settings taking precedence
+    const requestOverrides: Record<string, unknown> = {
+      ...(filteredSettingsParams ?? {}),
+      ...(filteredEphemeralParams ?? {}),
+    };
+
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-002/REQ-SP4-003
+    // Prefer resolved options, then runtime config, then defaults instead of stored provider state
     const baseURLCandidate =
       options.resolved.baseURL ??
       this.getBaseURL() ??
@@ -498,7 +493,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       model: resolvedModel,
       input,
       stream: true,
-      ...(modelParams || {}),
+      ...(requestOverrides || {}),
     };
 
     if (responsesTools && responsesTools.length > 0) {
@@ -511,6 +506,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
       type: 'application/json; charset=utf-8',
     });
 
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-002/REQ-SP4-003
+    // Source custom headers from normalized provider configuration each call
     const customHeaders = this.getCustomHeaders();
     const headers = {
       Authorization: `Bearer ${apiKey}`,

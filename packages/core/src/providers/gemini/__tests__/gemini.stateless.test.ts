@@ -120,22 +120,30 @@ class TestGeminiProvider extends GeminiProvider {
   }
 }
 
+/**
+ * @plan PLAN-20251023-STATELESS-HARDENING.P08
+ * @requirement REQ-SP4-002
+ * @pseudocode lines 10-14
+ *
+ * Updated mock helper for auth to work with stateless provider.
+ * The auth mode is now resolved per call rather than stored on instance.
+ * determineBestAuth now returns {authMode, token} object.
+ */
 const mockDetermineBestAuth = (
   modes: Array<{ authMode: 'gemini-api-key' | 'oauth'; token: string }>,
 ) => {
   let activeIndex = 0;
   const spy = vi.spyOn(
     GeminiProvider.prototype as unknown as {
-      determineBestAuth(): Promise<string>;
+      determineBestAuth(): Promise<{ authMode: string; token: string }>;
     },
     'determineBestAuth',
   );
 
-  spy.mockImplementation(async function (this: GeminiProvider) {
+  spy.mockImplementation(async () => {
     const config = modes[activeIndex] ?? modes[modes.length - 1];
-    (this as unknown as { authMode: 'gemini-api-key' | 'oauth' }).authMode =
-      config.authMode;
-    return config.token;
+    // In stateless mode, determineBestAuth returns {authMode, token}
+    return { authMode: config.authMode, token: config.token };
   });
 
   return {
@@ -227,6 +235,99 @@ describe('Gemini provider stateless contract tests', () => {
     expect(googleGenAIState.streamCalls).toHaveLength(0);
     expect(googleGenAIState.nonStreamCalls).toHaveLength(1);
     expect(chunks).not.toHaveLength(0);
+  });
+
+  it('applies runtime-scoped model parameters to Gemini requests @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-002 @requirement:REQ-SP4-003 @pseudocode provider-cache-elimination.md lines 10-12', async () => {
+    queueGoogleStream([
+      {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'stateless-resp' }],
+            },
+          },
+        ],
+      },
+    ]);
+
+    const authMock = mockDetermineBestAuth([
+      { authMode: 'gemini-api-key', token: 'token-config' },
+    ]);
+
+    const provider = new TestGeminiProvider();
+    const settingsPrimary = new SettingsService();
+    settingsPrimary.set('call-id', 'runtime-config');
+    const configPrimary = createRuntimeConfigStub(settingsPrimary, {
+      getEphemeralSettings: () => ({
+        temperature: 0.21,
+        'max-output-tokens': 1024,
+      }),
+    }) as Config;
+    const runtimePrimary = createProviderRuntimeContext({
+      runtimeId: 'runtime-config',
+      settingsService: settingsPrimary,
+      config: configPrimary,
+    });
+
+    await collectResults(
+      provider.generateChatCompletion({
+        contents: [createHumanContent('first request')],
+        settings: settingsPrimary,
+        runtime: runtimePrimary,
+      }),
+    );
+
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
+    // In stateless implementation, parameters are resolved from options.resolved.params
+    const firstRequest = googleGenAIState.streamCalls.at(-1)?.request as
+      | { config?: Record<string, unknown> }
+      | undefined;
+    expect(firstRequest?.config?.temperature).toBe(0.21);
+    expect(firstRequest?.config?.['max-output-tokens']).toBe(1024);
+
+    queueGoogleStream([
+      {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'stateless-resp-two' }],
+            },
+          },
+        ],
+      },
+    ]);
+
+    const settingsOverride = new SettingsService();
+    settingsOverride.set('call-id', 'runtime-config');
+    const configOverride = createRuntimeConfigStub(settingsOverride, {
+      getEphemeralSettings: () => ({
+        temperature: 0.78,
+        'max-output-tokens': 256,
+      }),
+    }) as Config;
+    const runtimeOverride = createProviderRuntimeContext({
+      runtimeId: 'runtime-config',
+      settingsService: settingsOverride,
+      config: configOverride,
+    });
+
+    await collectResults(
+      provider.generateChatCompletion({
+        contents: [createHumanContent('second request')],
+        settings: settingsOverride,
+        runtime: runtimeOverride,
+      }),
+    );
+
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
+    // In stateless implementation, parameters are resolved from options.resolved.params
+    const secondRequest = googleGenAIState.streamCalls.at(-1)?.request as
+      | { config?: Record<string, unknown> }
+      | undefined;
+    expect(secondRequest?.config?.temperature).toBe(0.78);
+    expect(secondRequest?.config?.['max-output-tokens']).toBe(256);
+
+    authMock.restore();
   });
 
   it('includes server tool declarations for Gemini streams @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 4-6', async () => {

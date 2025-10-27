@@ -1,6 +1,7 @@
 /**
- * @plan PLAN-20251018-STATELESSPROVIDER2.P11
+ * @plan PLAN-20251023-STATELESS-HARDENING.P08
  * @requirement REQ-SP2-001
+ * @project-plans/debuglogging/requirements.md
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '../../../settings/SettingsService.js';
@@ -148,7 +149,7 @@ describe('Anthropic provider stateless contract tests', () => {
     expect(runtimeClients[0].instanceId).not.toBe(runtimeClients[1].instanceId);
   });
 
-  it('reuses cached client for returning runtime @plan:PLAN-20251018-STATELESSPROVIDER2.P11 @requirement:REQ-SP2-001 @pseudocode anthropic-gemini-stateless.md lines 2-4', async () => {
+  it('creates fresh client for each call @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002', async () => {
     const provider = new TestAnthropicProvider();
     const baselineInstances = FakeAnthropicClass.created.length;
     const settingsA = createSettings('runtime-A');
@@ -195,8 +196,17 @@ describe('Anthropic provider stateless contract tests', () => {
 
     const runtimeClients = FakeAnthropicClass.created.slice(baselineInstances);
 
-    expect(runtimeClients).toHaveLength(2);
+    // @plan PLAN-20251023-STATELESS-HARDENING.P08: Expect 3 fresh clients (no caching)
+    expect(runtimeClients).toHaveLength(3);
     expect(runtimeClients[0].options.apiKey).toBe('token-A');
     expect(runtimeClients[1].options.apiKey).toBe('token-B');
+    expect(runtimeClients[2].options.apiKey).toBe('token-A');
+  });
+
+  it('disables getModelParams memoization @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002', async () => {
+    const provider = new TestAnthropicProvider();
+    expect(() => provider.getModelParams()).toThrow(
+      'ProviderCacheError("Attempted to memoize model parameters for anthropic")',
+    );
   });
 });

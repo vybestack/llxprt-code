@@ -22,59 +22,17 @@ describe('AnthropicProvider - modelParams', () => {
     provider.setRuntimeSettingsService(settingsService);
   });
 
+  /**
+   * @plan PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement REQ-SP4-002
+   * @project-plans/20251023stateless4/analysis/pseudocode/provider-cache-elimination.md lines 12-13
+   * Providers must throw when attempting to memoize model parameters
+   */
   describe('getModelParams', () => {
-    it('returns undefined when no parameters are configured', () => {
-      expect(provider.getModelParams()).toBeUndefined();
-    });
-
-    it('reads core parameters from SettingsService', () => {
-      const service = (
-        provider as unknown as {
-          resolveSettingsService: () => SettingsService;
-        }
-      ).resolveSettingsService();
-      service.setProviderSetting('anthropic', 'temperature', 0.7);
-      service.setProviderSetting('anthropic', 'top_p', 0.9);
-
-      expect(provider.getModelParams()).toMatchObject({
-        temperature: 0.7,
-        top_p: 0.9,
-      });
-    });
-
-    it('includes provider specific parameters alongside standard ones', () => {
-      const service = (
-        provider as unknown as {
-          resolveSettingsService: () => SettingsService;
-        }
-      ).resolveSettingsService();
-      service.setProviderSetting('anthropic', 'temperature', 0.65);
-      service.setProviderSetting('anthropic', 'max_tokens', 4096);
-      service.setProviderSetting('anthropic', 'stop_sequences', ['\n\n']);
-
-      expect(provider.getModelParams()).toMatchObject({
-        temperature: 0.65,
-        max_tokens: 4096,
-        stop_sequences: ['\n\n'],
-      });
-    });
-
-    it('reflects subsequent updates applied to the settings service', () => {
-      const service = (
-        provider as unknown as {
-          resolveSettingsService: () => SettingsService;
-        }
-      ).resolveSettingsService();
-      service.setProviderSetting('anthropic', 'temperature', 0.2);
-      expect(provider.getModelParams()).toMatchObject({ temperature: 0.2 });
-
-      service.setProviderSetting('anthropic', 'temperature', 0.55);
-      service.setProviderSetting('anthropic', 'top_p', 0.91);
-
-      expect(provider.getModelParams()).toMatchObject({
-        temperature: 0.55,
-        top_p: 0.91,
-      });
+    it('throws ProviderCacheError when attempting to access memoized model parameters', () => {
+      expect(() => provider.getModelParams()).toThrow(
+        'ProviderCacheError("Attempted to memoize model parameters for anthropic")',
+      );
     });
   });
 });

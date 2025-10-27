@@ -7,6 +7,8 @@ import {
   clearActiveModelParam,
   getActiveModelParams,
   getCliRuntimeServices,
+  isCliRuntimeStatelessReady,
+  isCliStatelessProviderModeEnabled,
   setActiveModel,
   setActiveModelParam,
   setEphemeralSetting,
@@ -114,6 +116,11 @@ export async function applyProfileWithGuards(
   );
 
   const warnings = [...selection.warnings];
+  if (isCliStatelessProviderModeEnabled() && !isCliRuntimeStatelessReady()) {
+    warnings.push(
+      `[REQ-SP4-005] Stateless provider runtime context is not initialised. Run setCliRuntimeContext() or ensure runtime infrastructure boots before applying profiles.`,
+    );
+  }
   const requestedProvider =
     typeof profile.provider === 'string' ? profile.provider : null;
 
@@ -148,7 +155,9 @@ export async function applyProfileWithGuards(
     'base-url',
   ]);
 
-  const providerSwitch = await switchActiveProvider(targetProviderName);
+  const providerSwitch = await switchActiveProvider(targetProviderName, {
+    autoOAuth: false,
+  });
   const infoMessages = [...providerSwitch.infoMessages];
   const requestedModel =
     typeof profile.model === 'string' ? profile.model.trim() : '';
@@ -162,7 +171,7 @@ export async function applyProfileWithGuards(
       `Profile '${profile.provider}' does not specify a model and no default is available.`,
     );
   }
-  const modelResult = await setActiveModel(requestedModel || fallbackModel);
+  let modelResult: Awaited<ReturnType<typeof setActiveModel>> | null = null;
 
   for (const key of mutatedEphemeralKeys) {
     setEphemeralSetting(key, undefined);
@@ -262,6 +271,8 @@ export async function applyProfileWithGuards(
     }
   }
 
+  modelResult = await setActiveModel(requestedModel || fallbackModel);
+
   const profileParams = profile.modelParams ?? {};
   const existingParams = getActiveModelParams();
 
@@ -294,7 +305,7 @@ export async function applyProfileWithGuards(
 
   return {
     providerName: provider.name,
-    modelName: modelResult.nextModel,
+    modelName: modelResult?.nextModel ?? requestedModel ?? fallbackModel,
     infoMessages,
     warnings,
     providerChanged: providerSwitch.changed,

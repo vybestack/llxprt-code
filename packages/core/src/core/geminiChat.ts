@@ -32,7 +32,7 @@ import type {
   UsageStats,
 } from '../services/history/IContent.js';
 import type { IProvider, ProviderToolset } from '../providers/IProvider.js';
-import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { getActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 // import { estimateTokens } from '../utils/toolOutputLimiter.js'; // Unused after retry stream refactor
 import {
   logApiRequest,
@@ -709,19 +709,26 @@ export class GeminiChat {
             authType: this.config.getContentGeneratorConfig()?.authType,
           },
         );
+        const activeRuntime = getActiveProviderRuntimeContext();
+        const runtimeId = activeRuntime.runtimeId ?? 'geminiChat';
+        const runtimeContext = {
+          ...activeRuntime,
+          runtimeId,
+          settingsService:
+            activeRuntime.settingsService ?? this.config.getSettingsService(),
+          config: activeRuntime.config ?? this.config,
+          metadata: {
+            ...(activeRuntime.metadata ?? {}),
+            source: 'GeminiChat.trySendMessage',
+            toolCount: tools?.length ?? 0,
+          },
+        } as const;
+
         const streamResponse = provider.generateChatCompletion!({
           contents: iContents,
           tools: tools as ProviderToolset | undefined,
-          config: this.config,
-          runtime: createProviderRuntimeContext({
-            settingsService: this.config.getSettingsService(),
-            config: this.config,
-            runtimeId: 'geminiChat.trySendMessage',
-            metadata: {
-              source: 'GeminiChat.trySendMessage',
-              toolCount: tools?.length ?? 0,
-            },
-          }),
+          config: runtimeContext.config,
+          runtime: runtimeContext,
         });
 
         // Collect all chunks from the stream
@@ -1064,22 +1071,29 @@ export class GeminiChat {
             },
           );
 
+          const activeRuntime = getActiveProviderRuntimeContext();
+          const runtimeId = activeRuntime.runtimeId ?? 'geminiChat';
+          const runtimeContext = {
+            ...activeRuntime,
+            runtimeId,
+            settingsService:
+              activeRuntime.settingsService ?? this.config.getSettingsService(),
+            config: activeRuntime.config ?? this.config,
+            metadata: {
+              ...(activeRuntime.metadata ?? {}),
+              source: 'GeminiChat.streamGeneration',
+              toolCount: toolsFromConfig?.length ?? 0,
+            },
+          } as const;
+
           const streamResponse = provider.generateChatCompletion({
             contents: userIContents,
             tools:
               toolsFromConfig && toolsFromConfig.length > 0
                 ? (toolsFromConfig as ProviderToolset)
                 : undefined,
-            config: this.config,
-            runtime: createProviderRuntimeContext({
-              settingsService: this.config.getSettingsService(),
-              config: this.config,
-              runtimeId: 'geminiChat.streamGeneration',
-              metadata: {
-                source: 'GeminiChat.streamGeneration',
-                toolCount: toolsFromConfig?.length ?? 0,
-              },
-            }),
+            config: runtimeContext.config,
+            runtime: runtimeContext,
           });
 
           let lastResponse: IContent | undefined;
@@ -1276,19 +1290,26 @@ export class GeminiChat {
           authType: activeAuthType,
         },
       );
+      const activeRuntime = getActiveProviderRuntimeContext();
+      const runtimeId = activeRuntime.runtimeId ?? 'geminiChat';
+      const runtimeContext = {
+        ...activeRuntime,
+        runtimeId,
+        settingsService:
+          activeRuntime.settingsService ?? this.config.getSettingsService(),
+        config: activeRuntime.config ?? this.config,
+        metadata: {
+          ...(activeRuntime.metadata ?? {}),
+          source: 'GeminiChat.generateRequest',
+          historyLength: requestContents.length,
+        },
+      } as const;
+
       const streamResponse = provider.generateChatCompletion!({
         contents: requestContents,
         tools: tools as ProviderToolset | undefined,
-        config: this.config,
-        runtime: createProviderRuntimeContext({
-          settingsService: this.config.getSettingsService(),
-          config: this.config,
-          runtimeId: 'geminiChat.generatorRequest',
-          metadata: {
-            source: 'GeminiChat.generateRequest',
-            historyLength: requestContents.length,
-          },
-        }),
+        config: runtimeContext.config,
+        runtime: runtimeContext,
       });
 
       // Convert the IContent stream to GenerateContentResponse stream
@@ -1715,19 +1736,26 @@ export class GeminiChat {
         authType: activeAuthType,
       },
     );
+    const activeRuntime = getActiveProviderRuntimeContext();
+    const runtimeId = activeRuntime.runtimeId ?? 'geminiChat';
+    const runtimeContext = {
+      ...activeRuntime,
+      runtimeId,
+      settingsService:
+        activeRuntime.settingsService ?? this.config.getSettingsService(),
+      config: activeRuntime.config ?? this.config,
+      metadata: {
+        ...(activeRuntime.metadata ?? {}),
+        source: 'GeminiChat.directCompression',
+        historyLength: compressionRequest.length,
+      },
+    } as const;
+
     const stream = provider.generateChatCompletion!({
       contents: compressionRequest,
       tools: undefined,
-      config: this.config,
-      runtime: createProviderRuntimeContext({
-        settingsService: this.config.getSettingsService(),
-        config: this.config,
-        runtimeId: 'geminiChat.directCompression',
-        metadata: {
-          source: 'GeminiChat.directCompression',
-          historyLength: compressionRequest.length,
-        },
-      }),
+      config: runtimeContext.config,
+      runtime: runtimeContext,
     });
 
     // Collect response

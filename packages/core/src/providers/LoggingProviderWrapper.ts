@@ -28,6 +28,7 @@ import { getConversationFileWriter } from '../storage/ConversationFileWriter.js'
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { MissingProviderRuntimeError } from './errors.js';
 
 export interface ConversationDataRedactor {
   redactMessage(content: IContent, provider: string): IContent;
@@ -181,25 +182,65 @@ class ConfigBasedRedactor implements ConversationDataRedactor {
 
 /**
  * @plan PLAN-20250909-TOKTRACK.P05
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+ * @requirement:REQ-SP4-004
+ * @requirement:REQ-SP4-005
+ * @pseudocode provider-runtime-handling.md lines 14-16
+ * @pseudocode logging-wrapper-adjustments.md lines 11-15
+ *
  * A minimal logging wrapper that acts as a transparent passthrough to the wrapped provider.
  * Only intercepts generateChatCompletion to log conversations while forwarding all other
  * methods directly to the wrapped provider without modification.
+ *
+ * In stateless hardening mode (P08), this wrapper:
+ * - Drops constructor-captured config/settings
+ * - Relies on per-call runtime metadata
+ * - Implements runtime context push/pop (via runtimeContextResolver)
+ * - Guards against missing runtime with MissingProviderRuntimeError
  */
 export class LoggingProviderWrapper implements IProvider {
   private conversationId: string;
   private turnNumber: number = 0;
-  private redactor: ConversationDataRedactor;
+  private redactor: ConversationDataRedactor | null = null;
   private performanceTracker: ProviderPerformanceTracker;
   private runtimeContextResolver?: () => ProviderRuntimeContext;
+  private statelessRuntimeMetadata: Record<string, unknown> | null = null;
+  private optionsNormalizer:
+    | ((
+        options: GenerateChatOptions,
+        providerName: string,
+      ) => GenerateChatOptions)
+    | null = null;
 
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-004
+   * Constructor no longer captures config - it's provided per-call via options.
+   */
   constructor(
     private readonly wrapped: IProvider,
-    private readonly config: Config,
-    redactor?: ConversationDataRedactor,
+    configOrRedactor?: Config | ConversationDataRedactor | null,
+    legacyRedactor?: ConversationDataRedactor,
   ) {
     this.conversationId = this.generateConversationId();
-    this.redactor =
-      redactor || new ConfigBasedRedactor(config.getRedactionConfig());
+
+    // Handle legacy constructor signature for backward compatibility
+    // New usage should NOT pass config here - config comes per-call
+    if (configOrRedactor && 'redactMessage' in configOrRedactor) {
+      this.redactor = configOrRedactor as ConversationDataRedactor;
+    } else if (
+      configOrRedactor &&
+      'getConversationLoggingEnabled' in configOrRedactor
+    ) {
+      // Legacy usage - create redactor from config
+      const config = configOrRedactor as Config;
+      this.redactor = new ConfigBasedRedactor(config.getRedactionConfig());
+    }
+
+    if (legacyRedactor) {
+      this.redactor = legacyRedactor;
+    }
+
     this.performanceTracker = new ProviderPerformanceTracker(wrapped.name);
 
     // Set throttle tracker callback on the wrapped provider if it supports it
@@ -216,6 +257,12 @@ export class LoggingProviderWrapper implements IProvider {
     }
   }
 
+  /* @plan:PLAN-20251023-STATELESS-HARDENING.P06 */
+  /* @requirement:REQ-SP4-004 */
+  attachStatelessRuntimeMetadata(metadata: Record<string, unknown>): void {
+    this.statelessRuntimeMetadata = { ...metadata };
+  }
+
   /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P05
    * @requirement:REQ-SP4-001
@@ -224,6 +271,20 @@ export class LoggingProviderWrapper implements IProvider {
    */
   setRuntimeContextResolver(resolver: () => ProviderRuntimeContext): void {
     this.runtimeContextResolver = resolver;
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Allows ProviderManager.normalizeRuntimeInputs to run per invocation.
+   */
+  setOptionsNormalizer(
+    normalizer: (
+      options: GenerateChatOptions,
+      providerName: string,
+    ) => GenerateChatOptions,
+  ): void {
+    this.optionsNormalizer = normalizer;
   }
 
   /**
@@ -256,13 +317,17 @@ export class LoggingProviderWrapper implements IProvider {
   /**
    * @plan PLAN-20251018-STATELESSPROVIDER2.P06
    * @plan:PLAN-20251023-STATELESS-HARDENING.P05
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
    * @requirement REQ-SP2-001
    * @requirement:REQ-SP4-001
+   * @requirement:REQ-SP4-004
+   * @requirement:REQ-SP4-005
    * @pseudocode base-provider-call-contract.md lines 3-4
    * @plan PLAN-20250218-STATELESSPROVIDER.P04
    * @requirement REQ-SP-001
    * @pseudocode base-provider.md lines 7-15
    * @pseudocode provider-invocation.md lines 11-15
+   * @pseudocode provider-runtime-handling.md lines 14-16
    */
   // Only method that includes logging - everything else is passthrough
   generateChatCompletion(
@@ -276,16 +341,17 @@ export class LoggingProviderWrapper implements IProvider {
     contentOrOptions: IContent[] | GenerateChatOptions,
     maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
-    const normalizedOptions: GenerateChatOptions = Array.isArray(
-      contentOrOptions,
-    )
+    let normalizedOptions: GenerateChatOptions = Array.isArray(contentOrOptions)
       ? { contents: contentOrOptions, tools: maybeTools }
       : { ...contentOrOptions };
 
+    // REQ-SP4-004: Runtime context push - inject runtime from resolver if available
     const injectedRuntime = this.runtimeContextResolver?.();
     const providedRuntime = normalizedOptions.runtime;
+
     if (injectedRuntime) {
       const mergedMetadata: Record<string, unknown> = {
+        ...(this.statelessRuntimeMetadata ?? {}),
         ...(injectedRuntime.metadata ?? {}),
         ...(providedRuntime?.metadata ?? {}),
         ...(normalizedOptions.metadata ?? {}),
@@ -307,11 +373,59 @@ export class LoggingProviderWrapper implements IProvider {
       normalizedOptions.metadata = mergedMetadata;
     }
 
+    if (!injectedRuntime && this.statelessRuntimeMetadata) {
+      normalizedOptions.metadata = {
+        ...(this.statelessRuntimeMetadata ?? {}),
+        ...(normalizedOptions.metadata ?? {}),
+      };
+    }
+
+    if (this.optionsNormalizer) {
+      normalizedOptions = this.optionsNormalizer(
+        normalizedOptions,
+        this.wrapped.name,
+      );
+    }
+
+    // REQ-SP4-004: Guard - ensure runtime context is present for stateless hardening
+    const runtimeId = normalizedOptions.runtime?.runtimeId ?? 'unknown';
+    if (!normalizedOptions.runtime?.settingsService) {
+      throw new MissingProviderRuntimeError({
+        providerKey: `LoggingProviderWrapper[${this.wrapped.name}]`,
+        missingFields: ['settings'],
+        requirement: 'REQ-SP4-004',
+        stage: 'generateChatCompletion',
+        metadata: {
+          hint: 'Runtime context must include settingsService for stateless hardening.',
+          runtimeId,
+        },
+      });
+    }
+
+    if (!normalizedOptions.runtime?.config) {
+      throw new MissingProviderRuntimeError({
+        providerKey: `LoggingProviderWrapper[${this.wrapped.name}]`,
+        missingFields: ['config'],
+        requirement: 'REQ-SP4-004',
+        stage: 'generateChatCompletion',
+        metadata: {
+          hint: 'Runtime context must include config for stateless hardening.',
+          runtimeId,
+        },
+      });
+    }
+
+    // Resolve config from runtime or legacy fallback
     normalizedOptions.config =
-      normalizedOptions.config ??
-      normalizedOptions.runtime?.config ??
-      this.config;
+      normalizedOptions.config ?? normalizedOptions.runtime?.config;
     const activeConfig = normalizedOptions.config;
+
+    // REQ-SP4-004: Create per-call redactor if not already set
+    if (!this.redactor && activeConfig) {
+      this.redactor = new ConfigBasedRedactor(
+        activeConfig.getRedactionConfig(),
+      );
+    }
 
     const promptId = this.generatePromptId();
     this.turnNumber++;
@@ -347,10 +461,12 @@ export class LoggingProviderWrapper implements IProvider {
     promptId?: string,
   ): Promise<void> {
     try {
-      // Apply redaction to content and tools
-      const redactedContent = content.map((item) =>
-        this.redactor.redactMessage(item, this.wrapped.name),
-      );
+      // Apply redaction to content and tools (use redactor if available)
+      const redactedContent = this.redactor
+        ? content.map((item) =>
+            this.redactor!.redactMessage(item, this.wrapped.name),
+          )
+        : content;
       // Note: tools format is different now, keeping minimal logging for now
       const redactedTools = tools;
 
@@ -522,10 +638,9 @@ export class LoggingProviderWrapper implements IProvider {
     tokenUsage?: UsageStats,
   ): Promise<void> {
     try {
-      const redactedContent = this.redactor.redactResponseContent(
-        content,
-        this.wrapped.name,
-      );
+      const redactedContent = this.redactor
+        ? this.redactor.redactResponseContent(content, this.wrapped.name)
+        : content;
 
       // Extract token counts from the response or use provided tokenUsage
       const tokenCounts = tokenUsage
@@ -744,8 +859,21 @@ export class LoggingProviderWrapper implements IProvider {
     }
   }
 
+  private resolveLoggingConfig(candidate?: unknown): Config | undefined {
+    if (
+      candidate &&
+      typeof candidate === 'object' &&
+      'getConversationLoggingEnabled' in candidate &&
+      typeof (candidate as { getConversationLoggingEnabled?: unknown })
+        .getConversationLoggingEnabled === 'function'
+    ) {
+      return candidate as Config;
+    }
+    return undefined;
+  }
+
   private async logToolCall(
-    config: Config,
+    config: Config | undefined,
     toolName: string,
     params: unknown,
     result: unknown,
@@ -753,6 +881,9 @@ export class LoggingProviderWrapper implements IProvider {
     success: boolean,
     error?: unknown,
   ): Promise<void> {
+    if (!config) {
+      return;
+    }
     try {
       const endTime = Date.now();
       const duration = endTime - startTime;
@@ -767,6 +898,14 @@ export class LoggingProviderWrapper implements IProvider {
         }
       }
 
+      // Redact tool parameters if redactor available
+      const redactedParams = this.redactor
+        ? this.redactor.redactToolCall({
+            type: 'function',
+            function: { name: toolName, parameters: params as object },
+          }).function.parameters
+        : (params as object);
+
       // Write to disk
       const fileWriter = getConversationFileWriter(
         config.getConversationLogPath(),
@@ -774,10 +913,7 @@ export class LoggingProviderWrapper implements IProvider {
       fileWriter.writeToolCall(this.wrapped.name, toolName, {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
-        params: this.redactor.redactToolCall({
-          type: 'function',
-          function: { name: toolName, parameters: params as object },
-        }).function.parameters,
+        params: redactedParams,
         result,
         duration,
         success,
@@ -844,6 +980,7 @@ export class LoggingProviderWrapper implements IProvider {
     config?: unknown,
   ): Promise<unknown> {
     const startTime = Date.now();
+    const loggingConfig = this.resolveLoggingConfig(config);
 
     try {
       const result = await this.wrapped.invokeServerTool(
@@ -853,9 +990,9 @@ export class LoggingProviderWrapper implements IProvider {
       );
 
       // Log tool call if logging is enabled and result has metadata
-      if (this.config.getConversationLoggingEnabled()) {
+      if (loggingConfig?.getConversationLoggingEnabled()) {
         await this.logToolCall(
-          this.config,
+          loggingConfig,
           toolName,
           params,
           result,
@@ -867,9 +1004,9 @@ export class LoggingProviderWrapper implements IProvider {
       return result;
     } catch (error) {
       // Log failed tool call if logging is enabled
-      if (this.config.getConversationLoggingEnabled()) {
+      if (loggingConfig?.getConversationLoggingEnabled()) {
         await this.logToolCall(
-          this.config,
+          loggingConfig,
           toolName,
           params,
           null,

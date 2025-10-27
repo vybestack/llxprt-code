@@ -31,6 +31,12 @@ import {
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import { MissingProviderRuntimeError } from './errors.js';
+import type {
+  ProviderTelemetryContext,
+  ResolvedAuthToken,
+  UserMemoryInput,
+} from './types/providerRuntime.js';
+import { resolveRuntimeAuthToken } from './utils/authToken.js';
 
 export interface BaseProviderConfig {
   // Basic provider config
@@ -50,13 +56,15 @@ export interface BaseProviderConfig {
 export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
   settings: SettingsService;
   config?: Config;
+  userMemory?: UserMemoryInput; // @plan PLAN-20251023-STATELESS-HARDENING.P08: User memory from runtime context
   runtime?: ProviderRuntimeContext;
   tools?: ProviderToolset;
   metadata: Record<string, unknown>;
   resolved: {
     model: string;
     baseURL?: string;
-    authToken: string;
+    authToken: ResolvedAuthToken;
+    telemetry?: ProviderTelemetryContext; // @plan PLAN-20251023-STATELESS-HARDENING.P08: Telemetry service
   };
 }
 
@@ -268,7 +276,12 @@ export abstract class BaseProvider implements IProvider {
   protected async getAuthToken(): Promise<string> {
     const activeOptions = this.activeCallContext.getStore();
     if (activeOptions) {
-      return activeOptions.resolved.authToken;
+      const runtimeToken = await resolveRuntimeAuthToken(
+        activeOptions.resolved.authToken,
+      );
+      if (runtimeToken) {
+        return runtimeToken;
+      }
     }
 
     const token =
@@ -918,7 +931,7 @@ export abstract class BaseProvider implements IProvider {
         model: _model,
         maxTokens,
         temperature,
-        ...modelParams
+        ...additionalSettings
       } = settings;
 
       // Include temperature and maxTokens as model params if they exist
@@ -927,8 +940,8 @@ export abstract class BaseProvider implements IProvider {
       if (maxTokens !== undefined) params.max_tokens = maxTokens;
 
       return Object.keys(params).length > 0 ||
-        Object.keys(modelParams).length > 0
-        ? { ...params, ...modelParams }
+        Object.keys(additionalSettings).length > 0
+        ? { ...params, ...additionalSettings }
         : undefined;
     } catch (error) {
       if (process.env.DEBUG) {

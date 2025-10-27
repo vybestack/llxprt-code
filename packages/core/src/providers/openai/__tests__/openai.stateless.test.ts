@@ -14,10 +14,12 @@ vi.mock('openai', () => {
   class FakeOpenAI {
     static instances: Set<symbol> = new Set();
     static created: symbol[] = [];
+    static requests: Array<{ request: Record<string, unknown> }> = [];
 
     static reset(): void {
       FakeOpenAI.instances.clear();
       FakeOpenAI.created = [];
+      FakeOpenAI.requests = [];
     }
 
     readonly instanceId: symbol;
@@ -32,24 +34,27 @@ vi.mock('openai', () => {
 
     chat = {
       completions: {
-        create: vi.fn(async () => ({
-          async *[Symbol.asyncIterator]() {
-            yield {
-              choices: [
-                {
-                  delta: { content: 'stateless-mock-response' },
-                  finish_reason: 'stop',
-                  index: 0,
+        create: vi.fn(async (request: Record<string, unknown>) => {
+          FakeOpenAI.requests.push({ request });
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield {
+                choices: [
+                  {
+                    delta: { content: 'stateless-mock-response' },
+                    finish_reason: 'stop',
+                    index: 0,
+                  },
+                ],
+                usage: {
+                  prompt_tokens: 0,
+                  completion_tokens: 0,
+                  total_tokens: 0,
                 },
-              ],
-              usage: {
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                total_tokens: 0,
-              },
-            };
-          },
-        })),
+              };
+            },
+          };
+        }),
       },
     };
   }
@@ -60,6 +65,7 @@ vi.mock('openai', () => {
 const FakeOpenAIClass = OpenAI as unknown as {
   instances: Set<symbol>;
   created: symbol[];
+  requests: Array<{ request: Record<string, unknown> }>;
   reset(): void;
 };
 
@@ -128,7 +134,7 @@ describe('OpenAI provider stateless contract tests', () => {
     expect(FakeOpenAIClass.created[0]).not.toBe(FakeOpenAIClass.created[1]);
   });
 
-  it('reuses client within runtime @plan:PLAN-20251018-STATELESSPROVIDER2.P08 @requirement:REQ-SP2-001 @pseudocode openai-responses-stateless.md lines 5-8', async () => {
+  it('creates fresh client even within a single runtime @plan:PLAN-20251023-STATELESS-HARDENING.P09 @requirement:REQ-SP4-002', async () => {
     const provider = new TestOpenAIProvider(
       'token-A',
       'https://api.openai.com/v1',
@@ -160,7 +166,63 @@ describe('OpenAI provider stateless contract tests', () => {
       })
       .next();
 
-    expect(FakeOpenAIClass.created).toHaveLength(1);
-    expect(FakeOpenAIClass.instances.size).toBe(1);
+    expect(FakeOpenAIClass.created).toHaveLength(2);
+    expect(FakeOpenAIClass.instances.size).toBe(2);
+  });
+
+  it('attaches per-call model parameters from runtime config @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-002 @requirement:REQ-SP4-003 @pseudocode provider-cache-elimination.md lines 10-12', async () => {
+    const provider = new TestOpenAIProvider(
+      'token-runner',
+      'https://api.openai.com/v1',
+    );
+    const settingsPrimary = createSettings({ callId: 'runtime-config' });
+    const configPrimary = createRuntimeConfigStub(settingsPrimary, {
+      getEphemeralSettings: () => ({
+        temperature: 0.42,
+        'max-tokens': 512,
+      }),
+    }) as Config;
+    const runtimePrimary = createProviderRuntimeContext({
+      runtimeId: 'runtime-config',
+      settingsService: settingsPrimary,
+      config: configPrimary,
+    });
+
+    await provider
+      .generateChatCompletion({
+        contents: [],
+        settings: settingsPrimary,
+        runtime: runtimePrimary,
+      })
+      .next();
+
+    const firstRequest = FakeOpenAIClass.requests.at(-1)?.request;
+    expect(firstRequest?.temperature).toBe(0.42);
+    expect(firstRequest?.['max_tokens']).toBe(512);
+
+    const settingsOverride = createSettings({ callId: 'runtime-config' });
+    const configOverride = createRuntimeConfigStub(settingsOverride, {
+      getEphemeralSettings: () => ({
+        temperature: 0.85,
+        'max-tokens': 128,
+      }),
+    }) as Config;
+    const runtimeOverride = createProviderRuntimeContext({
+      runtimeId: 'runtime-config',
+      settingsService: settingsOverride,
+      config: configOverride,
+    });
+
+    await provider
+      .generateChatCompletion({
+        contents: [],
+        settings: settingsOverride,
+        runtime: runtimeOverride,
+      })
+      .next();
+
+    const secondRequest = FakeOpenAIClass.requests.at(-1)?.request;
+    expect(secondRequest?.temperature).toBe(0.85);
+    expect(secondRequest?.['max_tokens']).toBe(128);
   });
 });

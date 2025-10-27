@@ -20,6 +20,11 @@ import { IContent } from '../services/history/IContent.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import type { Config } from '../config/config.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import type {
+  ProviderTelemetryContext,
+  ResolvedAuthToken,
+  UserMemoryInput,
+} from './types/providerRuntime.js';
 
 export type ProviderToolset = Array<{
   functionDeclarations: Array<{
@@ -32,8 +37,12 @@ export type ProviderToolset = Array<{
 
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P08
  * @requirement REQ-SP2-001
+ * @requirement:REQ-SP4-002
+ * @requirement:REQ-SP4-003
  * @pseudocode base-provider-call-contract.md lines 1-3
+ * @pseudocode provider-runtime-handling.md lines 10-16
  */
 export interface GenerateChatOptions {
   contents: IContent[];
@@ -42,6 +51,13 @@ export interface GenerateChatOptions {
   config?: Config;
   runtime?: ProviderRuntimeContext;
   metadata?: Record<string, unknown>;
+  resolved?: {
+    model?: string;
+    baseURL?: string;
+    authToken?: ResolvedAuthToken;
+    telemetry?: ProviderTelemetryContext;
+  };
+  userMemory?: UserMemoryInput;
 }
 
 /**

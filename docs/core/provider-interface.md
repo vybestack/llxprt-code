@@ -54,6 +54,15 @@ The following methods remain on the interface for backward compatibility but sho
 - `clearState()` – maintain state in the runtime scope instead.
 - `clearAuth()` / `clearAuthCache()` – authentication is managed by runtime-scoped handlers.
 
+## Stateless runtime requirements
+
+<!-- @plan:PLAN-20251023-STATELESS-HARDENING.P09 @requirement:REQ-SP4-002 @requirement:REQ-SP4-004 -->
+
+- Treat every invocation as isolated. Instantiate API clients, loggers, and tool formatters inside `generateChatCompletion` rather than storing them on the class or module scope. ProviderManager enforces this by running `prepareStatelessProviderInvocation()` before your method executes.
+- Use the normalized `options.resolved` object for `model`, `baseURL`, and `authToken`. These values already respect runtime-scoped overrides, so avoid recomputing or memoizing them.
+- Never import singleton helpers like `getSettingsService()`. The supplied `options.settings` and `options.runtime?.settingsService` are the only supported sources, and guards (`MissingProviderRuntimeError` / `ProviderRuntimeNormalizationError`) will throw if you attempt to run without them.
+- If you expose cache-clearing helpers (for CLI compatibility), keep them as no-ops. Per-call instantiation makes cache eviction unnecessary, and retaining the method signature simply avoids breaking existing commands.
+
 ## Accessing runtime information
 
 Provider implementations typically pull runtime data from `options.runtime`:

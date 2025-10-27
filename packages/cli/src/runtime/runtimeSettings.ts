@@ -35,6 +35,11 @@ import {
 } from './runtimeContextFactory.js';
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P07
 import { applyProfileWithGuards } from './profileApplication.js';
+import {
+  formatMissingRuntimeMessage,
+  formatNormalizationFailureMessage,
+} from './messages.js';
+import { ensureOAuthProviderRegistered } from '../providers/oauth-provider-registration.js';
 
 type ProfileApplicationResult = Awaited<
   ReturnType<typeof applyProfileWithGuards>
@@ -49,15 +54,141 @@ export type {
 
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P06
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P08
  * @requirement:REQ-SP-005
+ * @requirement:REQ-SP4-004
+ * @requirement:REQ-SP4-005
  * @pseudocode:cli-runtime.md lines 5-15
  *
  * Runtime helper bundle that provides a stable API for CLI commands, hooks,
  * and components to interact with the active provider runtime context without
  * touching singletons directly.
+ *
+ * P08 stateless hardening ensures all runtime helpers supply explicit
+ * stateless provider context (settings/config/userMemory) per invocation,
+ * eliminating singleton fallbacks and enforcing runtime isolation.
  */
 
 const logger = new DebugLogger('llxprt:runtime:settings');
+const STATELESS_METADATA_KEYS = [
+  'statelessHardening',
+  'statelessProviderMode',
+  'statelessGuards',
+  'statelessMode',
+] as const;
+
+export type StatelessHardeningPreference = 'legacy' | 'strict';
+
+let statelessHardeningPreferenceOverride: StatelessHardeningPreference | null =
+  null;
+
+function normalizeStatelessPreference(
+  value: unknown,
+): StatelessHardeningPreference | null {
+  if (typeof value === 'boolean') {
+    return value ? 'strict' : 'legacy';
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (
+      normalized === 'strict' ||
+      normalized === 'enabled' ||
+      normalized === 'true' ||
+      normalized === 'on'
+    ) {
+      return 'strict';
+    }
+    if (
+      normalized === 'legacy' ||
+      normalized === 'disabled' ||
+      normalized === 'false' ||
+      normalized === 'off'
+    ) {
+      return 'legacy';
+    }
+  }
+  return null;
+}
+
+function readStatelessPreferenceFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): StatelessHardeningPreference | null {
+  if (!metadata) {
+    return null;
+  }
+  for (const key of STATELESS_METADATA_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(metadata, key)) {
+      const value = metadata[key];
+      const preference = normalizeStatelessPreference(value);
+      if (preference) {
+        return preference;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P07
+ * @requirement:REQ-SP4-005
+ */
+function resolveStatelessHardeningPreference(): StatelessHardeningPreference {
+  const scope = getCurrentRuntimeScope();
+  const scopePreference = readStatelessPreferenceFromMetadata(scope?.metadata);
+  if (scopePreference) {
+    return scopePreference;
+  }
+
+  const { runtimeId } = resolveActiveRuntimeIdentity();
+  const entry = runtimeRegistry.get(runtimeId);
+  const entryPreference = readStatelessPreferenceFromMetadata(entry?.metadata);
+  if (entryPreference) {
+    return entryPreference;
+  }
+
+  if (statelessHardeningPreferenceOverride) {
+    return statelessHardeningPreferenceOverride;
+  }
+
+  return 'strict';
+}
+
+/**
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P07
+ * @requirement:REQ-SP4-005
+ * Configure the global CLI stateless guard preference. Tests and CLI bootstrap
+ * can call this to opt into strict guards without environment toggles.
+ */
+export function configureCliStatelessHardening(
+  preference: StatelessHardeningPreference | null,
+): void {
+  statelessHardeningPreferenceOverride = preference;
+}
+
+/**
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P07
+ * @requirement:REQ-SP4-005
+ */
+export function getCliStatelessHardeningOverride(): StatelessHardeningPreference | null {
+  return statelessHardeningPreferenceOverride;
+}
+
+/**
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P07
+ * @requirement:REQ-SP4-005
+ * Reports the currently resolved stateless hardening preference.
+ */
+export function getCliStatelessHardeningPreference(): StatelessHardeningPreference {
+  return resolveStatelessHardeningPreference();
+}
+
+function isStatelessProviderIntegrationEnabled(): boolean {
+  return resolveStatelessHardeningPreference() === 'strict';
+}
+
+export function isCliStatelessProviderModeEnabled(): boolean {
+  return isStatelessProviderIntegrationEnabled();
+}
 
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P15
@@ -137,8 +268,16 @@ function requireRuntimeEntry(runtimeId: string): RuntimeRegistryEntry {
     return entry;
   }
 
+  const hint = isStatelessProviderIntegrationEnabled()
+    ? 'Stateless hardening requires explicit runtime registration.'
+    : 'Ensure setCliRuntimeContext() was called before consuming CLI helpers.';
+
   throw new Error(
-    `[cli-runtime] Runtime ${runtimeId} has not been initialised. Ensure setCliRuntimeContext() was called before consuming CLI helpers.`,
+    formatMissingRuntimeMessage({
+      runtimeId,
+      missingFields: ['runtime registration'],
+      hint,
+    }),
   );
 }
 
@@ -162,30 +301,68 @@ export interface CliRuntimeServices {
 }
 
 /**
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+ * @requirement:REQ-SP4-004
+ * @requirement:REQ-SP4-005
+ *
  * Acquire the active provider runtime context that CLI bootstrap registered.
  * Throws if the runtime has not yet been initialised.
+ *
+ * When stateless hardening is enabled, this enforces that all required
+ * services (settingsService, config) are present in the runtime registry
+ * before allowing provider operations.
  */
 export function getCliRuntimeContext(): ProviderRuntimeContext {
   const identity = resolveActiveRuntimeIdentity();
   const entry = runtimeRegistry.get(identity.runtimeId);
 
   if (entry && entry.config) {
-    const settingsService =
-      entry.settingsService ??
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-004 - Remove singleton fallbacks when stateless hardening is enabled
+    const settingsService = entry.settingsService;
+
+    if (isStatelessProviderIntegrationEnabled() && !settingsService) {
+      throw new Error(
+        formatMissingRuntimeMessage({
+          runtimeId: identity.runtimeId,
+          missingFields: ['SettingsService'],
+          hint: 'Stateless hardening disables SettingsService fallbacks.',
+        }),
+      );
+    }
+
+    // Fallback path for legacy compatibility (disabled under stateless hardening)
+    const resolvedSettings =
+      settingsService ??
       entry.config.getSettingsService() ??
       new SettingsService();
+
     return createProviderRuntimeContext({
-      settingsService,
+      settingsService: resolvedSettings,
       config: entry.config,
       runtimeId: identity.runtimeId,
       metadata: identity.metadata,
     });
   }
 
+  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+  // Legacy fallback to global context (should not be used under stateless hardening)
   const context = getActiveProviderRuntimeContext();
+
+  if (isStatelessProviderIntegrationEnabled()) {
+    throw new Error(
+      formatMissingRuntimeMessage({
+        runtimeId: identity.runtimeId,
+        missingFields: ['runtime registration'],
+        hint: 'Register the runtime via activateIsolatedRuntimeContext() and registerCliProviderInfrastructure() before invoking CLI helpers.',
+      }),
+    );
+  }
+
   if (!context.config) {
     throw new Error(
-      '[cli-runtime] Active provider runtime context is missing Config instance. Ensure gemini bootstrap initialised runtime before invoking helpers.',
+      '[cli-runtime] Active provider runtime context is missing Config instance. ' +
+        'Ensure gemini bootstrap initialised runtime before invoking helpers.',
     );
   }
   return context;
@@ -201,19 +378,31 @@ export function getCliRuntimeServices(): CliRuntimeServices {
   const config = entry.config ?? context.config;
   if (!config) {
     throw new Error(
-      `[cli-runtime] Config has not been initialised for runtime ${runtimeId}.`,
+      formatNormalizationFailureMessage({
+        runtimeId,
+        missingFields: ['Config'],
+        hint: 'registerCliProviderInfrastructure() must supply Config before CLI helpers run.',
+      }),
     );
   }
   const settingsService = entry.settingsService ?? context.settingsService;
   if (!settingsService) {
     throw new Error(
-      `[cli-runtime] Settings service is unavailable for runtime ${runtimeId}.`,
+      formatMissingRuntimeMessage({
+        runtimeId,
+        missingFields: ['SettingsService'],
+        hint: 'Call activateIsolatedRuntimeContext() or inject a runtime-specific SettingsService for tests.',
+      }),
     );
   }
   const providerManager = entry.providerManager;
   if (!providerManager) {
     throw new Error(
-      `[cli-runtime] Provider manager has not been registered for runtime ${runtimeId}. Ensure registerCliProviderInfrastructure() ran within the activation scope.`,
+      formatMissingRuntimeMessage({
+        runtimeId,
+        missingFields: ['ProviderManager'],
+        hint: 'Ensure registerCliProviderInfrastructure() runs inside the runtime activation scope.',
+      }),
     );
   }
   return { settingsService, config, providerManager };
@@ -258,6 +447,82 @@ export function getCliProviderManager(
     }
   }
   return services.providerManager;
+}
+
+export function isCliRuntimeStatelessReady(): boolean {
+  if (!isStatelessProviderIntegrationEnabled()) {
+    return true;
+  }
+  const { runtimeId } = resolveActiveRuntimeIdentity();
+  const entry = runtimeRegistry.get(runtimeId);
+  if (!entry) {
+    return false;
+  }
+  return Boolean(
+    entry.settingsService && entry.config && entry.providerManager,
+  );
+}
+
+/**
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+ * @requirement:REQ-SP4-004
+ * @requirement:REQ-SP4-005
+ *
+ * Ensure the active provider runtime context is normalized and pushed into
+ * ProviderManager before any provider invocation. This function enforces
+ * stateless provider guarantees by requiring explicit runtime-scoped services
+ * (settings, config, userMemory) before execution.
+ *
+ * When stateless hardening is enabled (runtime metadata/global preference),
+ * this helper normalizes the current runtime context and registers it with
+ * ProviderManager so downstream providers always receive call-scoped
+ * configuration without relying on singleton fallbacks.
+ */
+export function ensureStatelessProviderReady(): void {
+  if (!isStatelessProviderIntegrationEnabled()) {
+    return;
+  }
+
+  const { runtimeId, metadata } = resolveActiveRuntimeIdentity();
+  const entry = requireRuntimeEntry(runtimeId);
+  const settingsService = entry.settingsService;
+  const config = entry.config;
+  const providerManager = entry.providerManager;
+
+  const missingFields: string[] = [];
+  if (!settingsService) {
+    missingFields.push('SettingsService');
+  }
+  if (!config) {
+    missingFields.push('Config');
+  }
+  if (!providerManager) {
+    missingFields.push('ProviderManager');
+  }
+
+  if (missingFields.length > 0) {
+    throw new Error(
+      formatNormalizationFailureMessage({
+        runtimeId,
+        missingFields,
+        hint: 'Call registerCliProviderInfrastructure() inside activateIsolatedRuntimeContext() before invoking providers.',
+      }),
+    );
+  }
+
+  const runtimeContext = createProviderRuntimeContext({
+    settingsService: settingsService!,
+    config: config!,
+    runtimeId,
+    metadata,
+  });
+
+  providerManager!.prepareStatelessProviderInvocation(runtimeContext);
+
+  logger.debug(
+    () =>
+      `[cli-runtime] Stateless provider ready for runtime ${runtimeId} (REQ-SP4-004, REQ-SP4-005)`,
+  );
 }
 
 /**
@@ -308,7 +573,22 @@ export function registerCliProviderInfrastructure(
 }
 
 export function resetCliProviderInfrastructure(runtimeId?: string): void {
-  const targetRuntimeId = runtimeId ?? resolveActiveRuntimeIdentity().runtimeId;
+  let targetRuntimeId = runtimeId;
+  if (!targetRuntimeId) {
+    try {
+      targetRuntimeId = resolveActiveRuntimeIdentity().runtimeId;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.name === 'MissingProviderRuntimeError' ||
+          /No active provider runtime context/i.test(error.message) ||
+          /MissingProviderRuntimeError/.test(error.message))
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
   if (!runtimeRegistry.has(targetRuntimeId)) {
     return;
   }
@@ -391,6 +671,7 @@ export function getCliRuntimeConfig(): Config {
 }
 
 function getProviderManagerOrThrow(): ProviderManager {
+  ensureStatelessProviderReady();
   const { providerManager } = getCliRuntimeServices();
   return providerManager;
 }
@@ -887,7 +1168,9 @@ export interface ProviderRuntimeStatus {
  */
 export async function switchActiveProvider(
   providerName: string,
+  options: { autoOAuth?: boolean } = {},
 ): Promise<ProviderSwitchResult> {
+  const autoOAuth = options.autoOAuth ?? false;
   const name = providerName.trim();
   if (!name) {
     throw new Error('Provider name is required.');
@@ -955,6 +1238,34 @@ export async function switchActiveProvider(
   );
   config.setModel(resolvedDefaultModel);
 
+  const unwrapProvider = (provider: unknown) => {
+    const visited = new Set<unknown>();
+    let current = provider as {
+      wrappedProvider?: unknown;
+    };
+
+    while (
+      current &&
+      typeof current === 'object' &&
+      'wrappedProvider' in current &&
+      current.wrappedProvider
+    ) {
+      if (visited.has(current)) {
+        break;
+      }
+      visited.add(current);
+      current = current.wrappedProvider as {
+        wrappedProvider?: unknown;
+      };
+    }
+    return current as {
+      hasNonOAuthAuthentication?: () => Promise<boolean>;
+      getAuthMethodName?: () => Promise<string | null>;
+    };
+  };
+
+  const baseProvider = unwrapProvider(activeProvider);
+
   let providerBaseUrl: string | undefined;
   if (name === 'qwen') {
     providerBaseUrl = 'https://portal.qwen.ai/v1';
@@ -990,6 +1301,47 @@ export async function switchActiveProvider(
   await config.refreshAuth(authType);
 
   const infoMessages: string[] = [];
+
+  if (name === 'anthropic') {
+    const oauthManager = getCliOAuthManager();
+    if (oauthManager) {
+      ensureOAuthProviderRegistered('anthropic', oauthManager);
+      if (autoOAuth) {
+        try {
+          const hasNonOAuth =
+            typeof baseProvider.hasNonOAuthAuthentication === 'function'
+              ? await baseProvider.hasNonOAuthAuthentication()
+              : true;
+          if (!hasNonOAuth) {
+            logger.debug(
+              () =>
+                `[cli-runtime] Anthropic OAuth check: hasNonOAuth=${hasNonOAuth} manager=${Boolean(oauthManager)}`,
+            );
+            if (!oauthManager.isOAuthEnabled('anthropic')) {
+              await oauthManager.toggleOAuthEnabled('anthropic');
+            }
+            logger.debug(() => '[cli-runtime] Initiating Anthropic OAuth flow');
+            await oauthManager.authenticate('anthropic');
+            await config.refreshAuth(authType);
+            infoMessages.push(
+              'Anthropic OAuth authentication completed. Use /auth anthropic to view status.',
+            );
+          }
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          infoMessages.push(
+            `Anthropic OAuth authentication failed: ${message}`,
+          );
+          logger.warn(
+            () =>
+              `[cli-runtime] Anthropic OAuth authentication failed: ${message}`,
+          );
+        }
+      }
+    }
+  }
+
   if (name !== 'gemini') {
     infoMessages.push('Use /key to set API key if needed.');
   }

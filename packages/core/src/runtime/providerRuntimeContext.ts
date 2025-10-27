@@ -12,6 +12,7 @@
 
 import { SettingsService } from '../settings/SettingsService.js';
 import type { Config } from '../config/config.js';
+import { MissingProviderRuntimeError } from '../providers/errors.js';
 
 export interface ProviderRuntimeContext {
   settingsService: SettingsService;
@@ -62,16 +63,34 @@ export function getActiveProviderRuntimeContext(): ProviderRuntimeContext {
 
   if (fallbackFactory) {
     const fallbackContext = fallbackFactory();
+    if (!fallbackContext?.settingsService) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'provider-runtime',
+        missingFields: ['settings'],
+        requirement: 'REQ-SP4-004',
+        stage: 'fallbackFactory',
+        metadata: {
+          hint: 'Fallback context must supply SettingsService.',
+        },
+        message:
+          'MissingProviderRuntimeError(provider-runtime): fallback context is missing SettingsService (REQ-SP4-004).',
+      });
+    }
     activeContext = fallbackContext;
     return fallbackContext;
   }
 
-  const fallbackContext = createProviderRuntimeContext({
-    runtimeId: 'legacy-singleton',
-    metadata: { source: 'statelessprovider-runtime', mode: 'fallback' },
+  throw new MissingProviderRuntimeError({
+    providerKey: 'provider-runtime',
+    missingFields: ['runtime registration'],
+    requirement: 'REQ-SP4-004',
+    stage: 'getActiveProviderRuntimeContext',
+    metadata: {
+      hint: 'Call activateIsolatedRuntimeContext() + registerCliProviderInfrastructure() before invoking providers or CLI helpers.',
+    },
+    message:
+      'MissingProviderRuntimeError(provider-runtime): runtime registration missing. Run activateIsolatedRuntimeContext() before invoking providers (REQ-SP4-004).',
   });
-  activeContext = fallbackContext;
-  return fallbackContext;
 }
 
 export function setProviderRuntimeContextFallback(

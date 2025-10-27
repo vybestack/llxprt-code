@@ -9,6 +9,7 @@ import {
   activateIsolatedRuntimeContext,
   applyProfileSnapshot,
   createIsolatedRuntimeContext,
+  configureCliStatelessHardening,
   setActiveModel,
   setActiveModelParam,
   setEphemeralSetting,
@@ -16,6 +17,7 @@ import {
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
   resetCliProviderInfrastructure,
+  getCliStatelessHardeningOverride,
 } from '../runtimeSettings.js';
 import type { IsolatedRuntimeContextHandle } from '../runtimeContextFactory.js';
 import {
@@ -292,6 +294,114 @@ describe('CLI runtime isolation', () => {
 
     await expect(taskB).resolves.toBe('beta-primary-post-dispose');
     await expect(taskA).resolves.toBe('alpha-primary-post-dispose');
+  });
+
+  it('enforces runtime guard when stateless hardening is active @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-005 @pseudocode provider-runtime-handling.md lines 10-16', async () => {
+    const previousPreference = getCliStatelessHardeningOverride();
+    configureCliStatelessHardening('strict');
+    resetCliProviderInfrastructure();
+
+    try {
+      await expect(setActiveModel('stateless-model')).rejects.toThrow(
+        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+      );
+    } finally {
+      configureCliStatelessHardening(previousPreference);
+    }
+  });
+
+  it('enforces explicit SettingsService when stateless hardening enabled @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', async () => {
+    const previousPreference = getCliStatelessHardeningOverride();
+    configureCliStatelessHardening('strict');
+
+    try {
+      resetCliProviderInfrastructure();
+
+      const { getCliRuntimeContext } = await import('../runtimeSettings.js');
+
+      // Try to get context with stateless mode enabled but no runtime registered
+      // This simulates missing SettingsService scenario
+      expect(() => getCliRuntimeContext()).toThrow(
+        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+      );
+    } finally {
+      configureCliStatelessHardening(previousPreference);
+      resetCliProviderInfrastructure();
+    }
+  });
+
+  it('enforces explicit runtime registration when stateless hardening enabled @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', async () => {
+    const previousPreference = getCliStatelessHardeningOverride();
+    configureCliStatelessHardening('strict');
+    resetCliProviderInfrastructure();
+
+    try {
+      const { getCliRuntimeContext } = await import('../runtimeSettings.js');
+
+      // Try to get context without any runtime registration
+      expect(() => getCliRuntimeContext()).toThrow(
+        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+      );
+    } finally {
+      configureCliStatelessHardening(previousPreference);
+    }
+  });
+
+  it('ensureStatelessProviderReady normalizes and pushes runtime context @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004 @requirement:REQ-SP4-005', async () => {
+    const previousPreference = getCliStatelessHardeningOverride();
+    configureCliStatelessHardening('strict');
+    resetCliProviderInfrastructure();
+
+    try {
+      const runtimeA = await bootstrapRuntimeFixture({
+        id: 'runtime-stateless-ready',
+        profileName: 'profile-ready',
+        primaryProvider: 'primary',
+        secondaryProvider: 'secondary',
+        primaryModel: 'ready-model',
+        secondaryModel: 'ready-model-2',
+      });
+
+      await activateIsolatedRuntimeContext(runtimeA.handle, {
+        runtimeId: runtimeA.id,
+        metadata: {
+          source: 'test-ensure-ready',
+        },
+      });
+
+      const { ensureStatelessProviderReady } = await import(
+        '../runtimeSettings.js'
+      );
+
+      // Should not throw - runtime properly registered
+      expect(() => ensureStatelessProviderReady()).not.toThrow();
+
+      // Verify prepareStatelessProviderInvocation was called
+      // (We can't directly verify this without exposing internals, but we can verify it doesn't throw)
+    } finally {
+      configureCliStatelessHardening(previousPreference);
+    }
+  });
+
+  it('ensureStatelessProviderReady throws when services missing @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', async () => {
+    const previousPreference = getCliStatelessHardeningOverride();
+    configureCliStatelessHardening('strict');
+
+    try {
+      resetCliProviderInfrastructure();
+
+      const { ensureStatelessProviderReady } = await import(
+        '../runtimeSettings.js'
+      );
+
+      // Try to ensure ready with no runtime registered - should throw
+      expect(() => ensureStatelessProviderReady()).toThrow(
+        /MissingProviderRuntimeError[\s\S]*runtime registration[\s\S]*REQ-SP4-004/i,
+      );
+    } finally {
+      configureCliStatelessHardening(previousPreference);
+      resetCliProviderInfrastructure();
+    }
   });
 });
 

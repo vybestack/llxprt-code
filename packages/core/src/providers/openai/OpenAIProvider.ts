@@ -20,7 +20,6 @@
  */
 
 import OpenAI from 'openai';
-import { createHash } from 'node:crypto';
 import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
@@ -32,7 +31,6 @@ import {
   NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import {
@@ -45,36 +43,21 @@ import { IModel } from '../IModel.js';
 import { IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { retryWithBackoff } from '../../utils/retry.js';
-
-const runtimeClientCache: Map<string, OpenAI> = new Map();
-const runtimeClientKeyIndex: Map<string, Set<string>> = new Map();
-const defaultRuntimeKey = 'openai.runtime.unscoped';
-
-function rememberClientKey(runtimeKey: string, cacheKey: string): void {
-  let keys = runtimeClientKeyIndex.get(runtimeKey);
-  if (!keys) {
-    keys = new Set();
-    runtimeClientKeyIndex.set(runtimeKey, keys);
-  }
-  keys.add(cacheKey);
-}
-
-function forgetRuntimeKeys(runtimeKey: string): void {
-  const keys = runtimeClientKeyIndex.get(runtimeKey);
-  if (!keys) {
-    return;
-  }
-  for (const key of keys) {
-    runtimeClientCache.delete(key);
-  }
-  runtimeClientKeyIndex.delete(runtimeKey);
-}
+import { resolveUserMemory } from '../utils/userMemory.js';
+import { resolveRuntimeAuthToken } from '../utils/authToken.js';
+import { filterOpenAIRequestParams } from './openaiRequestParams.js';
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   override readonly name: string = 'openai';
-  private logger: DebugLogger;
-  private modelParams?: Record<string, unknown>;
+  private getLogger(): DebugLogger {
+    return new DebugLogger('llxprt:provider:openai');
+  }
 
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Constructor reduced to minimal initialization - no state captured
+   */
   constructor(
     apiKey: string | undefined,
     baseURL?: string,
@@ -112,45 +95,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       config,
     );
 
-    // Setup debug logger
-    this.logger = new DebugLogger('llxprt:provider:openai');
-
-    const settingsService = getSettingsService();
-    if (settingsService) {
-      this.setRuntimeSettingsService(settingsService);
-      settingsService
-        .getSettings(this.name)
-        .then((settings) => {
-          const extracted = this.extractModelParamsFromSettings(settings);
-          if (extracted) {
-            this.modelParams = extracted;
-          }
-        })
-        .catch((error) => {
-          this.logger.debug(
-            () =>
-              `Failed to preload model params from SettingsService: ${error}`,
-          );
-        });
-    }
-
-    this.loadModelParamsFromSettings().catch((error) => {
-      this.logger.debug(
-        () =>
-          `Failed to initialize model params from SettingsService: ${error}`,
-      );
-    });
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-002
+    // No constructor-captured state - all values sourced from normalized options per call
   }
 
   /**
    * Create HTTP/HTTPS agents with socket configuration for local AI servers
    * Returns undefined if no socket settings are configured
+   *
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Now sources ephemeral settings from call options instead of provider config
    */
-  private createHttpAgents():
-    | { httpAgent: http.Agent; httpsAgent: https.Agent }
-    | undefined {
-    // Get socket configuration from ephemeral settings
-    const settings = this.providerConfig?.getEphemeralSettings?.() || {};
+  private createHttpAgents(
+    options?: NormalizedGenerateChatOptions,
+  ): { httpAgent: http.Agent; httpsAgent: https.Agent } | undefined {
+    // Get socket configuration from call options or fallback to provider config
+    const settings =
+      options?.config?.getEphemeralSettings?.() ||
+      this.providerConfig?.getEphemeralSettings?.() ||
+      {};
 
     // Check if any socket settings are explicitly configured
     const hasSocketSettings =
@@ -210,80 +175,35 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return { httpAgent, httpsAgent };
   }
 
-  private async loadModelParamsFromSettings(): Promise<void> {
-    const params = await this.getModelParamsFromSettings();
-    this.modelParams = params;
-  }
-
-  private extractModelParamsFromSettings(
-    settings: unknown,
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Extract model parameters from normalized options instead of settings service
+   */
+  private extractModelParamsFromOptions(
+    options: NormalizedGenerateChatOptions,
   ): Record<string, unknown> | undefined {
-    if (!settings || typeof settings !== 'object') {
+    const providerSettings =
+      options.settings?.getProviderSettings(this.name) ?? {};
+    const configEphemerals = options.config?.getEphemeralSettings?.() ?? {};
+
+    const filteredProviderParams = filterOpenAIRequestParams(providerSettings);
+    const filteredEphemeralParams = filterOpenAIRequestParams(configEphemerals);
+
+    if (!filteredProviderParams && !filteredEphemeralParams) {
       return undefined;
     }
 
-    const {
-      enabled: _enabled,
-      apiKey: _apiKey,
-      baseUrl: _baseUrl,
-      model: _model,
-      maxTokens,
-      temperature,
-      ...rest
-    } = settings as Record<string, unknown> & {
-      maxTokens?: unknown;
-      temperature?: unknown;
+    return {
+      ...(filteredProviderParams ?? {}),
+      ...(filteredEphemeralParams ?? {}),
     };
-
-    const params: Record<string, unknown> = { ...rest };
-
-    if (temperature !== undefined) {
-      params.temperature = temperature;
-    }
-
-    const restRecord = rest as Record<string, unknown>;
-    const maxTokensValue = maxTokens ?? restRecord.max_tokens;
-    if (maxTokensValue !== undefined) {
-      params.max_tokens = maxTokensValue;
-      delete params.maxTokens;
-    }
-
-    return Object.keys(params).length > 0 ? params : undefined;
-  }
-
-  private async resolveModelParams(): Promise<
-    Record<string, unknown> | undefined
-  > {
-    const params = await this.getModelParamsFromSettings();
-    if (params) {
-      this.modelParams = params;
-      return params;
-    }
-
-    const settingsService = getSettingsService();
-    if (settingsService) {
-      try {
-        const settings = await settingsService.getSettings(this.name);
-        const extracted = this.extractModelParamsFromSettings(settings);
-        if (extracted) {
-          this.modelParams = extracted;
-          return extracted;
-        }
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `Failed to resolve model params via SettingsService fallback: ${error}`,
-        );
-      }
-    }
-    return this.modelParams;
   }
 
   /**
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
-   * @plan:PLAN-20251018-STATELESSPROVIDER2.P09
-   * @requirement REQ-SP2-001
-   * @pseudocode openai-responses-stateless.md lines 1-3
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Resolve runtime key from normalized options for client scoping
    */
   private resolveRuntimeKey(options: NormalizedGenerateChatOptions): string {
     if (options.runtime?.runtimeId) {
@@ -300,48 +220,25 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return `call:${callId.trim()}`;
     }
 
-    return defaultRuntimeKey;
-  }
-
-  /**
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
-   * @plan:PLAN-20251018-STATELESSPROVIDER2.P09
-   * @requirement REQ-SP2-001
-   * @pseudocode openai-responses-stateless.md lines 2-4
-   */
-  private normalizeBaseURL(baseURL?: string): string {
-    if (!baseURL || baseURL.trim() === '') {
-      return 'default-endpoint';
-    }
-    return baseURL.replace(/\/+$/, '');
-  }
-
-  private buildClientCacheKey(
-    runtimeKey: string,
-    baseURL: string | undefined,
-    authToken: string,
-  ): string {
-    const normalizedBase = this.normalizeBaseURL(baseURL);
-    const hashedToken =
-      authToken && authToken.length > 0
-        ? createHash('sha256').update(authToken).digest('hex')
-        : 'no-auth';
-    return `${runtimeKey}::${normalizedBase}::${hashedToken}`;
+    return 'openai.runtime.unscoped';
   }
 
   /**
    * Tool formatter instances cannot be shared between stateless calls,
    * so construct a fresh one for every invocation.
    *
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
-   * @plan:PLAN-20251018-STATELESSPROVIDER2.P09
-   * @requirement REQ-SP2-001
-   * @pseudocode openai-responses-stateless.md lines 5-6
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
    */
   private createToolFormatter(): ToolFormatter {
     return new ToolFormatter();
   }
 
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P09
+   * @requirement:REQ-SP4-002
+   * Instantiates a fresh OpenAI client per call to preserve stateless behaviour.
+   */
   private instantiateClient(
     authToken: string,
     baseURL?: string,
@@ -367,42 +264,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Resolves or creates an OpenAI client scoped to the active runtime metadata.
-   *
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
-   * @plan:PLAN-20251018-STATELESSPROVIDER2.P09
-   * @requirement REQ-SP2-001
-   * @pseudocode openai-responses-stateless.md lines 1-4
-   */
-  private async getClientForCall(
-    options: NormalizedGenerateChatOptions,
-  ): Promise<OpenAI> {
-    const runtimeKey = this.resolveRuntimeKey(options);
-    const authToken = options.resolved.authToken;
-    const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
-
-    const cacheKey = this.buildClientCacheKey(runtimeKey, baseURL, authToken);
-    const cached = runtimeClientCache.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const agents = this.createHttpAgents();
-    const client = this.instantiateClient(authToken, baseURL, agents);
-
-    runtimeClientCache.set(cacheKey, client);
-    rememberClientKey(runtimeKey, cacheKey);
-
-    return client;
-  }
-
-  /**
-   * Exposed for testing and shared call sites; delegates to runtime-scoped client resolution.
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P09
+   * @requirement:REQ-SP4-002
+   * Creates a client scoped to the active runtime metadata without caching.
    */
   protected async getClient(
     options: NormalizedGenerateChatOptions,
   ): Promise<OpenAI> {
-    return this.getClientForCall(options);
+    const authToken =
+      (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
+    if (!authToken) {
+      throw new Error(
+        `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
+      );
+    }
+    const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
+    const agents = this.createHttpAgents(options);
+    return this.instantiateClient(authToken, baseURL, agents);
   }
 
   /**
@@ -467,7 +345,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       return models;
     } catch (error) {
-      this.logger.debug(() => `Error fetching models from OpenAI: ${error}`);
+      this.getLogger().debug(
+        () => `Error fetching models from OpenAI: ${error}`,
+      );
       // Return a hardcoded list as fallback
       return this.getFallbackModels();
     }
@@ -498,21 +378,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Clears cached clients either globally or for a specific runtime scope.
-   *
-   * @plan PLAN-20251018-STATELESSPROVIDER2.P09
-   * @plan:PLAN-20251018-STATELESSPROVIDER2.P09
-   * @requirement REQ-SP2-001
-   * @pseudocode openai-responses-stateless.md lines 3-4
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P09
+   * @requirement:REQ-SP4-002
+   * No-op retained for compatibility because clients are no longer cached.
    */
   // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
   public clearClientCache(runtimeKey?: string): void {
-    if (runtimeKey && runtimeKey.trim()) {
-      forgetRuntimeKeys(runtimeKey.trim());
-      return;
-    }
-    runtimeClientCache.clear();
-    runtimeClientKeyIndex.clear();
+    void runtimeKey;
   }
 
   /**
@@ -538,7 +410,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       }
     } catch (error) {
       if (process.env.DEBUG) {
-        this.logger.debug(
+        this.getLogger().debug(
           () =>
             `[openai] non-OAuth authentication resolution failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -554,7 +426,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         return typeof token === 'string' && token.trim() !== '';
       } catch (error) {
         if (process.env.DEBUG) {
-          this.logger.debug(
+          this.getLogger().debug(
             () =>
               `[openai] forced OAuth authentication failed: ${error instanceof Error ? error.message : String(error)}`,
           );
@@ -688,6 +560,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * @pseudocode base-provider.md lines 7-15
    * @pseudocode provider-invocation.md lines 8-12
    */
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P09
+   * @requirement:REQ-SP4-002
+   * Generate chat completion with per-call client instantiation.
+   */
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
@@ -695,10 +572,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const client = await this.getClient(options);
     const runtimeKey = this.resolveRuntimeKey(options);
     const { tools } = options;
+    const logger = new DebugLogger('llxprt:provider:openai');
 
     // Debug log what we receive
-    if (this.logger.enabled) {
-      this.logger.debug(
+    if (logger.enabled) {
+      logger.debug(
         () => `[OpenAIProvider] generateChatCompletion received tools:`,
         {
           hasTools: !!tools,
@@ -717,6 +595,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       options,
       callFormatter,
       client,
+      logger,
     );
 
     for await (const item of generator) {
@@ -802,22 +681,24 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Internal implementation for chat completion
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Internal implementation for chat completion using normalized options
    */
   private async *generateChatCompletionImpl(
     options: NormalizedGenerateChatOptions,
     toolFormatter: ToolFormatter,
     client: OpenAI,
+    logger: DebugLogger,
   ): AsyncGenerator<IContent, void, unknown> {
     const { contents, tools, metadata } = options;
     const model = options.resolved.model || this.getDefaultModel();
     const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
-    const ephemeralSettings =
-      this.providerConfig?.getEphemeralSettings?.() || {};
+    const ephemeralSettings = options.config?.getEphemeralSettings?.() || {};
 
-    if (this.logger.enabled) {
+    if (logger.enabled) {
       const resolved = options.resolved;
-      this.logger.debug(() => `[OpenAIProvider] Resolved request context`, {
+      logger.debug(() => `[OpenAIProvider] Resolved request context`, {
         provider: this.name,
         model,
         resolvedModel: resolved.model,
@@ -836,7 +717,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const detectedFormat = this.detectToolFormat();
 
     // Log the detected format for debugging
-    this.logger.debug(
+    logger.debug(
       () =>
         `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
       {
@@ -864,7 +745,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // CRITICAL FIX: Ensure we never pass an empty tools array
     // The OpenAI API errors when tools=[] but a tool call is attempted
     if (Array.isArray(formattedTools) && formattedTools.length === 0) {
-      this.logger.warn(
+      logger.warn(
         () =>
           `[OpenAIProvider] CRITICAL: Formatted tools is empty array! Setting to undefined to prevent API errors.`,
         {
@@ -879,8 +760,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Debug log the conversion result - enhanced logging for intermittent issues
-    if (this.logger.enabled && formattedTools) {
-      this.logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
+    if (logger.enabled && formattedTools) {
+      logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
         detectedFormat,
         inputHadTools: !!tools,
         inputToolsLength: tools?.length,
@@ -907,9 +788,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const toolNamesArg =
       tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
 
-    const userMemory = this.globalConfig?.getUserMemory
-      ? this.globalConfig.getUserMemory()
-      : '';
+    /**
+     * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+     * @requirement:REQ-SP4-003
+     * Source user memory from normalized options instead of global config
+     */
+    const userMemory = await resolveUserMemory(options.userMemory, () =>
+      options.runtime?.config?.getUserMemory?.(),
+    );
     const systemPrompt = await getCoreSystemPromptAsync({
       userMemory,
       model,
@@ -940,9 +826,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       requestBody.tool_choice = 'auto';
     }
 
-    const modelParams = await this.resolveModelParams();
-    if (modelParams) {
-      Object.assign(requestBody, modelParams);
+    /**
+     * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+     * @requirement:REQ-SP4-002
+     * Extract per-call request overrides from normalized options instead of cached state
+     */
+    const requestOverrides = this.extractModelParamsFromOptions(options);
+    if (requestOverrides) {
+      if (logger.enabled) {
+        logger.debug(() => `[OpenAIProvider] Applying request overrides`, {
+          overrideKeys: Object.keys(requestOverrides),
+        });
+      }
+      Object.assign(requestBody, requestOverrides);
     }
 
     if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
@@ -953,10 +849,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const baseURL = options.resolved.baseURL ?? this.getBaseURL();
 
     if (
-      this.logger.enabled &&
+      logger.enabled &&
       (model.toLowerCase().includes('qwen') || baseURL?.includes('cerebras'))
     ) {
-      this.logger.debug(() => `Request to ${baseURL} for model ${model}:`, {
+      logger.debug(() => `Request to ${baseURL} for model ${model}:`, {
         baseURL,
         model,
         streamingEnabled,
@@ -985,22 +881,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Log the exact tools being sent for debugging
-    if (this.logger.enabled && 'tools' in requestBody) {
-      this.logger.debug(
-        () => `[OpenAIProvider] Exact tools being sent to API:`,
-        {
-          toolCount: requestBody.tools?.length,
-          toolNames: requestBody.tools?.map((t) =>
-            'function' in t ? t.function?.name : undefined,
-          ),
-          firstTool: requestBody.tools?.[0],
-        },
-      );
+    if (logger.enabled && 'tools' in requestBody) {
+      logger.debug(() => `[OpenAIProvider] Exact tools being sent to API:`, {
+        toolCount: requestBody.tools?.length,
+        toolNames: requestBody.tools?.map((t) =>
+          'function' in t ? t.function?.name : undefined,
+        ),
+        firstTool: requestBody.tools?.[0],
+      });
     }
 
     // Wrap the API call with retry logic using centralized retry utility
-    if (this.logger.enabled) {
-      this.logger.debug(() => `[OpenAIProvider] Sending chat request`, {
+    if (logger.enabled) {
+      logger.debug(() => `[OpenAIProvider] Sending chat request`, {
         model,
         baseURL: baseURL ?? this.getBaseURL(),
         streamingEnabled,
@@ -1013,7 +906,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     let response;
 
     // Debug log throttle tracker status
-    this.logger.debug(() => `Retry configuration:`, {
+    logger.debug(() => `Retry configuration:`, {
       hasThrottleTracker: !!this.throttleTracker,
       throttleTrackerType: typeof this.throttleTracker,
       maxRetries,
@@ -1021,6 +914,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     });
 
     const customHeaders = this.getCustomHeaders();
+
+    if (logger.enabled) {
+      logger.debug(() => `[OpenAIProvider] Request body preview`, {
+        model: requestBody.model,
+        hasStop: 'stop' in requestBody,
+        hasMaxTokens: 'max_tokens' in requestBody,
+        hasResponseFormat: 'response_format' in requestBody,
+        overrideKeys: requestOverrides ? Object.keys(requestOverrides) : [],
+      });
+    }
 
     try {
       response = await retryWithBackoff(
@@ -1044,7 +947,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         (model.toLowerCase().includes('qwen') ||
           this.getBaseURL()?.includes('cerebras'))
       ) {
-        this.logger.error(
+        logger.error(
           'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
           {
             error,
@@ -1073,7 +976,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           ? (error as { status: number }).status
           : undefined;
 
-      this.logger.error(
+      logger.error(
         () =>
           `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
         {
@@ -1131,7 +1034,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Check for finish_reason to detect proper stream ending
           if (choice.finish_reason) {
-            this.logger.debug(
+            logger.debug(
               () =>
                 `[Streaming] Stream finished with reason: ${choice.finish_reason}`,
               {
@@ -1145,7 +1048,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
             // If finish_reason is 'length', the response was cut off
             if (choice.finish_reason === 'length') {
-              this.logger.debug(
+              logger.debug(
                 () =>
                   `Response truncated due to length limit for model ${model}`,
               );
@@ -1173,7 +1076,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
             // Debug log for providers that need buffering
             if (shouldBufferText) {
-              this.logger.debug(
+              logger.debug(
                 () => `[Streaming] Chunk content for ${detectedFormat} format:`,
                 {
                   deltaContent,
@@ -1262,7 +1165,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             (model.toLowerCase().includes('qwen') ||
               this.getBaseURL()?.includes('cerebras'))
           ) {
-            this.logger.error(
+            logger.error(
               'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
               {
                 error,
@@ -1280,7 +1183,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             ).originalError = error;
             throw enhancedError;
           }
-          this.logger.error('Error processing streaming response:', error);
+          logger.error('Error processing streaming response:', error);
           throw error;
         }
       }
@@ -1374,7 +1277,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Log finish reason for debugging Qwen issues
       if (choice.finish_reason) {
-        this.logger.debug(
+        logger.debug(
           () =>
             `[Non-streaming] Response finish_reason: ${choice.finish_reason}`,
           {
@@ -1392,7 +1295,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         // Warn if the response was truncated
         if (choice.finish_reason === 'length') {
-          this.logger.warn(
+          logger.warn(
             () =>
               `Response truncated due to max_tokens limit for model ${model}. Consider increasing max_tokens.`,
           );
@@ -1475,49 +1378,37 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Update model parameters and persist them in the SettingsService.
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Memoization of model parameters disabled for stateless provider
    */
-  setModelParams(params: Record<string, unknown> | undefined): void {
-    if (params === undefined) {
-      this.modelParams = undefined;
-      this.setModelParamsInSettings(undefined).catch((error) => {
-        this.logger.debug(
-          () => `Failed to clear model params in SettingsService: ${error}`,
-        );
-      });
-      return;
-    }
-
-    const updated = { ...(this.modelParams ?? {}) };
-
-    for (const [key, value] of Object.entries(params)) {
-      if (value === undefined || value === null) {
-        delete updated[key];
-      } else {
-        updated[key] = value;
-      }
-    }
-
-    this.modelParams = Object.keys(updated).length > 0 ? updated : undefined;
-
-    this.setModelParamsInSettings(this.modelParams).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist model params to SettingsService: ${error}`,
-      );
-    });
-  }
-
-  override getModelParams(): Record<string, unknown> | undefined {
-    return this.modelParams;
+  setModelParams(_params: Record<string, unknown> | undefined): void {
+    throw new Error(
+      'ProviderCacheError("Attempted to memoize model parameters for openai")',
+    );
   }
 
   /**
-   * Get the tool format for this provider
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Memoization disabled - throws error when trying to access cached model parameters
+   */
+  override getModelParams(): Record<string, unknown> | undefined {
+    throw new Error(
+      'ProviderCacheError("Attempted to memoize model parameters for openai")',
+    );
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Get the tool format for this provider using normalized options
    * @returns The tool format to use
    */
   override getToolFormat(): string {
     const format = this.detectToolFormat();
-    this.logger.debug(() => `getToolFormat() called, returning: ${format}`, {
+    const logger = new DebugLogger('llxprt:provider:openai');
+    logger.debug(() => `getToolFormat() called, returning: ${format}`, {
       provider: this.name,
       model: this.getModel(),
       format,
@@ -1530,35 +1421,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * @returns The detected tool format ('openai' or 'qwen')
    */
   private detectToolFormat(): ToolFormat {
-    try {
-      // Check for toolFormat override in provider settings
-      const settingsService = this.resolveSettingsService();
-      const providerSettings = settingsService.getProviderSettings(this.name);
-      const toolFormatOverride = providerSettings?.toolFormat as
-        | ToolFormat
-        | 'auto'
-        | undefined;
-
-      // If explicitly set to a specific format (not 'auto'), use it
-      if (toolFormatOverride && toolFormatOverride !== 'auto') {
-        this.logger.debug(
-          () =>
-            `Using tool format override '${toolFormatOverride}' for ${this.name}`,
-        );
-        return toolFormatOverride;
-      }
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to detect tool format from SettingsService: ${error}`,
-      );
-    }
-
     // Auto-detect based on model name if set to 'auto' or not set
     const modelName = (this.getModel() || this.getDefaultModel()).toLowerCase();
+    const logger = new DebugLogger('llxprt:provider:openai');
 
     // Check for GLM-4.5 models (glm-4.5, glm-4-5)
     if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
-      this.logger.debug(
+      logger.debug(
         () => `Auto-detected 'qwen' format for GLM-4.5 model: ${modelName}`,
       );
       return 'qwen';
@@ -1566,16 +1435,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Check for qwen models
     if (modelName.includes('qwen')) {
-      this.logger.debug(
+      logger.debug(
         () => `Auto-detected 'qwen' format for Qwen model: ${modelName}`,
       );
       return 'qwen';
     }
 
     // Default to 'openai' format
-    this.logger.debug(
-      () => `Using default 'openai' format for model: ${modelName}`,
-    );
+    logger.debug(() => `Using default 'openai' format for model: ${modelName}`);
     return 'openai';
   }
 
@@ -1591,11 +1458,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
    * Determines whether a response should be retried based on error codes
    * @param error The error object from the API response
    * @returns true if the request should be retried, false otherwise
    */
   shouldRetryResponse(error: unknown): boolean {
+    const logger = new DebugLogger('llxprt:provider:openai');
+
     // Don't retry if we're streaming chunks - just continue processing
     if (
       error &&
@@ -1630,7 +1501,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Log what we're seeing
-    this.logger.debug(() => `shouldRetryResponse checking error:`, {
+    logger.debug(() => `shouldRetryResponse checking error:`, {
       hasError: !!error,
       errorType: error?.constructor?.name,
       status,
@@ -1644,7 +1515,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     );
 
     if (shouldRetry) {
-      this.logger.debug(() => `Will retry request due to status ${status}`);
+      logger.debug(() => `Will retry request due to status ${status}`);
     }
 
     return shouldRetry;
