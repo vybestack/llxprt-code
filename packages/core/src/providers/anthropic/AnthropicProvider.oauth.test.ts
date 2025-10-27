@@ -377,16 +377,39 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
 
   describe('getModels with OAuth', () => {
     it('should use OAuth token for models API when available', async () => {
-      // Mock OAuth token
-      const mockToken = 'oauth-token-123';
+      // Mock OAuth token in Anthropic OAuth format
+      const mockToken = 'sk-ant-oat-oauth-token-123';
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(mockToken);
 
       const models = await provider.getModels();
 
-      expect(models).toHaveLength(2); // 1 actual model + 1 latest alias
-      expect(models.some((m) => m.id === 'claude-sonnet-4-latest')).toBe(true);
-      expect(models.some((m) => m.id === 'claude-sonnet-4-20250514')).toBe(
-        true,
+      expect(models).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'claude-opus-4-1-20250805',
+          }),
+          expect.objectContaining({
+            id: 'claude-opus-4-1',
+          }),
+          expect.objectContaining({
+            id: 'claude-sonnet-4-5-20250929',
+          }),
+          expect.objectContaining({
+            id: 'claude-sonnet-4-5',
+          }),
+          expect.objectContaining({
+            id: 'claude-sonnet-4-20250514',
+          }),
+          expect.objectContaining({
+            id: 'claude-sonnet-4',
+          }),
+          expect.objectContaining({
+            id: 'claude-haiku-4-5-20251001',
+          }),
+          expect.objectContaining({
+            id: 'claude-haiku-4-5',
+          }),
+        ]),
       );
 
       // Should have attempted to get OAuth token
