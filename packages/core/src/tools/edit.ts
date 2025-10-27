@@ -7,6 +7,7 @@
 import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import * as Diff from 'diff';
+import process from 'node:process';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -712,7 +713,9 @@ Expectation for required parameters:
         properties: {
           file_path: {
             description:
-              "The absolute path to the file to modify. Must start with '/'.",
+              process.platform === 'win32'
+                ? "The absolute path to the file to modify (e.g., 'C:\\Users\\project\\file.txt'). Must be an absolute path."
+                : "The absolute path to the file to modify (e.g., '/home/user/project/file.txt'). Must start with '/'.",
             type: 'string',
           },
           old_string: {
