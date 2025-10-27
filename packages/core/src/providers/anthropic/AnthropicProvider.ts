@@ -422,17 +422,51 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Get current model parameters
+   * Get current model parameters from SettingsService per call
    * @returns Current parameters or undefined if not set
    * @plan PLAN-20251023-STATELESS-HARDENING.P08
-   * @requirement REQ-SP4-002
-   * @project-plans/20251023stateless4/analysis/pseudocode/provider-cache-elimination.md lines 12-13
+   * @requirement REQ-SP4-003
+   * Gets model parameters from SettingsService per call (stateless)
    */
   override getModelParams(): Record<string, unknown> | undefined {
-    // @plan PLAN-20251023-STATELESS-HARDENING.P08: Providers must not memoize model parameters
-    throw new Error(
-      'ProviderCacheError("Attempted to memoize model parameters for anthropic")',
-    );
+    try {
+      const settingsService = this.resolveSettingsService();
+      const providerSettings = settingsService.getProviderSettings(this.name);
+
+      const reservedKeys = new Set([
+        'enabled',
+        'apiKey',
+        'api-key',
+        'apiKeyfile',
+        'api-keyfile',
+        'baseUrl',
+        'base-url',
+        'model',
+        'toolFormat',
+        'tool-format',
+        'toolFormatOverride',
+        'tool-format-override',
+        'defaultModel',
+      ]);
+
+      const params: Record<string, unknown> = {};
+      if (providerSettings) {
+        for (const [key, value] of Object.entries(providerSettings)) {
+          if (reservedKeys.has(key) || value === undefined || value === null) {
+            continue;
+          }
+          params[key] = value;
+        }
+      }
+
+      return Object.keys(params).length > 0 ? params : undefined;
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Failed to get Anthropic provider settings from SettingsService: ${error}`,
+      );
+      return undefined;
+    }
   }
 
   /**

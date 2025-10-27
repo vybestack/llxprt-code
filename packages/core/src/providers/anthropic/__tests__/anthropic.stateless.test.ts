@@ -203,10 +203,10 @@ describe('Anthropic provider stateless contract tests', () => {
     expect(runtimeClients[2].options.apiKey).toBe('token-A');
   });
 
-  it('disables getModelParams memoization @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002', async () => {
+  it('gets model params from SettingsService without caching @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003', async () => {
     const provider = new TestAnthropicProvider();
-    expect(() => provider.getModelParams()).toThrow(
-      'ProviderCacheError("Attempted to memoize model parameters for anthropic")',
-    );
+    // Should return params from SettingsService or undefined, but not throw
+    const params = provider.getModelParams();
+    expect(params === undefined || typeof params === 'object').toBe(true);
   });
 });

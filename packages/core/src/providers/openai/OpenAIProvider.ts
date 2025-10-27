@@ -1389,13 +1389,48 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P08
-   * @requirement:REQ-SP4-002
-   * Memoization disabled - throws error when trying to access cached model parameters
+   * @requirement:REQ-SP4-003
+   * Gets model parameters from SettingsService per call (stateless)
    */
   override getModelParams(): Record<string, unknown> | undefined {
-    throw new Error(
-      'ProviderCacheError("Attempted to memoize model parameters for openai")',
-    );
+    try {
+      const settingsService = this.resolveSettingsService();
+      const providerSettings = settingsService.getProviderSettings(this.name);
+
+      const reservedKeys = new Set([
+        'enabled',
+        'apiKey',
+        'api-key',
+        'apiKeyfile',
+        'api-keyfile',
+        'baseUrl',
+        'base-url',
+        'model',
+        'toolFormat',
+        'tool-format',
+        'toolFormatOverride',
+        'tool-format-override',
+        'defaultModel',
+      ]);
+
+      const params: Record<string, unknown> = {};
+      if (providerSettings) {
+        for (const [key, value] of Object.entries(providerSettings)) {
+          if (reservedKeys.has(key) || value === undefined || value === null) {
+            continue;
+          }
+          params[key] = value;
+        }
+      }
+
+      return Object.keys(params).length > 0 ? params : undefined;
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `Failed to get OpenAI provider settings from SettingsService: ${error}`,
+      );
+      return undefined;
+    }
   }
 
   /**
