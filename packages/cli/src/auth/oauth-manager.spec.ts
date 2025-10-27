@@ -44,7 +44,7 @@ class MockOAuthProvider implements OAuthProvider {
       this.token = {
         access_token: `access_${this.name}_${Date.now()}`,
         refresh_token: `refresh_${this.name}_${Date.now()}`,
-        expiry: Date.now() + 3600000, // 1 hour from now
+        expiry: Date.now() / 1000 + 3600, // 1 hour from now (in seconds)
         token_type: 'Bearer',
         scope: 'read write',
       };
@@ -57,12 +57,12 @@ class MockOAuthProvider implements OAuthProvider {
   }
 
   async refreshIfNeeded(): Promise<OAuthToken | null> {
-    if (this.token && this.token.expiry < Date.now() + 300000) {
+    if (this.token && this.token.expiry < Date.now() / 1000 + 300) {
       // Refresh if expires in less than 5 minutes
       this.token = {
         ...this.token,
         access_token: `refreshed_${this.name}_${Date.now()}`,
-        expiry: Date.now() + 3600000, // 1 hour from now
+        expiry: Date.now() / 1000 + 3600, // 1 hour from now (in seconds)
       };
     }
     return this.token;
@@ -77,7 +77,7 @@ class MockOAuthProvider implements OAuthProvider {
     this.token = {
       access_token: `expiring_${this.name}`,
       refresh_token: `refresh_${this.name}`,
-      expiry: Date.now() + 10000, // Expires in 10 seconds
+      expiry: Date.now() / 1000 + 10, // Expires in 10 seconds (in seconds)
       token_type: 'Bearer',
       scope: 'read',
     };
@@ -476,6 +476,7 @@ describe.skipIf(skipInCI)(
        */
       it('should include token expiry time in status', async () => {
         manager.registerProvider(qwenProvider);
+        await manager.toggleOAuthEnabled('qwen');
         await manager.authenticate('qwen');
 
         const statuses = await manager.getAuthStatus();

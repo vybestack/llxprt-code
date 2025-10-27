@@ -43,9 +43,15 @@ describe('Anthropic OAuth registration with environment key', () => {
       }
 
       class MockConfig {
+        private settingsService =
+          new actual.SettingsService() as import('@vybestack/llxprt-code-core').SettingsService;
+
         setProviderManager() {}
         getEphemeralSettings() {
           return {};
+        }
+        getSettingsService() {
+          return this.settingsService;
         }
       }
 
@@ -131,10 +137,16 @@ describe('Anthropic OAuth registration with environment key', () => {
     );
 
     resetProviderManager();
+    const mockSettingsService = new (
+      await import('@vybestack/llxprt-code-core')
+    ).SettingsService();
     const mockConfig = {
       setProviderManager() {},
       getEphemeralSettings() {
         return { authOnly: true };
+      },
+      getSettingsService() {
+        return mockSettingsService;
       },
     } as unknown as import('@vybestack/llxprt-code-core').Config;
 
