@@ -33,8 +33,14 @@ describe('prompts', () => {
 
   const callPrompt = (
     overrides: Partial<CoreSystemPromptOptions> = {},
-  ): Promise<string> =>
-    getCoreSystemPromptAsync({ ...baseOptions, ...overrides });
+  ): Promise<string> => {
+    const options = { ...baseOptions, ...overrides };
+    return getCoreSystemPromptAsync(
+      options.userMemory,
+      options.model,
+      options.tools,
+    );
+  };
 
   // Use a single temp directory for all tests to avoid singleton issues
   beforeAll(async () => {

@@ -25,8 +25,14 @@ describe('prompts async integration', () => {
 
   const callPrompt = (
     overrides: Partial<CoreSystemPromptOptions> = {},
-  ): Promise<string> =>
-    getCoreSystemPromptAsync({ ...baseOptions, ...overrides });
+  ): Promise<string> => {
+    const options = { ...baseOptions, ...overrides };
+    return getCoreSystemPromptAsync(
+      options.userMemory,
+      options.model,
+      options.tools,
+    );
+  };
 
   beforeAll(async () => {
     // Create a temporary directory for test prompts
