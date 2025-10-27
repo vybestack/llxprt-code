@@ -214,6 +214,7 @@ const mockProviderManager = {
   })),
   getAvailableModels: vi.fn(async () => [{ id: 'model-a' }, { id: 'model-b' }]),
   setConfig: vi.fn(),
+  prepareStatelessProviderInvocation: vi.fn(),
 };
 
 vi.mock('../providers/providerManagerInstance.js', () => ({
