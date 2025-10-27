@@ -1,9 +1,13 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { ITool } from '../ITool.js';
 import { IContent } from '../../services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime } from '../../test-utils/runtime.js';
+import {
+  clearActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../../runtime/providerRuntimeContext.js';
 
 type AnthropicContentBlock =
   | { type: 'text'; text: string }
@@ -223,8 +227,8 @@ describe('AnthropicProvider', () => {
     // Clear all mocks before each test
     vi.clearAllMocks();
 
-    // Create provider with test API key
-    ({ provider } = createProviderWithRuntime<AnthropicProvider>(
+    // Create provider with test API key and runtime context
+    const result = createProviderWithRuntime<AnthropicProvider>(
       ({ settingsService }) => {
         settingsService.set('auth-key', 'test-api-key');
         return new AnthropicProvider(
@@ -237,7 +241,11 @@ describe('AnthropicProvider', () => {
         runtimeId: 'anthropic.provider.test',
         metadata: { source: 'AnthropicProvider.test.ts' },
       },
-    ));
+    );
+    provider = result.provider;
+
+    // Re-activate the runtime context for test execution
+    setActiveProviderRuntimeContext(result.runtime);
 
     // Use the shared mock instance
     mockAnthropicInstance = {
@@ -245,6 +253,10 @@ describe('AnthropicProvider', () => {
         create: mockMessagesCreate,
       },
     };
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   describe('getModels', () => {

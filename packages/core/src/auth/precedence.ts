@@ -506,6 +506,27 @@ export function flushRuntimeAuthScope(
   return { runtimeId, revokedTokens };
 }
 
+/**
+ * Check if authOnly mode is enabled (OAuth-only authentication)
+ * @param value The authOnly setting value from SettingsService
+ * @returns true if authOnly is enabled, false otherwise
+ */
+function isAuthOnlyEnabled(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') {
+      return true;
+    }
+    if (normalized === 'false') {
+      return false;
+    }
+  }
+  return false;
+}
+
 export class AuthPrecedenceResolver {
   private config: AuthPrecedenceConfig;
   private oauthManager?: OAuthManager;
@@ -582,36 +603,41 @@ export class AuthPrecedenceResolver {
     const profileId = resolveProfileId(settingsService);
     registerSettingsSubscriptions(runtimeState, settingsService, providerId);
 
-    // 1. Check /key command key (highest priority) - stored in SettingsService
-    const authKey = settingsService.get('auth-key');
-    if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
-      return authKey;
-    }
+    // Check if authOnly mode is enabled (OAuth-only authentication)
+    const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
 
-    // 2. Check /keyfile command keyfile - stored in SettingsService
-    const authKeyfile = settingsService.get('auth-keyfile');
-    if (authKeyfile && typeof authKeyfile === 'string') {
-      try {
-        const keyFromFile = await this.readKeyFile(authKeyfile);
-        if (keyFromFile) {
-          return keyFromFile;
-        }
-      } catch (error) {
-        if (process.env.DEBUG) {
-          console.warn(
-            `Failed to read keyfile from SettingsService ${authKeyfile}:`,
-            error,
-          );
+    if (!authOnly) {
+      // 1. Check /key command key (highest priority) - stored in SettingsService
+      const authKey = settingsService.get('auth-key');
+      if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
+        return authKey;
+      }
+
+      // 2. Check /keyfile command keyfile - stored in SettingsService
+      const authKeyfile = settingsService.get('auth-keyfile');
+      if (authKeyfile && typeof authKeyfile === 'string') {
+        try {
+          const keyFromFile = await this.readKeyFile(authKeyfile);
+          if (keyFromFile) {
+            return keyFromFile;
+          }
+        } catch (error) {
+          if (process.env.DEBUG) {
+            console.warn(
+              `Failed to read keyfile from SettingsService ${authKeyfile}:`,
+              error,
+            );
+          }
         }
       }
-    }
 
-    // 3. Check environment variables
-    if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
-      for (const envVarName of this.config.envKeyNames) {
-        const envValue = process.env[envVarName];
-        if (envValue && envValue.trim() !== '') {
-          return envValue;
+      // 3. Check environment variables
+      if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
+        for (const envVarName of this.config.envKeyNames) {
+          const envValue = process.env[envVarName];
+          if (envValue && envValue.trim() !== '') {
+            return envValue;
+          }
         }
       }
     }

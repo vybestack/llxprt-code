@@ -3,9 +3,13 @@
  * @requirement REQ-SP2-001
  * @project-plans/debuglogging/requirements.md
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '../../../settings/SettingsService.js';
-import { createProviderRuntimeContext } from '../../../runtime/providerRuntimeContext.js';
+import {
+  clearActiveProviderRuntimeContext,
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../../../runtime/providerRuntimeContext.js';
 import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
 import type { Config } from '../../../config/config.js';
 import { AnthropicProvider } from '../AnthropicProvider.js';
@@ -104,6 +108,17 @@ const createSettings = (runtimeId: string): SettingsService => {
 
 beforeEach(() => {
   FakeAnthropicClass.reset();
+  // Set up default runtime context for tests
+  setActiveProviderRuntimeContext(
+    createProviderRuntimeContext({
+      settingsService: new SettingsService(),
+      runtimeId: 'anthropic-stateless-test',
+    }),
+  );
+});
+
+afterEach(() => {
+  clearActiveProviderRuntimeContext();
 });
 
 describe('Anthropic provider stateless contract tests', () => {

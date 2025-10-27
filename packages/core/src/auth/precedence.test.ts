@@ -236,7 +236,13 @@ describe('AuthPrecedenceResolver', () => {
 
       // Then: Should ignore keys/env and use OAuth
       expect(result).toBe('oauth-token-abc');
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('anthropic');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'anthropic',
+        expect.objectContaining({
+          providerId: 'anthropic',
+          profileId: 'default',
+        }),
+      );
     });
 
     it('should return null when authOnly is enabled but OAuth is unavailable', async () => {

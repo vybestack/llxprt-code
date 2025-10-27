@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { IContent } from '../../services/history/IContent.js';
 import { ITool } from '../ITool.js';
@@ -9,6 +9,10 @@ import {
 } from '../../auth/precedence.js';
 import { createProviderWithRuntime } from '../../test-utils/runtime.js';
 import { SettingsService } from '../../settings/SettingsService.js';
+import {
+  clearActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../../runtime/providerRuntimeContext.js';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -161,12 +165,8 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    // Clear SettingsService to ensure test isolation
-    const { getSettingsService } = await import(
-      '../../settings/settingsServiceInstance.js'
-    );
-    settingsService = getSettingsService();
-    settingsService.clear();
+    // Create a fresh SettingsService to ensure test isolation
+    settingsService = new SettingsService();
 
     // Create mock OAuth manager
     const getTokenMock = vi.fn<
@@ -182,7 +182,7 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
     } as OAuthManager;
 
     // Create provider with OAuth manager but no API key
-    ({ provider } = createProviderWithRuntime<AnthropicProvider>(
+    const result = createProviderWithRuntime<AnthropicProvider>(
       () =>
         new AnthropicProvider(
           undefined, // No API key - should use OAuth
@@ -195,10 +195,18 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
         runtimeId: 'anthropic.provider.oauth.test',
         metadata: { source: 'AnthropicProvider.oauth.test.ts' },
       },
-    ));
+    );
+    provider = result.provider;
+
+    // Re-activate the runtime context for test execution
+    setActiveProviderRuntimeContext(result.runtime);
 
     // Use the shared mock instance
     mockAnthropicInstance = mockAnthropicShared;
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   describe('constructor with OAuth manager', () => {
