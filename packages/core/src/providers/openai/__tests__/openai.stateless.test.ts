@@ -2,11 +2,15 @@
  * @plan PLAN-20251018-STATELESSPROVIDER2.P08
  * @requirement REQ-SP2-001
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '../../../settings/SettingsService.js';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import OpenAI from 'openai';
-import { createProviderRuntimeContext } from '../../../runtime/providerRuntimeContext.js';
+import {
+  clearActiveProviderRuntimeContext,
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../../../runtime/providerRuntimeContext.js';
 import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
 import type { Config } from '../../../config/config.js';
 
@@ -93,6 +97,17 @@ const createSettings = (overrides: { callId: string; baseUrl?: string }) => {
 
 beforeEach(() => {
   FakeOpenAIClass.reset();
+  // Set up default runtime context for tests
+  setActiveProviderRuntimeContext(
+    createProviderRuntimeContext({
+      settingsService: new SettingsService(),
+      runtimeId: 'openai-stateless-test',
+    }),
+  );
+});
+
+afterEach(() => {
+  clearActiveProviderRuntimeContext();
 });
 
 describe('OpenAI provider stateless contract tests', () => {

@@ -2,11 +2,15 @@
  * @plan PLAN-20251018-STATELESSPROVIDER2.P08
  * @requirement REQ-SP2-001
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsService } from '../../../settings/SettingsService.js';
 import { isUserMemoryProfileProvider } from '../../utils/userMemory.js';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
-import { createProviderRuntimeContext } from '../../../runtime/providerRuntimeContext.js';
+import {
+  clearActiveProviderRuntimeContext,
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../../../runtime/providerRuntimeContext.js';
 import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
 import type { Config } from '../../../config/config.js';
 import { getCoreSystemPromptAsync } from '../../../core/prompts.js';
@@ -128,6 +132,17 @@ const createSettings = (conversationId: string, parentId: string) => {
 describe('OpenAI Responses provider stateless contract tests', () => {
   beforeEach(() => {
     TestResponsesProvider.resetRequests();
+    // Set up default runtime context for tests
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeContext({
+        settingsService: new SettingsService(),
+        runtimeId: 'openai-responses-stateless-test',
+      }),
+    );
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   it('clears conversation cache per call @plan:PLAN-20251018-STATELESSPROVIDER2.P08 @requirement:REQ-SP2-001 @pseudocode openai-responses-stateless.md lines 6-8', async () => {
