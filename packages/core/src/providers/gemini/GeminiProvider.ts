@@ -721,6 +721,7 @@ export class GeminiProvider extends BaseProvider {
     toolName: string,
     params: unknown,
     _config?: unknown,
+    _signal?: AbortSignal,
   ): Promise<unknown> {
     if (toolName === 'web_search') {
       const logger = this.getToolsLogger();
@@ -733,6 +734,13 @@ export class GeminiProvider extends BaseProvider {
           `invokeServerTool: globalConfig is ${this.globalConfig ? 'set' : 'null/undefined'}`,
       );
 
+      // Check for abort before auth determination
+      if (_signal?.aborted) {
+        const error = new Error('Operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
+
       // Import the necessary modules dynamically
       const { GoogleGenAI } = await import('@google/genai');
 
@@ -744,6 +752,13 @@ export class GeminiProvider extends BaseProvider {
       // Get authentication token and mode lazily per call
       logger.debug(() => `invokeServerTool: about to call determineBestAuth()`);
       const { authMode, token: authToken } = await this.determineBestAuth();
+
+      // Check for abort after auth determination
+      if (_signal?.aborted) {
+        const error = new Error('Operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
       logger.debug(
         () =>
           `invokeServerTool: determineBestAuth returned authMode=${authMode}`,
@@ -902,6 +917,13 @@ export class GeminiProvider extends BaseProvider {
           throw new Error(`Web search not supported in auth mode: ${authMode}`);
       }
     } else if (toolName === 'web_fetch') {
+      // Check for abort before auth determination
+      if (_signal?.aborted) {
+        const error = new Error('Operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
+
       // Import the necessary modules dynamically
       const { GoogleGenAI } = await import('@google/genai');
 
@@ -915,6 +937,13 @@ export class GeminiProvider extends BaseProvider {
 
       // Get authentication token and mode lazily per call
       const { authMode, token: authToken } = await this.determineBestAuth();
+
+      // Check for abort after auth determination
+      if (_signal?.aborted) {
+        const error = new Error('Operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
 
       switch (authMode) {
         case 'gemini-api-key': {

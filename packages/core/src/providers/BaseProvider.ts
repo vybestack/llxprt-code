@@ -811,6 +811,7 @@ export abstract class BaseProvider implements IProvider {
     toolName: string,
     _params: unknown,
     _config?: unknown,
+    _signal?: AbortSignal,
   ): Promise<unknown> {
     throw new Error(
       `Server tool '${toolName}' not supported by ${this.name} provider`,

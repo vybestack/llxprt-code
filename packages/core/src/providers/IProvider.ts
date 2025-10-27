@@ -80,6 +80,7 @@ export interface IProvider {
   generateChatCompletion(
     content: IContent[],
     tools?: ProviderToolset,
+    signal?: AbortSignal,
   ): AsyncIterableIterator<IContent>;
   getCurrentModel?(): string;
   getDefaultModel(): string;
@@ -92,6 +93,7 @@ export interface IProvider {
     toolName: string,
     params: unknown,
     config?: unknown,
+    signal?: AbortSignal,
   ): Promise<unknown>;
   // Add other methods as needed, e.g., generateCompletion, getToolDefinitions
 
