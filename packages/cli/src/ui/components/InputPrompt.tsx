@@ -29,6 +29,23 @@ import {
 import * as path from 'path';
 import { SCREEN_READER_USER_PREFIX } from '../textConstants.js';
 
+const LARGE_PASTE_LINE_THRESHOLD = 4;
+const LARGE_PASTE_CHAR_THRESHOLD = 1000;
+
+const formatLargePastePlaceholder = (
+  lines: number,
+  chars: number,
+  id: number,
+): string => {
+  const idSuffix = ` #${id}`;
+  if (lines > 1) {
+    const label = lines === 1 ? 'line' : 'lines';
+    return `[${lines} ${label} pasted${idSuffix}]`;
+  }
+  const charLabel = chars === 1 ? 'character' : 'characters';
+  return `[${chars} ${charLabel} pasted${idSuffix}]`;
+};
+
 export interface InputPromptProps {
   buffer: TextBuffer;
   onSubmit: (value: string) => void;
@@ -68,6 +85,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   const [escPressCount, setEscPressCount] = useState(0);
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const escapeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const pendingLargePastesRef = useRef<Map<string, string>>(new Map());
 
   const [dirs, setDirs] = useState<readonly string[]>(
     config.getWorkspaceContext().getDirectories(),
@@ -133,15 +152,30 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     [],
   );
 
+  const nextPlaceholderIdRef = useRef(1);
+
   const handleSubmitAndClear = useCallback(
     (submittedValue: string) => {
+      let actualValue = submittedValue;
+      const pendingPastes = pendingLargePastesRef.current;
+      if (pendingPastes.size > 0) {
+        pendingPastes.forEach((actualContent, placeholderLabel) => {
+          if (actualValue.includes(placeholderLabel)) {
+            actualValue = actualValue
+              .split(placeholderLabel)
+              .join(actualContent);
+          }
+        });
+      }
+
       if (shellModeActive) {
-        shellHistory.addCommandToHistory(submittedValue);
+        shellHistory.addCommandToHistory(actualValue);
       }
       // Clear the buffer *before* calling onSubmit to prevent potential re-submission
       // if onSubmit triggers a re-render while the buffer still holds the old value.
       buffer.setText('');
-      onSubmit(submittedValue);
+      pendingLargePastesRef.current = new Map();
+      onSubmit(actualValue);
       resetCompletionState();
       resetReverseSearchCompletionState();
     },
@@ -187,6 +221,19 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     setJustNavigatedHistory,
     resetReverseSearchCompletionState,
   ]);
+
+  useEffect(() => {
+    const pendingPastes = pendingLargePastesRef.current;
+    if (pendingPastes.size === 0) {
+      return;
+    }
+    const filtered = Array.from(pendingPastes.entries()).filter(
+      ([placeholderLabel]) => buffer.text.includes(placeholderLabel),
+    );
+    if (filtered.length !== pendingPastes.size) {
+      pendingLargePastesRef.current = new Map(filtered);
+    }
+  }, [buffer.text]);
 
   // Handle clipboard image pasting with Ctrl+V
   const handleClipboardImage = useCallback(async () => {
@@ -244,8 +291,44 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       }
 
       if (key.paste) {
+        const sanitized = key.sequence.replace(/\r\n?/g, '\n');
+        const charCount = cpLen(sanitized);
+        const lineCount =
+          sanitized.length === 0 ? 0 : sanitized.split('\n').length;
+
+        if (
+          lineCount >= LARGE_PASTE_LINE_THRESHOLD ||
+          charCount >= LARGE_PASTE_CHAR_THRESHOLD
+        ) {
+          const existingText = buffer.text;
+          const cursorOffset = logicalPosToOffset(
+            buffer.lines,
+            buffer.cursor[0],
+            buffer.cursor[1],
+          );
+          const before = existingText.slice(0, cursorOffset);
+          const after = existingText.slice(cursorOffset);
+          const placeholderId = nextPlaceholderIdRef.current++;
+          const placeholderLabel = formatLargePastePlaceholder(
+            lineCount,
+            charCount,
+            placeholderId,
+          );
+          const placeholderText = `${before}${placeholderLabel}${after}`;
+
+          buffer.setText(placeholderText);
+          buffer.moveToOffset(cursorOffset + placeholderLabel.length);
+          const nextPendingPastes = new Map(pendingLargePastesRef.current);
+          nextPendingPastes.set(placeholderLabel, sanitized);
+          pendingLargePastesRef.current = nextPendingPastes;
+          return;
+        }
+
         // Ensure we never accidentally interpret paste as regular input.
-        buffer.handleInput(key);
+        buffer.handleInput({
+          ...key,
+          sequence: sanitized,
+        });
         return;
       }
 

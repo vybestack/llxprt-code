@@ -14,6 +14,11 @@ if (process.env.NO_COLOR !== undefined) {
 
 // Setup for React DOM testing - fix for React 19 internals issue
 import React from 'react';
+import { vi } from 'vitest';
+
+vi.mock('ink', () => import('./test-utils/ink-stub.ts'), {
+  virtual: true,
+});
 
 // The issue is that React DOM is trying to access ReactSharedInternals.S
 // but ReactSharedInternals might be undefined or missing the S property.

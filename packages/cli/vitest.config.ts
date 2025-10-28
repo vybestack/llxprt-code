@@ -6,10 +6,18 @@
 
 /// <reference types="vitest" />
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const inkStubPath = resolve(__dirname, './test-utils/ink-stub.ts');
 
 export default defineConfig({
   resolve: {
     conditions: ['node', 'import', 'module', 'browser', 'default'],
+    alias: {
+      ink: inkStubPath,
+    },
   },
   test: {
     include: ['**/*.{test,spec}.?(c|m)[jt]s?(x)', 'config.test.ts'],

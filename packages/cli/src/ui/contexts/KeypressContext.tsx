@@ -114,15 +114,9 @@ export function KeypressProvider({
     setRawMode(true);
 
     const keypressStream = new PassThrough();
-    let usePassthrough = false;
-    const nodeMajorVersion = parseInt(process.versions.node.split('.')[0], 10);
-    if (
-      nodeMajorVersion < 20 ||
-      process.env['PASTE_WORKAROUND'] === '1' ||
-      process.env['PASTE_WORKAROUND'] === 'true'
-    ) {
-      usePassthrough = true;
-    }
+    const pasteModePrefixBuffer = Buffer.from(PASTE_MODE_PREFIX);
+    const pasteModeSuffixBuffer = Buffer.from(PASTE_MODE_SUFFIX);
+    let rawInputBuffer = Buffer.alloc(0);
 
     let isPaste = false;
     let pasteBuffer = Buffer.alloc(0);
@@ -575,81 +569,105 @@ export function KeypressProvider({
       broadcast({ ...key, paste: isPaste });
     };
 
-    const handleRawKeypress = (data: Buffer) => {
-      const pasteModePrefixBuffer = Buffer.from(PASTE_MODE_PREFIX);
-      const pasteModeSuffixBuffer = Buffer.from(PASTE_MODE_SUFFIX);
+    const createPasteKeyEvent = (name: 'paste-start' | 'paste-end'): Key => ({
+      name,
+      ctrl: false,
+      meta: false,
+      shift: false,
+      paste: false,
+      sequence: '',
+    });
 
-      let pos = 0;
-      while (pos < data.length) {
-        const prefixPos = data.indexOf(pasteModePrefixBuffer, pos);
-        const suffixPos = data.indexOf(pasteModeSuffixBuffer, pos);
-        const isPrefixNext =
-          prefixPos !== -1 && (suffixPos === -1 || prefixPos < suffixPos);
-        const isSuffixNext =
-          suffixPos !== -1 && (prefixPos === -1 || suffixPos < prefixPos);
-
-        let nextMarkerPos = -1;
-        let markerLength = 0;
-
-        if (isPrefixNext) {
-          nextMarkerPos = prefixPos;
-        } else if (isSuffixNext) {
-          nextMarkerPos = suffixPos;
-        }
-        markerLength = pasteModeSuffixBuffer.length;
-
-        if (nextMarkerPos === -1) {
-          keypressStream.write(data.slice(pos));
-          return;
-        }
-
-        const nextData = data.slice(pos, nextMarkerPos);
-        if (nextData.length > 0) {
-          keypressStream.write(nextData);
-        }
-        const createPasteKeyEvent = (
-          name: 'paste-start' | 'paste-end',
-        ): Key => ({
-          name,
-          ctrl: false,
-          meta: false,
-          shift: false,
-          paste: false,
-          sequence: '',
-        });
-        if (isPrefixNext) {
-          handleKeypress(undefined, createPasteKeyEvent('paste-start'));
-        } else if (isSuffixNext) {
-          handleKeypress(undefined, createPasteKeyEvent('paste-end'));
-        }
-        pos = nextMarkerPos + markerLength;
+    const flushToStream = (chunk: Buffer) => {
+      if (chunk.length > 0) {
+        keypressStream.write(chunk);
       }
     };
 
-    let rl: readline.Interface;
-    if (usePassthrough) {
-      rl = readline.createInterface({
-        input: keypressStream,
-        escapeCodeTimeout: 0,
-      });
-      readline.emitKeypressEvents(keypressStream, rl);
-      keypressStream.on('keypress', handleKeypress);
-      stdin.on('data', handleRawKeypress);
-    } else {
-      rl = readline.createInterface({ input: stdin, escapeCodeTimeout: 0 });
-      readline.emitKeypressEvents(stdin, rl);
-      stdin.on('keypress', handleKeypress);
-    }
-
-    const cleanup = () => {
-      if (usePassthrough) {
-        keypressStream.removeListener('keypress', handleKeypress);
-        stdin.removeListener('data', handleRawKeypress);
+    const handleRawKeypress = (data: Buffer | string) => {
+      let chunk: Buffer;
+      if (typeof data === 'string') {
+        if (data.length === 0) {
+          return;
+        }
+        chunk = Buffer.from(data, 'utf8');
+      } else if (Buffer.isBuffer(data)) {
+        if (data.length === 0) {
+          return;
+        }
+        chunk = data;
       } else {
-        stdin.removeListener('keypress', handleKeypress);
+        return;
       }
 
+      rawInputBuffer = Buffer.concat([rawInputBuffer, chunk]);
+
+      while (rawInputBuffer.length > 0) {
+        const prefixIndex = rawInputBuffer.indexOf(pasteModePrefixBuffer);
+        const suffixIndex = rawInputBuffer.indexOf(pasteModeSuffixBuffer);
+        const hasPrefix = prefixIndex !== -1;
+        const hasSuffix = suffixIndex !== -1;
+
+        if (!hasPrefix && !hasSuffix) {
+          flushToStream(rawInputBuffer);
+          rawInputBuffer = Buffer.alloc(0);
+          break;
+        }
+
+        const prefixIsNext =
+          hasPrefix && (!hasSuffix || prefixIndex < suffixIndex);
+        const suffixIsNext =
+          hasSuffix && (!hasPrefix || suffixIndex < prefixIndex);
+
+        if (prefixIsNext) {
+          flushToStream(rawInputBuffer.slice(0, prefixIndex));
+          if (
+            rawInputBuffer.length <
+            prefixIndex + pasteModePrefixBuffer.length
+          ) {
+            rawInputBuffer = rawInputBuffer.slice(prefixIndex);
+            break;
+          }
+
+          rawInputBuffer = rawInputBuffer.slice(
+            prefixIndex + pasteModePrefixBuffer.length,
+          );
+          handleKeypress(undefined, createPasteKeyEvent('paste-start'));
+          continue;
+        }
+
+        if (suffixIsNext) {
+          flushToStream(rawInputBuffer.slice(0, suffixIndex));
+          if (
+            rawInputBuffer.length <
+            suffixIndex + pasteModeSuffixBuffer.length
+          ) {
+            rawInputBuffer = rawInputBuffer.slice(suffixIndex);
+            break;
+          }
+
+          rawInputBuffer = rawInputBuffer.slice(
+            suffixIndex + pasteModeSuffixBuffer.length,
+          );
+          handleKeypress(undefined, createPasteKeyEvent('paste-end'));
+          continue;
+        }
+      }
+    };
+
+    const rl = readline.createInterface({
+      input: keypressStream,
+      escapeCodeTimeout: 0,
+    });
+    readline.emitKeypressEvents(keypressStream, rl);
+    keypressStream.on('keypress', handleKeypress);
+    stdin.on('data', handleRawKeypress);
+
+    const cleanup = () => {
+      keypressStream.removeListener('keypress', handleKeypress);
+      stdin.removeListener('data', handleRawKeypress);
       rl.close();
+      rawInputBuffer = Buffer.alloc(0);
 
       // Restore the terminal to its original state.
       setRawMode(false);
