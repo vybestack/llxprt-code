@@ -33,6 +33,7 @@ import { ContentConverters } from '../services/history/ContentConverters.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
+  AuthType,
   ContentGenerator,
   ContentGeneratorConfig,
   createContentGenerator,
@@ -157,7 +158,7 @@ export class GeminiClient {
    * @requirement REQ-STAT5-003.1
    * @pseudocode gemini-runtime.md lines 21-42
    */
-  private runtimeState?: AgentRuntimeState;
+  private readonly runtimeState: AgentRuntimeState;
   private _historyService?: HistoryService;
   private _unsubscribe?: () => void;
 
@@ -172,54 +173,55 @@ export class GeminiClient {
    */
   constructor(
     private readonly config: Config,
-    runtimeState?: AgentRuntimeState,
+    runtimeState: AgentRuntimeState,
     historyService?: HistoryService,
   ) {
-    // @plan PLAN-20251027-STATELESS5.P10
-    // @requirement REQ-STAT5-003.1
-    // Validate runtime state if provided
-    if (runtimeState) {
-      if (!runtimeState.provider || runtimeState.provider === '') {
-        throw new Error('AgentRuntimeState must have a valid provider');
-      }
-      if (!runtimeState.model || runtimeState.model === '') {
-        throw new Error('AgentRuntimeState must have a valid model');
-      }
-      if (!runtimeState.authPayload && runtimeState.authType) {
-        throw new Error(
-          'AgentRuntimeState must have authPayload when authType is set',
-        );
-      }
-
-      this.runtimeState = runtimeState;
-      this._historyService = historyService;
-
-      // @requirement REQ-STAT5-003.2
-      // Subscribe to runtime state changes for telemetry
-      this._unsubscribe = subscribeToAgentRuntimeState(
-        runtimeState.runtimeId,
-        (event) => {
-          this.logger.debug('Runtime state changed', event);
-          // Update telemetry context when runtime state changes
-          // Telemetry integration will be handled in actual usage
-        },
+    if (!runtimeState.provider || runtimeState.provider === '') {
+      throw new Error('AgentRuntimeState must have a valid provider');
+    }
+    if (!runtimeState.model || runtimeState.model === '') {
+      throw new Error('AgentRuntimeState must have a valid model');
+    }
+    if (
+      runtimeState.authType === AuthType.API_KEY &&
+      !runtimeState.authPayload?.apiKey
+    ) {
+      throw new Error(
+        'AgentRuntimeState must include apiKey when authType is API_KEY',
       );
-
-      // Mark as used for future disposal/cleanup
-      void this._historyService;
-      void this._unsubscribe;
+    }
+    if (
+      runtimeState.authType === AuthType.OAUTH &&
+      !runtimeState.authPayload?.token
+    ) {
+      throw new Error(
+        'AgentRuntimeState must include token when authType is OAUTH',
+      );
     }
 
-    // Proxy configuration
-    const proxyUrl = runtimeState?.proxyUrl ?? config.getProxy();
+    this.runtimeState = runtimeState;
+    this._historyService = historyService;
+    this.logger = new DebugLogger('llxprt:core:client');
+
+    this._unsubscribe = subscribeToAgentRuntimeState(
+      runtimeState.runtimeId,
+      (event) => {
+        this.logger.debug('Runtime state changed', event);
+      },
+    );
+
+    void this._historyService;
+    void this._unsubscribe;
+
+    const proxyUrl = runtimeState.proxyUrl;
     if (proxyUrl) {
       setGlobalDispatcher(new ProxyAgent(proxyUrl as string));
     }
 
-    this.logger = new DebugLogger('llxprt:core:client');
-    this.embeddingModel = runtimeState?.model ?? config.getEmbeddingModel();
+    const embeddingModel = config.getEmbeddingModel();
+    this.embeddingModel = embeddingModel || runtimeState.model;
     this.loopDetector = new LoopDetectionService(config);
-    this.lastPromptId = runtimeState?.sessionId ?? this.config.getSessionId();
+    this.lastPromptId = runtimeState.sessionId;
 
     // Initialize complexity analyzer with config settings
     const complexitySettings = config.getComplexityAnalyzerSettings();
@@ -601,7 +603,7 @@ export class GeminiClient {
     if (extraHistory && extraHistory.length > 0) {
       // @plan PLAN-20251027-STATELESS5.P10
       // @requirement REQ-STAT5-003.1
-      const currentModel = this.runtimeState?.model ?? this.config.getModel();
+      const currentModel = this.runtimeState.model;
       for (const content of extraHistory) {
         historyService.add(ContentConverters.toIContent(content), currentModel);
       }
@@ -611,7 +613,7 @@ export class GeminiClient {
       const userMemory = this.config.getUserMemory();
       // @plan PLAN-20251027-STATELESS5.P10
       // @requirement REQ-STAT5-003.1
-      const model = this.runtimeState?.model ?? this.config.getModel();
+      const model = this.runtimeState.model;
       // Provider name removed from prompt call signature
       const logger = new DebugLogger('llxprt:client:start');
       logger.debug(
@@ -657,7 +659,7 @@ export class GeminiClient {
       // @plan PLAN-20251027-STATELESS5.P10
       // @requirement REQ-STAT5-003.1
       const generateContentConfigWithThinking = isThinkingSupported(
-        this.runtimeState?.model ?? this.config.getModel(),
+        this.runtimeState.model,
       )
         ? {
             ...this.generateContentConfig,
@@ -668,6 +670,7 @@ export class GeminiClient {
           }
         : this.generateContentConfig;
       return new GeminiChat(
+        this.runtimeState,
         this.config,
         this.getContentGenerator(),
         {
@@ -936,8 +939,7 @@ export class GeminiClient {
     // Track the original model from the first call to detect model switching
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-003.1
-    const initialModel =
-      originalModel || (this.runtimeState?.model ?? this.config.getModel());
+    const initialModel = originalModel || this.runtimeState.model;
 
     const compressed = await this.tryCompressChat(prompt_id);
 
@@ -1051,7 +1053,7 @@ export class GeminiClient {
       // Check if model was switched during the call (likely due to quota error)
       // @plan PLAN-20251027-STATELESS5.P10
       // @requirement REQ-STAT5-003.1
-      const currentModel = this.runtimeState?.model ?? this.config.getModel();
+      const currentModel = this.runtimeState.model;
       if (currentModel !== initialModel) {
         // Model was switched (likely due to quota error fallback)
         // Don't continue with recursive call to prevent unwanted Flash execution
@@ -1327,7 +1329,7 @@ export class GeminiClient {
 
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-003.1
-    const model = this.runtimeState?.model ?? this.config.getModel();
+    const model = this.runtimeState.model;
     // Get the ACTUAL token count from the history service, not the curated subset
     const historyService = this.getChat().getHistoryService();
     const originalTokenCount = historyService
@@ -1451,9 +1453,7 @@ export class GeminiClient {
           historyService.emit('tokensUpdated', {
             totalTokens: newTokenCount,
             addedTokens: newTokenCount - originalTokenCount,
-            tokenLimit: tokenLimit(
-              this.runtimeState?.model ?? this.config.getModel(),
-            ),
+            tokenLimit: tokenLimit(this.runtimeState.model),
           });
         }
       }

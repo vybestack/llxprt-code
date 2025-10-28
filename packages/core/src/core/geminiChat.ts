@@ -358,7 +358,7 @@ export class GeminiChat {
    * @requirement REQ-STAT5-004.1
    * @pseudocode gemini-runtime.md lines 296-384
    */
-  private runtimeState?: AgentRuntimeState;
+  private readonly runtimeState: AgentRuntimeState;
   private _providerContext?: ProviderRuntimeContext;
 
   /**
@@ -371,91 +371,47 @@ export class GeminiChat {
    * Config is kept for ephemeral settings passthrough (Phase 5 backward compat)
    */
   constructor(
-    runtimeStateOrConfig: AgentRuntimeState | Config,
-    configOrContentGenerator: Config | ContentGenerator,
-    contentGeneratorOrConfig?: ContentGenerator | GenerateContentConfig,
-    generationConfigOrInitialHistory?: GenerateContentConfig | Content[],
-    initialHistoryOrHistoryService?: Content[] | HistoryService,
-    historyServiceOrProviderContext?: HistoryService | ProviderRuntimeContext,
+    runtimeState: AgentRuntimeState,
+    config: Config,
+    contentGenerator: ContentGenerator,
+    generationConfig: GenerateContentConfig = {},
+    initialHistory: Content[] = [],
+    historyService?: HistoryService,
     providerContext?: ProviderRuntimeContext,
   ) {
-    // @plan PLAN-20251027-STATELESS5.P10
-    // @requirement REQ-STAT5-004.1
-    // Determine constructor signature based on first parameter
-    let config: Config;
-    let _contentGenerator: ContentGenerator;
-    let generationConfig: GenerateContentConfig;
-    let initialHistory: Content[];
-    let historyService: HistoryService | undefined;
-
-    // New signature: (runtimeState, config, contentGenerator, generationConfig, initialHistory, historyService, providerContext)
-    // Old signature: (config, contentGenerator, generationConfig, initialHistory, historyService)
-    if ('runtimeId' in runtimeStateOrConfig) {
-      // New signature with AgentRuntimeState as first parameter
-      this.runtimeState = runtimeStateOrConfig;
-      config = configOrContentGenerator as Config;
-      _contentGenerator = contentGeneratorOrConfig as ContentGenerator;
-      generationConfig =
-        (generationConfigOrInitialHistory as GenerateContentConfig) || {};
-      initialHistory = (initialHistoryOrHistoryService as Content[]) || [];
-      historyService = historyServiceOrProviderContext as
-        | HistoryService
-        | undefined;
-      this._providerContext = providerContext;
-    } else {
-      // Old signature with Config as first parameter
-      config = runtimeStateOrConfig;
-      _contentGenerator = configOrContentGenerator as ContentGenerator;
-      generationConfig =
-        (contentGeneratorOrConfig as GenerateContentConfig) || {};
-      initialHistory = (generationConfigOrInitialHistory as Content[]) || [];
-      historyService = initialHistoryOrHistoryService as
-        | HistoryService
-        | undefined;
-      this._providerContext = historyServiceOrProviderContext as
-        | ProviderRuntimeContext
-        | undefined;
+    if (!runtimeState) {
+      throw new Error('AgentRuntimeState is required for GeminiChat');
     }
 
+    this.runtimeState = runtimeState;
     this.config = config;
     this.generationConfig = generationConfig;
-
-    // ContentGenerator is passed as parameter but not stored in Phase 5
-    // It will be used in later phases for provider operations
-    void _contentGenerator;
-    // Provider context stored for future use
+    this._providerContext = providerContext;
+    void contentGenerator;
     void this._providerContext;
 
     validateHistory(initialHistory);
 
-    // @requirement REQ-STAT5-004.2
-    // HistoryService must be injected (required dependency)
     if (!historyService) {
-      // For backward compatibility, create a new one if not provided
       historyService = new HistoryService();
     }
     this.historyService = historyService;
 
-    const model = this.runtimeState?.model ?? this.config.getModel();
+    const model = this.runtimeState.model;
     this.logger.debug('GeminiChat initialized:', {
       model,
       initialHistoryLength: initialHistory.length,
       hasHistoryService: !!historyService,
-      hasRuntimeState: !!this.runtimeState,
+      hasRuntimeState: true,
     });
 
-    // Convert and add initial history if provided
     if (initialHistory.length > 0) {
-      const currentModel = model;
-      this.logger.debug('Adding initial history to service:', {
-        count: initialHistory.length,
-      });
       const idGen = this.historyService.getIdGeneratorCallback();
       for (const content of initialHistory) {
         const matcher = this.makePositionMatcher();
         this.historyService.add(
           ContentConverters.toIContent(content, idGen, matcher),
-          currentModel,
+          model,
         );
       }
     }
@@ -512,10 +468,10 @@ export class GeminiChat {
     logApiResponse(
       this.config,
       new ApiResponseEvent(
-        this.runtimeState?.model ?? this.config.getModel(),
+        this.runtimeState.model,
         durationMs,
         prompt_id,
-        this.config.getContentGeneratorConfig()?.authType,
+        this.runtimeState.authType,
         usageMetadata,
         responseText,
       ),
@@ -535,11 +491,11 @@ export class GeminiChat {
     logApiError(
       this.config,
       new ApiErrorEvent(
-        this.runtimeState?.model ?? this.config.getModel(),
+        this.runtimeState.model,
         errorMessage,
         durationMs,
         prompt_id,
-        this.config.getContentGeneratorConfig()?.authType,
+        this.runtimeState.authType,
         errorType,
       ),
     );
@@ -605,8 +561,7 @@ export class GeminiChat {
     const providerManager = this.config.getProviderManager?.();
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-004.1
-    const desiredProviderName =
-      this.runtimeState?.provider ?? this.config.getProvider();
+    const desiredProviderName = this.runtimeState.provider;
     if (
       providerManager &&
       desiredProviderName &&
@@ -632,7 +587,7 @@ export class GeminiChat {
       }
     }
 
-    const activeAuthType = this.config.getContentGeneratorConfig()?.authType;
+    const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     // @plan PLAN-20251027-STATELESS5.P10
@@ -642,7 +597,7 @@ export class GeminiChat {
       {
         providerName: provider.name,
         providerDefaultModel: provider.getDefaultModel?.(),
-        configModel: this.runtimeState?.model ?? this.config.getModel(),
+        configModel: this.runtimeState.model,
         baseUrl: providerBaseUrl,
         authType: activeAuthType,
       },
@@ -668,7 +623,7 @@ export class GeminiChat {
     // @requirement REQ-STAT5-004.1
     this._logApiRequest(
       ContentConverters.toGeminiContents(iContents),
-      this.runtimeState?.model ?? this.config.getModel(),
+      this.runtimeState.model,
       prompt_id,
     );
 
@@ -680,8 +635,7 @@ export class GeminiChat {
         // @plan PLAN-20251027-STATELESS5.P10
         // @requirement REQ-STAT5-004.1
         const modelToUse =
-          (this.runtimeState?.model ?? this.config.getModel()) ||
-          DEFAULT_GEMINI_FLASH_MODEL;
+          this.runtimeState.model || DEFAULT_GEMINI_FLASH_MODEL;
 
         // Get tools in the format the provider expects
         const tools = this.generationConfig.tools;
@@ -747,10 +701,10 @@ export class GeminiChat {
           () => '[GeminiChat] Calling provider.generateChatCompletion',
           {
             providerName: provider.name,
-            model: this.runtimeState?.model ?? this.config.getModel(),
+            model: this.runtimeState.model,
             toolCount: tools?.length ?? 0,
             baseUrl: this.resolveProviderBaseUrl(provider),
-            authType: this.config.getContentGeneratorConfig()?.authType,
+            authType: this.runtimeState.authType,
           },
         );
         const activeRuntime = getActiveProviderRuntimeContext();
@@ -814,7 +768,7 @@ export class GeminiChat {
         // Send-then-commit: Now that we have a successful response, add both user and model messages
         // @plan PLAN-20251027-STATELESS5.P10
         // @requirement REQ-STAT5-004.1
-        const currentModel = this.runtimeState?.model ?? this.config.getModel();
+        const currentModel = this.runtimeState.model;
 
         // Handle AFC history or regular history
         const fullAutomaticFunctionCallingHistory =
@@ -935,8 +889,7 @@ export class GeminiChat {
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-004.1
     this.logger.debug(
-      () =>
-        `DEBUG [geminiChat]: Model from config: ${this.runtimeState?.model ?? this.config.getModel()}`,
+      () => `DEBUG [geminiChat]: Model from config: ${this.runtimeState.model}`,
     );
     this.logger.debug(
       () => `DEBUG [geminiChat]: Params: ${JSON.stringify(params, null, 2)}`,
@@ -1071,7 +1024,7 @@ export class GeminiChat {
     // @requirement REQ-STAT5-004.1
     await this._logApiRequest(
       requestContents,
-      this.runtimeState?.model ?? this.config.getModel(),
+      this.runtimeState.model,
       prompt_id,
     );
 
@@ -1093,8 +1046,7 @@ export class GeminiChat {
               : undefined;
 
           const baseUrlForCall = this.resolveProviderBaseUrl(provider);
-          const activeAuthType =
-            this.config.getContentGeneratorConfig()?.authType;
+          const activeAuthType = this.runtimeState.authType;
 
           // @plan PLAN-20251027-STATELESS5.P10
           // @requirement REQ-STAT5-004.1
@@ -1103,7 +1055,7 @@ export class GeminiChat {
               '[GeminiChat] Calling provider.generateChatCompletion (non-stream retry path)',
             {
               providerName: provider.name,
-              model: this.runtimeState?.model ?? this.config.getModel(),
+              model: this.runtimeState.model,
               toolCount: toolsFromConfig?.length ?? 0,
               baseUrl: baseUrlForCall,
               authType: activeAuthType,
@@ -1221,8 +1173,7 @@ export class GeminiChat {
 
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-004.1
-    const desiredProviderName =
-      this.runtimeState?.provider ?? this.config.getProvider();
+    const desiredProviderName = this.runtimeState.provider;
     const providerManager = this.config.getProviderManager?.();
     if (
       desiredProviderName &&
@@ -1246,7 +1197,7 @@ export class GeminiChat {
       }
     }
 
-    const activeAuthType = this.config.getContentGeneratorConfig()?.authType;
+    const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     this.logger.debug(
@@ -1254,7 +1205,7 @@ export class GeminiChat {
       {
         providerName: provider.name,
         providerDefaultModel: provider.getDefaultModel?.(),
-        configModel: this.runtimeState?.model ?? this.config.getModel(),
+        configModel: this.runtimeState.model,
         baseUrl: providerBaseUrl,
         authType: activeAuthType,
       },
@@ -1312,7 +1263,7 @@ export class GeminiChat {
           '[GeminiChat] Calling provider.generateChatCompletion (generatorRequest)',
         {
           providerName: provider.name,
-          model: this.runtimeState?.model ?? this.config.getModel(),
+          model: this.runtimeState.model,
           historyLength: requestContents.length,
           toolCount: tools?.length ?? 0,
           baseUrl: providerBaseUrl,
@@ -1413,12 +1364,12 @@ export class GeminiChat {
   addHistory(content: Content): void {
     this.historyService.add(
       ContentConverters.toIContent(content),
-      this.runtimeState?.model ?? this.config.getModel(),
+      this.runtimeState.model,
     );
   }
   setHistory(history: Content[]): void {
     this.historyService.clear();
-    const currentModel = this.runtimeState?.model ?? this.config.getModel();
+    const currentModel = this.runtimeState.model;
     for (const content of history) {
       this.historyService.add(
         ContentConverters.toIContent(content),
@@ -1510,7 +1461,7 @@ export class GeminiChat {
     try {
       return await this.historyService.estimateTokensForContents(
         contents,
-        this.runtimeState?.model ?? this.config.getModel(),
+        this.runtimeState.model,
       );
     } catch (error) {
       this.logger.debug(
@@ -1648,9 +1599,7 @@ export class GeminiChat {
     await this.historyService.waitForTokenUpdates();
 
     const completionBudget = Math.max(0, this.getCompletionBudget(provider));
-    const limit = tokenLimit(
-      this.runtimeState?.model ?? this.config.getModel(),
-    );
+    const limit = tokenLimit(this.runtimeState.model);
     const marginAdjustedLimit = Math.max(
       0,
       limit - GeminiChat.TOKEN_SAFETY_MARGIN,
@@ -1824,8 +1773,7 @@ export class GeminiChat {
     }
 
     const providerManager = this.config.getProviderManager?.();
-    const desiredProviderName =
-      this.runtimeState?.provider ?? this.config.getProvider();
+    const desiredProviderName = this.runtimeState.provider;
     if (
       desiredProviderName &&
       providerManager &&
@@ -1851,7 +1799,7 @@ export class GeminiChat {
       throw new Error('Provider does not support compression');
     }
 
-    const activeAuthType = this.config.getContentGeneratorConfig()?.authType;
+    const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     // Build compression request with system prompt and user history
@@ -1886,7 +1834,7 @@ export class GeminiChat {
         '[GeminiChat] Calling provider.generateChatCompletion (directCompression)',
       {
         providerName: provider.name,
-        model: this.runtimeState?.model ?? this.config.getModel(),
+        model: this.runtimeState.model,
         historyLength: compressionRequest.length,
         baseUrl: providerBaseUrl,
         authType: activeAuthType,
@@ -1936,7 +1884,7 @@ export class GeminiChat {
     // Clear and rebuild history atomically
     this.historyService.clear();
 
-    const currentModel = this.runtimeState?.model ?? this.config.getModel();
+    const currentModel = this.runtimeState.model;
 
     // Add compressed summary as user message
     this.historyService.add(
@@ -2140,7 +2088,7 @@ export class GeminiChat {
     }
 
     // Part 4: Add the new turn (user and model parts) to the history service.
-    const currentModel = this.runtimeState?.model ?? this.config.getModel();
+    const currentModel = this.runtimeState.model;
     for (const entry of newHistoryEntries) {
       this.historyService.add(entry, currentModel);
     }

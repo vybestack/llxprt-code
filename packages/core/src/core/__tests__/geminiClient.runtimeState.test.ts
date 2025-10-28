@@ -50,7 +50,7 @@ function createTestRuntimeState(
     runtimeId: 'test-runtime-001',
     provider: 'gemini',
     model: 'gemini-2.0-flash',
-    authType: AuthType.USE_GEMINI,
+    authType: AuthType.API_KEY,
     authPayload: { apiKey: 'runtime-api-key' },
     sessionId: 'test-session-001',
     ...overrides,
@@ -349,10 +349,13 @@ describe('GeminiClient - Runtime State Integration', () => {
       // @requirement REQ-STAT5-003.1
 
       const config = createTestConfig();
-      const runtimeState = createTestRuntimeState({
-        authType: AuthType.USE_GEMINI,
-        authPayload: undefined, // Invalid - missing auth payload
-      });
+      const baseState = createTestRuntimeState();
+      const runtimeState = Object.freeze({
+        ...baseState,
+        authType: AuthType.API_KEY,
+        authPayload: undefined, // Invalid - missing apiKey
+        updatedAt: Date.now(),
+      }) as AgentRuntimeState;
 
       expect(() => {
         // @ts-expect-error - Testing future API

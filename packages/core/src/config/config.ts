@@ -35,6 +35,8 @@ import { TodoWrite } from '../tools/todo-write.js';
 import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
 import { GeminiClient } from '../core/client.js';
+import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
+import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -316,6 +318,7 @@ export class Config {
   private telemetrySettings: TelemetrySettings;
   private readonly usageStatisticsEnabled: boolean;
   private geminiClient!: GeminiClient;
+  private runtimeState!: AgentRuntimeState;
   private readonly fileFiltering: {
     respectGitIgnore: boolean;
     respectLlxprtIgnore: boolean;
@@ -506,6 +509,8 @@ export class Config {
     this.fileExclusions = new FileExclusions(this);
     this.eventEmitter = params.eventEmitter;
 
+    this.runtimeState = createAgentRuntimeStateFromConfig(this);
+
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
     }
@@ -550,7 +555,7 @@ export class Config {
 
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
-    this.geminiClient = new GeminiClient(this);
+    this.geminiClient = new GeminiClient(this, this.runtimeState);
 
     // Reserved for future model switching tracking
     void this._modelSwitchedDuringSession;
@@ -584,8 +589,22 @@ export class Config {
       newContentGeneratorConfig.providerManager = this.providerManager;
     }
 
+    const updatedRuntimeState = createAgentRuntimeStateFromConfig(this, {
+      runtimeId: this.runtimeState.runtimeId,
+      overrides: {
+        model: newContentGeneratorConfig.model,
+        authType:
+          newContentGeneratorConfig.authType ?? this.runtimeState.authType,
+        authPayload: newContentGeneratorConfig.apiKey
+          ? { apiKey: newContentGeneratorConfig.apiKey }
+          : undefined,
+        proxyUrl: newContentGeneratorConfig.proxy ?? this.runtimeState.proxyUrl,
+      },
+    });
+    this.runtimeState = updatedRuntimeState;
+
     // Create new client in local variable first
-    const newGeminiClient = new GeminiClient(this);
+    const newGeminiClient = new GeminiClient(this, this.runtimeState);
 
     // CRITICAL: Store both the history AND the HistoryService instance
     // This preserves both the API conversation context and the UI's conversation display

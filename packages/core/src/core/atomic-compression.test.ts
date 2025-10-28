@@ -6,6 +6,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import process from 'node:process';
 import { GeminiClient } from './client.js';
 import { Config } from '../config/index.js';
+import { AuthType } from './contentGenerator.js';
+import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 
 describe('Atomic Compression', () => {
   let client: GeminiClient;
@@ -18,7 +20,14 @@ describe('Atomic Compression', () => {
       debugMode: false,
     });
 
-    client = new GeminiClient(config);
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: 'compression-runtime',
+      provider: 'gemini',
+      model: 'gemini-pro',
+      authType: AuthType.USE_NONE,
+      sessionId: 'test-session-id',
+    });
+    client = new GeminiClient(config, runtimeState);
 
     // Mock the client methods directly to avoid complex initialization
     const mockChat = {

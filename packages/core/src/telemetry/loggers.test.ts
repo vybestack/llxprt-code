@@ -15,6 +15,7 @@ import {
   ToolConfirmationOutcome,
   ToolErrorType,
   ToolRegistry,
+  createRuntimeStateFromConfig,
 } from '../index.js';
 import { logs } from '@opentelemetry/api-logs';
 import { SemanticAttributes } from '@opentelemetry/semantic-conventions';
@@ -390,7 +391,10 @@ describe('loggers', () => {
       }),
     } as unknown as Config;
 
-    const mockGeminiClient = new GeminiClient(cfg2);
+    const runtimeState = createRuntimeStateFromConfig(cfg2, {
+      runtimeId: 'telemetry-runtime',
+    });
+    const mockGeminiClient = new GeminiClient(cfg2, runtimeState);
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',

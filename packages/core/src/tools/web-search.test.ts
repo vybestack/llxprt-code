@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { WebSearchTool, WebSearchToolParams } from './web-search.js';
 import { Config } from '../config/config.js';
 import { GeminiClient } from '../core/client.js';
+import { AuthType } from '../core/contentGenerator.js';
+import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { ToolErrorType } from './tool-error.js';
 
 // Mock GeminiClient and Config constructor
@@ -34,7 +36,13 @@ describe('WebSearchTool', () => {
         },
       }),
     } as unknown as Config;
-    mockGeminiClient = new GeminiClient(mockConfigInstance);
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: 'web-search-runtime',
+      provider: 'gemini',
+      model: 'gemini-pro',
+      authType: AuthType.USE_NONE,
+    });
+    mockGeminiClient = new GeminiClient(mockConfigInstance, runtimeState);
     tool = new WebSearchTool(mockConfigInstance);
   });
 

@@ -15,6 +15,8 @@ import type { ConfigParameters } from '../config/config.js';
 import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import type { ContentGenerator } from './contentGenerator.js';
+import { AuthType } from './contentGenerator.js';
+import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 
 vi.mock('../utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
@@ -103,7 +105,15 @@ describe('GeminiChat runtime context', () => {
       tools,
     };
 
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: 'runtime-test',
+      provider: provider.name,
+      model: config.getModel(),
+      authType: AuthType.USE_NONE,
+      sessionId: config.getSessionId(),
+    });
     const chat = new GeminiChat(
+      runtimeState,
       config,
       {} as unknown as ContentGenerator,
       generationConfig,

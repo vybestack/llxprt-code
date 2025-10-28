@@ -260,6 +260,8 @@ export {
   getSessionId,
   getModelParams,
 } from './runtime/AgentRuntimeState.js';
+export type { RuntimeStateFromConfigOptions } from './runtime/runtimeStateFactory.js';
+export { createAgentRuntimeStateFromConfig as createRuntimeStateFromConfig } from './runtime/runtimeStateFactory.js';
 
 // Export emoji filter system
 export { EmojiFilter } from './filters/EmojiFilter.js';

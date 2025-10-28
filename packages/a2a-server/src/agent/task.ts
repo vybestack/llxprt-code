@@ -14,6 +14,8 @@ import {
   MCPServerStatus,
   isNodeError,
   parseAndFormatApiError,
+  createAgentRuntimeState,
+  AuthType,
 } from '@vybestack/llxprt-code-core';
 import type {
   ToolConfirmationPayload,
@@ -82,7 +84,19 @@ export class Task {
     this.contextId = contextId;
     this.config = config;
     this.scheduler = this.createScheduler();
-    this.geminiClient = new GeminiClient(this.config);
+    const contentConfig = this.config.getContentGeneratorConfig();
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: `${this.contextId}-task-runtime`,
+      provider: this.config.getProvider?.() ?? 'gemini',
+      model: this.config.getModel?.() ?? contentConfig?.model ?? 'gemini-pro',
+      authType: contentConfig?.authType ?? AuthType.USE_NONE,
+      authPayload: contentConfig?.apiKey
+        ? { apiKey: contentConfig.apiKey }
+        : undefined,
+      proxyUrl: this.config.getProxy?.(),
+      sessionId: this.config.getSessionId?.(),
+    });
+    this.geminiClient = new GeminiClient(this.config, runtimeState);
     this.pendingToolConfirmationDetails = new Map();
     this.taskState = 'submitted';
     this.eventBus = eventBus;

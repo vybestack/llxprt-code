@@ -19,6 +19,7 @@ import {
   Type,
 } from '@google/genai';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
+import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -607,7 +608,24 @@ export class SubAgentScope {
 
       this.runtimeContext.setModel(this.modelConfig.model);
 
+      const runtimeId =
+        this.runtimeContext.getSessionId() || 'subagent-runtime';
+      const runtimeState = createAgentRuntimeStateFromConfig(
+        this.runtimeContext,
+        {
+          runtimeId: `${runtimeId}-subagent`,
+          overrides: {
+            model: this.modelConfig.model,
+            proxyUrl: contentGenConfig.proxy,
+            authPayload: contentGenConfig.apiKey
+              ? { apiKey: contentGenConfig.apiKey }
+              : undefined,
+          },
+        },
+      );
+
       return new GeminiChat(
+        runtimeState,
         this.runtimeContext,
         contentGenerator,
         generationConfig,

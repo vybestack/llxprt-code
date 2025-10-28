@@ -33,7 +33,13 @@ import {
 import { ToolErrorType } from '../tools/tool-error.js';
 
 vi.mock('./geminiChat.js');
-vi.mock('./contentGenerator.js');
+vi.mock('./contentGenerator.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./contentGenerator.js')>();
+  return {
+    ...actual,
+    createContentGenerator: vi.fn(),
+  };
+});
 vi.mock('../utils/environmentContext.js');
 vi.mock('./nonInteractiveToolExecutor.js');
 vi.mock('../ide/ide-client.js');
@@ -166,7 +172,7 @@ describe('subagent.ts', () => {
       callIndex = 0,
     ): GenerateContentConfig & { systemInstruction?: string | Content } => {
       const callArgs = vi.mocked(GeminiChat).mock.calls[callIndex];
-      const generationConfig = callArgs?.[2];
+      const generationConfig = callArgs?.[3];
       // Ensure it's defined before proceeding
       expect(generationConfig).toBeDefined();
       if (!generationConfig) throw new Error('generationConfig is undefined');
@@ -342,7 +348,7 @@ describe('subagent.ts', () => {
         );
 
         // Check History (should be empty since environment context is now in system instruction)
-        const history = callArgs[3];
+        const history = callArgs[4];
         expect(history).toEqual([]);
       });
 
@@ -410,7 +416,7 @@ describe('subagent.ts', () => {
 
         const callArgs = vi.mocked(GeminiChat).mock.calls[0];
         const generationConfig = getGenerationConfigFromMock();
-        const history = callArgs[3];
+        const history = callArgs[4];
 
         // Environment context should now be in system instruction, not undefined
         expect(generationConfig.systemInstruction).toBe('Env Context');

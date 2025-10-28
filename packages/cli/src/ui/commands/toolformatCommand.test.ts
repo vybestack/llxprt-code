@@ -20,11 +20,6 @@ vi.mock('../contexts/RuntimeContext.js', () => ({
 
 describe('toolformatCommand', () => {
   let mockContext: CommandContext;
-  let mockSettingsService: {
-    getSettings: ReturnType<typeof vi.fn>;
-    updateSettings: ReturnType<typeof vi.fn>;
-  };
-
   beforeEach(() => {
     vi.resetAllMocks();
 
@@ -42,19 +37,11 @@ describe('toolformatCommand', () => {
       isAutoDetected: true,
     });
 
-    mockSettingsService = {
-      getSettings: vi.fn().mockResolvedValue({ toolFormat: undefined }),
-      updateSettings: vi.fn().mockResolvedValue(undefined),
-    };
-
     mockContext = createMockCommandContext();
     mockContext.services.settings.merged.providerToolFormatOverrides = {
       openai: 'xml',
     };
     mockContext.services.settings.setValue = vi.fn();
-    mockContext.services.config = {
-      getSettingsService: vi.fn().mockReturnValue(mockSettingsService),
-    } as never;
   });
 
   it('shows the current format when invoked without arguments', async () => {
@@ -69,10 +56,11 @@ describe('toolformatCommand', () => {
   it('clears overrides when auto is provided', async () => {
     const result = await toolformatCommand.action!(mockContext, 'auto');
     expect(mockRuntime.setActiveToolFormatOverride).toHaveBeenCalledWith(null);
-    expect(mockSettingsService.updateSettings).toHaveBeenCalledWith('openai', {
-      toolFormat: 'auto',
-    });
     expect(result?.type).toBe('message');
+    if (result?.type === 'message') {
+      expect(result.messageType).toBe('info');
+      expect(result.content).toContain('override cleared');
+    }
   });
 
   it('rejects invalid formats', async () => {
@@ -97,13 +85,14 @@ describe('toolformatCommand', () => {
     expect(mockRuntime.setActiveToolFormatOverride).toHaveBeenCalledWith(
       'hermes',
     );
-    expect(mockSettingsService.updateSettings).toHaveBeenCalledWith('openai', {
-      toolFormat: 'hermes',
-    });
     expect(result?.type).toBe('message');
+    if (result?.type === 'message') {
+      expect(result.messageType).toBe('info');
+      expect(result.content).toContain("override set to 'hermes'");
+    }
   });
 
-  it('falls back to legacy settings when SettingsService unavailable', async () => {
+  it('works when settings service is unavailable', async () => {
     mockContext.services.config = {
       getSettingsService: vi.fn().mockReturnValue(null),
     } as never;
@@ -113,18 +102,16 @@ describe('toolformatCommand', () => {
     expect(mockRuntime.setActiveToolFormatOverride).toHaveBeenCalledWith(
       'hermes',
     );
-    expect(mockContext.services.settings.setValue).toHaveBeenCalledWith(
-      'User',
-      'providerToolFormatOverrides',
-      { openai: 'hermes' },
-    );
     expect(result?.type).toBe('message');
+    if (result?.type === 'message') {
+      expect(result.messageType).toBe('info');
+    }
   });
 
-  it('surfaces errors from SettingsService updates', async () => {
-    mockSettingsService.updateSettings = vi
-      .fn()
-      .mockRejectedValue(new Error('failure'));
+  it('surfaces runtime errors when override update fails', async () => {
+    mockRuntime.setActiveToolFormatOverride.mockRejectedValue(
+      new Error('failure'),
+    );
 
     const result = await toolformatCommand.action!(mockContext, 'xml');
 

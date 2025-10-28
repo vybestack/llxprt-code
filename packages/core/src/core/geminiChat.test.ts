@@ -27,6 +27,11 @@ import {
 import { Config } from '../config/config.js';
 import { createGeminiChatRuntime } from '../test-utils/runtime.js';
 import { setSimulate429 } from '../utils/testUtils.js';
+import { AuthType } from './contentGenerator.js';
+import {
+  createAgentRuntimeState,
+  type AgentRuntimeState,
+} from '../runtime/AgentRuntimeState.js';
 
 // Mocks
 const mockModelsModule = {
@@ -41,6 +46,8 @@ describe('GeminiChat', () => {
   let chat: GeminiChat;
   let mockConfig: Config;
   const config: GenerateContentConfig = {};
+  let runtimeState: AgentRuntimeState;
+  let runtimeSetup: ReturnType<typeof createGeminiChatRuntime>;
 
   let mockProvider: {
     name: string;
@@ -83,7 +90,7 @@ describe('GeminiChat', () => {
       getActiveProvider: vi.fn(() => mockProvider),
     };
 
-    const runtimeSetup = createGeminiChatRuntime({
+    runtimeSetup = createGeminiChatRuntime({
       provider: mockProvider,
       providerManager,
       configOverrides: {
@@ -110,7 +117,21 @@ describe('GeminiChat', () => {
     } as typeof mockContentGenerator;
 
     // Reset history for each test by creating a new instance
-    chat = new GeminiChat(mockConfig, mockContentGenerator, config, []);
+    runtimeState = createAgentRuntimeState({
+      runtimeId: runtimeSetup.runtime.runtimeId,
+      provider: runtimeSetup.provider.name,
+      model: 'gemini-pro',
+      authType: AuthType.LOGIN_WITH_GOOGLE,
+      sessionId: 'test-session-id',
+    });
+
+    chat = new GeminiChat(
+      runtimeState,
+      mockConfig,
+      mockContentGenerator,
+      config,
+      [],
+    );
   });
 
   afterEach(() => {
@@ -349,7 +370,20 @@ describe('GeminiChat', () => {
       chat.recordHistory(userInput, newModelOutput); // userInput here is for the *next* turn, but history is already primed
 
       // Reset and set up a more realistic scenario for merging with existing history
-      chat = new GeminiChat(mockConfig, mockModelsModule, config, []);
+      runtimeState = createAgentRuntimeState({
+        runtimeId: `${runtimeSetup.runtime.runtimeId}-reset`,
+        provider: runtimeSetup.provider.name,
+        model: 'gemini-pro',
+        authType: AuthType.LOGIN_WITH_GOOGLE,
+        sessionId: 'test-session-id',
+      });
+      chat = new GeminiChat(
+        runtimeState,
+        mockConfig,
+        mockModelsModule,
+        config,
+        [],
+      );
       const firstUserInput: Content = {
         role: 'user',
         parts: [{ text: 'First user input' }],
@@ -392,10 +426,20 @@ describe('GeminiChat', () => {
         role: 'model',
         parts: [{ text: 'Initial model answer.' }],
       };
-      chat = new GeminiChat(mockConfig, mockModelsModule, config, [
-        initialUser,
-        initialModel,
-      ]);
+      runtimeState = createAgentRuntimeState({
+        runtimeId: `${runtimeSetup.runtime.runtimeId}-history`,
+        provider: runtimeSetup.provider.name,
+        model: 'gemini-pro',
+        authType: AuthType.LOGIN_WITH_GOOGLE,
+        sessionId: 'test-session-id',
+      });
+      chat = new GeminiChat(
+        runtimeState,
+        mockConfig,
+        mockModelsModule,
+        config,
+        [initialUser, initialModel],
+      );
 
       // New interaction
       const currentUserInput: Content = {

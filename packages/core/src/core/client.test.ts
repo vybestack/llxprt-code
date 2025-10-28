@@ -43,6 +43,7 @@ import type { Mock } from 'vitest';
 import type { ConfigParameters } from '../config/config.js';
 import { GeminiChat } from './geminiChat.js';
 import { Config } from '../config/config.js';
+import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import {
   CompressionStatus,
   GeminiEventType,
@@ -318,7 +319,14 @@ describe('Gemini Client (client.ts)', () => {
     const mockConfig = new Config({
       sessionId: 'test-session-id',
     } as ConfigParameters);
-    client = new GeminiClient(mockConfig);
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: 'test-runtime',
+      provider: 'gemini',
+      model: 'test-model',
+      authType: AuthType.USE_NONE,
+      sessionId: 'test-session-id',
+    });
+    client = new GeminiClient(mockConfig, runtimeState);
     await client.initialize(contentGeneratorConfig);
 
     // Update the mock to return the client
