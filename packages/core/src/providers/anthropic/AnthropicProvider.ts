@@ -528,8 +528,8 @@ export class AnthropicProvider extends BaseProvider {
       // Auto-detect based on model name if set to 'auto' or not set
       const modelName = this.getCurrentModel().toLowerCase();
 
-      // Check for GLM-4.5 models (glm-4.5, glm-4-5)
-      if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
+      // Check for GLM models which require Qwen handling
+      if (modelName.includes('glm-')) {
         return 'qwen';
       }
 
@@ -548,7 +548,7 @@ export class AnthropicProvider extends BaseProvider {
       // Fallback detection without SettingsService
       const modelName = this.getCurrentModel().toLowerCase();
 
-      if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
+      if (modelName.includes('glm-')) {
         return 'qwen';
       }
 

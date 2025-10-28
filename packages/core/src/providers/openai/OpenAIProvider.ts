@@ -1585,10 +1585,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Auto-detect based on model name if set to 'auto' or not set
     const modelName = (this.getModel() || this.getDefaultModel()).toLowerCase();
 
-    // Check for GLM-4.5 models (glm-4.5, glm-4-5)
-    if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
+    // Check for GLM models (glm-4.5, glm-4-6, etc.) which require Qwen handling
+    if (modelName.includes('glm-')) {
       this.logger.debug(
-        () => `Auto-detected 'qwen' format for GLM-4.5 model: ${modelName}`,
+        () => `Auto-detected 'qwen' format for GLM model: ${modelName}`,
       );
       return 'qwen';
     }
