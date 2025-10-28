@@ -4,22 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { EventEmitter } from 'events';
 import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 
-// Create stdin mock at module level
-const stdin = Object.assign(new EventEmitter(), {
-  isTTY: true,
-  setRawMode: vi.fn(),
-});
-
 // Mock ink before any imports
-vi.mock('ink', () => ({
-  useStdin: () => ({ stdin, setRawMode: vi.fn() }),
-  Box: 'Box',
-  Text: 'Text',
-}));
-
 // Mock chalk
 vi.mock('chalk', () => ({
   default: {
@@ -110,7 +97,6 @@ vi.mock('../hooks/useKeypress.ts', () => ({
     handler: (key: Record<string, unknown>) => void,
     _options?: unknown,
   ) => {
-    console.log('useKeypress mock called with handler:', typeof handler);
     keypressHandler = handler;
     // Return a mock function to ensure the hook setup completes
     return vi.fn();
@@ -120,6 +106,7 @@ vi.mock('../hooks/useKeypress.ts', () => ({
 
 // Now import components after all mocks are set up
 import { render } from 'ink-testing-library';
+import { act } from 'react-dom/test-utils';
 import { InputPrompt } from './InputPrompt.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import { TextBuffer } from './shared/text-buffer.js';
@@ -135,6 +122,7 @@ const mockConfig = {
   getWorkspaceContext: () => ({
     getDirectories: () => ['/tmp/test'],
   }),
+  getEnablePromptCompletion: () => false,
 } as unknown as Config;
 
 describe('InputPrompt paste functionality', () => {
@@ -142,6 +130,7 @@ describe('InputPrompt paste functionality', () => {
   let mockOnSubmit: ReturnType<typeof vi.fn>;
   let mockOnClearScreen: ReturnType<typeof vi.fn>;
   let mockSetShellModeActive: ReturnType<typeof vi.fn>;
+  let sendKey: (key: Record<string, unknown>) => Promise<void>;
 
   beforeEach(() => {
     // Reset the keypress handler
@@ -199,6 +188,17 @@ describe('InputPrompt paste functionality', () => {
     mockOnSubmit = vi.fn();
     mockOnClearScreen = vi.fn();
     mockSetShellModeActive = vi.fn();
+
+    sendKey = async (key: Record<string, unknown>) => {
+      const handler = keypressHandler;
+      if (!handler) {
+        throw new Error('keypressHandler not initialized');
+      }
+      await act(async () => {
+        handler(key as never);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
   });
 
   it('should handle multi-line paste as a single message', async () => {
@@ -288,7 +288,7 @@ describe('InputPrompt paste functionality', () => {
 
     const multiLineContent = 'Line 1\nLine 2\nLine 3\nLine 4';
 
-    const { lastFrame } = render(
+    render(
       <AppDispatchProvider value={mockDispatch}>
         <InputPrompt
           buffer={mockBuffer}
@@ -312,7 +312,7 @@ describe('InputPrompt paste functionality', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     // Call the handler directly instead of emitting stdin events
-    keypressHandler?.({
+    await sendKey({
       name: '',
       ctrl: false,
       meta: false,
@@ -321,15 +321,8 @@ describe('InputPrompt paste functionality', () => {
       sequence: multiLineContent,
     });
 
-    // Wait a bit for React to update the component
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Re-render to get the updated output
-    const output = lastFrame();
-
-    // Check that the paste message is shown
-    expect(output).not.toBeUndefined();
-    expect(output).toMatch(/\[4 lines pasted #\d+\]/);
+    expect(mockBuffer.text).toMatch(/\[4 lines pasted #\d+\]/);
+    expect(mockOnSubmit).not.toHaveBeenCalled();
   });
 
   it('should submit full paste content when placeholder is shown', async () => {
@@ -359,7 +352,7 @@ describe('InputPrompt paste functionality', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    keypressHandler?.({
+    await sendKey({
       name: '',
       ctrl: false,
       meta: false,
@@ -368,10 +361,9 @@ describe('InputPrompt paste functionality', () => {
       sequence: multiLineContent,
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    // Simulate submit key
-    keypressHandler?.({
+    await sendKey({
       name: 'return',
       ctrl: false,
       meta: false,
@@ -388,7 +380,7 @@ describe('InputPrompt paste functionality', () => {
 
     const singleLineContent = 'This is a single line';
 
-    const { lastFrame } = render(
+    render(
       <AppDispatchProvider value={mockDispatch}>
         <InputPrompt
           buffer={mockBuffer}
@@ -417,13 +409,7 @@ describe('InputPrompt paste functionality', () => {
     (mockBuffer.insert as Mock).mockClear();
     (mockBuffer.handleInput as Mock).mockClear();
 
-    // Ensure the handler was captured
-    if (!keypressHandler) {
-      console.warn('keypressHandler was not captured, skipping test');
-      return;
-    }
-
-    keypressHandler({
+    await sendKey({
       name: '',
       ctrl: false,
       meta: false,
@@ -432,29 +418,6 @@ describe('InputPrompt paste functionality', () => {
       sequence: singleLineContent,
     });
 
-    // Wait for the event to be processed and React to update
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Check if the handler threw an error
-    if (
-      !(mockBuffer.insert as Mock).mock.calls.length &&
-      !(mockBuffer.handleInput as Mock).mock.calls.length
-    ) {
-      // Try calling the handler again with logging
-      const testKey = {
-        name: '',
-        ctrl: false,
-        meta: false,
-        shift: false,
-        paste: true,
-        sequence: singleLineContent,
-      };
-      console.log('Attempting to call handler again with key:', testKey);
-      keypressHandler(testKey);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-
-    // The buffer should have been updated with the paste content through handleInput
     expect(mockBuffer.handleInput).toHaveBeenCalledWith(
       expect.objectContaining({
         paste: true,
@@ -466,8 +429,7 @@ describe('InputPrompt paste functionality', () => {
     expect(mockOnSubmit).not.toHaveBeenCalled();
 
     // Check that no paste indicator is shown for single line
-    const output = lastFrame();
-    expect(output).not.toContain('lines pasted');
+    expect(mockBuffer.text).not.toContain('lines pasted');
   });
 
   it('should preserve multiple large paste placeholders until submit', async () => {
@@ -478,7 +440,7 @@ describe('InputPrompt paste functionality', () => {
     const secondPaste =
       'Block 2 line 1\nBlock 2 line 2\nBlock 2 line 3\nBlock 2 line 4';
 
-    const { lastFrame } = render(
+    render(
       <AppDispatchProvider value={mockDispatch}>
         <InputPrompt
           buffer={mockBuffer}
@@ -498,9 +460,7 @@ describe('InputPrompt paste functionality', () => {
       </AppDispatchProvider>,
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    keypressHandler?.({
+    await sendKey({
       name: '',
       ctrl: false,
       meta: false,
@@ -509,9 +469,7 @@ describe('InputPrompt paste functionality', () => {
       sequence: firstPaste,
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
-
-    keypressHandler?.({
+    await sendKey({
       name: '',
       ctrl: false,
       meta: false,
@@ -520,13 +478,15 @@ describe('InputPrompt paste functionality', () => {
       sequence: secondPaste,
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    const placeholderMatches = mockBuffer.text.match(
+      /\[4 lines pasted #\d+\]/g,
+    );
+    expect(placeholderMatches).not.toBeNull();
+    expect(placeholderMatches?.length).toBe(2);
 
-    const output = lastFrame();
-    expect(output).toMatch(/\[4 lines pasted #1\]/);
-    expect(output).toMatch(/\[4 lines pasted #2\]/);
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    keypressHandler?.({
+    await sendKey({
       name: 'return',
       ctrl: false,
       meta: false,

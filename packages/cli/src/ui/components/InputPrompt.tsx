@@ -86,13 +86,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const escapeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [pendingLargePastes, setPendingLargePastes] = useState<
-    ReadonlyArray<{
-      id: number;
-      placeholderLabel: string;
-      actualContent: string;
-    }>
-  >([]);
+  const pendingLargePastesRef = useRef<Map<string, string>>(new Map());
 
   const [dirs, setDirs] = useState<readonly string[]>(
     config.getWorkspaceContext().getDirectories(),
@@ -163,8 +157,9 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   const handleSubmitAndClear = useCallback(
     (submittedValue: string) => {
       let actualValue = submittedValue;
-      if (pendingLargePastes.length > 0) {
-        pendingLargePastes.forEach(({ placeholderLabel, actualContent }) => {
+      const pendingPastes = pendingLargePastesRef.current;
+      if (pendingPastes.size > 0) {
+        pendingPastes.forEach((actualContent, placeholderLabel) => {
           if (actualValue.includes(placeholderLabel)) {
             actualValue = actualValue
               .split(placeholderLabel)
@@ -179,7 +174,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       // Clear the buffer *before* calling onSubmit to prevent potential re-submission
       // if onSubmit triggers a re-render while the buffer still holds the old value.
       buffer.setText('');
-      setPendingLargePastes([]);
+      pendingLargePastesRef.current = new Map();
       onSubmit(actualValue);
       resetCompletionState();
       resetReverseSearchCompletionState();
@@ -191,7 +186,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       shellModeActive,
       shellHistory,
       resetReverseSearchCompletionState,
-      pendingLargePastes,
     ],
   );
 
@@ -229,16 +223,17 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   ]);
 
   useEffect(() => {
-    setPendingLargePastes((prev) => {
-      if (prev.length === 0) {
-        return prev;
-      }
-      const filtered = prev.filter(({ placeholderLabel }) =>
-        buffer.text.includes(placeholderLabel),
-      );
-      return filtered.length === prev.length ? prev : filtered;
-    });
-  }, [buffer.text, setPendingLargePastes]);
+    const pendingPastes = pendingLargePastesRef.current;
+    if (pendingPastes.size === 0) {
+      return;
+    }
+    const filtered = Array.from(pendingPastes.entries()).filter(
+      ([placeholderLabel]) => buffer.text.includes(placeholderLabel),
+    );
+    if (filtered.length !== pendingPastes.size) {
+      pendingLargePastesRef.current = new Map(filtered);
+    }
+  }, [buffer.text]);
 
   // Handle clipboard image pasting with Ctrl+V
   const handleClipboardImage = useCallback(async () => {
@@ -323,14 +318,9 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
           buffer.setText(placeholderText);
           buffer.moveToOffset(cursorOffset + placeholderLabel.length);
-          setPendingLargePastes((prev) => [
-            ...prev,
-            {
-              id: placeholderId,
-              placeholderLabel,
-              actualContent: sanitized,
-            },
-          ]);
+          const nextPendingPastes = new Map(pendingLargePastesRef.current);
+          nextPendingPastes.set(placeholderLabel, sanitized);
+          pendingLargePastesRef.current = nextPendingPastes;
           return;
         }
 
