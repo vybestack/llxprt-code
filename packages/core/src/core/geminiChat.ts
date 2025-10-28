@@ -21,7 +21,7 @@ import {
 import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { ContentGenerator } from './contentGenerator.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 import type {
