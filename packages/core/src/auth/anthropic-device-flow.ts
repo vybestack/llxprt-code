@@ -7,6 +7,7 @@
 
 import { DeviceCodeResponse, OAuthToken } from './types.js';
 import { createHash, randomBytes } from 'crypto';
+import { URL } from 'node:url';
 
 /**
  * Configuration for Anthropic device flow authentication
@@ -27,6 +28,7 @@ export class AnthropicDeviceFlow {
   private codeVerifier?: string;
   private _codeChallenge?: string;
   private state?: string;
+  private redirectUri: string;
 
   constructor(config?: Partial<AnthropicFlowConfig>) {
     const defaultConfig: AnthropicFlowConfig = {
@@ -37,6 +39,7 @@ export class AnthropicDeviceFlow {
     };
 
     this.config = { ...defaultConfig, ...config };
+    this.redirectUri = 'https://console.anthropic.com/oauth/code/callback';
   }
 
   /**
@@ -63,19 +66,21 @@ export class AnthropicDeviceFlow {
    * Initiates the OAuth flow by constructing the authorization URL.
    * Since Anthropic doesn't have a device flow, we simulate it with authorization code flow.
    */
-  async initiateDeviceFlow(): Promise<DeviceCodeResponse> {
+  async initiateDeviceFlow(redirectUri?: string): Promise<DeviceCodeResponse> {
     // Generate PKCE parameters
     const { verifier, challenge } = this.generatePKCE();
 
     // Use verifier as state like OpenCode does
     this.state = verifier; // Store for later use in token exchange
+    this.redirectUri =
+      redirectUri ?? 'https://console.anthropic.com/oauth/code/callback';
 
     // Build authorization URL with PKCE parameters
     const params = new URLSearchParams({
       code: 'true',
       client_id: this.config.clientId,
       response_type: 'code',
-      redirect_uri: 'https://console.anthropic.com/oauth/code/callback',
+      redirect_uri: this.redirectUri,
       scope: this.config.scopes.join(' '),
       code_challenge: challenge,
       code_challenge_method: 'S256',
@@ -126,7 +131,7 @@ export class AnthropicDeviceFlow {
       code: authCode,
       state: stateFromResponse, // Include state in the request
       client_id: this.config.clientId,
-      redirect_uri: 'https://console.anthropic.com/oauth/code/callback',
+      redirect_uri: this.redirectUri,
       code_verifier: this.codeVerifier,
     };
 
@@ -156,6 +161,42 @@ export class AnthropicDeviceFlow {
       scope: data.scope, // Log the actual scopes returned
     });
     return this.mapTokenResponse(data);
+  }
+
+  getState(): string {
+    if (!this.state) {
+      throw new Error('OAuth flow not initialized');
+    }
+    return this.state;
+  }
+
+  buildAuthorizationUrl(redirectUri: string): string {
+    if (!this._codeChallenge || !this.state) {
+      throw new Error('OAuth flow not initialized');
+    }
+
+    const redirect = new URL(redirectUri);
+    if (
+      redirect.hostname !== '127.0.0.1' &&
+      redirect.hostname !== 'localhost'
+    ) {
+      throw new Error(
+        'Only localhost redirect URIs are supported for Anthropic OAuth',
+      );
+    }
+
+    this.redirectUri = redirectUri;
+    const params = new URLSearchParams({
+      code: 'true',
+      client_id: this.config.clientId,
+      response_type: 'code',
+      redirect_uri: redirectUri,
+      scope: this.config.scopes.join(' '),
+      code_challenge: this._codeChallenge,
+      code_challenge_method: 'S256',
+      state: this.state,
+    });
+    return `${this.config.authorizationEndpoint}?${params.toString()}`;
   }
 
   /**

@@ -22,6 +22,10 @@ import {
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { HistoryItemWithoutId } from '../ui/types.js';
+import {
+  LocalOAuthCallbackServer,
+  startLocalOAuthCallback,
+} from './local-oauth-callback.js';
 
 enum InitializationState {
   NotStarted = 'not-started',
@@ -29,6 +33,9 @@ enum InitializationState {
   Completed = 'completed',
   Failed = 'failed',
 }
+
+const CALLBACK_PORT_RANGE: [number, number] = [8765, 8795];
+const CALLBACK_TIMEOUT_MS = 3 * 60 * 1000;
 
 export class AnthropicOAuthProvider implements OAuthProvider {
   name = 'anthropic';
@@ -178,83 +185,85 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     return this.errorHandler.wrapMethod(
       async () => {
         await this.ensureInitialized();
-        // Start device flow
         const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
+        const interactive = shouldLaunchBrowser();
+        let localCallback: LocalOAuthCallbackServer | null = null;
 
-        // Construct the authorization URL
-        const authUrl =
-          deviceCodeResponse.verification_uri_complete ||
-          `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
+        if (interactive) {
+          try {
+            const state = this.deviceFlow.getState();
+            localCallback = await startLocalOAuthCallback({
+              state,
+              portRange: CALLBACK_PORT_RANGE,
+              timeoutMs: CALLBACK_TIMEOUT_MS,
+            });
+          } catch (error) {
+            this.logger.debug(
+              () =>
+                `Local OAuth callback unavailable: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+            );
+          }
+        }
 
-        // Display user instructions
         console.log('\nAnthropic Claude OAuth Authentication');
         console.log('─'.repeat(40));
 
-        // Try to open browser if appropriate
-        if (shouldLaunchBrowser()) {
+        let authUrl =
+          deviceCodeResponse.verification_uri_complete ||
+          `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
+
+        if (localCallback) {
+          authUrl = this.deviceFlow.buildAuthorizationUrl(
+            localCallback.redirectUri,
+          );
+        }
+
+        if (interactive) {
           console.log('Opening browser for authentication...');
 
-          // Add OAuth URL to history so user can copy it from the UI
-          if (this.addItem) {
-            this.addItem(
-              {
-                type: 'info',
-                text: `Please visit the following URL to authorize with Anthropic Claude:\n${authUrl}`,
-              },
-              Date.now(),
-            );
-          } else {
-            console.log('Visit the following URL to authorize:');
-            console.log(authUrl);
-          }
+          this.showAuthMessage(authUrl);
 
           try {
             await openBrowserSecurely(authUrl);
           } catch (error) {
-            // If browser fails to open, just show the URL - this is not critical
             console.log('Failed to open browser automatically.');
             this.logger.debug(() => `Browser launch error: ${error}`);
-
-            // Add OAuth URL to history so user can copy it from the UI
-            if (this.addItem) {
-              this.addItem(
-                {
-                  type: 'info',
-                  text: `Please visit the following URL to authorize with Anthropic Claude:
-${authUrl}`,
-                },
-                Date.now(),
-              );
-            }
+            this.showAuthMessage(authUrl);
           }
         } else {
-          // In non-interactive environments, just show the URL
-          if (this.addItem) {
-            this.addItem(
-              {
-                type: 'info',
-                text: `Please visit the following URL to authorize with Anthropic Claude:\n${authUrl}`,
-              },
-              Date.now(),
-            );
-          } else {
-            console.log('Visit the following URL to authorize:');
-            console.log(authUrl);
-          }
+          this.showAuthMessage(authUrl);
         }
 
         console.log('─'.repeat(40));
 
-        // Store the provider name globally so the dialog knows which provider
+        if (localCallback) {
+          try {
+            const { code, state } = await localCallback.waitForCallback();
+            await localCallback.shutdown();
+            await this.completeAuth(`${code}#${state}`);
+            return;
+          } catch (error) {
+            await localCallback.shutdown().catch(() => undefined);
+            this.logger.debug(
+              () =>
+                `Local OAuth callback failed: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+            );
+            console.log(
+              'Falling back to manual authorization code entry. Please paste the code when prompted.',
+            );
+          }
+        }
+
         (global as unknown as { __oauth_provider: string }).__oauth_provider =
           'anthropic';
 
-        // Create a promise that will resolve when the code is entered
         this.pendingAuthPromise = new Promise<string>((resolve, reject) => {
           this.authCodeResolver = resolve;
           this.authCodeRejecter = reject;
-
-          // Set a timeout to prevent hanging forever
           setTimeout(
             () => {
               const timeoutError = OAuthErrorFactory.fromUnknown(
@@ -265,19 +274,15 @@ ${authUrl}`,
               reject(timeoutError);
             },
             5 * 60 * 1000,
-          ); // 5 minute timeout
+          );
         });
 
-        // Signal that we need the OAuth code dialog
-        // This needs to be caught by the UI to open the dialog
         (
           global as unknown as { __oauth_needs_code: boolean }
         ).__oauth_needs_code = true;
 
-        // Wait for the code to be entered
         const authCode = await this.pendingAuthPromise;
 
-        // Exchange the code for tokens
         await this.completeAuth(authCode);
       },
       this.name,
@@ -324,6 +329,22 @@ ${authUrl}`,
       this.name,
       'completeAuth',
     )();
+  }
+
+  private showAuthMessage(authUrl: string): void {
+    const message = `Please visit the following URL to authorize with Anthropic Claude:\n${authUrl}`;
+    if (this.addItem) {
+      this.addItem(
+        {
+          type: 'info',
+          text: message,
+        },
+        Date.now(),
+      );
+    } else {
+      console.log('Visit the following URL to authorize:');
+      console.log(authUrl);
+    }
   }
 
   /**
