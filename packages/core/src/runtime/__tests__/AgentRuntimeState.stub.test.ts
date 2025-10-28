@@ -70,7 +70,8 @@ describe('AgentRuntimeState - Stub Verification', () => {
     expect(RuntimeStateErrorCode).toBeDefined();
   });
 
-  it('should verify stub throws NotImplemented for createAgentRuntimeState', () => {
+  it.skip('should verify stub throws NotImplemented for createAgentRuntimeState', () => {
+    // SKIPPED: Phase 05 implemented actual functionality
     const params: RuntimeStateParams = {
       runtimeId: 'test-runtime',
       provider: 'gemini',
@@ -83,8 +84,8 @@ describe('AgentRuntimeState - Stub Verification', () => {
     expect(() => createAgentRuntimeState(params)).toThrow('NotImplemented');
   });
 
-  it('should verify stub throws NotImplemented for updateAgentRuntimeState', () => {
-    // Create a stub state object (won't call createAgentRuntimeState)
+  it.skip('should verify stub throws NotImplemented for updateAgentRuntimeState', () => {
+    // SKIPPED: Phase 05 implemented actual functionality
     const stubState: AgentRuntimeState = {
       runtimeId: 'test-runtime',
       provider: 'gemini',
@@ -99,7 +100,8 @@ describe('AgentRuntimeState - Stub Verification', () => {
     ).toThrow('NotImplemented');
   });
 
-  it('should verify stub throws NotImplemented for getAgentRuntimeStateSnapshot', () => {
+  it.skip('should verify stub throws NotImplemented for getAgentRuntimeStateSnapshot', () => {
+    // SKIPPED: Phase 05 implemented actual functionality
     const stubState: AgentRuntimeState = {
       runtimeId: 'test-runtime',
       provider: 'gemini',
