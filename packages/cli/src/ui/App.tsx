@@ -1252,6 +1252,9 @@ const App = (props: AppInternalProps) => {
     geminiClient,
   ]);
 
+  const showTodoPanelSetting = settings.merged.showTodoPanel ?? true;
+  const hideContextSummary = settings.merged.hideContextSummary ?? false;
+
   if (quittingMessages) {
     return (
       <Box flexDirection="column" marginBottom={1}>
@@ -1289,9 +1292,6 @@ const App = (props: AppInternalProps) => {
     : isPowerShell
       ? '  Type your message, @path/to/file or +path/to/file'
       : '  Type your message or @path/to/file';
-
-  const showTodoPanelSetting = settings.merged.showTodoPanel ?? true;
-  const hideContextSummary = settings.merged.hideContextSummary ?? false;
 
   return (
     <StreamingContext.Provider value={streamingState}>
