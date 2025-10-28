@@ -19,6 +19,7 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { NotYetImplemented } from '../../utils/errors.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime as createProviderWithRuntimeHelper } from '../../test-utils/runtime.js';
+import { flushRuntimeAuthScope } from '../../auth/precedence.js';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -115,6 +116,9 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
   afterEach(() => {
     // Restore original environment
     process.env = originalEnv;
+    flushRuntimeAuthScope('openai.oauth.spec.runtime');
+    flushRuntimeAuthScope('test-global-runtime');
+    flushRuntimeAuthScope('legacy-singleton');
   });
 
   describe('Authentication Precedence', () => {

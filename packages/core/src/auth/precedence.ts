@@ -26,6 +26,9 @@ import {
 } from '../runtime/providerRuntimeContext.js';
 
 export interface AuthPrecedenceConfig {
+  // Constructor/direct API key
+  apiKey?: string;
+
   // Environment variable names to check
   envKeyNames?: string[];
 
@@ -593,27 +596,15 @@ export class AuthPrecedenceResolver {
     const settingsService = this.resolveSettingsService(
       options?.settingsService ?? undefined,
     );
-    const runtimeContext = getActiveProviderRuntimeContext();
-    const runtimeState = ensureRuntimeState(runtimeContext);
-    const providerId =
-      this.config.providerId ??
-      this.config.oauthProvider ??
-      this.config.envKeyNames?.[0] ??
-      'unknown-provider';
-    const profileId = resolveProfileId(settingsService);
-    registerSettingsSubscriptions(runtimeState, settingsService, providerId);
 
-    // Check if authOnly mode is enabled (OAuth-only authentication)
     const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
 
     if (!authOnly) {
-      // 1. Check /key command key (highest priority) - stored in SettingsService
       const authKey = settingsService.get('auth-key');
       if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
         return authKey;
       }
 
-      // 2. Check /keyfile command keyfile - stored in SettingsService
       const authKeyfile = settingsService.get('auth-keyfile');
       if (authKeyfile && typeof authKeyfile === 'string') {
         try {
@@ -631,7 +622,14 @@ export class AuthPrecedenceResolver {
         }
       }
 
-      // 3. Check environment variables
+      if (
+        this.config.apiKey &&
+        typeof this.config.apiKey === 'string' &&
+        this.config.apiKey.trim() !== ''
+      ) {
+        return this.config.apiKey;
+      }
+
       if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
         for (const envVarName of this.config.envKeyNames) {
           const envValue = process.env[envVarName];
@@ -642,13 +640,6 @@ export class AuthPrecedenceResolver {
       }
     }
 
-    /**
-     * @plan PLAN-20251018-STATELESSPROVIDER2.P18
-     * @requirement REQ-SP2-004
-     * @pseudocode auth-runtime-scope.md lines 2-6
-     * Resolve scoped OAuth credentials with runtime aware cache, metadata, and invalidation hooks.
-     */
-    // 4. OAuth (if enabled and supported)
     if (
       includeOAuth &&
       this.config.isOAuthEnabled &&
@@ -656,7 +647,73 @@ export class AuthPrecedenceResolver {
       this.oauthManager &&
       this.config.oauthProvider
     ) {
+      const providerId =
+        this.config.providerId ??
+        this.config.oauthProvider ??
+        this.config.envKeyNames?.[0] ??
+        'unknown-provider';
+      const profileId = resolveProfileId(settingsService);
+
+      let runtimeContext: ProviderRuntimeContext | null = null;
+      let runtimeState: RuntimeScopedState | null = null;
+
       try {
+        runtimeContext = getActiveProviderRuntimeContext();
+        runtimeState = ensureRuntimeState(runtimeContext);
+        registerSettingsSubscriptions(
+          runtimeState,
+          settingsService,
+          providerId,
+        );
+      } catch {
+        runtimeContext = null;
+        runtimeState = null;
+      }
+
+      const managerWithCheck = this.oauthManager as OAuthManager & {
+        isOAuthEnabled?(
+          provider: string,
+        ): boolean | Promise<boolean | undefined>;
+      };
+      if (
+        managerWithCheck.isOAuthEnabled &&
+        typeof managerWithCheck.isOAuthEnabled === 'function'
+      ) {
+        let isEnabledByManager: boolean | undefined;
+        try {
+          const enabledResult = managerWithCheck.isOAuthEnabled(
+            this.config.oauthProvider,
+          );
+          isEnabledByManager =
+            typeof enabledResult === 'boolean'
+              ? enabledResult
+              : await enabledResult;
+        } catch (error) {
+          if (process.env.DEBUG) {
+            console.debug(
+              `Failed to determine OAuth enablement for ${this.config.oauthProvider}:`,
+              error,
+            );
+          }
+          isEnabledByManager = undefined;
+        }
+
+        if (isEnabledByManager === false) {
+          if (runtimeState) {
+            const cacheKey = buildCacheKey(
+              runtimeState.runtimeAuthScopeId,
+              providerId,
+              profileId,
+            );
+            if (runtimeState.entries.has(cacheKey)) {
+              invalidateEntry(runtimeState, cacheKey, 'oauth-disabled');
+            }
+          }
+          return null;
+        }
+      }
+
+      if (runtimeState) {
         const cachedEntry = getValidCachedEntry(
           runtimeState,
           providerId,
@@ -668,18 +725,20 @@ export class AuthPrecedenceResolver {
         }
 
         recordCacheMiss(runtimeState);
+      }
 
+      try {
         const requestMetadata: OAuthTokenRequestMetadata = {
-          runtimeAuthScopeId: runtimeState.runtimeAuthScopeId,
+          runtimeAuthScopeId: runtimeState?.runtimeAuthScopeId ?? 'no-runtime',
           providerId,
           profileId,
           cliScope:
-            runtimeContext.metadata &&
+            runtimeContext?.metadata &&
             typeof runtimeContext.metadata === 'object'
               ? runtimeContext.metadata
               : undefined,
           runtimeMetadata:
-            runtimeContext.metadata &&
+            runtimeContext?.metadata &&
             typeof runtimeContext.metadata === 'object'
               ? runtimeContext.metadata
               : undefined,
@@ -707,13 +766,15 @@ export class AuthPrecedenceResolver {
               oauthToken = null;
             }
           }
-          storeRuntimeScopedToken(
-            runtimeState,
-            providerId,
-            profileId,
-            token,
-            oauthToken ?? null,
-          );
+          if (runtimeState) {
+            storeRuntimeScopedToken(
+              runtimeState,
+              providerId,
+              profileId,
+              token,
+              oauthToken ?? null,
+            );
+          }
           return token;
         }
       } catch (error) {
@@ -726,7 +787,6 @@ export class AuthPrecedenceResolver {
       }
     }
 
-    // No authentication method available
     return null;
   }
 
@@ -790,6 +850,14 @@ export class AuthPrecedenceResolver {
       } catch {
         // Ignore errors for method detection
       }
+    }
+
+    if (
+      this.config.apiKey &&
+      typeof this.config.apiKey === 'string' &&
+      this.config.apiKey.trim() !== ''
+    ) {
+      return 'constructor-apikey';
     }
 
     if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
