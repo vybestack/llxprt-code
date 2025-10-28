@@ -1197,7 +1197,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               // Emit buffered text when we have a complete sentence or paragraph
               // Look for natural break points
               if (
-                textBuffer.includes('\n') ||
                 textBuffer.endsWith('. ') ||
                 textBuffer.endsWith('! ') ||
                 textBuffer.endsWith('? ') ||
@@ -1589,6 +1588,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     if (modelName.includes('glm-')) {
       this.logger.debug(
         () => `Auto-detected 'qwen' format for GLM model: ${modelName}`,
+      );
+      return 'qwen';
+    }
+
+    // Check for MiniMax models (minimax, mini-max, etc.) which require Qwen handling
+    if (modelName.includes('minimax') || modelName.includes('mini-max')) {
+      this.logger.debug(
+        () => `Auto-detected 'qwen' format for MiniMax model: ${modelName}`,
       );
       return 'qwen';
     }
