@@ -416,7 +416,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       type: 'boolean',
       description:
         'If true, when refreshing memory, LLXPRT.md files should be loaded from all directories that are added. If false, LLXPRT.md files should only be loaded from the primary working directory.',
-      default: false,
     })
     // Register MCP subcommands
     .command(mcpCommand);
@@ -682,17 +681,34 @@ export async function loadCliConfig(
     ...effectiveSettings.fileFiltering,
   };
 
-  const includeDirectories = (effectiveSettings.includeDirectories || [])
+  const includeDirectoriesFromSettings =
+    effectiveSettings.includeDirectories || [];
+  const includeDirectoriesFromCli = argv.includeDirectories || [];
+  const includeDirectories = includeDirectoriesFromSettings
     .map(resolvePath)
-    .concat((argv.includeDirectories || []).map(resolvePath));
+    .concat(includeDirectoriesFromCli.map(resolvePath));
+
+  const includeDirectoriesProvided = includeDirectories.length > 0;
+  const cliLoadMemoryPreference = argv.loadMemoryFromIncludeDirectories;
+  const settingsLoadMemoryPreference =
+    effectiveSettings.loadMemoryFromIncludeDirectories;
+
+  let resolvedLoadMemoryFromIncludeDirectories =
+    cliLoadMemoryPreference ?? settingsLoadMemoryPreference ?? false;
+
+  if (
+    !resolvedLoadMemoryFromIncludeDirectories &&
+    includeDirectoriesProvided &&
+    cliLoadMemoryPreference === undefined &&
+    settingsLoadMemoryPreference !== true
+  ) {
+    resolvedLoadMemoryFromIncludeDirectories = true;
+  }
 
   // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
   const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
     cwd,
-    effectiveSettings.loadMemoryFromIncludeDirectories ||
-      argv.loadMemoryFromIncludeDirectories
-      ? includeDirectories
-      : [],
+    resolvedLoadMemoryFromIncludeDirectories ? includeDirectories : [],
     debugMode,
     fileService,
     effectiveSettings,
@@ -843,10 +859,7 @@ export async function loadCliConfig(
     sandbox: sandboxConfig,
     targetDir: cwd,
     includeDirectories,
-    loadMemoryFromIncludeDirectories:
-      argv.loadMemoryFromIncludeDirectories ||
-      effectiveSettings.loadMemoryFromIncludeDirectories ||
-      false,
+    loadMemoryFromIncludeDirectories: resolvedLoadMemoryFromIncludeDirectories,
     debugMode,
     question,
     fullContext: argv.allFiles || false,
