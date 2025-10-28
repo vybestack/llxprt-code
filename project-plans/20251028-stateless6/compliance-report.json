@@ -1,0 +1,140 @@
+{
+  "plan_id": "PLAN-20251028-STATELESS6",
+  "evaluation_date": "2025-10-28",
+  "overall_compliance": false,
+  "integration_analysis": {
+    "has_integration_plan": true,
+    "builds_in_isolation": false,
+    "specific_files_to_modify": [
+      "packages/core/src/core/geminiChat.ts (lines 561, 1177, 1775, 2480 - remove getProviderManager calls)",
+      "packages/core/src/core/geminiChat.ts (lines 1392, 1396, 1575, 1700 - remove getEphemeralSetting calls)",
+      "packages/core/src/core/geminiChat.ts (lines 514, 538, 672 - refactor telemetry logging)",
+      "packages/core/src/core/geminiChat.ts (line 2282 - replace tool registry access)",
+      "packages/core/src/core/subagent.ts (line ~609 - REMOVE setModel mutation)",
+      "packages/core/src/telemetry/loggers.ts (refactor API signatures to accept runtime view)",
+      "packages/core/src/index.ts (add new exports for GeminiRuntimeView)"
+    ],
+    "old_code_to_remove": [
+      "this.runtimeContext.setModel(this.modelConfig.model) in subagent.ts:609",
+      "this.config.getProviderManager() calls in geminiChat.ts",
+      "this.config.getEphemeralSetting() calls in geminiChat.ts",
+      "logApiRequest(this.config, ...) pattern in geminiChat.ts",
+      "Direct Config dependency in GeminiChat constructor (replaced with GeminiRuntimeView)"
+    ],
+    "user_access_points": [
+      "Existing CLI/UI flows continue to work (internal refactoring only)",
+      "Users start chats via existing commands - runtime view is internal",
+      "SubAgentScope.create() becomes internal wiring point for isolated views",
+      "Foreground uses Config adapter bridge (createRuntimeViewFromConfig) until STATELESS7"
+    ],
+    "integration_phases_present": true,
+    "integration_tests_specified": true,
+    "verdict": "PASS - Plan identifies specific existing code to modify/remove, shows integration pathways, and includes integration test phases (P09/P11). Feature cannot be built in isolation as it requires modifying GeminiChat constructor signature and SubAgentScope internals. However, pseudocode is incomplete and test strategy is vague (see detailed violations below)."
+  },
+  "plan_structure": {
+    "sequential_phases": true,
+    "all_phases_have_verification": true,
+    "execution_tracker_present": true,
+    "plan_id_format_correct": true,
+    "issues": []
+  },
+  "pseudocode_compliance": {
+    "pseudocode_exists": true,
+    "lines_are_numbered": true,
+    "implementation_references_lines": false,
+    "verification_checks_compliance": false,
+    "issues": [
+      "Pseudocode has numbered steps (001-010) which is good",
+      "CRITICAL: Implementation phase files (P06-P10) do NOT reference specific pseudocode line numbers",
+      "Phase files say 'matching pseudocode steps 001-004' but don't cite specific lines like 'Line 005.3: Build provider adapter'",
+      "Verification phases (P06a-P10a) do NOT specify checking pseudocode compliance",
+      "No verification phase includes command to compare implementation against pseudocode line-by-line"
+    ]
+  },
+  "tdd_compliance": {
+    "tdd_before_implementation": true,
+    "no_reverse_testing": true,
+    "behavioral_assertions": true,
+    "property_testing_required": true,
+    "integration_tests_included": true,
+    "issues": [
+      "P07 writes TDD tests before P08 implementation - CORRECT",
+      "P09 writes integration TDD before P10 implementation - CORRECT",
+      "Test strategy mentions property-based testing (≥30%) - GOOD",
+      "CRITICAL: Test strategy is TOO VAGUE - no concrete test case specifications",
+      "Test strategy says 'spy-based check' for setModel but doesn't show actual test code",
+      "Integration test strategy says 'dual runtime scenario' but doesn't define what that means precisely",
+      "Missing specific assertions like 'expect(result.model).toBe(\"gemini-2.0-flash-exp\")'",
+      "No concrete property-based test examples (just mentions @fast-check)"
+    ]
+  },
+  "anti_patterns": {
+    "no_version_duplication": true,
+    "files_updated_not_created": true,
+    "no_todos_in_production": true,
+    "stub_approach_correct": true,
+    "issues": [
+      "Plan correctly creates NEW files (GeminiRuntimeView.ts, createGeminiRuntimeView.ts) as these don't exist yet",
+      "Plan correctly UPDATES existing files (geminiChat.ts, subagent.ts) rather than creating V2 versions",
+      "Stub phase (P06) allows scaffold with no behavioral changes - CORRECT",
+      "No NotYetImplemented patterns detected - GOOD",
+      "No TODO comments planned for production code - GOOD"
+    ]
+  },
+  "verification_requirements": {
+    "mutation_testing_specified": true,
+    "behavioral_contract_validation": true,
+    "mock_theater_detection": true,
+    "pseudocode_compliance_check": false,
+    "issues": [
+      "Test strategy mentions mutation testing (≥80%) - GOOD",
+      "Test strategy includes behavioral contract template - GOOD",
+      "Test strategy mentions spy-based mutation detection - GOOD",
+      "CRITICAL: Verification phases do NOT include pseudocode compliance checking",
+      "No verification phase runs command like: 'Compare implementation with pseudocode and verify every numbered line is implemented'",
+      "P10a mentions 'pseudocode compliance' but doesn't specify HOW to verify it",
+      "Missing automated pseudocode traceability verification"
+    ]
+  },
+  "code_markers": {
+    "plan_markers_required": true,
+    "requirement_markers_required": true,
+    "verification_checks_markers": false,
+    "issues": [
+      "Plan consistently requires @plan PLAN-20251028-STATELESS6.PNN markers - GOOD",
+      "Plan consistently requires @requirement REQ-STAT6-XXX markers - GOOD",
+      "Pseudocode includes traceability section (step 010) - GOOD",
+      "CRITICAL: Verification phases don't check for marker presence",
+      "No verification phase includes: grep -r '@plan:PLAN-20251028-STATELESS6.P06' . | wc -l",
+      "Execution tracker mentions markers in checklist but verification phases don't enforce it"
+    ]
+  },
+  "critical_violations": [
+    "VAGUE TEST STRATEGY: Test strategy describes test categories but lacks concrete test cases with specific assertions",
+    "MISSING PSEUDOCODE REFERENCES: Implementation phases (P06-P10) don't cite specific pseudocode line numbers like 'Line 005.3: Build provider adapter'",
+    "NO PSEUDOCODE VERIFICATION: Verification phases don't include steps to compare implementation against pseudocode line-by-line",
+    "NO MARKER VERIFICATION: Verification phases don't check that @plan and @requirement markers are present in code",
+    "INCOMPLETE DEEP ANALYSIS: DEEP-ANALYSIS.md identifies plan as 'NOT READY TO EXECUTE' with critical gaps in pseudocode detail"
+  ],
+  "warnings": [
+    "Pseudocode exists but implementation phases don't reference it granularly enough (should cite '005.3' not just 'steps 001-004')",
+    "Test strategy mentions behavioral contracts but examples are generic templates not specific to this plan's requirements",
+    "Integration map is very brief (3 rows) - could be more detailed about data flows and dependencies",
+    "P11 hardening phase uses grep but doesn't specify expected output counts (how many references are allowed?)",
+    "Config adapter (step 008 in pseudocode) is 'temporary' but no deprecation timeline or follow-on plan referenced",
+    "AgentRuntimeState is documented as incomplete in DEEP-ANALYSIS but plan doesn't address extending it"
+  ],
+  "recommendations": [
+    "IMMEDIATE: Expand test strategy with concrete test cases showing actual code snippets (expect statements, property test generators)",
+    "IMMEDIATE: Update implementation phases to reference specific pseudocode line numbers: 'Implement step 005.3: Build provider adapter...'",
+    "IMMEDIATE: Add pseudocode compliance verification to P08a and P10a: 'Compare implementation with pseudocode lines 006.1-006.7'",
+    "IMMEDIATE: Add marker verification to all verification phases: 'grep -r @plan:PLAN-ID.PNN . | wc -l # Expected: N occurrences'",
+    "HIGH: Expand pseudocode with more algorithmic detail for complex steps (e.g., 005.4 telemetry enrichment logic)",
+    "HIGH: Create specific integration test scenario in test strategy showing exact foreground/subagent setup and assertions",
+    "MEDIUM: Add mutation testing configuration details (which files to mutate, threshold enforcement commands)",
+    "MEDIUM: Specify expected grep output counts in P11 hardening phase",
+    "MEDIUM: Document relationship between STATELESS6 and future STATELESS7 (Config removal timeline)",
+    "LOW: Expand integration map with data flow diagrams or call sequence descriptions"
+  ],
+  "summary": "PLAN-20251028-STATELESS6 demonstrates STRONG INTEGRATION PLANNING and correctly avoids the 'isolated feature trap'. The plan identifies specific existing files to modify (geminiChat.ts, subagent.ts), lists exact code to remove (setModel mutation at line 609), and shows integration pathways through Config adapter bridge. Phases are properly sequenced (TDD before implementation) with verification steps. HOWEVER, the plan suffers from EXECUTION GAPS: (1) test strategy is too abstract/vague with no concrete test case code, (2) implementation phases don't granularly reference pseudocode line numbers, (3) verification phases lack pseudocode compliance checking and marker verification. The DEEP-ANALYSIS.md file explicitly marks this plan as 'NOT READY TO EXECUTE' and identifies missing details. While the plan structure and integration approach are correct, it needs MORE SPECIFICITY in test cases, pseudocode references, and verification steps before execution can proceed safely. Status: CONDITIONALLY ACCEPTABLE pending specificity improvements."
+}
