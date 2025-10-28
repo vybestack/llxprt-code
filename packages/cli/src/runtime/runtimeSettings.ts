@@ -45,6 +45,10 @@ type ProfileApplicationResult = Awaited<
   ReturnType<typeof applyProfileWithGuards>
 >;
 
+// @plan PLAN-20251027-STATELESS5.P06
+// NOTE: Adapter stub exists but not integrated until Phase 08
+// Verified to compile successfully via: import type { AgentRuntimeAdapter } from './agentRuntimeAdapter.js';
+
 export { createIsolatedRuntimeContextInternal as createIsolatedRuntimeContext };
 export type {
   IsolatedRuntimeActivationOptions,

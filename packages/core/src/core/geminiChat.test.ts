@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan PLAN-20251027-STATELESS5.P09
+ * Note: Legacy tests updated with plan markers. Runtime state integration tests
+ * are in __tests__/geminiChat.runtimeState.test.ts
+ */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   Content,

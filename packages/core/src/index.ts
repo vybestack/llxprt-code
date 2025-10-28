@@ -231,6 +231,36 @@ export {
 } from './runtime/providerRuntimeContext.js';
 export type { ProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
 
+// @plan PLAN-20251027-STATELESS5.P06
+// Export AgentRuntimeState types and functions for CLI adapter integration
+export type {
+  AgentRuntimeState,
+  RuntimeStateParams,
+  RuntimeStateSnapshot,
+  RuntimeStateChangedEvent,
+  RuntimeStateChangeCallback,
+  UnsubscribeFunction,
+  AuthPayload,
+  ModelParams,
+  SanitizedAuthPayload,
+  RuntimeStateErrorCode,
+} from './runtime/AgentRuntimeState.js';
+export {
+  createAgentRuntimeState,
+  updateAgentRuntimeState,
+  updateAgentRuntimeStateBatch,
+  getAgentRuntimeStateSnapshot,
+  subscribeToAgentRuntimeState,
+  RuntimeStateError,
+  getProvider,
+  getModel,
+  getAuthType,
+  getAuthPayload,
+  getBaseUrl,
+  getSessionId,
+  getModelParams,
+} from './runtime/AgentRuntimeState.js';
+
 // Export emoji filter system
 export { EmojiFilter } from './filters/EmojiFilter.js';
 export type {
