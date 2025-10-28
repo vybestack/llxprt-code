@@ -177,7 +177,17 @@ describe('InputPrompt paste functionality', () => {
       redo: vi.fn(),
       replaceRange: vi.fn(),
       replaceRangeByOffset: vi.fn(),
-      moveToOffset: vi.fn(),
+      moveToOffset: vi.fn((offset: number) => {
+        const safeOffset = Math.max(
+          0,
+          Math.min(offset, mockBuffer.text.length),
+        );
+        const before = mockBuffer.text.slice(0, safeOffset);
+        const segments = before.split('\n');
+        const row = segments.length - 1;
+        const col = segments[segments.length - 1]?.length ?? 0;
+        mockBuffer.cursor = [row, col];
+      }),
       deleteWordLeft: vi.fn(),
       deleteWordRight: vi.fn(),
       killLineRight: vi.fn(),
@@ -273,9 +283,7 @@ describe('InputPrompt paste functionality', () => {
     expect(mockOnSubmit).not.toHaveBeenCalled();
   });
 
-  it.skip('should show paste indicator for multi-line paste', async () => {
-    // This test is skipped due to rendering issues with ink-testing-library
-    // The paste functionality is tested in the other tests
+  it('should show paste indicator for multi-line paste', async () => {
     const mockDispatch = vi.fn();
 
     const multiLineContent = 'Line 1\nLine 2\nLine 3\nLine 4';
@@ -320,7 +328,59 @@ describe('InputPrompt paste functionality', () => {
     const output = lastFrame();
 
     // Check that the paste message is shown
-    expect(output).toContain('[4 lines pasted]');
+    expect(output).not.toBeUndefined();
+    expect(output).toMatch(/\[4 lines pasted #\d+\]/);
+  });
+
+  it('should submit full paste content when placeholder is shown', async () => {
+    const mockDispatch = vi.fn();
+
+    const multiLineContent = 'Line 1\nLine 2\nLine 3\nLine 4';
+
+    render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+        />
+      </AppDispatchProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    keypressHandler?.({
+      name: '',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      paste: true,
+      sequence: multiLineContent,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Simulate submit key
+    keypressHandler?.({
+      name: 'return',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      paste: false,
+      sequence: '\r',
+    });
+
+    expect(mockOnSubmit).toHaveBeenCalledWith(multiLineContent);
   });
 
   it('should handle single-line paste without special indicator', async () => {
@@ -408,5 +468,73 @@ describe('InputPrompt paste functionality', () => {
     // Check that no paste indicator is shown for single line
     const output = lastFrame();
     expect(output).not.toContain('lines pasted');
+  });
+
+  it('should preserve multiple large paste placeholders until submit', async () => {
+    const mockDispatch = vi.fn();
+
+    const firstPaste =
+      'Block 1 line 1\nBlock 1 line 2\nBlock 1 line 3\nBlock 1 line 4';
+    const secondPaste =
+      'Block 2 line 1\nBlock 2 line 2\nBlock 2 line 3\nBlock 2 line 4';
+
+    const { lastFrame } = render(
+      <AppDispatchProvider value={mockDispatch}>
+        <InputPrompt
+          buffer={mockBuffer}
+          onSubmit={mockOnSubmit}
+          userMessages={[]}
+          onClearScreen={mockOnClearScreen}
+          config={mockConfig}
+          slashCommands={[]}
+          commandContext={{} as unknown as CommandContext}
+          placeholder="Type a message..."
+          focus={true}
+          inputWidth={80}
+          suggestionsWidth={0}
+          shellModeActive={false}
+          setShellModeActive={mockSetShellModeActive}
+        />
+      </AppDispatchProvider>,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    keypressHandler?.({
+      name: '',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      paste: true,
+      sequence: firstPaste,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    keypressHandler?.({
+      name: '',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      paste: true,
+      sequence: secondPaste,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const output = lastFrame();
+    expect(output).toMatch(/\[4 lines pasted #1\]/);
+    expect(output).toMatch(/\[4 lines pasted #2\]/);
+
+    keypressHandler?.({
+      name: 'return',
+      ctrl: false,
+      meta: false,
+      shift: false,
+      paste: false,
+      sequence: '\r',
+    });
+
+    expect(mockOnSubmit).toHaveBeenCalledWith(firstPaste + secondPaste);
   });
 });

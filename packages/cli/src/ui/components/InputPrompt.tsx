@@ -29,6 +29,23 @@ import {
 import * as path from 'path';
 import { SCREEN_READER_USER_PREFIX } from '../textConstants.js';
 
+const LARGE_PASTE_LINE_THRESHOLD = 4;
+const LARGE_PASTE_CHAR_THRESHOLD = 1000;
+
+const formatLargePastePlaceholder = (
+  lines: number,
+  chars: number,
+  id: number,
+): string => {
+  const idSuffix = ` #${id}`;
+  if (lines > 1) {
+    const label = lines === 1 ? 'line' : 'lines';
+    return `[${lines} ${label} pasted${idSuffix}]`;
+  }
+  const charLabel = chars === 1 ? 'character' : 'characters';
+  return `[${chars} ${charLabel} pasted${idSuffix}]`;
+};
+
 export interface InputPromptProps {
   buffer: TextBuffer;
   onSubmit: (value: string) => void;
@@ -68,6 +85,14 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   const [escPressCount, setEscPressCount] = useState(0);
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const escapeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [pendingLargePastes, setPendingLargePastes] = useState<
+    ReadonlyArray<{
+      id: number;
+      placeholderLabel: string;
+      actualContent: string;
+    }>
+  >([]);
 
   const [dirs, setDirs] = useState<readonly string[]>(
     config.getWorkspaceContext().getDirectories(),
@@ -133,15 +158,29 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     [],
   );
 
+  const nextPlaceholderIdRef = useRef(1);
+
   const handleSubmitAndClear = useCallback(
     (submittedValue: string) => {
+      let actualValue = submittedValue;
+      if (pendingLargePastes.length > 0) {
+        pendingLargePastes.forEach(({ placeholderLabel, actualContent }) => {
+          if (actualValue.includes(placeholderLabel)) {
+            actualValue = actualValue
+              .split(placeholderLabel)
+              .join(actualContent);
+          }
+        });
+      }
+
       if (shellModeActive) {
-        shellHistory.addCommandToHistory(submittedValue);
+        shellHistory.addCommandToHistory(actualValue);
       }
       // Clear the buffer *before* calling onSubmit to prevent potential re-submission
       // if onSubmit triggers a re-render while the buffer still holds the old value.
       buffer.setText('');
-      onSubmit(submittedValue);
+      setPendingLargePastes([]);
+      onSubmit(actualValue);
       resetCompletionState();
       resetReverseSearchCompletionState();
     },
@@ -152,6 +191,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       shellModeActive,
       shellHistory,
       resetReverseSearchCompletionState,
+      pendingLargePastes,
     ],
   );
 
@@ -187,6 +227,18 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     setJustNavigatedHistory,
     resetReverseSearchCompletionState,
   ]);
+
+  useEffect(() => {
+    setPendingLargePastes((prev) => {
+      if (prev.length === 0) {
+        return prev;
+      }
+      const filtered = prev.filter(({ placeholderLabel }) =>
+        buffer.text.includes(placeholderLabel),
+      );
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [buffer.text, setPendingLargePastes]);
 
   // Handle clipboard image pasting with Ctrl+V
   const handleClipboardImage = useCallback(async () => {
@@ -244,8 +296,49 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       }
 
       if (key.paste) {
+        const sanitized = key.sequence.replace(/\r\n?/g, '\n');
+        const charCount = cpLen(sanitized);
+        const lineCount =
+          sanitized.length === 0 ? 0 : sanitized.split('\n').length;
+
+        if (
+          lineCount >= LARGE_PASTE_LINE_THRESHOLD ||
+          charCount >= LARGE_PASTE_CHAR_THRESHOLD
+        ) {
+          const existingText = buffer.text;
+          const cursorOffset = logicalPosToOffset(
+            buffer.lines,
+            buffer.cursor[0],
+            buffer.cursor[1],
+          );
+          const before = existingText.slice(0, cursorOffset);
+          const after = existingText.slice(cursorOffset);
+          const placeholderId = nextPlaceholderIdRef.current++;
+          const placeholderLabel = formatLargePastePlaceholder(
+            lineCount,
+            charCount,
+            placeholderId,
+          );
+          const placeholderText = `${before}${placeholderLabel}${after}`;
+
+          buffer.setText(placeholderText);
+          buffer.moveToOffset(cursorOffset + placeholderLabel.length);
+          setPendingLargePastes((prev) => [
+            ...prev,
+            {
+              id: placeholderId,
+              placeholderLabel,
+              actualContent: sanitized,
+            },
+          ]);
+          return;
+        }
+
         // Ensure we never accidentally interpret paste as regular input.
-        buffer.handleInput(key);
+        buffer.handleInput({
+          ...key,
+          sequence: sanitized,
+        });
         return;
       }
 
