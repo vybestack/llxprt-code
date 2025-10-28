@@ -26,6 +26,7 @@ import { OAuthManager } from '../auth/oauth-manager.js';
 import { MultiProviderTokenStore } from '../auth/types.js';
 import { ensureOAuthProviderRegistered } from './oauth-provider-registration.js';
 import { HistoryItemWithoutId } from '../ui/types.js';
+import { IProviderConfig } from '@vybestack/llxprt-code-core/providers/types/IProviderConfig.js';
 
 /**
  * Sanitizes API keys to remove problematic characters that cause ByteString errors.
@@ -216,17 +217,9 @@ export function getProviderManager(
 
     // Register OAuth providers on-demand when creating actual providers
     // Gemini Provider
-    const geminiProvider = new GeminiProvider(
-      undefined,
-      undefined,
-      config,
-      oauthManager,
+    providerManagerInstance.registerProvider(
+      getGeminiProvider(oauthManager, config),
     );
-
-    if (config) {
-      geminiProvider.setConfig(config);
-    }
-    providerManagerInstance.registerProvider(geminiProvider);
 
     // Register Gemini OAuth provider when Gemini provider is created
     if (oauthManager && tokenStore) {
@@ -267,36 +260,29 @@ export function getProviderManager(
         ? () => config.getEphemeralSettings()
         : undefined,
     };
-    const openaiProvider = new OpenAIProvider(
-      openaiApiKey || undefined, // Pass undefined, not empty string, to allow OAuth fallback
-      openaiBaseUrl,
+
+    providerManagerInstance.registerProvider(
+      getOpenAIProvider(
+        openaiApiKey,
+        openaiBaseUrl,
+        openaiProviderConfig,
+        oauthManager,
+      ),
+    );
+    // Register OpenAI-compatible provider as well
+    setAnotherOpenAIProvider(
+      providerManagerInstance,
+      openaiApiKey,
       openaiProviderConfig,
       oauthManager,
     );
-    providerManagerInstance.registerProvider(openaiProvider);
 
     // Register qwen as an alias to OpenAI provider with OAuth
     // When user selects "--provider qwen", we create a separate OpenAI instance for Qwen
     // Create a special config for qwen that ensures proper OAuth identification
-    const qwenProviderConfig = {
-      ...openaiProviderConfig,
-      // Override any OAuth-related settings that might affect provider identification
-      forceQwenOAuth: true,
-    };
-    const qwenProvider = new OpenAIProvider(
-      undefined, // No API key - force OAuth
-      'https://portal.qwen.ai/v1', // Set Qwen base URL to trigger OAuth enablement
-      qwenProviderConfig,
-      oauthManager,
+    providerManagerInstance.registerProvider(
+      getQwenProvider(openaiProviderConfig, oauthManager),
     );
-    // Override the name to 'qwen' so it can be selected
-    Object.defineProperty(qwenProvider, 'name', {
-      value: 'qwen',
-      writable: false,
-      enumerable: true,
-      configurable: true,
-    });
-    providerManagerInstance.registerProvider(qwenProvider);
 
     // Register Qwen OAuth provider when Qwen provider is created
     if (oauthManager && tokenStore) {
@@ -310,33 +296,23 @@ export function getProviderManager(
 
     // Register OpenAI Responses provider (for o1, o3 models)
     // This provider exclusively uses the /responses endpoint
-    const openaiResponsesProvider = new OpenAIResponsesProvider(
-      openaiApiKey || undefined, // Use same API key as OpenAI
-      openaiBaseUrl,
-      openaiProviderConfig,
+    providerManagerInstance.registerProvider(
+      getOpenAIResponsesProvider(
+        openaiApiKey,
+        openaiBaseUrl,
+        allowBrowserEnvironment,
+      ),
     );
-    providerManagerInstance.registerProvider(openaiResponsesProvider);
 
     // Always register Anthropic provider
     // Priority: Environment variable only - no automatic keyfile loading
-    let anthropicApiKey: string | undefined;
-
-    if (!authOnlyEnabled && process.env.ANTHROPIC_API_KEY) {
-      anthropicApiKey = sanitizeApiKey(process.env.ANTHROPIC_API_KEY);
-    }
-
-    const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
-    // Create provider config from user settings
-    const anthropicProviderConfig = {
-      allowBrowserEnvironment,
-    };
-    const anthropicProvider = new AnthropicProvider(
-      anthropicApiKey || undefined, // Pass undefined instead of empty string to allow OAuth fallback
-      anthropicBaseUrl,
-      anthropicProviderConfig,
-      oauthManager,
+    providerManagerInstance.registerProvider(
+      getAnthropicProvider(
+        authOnlyEnabled,
+        oauthManager,
+        allowBrowserEnvironment,
+      ),
     );
-    providerManagerInstance.registerProvider(anthropicProvider);
 
     // Always register Anthropic OAuth provider so users can switch between API key and OAuth flows
     if (oauthManager && tokenStore) {
@@ -364,5 +340,154 @@ export function resetProviderManager(): void {
 export function getOAuthManager(): OAuthManager | null {
   return oauthManagerInstance;
 }
+function getOpenAIProvider(
+  openaiApiKey: string | undefined,
+  openaiBaseUrl: string | undefined,
+  openaiProviderConfig: IProviderConfig,
+  oauthManager: OAuthManager,
+): OpenAIProvider {
+  const openaiProvider = new OpenAIProvider(
+    openaiApiKey || undefined, // Pass undefined, not empty string, to allow OAuth fallback
+    openaiBaseUrl,
+    openaiProviderConfig,
+    oauthManager,
+  );
+  return openaiProvider;
+}
+function setAnotherOpenAIProvider(
+  providerManagerInstance: ProviderManager,
+  openaiApiKey: string | undefined,
+  openaiProviderConfig: IProviderConfig,
+  oauthManager: OAuthManager,
+): void {
+  const providerSettings = {
+    Fireworks: {
+      baseURL: 'https://api.fireworks.ai/inference/v1/',
+      model: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
+    },
+    OpenRouter: {
+      baseURL: 'https://openrouter.ai/api/v1/',
+      model: 'nvidia/nemotron-nano-9b-v2:free',
+    },
+    'Chutes.ai': {
+      baseURL: 'https://llm.chutes.ai/v1/',
+      model: 'zai-org/GLM-4.5-Air',
+    },
+    'Cerebras Code': {
+      baseURL: 'https://api.cerebras.ai/v1/',
+      model: 'qwen-3-coder-480b',
+    },
+    xAI: {
+      baseURL: 'https://api.x.ai/v1/',
+      model: 'grok-3',
+    },
+    'LM Studio': {
+      baseURL: 'http://127.0.0.1:1234/v1/',
+      model: 'gemma-3b-it',
+    },
+    'llama.cpp': {
+      baseURL: 'http://localhost:8080/v1/',
+      model: 'local-model',
+    },
+  };
+  for (const [providerName, config] of Object.entries(providerSettings)) {
+    const aliasProviderConfig = { ...openaiProviderConfig };
+    aliasProviderConfig.defaultModel = config.model;
+    const provider = new OpenAIProvider(
+      openaiApiKey || undefined, // Pass undefined, not empty string, to allow OAuth fallback
+      config.baseURL,
+      aliasProviderConfig,
+      oauthManager,
+    );
+    // Override the name to the specific provider name so it can be selected
+    Object.defineProperty(provider, 'name', {
+      value: providerName,
+      writable: false,
+      enumerable: true,
+      configurable: true,
+    });
+    providerManagerInstance.registerProvider(provider);
+  }
+}
+function getQwenProvider(
+  openaiProviderConfig: IProviderConfig,
+  oauthManager: OAuthManager,
+): OpenAIProvider {
+  const qwenProviderConfig = {
+    ...openaiProviderConfig,
+    // Override any OAuth-related settings that might affect provider identification
+    forceQwenOAuth: true,
+  };
+  const qwenProvider = new OpenAIProvider(
+    undefined, // No API key - force OAuth
+    'https://portal.qwen.ai/v1', // Set Qwen base URL to trigger OAuth enablement
+    qwenProviderConfig,
+    oauthManager,
+  );
+  // Override the name to 'qwen' so it can be selected
+  Object.defineProperty(qwenProvider, 'name', {
+    value: 'qwen',
+    writable: false,
+    enumerable: true,
+    configurable: true,
+  });
+  return qwenProvider;
+}
+function getOpenAIResponsesProvider(
+  openaiApiKey: string | undefined,
+  openaiBaseUrl: string | undefined,
+  allowBrowserEnvironment: boolean,
+): OpenAIResponsesProvider {
+  // Create provider config from user settings
+  const openaiProviderConfig = {
+    allowBrowserEnvironment,
+  };
+  const openaiResponsesProvider = new OpenAIResponsesProvider(
+    openaiApiKey || undefined, // Use same API key as OpenAI
+    openaiBaseUrl,
+    openaiProviderConfig,
+  );
+  return openaiResponsesProvider;
+}
+function getGeminiProvider(
+  oauthManager: OAuthManager,
+  config?: Config,
+): GeminiProvider {
+  // Register OAuth providers on-demand when creating actual providers
+  // Gemini Provider
+  const geminiProvider = new GeminiProvider(
+    undefined,
+    undefined,
+    config,
+    oauthManager,
+  );
+  if (config) {
+    geminiProvider.setConfig(config);
+  }
+  return geminiProvider;
+}
+function getAnthropicProvider(
+  authOnlyEnabled: boolean,
+  oauthManager: OAuthManager,
+  allowBrowserEnvironment: boolean,
+): AnthropicProvider {
+  let anthropicApiKey: string | undefined;
 
+  if (!authOnlyEnabled && process.env.ANTHROPIC_API_KEY) {
+    anthropicApiKey = sanitizeApiKey(process.env.ANTHROPIC_API_KEY);
+  }
+
+  const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
+  // Create provider config from user settings
+  const anthropicProviderConfig = {
+    allowBrowserEnvironment,
+  };
+  const anthropicProvider = new AnthropicProvider(
+    anthropicApiKey || undefined, // Pass undefined instead of empty string to allow OAuth fallback
+    anthropicBaseUrl,
+    anthropicProviderConfig,
+    oauthManager,
+  );
+  return anthropicProvider;
+}
 export { getProviderManager as providerManager };
