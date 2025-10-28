@@ -234,13 +234,7 @@ describe('InputPrompt paste functionality', () => {
     (mockBuffer.setText as Mock).mockClear();
     (mockBuffer.insert as Mock).mockClear();
 
-    // Ensure the handler was captured
-    if (!keypressHandler) {
-      console.warn('keypressHandler was not captured, skipping test');
-      return;
-    }
-
-    keypressHandler({
+    await sendKey({
       name: '',
       ctrl: false,
       meta: false,
@@ -248,28 +242,6 @@ describe('InputPrompt paste functionality', () => {
       paste: true,
       sequence: multiLineContent,
     });
-
-    // Wait for the event to be processed and React to update
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Check if the handler threw an error
-    if (
-      !(mockBuffer.insert as Mock).mock.calls.length &&
-      !(mockBuffer.handleInput as Mock).mock.calls.length
-    ) {
-      // Try calling the handler again with logging
-      const testKey = {
-        name: '',
-        ctrl: false,
-        meta: false,
-        shift: false,
-        paste: true,
-        sequence: multiLineContent,
-      };
-      console.log('Attempting to call handler again with key:', testKey);
-      keypressHandler(testKey);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
 
     // The buffer should have been updated with the paste content through handleInput
     expect(mockBuffer.handleInput).toHaveBeenCalledWith(
