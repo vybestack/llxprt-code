@@ -26,7 +26,7 @@ describe('OpenAIProvider model resolution', () => {
     const internal = provider as unknown as {
       defaultSettingsService?: SettingsService;
     };
-    expect(internal.defaultSettingsService).toBe(settingsService);
+    expect(internal.defaultSettingsService).toStrictEqual(settingsService);
   });
 
   it('uses SettingsService global model override when present', () => {

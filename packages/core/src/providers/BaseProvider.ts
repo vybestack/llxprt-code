@@ -30,6 +30,7 @@ import {
 } from '../runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import { MissingProviderRuntimeError } from './errors.js';
 import type {
   ProviderTelemetryContext,
@@ -108,14 +109,24 @@ export abstract class BaseProvider implements IProvider {
     this.baseProviderConfig = config;
     this.providerConfig = providerConfig;
     this.defaultConfig = globalConfig;
-    const fallbackSettingsService = settingsService ?? new SettingsService();
+
+    let fallbackSettingsService: SettingsService;
+    if (settingsService) {
+      fallbackSettingsService = settingsService;
+    } else {
+      try {
+        fallbackSettingsService = getSettingsService();
+      } catch {
+        fallbackSettingsService = new SettingsService();
+      }
+    }
+
     this.defaultSettingsService = fallbackSettingsService;
 
-    // Initialize auth precedence resolver
-    // OAuth enablement will be checked dynamically through the manager
     const precedenceConfig: AuthPrecedenceConfig = {
+      apiKey: config.apiKey,
       envKeyNames: config.envKeyNames || [],
-      isOAuthEnabled: config.isOAuthEnabled ?? false, // Use the config value, which can be updated
+      isOAuthEnabled: config.isOAuthEnabled ?? false,
       supportsOAuth: this.supportsOAuth(),
       oauthProvider: config.oauthProvider,
       providerId: this.name,
@@ -284,21 +295,14 @@ export abstract class BaseProvider implements IProvider {
       }
     }
 
+    const settingsService = this.resolveSettingsService();
+
     const token =
       (await this.authResolver.resolveAuthentication({
-        settingsService: this.resolveSettingsService(),
+        settingsService,
       })) ?? '';
 
-    if (typeof token === 'string' && token.trim() !== '') {
-      return token;
-    }
-
-    const directApiKey = this.baseProviderConfig.apiKey;
-    if (typeof directApiKey === 'string' && directApiKey.trim() !== '') {
-      return directApiKey;
-    }
-
-    return '';
+    return token;
   }
 
   /**
@@ -418,6 +422,7 @@ export abstract class BaseProvider implements IProvider {
         (await this.authResolver.resolveAuthentication({
           settingsService: this.resolveSettingsService(),
         })) ?? '';
+
       return token !== '';
     } catch {
       return false;
@@ -636,18 +641,10 @@ export abstract class BaseProvider implements IProvider {
 
     const resolvedModel = this.computeModel(settings);
     const resolvedBaseURL = this.computeBaseURL(settings);
-    let resolvedAuth =
+    const resolvedAuth =
       (await this.authResolver.resolveAuthentication({
         settingsService: settings,
       })) ?? '';
-
-    if (
-      (typeof resolvedAuth !== 'string' || resolvedAuth.trim() === '') &&
-      typeof this.baseProviderConfig.apiKey === 'string' &&
-      this.baseProviderConfig.apiKey.trim() !== ''
-    ) {
-      resolvedAuth = this.baseProviderConfig.apiKey;
-    }
 
     const resolved = {
       model: resolvedModel,

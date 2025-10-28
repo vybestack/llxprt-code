@@ -3,16 +3,17 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import type OpenAI from 'openai';
 import { IContent } from '../../services/history/IContent.js';
 
-const mockChatCreate = vi.hoisted(() => vi.fn());
-const mockOpenAIConstructor = vi.hoisted(() =>
-  vi.fn().mockImplementation(() => ({
+const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
+  const chatCreate = vi.fn();
+  const constructor = vi.fn().mockImplementation(() => ({
     chat: {
       completions: {
-        create: mockChatCreate,
+        create: chatCreate,
       },
     },
-  })),
-);
+  }));
+  return { mockChatCreate: chatCreate, mockOpenAIConstructor: constructor };
+});
 const mockSettingsService = vi.hoisted(() => ({
   set: vi.fn(),
   get: vi.fn(),
@@ -22,6 +23,9 @@ const mockSettingsService = vi.hoisted(() => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
   settings: { providers: { openai: {} } },
+  on: vi.fn(),
+  off: vi.fn(),
+  emit: vi.fn(),
 }));
 
 vi.mock('openai', () => ({
@@ -51,19 +55,24 @@ describe('OpenAIProvider model params and custom headers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSettingsService.getSettings.mockResolvedValue({});
-    mockChatCreate.mockResolvedValue({
-      choices: [
-        {
-          message: {
-            role: 'assistant',
-            content: 'Hello!',
+    mockChatCreate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield {
+          choices: [
+            {
+              delta: {
+                role: 'assistant',
+                content: 'Hello!',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 1,
+            completion_tokens: 1,
+            total_tokens: 2,
           },
-        },
-      ],
-      usage: {
-        prompt_tokens: 1,
-        completion_tokens: 1,
-        total_tokens: 2,
+        };
       },
     });
   });
@@ -73,7 +82,16 @@ describe('OpenAIProvider model params and custom headers', () => {
   });
 
   it('should include model parameters from settings in the OpenAI request body', async () => {
+    mockSettingsService.get.mockImplementation((key: string) => {
+      if (key === 'temperature') return 0.6;
+      if (key === 'top_p') return 0.9;
+      return undefined;
+    });
     mockSettingsService.getSettings.mockResolvedValue({
+      temperature: 0.6,
+      top_p: 0.9,
+    });
+    mockSettingsService.getProviderSettings.mockReturnValue({
       temperature: 0.6,
       top_p: 0.9,
     });
@@ -81,6 +99,8 @@ describe('OpenAIProvider model params and custom headers', () => {
     const provider = new OpenAIProvider('test-key', undefined, {
       getEphemeralSettings: () => ({
         streaming: 'disabled',
+        temperature: 0.6,
+        top_p: 0.9,
       }),
     });
 
@@ -151,6 +171,15 @@ describe('OpenAIProvider model params and custom headers', () => {
   });
 
   it('should configure socket-aware transport when socket settings are present', async () => {
+    vi.clearAllMocks();
+    mockOpenAIConstructor.mockImplementation(() => ({
+      chat: {
+        completions: {
+          create: mockChatCreate,
+        },
+      },
+    }));
+
     const provider = new OpenAIProvider(
       'test-key',
       'http://localhost:1234/v1/',
@@ -164,17 +193,19 @@ describe('OpenAIProvider model params and custom headers', () => {
       },
     );
 
-    await (
-      provider as unknown as {
-        getClient: () => Promise<unknown>;
-      }
-    ).getClient();
+    const generator = provider.generateChatCompletion(createBasicMessages());
+    await generator.next();
 
-    const constructorArgs = mockOpenAIConstructor.mock.calls.at(
-      -1,
-    )?.[0] as Record<string, unknown>;
+    const constructorCalls = mockOpenAIConstructor.mock.calls;
+    expect(constructorCalls.length).toBeGreaterThan(0);
+
+    const constructorArgs = constructorCalls.at(-1)?.[0] as Record<
+      string,
+      unknown
+    >;
 
     expect(constructorArgs).toBeDefined();
-    expect(typeof constructorArgs.fetch).toBe('function');
+    expect(constructorArgs.httpAgent).toBeDefined();
+    expect(constructorArgs.httpsAgent).toBeDefined();
   });
 });

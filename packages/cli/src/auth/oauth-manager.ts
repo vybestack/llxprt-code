@@ -455,8 +455,9 @@ export class OAuthManager {
       }
 
       // 2. Check if token expires within 30 seconds (30000ms)
-      const now = Date.now();
-      const thirtySecondsFromNow = now + 30000;
+      // Note: token.expiry is in seconds, not milliseconds
+      const now = Date.now() / 1000; // Convert to seconds
+      const thirtySecondsFromNow = now + 30;
 
       if (token.expiry <= thirtySecondsFromNow) {
         // 3. Token is expired or about to expire, try refresh

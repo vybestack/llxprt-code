@@ -17,6 +17,7 @@ import {
   getActiveProviderRuntimeContext,
   peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
+  setProviderRuntimeContextFallback,
 } from './providerRuntimeContext.js';
 import {
   getSettingsService,
@@ -28,6 +29,13 @@ describe('providerRuntimeContext', () => {
   beforeEach(() => {
     resetSettingsService();
     clearActiveProviderRuntimeContext();
+    setProviderRuntimeContextFallback(() =>
+      createProviderRuntimeContext({
+        settingsService: new SettingsService(),
+        runtimeId: 'fallback-runtime',
+        metadata: { source: 'test-fallback' },
+      }),
+    );
   });
 
   it('returns singleton-backed fallback when no active context is registered', () => {

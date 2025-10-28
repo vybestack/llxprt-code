@@ -391,7 +391,7 @@ describe.skipIf(skipInCI)(
         const expiringToken = {
           access_token: 'expiring_token',
           refresh_token: 'refresh_token',
-          expiry: Date.now() + 10000, // Expires in 10 seconds
+          expiry: Date.now() / 1000 + 10, // Expires in 10 seconds (in seconds)
           token_type: 'Bearer' as const,
           scope: 'read',
         };

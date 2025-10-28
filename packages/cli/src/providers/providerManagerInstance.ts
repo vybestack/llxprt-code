@@ -183,8 +183,12 @@ export function createProviderManager(
     addItem,
   );
 
+  // Check if authOnly mode is enabled - if so, ignore API keys
+  const ephemeralSettings = config?.getEphemeralSettings() || {};
+  const authOnlyEnabled = ephemeralSettings.authOnly === true;
+
   let openaiApiKey: string | undefined;
-  if (process.env.OPENAI_API_KEY) {
+  if (process.env.OPENAI_API_KEY && !authOnlyEnabled) {
     openaiApiKey = sanitizeApiKey(process.env.OPENAI_API_KEY);
   }
 
@@ -197,11 +201,21 @@ export function createProviderManager(
   }
 
   const settingsData = loadedSettings?.merged || {};
+  // Merge settings from both loaded settings and ephemeral settings for runtime config
+  // When authOnly is enabled, enable openaiResponses to provide additional options
+  const effectiveOpenaiResponsesEnabled: boolean | undefined =
+    ephemeralSettings.openaiResponsesEnabled !== undefined
+      ? Boolean(ephemeralSettings.openaiResponsesEnabled)
+      : authOnlyEnabled
+        ? true
+        : typeof settingsData.openaiResponsesEnabled === 'boolean'
+          ? settingsData.openaiResponsesEnabled
+          : undefined;
   const openaiProviderConfig = {
     enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
     textToolCallModels: settingsData.textToolCallModels,
     providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
-    openaiResponsesEnabled: settingsData.openaiResponsesEnabled,
+    openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
     allowBrowserEnvironment,
     getEphemeralSettings: config
       ? () => config.getEphemeralSettings()
@@ -236,7 +250,7 @@ export function createProviderManager(
 
   void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
 
-  if (settingsData.openaiResponsesEnabled) {
+  if (effectiveOpenaiResponsesEnabled) {
     const openaiResponsesProvider = new OpenAIResponsesProvider(
       openaiApiKey ?? undefined,
       openaiBaseUrl,
@@ -246,29 +260,29 @@ export function createProviderManager(
   }
 
   let anthropicApiKey: string | undefined;
-  if (process.env.ANTHROPIC_API_KEY) {
+  if (process.env.ANTHROPIC_API_KEY && !authOnlyEnabled) {
     anthropicApiKey = sanitizeApiKey(process.env.ANTHROPIC_API_KEY);
   }
   const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
   const anthropicProviderConfig = {
     allowBrowserEnvironment,
   };
+  // Always pass oauthManager to Anthropic provider to enable OAuth as an option
   const anthropicProvider = new AnthropicProvider(
     anthropicApiKey ?? undefined,
     anthropicBaseUrl,
     anthropicProviderConfig,
-    anthropicApiKey ? undefined : oauthManager,
+    oauthManager,
   );
   manager.registerProvider(anthropicProvider);
 
-  if (!anthropicApiKey) {
-    void ensureOAuthProviderRegistered(
-      'anthropic',
-      oauthManager,
-      tokenStore,
-      addItem,
-    );
-  }
+  // Always register OAuth provider for Anthropic to make it available as an option
+  void ensureOAuthProviderRegistered(
+    'anthropic',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
 
   manager.setActiveProvider('gemini');
   attachAddItemToOAuthProviders(oauthManager, addItem);

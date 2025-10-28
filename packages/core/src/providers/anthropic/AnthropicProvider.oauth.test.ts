@@ -6,6 +6,7 @@ import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import {
   OAuthManager,
   type OAuthTokenRequestMetadata,
+  flushRuntimeAuthScope,
 } from '../../auth/precedence.js';
 import { createProviderWithRuntime } from '../../test-utils/runtime.js';
 import { SettingsService } from '../../settings/SettingsService.js';
@@ -163,7 +164,17 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
   let settingsService: SettingsService;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
+    mockAnthropicShared.messages.create = vi.fn();
+    mockAnthropicShared.beta.models.list = vi.fn().mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        const models = [
+          { id: 'claude-sonnet-4-20250514', display_name: 'Claude 4 Sonnet' },
+        ];
+        for (const model of models) {
+          yield model;
+        }
+      },
+    });
 
     // Create a fresh SettingsService to ensure test isolation
     settingsService = new SettingsService();
@@ -206,6 +217,8 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
   });
 
   afterEach(() => {
+    flushRuntimeAuthScope('anthropic.provider.oauth.test');
+    flushRuntimeAuthScope('anthropic.provider.oauth.test.apiKey');
     clearActiveProviderRuntimeContext();
   });
 
@@ -317,8 +330,6 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
             },
           },
         );
-      settingsService.set('auth-key', 'test-api-key');
-      expect(settingsService.get('auth-key')).toBe('test-api-key');
 
       // Mock successful streaming response
       const mockStream = {

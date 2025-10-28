@@ -51,6 +51,10 @@ describe('GeminiChat runtime context', () => {
     settingsService = new SettingsService();
     config = new Config(createConfigParams(settingsService));
 
+    settingsService.set('providers.stub.baseURL', 'https://stub.example.com');
+    settingsService.set('providers.stub.apiKey', 'stub-api-key');
+    settingsService.set('providers.stub.model', 'stub-model');
+
     const runtime = createProviderRuntimeContext({
       settingsService,
       config,
@@ -84,6 +88,7 @@ describe('GeminiChat runtime context', () => {
       generateChatCompletion: generateChatCompletionMock,
       getServerTools: () => [],
       invokeServerTool: vi.fn(),
+      getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
 
     manager.registerProvider(provider);

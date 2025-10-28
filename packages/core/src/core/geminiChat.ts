@@ -895,7 +895,7 @@ export class GeminiChat {
 
         for (
           let attempt = 0;
-          attempt <= INVALID_CONTENT_RETRY_OPTIONS.maxAttempts;
+          attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts;
           attempt++
         ) {
           try {
