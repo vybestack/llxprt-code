@@ -10,7 +10,7 @@ import { ComplexityAnalyzer } from './complexity-analyzer.js';
 describe('ComplexityAnalyzer', () => {
   it('treats very long instructions as complex even without explicit task lists', () => {
     const analyzer = new ComplexityAnalyzer({
-      complexityThreshold: 0.5,
+      complexityThreshold: 0.6,
       minTasksForSuggestion: 3,
     });
 
@@ -26,9 +26,9 @@ describe('ComplexityAnalyzer', () => {
     expect(result.shouldSuggestTodos).toBe(true);
   });
 
-  it('counts file references toward task detection for todo suggestions', () => {
+  it('does not count file references toward task detection for todo suggestions', () => {
     const analyzer = new ComplexityAnalyzer({
-      complexityThreshold: 0.5,
+      complexityThreshold: 0.6,
       minTasksForSuggestion: 3,
     });
 
@@ -37,11 +37,9 @@ describe('ComplexityAnalyzer', () => {
 
     const result = analyzer.analyzeComplexity(message);
 
-    expect(result.detectedTasks).toEqual([
-      'src/app.ts',
-      'src/index.ts',
-      'src/utils/helpers.ts',
-    ]);
+    // File references should no longer be counted as tasks
+    expect(result.detectedTasks).toEqual([]);
+    expect(result.shouldSuggestTodos).toBe(false);
   });
 
   it('flags multi-sentence narratives as complex even under 600 characters', () => {
@@ -57,8 +55,8 @@ describe('ComplexityAnalyzer', () => {
 
   it('treats a score equal to the threshold as complex', () => {
     const analyzer = new ComplexityAnalyzer({
-      complexityThreshold: 0.5,
-      minTasksForSuggestion: 5,
+      complexityThreshold: 0.6,
+      minTasksForSuggestion: 3,
     });
 
     const message =
@@ -66,7 +64,31 @@ describe('ComplexityAnalyzer', () => {
 
     const result = analyzer.analyzeComplexity(message);
 
-    expect(result.complexityScore).toBeGreaterThanOrEqual(0.5);
+    expect(result.complexityScore).toBeGreaterThanOrEqual(0.6);
     expect(result.isComplex).toBe(true);
+  });
+
+  it('requires 3 tasks to reach 0.5 complexity score', () => {
+    const analyzer = new ComplexityAnalyzer();
+
+    const message = 'First task. Second task. Third task.';
+
+    const result = analyzer.analyzeComplexity(message);
+
+    // 3 tasks should give us exactly 0.5 score
+    expect(result.complexityScore).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it('gives reduced weight to 2 tasks after changes', () => {
+    const analyzer = new ComplexityAnalyzer();
+
+    const message = 'First task. Second task.';
+
+    const result = analyzer.analyzeComplexity(message);
+
+    // 2 tasks should give 0.5 score after our changes (2 tasks x 0.25 each)
+    expect(result.complexityScore).toBe(0.5);
+    // With new threshold of 0.6, 0.5 is below threshold so not complex
+    expect(result.isComplex).toBe(false);
   });
 });

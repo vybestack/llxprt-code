@@ -1273,7 +1273,8 @@ describe('Gemini Client (client.ts)', () => {
         },
       ]);
 
-      const todoSuffixText = 'Use TODO List to organize this effort.';
+      const todoSuffixText =
+        'Consider using a todo list to organize this multi-step work.';
       const suffixPart = lastRequest?.find(
         (part) =>
           typeof part === 'object' &&
@@ -1350,7 +1351,8 @@ describe('Gemini Client (client.ts)', () => {
           typeof part === 'object' &&
           part !== null &&
           'text' in part &&
-          part.text === 'Use TODO List to organize this effort.',
+          part.text ===
+            'Consider using a todo list to organize this multi-step work.',
       ) as Part | undefined;
       expect(suffixPart).toBeUndefined();
     });
@@ -1454,12 +1456,15 @@ describe('Gemini Client (client.ts)', () => {
           typeof part === 'object' &&
           part !== null &&
           'text' in part &&
-          part.text === 'Use TODO List to organize this effort.',
+          part.text ===
+            'Consider using a todo list to organize this multi-step work.',
       ) as Part | undefined;
-      expect(suffixPart?.text).toBe('Use TODO List to organize this effort.');
+      expect(suffixPart?.text).toBe(
+        'Consider using a todo list to organize this multi-step work.',
+      );
     });
 
-    it('injects a model reminder after four tool calls even without complexity trigger', async () => {
+    it('injects a model reminder after five tool calls even without complexity trigger', async () => {
       // Arrange
       (
         client as unknown as { complexityAnalyzer: ComplexityAnalyzer }
@@ -1474,14 +1479,27 @@ describe('Gemini Client (client.ts)', () => {
         }),
       } as unknown as ComplexityAnalyzer;
 
-      (
-        client as unknown as { todoReminderService: TodoReminderService }
-      ).todoReminderService = new TodoReminderService();
+      // We need to set up a history that contains a complex user request
+      // since we now check for complexity in the last user message
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'I need to configure the build system, implement the feature, test it, and deploy it to production',
+              },
+            ],
+          },
+        ]),
+      };
+      client['chat'] = mockChat as GeminiChat;
 
       mockTurnRunFn.mockReset();
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
-          for (let i = 0; i < 4; i++) {
+          for (let i = 0; i < 5; i++) {
             yield {
               type: GeminiEventType.ToolCallRequest,
               value: { name: 'shell_execute' },
@@ -1491,17 +1509,6 @@ describe('Gemini Client (client.ts)', () => {
       );
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
-
-      const mockChat: Partial<GeminiChat> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-      };
-      client['chat'] = mockChat as GeminiChat;
-
-      const mockGenerator: Partial<ContentGenerator> = {
-        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
-      };
-      client['contentGenerator'] = mockGenerator as ContentGenerator;
 
       const stream = client.sendMessageStream(
         [{ text: 'Run tools until complete.' }],
@@ -1525,7 +1532,7 @@ describe('Gemini Client (client.ts)', () => {
       expect(reminderEntry).toBeDefined();
     });
 
-    it('escalates to a strong model reminder after more than four tool calls', async () => {
+    it('escalates to a strong model reminder after more than five tool calls', async () => {
       // Arrange
       (
         client as unknown as { complexityAnalyzer: ComplexityAnalyzer }
@@ -1540,14 +1547,34 @@ describe('Gemini Client (client.ts)', () => {
         }),
       } as unknown as ComplexityAnalyzer;
 
-      (
-        client as unknown as { todoReminderService: TodoReminderService }
-      ).todoReminderService = new TodoReminderService();
+      // Set up mock chat with a complex user request in history
+      // since we now check for complexity in the last user message
+      const mockHistoryService = {
+        getTotalTokens: vi.fn().mockReturnValue(100),
+        clear: vi.fn(),
+      };
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([
+          {
+            role: 'user',
+            parts: [
+              {
+                text: 'I need to configure the build system, implement the feature, test it, and deploy it to production',
+              },
+            ],
+          },
+        ]),
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
+        setHistory: vi.fn(),
+        sendMessage: vi.fn().mockResolvedValue({ text: 'Test response' }),
+      };
+      client['chat'] = mockChat as GeminiChat;
 
       mockTurnRunFn.mockReset();
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
-          for (let i = 0; i < 5; i++) {
+          for (let i = 0; i < 6; i++) {
             yield {
               type: GeminiEventType.ToolCallRequest,
               value: { name: 'shell_execute' },
@@ -1557,12 +1584,6 @@ describe('Gemini Client (client.ts)', () => {
       );
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
-
-      const mockChat: Partial<GeminiChat> = {
-        addHistory: vi.fn(),
-        getHistory: vi.fn().mockReturnValue([]),
-      };
-      client['chat'] = mockChat as GeminiChat;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),

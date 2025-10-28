@@ -53,11 +53,12 @@ import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
-const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
+const TODO_PROMPT_SUFFIX =
+  'Consider using a todo list to organize this multi-step work.';
 const TOOL_BASE_TODO_MESSAGE =
-  'After this next tool call I need to call todo_write and create a todo list to organize this effort.';
+  'Consider using a todo list to help organize your work if this is a complex task.';
 const TOOL_ESCALATED_TODO_MESSAGE =
-  'I have already made several tool calls without a todo list. Immediately call todo_write after this next tool call to organize the work.';
+  'This task seems to involve multiple steps. A todo list might help track your progress.';
 
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
@@ -311,14 +312,49 @@ export class GeminiClient {
 
     this.toolActivityCount += 1;
 
-    if (this.toolActivityCount > 4) {
+    // Check if the current request is complex enough to warrant a todo reminder
+    const isComplex = this.isCurrentRequestComplex();
+
+    if (this.toolActivityCount > 5 && isComplex) {
       this.toolCallReminderLevel = 'escalated';
     } else if (
-      this.toolActivityCount === 4 &&
-      this.toolCallReminderLevel === 'none'
+      this.toolActivityCount === 5 &&
+      this.toolCallReminderLevel === 'none' &&
+      isComplex
     ) {
       this.toolCallReminderLevel = 'base';
     }
+  }
+
+  /**
+   * Analyzes the current user request to determine if it's complex enough
+   * to warrant todo reminders
+   */
+  private isCurrentRequestComplex(): boolean {
+    // If we have recent history, analyze the last user message
+    const chatHistory = this.chat?.getHistory() || [];
+    if (chatHistory.length === 0) return false;
+
+    // Find the last user message
+    const lastUserMessage = chatHistory
+      .slice()
+      .reverse()
+      .find((msg) => msg.role === 'user');
+
+    if (!lastUserMessage) return false;
+
+    // Extract text content from all parts
+    const messageText =
+      lastUserMessage.parts
+        ?.filter((part) => 'text' in part)
+        .map((part) => part.text || '')
+        .join(' ') || '';
+
+    if (!messageText.trim()) return false;
+
+    // Use complexity analyzer to determine if this is complex
+    const analysis = this.complexityAnalyzer.analyzeComplexity(messageText);
+    return analysis.isComplex;
   }
 
   async addHistory(content: Content) {
@@ -855,10 +891,12 @@ export class GeminiClient {
     // Track the original model from the first call to detect model switching
     const initialModel = originalModel || this.config.getModel();
 
-    const compressed = await this.tryCompressChat(prompt_id);
-
-    if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
-      yield { type: GeminiEventType.ChatCompressed, value: compressed };
+    // Only try compression if chat is properly initialized
+    if (this.chat && typeof this.chat.getHistoryService === 'function') {
+      const compressed = await this.tryCompressChat(prompt_id);
+      if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
+        yield { type: GeminiEventType.ChatCompressed, value: compressed };
+      }
     }
 
     // Prevent context updates from being sent while a tool call is
