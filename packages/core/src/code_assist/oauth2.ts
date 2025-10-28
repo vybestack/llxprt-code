@@ -47,8 +47,7 @@ const OAUTH_SCOPE = [
 ];
 
 const HTTP_REDIRECT = 301;
-const SIGN_IN_SUCCESS_URL =
-  'https://developers.google.com/gemini-code-assist/auth_success_gemini';
+const SIGN_IN_SUCCESS_URL = 'https://vybestack.dev/google/login.html';
 const SIGN_IN_FAILURE_URL =
   'https://developers.google.com/gemini-code-assist/auth_failure_gemini';
 
