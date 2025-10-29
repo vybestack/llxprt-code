@@ -58,8 +58,8 @@ export function WorkspaceMigrationDialog(props: {
           <>
             <Text>
               The following extensions failed to migrate. Please try installing
-              them manually. To see other changes, LLxprt Code must be restarted.
-              Press {"'q'"} to quit.
+              them manually. To see other changes, LLxprt Code must be
+              restarted. Press {"'q'"} to quit.
             </Text>
             <Box flexDirection="column" marginTop={1} marginLeft={2}>
               {failedExtensions.map((failed) => (
