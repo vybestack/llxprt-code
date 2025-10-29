@@ -10,10 +10,15 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../../../runtime/providerRuntimeContext.js';
+import { createRuntimeInvocationContext } from '../../../runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
 import type { Config } from '../../../config/config.js';
 import { AnthropicProvider } from '../AnthropicProvider.js';
 import Anthropic from '@anthropic-ai/sdk';
+import {
+  createProviderCallOptions,
+  type ProviderCallOptionsInit,
+} from '../../../test-utils/providerCallOptions.js';
 
 vi.mock('../../core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
@@ -106,6 +111,18 @@ const createSettings = (runtimeId: string): SettingsService => {
   return svc;
 };
 
+function buildCallOptions(
+  provider: AnthropicProvider,
+  overrides: Omit<ProviderCallOptionsInit, 'providerName'> = {},
+) {
+  const { contents = [], ...rest } = overrides;
+  return createProviderCallOptions({
+    providerName: provider.name,
+    contents,
+    ...rest,
+  });
+}
+
 beforeEach(() => {
   FakeAnthropicClass.reset();
   // Set up default runtime context for tests
@@ -127,35 +144,24 @@ describe('Anthropic provider stateless contract tests', () => {
     const baselineInstances = FakeAnthropicClass.created.length;
     const settingsA = createSettings('runtime-A');
     const settingsB = createSettings('runtime-B');
-    const configA = createRuntimeConfigStub(settingsA) as Config;
-    const configB = createRuntimeConfigStub(settingsB) as Config;
-    const runtimeA = createProviderRuntimeContext({
-      runtimeId: 'runtime-A',
-      settingsService: settingsA,
-      config: configA,
-    });
-    const runtimeB = createProviderRuntimeContext({
-      runtimeId: 'runtime-B',
-      settingsService: settingsB,
-      config: configB,
-    });
-
     provider.setAuthToken('sk-shared-token');
 
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsA,
-        runtime: runtimeA,
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsA,
+          runtimeId: 'runtime-A',
+        }),
+      )
       .next();
 
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsB,
-        runtime: runtimeB,
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsB,
+          runtimeId: 'runtime-B',
+        }),
+      )
       .next();
 
     const runtimeClients = FakeAnthropicClass.created.slice(baselineInstances);
@@ -184,29 +190,35 @@ describe('Anthropic provider stateless contract tests', () => {
 
     provider.setAuthToken('token-A');
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsA,
-        runtime: runtimeA,
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsA,
+          runtime: runtimeA,
+          config: configA,
+        }),
+      )
       .next();
 
     provider.setAuthToken('token-B');
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsB,
-        runtime: runtimeB,
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsB,
+          runtime: runtimeB,
+          config: configB,
+        }),
+      )
       .next();
 
     provider.setAuthToken('token-A');
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsA,
-        runtime: runtimeA,
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsA,
+          runtime: runtimeA,
+          config: configA,
+        }),
+      )
       .next();
 
     const runtimeClients = FakeAnthropicClass.created.slice(baselineInstances);
@@ -223,5 +235,57 @@ describe('Anthropic provider stateless contract tests', () => {
     // Should return params from SettingsService or undefined, but not throw
     const params = provider.getModelParams();
     expect(params === undefined || typeof params === 'object').toBe(true);
+  });
+
+  it('reads request overrides from invocation ephemerals when config is inert', async () => {
+    const provider = new TestAnthropicProvider();
+    const settings = createSettings('runtime-invocation');
+    const getEphemerals = vi.fn(() => {
+      throw new Error('config ephemerals should not be accessed');
+    });
+    const config = createRuntimeConfigStub(settings, {
+      getEphemeralSettings: getEphemerals,
+    }) as Config;
+    const runtime = createProviderRuntimeContext({
+      runtimeId: 'runtime-invocation',
+      settingsService: settings,
+      config,
+    });
+    const invocation = createRuntimeInvocationContext({
+      runtime,
+      settings,
+      providerName: 'anthropic',
+      ephemeralsSnapshot: {
+        streaming: 'enabled',
+        anthropic: {
+          top_k: 5,
+          temperature: 0.3,
+        },
+      },
+      userMemory: 'cached-memory-profile',
+      metadata: { testCase: 'anthropic-invocation-ephemerals' },
+    });
+
+    provider.setAuthToken('token-invocation');
+    await provider
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings,
+          runtime,
+          config,
+          invocation,
+        }),
+      )
+      .next();
+
+    const lastRequest = FakeAnthropicClass.requests.at(-1)?.request as
+      | Record<string, unknown>
+      | undefined;
+    expect(lastRequest).toBeDefined();
+    expect(lastRequest).toMatchObject({
+      top_k: 5,
+      temperature: 0.3,
+    });
+    expect(getEphemerals).not.toHaveBeenCalled();
   });
 });

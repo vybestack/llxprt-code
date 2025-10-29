@@ -6,3 +6,4 @@
 
 export * from './mock-tool.js';
 export * from './runtime.js';
+export * from './providerCallOptions.js';

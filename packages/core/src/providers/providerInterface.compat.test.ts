@@ -13,8 +13,13 @@ import {
 } from './BaseProvider.js';
 import type { IContent } from '../services/history/IContent.js';
 import { IModel } from './IModel.js';
-import { SettingsService } from '../settings/SettingsService.js';
 import type { Config } from '../config/config.js';
+import { createProviderWithRuntime } from '../test-utils/runtime.js';
+import {
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
+import { createProviderCallOptions } from '../test-utils/providerCallOptions.js';
 
 const asContent = (text: string): IContent => ({
   speaker: 'human',
@@ -70,23 +75,39 @@ describe('generateChatCompletion compatibility', () => {
   it('normalizes legacy arguments into options object', async () => {
     const message = asContent('legacy-call');
 
-    await legacyProvider.generateChatCompletion([message]).next();
+    const options = createProviderCallOptions({
+      providerName: legacyProvider.name,
+      contents: [message],
+    });
+
+    await legacyProvider.generateChatCompletion(options).next();
 
     expect(legacyProvider.lastOptions?.contents).toEqual([message]);
     expect(legacyProvider.lastOptions?.tools).toBeUndefined();
-    expect(legacyProvider.lastOptions?.settings).toBeInstanceOf(
-      SettingsService,
-    );
+    expect(legacyProvider.lastOptions?.settings).toBe(options.settings);
   });
 
   it('honours provided GenerateChatOptions payload', async () => {
-    const provider = new OptionRecorderProvider({ name: 'compat' });
-    const customSettings = new SettingsService();
-    customSettings.set('auth-key', 'options-token');
+    const {
+      provider,
+      runtime,
+      settingsService: customSettings,
+    } = createProviderWithRuntime<OptionRecorderProvider>(
+      ({ settingsService: svc }) => {
+        svc.set('auth-key', 'options-token');
+        return new OptionRecorderProvider({ name: 'compat' });
+      },
+      {
+        runtimeId: 'compat.options',
+      },
+    );
     const fakeConfig = {
       getUserMemory: () => 'compat-memory',
       getModel: () => 'compat-model',
     } as unknown as Config;
+
+    provider.setRuntimeSettingsService(customSettings);
+    provider.setConfig?.(fakeConfig);
 
     const options = {
       contents: [asContent('options-call')],
@@ -95,7 +116,16 @@ describe('generateChatCompletion compatibility', () => {
       metadata: { requestId: 'options-test' },
     } satisfies Parameters<OptionRecorderProvider['generateChatCompletion']>[0];
 
-    await provider.generateChatCompletion(options).next();
+    if (!runtime.config) {
+      runtime.config = fakeConfig;
+    }
+
+    setActiveProviderRuntimeContext(runtime);
+    try {
+      await provider.generateChatCompletion(options).next();
+    } finally {
+      clearActiveProviderRuntimeContext();
+    }
 
     expect(provider.lastOptions?.settings).toBe(customSettings);
     expect(provider.lastOptions?.config).toBe(fakeConfig);

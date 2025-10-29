@@ -3,6 +3,7 @@ import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '../../settings/SettingsService.js';
 import type { Config } from '../../config/config.js';
 import { createRuntimeConfigStub } from '../../test-utils/runtime.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import { BaseProvider } from '../BaseProvider.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import {
@@ -83,12 +84,22 @@ describe('ProviderManager runtime guard plumbing', () => {
     manager.setActiveProvider(provider.name);
 
     await collect(
-      manager
-        .getActiveProvider()
-        .generateChatCompletion({ contents: [prompt] }),
+      manager.getActiveProvider().generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [prompt],
+          settings: settingsService,
+          config,
+          runtime: runtimeContext,
+        }),
+      ),
     );
 
     expect(provider.lastNormalizedOptions?.settings).toBe(settingsService);
+    expect(provider.lastNormalizedOptions?.invocation).toBeDefined();
+    expect(provider.lastNormalizedOptions?.invocation.settings).toBe(
+      settingsService,
+    );
   });
 
   it('injects runtime config into BaseProvider before invocation', async () => {
@@ -119,12 +130,50 @@ describe('ProviderManager runtime guard plumbing', () => {
     manager.setActiveProvider(provider.name);
 
     await collect(
-      manager
-        .getActiveProvider()
-        .generateChatCompletion({ contents: [prompt] }),
+      manager.getActiveProvider().generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [prompt],
+          settings: settingsService,
+          config,
+          runtime: runtimeContext,
+        }),
+      ),
     );
 
     expect(provider.lastNormalizedOptions?.config).toBe(config);
+    expect(provider.lastNormalizedOptions?.invocation).toBeDefined();
+    expect(typeof provider.lastNormalizedOptions?.invocation.runtimeId).toBe(
+      'string',
+    );
+  });
+
+  it('captures provider-scoped ephemerals in the invocation snapshot', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('streaming', 'enabled');
+    settingsService.setProviderSetting('openai', 'temperature', 0.5);
+    settingsService.setProviderSetting('openai', 'apiKey', 'test-key');
+    const config = createRuntimeConfigStub(settingsService) as Config;
+    const manager = new ProviderManager({ settingsService, config });
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: settingsService,
+        config,
+        runtime: {
+          runtimeId: 'runtime-with-ephemerals',
+          settingsService,
+          config,
+        },
+      },
+      'openai',
+    );
+
+    expect(normalized.invocation.ephemerals.streaming).toBe('enabled');
+    expect(normalized.invocation.ephemerals.openai).toMatchObject({
+      temperature: 0.5,
+    });
   });
 });
 

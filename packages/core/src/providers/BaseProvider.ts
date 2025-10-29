@@ -29,6 +29,10 @@ import {
   setActiveProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import {
+  createRuntimeInvocationContext,
+  type RuntimeInvocationContext,
+} from '../runtime/RuntimeInvocationContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import { MissingProviderRuntimeError } from './errors.js';
@@ -59,6 +63,7 @@ export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
   config?: Config;
   userMemory?: UserMemoryInput; // @plan PLAN-20251023-STATELESS-HARDENING.P08: User memory from runtime context
   runtime?: ProviderRuntimeContext;
+  invocation: RuntimeInvocationContext;
   tools?: ProviderToolset;
   metadata: Record<string, unknown>;
   resolved: {
@@ -650,6 +655,7 @@ export abstract class BaseProvider implements IProvider {
       model: resolvedModel,
       baseURL: resolvedBaseURL,
       authToken: resolvedAuth,
+      telemetry: providedOptions.resolved?.telemetry,
     };
 
     const guard = this.assertRuntimeContext({
@@ -662,6 +668,27 @@ export abstract class BaseProvider implements IProvider {
       stage: 'normalizeGenerateChatOptions',
     });
     const finalConfig = guard.runtime.config ?? configCandidate ?? undefined;
+    const normalizedRuntime: ProviderRuntimeContext = {
+      ...guard.runtime,
+      metadata: guard.metadata,
+      config: finalConfig,
+    };
+
+    const invocation =
+      providedOptions.invocation ??
+      createRuntimeInvocationContext({
+        runtime: normalizedRuntime,
+        settings,
+        providerName: this.name,
+        ephemeralsSnapshot: this.buildEphemeralsSnapshot(settings),
+        telemetry: resolved.telemetry,
+        metadata: guard.metadata,
+        userMemory:
+          typeof providedOptions.userMemory === 'string'
+            ? providedOptions.userMemory
+            : undefined,
+        fallbackRuntimeId: `${this.name}:normalizeGenerateChatOptions`,
+      });
 
     return {
       ...providedOptions,
@@ -669,10 +696,22 @@ export abstract class BaseProvider implements IProvider {
       tools: providedOptions.tools ?? maybeTools,
       settings,
       config: finalConfig,
-      runtime: guard.runtime,
+      runtime: normalizedRuntime,
       metadata: guard.metadata,
       resolved,
+      invocation,
     };
+  }
+
+  private buildEphemeralsSnapshot(
+    settings: SettingsService,
+  ): Record<string, unknown> {
+    const snapshot: Record<string, unknown> = {
+      ...settings.getAllGlobalSettings(),
+    };
+    const providerEphemerals = settings.getProviderSettings(this.name);
+    snapshot[this.name] = { ...providerEphemerals };
+    return snapshot;
   }
 
   /**
@@ -695,6 +734,9 @@ export abstract class BaseProvider implements IProvider {
     const missing: string[] = [];
     if (!input.settings) {
       missing.push('settings');
+    }
+    if (!input.config) {
+      missing.push('config');
     }
     const resolvedMissing: string[] = [];
     if (!input.resolved) {

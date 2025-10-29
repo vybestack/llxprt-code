@@ -112,9 +112,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     options?: NormalizedGenerateChatOptions,
   ): { httpAgent: http.Agent; httpsAgent: https.Agent } | undefined {
     // Get socket configuration from call options or fallback to provider config
+    const settingsFromInvocation = options?.invocation?.ephemerals;
     const settings =
-      options?.config?.getEphemeralSettings?.() ||
-      this.providerConfig?.getEphemeralSettings?.() ||
+      settingsFromInvocation ??
+      this.providerConfig?.getEphemeralSettings?.() ??
       {};
 
     // Check if any socket settings are explicitly configured
@@ -185,7 +186,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   ): Record<string, unknown> | undefined {
     const providerSettings =
       options.settings?.getProviderSettings(this.name) ?? {};
-    const configEphemerals = options.config?.getEphemeralSettings?.() ?? {};
+    const configEphemerals = options.invocation?.ephemerals ?? {};
 
     const filteredProviderParams = filterOpenAIRequestParams(providerSettings);
     const filteredEphemeralParams = filterOpenAIRequestParams(configEphemerals);
@@ -695,7 +696,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const { contents, tools, metadata } = options;
     const model = options.resolved.model || this.getDefaultModel();
     const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
-    const ephemeralSettings = options.config?.getEphemeralSettings?.() || {};
+    const ephemeralSettings = options.invocation?.ephemerals ?? {};
 
     if (logger.enabled) {
       const resolved = options.resolved;
@@ -794,8 +795,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
      * @requirement:REQ-SP4-003
      * Source user memory from normalized options instead of global config
      */
-    const userMemory = await resolveUserMemory(options.userMemory, () =>
-      options.runtime?.config?.getUserMemory?.(),
+    const userMemory = await resolveUserMemory(
+      options.userMemory,
+      () => options.invocation?.userMemory,
     );
     const systemPrompt = await getCoreSystemPromptAsync(
       userMemory,

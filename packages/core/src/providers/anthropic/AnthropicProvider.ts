@@ -946,13 +946,13 @@ export class AnthropicProvider extends BaseProvider {
     const currentModel = options.resolved.model;
 
     // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
-    const userMemory = await resolveUserMemory(options.userMemory, () =>
-      options.runtime?.config?.getUserMemory?.(),
+    const userMemory = await resolveUserMemory(
+      options.userMemory,
+      () => options.invocation?.userMemory,
     );
 
     // Derive model parameters on demand from ephemeral settings
-    const configEphemeralSettings =
-      options.config?.getEphemeralSettings?.() ?? {};
+    const configEphemeralSettings = options.invocation?.ephemerals ?? {};
     const requestOverrides =
       (configEphemeralSettings['anthropic'] as
         | Record<string, unknown>

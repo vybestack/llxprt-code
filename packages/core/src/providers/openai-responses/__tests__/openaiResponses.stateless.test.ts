@@ -11,10 +11,15 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../../../runtime/providerRuntimeContext.js';
+import { createRuntimeInvocationContext } from '../../../runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
 import type { Config } from '../../../config/config.js';
 import { getCoreSystemPromptAsync } from '../../../core/prompts.js';
 import OpenAI from 'openai';
+import {
+  createProviderCallOptions,
+  type ProviderCallOptionsInit,
+} from '../../../test-utils/providerCallOptions.js';
 
 vi.mock('openai', () => ({
   default: class FakeOpenAI {
@@ -79,8 +84,7 @@ class TestResponsesProvider extends OpenAIResponsesProvider {
           ? await options.userMemory.getProfile()
           : undefined;
 
-    const runtimeConfigEphemeralSettings =
-      options.runtime?.config?.getEphemeralSettings?.();
+    const runtimeConfigEphemeralSettings = options.invocation?.ephemerals;
 
     // Simulate the system prompt generation (don't actually call OpenAI)
     const promptSpy = vi.mocked(getCoreSystemPromptAsync);
@@ -129,6 +133,18 @@ const createSettings = (conversationId: string, parentId: string) => {
   return svc;
 };
 
+function buildCallOptions(
+  provider: OpenAIResponsesProvider,
+  overrides: Omit<ProviderCallOptionsInit, 'providerName'> = {},
+) {
+  const { contents = [], ...rest } = overrides;
+  return createProviderCallOptions({
+    providerName: provider.name,
+    contents,
+    ...rest,
+  });
+}
+
 describe('OpenAI Responses provider stateless contract tests', () => {
   beforeEach(() => {
     TestResponsesProvider.resetRequests();
@@ -166,18 +182,22 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
 
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsA,
-        runtime: runtimeA,
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsA,
+          config: configA,
+          runtime: runtimeA,
+        }),
+      )
       .next();
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsB,
-        runtime: runtimeB,
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsB,
+          config: configB,
+          runtime: runtimeB,
+        }),
+      )
       .next();
 
     const sizes = provider.getCacheSizes();
@@ -203,12 +223,14 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
 
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsA,
-        runtime: runtimeA,
-        userMemory: 'openai-responses-memory-A',
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsA,
+          config: configA,
+          runtime: runtimeA,
+          userMemory: 'openai-responses-memory-A',
+        }),
+      )
       .next();
 
     const firstCallArgs = promptSpy.mock.calls.at(-1)?.[0] as
@@ -227,12 +249,14 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
 
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsB,
-        runtime: runtimeB,
-        userMemory: 'openai-responses-memory-B',
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsB,
+          config: configB,
+          runtime: runtimeB,
+          userMemory: 'openai-responses-memory-B',
+        }),
+      )
       .next();
 
     const secondCallArgs = promptSpy.mock.calls.at(-1)?.[0] as
@@ -248,6 +272,8 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     );
 
     const settingsA = createSettings('conversation-A', 'parent-A');
+    settingsA.set('temperature', 0.17);
+    settingsA.set('max-output-tokens', 2048);
     const configA = createRuntimeConfigStub(settingsA, {
       getEphemeralSettings: () => ({
         temperature: 0.17,
@@ -261,11 +287,13 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
 
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsA,
-        runtime: runtimeA,
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsA,
+          config: configA,
+          runtime: runtimeA,
+        }),
+      )
       .next();
 
     const Fake = OpenAI as unknown as typeof import('openai').default & {
@@ -276,6 +304,8 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     expect(firstRequest?.['max-output-tokens']).toBe(2048);
 
     const settingsB = createSettings('conversation-B', 'parent-B');
+    settingsB.set('temperature', 0.44);
+    settingsB.set('max-output-tokens', 512);
     const configB = createRuntimeConfigStub(settingsB, {
       getEphemeralSettings: () => ({
         temperature: 0.44,
@@ -289,15 +319,66 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
 
     await provider
-      .generateChatCompletion({
-        contents: [],
-        settings: settingsB,
-        runtime: runtimeB,
-      })
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings: settingsB,
+          config: configB,
+          runtime: runtimeB,
+        }),
+      )
       .next();
 
     const secondRequest = Fake.requests.at(-1)?.request;
     expect(secondRequest?.temperature).toBe(0.44);
     expect(secondRequest?.['max-output-tokens']).toBe(512);
+  });
+
+  it('uses invocation ephemerals when config cannot supply overrides', async () => {
+    const provider = new TestResponsesProvider(
+      'token-invocation',
+      'https://api.openai.com/v1',
+    );
+
+    const settings = createSettings('conversation-inv', 'parent-inv');
+    const getEphemerals = vi.fn(() => {
+      throw new Error('config ephemerals should not be accessed');
+    });
+    const config = createRuntimeConfigStub(settings, {
+      getEphemeralSettings: getEphemerals,
+    }) as Config;
+    const runtime = createProviderRuntimeContext({
+      runtimeId: 'runtime-invocation',
+      settingsService: settings,
+      config,
+    });
+    const invocation = createRuntimeInvocationContext({
+      runtime,
+      settings,
+      providerName: 'openai-responses',
+      ephemeralsSnapshot: {
+        temperature: 0.11,
+        'max-output-tokens': 1024,
+      },
+      metadata: { testCase: 'openai-responses-invocation' },
+    });
+
+    await provider
+      .generateChatCompletion(
+        buildCallOptions(provider, {
+          settings,
+          config,
+          runtime,
+          invocation,
+        }),
+      )
+      .next();
+
+    const Fake = OpenAI as unknown as typeof import('openai').default & {
+      requests: Array<{ request: Record<string, unknown> }>;
+    };
+    const request = Fake.requests.at(-1)?.request;
+    expect(request?.temperature).toBe(0.11);
+    expect(request?.['max-output-tokens']).toBe(1024);
+    expect(getEphemerals).not.toHaveBeenCalled();
   });
 });

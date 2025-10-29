@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { OpenAIProvider, ProviderManager } from '../../index.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import {
   getSettingsService,
   resetSettingsService,
@@ -250,9 +251,25 @@ describe('Multi-Provider Integration Tests', () => {
           },
         ];
 
-        const stream = openaiProvider.generateChatCompletion({
-          contents: messages,
-        });
+        const settingsService = getSettingsService();
+        settingsService.set('call-id', 'integration-call');
+        settingsService.setProviderSetting(
+          'openai',
+          'model',
+          openaiProvider.getDefaultModel(),
+        );
+        if (baseURL) {
+          settingsService.set('base-url', baseURL);
+          settingsService.setProviderSetting('openai', 'baseUrl', baseURL);
+        }
+
+        const stream = openaiProvider.generateChatCompletion(
+          createProviderCallOptions({
+            providerName: openaiProvider.name,
+            contents: messages,
+            settings: settingsService,
+          }),
+        );
 
         const chunks: string[] = [];
         for await (const message of stream) {

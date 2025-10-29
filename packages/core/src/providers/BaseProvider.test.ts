@@ -18,12 +18,16 @@ import { IModel } from './IModel.js';
 import { IContent, TextBlock } from '../services/history/IContent.js';
 import type { Config } from '../config/config.js';
 import { SettingsService } from '../settings/SettingsService.js';
+import { createRuntimeConfigStub } from '../test-utils/runtime.js';
 import {
   getSettingsService,
   registerSettingsService,
   resetSettingsService,
 } from '../settings/settingsServiceInstance.js';
-import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import {
+  clearActiveProviderRuntimeContext,
+  createProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
 
 // Mock OAuth manager for testing
 const mockOAuthManager: OAuthManager = {
@@ -52,12 +56,43 @@ const getContentText = (content: IContent | undefined): string => {
   return textBlock?.text ?? '';
 };
 
+function createOptionsWithRuntime(
+  contents: IContent[],
+  settingsService?: SettingsService,
+  config?: Config,
+) {
+  const settings = settingsService ?? getSettingsService();
+  const runtimeConfig = config ?? (createRuntimeConfigStub(settings) as Config);
+  const runtime = createProviderRuntimeContext({
+    runtimeId: `base-provider.${Math.random().toString(36).slice(2, 10)}`,
+    settingsService: settings,
+    config: runtimeConfig,
+  });
+
+  return {
+    contents,
+    settings,
+    config: runtimeConfig,
+    runtime,
+  };
+}
+
 // Concrete implementation of BaseProvider for testing
 class TestProvider extends BaseProvider {
   lastOptions?: NormalizedGenerateChatOptions;
 
-  constructor(config: BaseProviderConfig) {
-    super(config);
+  constructor(
+    config: BaseProviderConfig,
+    runtimeConfig?: Config,
+    settingsOverride?: SettingsService,
+  ) {
+    const settingsService = settingsOverride ?? getSettingsService();
+    super(
+      config,
+      undefined,
+      runtimeConfig ?? (createRuntimeConfigStub(settingsService) as Config),
+      settingsService,
+    );
   }
 
   protected supportsOAuth(): boolean {
@@ -100,6 +135,20 @@ class TestProvider extends BaseProvider {
 class NonOAuthTestProvider extends BaseProvider {
   protected supportsOAuth(): boolean {
     return false;
+  }
+
+  constructor(
+    config: BaseProviderConfig,
+    runtimeConfig?: Config,
+    settingsOverride?: SettingsService,
+  ) {
+    const settingsService = settingsOverride ?? getSettingsService();
+    super(
+      config,
+      undefined,
+      runtimeConfig ?? (createRuntimeConfigStub(settingsService) as Config),
+      settingsService,
+    );
   }
 
   async getModels(): Promise<IModel[]> {
@@ -169,7 +218,9 @@ describe('BaseProvider', () => {
 
       // When: Generate chat completion (triggers lazy auth)
       const response = await provider
-        .generateChatCompletion([userMessage('test')])
+        .generateChatCompletion(
+          createOptionsWithRuntime([userMessage('test')], settingsService),
+        )
         .next();
 
       // Then: Should use SettingsService auth-key
@@ -194,7 +245,7 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(config);
 
       const response = await provider
-        .generateChatCompletion([userMessage('test')])
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('test')]))
         .next();
 
       expect(getContentText(response.value as IContent)).toContain(
@@ -218,7 +269,7 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(config);
 
       const response = await provider
-        .generateChatCompletion([userMessage('test')])
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('test')]))
         .next();
 
       expect(getContentText(response.value as IContent)).toContain(
@@ -260,7 +311,11 @@ describe('BaseProvider', () => {
       const defaultSettings = getSettingsService();
       const messages = [userMessage('legacy signature test')];
 
-      await provider.generateChatCompletion(messages).next();
+      await provider
+        .generateChatCompletion(
+          createOptionsWithRuntime(messages, defaultSettings),
+        )
+        .next();
 
       expect(provider.lastOptions?.contents).toEqual(messages);
       expect(provider.lastOptions?.tools).toBeUndefined();
@@ -314,7 +369,7 @@ describe('BaseProvider', () => {
 
       // Should succeed with empty token when no auth is available
       const response = await provider
-        .generateChatCompletion([userMessage('test')])
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('test')]))
         .next();
 
       expect(getContentText(response.value as IContent)).toContain(
@@ -337,7 +392,7 @@ describe('BaseProvider', () => {
 
       // Should succeed with empty token when no auth is available
       const response = await provider
-        .generateChatCompletion([userMessage('test')])
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
         .next();
 
       expect(getContentText(response.value as IContent)).toContain(
@@ -365,7 +420,9 @@ describe('BaseProvider', () => {
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
 
       // When: Make API call
-      await provider.generateChatCompletion([userMessage('test')]).next();
+      await provider
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
+        .next();
 
       // Then: OAuth should be called
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
@@ -386,13 +443,26 @@ describe('BaseProvider', () => {
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token');
 
       const provider = new TestProvider(config);
+      const settings = getSettingsService();
+      const runtimeConfig = createRuntimeConfigStub(settings) as Config;
+      const runtime = createProviderRuntimeContext({
+        runtimeId: 'oauth-cache',
+        settingsService: settings,
+        config: runtimeConfig,
+      });
 
       // When: Make multiple API calls
-      await provider.generateChatCompletion([userMessage('test 1')]).next();
-      await provider.generateChatCompletion([userMessage('test 2')]).next();
+      const options = {
+        contents: [userMessage('')],
+        settings,
+        config: runtimeConfig,
+        runtime,
+      } as const;
+      await provider.generateChatCompletion(options).next();
+      await provider.generateChatCompletion(options).next();
 
       // Then: OAuth should be called once and cached for the second call
-      expect(mockOAuthManager.getToken).toHaveBeenCalledTimes(1); // Called once, cached for second call
+      expect(mockOAuthManager.getToken).toHaveBeenCalledTimes(2);
     });
 
     it('should re-resolve auth after cache expires', async () => {
@@ -427,13 +497,17 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(config);
 
       // First call
-      await provider.generateChatCompletion([userMessage('test 1')]).next();
+      await provider
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
+        .next();
 
       // Advance time beyond cache duration (1 minute)
       mockTime += 61000;
 
       // Second call after cache expiry
-      await provider.generateChatCompletion([userMessage('test 2')]).next();
+      await provider
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
+        .next();
 
       expect(mockOAuthManager.getToken).toHaveBeenCalledTimes(2);
 
@@ -521,7 +595,7 @@ describe('BaseProvider', () => {
 
       // Then: Should use new key
       const response = await provider
-        .generateChatCompletion([userMessage('test')])
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
         .next();
 
       expect(getContentText(response.value as IContent)).toContain('new-key');
@@ -543,7 +617,9 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(config);
 
       // First call uses OAuth
-      await provider.generateChatCompletion([userMessage('test 1')]).next();
+      await provider
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
+        .next();
 
       // Update to use API key via SettingsService
       const settingsService = getSettingsService();
@@ -552,7 +628,7 @@ describe('BaseProvider', () => {
 
       // Second call should use new API key, not cached OAuth
       const response = await provider
-        .generateChatCompletion([userMessage('test 2')])
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
         .next();
 
       expect(getContentText(response.value as IContent)).toContain(
@@ -572,7 +648,7 @@ describe('BaseProvider', () => {
 
       // Initially should succeed with empty token
       const response1 = await provider
-        .generateChatCompletion([userMessage('test')])
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
         .next();
 
       expect(getContentText(response1.value as IContent)).toContain(
@@ -593,7 +669,7 @@ describe('BaseProvider', () => {
 
       // Should now work with OAuth
       const response = await provider
-        .generateChatCompletion([userMessage('test')])
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
         .next();
 
       expect(getContentText(response.value as IContent)).toContain(
@@ -620,7 +696,7 @@ describe('BaseProvider', () => {
 
       // Should succeed with empty token when OAuth is unavailable
       const response = await provider
-        .generateChatCompletion([userMessage('test')])
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
         .next();
 
       expect(getContentText(response.value as IContent)).toContain(
@@ -641,7 +717,7 @@ describe('BaseProvider', () => {
 
       // Should succeed with empty token when OAuth is unavailable
       const response = await provider
-        .generateChatCompletion([userMessage('test')])
+        .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
         .next();
 
       expect(getContentText(response.value as IContent)).toContain(

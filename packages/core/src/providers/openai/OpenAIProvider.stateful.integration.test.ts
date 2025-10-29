@@ -12,8 +12,13 @@ import { IContent } from '../../services/history/IContent.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { createProviderWithRuntime } from '../../test-utils/runtime.js';
+import {
+  createProviderWithRuntime,
+  createRuntimeConfigStub,
+} from '../../test-utils/runtime.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import { SettingsService } from '../../settings/SettingsService.js';
+import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
 
 // This test suite makes live API calls and requires an OpenAI API key.
 // The key is expected to be in a file named .openai_key in the user's home directory.
@@ -21,6 +26,7 @@ describe('OpenAIProvider Stateful Integration', () => {
   let provider: OpenAIProvider;
   let apiKey: string | undefined;
   let runtimeSettingsService: SettingsService | undefined;
+  let runtimeContext: ProviderRuntimeContext | undefined;
 
   beforeAll(() => {
     try {
@@ -38,17 +44,24 @@ describe('OpenAIProvider Stateful Integration', () => {
     // Ensure each test starts with a fresh context
     // ConversationContext.reset(); // Not available in core package
     if (apiKey) {
-      ({ provider, settingsService: runtimeSettingsService } =
-        createProviderWithRuntime<OpenAIProvider>(
-          ({ settingsService }) => {
-            settingsService.set('auth-key', apiKey);
-            return new OpenAIProvider(apiKey, 'https://api.openai.com/v1');
-          },
-          {
-            runtimeId: 'openai.stateful.integration.test',
-            metadata: { source: 'OpenAIProvider.stateful.integration.test.ts' },
-          },
-        ));
+      ({
+        provider,
+        settingsService: runtimeSettingsService,
+        runtime: runtimeContext,
+      } = createProviderWithRuntime<OpenAIProvider>(
+        ({ settingsService }) => {
+          settingsService.set('auth-key', apiKey);
+          settingsService.set('activeProvider', 'openai');
+          return new OpenAIProvider(apiKey, 'https://api.openai.com/v1');
+        },
+        {
+          runtimeId: 'openai.stateful.integration.test',
+          metadata: { source: 'OpenAIProvider.stateful.integration.test.ts' },
+        },
+      ));
+      if (runtimeContext && runtimeSettingsService && !runtimeContext.config) {
+        runtimeContext.config = createRuntimeConfigStub(runtimeSettingsService);
+      }
     }
   });
 
@@ -68,12 +81,32 @@ describe('OpenAIProvider Stateful Integration', () => {
     return fullContent;
   }
 
+  const buildCallOptions = (contents: IContent[]) => {
+    if (!runtimeSettingsService || !runtimeContext) {
+      throw new Error('Runtime context not initialised');
+    }
+    if (!runtimeContext.config) {
+      runtimeContext.config = createRuntimeConfigStub(runtimeSettingsService);
+    }
+    return createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+      settings: runtimeSettingsService,
+      runtime: runtimeContext,
+      config: runtimeContext.config,
+    });
+  };
+
   // TODO: Revert this before finishing. Forcing test to run for TDD.
   it.skip(
     'should maintain context across multiple turns with a stateful model (o3)',
     async () => {
       if (!apiKey) {
         console.warn('Skipping test: API key not found');
+        return;
+      }
+      if (!runtimeSettingsService || !runtimeContext) {
+        console.warn('Skipping test: runtime context not initialised');
         return;
       }
       runtimeSettingsService?.set('model', 'o3');
@@ -93,7 +126,7 @@ describe('OpenAIProvider Stateful Integration', () => {
         },
       ];
       const response1 = await collectResponse(
-        provider.generateChatCompletion(history),
+        provider.generateChatCompletion(buildCallOptions(history)),
       );
       history.push({
         speaker: 'ai',
@@ -113,7 +146,7 @@ describe('OpenAIProvider Stateful Integration', () => {
         blocks: [{ type: 'text', text: 'What is my name?' }],
       });
       const response2 = await collectResponse(
-        provider.generateChatCompletion(history),
+        provider.generateChatCompletion(buildCallOptions(history)),
       );
 
       // Assert that the model remembers the context
@@ -153,8 +186,12 @@ describe('OpenAIProvider Stateful Integration', () => {
       ];
 
       try {
+        if (!runtimeSettingsService || !runtimeContext) {
+          console.warn('Skipping test: runtime context not initialised');
+          return;
+        }
         const response = await collectResponse(
-          provider.generateChatCompletion(history),
+          provider.generateChatCompletion(buildCallOptions(history)),
         );
 
         // Assert that the model received the full history

@@ -11,6 +11,7 @@
  */
 import { reportError } from '../utils/errorReporting.js';
 import { Config } from '../config/config.js';
+import { SettingsService } from '../settings/SettingsService.js';
 import { ToolCallRequestInfo } from './turn.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import {
@@ -51,7 +52,7 @@ import {
 } from '../runtime/providerRuntimeContext.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import { AuthType } from './contentGenerator.js';
-import type { ProviderManager } from '../providers/ProviderManager.js';
+import { ProviderManager } from '../providers/ProviderManager.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 
 /**
@@ -236,6 +237,39 @@ export class ContextState {
   get_keys(): string[] {
     return Object.keys(this.state);
   }
+}
+
+function createIsolatedSettingsService(
+  foregroundConfig: Config,
+  providerName: string,
+  modelId: string,
+): SettingsService {
+  const sourceSettings = foregroundConfig.getSettingsService();
+  const subagentSettings = new SettingsService();
+
+  const globalEphemerals = sourceSettings.getAllGlobalSettings();
+  for (const [key, value] of Object.entries(globalEphemerals)) {
+    if (key === 'activeProvider') {
+      continue;
+    }
+    subagentSettings.set(key, value);
+  }
+
+  if (providerName) {
+    subagentSettings.set('activeProvider', providerName);
+    const providerEphemerals =
+      sourceSettings.getProviderSettings(providerName) ?? {};
+    for (const [key, value] of Object.entries(providerEphemerals)) {
+      subagentSettings.setProviderSetting(providerName, key, value);
+    }
+    subagentSettings.setProviderSetting(providerName, 'model', modelId);
+  }
+
+  if (subagentSettings.get('streaming') === undefined) {
+    subagentSettings.set('streaming', 'enabled');
+  }
+
+  return subagentSettings;
 }
 
 /**
@@ -440,45 +474,18 @@ export class SubAgentScope {
     // Step 007.3: Build ReadonlySettingsSnapshot from profile
     // @plan PLAN-20251028-STATELESS6.P08
     // @requirement REQ-STAT6-002.2
-    const settingsSnapshot: ReadonlySettingsSnapshot =
-      overrides.settingsSnapshot ?? {
-        compressionThreshold: foregroundConfig.getEphemeralSetting(
-          'compression-threshold',
-        ) as number | undefined,
-        contextLimit: foregroundConfig.getEphemeralSetting('context-limit') as
-          | number
-          | undefined,
-        preserveThreshold: foregroundConfig.getEphemeralSetting(
-          'compression-preserve-threshold',
-        ) as number | undefined,
-        toolFormatOverride: foregroundConfig.getEphemeralSetting(
-          'tool-format-override',
-        ) as string | undefined,
-        telemetry: {
-          enabled: true, // Stub: Will be configured properly in later phases
-          target: null,
-        },
-      };
-    // Step 007.4: Call createAgentRuntimeContext to build runtime view
-    // @plan PLAN-20251028-STATELESS6.P08
-    // @requirement REQ-STAT6-001.1, REQ-STAT6-003.2
-    const providerAdapter: AgentRuntimeProviderAdapter =
-      overrides.providerAdapter ??
-      createProviderAdapterFromManager(
-        foregroundConfig.getProviderManager?.() as ProviderManager | undefined,
+    const defaultSettingsService =
+      overrides.providerRuntime?.settingsService ??
+      createIsolatedSettingsService(
+        foregroundConfig,
+        providerName,
+        modelConfig.model,
       );
-
-    const telemetryAdapter: AgentRuntimeTelemetryAdapter =
-      overrides.telemetryAdapter ??
-      createTelemetryAdapterFromConfig(foregroundConfig);
-
-    const toolsView: ToolRegistryView =
-      overrides.toolsView ?? createToolRegistryViewFromRegistry(toolRegistry);
 
     const providerRuntime: ProviderRuntimeContext =
       overrides.providerRuntime ??
       createProviderRuntimeContext({
-        settingsService: foregroundConfig.getSettingsService(),
+        settingsService: defaultSettingsService,
         config: foregroundConfig,
         runtimeId: runtimeState.runtimeId,
         metadata: {
@@ -486,6 +493,58 @@ export class SubAgentScope {
           subagentName: name,
         },
       });
+
+    const runtimeSettingsService = providerRuntime.settingsService;
+
+    if (
+      providerName &&
+      runtimeSettingsService.get('activeProvider') !== providerName
+    ) {
+      runtimeSettingsService.set('activeProvider', providerName);
+    }
+
+    const settingsSnapshot: ReadonlySettingsSnapshot =
+      overrides.settingsSnapshot ?? {
+        compressionThreshold:
+          (runtimeSettingsService.get('compression-threshold') as
+            | number
+            | undefined) ?? 0.8,
+        contextLimit:
+          (runtimeSettingsService.get('context-limit') as number | undefined) ??
+          60_000,
+        preserveThreshold:
+          (runtimeSettingsService.get('compression-preserve-threshold') as
+            | number
+            | undefined) ?? 0.2,
+        toolFormatOverride: runtimeSettingsService.get(
+          'tool-format-override',
+        ) as string | undefined,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+      };
+    // Step 007.4: Call createAgentRuntimeContext to build runtime view
+    // @plan PLAN-20251028-STATELESS6.P08
+    // @requirement REQ-STAT6-001.1, REQ-STAT6-003.2
+    const defaultProviderManager = overrides.providerAdapter
+      ? undefined
+      : new ProviderManager({
+          settingsService: runtimeSettingsService,
+          config: foregroundConfig,
+          runtime: providerRuntime,
+        });
+
+    const providerAdapter: AgentRuntimeProviderAdapter =
+      overrides.providerAdapter ??
+      createProviderAdapterFromManager(defaultProviderManager);
+
+    const telemetryAdapter: AgentRuntimeTelemetryAdapter =
+      overrides.telemetryAdapter ??
+      createTelemetryAdapterFromConfig(foregroundConfig);
+
+    const toolsView: ToolRegistryView =
+      overrides.toolsView ?? createToolRegistryViewFromRegistry(toolRegistry);
 
     const runtimeContext = createAgentRuntimeContext({
       state: runtimeState,

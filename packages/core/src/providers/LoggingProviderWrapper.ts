@@ -420,8 +420,15 @@ export class LoggingProviderWrapper implements IProvider {
       normalizedOptions.config ?? normalizedOptions.runtime?.config;
     const activeConfig = normalizedOptions.config;
 
-    // REQ-SP4-004: Create per-call redactor if not already set
-    if (!this.redactor && activeConfig) {
+    const invocation = normalizedOptions.invocation;
+
+    // Prefer per-call redaction config from invocation context when available
+    if (invocation?.redaction) {
+      this.redactor = new ConfigBasedRedactor({
+        ...invocation.redaction,
+      });
+    } else if (!this.redactor && activeConfig) {
+      // REQ-SP4-004: Create per-call redactor if not already set
       this.redactor = new ConfigBasedRedactor(
         activeConfig.getRedactionConfig(),
       );

@@ -1170,7 +1170,7 @@ export class GeminiProvider extends BaseProvider {
     const serverTools = ['web_search', 'web_fetch'];
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
     // Get model params per call from ephemeral settings, not cached instance state
-    const requestOverrides = options.config?.getEphemeralSettings?.() || {};
+    const requestOverrides = options.invocation?.ephemerals ?? {};
     const requestConfig: Record<string, unknown> = {
       serverTools,
       ...(requestOverrides ?? {}),

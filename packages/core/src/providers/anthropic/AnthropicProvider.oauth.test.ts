@@ -8,8 +8,13 @@ import {
   type OAuthTokenRequestMetadata,
   flushRuntimeAuthScope,
 } from '../../auth/precedence.js';
-import { createProviderWithRuntime } from '../../test-utils/runtime.js';
+import {
+  createProviderWithRuntime,
+  createRuntimeConfigStub,
+} from '../../test-utils/runtime.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import { SettingsService } from '../../settings/SettingsService.js';
+import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
 import {
   clearActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
@@ -162,6 +167,7 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
     apiKey: string;
   };
   let settingsService: SettingsService;
+  let runtimeContext: ProviderRuntimeContext;
 
   beforeEach(async () => {
     mockAnthropicShared.messages.create = vi.fn();
@@ -208,9 +214,14 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       },
     );
     provider = result.provider;
+    runtimeContext = result.runtime;
+    settingsService = result.settingsService;
+    if (!runtimeContext.config) {
+      runtimeContext.config = createRuntimeConfigStub(settingsService);
+    }
 
     // Re-activate the runtime context for test execution
-    setActiveProviderRuntimeContext(result.runtime);
+    setActiveProviderRuntimeContext(runtimeContext);
 
     // Use the shared mock instance
     mockAnthropicInstance = mockAnthropicShared;
@@ -221,6 +232,19 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
     flushRuntimeAuthScope('anthropic.provider.oauth.test.apiKey');
     clearActiveProviderRuntimeContext();
   });
+
+  const buildCallOptions = (
+    contents: IContent[],
+    overrides: Partial<ProviderCallOptionsInit> = {},
+  ) =>
+    createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+      settings: settingsService,
+      runtime: runtimeContext,
+      config: runtimeContext.config,
+      ...overrides,
+    });
 
   describe('constructor with OAuth manager', () => {
     it('should extend BaseProvider and accept oauth manager parameter', () => {
@@ -265,7 +289,9 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
         },
       ];
 
-      const generator = provider.generateChatCompletion(messages);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
       const chunks = [];
       for await (const chunk of generator) {
         chunks.push(chunk);
@@ -290,12 +316,26 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
 
       // Create provider with no API key and failing OAuth
-      const providerNoAuth = new AnthropicProvider(
-        undefined, // No API key
-        undefined,
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      const { provider: providerNoAuth, runtime: runtimeNoAuth } =
+        createProviderWithRuntime<AnthropicProvider>(
+          ({ settingsService: svc }) => {
+            svc.set('activeProvider', 'anthropic');
+            return new AnthropicProvider(
+              undefined,
+              undefined,
+              TEST_PROVIDER_CONFIG,
+              mockOAuthManager,
+            );
+          },
+          {
+            runtimeId: 'anthropic.no-auth',
+          },
+        );
+      if (!runtimeNoAuth.config) {
+        runtimeNoAuth.config = createRuntimeConfigStub(
+          runtimeNoAuth.settingsService,
+        );
+      }
 
       const messages: IContent[] = [
         {
@@ -304,7 +344,15 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
         },
       ];
 
-      const generator = providerNoAuth.generateChatCompletion(messages);
+      const generator = providerNoAuth.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: providerNoAuth.name,
+          contents: messages,
+          settings: runtimeNoAuth.settingsService,
+          runtime: runtimeNoAuth,
+          config: runtimeNoAuth.config,
+        }),
+      );
 
       await expect(generator.next()).rejects.toThrow(
         /No authentication available for Anthropic API calls/,
@@ -313,15 +361,18 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
 
     it('should prefer API key over OAuth when both are available', async () => {
       // Create provider with both API key and OAuth manager
-      const { provider: providerWithApiKey } =
+      const { provider: providerWithApiKey, runtime: runtimeWithApiKey } =
         createProviderWithRuntime<AnthropicProvider>(
-          () =>
-            new AnthropicProvider(
+          ({ settingsService: svc }) => {
+            svc.set('auth-key', 'test-api-key');
+            svc.set('activeProvider', 'anthropic');
+            return new AnthropicProvider(
               'test-api-key',
               undefined,
               TEST_PROVIDER_CONFIG,
               mockOAuthManager,
-            ),
+            );
+          },
           {
             runtimeId: 'anthropic.provider.oauth.test.apiKey',
             metadata: {
@@ -330,6 +381,11 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
             },
           },
         );
+      if (!runtimeWithApiKey.config) {
+        runtimeWithApiKey.config = createRuntimeConfigStub(
+          runtimeWithApiKey.settingsService,
+        );
+      }
 
       // Mock successful streaming response
       const mockStream = {
@@ -349,7 +405,15 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
         },
       ];
 
-      const generator = providerWithApiKey.generateChatCompletion(messages);
+      const generator = providerWithApiKey.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: providerWithApiKey.name,
+          contents: messages,
+          settings: runtimeWithApiKey.settingsService,
+          runtime: runtimeWithApiKey,
+          config: runtimeWithApiKey.config,
+        }),
+      );
       const chunks = [];
       for await (const chunk of generator) {
         chunks.push(chunk);

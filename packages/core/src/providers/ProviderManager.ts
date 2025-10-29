@@ -32,6 +32,7 @@ import {
   MissingProviderRuntimeError,
   ProviderRuntimeNormalizationError,
 } from './errors.js';
+import { createRuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
 
 const PROVIDER_CAPABILITY_HINTS: Record<
   string,
@@ -481,14 +482,57 @@ export class ProviderManager implements IProviderManager {
       _provider: targetProvider,
     };
 
+    const normalizedRuntime: ProviderRuntimeContext = {
+      ...(rawOptions.runtime ?? {}),
+      settingsService,
+      config,
+      runtimeId,
+      metadata,
+    };
+
+    const userMemorySnapshot =
+      typeof userMemory === 'string' ? userMemory : config.getUserMemory?.();
+
+    const invocation =
+      rawOptions.invocation ??
+      createRuntimeInvocationContext({
+        runtime: normalizedRuntime,
+        settings: settingsService,
+        providerName: targetProvider,
+        ephemeralsSnapshot: this.buildEphemeralsSnapshot(
+          settingsService,
+          targetProvider,
+        ),
+        telemetry: resolved.telemetry,
+        metadata,
+        userMemory: userMemorySnapshot ?? undefined,
+        fallbackRuntimeId: runtimeId,
+      });
+
     return {
       ...rawOptions,
       settings: settingsService,
       config,
+      runtime: normalizedRuntime,
       resolved,
       userMemory,
       metadata,
+      invocation,
     };
+  }
+
+  private buildEphemeralsSnapshot(
+    settingsService: SettingsService,
+    providerName: string,
+  ): Record<string, unknown> {
+    const globalEphemerals = settingsService.getAllGlobalSettings();
+    const providerEphemerals =
+      settingsService.getProviderSettings(providerName);
+    const snapshot: Record<string, unknown> = {
+      ...globalEphemerals,
+    };
+    snapshot[providerName] = { ...providerEphemerals };
+    return snapshot;
   }
 
   /**

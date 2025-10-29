@@ -93,10 +93,7 @@ describe('BaseProvider runtime guard', () => {
     });
   });
 
-  it('normalizes options when config is not supplied', async () => {
-    // @plan:PLAN-20251023-STATELESS-HARDENING.P04 @requirement:REQ-SP4-001
-    // Red state: same command exits early with CACError `Unknown option --filter`, so pseudocode lines 10-16
-    // covering provider runtime config guard do not execute; implementation must enable the runtime guard path.
+  it('fails when config is not supplied', async () => {
     const provider = new HarnessProvider();
 
     (
@@ -122,12 +119,10 @@ describe('BaseProvider runtime guard', () => {
       metadata: { scenario: 'missing-config' },
     } as GenerateChatOptions);
 
-    const result = await iterator.next();
-    expect(result).toEqual({ value: undefined, done: true });
-    expect(provider.lastNormalizedOptions?.config ?? null).toBeNull();
-    expect(provider.lastNormalizedOptions?.runtime?.metadata).toMatchObject({
-      requirement: 'REQ-SP4-001',
-      stage: 'normalizeGenerateChatOptions',
+    await expect(iterator.next()).rejects.toMatchObject({
+      name: 'MissingProviderRuntimeError',
+      providerKey: 'BaseProvider.harness',
+      missingFields: expect.arrayContaining(['config']),
     });
   });
 });

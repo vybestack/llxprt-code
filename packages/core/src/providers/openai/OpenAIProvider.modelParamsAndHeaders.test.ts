@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import type OpenAI from 'openai';
 import { IContent } from '../../services/history/IContent.js';
+import { SettingsService } from '../../settings/SettingsService.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 
 const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
   const chatCreate = vi.fn();
@@ -14,19 +16,9 @@ const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
   }));
   return { mockChatCreate: chatCreate, mockOpenAIConstructor: constructor };
 });
-const mockSettingsService = vi.hoisted(() => ({
-  set: vi.fn(),
-  get: vi.fn(),
-  setProviderSetting: vi.fn(),
-  getProviderSetting: vi.fn(),
-  getProviderSettings: vi.fn().mockReturnValue({}),
-  getSettings: vi.fn(),
-  updateSettings: vi.fn(),
-  settings: { providers: { openai: {} } },
-  on: vi.fn(),
-  off: vi.fn(),
-  emit: vi.fn(),
-}));
+let settingsServiceRef: { current: SettingsService } = {
+  current: new SettingsService(),
+};
 
 vi.mock('openai', () => ({
   default: mockOpenAIConstructor,
@@ -41,7 +33,7 @@ vi.mock('../../utils/retry.js', () => ({
 }));
 
 vi.mock('../../settings/settingsServiceInstance.js', () => ({
-  getSettingsService: () => mockSettingsService,
+  getSettingsService: () => settingsServiceRef.current,
 }));
 
 const createBasicMessages = (): IContent[] => [
@@ -54,25 +46,21 @@ const createBasicMessages = (): IContent[] => [
 describe('OpenAIProvider model params and custom headers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSettingsService.getSettings.mockResolvedValue({});
-    mockChatCreate.mockReturnValue({
-      async *[Symbol.asyncIterator]() {
-        yield {
-          choices: [
-            {
-              delta: {
-                role: 'assistant',
-                content: 'Hello!',
-              },
-              finish_reason: 'stop',
-            },
-          ],
-          usage: {
-            prompt_tokens: 1,
-            completion_tokens: 1,
-            total_tokens: 2,
+    settingsServiceRef = { current: new SettingsService() };
+    mockChatCreate.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            role: 'assistant',
+            content: 'Hello!',
           },
-        };
+          finish_reason: 'stop',
+        },
+      ],
+      usage: {
+        prompt_tokens: 1,
+        completion_tokens: 1,
+        total_tokens: 2,
       },
     });
   });
@@ -82,19 +70,14 @@ describe('OpenAIProvider model params and custom headers', () => {
   });
 
   it('should include model parameters from settings in the OpenAI request body', async () => {
-    mockSettingsService.get.mockImplementation((key: string) => {
-      if (key === 'temperature') return 0.6;
-      if (key === 'top_p') return 0.9;
-      return undefined;
-    });
-    mockSettingsService.getSettings.mockResolvedValue({
-      temperature: 0.6,
-      top_p: 0.9,
-    });
-    mockSettingsService.getProviderSettings.mockReturnValue({
-      temperature: 0.6,
-      top_p: 0.9,
-    });
+    const settingsService = settingsServiceRef.current;
+    settingsService.set('activeProvider', 'openai');
+    settingsService.set('streaming', 'disabled');
+    settingsService.set('temperature', 0.6);
+    settingsService.set('top_p', 0.9);
+    settingsService.setProviderSetting('openai', 'temperature', 0.6);
+    settingsService.setProviderSetting('openai', 'top_p', 0.9);
+    settingsService.setProviderSetting('openai', 'streaming', 'disabled');
 
     const provider = new OpenAIProvider('test-key', undefined, {
       getEphemeralSettings: () => ({
@@ -103,6 +86,8 @@ describe('OpenAIProvider model params and custom headers', () => {
         top_p: 0.9,
       }),
     });
+
+    provider.setRuntimeSettingsService(settingsService);
 
     const getClientSpy = vi
       .spyOn(
@@ -115,7 +100,14 @@ describe('OpenAIProvider model params and custom headers', () => {
         chat: { completions: { create: mockChatCreate } },
       } as unknown as OpenAI);
 
-    const generator = provider.generateChatCompletion(createBasicMessages());
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: createBasicMessages(),
+        settings: settingsService,
+        runtimeId: 'openai-model-params',
+      }),
+    );
     await generator.next();
 
     const requestBody = mockChatCreate.mock.calls[0]?.[0];
@@ -133,15 +125,49 @@ describe('OpenAIProvider model params and custom headers', () => {
       'X-Trace-Id': '12345',
     };
 
+    mockChatCreate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield {
+          choices: [
+            {
+              delta: {
+                content: 'stream-chunk',
+                role: 'assistant',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 1,
+            completion_tokens: 1,
+            total_tokens: 2,
+          },
+        };
+      },
+    });
+
+    const settingsService = settingsServiceRef.current;
+    settingsService.set('activeProvider', 'openai');
+    settingsService.set('streaming', 'enabled');
+    settingsService.set('custom-headers', customHeaders);
+    settingsService.setProviderSetting(
+      'openai',
+      'custom-headers',
+      customHeaders,
+    );
+    settingsService.setProviderSetting('openai', 'streaming', 'enabled');
+
     const provider = new OpenAIProvider('test-key', undefined, {
       getEphemeralSettings: () => ({
-        streaming: 'disabled',
+        streaming: 'enabled',
         'custom-headers': customHeaders,
       }),
       customHeaders: {
         'X-Provider-Header': 'provider-value',
       },
     });
+
+    provider.setRuntimeSettingsService(settingsService);
 
     const getClientSpy = vi
       .spyOn(
@@ -154,7 +180,14 @@ describe('OpenAIProvider model params and custom headers', () => {
         chat: { completions: { create: mockChatCreate } },
       } as unknown as OpenAI);
 
-    const generator = provider.generateChatCompletion(createBasicMessages());
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: createBasicMessages(),
+        settings: settingsService,
+        runtimeId: 'openai-custom-headers',
+      }),
+    );
     await generator.next();
 
     const call = mockChatCreate.mock.calls[0];
@@ -172,6 +205,7 @@ describe('OpenAIProvider model params and custom headers', () => {
 
   it('should configure socket-aware transport when socket settings are present', async () => {
     vi.clearAllMocks();
+    settingsServiceRef.current = new SettingsService();
     mockOpenAIConstructor.mockImplementation(() => ({
       chat: {
         completions: {
@@ -180,12 +214,44 @@ describe('OpenAIProvider model params and custom headers', () => {
       },
     }));
 
+    mockChatCreate.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        yield {
+          choices: [
+            {
+              delta: {
+                content: 'socket-chunk',
+                role: 'assistant',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 1,
+            completion_tokens: 1,
+            total_tokens: 2,
+          },
+        };
+      },
+    });
+
+    const settingsService = settingsServiceRef.current;
+    settingsService.set('activeProvider', 'openai');
+    settingsService.set('streaming', 'enabled');
+    settingsService.set('socket-timeout', 120000);
+    settingsService.set('socket-keepalive', true);
+    settingsService.set('socket-nodelay', true);
+    settingsService.setProviderSetting('openai', 'socket-timeout', 120000);
+    settingsService.setProviderSetting('openai', 'socket-keepalive', true);
+    settingsService.setProviderSetting('openai', 'socket-nodelay', true);
+    settingsService.setProviderSetting('openai', 'streaming', 'enabled');
+
     const provider = new OpenAIProvider(
       'test-key',
       'http://localhost:1234/v1/',
       {
         getEphemeralSettings: () => ({
-          streaming: 'disabled',
+          streaming: 'enabled',
           'socket-timeout': 120000,
           'socket-keepalive': true,
           'socket-nodelay': true,
@@ -193,7 +259,16 @@ describe('OpenAIProvider model params and custom headers', () => {
       },
     );
 
-    const generator = provider.generateChatCompletion(createBasicMessages());
+    provider.setRuntimeSettingsService(settingsService);
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: createBasicMessages(),
+        settings: settingsService,
+        runtimeId: 'openai-socket-settings',
+      }),
+    );
     await generator.next();
 
     const constructorCalls = mockOpenAIConstructor.mock.calls;

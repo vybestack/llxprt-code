@@ -20,6 +20,7 @@ import { NotYetImplemented } from '../../utils/errors.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime as createProviderWithRuntimeHelper } from '../../test-utils/runtime.js';
 import { flushRuntimeAuthScope } from '../../auth/precedence.js';
+import { SettingsService } from '../../settings/SettingsService.js';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -95,12 +96,23 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
     vi.clearAllMocks();
     originalEnv = { ...process.env };
 
-    // Clear SettingsService to ensure test isolation
+    // Clear global SettingsService instance to ensure isolation
+    const {
+      createProviderRuntimeContext,
+      setActiveProviderRuntimeContext,
+      clearActiveProviderRuntimeContext,
+    } = await import('../../runtime/providerRuntimeContext.js');
     const { getSettingsService } = await import(
       '../../settings/settingsServiceInstance.js'
     );
+    const tempRuntime = createProviderRuntimeContext({
+      settingsService: new SettingsService(),
+      runtimeId: 'test-global-runtime',
+    });
+    setActiveProviderRuntimeContext(tempRuntime);
     const globalSettingsService = getSettingsService();
     globalSettingsService.clear();
+    clearActiveProviderRuntimeContext();
 
     // Clear OPENAI_API_KEY for OAuth tests to work properly
     delete process.env.OPENAI_API_KEY;

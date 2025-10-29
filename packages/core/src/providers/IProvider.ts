@@ -20,6 +20,7 @@ import { IContent } from '../services/history/IContent.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import type { Config } from '../config/config.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import type { RuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -50,6 +51,7 @@ export interface GenerateChatOptions {
   settings?: SettingsService;
   config?: Config;
   runtime?: ProviderRuntimeContext;
+  invocation?: RuntimeInvocationContext;
   metadata?: Record<string, unknown>;
   resolved?: {
     model?: string;

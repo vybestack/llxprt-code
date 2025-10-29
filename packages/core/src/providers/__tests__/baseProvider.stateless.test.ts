@@ -10,6 +10,7 @@ import {
 import type { IContent } from '../../services/history/IContent.js';
 import type { IModel } from '../IModel.js';
 import { SettingsService } from '../../settings/SettingsService.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 
 type Snapshot = {
   callId: string;
@@ -232,11 +233,14 @@ describe('BaseProvider stateless contract', () => {
     });
 
     await collectChunks(
-      provider.generateChatCompletion({
-        contents: [createContent('ping')],
-        settings: call.settings,
-        metadata: call.metadata,
-      }),
+      provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: PROVIDER_NAME,
+          contents: [createContent('ping')],
+          settings: call.settings,
+          metadata: call.metadata,
+        }),
+      ),
     );
 
     const snapshots = provider.snapshotsFor('call-override');
@@ -264,18 +268,24 @@ describe('BaseProvider stateless contract', () => {
 
     await Promise.all([
       collectChunks(
-        provider.generateChatCompletion({
-          contents: [createContent('ping-a')],
-          settings: callA.settings,
-          metadata: callA.metadata,
-        }),
+        provider.generateChatCompletion(
+          createProviderCallOptions({
+            providerName: PROVIDER_NAME,
+            contents: [createContent('ping-a')],
+            settings: callA.settings,
+            metadata: callA.metadata,
+          }),
+        ),
       ),
       collectChunks(
-        provider.generateChatCompletion({
-          contents: [createContent('ping-b')],
-          settings: callB.settings,
-          metadata: callB.metadata,
-        }),
+        provider.generateChatCompletion(
+          createProviderCallOptions({
+            providerName: PROVIDER_NAME,
+            contents: [createContent('ping-b')],
+            settings: callB.settings,
+            metadata: callB.metadata,
+          }),
+        ),
       ),
     ]);
 
@@ -311,11 +321,14 @@ describe('BaseProvider stateless contract', () => {
     });
 
     await collectChunks(
-      provider.generateChatCompletion({
-        contents: [createContent('auth-request')],
-        settings: authCall.settings,
-        metadata: authCall.metadata,
-      }),
+      provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: PROVIDER_NAME,
+          contents: [createContent('auth-request')],
+          settings: authCall.settings,
+          metadata: authCall.metadata,
+        }),
+      ),
     );
 
     const authSnapshots = provider.snapshotsFor('call-auth');
@@ -324,14 +337,17 @@ describe('BaseProvider stateless contract', () => {
     ).toBe(true);
 
     await collectChunks(
-      provider.generateChatCompletion({
-        contents: [createContent('baseline-request')],
-        metadata: {
-          marker: 'baseline',
-          captureAuth: true,
-          hook: { callId: 'baseline' },
-        },
-      }),
+      provider.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: PROVIDER_NAME,
+          contents: [createContent('baseline-request')],
+          metadata: {
+            marker: 'baseline',
+            captureAuth: true,
+            hook: { callId: 'baseline' },
+          },
+        }),
+      ),
     );
 
     const baselineSnapshots = provider.snapshotsFor('baseline');

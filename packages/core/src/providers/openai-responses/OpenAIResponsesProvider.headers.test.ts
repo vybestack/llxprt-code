@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import { IContent } from '../../services/history/IContent.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 
 const mockSettingsService = vi.hoisted(() => ({
   set: vi.fn(),
@@ -9,6 +10,7 @@ const mockSettingsService = vi.hoisted(() => ({
   getProviderSettings: vi.fn().mockReturnValue({}),
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
+  getAllGlobalSettings: vi.fn().mockReturnValue({}),
 }));
 
 const parseResponsesStreamMock = vi.hoisted(() =>
@@ -61,7 +63,6 @@ describe('OpenAIResponsesProvider custom headers', () => {
         'custom-headers': customHeaders,
       }),
     });
-
     const authSpy = vi
       .spyOn(
         provider as unknown as {
@@ -71,12 +72,21 @@ describe('OpenAIResponsesProvider custom headers', () => {
       )
       .mockResolvedValue('resolved-key');
 
-    const generator = provider.generateChatCompletion([
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'Hello' }],
-      },
-    ] as IContent[]);
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ] as IContent[],
+        settingsOverrides: {
+          global: { 'custom-headers': customHeaders },
+          provider: { 'custom-headers': customHeaders },
+        },
+      }),
+    );
 
     await generator.next();
 

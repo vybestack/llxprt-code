@@ -8,6 +8,7 @@ import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
 import type { Config } from '../../config/config.js';
 import { SettingsService } from '../../settings/SettingsService.js';
 import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 
 class StubProvider implements IProvider {
   name = 'stub-provider';
@@ -148,12 +149,15 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       metadata: { source: 'test' },
     };
 
-    const iterator = wrapper.generateChatCompletion({
-      contents: [],
-      settings,
-      config,
-      runtime,
-    });
+    const iterator = wrapper.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [],
+        settings,
+        config,
+        runtime,
+      }),
+    );
 
     // Should not throw - successfully iterate
     const result = await iterator.next();
@@ -182,13 +186,16 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       metadata: { provided: true, source: 'caller' },
     };
 
-    const iterator = wrapper.generateChatCompletion({
-      contents: [],
-      settings,
-      config,
-      runtime,
-      metadata: { explicit: true },
-    });
+    const iterator = wrapper.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [],
+        settings,
+        config,
+        runtime,
+        metadata: { explicit: true },
+      }),
+    );
 
     // Should not throw and merge metadata
     const result = await iterator.next();

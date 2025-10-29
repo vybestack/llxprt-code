@@ -9,12 +9,17 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../../../runtime/providerRuntimeContext.js';
+import { createRuntimeInvocationContext } from '../../../runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
 import type { Config } from '../../../config/config.js';
 import type { IContent } from '../../../services/history/IContent.js';
 import type { IProviderConfig } from '../../types/IProviderConfig.js';
 import { GeminiProvider } from '../GeminiProvider.js';
 import { createCodeAssistContentGenerator } from '../../code_assist/codeAssist.js';
+import {
+  createProviderCallOptions,
+  type ProviderCallOptionsInit,
+} from '../../../test-utils/providerCallOptions.js';
 
 vi.mock('../../core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
@@ -98,6 +103,18 @@ const queueCodeAssistStream = (
 ): void => {
   codeAssistState.streamPlans.push(responses);
 };
+
+function buildCallOptions(
+  provider: GeminiProvider,
+  overrides: Omit<ProviderCallOptionsInit, 'providerName'> = {},
+) {
+  const { contents = [], ...rest } = overrides;
+  return createProviderCallOptions({
+    providerName: provider.name,
+    contents,
+    ...rest,
+  });
+}
 
 class TestGeminiProvider extends GeminiProvider {
   setEphemeralSettings(settings: Record<string, unknown>): void {
@@ -238,11 +255,14 @@ describe('Gemini provider stateless contract tests', () => {
     });
 
     const chunks = await collectResults(
-      provider.generateChatCompletion({
-        contents: [createHumanContent('ping')],
-        settings,
-        runtime,
-      }),
+      provider.generateChatCompletion(
+        buildCallOptions(provider, {
+          contents: [createHumanContent('ping')],
+          settings,
+          config,
+          runtime,
+        }),
+      ),
     );
 
     authMock.restore();
@@ -272,6 +292,10 @@ describe('Gemini provider stateless contract tests', () => {
     const provider = new TestGeminiProvider();
     const settingsPrimary = new SettingsService();
     settingsPrimary.set('call-id', 'runtime-config');
+    settingsPrimary.set('temperature', 0.21);
+    settingsPrimary.set('max-output-tokens', 1024);
+    settingsPrimary.setProviderSetting('gemini', 'temperature', 0.21);
+    settingsPrimary.setProviderSetting('gemini', 'max-output-tokens', 1024);
     const configPrimary = createRuntimeConfigStub(settingsPrimary, {
       getEphemeralSettings: () => ({
         temperature: 0.21,
@@ -285,11 +309,14 @@ describe('Gemini provider stateless contract tests', () => {
     });
 
     await collectResults(
-      provider.generateChatCompletion({
-        contents: [createHumanContent('first request')],
-        settings: settingsPrimary,
-        runtime: runtimePrimary,
-      }),
+      provider.generateChatCompletion(
+        buildCallOptions(provider, {
+          contents: [createHumanContent('first request')],
+          settings: settingsPrimary,
+          config: configPrimary,
+          runtime: runtimePrimary,
+        }),
+      ),
     );
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
@@ -314,6 +341,10 @@ describe('Gemini provider stateless contract tests', () => {
 
     const settingsOverride = new SettingsService();
     settingsOverride.set('call-id', 'runtime-config');
+    settingsOverride.set('temperature', 0.78);
+    settingsOverride.set('max-output-tokens', 256);
+    settingsOverride.setProviderSetting('gemini', 'temperature', 0.78);
+    settingsOverride.setProviderSetting('gemini', 'max-output-tokens', 256);
     const configOverride = createRuntimeConfigStub(settingsOverride, {
       getEphemeralSettings: () => ({
         temperature: 0.78,
@@ -327,11 +358,14 @@ describe('Gemini provider stateless contract tests', () => {
     });
 
     await collectResults(
-      provider.generateChatCompletion({
-        contents: [createHumanContent('second request')],
-        settings: settingsOverride,
-        runtime: runtimeOverride,
-      }),
+      provider.generateChatCompletion(
+        buildCallOptions(provider, {
+          contents: [createHumanContent('second request')],
+          settings: settingsOverride,
+          config: configOverride,
+          runtime: runtimeOverride,
+        }),
+      ),
     );
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
@@ -383,22 +417,25 @@ describe('Gemini provider stateless contract tests', () => {
     });
 
     await collectResults(
-      provider.generateChatCompletion({
-        contents: [createHumanContent('use tool')],
-        settings,
-        runtime,
-        tools: [
-          {
-            functionDeclarations: [
-              {
-                name: 'fetchSomething',
-                description: 'fetch data',
-                parametersJsonSchema: {},
-              },
-            ],
-          },
-        ],
-      }),
+      provider.generateChatCompletion(
+        buildCallOptions(provider, {
+          contents: [createHumanContent('use tool')],
+          settings,
+          config,
+          runtime,
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'fetchSomething',
+                  description: 'fetch data',
+                  parametersJsonSchema: {},
+                },
+              ],
+            },
+          ],
+        }),
+      ),
     );
 
     authMock.restore();
@@ -478,11 +515,14 @@ describe('Gemini provider stateless contract tests', () => {
       config: configB,
     });
 
-    const oauthIteratorA = provider.generateChatCompletion({
-      contents: [createHumanContent('oauth-a')],
-      settings: settingsA,
-      runtime: runtimeA,
-    });
+    const oauthIteratorA = provider.generateChatCompletion(
+      buildCallOptions(provider, {
+        contents: [createHumanContent('oauth-a')],
+        settings: settingsA,
+        config: configA,
+        runtime: runtimeA,
+      }),
+    );
     await oauthIteratorA.next();
 
     authMock.useMode(1);
@@ -499,11 +539,14 @@ describe('Gemini provider stateless contract tests', () => {
       },
     ]);
 
-    const oauthIteratorB = provider.generateChatCompletion({
-      contents: [createHumanContent('oauth-b')],
-      settings: settingsB,
-      runtime: runtimeB,
-    });
+    const oauthIteratorB = provider.generateChatCompletion(
+      buildCallOptions(provider, {
+        contents: [createHumanContent('oauth-b')],
+        settings: settingsB,
+        config: configB,
+        runtime: runtimeB,
+      }),
+    );
     await oauthIteratorB.next();
 
     authMock.restore();
@@ -514,5 +557,67 @@ describe('Gemini provider stateless contract tests', () => {
     expect(firstSession).toContain('runtime-oauth-a');
     expect(secondSession).toContain('runtime-oauth-b');
     expect(firstSession).not.toBe(secondSession);
+  });
+
+  it('honors invocation overrides without touching config ephemerals', async () => {
+    const provider = new TestGeminiProvider();
+    const settings = new SettingsService();
+    const getEphemerals = vi.fn(() => {
+      throw new Error('config ephemerals should not be accessed');
+    });
+    const config = createRuntimeConfigStub(settings, {
+      getEphemeralSettings: getEphemerals,
+    }) as Config;
+    const runtime = createProviderRuntimeContext({
+      runtimeId: 'runtime-invocation',
+      settingsService: settings,
+      config,
+    });
+    const authMock = mockDetermineBestAuth([
+      { authMode: 'gemini-api-key', token: 'runtime-key' },
+    ]);
+    authMock.useMode(0);
+    const invocation = createRuntimeInvocationContext({
+      runtime,
+      settings,
+      providerName: 'gemini',
+      ephemeralsSnapshot: {
+        temperature: 0.23,
+        streaming: 'enabled',
+      },
+      metadata: { testCase: 'gemini-invocation-ephemerals' },
+    });
+
+    queueGoogleStream([
+      {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'invocation chunk' }],
+            },
+          },
+        ],
+      },
+    ]);
+
+    await collectResults(
+      provider.generateChatCompletion(
+        buildCallOptions(provider, {
+          contents: [createHumanContent('override')],
+          settings,
+          config,
+          runtime,
+          invocation,
+        }),
+      ),
+    );
+    authMock.restore();
+
+    const lastRequest = googleGenAIState.streamCalls.at(-1)?.request as
+      | { config?: Record<string, unknown> }
+      | undefined;
+    expect(lastRequest).toBeDefined();
+    expect(lastRequest?.config).toMatchObject({ temperature: 0.23 });
+    expect(getEphemerals).not.toHaveBeenCalled();
   });
 });

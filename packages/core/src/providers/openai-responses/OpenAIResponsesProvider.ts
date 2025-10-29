@@ -358,8 +358,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002/REQ-SP4-003
     // Source user memory directly from normalized options if available, then fallback to runtime config
-    const userMemory = await resolveUserMemory(options.userMemory, () =>
-      options.runtime?.config?.getUserMemory?.(),
+    const userMemory = await resolveUserMemory(
+      options.userMemory,
+      () => options.invocation?.userMemory,
     );
 
     const systemPrompt = await getCoreSystemPromptAsync(
@@ -455,8 +456,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002/REQ-SP4-003
     // Source per-call request overrides from normalized options (ephemeral settings take precedence)
-    const runtimeConfigEphemeralSettings =
-      options.runtime?.config?.getEphemeralSettings?.();
+    const runtimeConfigEphemeralSettings = options.invocation?.ephemerals;
     const settingsServiceModelParams = options.settings?.getProviderSettings(
       this.name,
     );
