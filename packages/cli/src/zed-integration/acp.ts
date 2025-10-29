@@ -10,8 +10,8 @@ import { z } from 'zod';
 import * as schema from './schema.js';
 export * from './schema.js';
 
-import { WritableStream, ReadableStream } from 'node:stream/web';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import type { WritableStream, ReadableStream } from 'node:stream/web';
+import { DebugLogger, coreEvents } from '@vybestack/llxprt-code-core';
 
 const acpLogger = new DebugLogger('llxprt:acp:connection');
 
@@ -286,7 +286,7 @@ class Connection {
       })
       .catch((error) => {
         // Continue processing writes on error
-        console.error('ACP write error:', error);
+        coreEvents.emitFeedback('error', 'ACP write error.', error);
       });
     return this.#writeQueue;
   }
