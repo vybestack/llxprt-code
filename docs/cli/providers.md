@@ -111,6 +111,48 @@ Each provider offers different models. You can select a specific model using the
 
 Many providers offer OpenAI-compatible APIs, which can be used by setting the `openai` provider with a custom base URL:
 
+#### Provider Aliases and Custom Endpoints
+
+LLxprt ships with ready-to-use aliases for popular OpenAI-compatible services—Fireworks, OpenRouter, Chutes.ai, Cerebras Code, xAI, LM Studio, and `llama.cpp`. These aliases are installed with the CLI and appear automatically in the `/provider` picker.
+
+- Packaged aliases live in the CLI bundle (`packages/cli/src/providers/aliases/*.config`)
+- User-defined aliases are loaded from `~/.llxprt/providers/*.config`
+- Aliases are reloaded every time you run `/provider save` or restart the CLI
+
+##### Save the current configuration as an alias
+
+```
+/provider openai
+/baseurl https://myotherprovider.com:123/v1/
+/model qwen-3-coder
+/provider save myotherprovider
+```
+
+`/provider save myotherprovider` writes `~/.llxprt/providers/myotherprovider.config`, capturing the active provider type, base URL, and current default model. The new alias shows up immediately in `/provider`.
+
+##### Manual alias files
+
+Create `~/.llxprt/providers/<alias>.config` to define an alias without using the CLI:
+
+```json
+{
+  "baseProvider": "openai",
+  "baseUrl": "https://example.com/v1/",
+  "defaultModel": "awesome-model-1",
+  "description": "Example hosted endpoint",
+  "apiKeyEnv": "EXAMPLE_API_KEY"
+}
+```
+
+Fields:
+
+- `baseProvider` (required): Base implementation to use. Currently `openai` is supported.
+- `baseUrl`: Overrides the endpoint. Defaults to the base provider’s URL when omitted.
+- `defaultModel`: Pre-selects the model shown in the UI.
+- `description`: Optional helper text.
+- `apiKeyEnv`: Name of an environment variable whose value should be used for this alias.
+- `providerConfig`: Optional object merged into the underlying provider config (advanced).
+
 #### xAI (Grok)
 
 To use Grok models:

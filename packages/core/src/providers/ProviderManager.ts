@@ -236,7 +236,13 @@ export class ProviderManager implements IProviderManager {
   }
 
   listProviders(): string[] {
-    return Array.from(this.providers.keys());
+    const names = Array.from(this.providers.keys());
+    const priorityOrder = ['anthropic', 'gemini', 'openai', 'openai-responses'];
+    const prioritized = priorityOrder.filter((name) => names.includes(name));
+    const remaining = names
+      .filter((name) => !priorityOrder.includes(name))
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    return [...prioritized, ...remaining];
   }
 
   /**
