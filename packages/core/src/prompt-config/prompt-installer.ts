@@ -28,10 +28,6 @@ export interface InstallOptions {
   force?: boolean; // Overwrite existing files
   dryRun?: boolean; // Simulate without writing
   verbose?: boolean; // Detailed logging
-  promptUser?: boolean; // Ask before overwriting conflicts
-  resolveConflict?: (
-    details: PromptConflictDetails,
-  ) => Promise<'overwrite' | 'keep'> | 'overwrite' | 'keep';
 }
 
 export type PromptConflictReason =
@@ -53,8 +49,8 @@ export interface PromptConflictSummary extends PromptConflictDetails {
 
 type ExistingFileDecision =
   | { action: 'same' }
-  | { action: 'keep'; conflict: PromptConflictSummary }
-  | { action: 'overwrite'; conflict: PromptConflictSummary };
+  | { action: 'keep'; conflict: PromptConflictSummary; notice: string | null }
+  | { action: 'resolved' };
 
 export interface InstallResult {
   success: boolean;
@@ -63,6 +59,7 @@ export interface InstallResult {
   errors: string[];
   baseDir?: string;
   conflicts: PromptConflictSummary[];
+  notices: string[];
 }
 
 export interface UninstallOptions {
@@ -129,6 +126,7 @@ export class PromptInstaller {
     const skipped: string[] = [];
     const errors: string[] = [];
     const conflicts: PromptConflictSummary[] = [];
+    const notices: string[] = [];
 
     // Prepare installation
     let expandedBaseDir = baseDir;
@@ -145,6 +143,7 @@ export class PromptInstaller {
         errors: ['Invalid base directory'],
         baseDir: expandedBaseDir,
         conflicts: [],
+        notices: [],
       };
     }
 
@@ -181,7 +180,6 @@ export class PromptInstaller {
     for (const [relativePath, content] of Object.entries(defaults)) {
       const fullPath = path.join(expandedBaseDir, relativePath);
       const fileDir = path.dirname(fullPath);
-      let overwriteConflict: PromptConflictSummary | null = null;
 
       // Create parent directory if needed
       if (!existsSync(fileDir) && !options?.dryRun) {
@@ -196,13 +194,13 @@ export class PromptInstaller {
       }
 
       // Check existing file
-      if (!options?.dryRun && existsSync(fullPath) && !options?.force) {
+      if (existsSync(fullPath) && !options?.force) {
         const decision = await this.handleExistingFile(
           expandedBaseDir,
           relativePath,
           fullPath,
           content,
-          options,
+          !options?.dryRun,
         ).catch((error) => {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -218,15 +216,24 @@ export class PromptInstaller {
           continue;
         }
 
-        if (decision.action === 'keep') {
-          conflicts.push(decision.conflict);
+        if (decision.action === 'resolved') {
           skipped.push(relativePath);
+          if (options?.verbose) {
+            console.log(
+              'Default update already provided for review:',
+              relativePath,
+            );
+          }
           continue;
         }
 
-        if (decision.action === 'overwrite') {
+        if (decision.action === 'keep') {
           conflicts.push(decision.conflict);
-          overwriteConflict = decision.conflict;
+          if (decision.notice) {
+            notices.push(decision.notice);
+          }
+          skipped.push(relativePath);
+          continue;
         }
       }
 
@@ -245,9 +252,6 @@ export class PromptInstaller {
           try {
             await fs.rename(tempPath, fullPath);
             installed.push(relativePath);
-            if (overwriteConflict) {
-              this.logConflict(overwriteConflict, 'overwritten');
-            }
             if (options?.verbose) {
               console.log('Installed:', relativePath);
             }
@@ -330,6 +334,7 @@ export class PromptInstaller {
       errors,
       baseDir: expandedBaseDir,
       conflicts,
+      notices,
     };
   }
 
@@ -338,7 +343,7 @@ export class PromptInstaller {
     relativePath: string,
     fullPath: string,
     content: string,
-    options?: InstallOptions,
+    createReviewCopy: boolean,
   ): Promise<ExistingFileDecision> {
     const existingContent = await fs.readFile(fullPath, 'utf-8');
     if (existingContent === content) {
@@ -349,61 +354,43 @@ export class PromptInstaller {
     const defaultStats = await this.getDefaultFileStats(relativePath);
     const reason = this.determineConflictReason(userStats, defaultStats);
 
-    const userTimestamp = userStats.mtime.toISOString();
-    const defaultTimestamp = defaultStats?.mtime.toISOString();
+    const timestamp = this.getReviewTimestamp(defaultStats);
+    const reviewRelativePath = this.generateReviewFilename(
+      relativePath,
+      timestamp,
+    );
+    const reviewFullPath = path.join(expandedBaseDir, reviewRelativePath);
 
-    const context: PromptConflictDetails = {
+    if (existsSync(reviewFullPath)) {
+      return { action: 'resolved' };
+    }
+
+    if (createReviewCopy) {
+      await fs.mkdir(path.dirname(reviewFullPath), {
+        recursive: true,
+        mode: 0o755,
+      });
+      await fs.writeFile(reviewFullPath, content, { mode: 0o644 });
+    }
+
+    const conflict: PromptConflictSummary = {
       path: relativePath,
+      action: 'kept',
+      reviewFile: reviewRelativePath,
       reason,
-      userTimestamp,
-      defaultTimestamp,
+      userTimestamp: userStats.mtime.toISOString(),
+      defaultTimestamp: defaultStats?.mtime.toISOString(),
     };
 
-    const decision = await this.resolveConflictDecision(context, options);
-
-    if (decision === 'overwrite') {
-      return {
-        action: 'overwrite',
-        conflict: {
-          ...context,
-          action: 'overwritten',
-        },
-      };
-    }
-
-    const reviewDate = new Date();
-    let reviewRelativePath = this.generateReviewFilename(
-      relativePath,
-      0,
-      reviewDate,
+    const notice = this.buildConflictNotice(
+      path.join(expandedBaseDir, relativePath),
+      reviewFullPath,
     );
-    let reviewFullPath = path.join(expandedBaseDir, reviewRelativePath);
-    let attempt = 1;
-    while (existsSync(reviewFullPath)) {
-      reviewRelativePath = this.generateReviewFilename(
-        relativePath,
-        attempt,
-        reviewDate,
-      );
-      reviewFullPath = path.join(expandedBaseDir, reviewRelativePath);
-      attempt += 1;
-    }
-
-    await fs.mkdir(path.dirname(reviewFullPath), {
-      recursive: true,
-      mode: 0o755,
-    });
-    await fs.writeFile(reviewFullPath, content, { mode: 0o644 });
-
-    this.logConflict(context, 'kept', reviewRelativePath);
 
     return {
       action: 'keep',
-      conflict: {
-        ...context,
-        action: 'kept',
-        reviewFile: reviewRelativePath,
-      },
+      conflict,
+      notice,
     };
   }
 
@@ -463,12 +450,9 @@ export class PromptInstaller {
 
   private generateReviewFilename(
     relativePath: string,
-    attempt = 0,
-    baseDate: Date = new Date(),
+    timestamp: string,
   ): string {
-    const timestamp = this.formatTimestamp(baseDate);
-    const suffix = attempt === 0 ? '' : `-${attempt}`;
-    return `${relativePath}.${timestamp}${suffix}.llxprt-update`;
+    return `${relativePath}.${timestamp}`;
   }
 
   private formatTimestamp(date: Date): string {
@@ -478,88 +462,18 @@ export class PromptInstaller {
     const hours = date.getUTCHours().toString().padStart(2, '0');
     const minutes = date.getUTCMinutes().toString().padStart(2, '0');
     const seconds = date.getUTCSeconds().toString().padStart(2, '0');
-    return `${year}${month}${day}${hours}${minutes}${seconds}`;
+    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
   }
 
-  private canPromptUser(options?: InstallOptions): boolean {
-    if (options?.promptUser === false) {
-      return false;
+  private getReviewTimestamp(defaultStats: Stats | null): string {
+    if (defaultStats) {
+      return this.formatTimestamp(defaultStats.mtime);
     }
-    if (!process.stdin || !process.stdout) {
-      return false;
-    }
-    return (
-      Boolean(process.stdin.isTTY) &&
-      Boolean(process.stdout.isTTY) &&
-      process.env.CI !== 'true'
-    );
+    return this.formatTimestamp(new Date(0));
   }
 
-  private async resolveConflictDecision(
-    context: PromptConflictDetails,
-    options?: InstallOptions,
-  ): Promise<'overwrite' | 'keep'> {
-    if (options?.resolveConflict) {
-      return await options.resolveConflict(context);
-    }
-
-    if (!this.canPromptUser(options)) {
-      return 'keep';
-    }
-
-    const { createInterface } = await import('node:readline/promises');
-    const rl = createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    try {
-      const defaultInfo = context.defaultTimestamp
-        ? ` (default updated ${context.defaultTimestamp})`
-        : '';
-      const userInfo = context.userTimestamp
-        ? ` (your version ${context.userTimestamp})`
-        : '';
-      const answer = (
-        await rl.question(
-          `New default prompt available for ${context.path}${defaultInfo}. Overwrite your prompt${userInfo}? [y/N]: `,
-        )
-      )
-        .trim()
-        .toLowerCase();
-
-      if (answer === 'y' || answer === 'yes') {
-        return 'overwrite';
-      }
-    } finally {
-      await rl.close();
-    }
-
-    return 'keep';
-  }
-
-  private logConflict(
-    details: PromptConflictDetails,
-    resolution: 'kept' | 'overwritten',
-    reviewFile?: string,
-  ): void {
-    const parts = [`Detected updated default prompt for ${details.path}.`];
-    if (details.defaultTimestamp) {
-      parts.push(`Default updated ${details.defaultTimestamp}.`);
-    }
-    if (details.userTimestamp) {
-      parts.push(`Your version modified ${details.userTimestamp}.`);
-    }
-
-    if (resolution === 'kept' && reviewFile) {
-      parts.push(
-        `Kept your prompt. New default saved to ${reviewFile} for review.`,
-      );
-    } else if (resolution === 'overwritten') {
-      parts.push('Overwrote local prompt with bundled default.');
-    }
-
-    console.warn(parts.join(' '));
+  private buildConflictNotice(userPath: string, reviewPath: string): string {
+    return `Warning: this version includes a newer version of ${userPath} which you customized. We put ${reviewPath} next to it for your review.`;
   }
 
   /**

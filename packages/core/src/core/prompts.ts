@@ -51,6 +51,11 @@ async function getPromptService(): Promise<PromptService> {
   return promptService!;
 }
 
+export async function drainPromptInstallerNotices(): Promise<string[]> {
+  const service = await getPromptService();
+  return service.consumeInstallerNotices();
+}
+
 /**
  * Get tool name mapping - lazy initialization to avoid circular dependencies
  */

@@ -48,6 +48,7 @@ export class PromptService {
   private config: Required<PromptServiceConfig>;
   private preloadedFiles: Map<string, string>;
   private _detectedEnvironment: EnvironmentInfo | null;
+  private installerNotices: string[];
 
   /**
    * Creates a new PromptService instance
@@ -79,6 +80,7 @@ export class PromptService {
     this.initialized = false;
     this.preloadedFiles = new Map();
     this._detectedEnvironment = null;
+    this.installerNotices = [];
 
     // Environment detection reserved for future prompt customization
     void this._detectedEnvironment;
@@ -116,6 +118,9 @@ export class PromptService {
         verbose: this.config.debugMode,
       },
     );
+    if (installResult.notices.length > 0) {
+      this.installerNotices.push(...installResult.notices);
+    }
 
     if (!installResult.success) {
       throw new Error(
@@ -159,6 +164,16 @@ export class PromptService {
     );
 
     this.initialized = true;
+  }
+
+  /**
+   * Consume any installer notices generated during initialization.
+   * Returns the notices and clears the internal queue.
+   */
+  consumeInstallerNotices(): string[] {
+    const notices = [...this.installerNotices];
+    this.installerNotices = [];
+    return notices;
   }
 
   /**
