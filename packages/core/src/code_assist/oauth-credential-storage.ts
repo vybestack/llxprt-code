@@ -11,6 +11,7 @@ import type { OAuthCredentials } from '../mcp/token-storage/types.js';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { promises as fs } from 'node:fs';
+import { coreEvents } from '../events/core-events.js';
 
 const KEYCHAIN_SERVICE_NAME = 'llxprt-code-oauth';
 const MAIN_ACCOUNT_KEY = 'main-account';
@@ -59,8 +60,12 @@ export class OAuthCredentialStorage {
       // Fallback: Try to migrate from old file-based storage
       return await this.migrateFromFileStorage();
     } catch (error: unknown) {
-      console.error(error);
-      throw new Error('Failed to load OAuth credentials');
+      coreEvents.emitFeedback(
+        'error',
+        'Failed to load OAuth credentials',
+        error,
+      );
+      throw new Error('Failed to load OAuth credentials', { cause: error });
     }
   }
 
@@ -102,8 +107,12 @@ export class OAuthCredentialStorage {
         ),
       );
     } catch (error: unknown) {
-      console.error(error);
-      throw new Error('Failed to clear OAuth credentials');
+      coreEvents.emitFeedback(
+        'error',
+        'Failed to clear OAuth credentials',
+        error,
+      );
+      throw new Error('Failed to clear OAuth credentials', { cause: error });
     }
   }
 
