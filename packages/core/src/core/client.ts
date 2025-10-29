@@ -312,15 +312,13 @@ export class GeminiClient {
 
     this.toolActivityCount += 1;
 
-    // Check if the current request is complex enough to warrant a todo reminder
-    const isComplex = this.isCurrentRequestComplex();
-
-    if (this.toolActivityCount > 5 && isComplex) {
+    // Always trigger reminders after a certain number of tool calls
+    // regardless of complexity - this is the core safety feature
+    if (this.toolActivityCount > 5) {
       this.toolCallReminderLevel = 'escalated';
     } else if (
       this.toolActivityCount === 5 &&
-      this.toolCallReminderLevel === 'none' &&
-      isComplex
+      this.toolCallReminderLevel === 'none'
     ) {
       this.toolCallReminderLevel = 'base';
     }
