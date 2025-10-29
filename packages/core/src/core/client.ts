@@ -328,32 +328,6 @@ export class GeminiClient {
    * Analyzes the current user request to determine if it's complex enough
    * to warrant todo reminders
    */
-  private isCurrentRequestComplex(): boolean {
-    // If we have recent history, analyze the last user message
-    const chatHistory = this.chat?.getHistory() || [];
-    if (chatHistory.length === 0) return false;
-
-    // Find the last user message
-    const lastUserMessage = chatHistory
-      .slice()
-      .reverse()
-      .find((msg) => msg.role === 'user');
-
-    if (!lastUserMessage) return false;
-
-    // Extract text content from all parts
-    const messageText =
-      lastUserMessage.parts
-        ?.filter((part) => 'text' in part)
-        .map((part) => part.text || '')
-        .join(' ') || '';
-
-    if (!messageText.trim()) return false;
-
-    // Use complexity analyzer to determine if this is complex
-    const analysis = this.complexityAnalyzer.analyzeComplexity(messageText);
-    return analysis.isComplex;
-  }
 
   async addHistory(content: Content) {
     // Ensure chat is initialized before adding history
