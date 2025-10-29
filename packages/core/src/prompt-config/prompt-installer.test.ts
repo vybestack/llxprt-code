@@ -174,6 +174,7 @@ describe('PromptInstaller', () => {
 
       expect(result.success).toBe(true);
       expect(result.installed).toHaveLength(4);
+      expect(result.conflicts).toHaveLength(0);
 
       // Verify no files were actually written
       expect(existsSync(testBaseDir)).toBe(false);
@@ -196,6 +197,37 @@ describe('PromptInstaller', () => {
 
       expect(result.success).toBe(false);
       expect(result.errors).toContain('Invalid base directory');
+    });
+
+    it('should create review file when defaults are newer than local prompt', async () => {
+      await fs.mkdir(testBaseDir, { recursive: true });
+      const existingPath = path.join(testBaseDir, 'core.md');
+      await fs.writeFile(existingPath, 'User customized content');
+      const pastDate = new Date('2023-01-01T00:00:00.000Z');
+      await fs.utimes(existingPath, pastDate, pastDate);
+
+      const result = await installer.install(testBaseDir, {
+        'core.md': '# Core Prompt\nNew default content',
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.installed).not.toContain('core.md');
+      expect(result.skipped).toContain('core.md');
+      expect(result.conflicts).toHaveLength(1);
+
+      const conflict = result.conflicts[0];
+      expect(conflict.path).toBe('core.md');
+      expect(conflict.action).toBe('kept');
+      expect(conflict.reviewFile).toMatch(/^core\.md\.\d{8}.*llxprt-update$/);
+
+      const reviewPath = path.join(testBaseDir, conflict.reviewFile!);
+      expect(existsSync(reviewPath)).toBe(true);
+
+      const reviewContent = await fs.readFile(reviewPath, 'utf-8');
+      expect(reviewContent).toBe('# Core Prompt\nNew default content');
+
+      const originalContent = await fs.readFile(existingPath, 'utf-8');
+      expect(originalContent).toBe('User customized content');
     });
 
     it('should set correct file permissions', async () => {

@@ -10,6 +10,9 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { existsSync } from 'fs';
+import { fileURLToPath } from 'node:url';
+import process from 'node:process';
+import type { Stats } from 'fs';
 
 // Constants
 export const DEFAULT_BASE_DIR = '~/.llxprt/prompts';
@@ -25,7 +28,33 @@ export interface InstallOptions {
   force?: boolean; // Overwrite existing files
   dryRun?: boolean; // Simulate without writing
   verbose?: boolean; // Detailed logging
+  promptUser?: boolean; // Ask before overwriting conflicts
+  resolveConflict?: (
+    details: PromptConflictDetails,
+  ) => Promise<'overwrite' | 'keep'> | 'overwrite' | 'keep';
 }
+
+export type PromptConflictReason =
+  | 'default-newer'
+  | 'user-newer'
+  | 'content-diff';
+
+export interface PromptConflictDetails {
+  path: string;
+  userTimestamp?: string;
+  defaultTimestamp?: string;
+  reason: PromptConflictReason;
+}
+
+export interface PromptConflictSummary extends PromptConflictDetails {
+  action: 'kept' | 'overwritten';
+  reviewFile?: string;
+}
+
+type ExistingFileDecision =
+  | { action: 'same' }
+  | { action: 'keep'; conflict: PromptConflictSummary }
+  | { action: 'overwrite'; conflict: PromptConflictSummary };
 
 export interface InstallResult {
   success: boolean;
@@ -33,6 +62,7 @@ export interface InstallResult {
   skipped: string[];
   errors: string[];
   baseDir?: string;
+  conflicts: PromptConflictSummary[];
 }
 
 export interface UninstallOptions {
@@ -81,6 +111,8 @@ export type DefaultsMap = z.infer<typeof DefaultsMapSchema>;
  * PromptInstaller handles installation, validation, and maintenance of prompt files
  */
 export class PromptInstaller {
+  private defaultSourceDirs: string[] | null = null;
+
   /**
    * Install default prompt files
    * @param baseDir - Base directory for prompts (defaults to DEFAULT_BASE_DIR)
@@ -96,6 +128,7 @@ export class PromptInstaller {
     const installed: string[] = [];
     const skipped: string[] = [];
     const errors: string[] = [];
+    const conflicts: PromptConflictSummary[] = [];
 
     // Prepare installation
     let expandedBaseDir = baseDir;
@@ -111,6 +144,7 @@ export class PromptInstaller {
         skipped: [],
         errors: ['Invalid base directory'],
         baseDir: expandedBaseDir,
+        conflicts: [],
       };
     }
 
@@ -147,6 +181,7 @@ export class PromptInstaller {
     for (const [relativePath, content] of Object.entries(defaults)) {
       const fullPath = path.join(expandedBaseDir, relativePath);
       const fileDir = path.dirname(fullPath);
+      let overwriteConflict: PromptConflictSummary | null = null;
 
       // Create parent directory if needed
       if (!existsSync(fileDir) && !options?.dryRun) {
@@ -162,11 +197,37 @@ export class PromptInstaller {
 
       // Check existing file
       if (!options?.dryRun && existsSync(fullPath) && !options?.force) {
-        skipped.push(relativePath);
-        if (options?.verbose) {
-          console.log('Preserving existing:', relativePath);
+        const decision = await this.handleExistingFile(
+          expandedBaseDir,
+          relativePath,
+          fullPath,
+          content,
+          options,
+        ).catch((error) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          errors.push(`Failed to evaluate ${relativePath}: ${message}`);
+          return { action: 'same' } as ExistingFileDecision;
+        });
+
+        if (decision.action === 'same') {
+          skipped.push(relativePath);
+          if (options?.verbose) {
+            console.log('Preserving existing:', relativePath);
+          }
+          continue;
         }
-        continue;
+
+        if (decision.action === 'keep') {
+          conflicts.push(decision.conflict);
+          skipped.push(relativePath);
+          continue;
+        }
+
+        if (decision.action === 'overwrite') {
+          conflicts.push(decision.conflict);
+          overwriteConflict = decision.conflict;
+        }
       }
 
       // Write file
@@ -184,6 +245,9 @@ export class PromptInstaller {
           try {
             await fs.rename(tempPath, fullPath);
             installed.push(relativePath);
+            if (overwriteConflict) {
+              this.logConflict(overwriteConflict, 'overwritten');
+            }
             if (options?.verbose) {
               console.log('Installed:', relativePath);
             }
@@ -265,7 +329,237 @@ export class PromptInstaller {
       skipped,
       errors,
       baseDir: expandedBaseDir,
+      conflicts,
     };
+  }
+
+  private async handleExistingFile(
+    expandedBaseDir: string,
+    relativePath: string,
+    fullPath: string,
+    content: string,
+    options?: InstallOptions,
+  ): Promise<ExistingFileDecision> {
+    const existingContent = await fs.readFile(fullPath, 'utf-8');
+    if (existingContent === content) {
+      return { action: 'same' };
+    }
+
+    const userStats = await fs.stat(fullPath);
+    const defaultStats = await this.getDefaultFileStats(relativePath);
+    const reason = this.determineConflictReason(userStats, defaultStats);
+
+    const userTimestamp = userStats.mtime.toISOString();
+    const defaultTimestamp = defaultStats?.mtime.toISOString();
+
+    const context: PromptConflictDetails = {
+      path: relativePath,
+      reason,
+      userTimestamp,
+      defaultTimestamp,
+    };
+
+    const decision = await this.resolveConflictDecision(context, options);
+
+    if (decision === 'overwrite') {
+      return {
+        action: 'overwrite',
+        conflict: {
+          ...context,
+          action: 'overwritten',
+        },
+      };
+    }
+
+    const reviewDate = new Date();
+    let reviewRelativePath = this.generateReviewFilename(
+      relativePath,
+      0,
+      reviewDate,
+    );
+    let reviewFullPath = path.join(expandedBaseDir, reviewRelativePath);
+    let attempt = 1;
+    while (existsSync(reviewFullPath)) {
+      reviewRelativePath = this.generateReviewFilename(
+        relativePath,
+        attempt,
+        reviewDate,
+      );
+      reviewFullPath = path.join(expandedBaseDir, reviewRelativePath);
+      attempt += 1;
+    }
+
+    await fs.mkdir(path.dirname(reviewFullPath), {
+      recursive: true,
+      mode: 0o755,
+    });
+    await fs.writeFile(reviewFullPath, content, { mode: 0o644 });
+
+    this.logConflict(context, 'kept', reviewRelativePath);
+
+    return {
+      action: 'keep',
+      conflict: {
+        ...context,
+        action: 'kept',
+        reviewFile: reviewRelativePath,
+      },
+    };
+  }
+
+  private getDefaultSourceDirectories(): string[] {
+    if (this.defaultSourceDirs) {
+      return this.defaultSourceDirs;
+    }
+
+    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+    const candidates = new Set<string>();
+    candidates.add(path.join(moduleDir, 'defaults'));
+    candidates.add(path.join(moduleDir, '..', 'defaults'));
+    candidates.add(path.join(moduleDir, '..', '..', 'defaults'));
+    candidates.add(
+      path.join(moduleDir, '..', '..', 'src', 'prompt-config', 'defaults'),
+    );
+    candidates.add(path.join(process.cwd(), 'bundle'));
+    candidates.add(
+      path.join(process.cwd(), 'packages/core/src/prompt-config/defaults'),
+    );
+
+    this.defaultSourceDirs = Array.from(candidates);
+    return this.defaultSourceDirs;
+  }
+
+  private async getDefaultFileStats(
+    relativePath: string,
+  ): Promise<Stats | null> {
+    for (const baseDir of this.getDefaultSourceDirectories()) {
+      const candidate = path.join(baseDir, relativePath);
+      try {
+        const stats = await fs.stat(candidate);
+        if (stats.isFile()) {
+          return stats;
+        }
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  private determineConflictReason(
+    userStats: Stats | null,
+    defaultStats: Stats | null,
+  ): PromptConflictReason {
+    if (userStats && defaultStats) {
+      if (defaultStats.mtimeMs > userStats.mtimeMs) {
+        return 'default-newer';
+      }
+      if (userStats.mtimeMs > defaultStats.mtimeMs) {
+        return 'user-newer';
+      }
+    }
+    return 'content-diff';
+  }
+
+  private generateReviewFilename(
+    relativePath: string,
+    attempt = 0,
+    baseDate: Date = new Date(),
+  ): string {
+    const timestamp = this.formatTimestamp(baseDate);
+    const suffix = attempt === 0 ? '' : `-${attempt}`;
+    return `${relativePath}.${timestamp}${suffix}.llxprt-update`;
+  }
+
+  private formatTimestamp(date: Date): string {
+    const year = date.getUTCFullYear().toString();
+    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = date.getUTCDate().toString().padStart(2, '0');
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+    return `${year}${month}${day}${hours}${minutes}${seconds}`;
+  }
+
+  private canPromptUser(options?: InstallOptions): boolean {
+    if (options?.promptUser === false) {
+      return false;
+    }
+    if (!process.stdin || !process.stdout) {
+      return false;
+    }
+    return (
+      Boolean(process.stdin.isTTY) &&
+      Boolean(process.stdout.isTTY) &&
+      process.env.CI !== 'true'
+    );
+  }
+
+  private async resolveConflictDecision(
+    context: PromptConflictDetails,
+    options?: InstallOptions,
+  ): Promise<'overwrite' | 'keep'> {
+    if (options?.resolveConflict) {
+      return await options.resolveConflict(context);
+    }
+
+    if (!this.canPromptUser(options)) {
+      return 'keep';
+    }
+
+    const { createInterface } = await import('node:readline/promises');
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    try {
+      const defaultInfo = context.defaultTimestamp
+        ? ` (default updated ${context.defaultTimestamp})`
+        : '';
+      const userInfo = context.userTimestamp
+        ? ` (your version ${context.userTimestamp})`
+        : '';
+      const answer = (
+        await rl.question(
+          `New default prompt available for ${context.path}${defaultInfo}. Overwrite your prompt${userInfo}? [y/N]: `,
+        )
+      )
+        .trim()
+        .toLowerCase();
+
+      if (answer === 'y' || answer === 'yes') {
+        return 'overwrite';
+      }
+    } finally {
+      await rl.close();
+    }
+
+    return 'keep';
+  }
+
+  private logConflict(
+    details: PromptConflictDetails,
+    resolution: 'kept' | 'overwritten',
+    reviewFile?: string,
+  ): void {
+    const parts = [`Detected updated default prompt for ${details.path}.`];
+    if (details.defaultTimestamp) {
+      parts.push(`Default updated ${details.defaultTimestamp}.`);
+    }
+    if (details.userTimestamp) {
+      parts.push(`Your version modified ${details.userTimestamp}.`);
+    }
+
+    if (resolution === 'kept' && reviewFile) {
+      parts.push(
+        `Kept your prompt. New default saved to ${reviewFile} for review.`,
+      );
+    } else if (resolution === 'overwritten') {
+      parts.push('Overwrote local prompt with bundled default.');
+    }
+
+    console.warn(parts.join(' '));
   }
 
   /**
