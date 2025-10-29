@@ -610,8 +610,13 @@ export async function loadCliConfig(
         );
       }
     } catch (error) {
-      logger.error(`Failed to load profile '${profileToLoad}': ${error}`);
-      // Continue without the profile settings
+      // CRITICAL FIX: Throw error instead of continuing silently when profile is invalid
+      // This prevents the system from falling back to Gemini provider when profile is invalid
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to load profile '${profileToLoad}': ${errorMessage}`,
+      );
     }
   }
 
@@ -820,6 +825,13 @@ export async function loadCliConfig(
   // Priority: CLI arg > Profile > Environment > Default
   let finalProvider: string;
   if (argv.provider) {
+    // CRITICAL FIX: Validate that the explicitly provided provider is valid
+    // Don't fallback to gemini silently if invalid provider is specified
+    if (argv.provider.trim() === '') {
+      throw new Error(
+        'Provider cannot be empty or whitespace. Please specify a valid provider or remove the --provider flag to use the default.',
+      );
+    }
     finalProvider = argv.provider;
   } else if (profileProvider && profileProvider.trim() !== '') {
     // Use profile provider only if it's not empty/whitespace
