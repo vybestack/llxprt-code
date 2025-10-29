@@ -64,33 +64,12 @@ export const SINGLE_QUOTE = "'";
 export const DOUBLE_QUOTE = '"';
 const MAX_MOUSE_BUFFER_SIZE = 4096;
 
-const ALT_KEY_CHARACTER_MAP: Record<string, string> = {
-  '\u00E5': 'a',
-  '\u222B': 'b',
-  '\u00E7': 'c',
-  '\u2202': 'd',
-  '\u00B4': 'e',
-  '\u0192': 'f',
-  '\u00A9': 'g',
-  '\u02D9': 'h',
-  '\u02C6': 'i',
-  '\u2206': 'j',
-  '\u02DA': 'k',
-  '\u00AC': 'l',
-  '\u00B5': 'm',
-  '\u02DC': 'n',
-  '\u00F8': 'o',
-  '\u03C0': 'p',
-  '\u0153': 'q',
-  '\u00AE': 'r',
-  '\u00DF': 's',
-  '\u2020': 't',
-  '\u00A8': 'u',
-  '\u25CA': 'v',
-  '\u201E': 'w',
-  '\u02DB': 'x',
-  '\u00C1': 'y',
-  '\u03A9': 'z',
+// On Mac, hitting alt+char will yield funny characters.
+// Remap these three since we listen for them.
+const MAC_ALT_KEY_CHARACTER_MAP: Record<string, string> = {
+  '\u222B': 'b', // "∫" back one word
+  '\u0192': 'f', // "ƒ" forward one word
+  '\u00B5': 'm', // "µ" toggle markup view
 };
 
 // IME interference handling constants - moved to module level for performance
@@ -707,8 +686,8 @@ export function KeypressProvider({
     };
 
     const handleAltKeyMapping = (key: Key): boolean => {
-      const mappedLetter = ALT_KEY_CHARACTER_MAP[key.sequence];
-      if (mappedLetter && !key.meta) {
+      const mappedLetter = MAC_ALT_KEY_CHARACTER_MAP[key.sequence];
+      if (process.platform === 'darwin' && mappedLetter && !key.meta) {
         broadcast({
           name: mappedLetter,
           ctrl: false,
