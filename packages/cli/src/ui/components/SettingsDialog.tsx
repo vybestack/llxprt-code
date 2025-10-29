@@ -766,7 +766,7 @@ export function SettingsDialog({
         </Text>
         {showRestartPrompt && (
           <Text color={Colors.AccentYellow}>
-            To see changes, Gemini CLI must be restarted. Press r to exit and
+            To see changes, LLxprt Code must be restarted. Press r to exit and
             apply changes now.
           </Text>
         )}
