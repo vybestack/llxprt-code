@@ -72,11 +72,11 @@ export class ComplexityAnalyzer {
 
   // Task separator patterns for comma-separated lists
   private readonly taskSeparatorPattern = /(?:,\s*(?:and\s+)?|;\s*|\band\s+)/;
-  private readonly fileReferencePattern =
-    /(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]+/g;
+  // NOTE: File reference pattern no longer used to reduce false positives
+  // private readonly fileReferencePattern = /(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]+/g;
 
   constructor(options: ComplexityAnalyzerOptions = {}) {
-    this.complexityThreshold = options.complexityThreshold ?? 0.5;
+    this.complexityThreshold = options.complexityThreshold ?? 0.6;
     this.minTasksForSuggestion = options.minTasksForSuggestion ?? 3;
   }
 
@@ -95,12 +95,14 @@ export class ComplexityAnalyzer {
     const sequentialIndicators = this.findSequentialIndicators(message);
     const questionCount = this.countQuestions(message);
 
-    const fileReferences = this.extractFileReferences(message);
-    for (const reference of fileReferences) {
-      if (!detectedTasks.includes(reference)) {
-        detectedTasks.push(reference);
-      }
-    }
+    // File references are no longer counted toward task detection
+    // This was causing too many false positives for todo suggestions
+    // const fileReferences = this.extractFileReferences(message);
+    // for (const reference of fileReferences) {
+    //   if (!detectedTasks.includes(reference)) {
+    //     detectedTasks.push(reference);
+    //   }
+    // }
 
     // Calculate complexity score based on multiple factors
     const complexityScore = this.calculateComplexityScore({
@@ -224,21 +226,23 @@ export class ComplexityAnalyzer {
   }
 
   /**
-   * Extracts file references from the message to count as tasks.
+   * Extracts file references from the message.
+   * NOTE: No longer used for complexity counting to reduce false positives,
+   * but kept in case needed for future functionality.
    */
-  private extractFileReferences(message: string): string[] {
-    const references: string[] = [];
-    const matches = message.matchAll(this.fileReferencePattern);
+  // private extractFileReferences(message: string): string[] {
+  //   const references: string[] = [];
+  //   const matches = message.matchAll(this.fileReferencePattern);
 
-    for (const match of matches) {
-      const reference = match[0].trim();
-      if (reference.length > 0 && !references.includes(reference)) {
-        references.push(reference);
-      }
-    }
+  //   for (const match of matches) {
+  //     const reference = match[0].trim();
+  //     if (reference.length > 0 && !references.includes(reference)) {
+  //       references.push(reference);
+  //     }
+  //   }
 
-    return references;
-  }
+  //   return references;
+  // }
 
   /**
    * Finds sequential indicator keywords in the message.
@@ -312,36 +316,36 @@ export class ComplexityAnalyzer {
   }): number {
     let score = 0;
 
-    // Task count is the primary factor - increased weights
+    // Task count is the primary factor - tuned to require more genuine complexity
     if (factors.taskCount >= 5) {
       score += 0.8;
     } else if (factors.taskCount >= 4) {
-      score += 0.75;
+      score += 0.7; // Reduced from 0.75
     } else if (factors.taskCount >= 3) {
-      score += 0.7;
+      score += 0.5; // Exactly threshold with 3 tasks
     } else if (factors.taskCount >= 2) {
-      score += 0.5;
+      score += 0.3; // Reduced from 0.5
     } else if (factors.taskCount === 1) {
-      score += 0.2;
+      score += 0.1; // Reduced from 0.2
     }
 
-    // Sequential indicators add to complexity
+    // Sequential indicators add to complexity, but with reduced impact
     if (factors.hasSequentialIndicators) {
       // If we have sequential indicators but few detected tasks, boost the score
       if (factors.taskCount === 0) {
-        score += 0.5; // Likely sequential tasks that weren't parsed as list
+        score += 0.3; // Reduced from 0.5
       } else {
-        score += Math.min(0.4, factors.sequentialIndicatorCount * 0.15);
+        score += Math.min(0.3, factors.sequentialIndicatorCount * 0.1); // Reduced from 0.4 and 0.15
       }
     }
 
-    // Multiple questions indicate complexity
+    // Multiple questions indicate complexity, with slight reduction
     if (factors.questionCount >= 3) {
-      score += 0.65; // Multiple questions typically mean separate topics
+      score += 0.6; // Reduced from 0.65
     } else if (factors.questionCount >= 2) {
-      score += 0.4;
+      score += 0.35; // Reduced from 0.4
     } else if (factors.questionCount === 1) {
-      score += 0.1;
+      score += 0.08; // Reduced from 0.1
     }
 
     // Very long messages might be complex
