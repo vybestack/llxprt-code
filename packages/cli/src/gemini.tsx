@@ -1101,8 +1101,18 @@ export async function main() {
     settings,
   );
 
+  const hasDeprecatedPromptArg = process.argv.some((arg) =>
+    arg.startsWith('--prompt'),
+  );
+
   try {
-    await runNonInteractive(nonInteractiveConfig, settings, input, prompt_id);
+    await runNonInteractive({
+      config: nonInteractiveConfig,
+      settings,
+      input,
+      prompt_id,
+      hasDeprecatedPromptArg,
+    });
   } catch (error) {
     if (nonInteractiveConfig.getOutputFormat() === OutputFormat.JSON) {
       const formatter = new JsonFormatter();

@@ -79,6 +79,26 @@ describe('runNonInteractive', () => {
   let mockGeminiClient: {
     sendMessageStream: vi.Mock;
   };
+  const MOCK_SESSION_METRICS: SessionMetrics = {
+    models: {},
+    tools: {
+      totalCalls: 0,
+      totalSuccess: 0,
+      totalFail: 0,
+      totalDurationMs: 0,
+      totalDecisions: {
+        accept: 0,
+        reject: 0,
+        modify: 0,
+        auto_accept: 0,
+      },
+      byName: {},
+    },
+    files: {
+      totalLinesAdded: 0,
+      totalLinesRemoved: 0,
+    },
+  };
 
   beforeEach(async () => {
     mockCoreExecuteToolCall = vi.mocked(executeToolCall);
@@ -172,12 +192,12 @@ describe('runNonInteractive', () => {
       createStreamFromEvents(events),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Test input',
-      'prompt-id-1',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-1',
+    });
 
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
       [{ text: 'Test input' }],
@@ -221,12 +241,12 @@ describe('runNonInteractive', () => {
       .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
       .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Use a tool',
-      'prompt-id-2',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Use a tool',
+      prompt_id: 'prompt-id-2',
+    });
 
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
@@ -289,12 +309,12 @@ describe('runNonInteractive', () => {
       },
     });
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Use the non-gemini provider',
-      'prompt-provider',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Use the non-gemini provider',
+      prompt_id: 'prompt-provider',
+    });
 
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
     expect(mockGeminiClient.sendMessageStream).toHaveBeenNthCalledWith(
@@ -356,12 +376,12 @@ describe('runNonInteractive', () => {
       .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
       .mockReturnValueOnce(createStreamFromEvents(finalResponse));
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Trigger tool error',
-      'prompt-id-3',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Trigger tool error',
+      prompt_id: 'prompt-id-3',
+    });
 
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
@@ -397,12 +417,12 @@ describe('runNonInteractive', () => {
     });
 
     await expect(
-      runNonInteractive(
-        mockConfig,
-        mockSettings,
-        'Initial fail',
-        'prompt-id-4',
-      ),
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: 'Initial fail',
+        prompt_id: 'prompt-id-4',
+      }),
     ).rejects.toThrow(apiError);
   });
 
@@ -438,12 +458,12 @@ describe('runNonInteractive', () => {
       .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
       .mockReturnValueOnce(createStreamFromEvents(finalResponse));
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'Trigger tool not found',
-      'prompt-id-5',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Trigger tool not found',
+      prompt_id: 'prompt-id-5',
+    });
 
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
@@ -462,12 +482,12 @@ describe('runNonInteractive', () => {
   it('should exit when max session turns are exceeded', async () => {
     vi.mocked(mockConfig.getMaxSessionTurns).mockReturnValue(0);
     await expect(
-      runNonInteractive(
-        mockConfig,
-        mockSettings,
-        'Trigger loop',
-        'prompt-id-6',
-      ),
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: 'Trigger loop',
+        prompt_id: 'prompt-id-6',
+      }),
     ).rejects.toThrow(
       'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
     );
@@ -503,7 +523,12 @@ describe('runNonInteractive', () => {
     );
 
     // 4. Run the non-interactive mode with the raw input
-    await runNonInteractive(mockConfig, mockSettings, rawInput, 'prompt-id-7');
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: rawInput,
+      prompt_id: 'prompt-id-7',
+    });
 
     // 5. Assert that sendMessageStream was called with the PROCESSED parts, not the raw input
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
@@ -534,12 +559,12 @@ describe('runNonInteractive', () => {
       createStreamFromEvents(events),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      '/testcommand',
-      'prompt-id-slash',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: '/testcommand',
+      prompt_id: 'prompt-id-slash',
+    });
 
     // Ensure the prompt sent to the model is from the command, not the raw input
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
@@ -563,12 +588,12 @@ describe('runNonInteractive', () => {
     mockGetCommands.mockReturnValue([mockCommand]);
 
     await expect(
-      runNonInteractive(
-        mockConfig,
-        mockSettings,
-        '/confirm',
-        'prompt-id-confirm',
-      ),
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: '/confirm',
+        prompt_id: 'prompt-id-confirm',
+      }),
     ).rejects.toThrow(
       'Exiting due to a confirmation prompt requested by the command.',
     );
@@ -585,12 +610,12 @@ describe('runNonInteractive', () => {
       createStreamFromEvents(events),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      '/unknowncommand',
-      'prompt-id-unknown',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: '/unknowncommand',
+      prompt_id: 'prompt-id-unknown',
+    });
 
     // Ensure the raw input is sent to the model
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
@@ -613,12 +638,12 @@ describe('runNonInteractive', () => {
     mockGetCommands.mockReturnValue([mockCommand]);
 
     await expect(
-      runNonInteractive(
-        mockConfig,
-        mockSettings,
-        '/noaction',
-        'prompt-id-unhandled',
-      ),
+      runNonInteractive({
+        config: mockConfig,
+        settings: mockSettings,
+        input: '/noaction',
+        prompt_id: 'prompt-id-unhandled',
+      }),
     ).rejects.toThrow(
       'Exiting due to command result that is not supported in non-interactive mode.',
     );
@@ -643,12 +668,12 @@ describe('runNonInteractive', () => {
       createStreamFromEvents(events),
     );
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      '/testargs arg1 arg2',
-      'prompt-id-args',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: '/testargs arg1 arg2',
+      prompt_id: 'prompt-id-args',
+    });
 
     expect(mockAction).toHaveBeenCalledWith(expect.any(Object), 'arg1 arg2');
 
@@ -698,12 +723,12 @@ describe('runNonInteractive', () => {
       .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
       .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
 
-    await runNonInteractive(
-      mockConfig,
-      mockSettings,
-      'List the files',
-      'prompt-id-allowed',
-    );
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'List the files',
+      prompt_id: 'prompt-id-allowed',
+    });
 
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
@@ -711,5 +736,57 @@ describe('runNonInteractive', () => {
       expect.any(AbortSignal),
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('file.txt');
+  });
+
+  it('should display a deprecation warning if hasDeprecatedPromptArg is true', async () => {
+    const events: ServerGeminiStreamEvent[] = [
+      { type: GeminiEventType.Content, value: 'Final Answer' },
+      {
+        type: GeminiEventType.Finished,
+        value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
+      },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-deprecated',
+      hasDeprecatedPromptArg: true,
+    });
+
+    expect(processStderrSpy).toHaveBeenCalledWith(
+      'The --prompt (-p) flag has been deprecated and will be removed in a future version. Please use a positional argument for your prompt. See gemini --help for more information.\n',
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('Final Answer');
+  });
+
+  it('should display a deprecation warning for JSON format', async () => {
+    const events: ServerGeminiStreamEvent[] = [
+      { type: GeminiEventType.Content, value: 'Final Answer' },
+      {
+        type: GeminiEventType.Finished,
+        value: { reason: undefined, usageMetadata: { totalTokenCount: 10 } },
+      },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+    vi.mocked(mockConfig.getOutputFormat).mockReturnValue(OutputFormat.JSON);
+
+    await runNonInteractive({
+      config: mockConfig,
+      settings: mockSettings,
+      input: 'Test input',
+      prompt_id: 'prompt-id-deprecated-json',
+      hasDeprecatedPromptArg: true,
+    });
+
+    const deprecateText =
+      'The --prompt (-p) flag has been deprecated and will be removed in a future version. Please use a positional argument for your prompt. See gemini --help for more information.\n';
+    expect(processStderrSpy).toHaveBeenCalledWith(deprecateText);
   });
 });
