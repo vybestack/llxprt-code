@@ -15,7 +15,7 @@ import { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
 
 export const toolsCommand: SlashCommand = {
   name: 'tools',
-  description: 'list, enable, or disable Gemini CLI tools',
+  description: 'list, enable, or disable LLxprt Code tools',
   kind: CommandKind.BUILT_IN,
   action: async (
     context: CommandContext,
@@ -64,7 +64,7 @@ export const toolsCommand: SlashCommand = {
       useShowDescriptions = true;
     }
 
-    let message = 'Available Gemini CLI tools:\n\n';
+    let message = 'Available LLxprt Code tools:\n\n';
 
     if (geminiTools.length > 0) {
       geminiTools.forEach((tool: AnyDeclarativeTool) => {
