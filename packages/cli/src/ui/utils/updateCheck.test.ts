@@ -9,8 +9,12 @@ import { checkForUpdates, FETCH_TIMEOUT_MS } from './updateCheck.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
 const getPackageJson = vi.hoisted(() => vi.fn());
-vi.mock('../../utils/package.js', () => ({
+const debugLogger = vi.hoisted(() => ({
+  warn: vi.fn(),
+}));
+vi.mock('@google/gemini-cli-core', () => ({
   getPackageJson,
+  debugLogger,
 }));
 
 const updateNotifier = vi.hoisted(() => vi.fn());
