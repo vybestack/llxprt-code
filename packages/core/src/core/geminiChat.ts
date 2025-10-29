@@ -1264,7 +1264,10 @@ export class GeminiChat {
     await this.historyService.waitForTokenUpdates();
 
     const completionBudget = Math.max(0, this.getCompletionBudget(provider));
-    const limit = tokenLimit(this.config.getModel());
+    const userContextLimit = this.config.getEphemeralSetting(
+      'context-limit',
+    ) as number | undefined;
+    const limit = tokenLimit(this.config.getModel(), userContextLimit);
     const marginAdjustedLimit = Math.max(
       0,
       limit - GeminiChat.TOKEN_SAFETY_MARGIN,
