@@ -10,7 +10,7 @@
 - Produce line-numbered pseudocode guiding runtime view builder, GeminiChat refactor, and SubAgentScope changes.
 
 ## Tasks
-1. Populate `analysis/pseudocode/geminiChat-runtime-view.md` with numbered steps covering interfaces, builder, adapters, and edge cases.
+1. Populate `analysis/pseudocode/agent-runtime-context.md` with numbered steps covering interfaces, builder, adapters, and edge cases.
 2. Reference requirements within pseudocode comments (e.g., REQ-STAT6-001.2).
 3. Ensure traceability note (step 010) maps pseudocode ranges to future implementation.
 

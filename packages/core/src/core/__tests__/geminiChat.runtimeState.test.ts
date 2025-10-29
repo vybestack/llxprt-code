@@ -24,9 +24,21 @@ import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '../../runtime/AgentRuntimeState.js';
+import { createAgentRuntimeContext } from '../../runtime/createAgentRuntimeContext.js';
+import type {
+  AgentRuntimeContext,
+  ReadonlySettingsSnapshot,
+} from '../../runtime/AgentRuntimeContext.js';
+import {
+  createProviderAdapterFromManager,
+  createTelemetryAdapterFromConfig,
+  createToolRegistryViewFromRegistry,
+} from '../../runtime/runtimeAdapters.js';
 import { AuthType } from '../contentGenerator.js';
 import { HistoryService } from '../../services/history/HistoryService.js';
 import type { ContentGenerator } from '../contentGenerator.js';
+import { createProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
+import { SettingsService } from '../../settings/SettingsService.js';
 
 /**
  * Test helper: Create minimal Config for testing
@@ -54,6 +66,49 @@ function createTestRuntimeState(
     authPayload: { apiKey: 'runtime-api-key' },
     sessionId: 'test-session-001',
     ...overrides,
+  });
+}
+
+/**
+ * Test helper: Create test AgentRuntimeContext
+ * @plan PLAN-20251028-STATELESS6.P10
+ */
+function createTestRuntimeContext(
+  runtimeState: AgentRuntimeState,
+  config?: Config,
+  historyService?: HistoryService,
+): AgentRuntimeContext {
+  const settings: ReadonlySettingsSnapshot = {
+    compressionThreshold: 0.8,
+    contextLimit: 60000,
+    preserveThreshold: 0.2,
+    telemetry: {
+      enabled: true,
+      target: null,
+    },
+  };
+
+  const providerRuntime = createProviderRuntimeContext({
+    settingsService: config?.getSettingsService?.() ?? new SettingsService(),
+    config,
+    runtimeId: runtimeState.runtimeId,
+    metadata: { source: 'geminiChat.runtimeState.test' },
+  });
+
+  return createAgentRuntimeContext({
+    state: runtimeState,
+    settings,
+    provider: createProviderAdapterFromManager(config?.getProviderManager?.()),
+    telemetry: config
+      ? createTelemetryAdapterFromConfig(config)
+      : {
+          logApiRequest: () => {},
+          logApiResponse: () => {},
+          logApiError: () => {},
+        },
+    tools: createToolRegistryViewFromRegistry(config?.getToolRegistry?.()),
+    history: historyService,
+    providerRuntime: { ...providerRuntime },
   });
 }
 
@@ -101,17 +156,19 @@ describe('GeminiChat - Runtime State Integration', () => {
       const config = createTestConfig();
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
+      const view = createTestRuntimeContext(
+        runtimeState,
+        config,
+        historyService,
+      );
 
-      // This will fail because current GeminiChat doesn't accept runtime state
+      // Phase 6: Use AgentRuntimeContext constructor
       expect(() => {
-        // @ts-expect-error - Testing future constructor signature
         new GeminiChat(
-          runtimeState,
-          config,
+          view,
           contentGenerator,
           { systemInstruction: 'test' },
           [],
-          historyService,
         );
       }).not.toThrow();
     });
@@ -125,23 +182,18 @@ describe('GeminiChat - Runtime State Integration', () => {
       const config = createTestConfig();
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
-      const providerContext = {
+      const view = createTestRuntimeContext(
         runtimeState,
-        settingsService: config.getSettingsService(),
-        config, // Phase 5 backward compat
-      };
-
-      // This will fail because current GeminiChat doesn't accept provider context
+        config,
+        historyService,
+      );
+      // Phase 7: Constructor relies solely on AgentRuntimeContext
       expect(() => {
-        // @ts-expect-error - Testing future constructor signature
         new GeminiChat(
-          runtimeState,
-          config,
+          view,
           contentGenerator,
           { systemInstruction: 'test' },
           [],
-          historyService,
-          providerContext,
         );
       }).not.toThrow();
     });
@@ -166,15 +218,17 @@ describe('GeminiChat - Runtime State Integration', () => {
 
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
-
-      // @ts-expect-error - Testing future API
-      const chat = new GeminiChat(
+      const view = createTestRuntimeContext(
         runtimeState,
         config,
+        historyService,
+      );
+
+      const chat = new GeminiChat(
+        view,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
-        historyService,
       );
 
       // When sending a message, should use 'gemini' from runtime state
@@ -194,15 +248,17 @@ describe('GeminiChat - Runtime State Integration', () => {
 
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
-
-      // @ts-expect-error - Testing future API
-      const chat = new GeminiChat(
+      const view = createTestRuntimeContext(
         runtimeState,
         config,
+        historyService,
+      );
+
+      const chat = new GeminiChat(
+        view,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
-        historyService,
       );
 
       // Should use model from runtime state
@@ -223,15 +279,17 @@ describe('GeminiChat - Runtime State Integration', () => {
 
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
-
-      // @ts-expect-error - Testing future API
-      const chat = new GeminiChat(
+      const view = createTestRuntimeContext(
         runtimeState,
         config,
+        historyService,
+      );
+
+      const chat = new GeminiChat(
+        view,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
-        historyService,
       );
 
       // Should use auth from runtime state
@@ -254,15 +312,17 @@ describe('GeminiChat - Runtime State Integration', () => {
 
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
-
-      // @ts-expect-error - Testing future API
-      const chat = new GeminiChat(
+      const view = createTestRuntimeContext(
         runtimeState,
         config,
+        historyService,
+      );
+
+      const chat = new GeminiChat(
+        view,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
-        historyService,
       );
 
       // Should use baseUrl from runtime state
@@ -290,15 +350,17 @@ describe('GeminiChat - Runtime State Integration', () => {
       const config = createTestConfig();
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
-
-      // @ts-expect-error - Testing future API
-      const chat = new GeminiChat(
+      const view = createTestRuntimeContext(
         runtimeState,
         config,
+        historyService,
+      );
+
+      const chat = new GeminiChat(
+        view,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
-        historyService,
       );
 
       // Chat should use the injected history service
@@ -313,15 +375,17 @@ describe('GeminiChat - Runtime State Integration', () => {
       const config = createTestConfig();
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
-
-      // @ts-expect-error - Testing future API
-      const chat = new GeminiChat(
+      const view = createTestRuntimeContext(
         runtimeState,
         config,
+        historyService,
+      );
+
+      const chat = new GeminiChat(
+        view,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
-        historyService,
       );
 
       // Should not create a second history service
@@ -346,25 +410,18 @@ describe('GeminiChat - Runtime State Integration', () => {
       const config = createTestConfig();
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
-      const providerContext = {
+      const view = createTestRuntimeContext(
         runtimeState,
-        settingsService: config.getSettingsService(),
         config,
-      };
-
-      // @ts-expect-error - Testing future API
+        historyService,
+      );
       const chat = new GeminiChat(
-        runtimeState,
-        config,
+        view,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
-        historyService,
-        providerContext,
       );
-
-      // Chat should have access to provider context
-      expect(chat['_providerContext']).toBe(providerContext);
+      expect(chat).toBeInstanceOf(GeminiChat);
     });
 
     it('should use provider context for metadata, not Config', () => {
@@ -381,24 +438,19 @@ describe('GeminiChat - Runtime State Integration', () => {
 
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
-      const providerContext = {
+      const view = createTestRuntimeContext(
         runtimeState,
-        settingsService: config.getSettingsService(),
         config,
-      };
-
-      // @ts-expect-error - Testing future API
+        historyService,
+      );
       const chat = new GeminiChat(
-        runtimeState,
-        config,
+        view,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
-        historyService,
-        providerContext,
       );
 
-      // Should use runtime state from provider context, not Config
+      // Should use runtime state from provided AgentRuntimeContext, not Config
       expect(chat['runtimeState']).toBeDefined();
       expect(chat['runtimeState']?.provider).toBe('gemini');
       expect(chat['runtimeState']?.model).toBe('gemini-2.0-flash');
@@ -420,18 +472,15 @@ describe('GeminiChat - Runtime State Integration', () => {
       const config = createTestConfig();
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
+      const view = createTestRuntimeContext(
+        runtimeState,
+        config,
+        historyService,
+      );
 
       const getProviderSpy = vi.spyOn(config, 'getProvider');
 
-      // @ts-expect-error - Testing future API
-      new GeminiChat(
-        runtimeState,
-        config,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-        historyService,
-      );
+      new GeminiChat(view, contentGenerator, { systemInstruction: 'test' }, []);
 
       // GeminiChat should NOT call getProvider when runtime state is provided
       // Note: getModel() may still be called as a fallback in line 425 of geminiChat.ts
@@ -448,19 +497,16 @@ describe('GeminiChat - Runtime State Integration', () => {
       const config = createTestConfig();
       const contentGenerator = createMockContentGenerator();
       const historyService = createMockHistoryService();
+      const view = createTestRuntimeContext(
+        runtimeState,
+        config,
+        historyService,
+      );
 
       const _getToolRegistrySpy = vi.spyOn(config, 'getToolRegistry');
       const _getUserMemorySpy = vi.spyOn(config, 'getUserMemory');
 
-      // @ts-expect-error - Testing future API
-      new GeminiChat(
-        runtimeState,
-        config,
-        contentGenerator,
-        { systemInstruction: 'test' },
-        [],
-        historyService,
-      );
+      new GeminiChat(view, contentGenerator, { systemInstruction: 'test' }, []);
 
       // GeminiChat CAN call these Config methods (ephemeral settings)
       // This tests that we maintain backward compatibility for non-migrated settings

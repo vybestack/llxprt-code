@@ -57,7 +57,7 @@ This is NOT an isolated feature trap. The plan forces integration by changing co
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| Pseudocode files have numbered lines | ✅ PASS | Steps 001-010 in geminiChat-runtime-view.md |
+| Pseudocode files have numbered lines | ✅ PASS | Steps 001-010 in agent-runtime-context.md |
 | Implementation phases reference line numbers | ❌ FAIL | Phases say "steps 001-004" not "Line 005.3: Build provider adapter" |
 | Verification checks pseudocode was followed | ❌ FAIL | No verification commands compare implementation to pseudocode |
 | No unused pseudocode files | ✅ PASS | Single pseudocode file, all steps referenced |
@@ -72,7 +72,7 @@ This is NOT an isolated feature trap. The plan forces integration by changing co
    # REQUIRED
    - Line 001: Define ReadonlySettingsSnapshot interface with compressionThreshold field
    - Line 002: Define ToolRegistryView with listToolNames/getToolMetadata methods
-   - Line 003: Define GeminiRuntimeView with readonly state/history/ephemerals/telemetry/provider/tools
+   - Line 003: Define AgentRuntimeContext with readonly state/history/ephemerals/telemetry/provider/tools
    ```
 
 2. **Verification phases miss pseudocode compliance:**
@@ -81,7 +81,7 @@ This is NOT an isolated feature trap. The plan forces integration by changing co
    # Compare implementation with pseudocode
    claude --dangerously-skip-permissions -p "
    Compare packages/core/src/core/subagent.ts with
-   analysis/pseudocode/geminiChat-runtime-view.md steps 007.1-007.8
+   analysis/pseudocode/agent-runtime-context.md steps 007.1-007.8
    Verify every numbered line is implemented
    Report to pseudocode-compliance.json
    "
@@ -139,7 +139,7 @@ This is NOT an isolated feature trap. The plan forces integration by changing co
    it.prop([fc.double({ min: 0.1, max: 1.0 })])(
      'should respect compression threshold override @plan PLAN-20251028-STATELESS6.P07',
      (threshold) => {
-       const view = createGeminiRuntimeView({
+       const view = createAgentRuntimeContext({
          state,
          settings: { compressionThreshold: threshold }
        });
@@ -223,7 +223,7 @@ PERCENTAGE=$((PROPERTY_TESTS * 100 / TOTAL_TESTS))
 | No test modifications during implementation | ✅ PASS | TDD phases precede implementation phases |
 | No mock-only tests | ✅ PASS | Test strategy emphasizes behavioral assertions |
 | No reverse testing (NotYetImplemented) | ✅ PASS | Stub phase uses empty returns OR throws, not test expectations |
-| Modify existing files, don't duplicate | ✅ PASS | P06-P10 update existing files; only NEW files are GeminiRuntimeView (doesn't exist yet) |
+| Modify existing files, don't duplicate | ✅ PASS | P06-P10 update existing files; only NEW files are AgentRuntimeContext (doesn't exist yet) |
 
 **Anti-Pattern Verdict:** ✅ **CLEAN** - No red flags detected
 
@@ -322,7 +322,7 @@ PERCENTAGE=$((PROPERTY_TESTS * 100 / TOTAL_TESTS))
 
 4. **Specify Mutation Testing Configuration**
    - Add exact stryker.conf.js requirements to test-strategy.md
-   - Specify which files to mutate (geminiChat.ts, createGeminiRuntimeView.ts)
+   - Specify which files to mutate (geminiChat.ts, createAgentRuntimeContext.ts)
    - Define mutation thresholds and failure criteria
 
 ### HIGH PRIORITY (Before P06 Execution)

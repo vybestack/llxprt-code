@@ -287,6 +287,8 @@ export function createGeminiChatRuntime(
     ...(options.configOverrides ?? {}),
   } as GeminiChatConfigShape;
 
+  Object.assign(runtime, { config: config as unknown as Config });
+
   return {
     config: config as unknown as Config,
     provider,

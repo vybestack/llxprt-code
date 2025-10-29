@@ -263,6 +263,24 @@ export {
 export type { RuntimeStateFromConfigOptions } from './runtime/runtimeStateFactory.js';
 export { createAgentRuntimeStateFromConfig as createRuntimeStateFromConfig } from './runtime/runtimeStateFactory.js';
 
+// @plan PLAN-20251028-STATELESS6.P06
+// Export AgentRuntimeContext types and factory for Config elimination
+export type {
+  AgentRuntimeContext,
+  AgentRuntimeContextFactoryOptions,
+  ReadonlySettingsSnapshot,
+  ToolRegistryView,
+  ToolMetadata,
+  ApiRequestEvent,
+  ApiResponseEvent,
+  ApiErrorEvent,
+  TelemetryRedactionConfig,
+  AgentRuntimeProviderAdapter,
+  AgentRuntimeTelemetryAdapter,
+} from './runtime/AgentRuntimeContext.js';
+export { TelemetryTarget } from './runtime/AgentRuntimeContext.js';
+export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.js';
+
 // Export emoji filter system
 export { EmojiFilter } from './filters/EmojiFilter.js';
 export type {

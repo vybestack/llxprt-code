@@ -14,10 +14,18 @@ import {
   RunConfig,
   OutputConfig,
   ToolConfig,
+  SubAgentRuntimeOverrides,
 } from './subagent.js';
 import { Config, ConfigParameters } from '../config/config.js';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
 import { createContentGenerator, AuthType } from './contentGenerator.js';
+import { SettingsService } from '../settings/SettingsService.js';
+import {
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
+import type { AgentRuntimeProviderAdapter } from '../runtime/AgentRuntimeContext.js';
+import type { IProvider } from '../providers/IProvider.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
@@ -47,12 +55,17 @@ vi.mock('../ide/ide-client.js');
 async function createMockConfig(
   toolRegistryMocks = {},
 ): Promise<{ config: Config; toolRegistry: ToolRegistry }> {
+  const settingsService = new SettingsService();
+  setActiveProviderRuntimeContext(
+    createProviderRuntimeContext({ settingsService }),
+  );
   const configParams: ConfigParameters = {
     sessionId: 'test-session',
     model: DEFAULT_GEMINI_MODEL,
     targetDir: '.',
     debugMode: false,
     cwd: process.cwd(),
+    settingsService,
   };
   const config = new Config(configParams);
   await config.initialize();
@@ -142,6 +155,47 @@ describe('subagent.ts', () => {
       max_turns: 10,
     };
 
+    describe('Stateless compliance (STATELESS7)', () => {
+      it('should not read provider manager directly from Config', async () => {
+        const { config } = await createMockConfig();
+        const promptConfig: PromptConfig = { systemPrompt: 'Stateless' };
+        const getProviderManagerSpy = vi.spyOn(config, 'getProviderManager');
+
+        const providerAdapter: AgentRuntimeProviderAdapter = {
+          getActiveProvider: vi.fn(
+            () =>
+              ({
+                name: 'gemini',
+                generateChatCompletion: vi.fn(async function* () {
+                  yield { speaker: 'ai', blocks: [] };
+                }),
+                getDefaultModel: () => defaultModelConfig.model,
+                getServerTools: () => [],
+                invokeServerTool: vi.fn(),
+              }) as IProvider,
+          ),
+          setActiveProvider: vi.fn(),
+        };
+
+        const overrides: SubAgentRuntimeOverrides = {
+          providerAdapter,
+        };
+
+        await SubAgentScope.create(
+          'stateless-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        expect(getProviderManagerSpy).not.toHaveBeenCalled();
+      });
+    });
+
     beforeEach(async () => {
       vi.clearAllMocks();
 
@@ -172,7 +226,7 @@ describe('subagent.ts', () => {
       callIndex = 0,
     ): GenerateContentConfig & { systemInstruction?: string | Content } => {
       const callArgs = vi.mocked(GeminiChat).mock.calls[callIndex];
-      const generationConfig = callArgs?.[3];
+      const generationConfig = callArgs?.[2];
       // Ensure it's defined before proceeding
       expect(generationConfig).toBeDefined();
       if (!generationConfig) throw new Error('generationConfig is undefined');
@@ -348,7 +402,7 @@ describe('subagent.ts', () => {
         );
 
         // Check History (should be empty since environment context is now in system instruction)
-        const history = callArgs[4];
+        const history = callArgs[3];
         expect(history).toEqual([]);
       });
 
@@ -416,7 +470,7 @@ describe('subagent.ts', () => {
 
         const callArgs = vi.mocked(GeminiChat).mock.calls[0];
         const generationConfig = getGenerationConfigFromMock();
-        const history = callArgs[4];
+        const history = callArgs[3];
 
         // Environment context should now be in system instruction, not undefined
         expect(generationConfig.systemInstruction).toBe('Env Context');

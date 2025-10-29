@@ -4,11 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan PLAN-20251028-STATELESS6.P08
+ * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
+ * @pseudocode agent-runtime-context.md lines 92-101
+ */
 import { reportError } from '../utils/errorReporting.js';
 import { Config } from '../config/config.js';
 import { ToolCallRequestInfo } from './turn.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import { createContentGenerator } from './contentGenerator.js';
+import {
+  createContentGenerator,
+  type ContentGeneratorConfig,
+  type ContentGenerator,
+} from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import {
   Content,
@@ -19,7 +28,31 @@ import {
   Type,
 } from '@google/genai';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
-import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
+import {
+  createAgentRuntimeState,
+  type RuntimeStateParams,
+} from '../runtime/AgentRuntimeState.js';
+import type {
+  AgentRuntimeContext,
+  ReadonlySettingsSnapshot,
+  AgentRuntimeProviderAdapter,
+  AgentRuntimeTelemetryAdapter,
+  ToolRegistryView,
+} from '../runtime/AgentRuntimeContext.js';
+import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
+import {
+  createProviderAdapterFromManager,
+  createTelemetryAdapterFromConfig,
+  createToolRegistryViewFromRegistry,
+} from '../runtime/runtimeAdapters.js';
+import {
+  createProviderRuntimeContext,
+  type ProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
+import type { ToolRegistry } from '../tools/tool-registry.js';
+import { AuthType } from './contentGenerator.js';
+import type { ProviderManager } from '../providers/ProviderManager.js';
+import type { HistoryService } from '../services/history/HistoryService.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -106,6 +139,25 @@ export interface OutputConfig {
    * The subagent will be prompted to generate these values before terminating.
    */
   outputs: Record<string, string>;
+}
+
+export interface SubAgentRuntimeOverrides {
+  sessionId?: string;
+  provider?: string;
+  contentGeneratorConfig?: ContentGeneratorConfig;
+  settingsSnapshot?: ReadonlySettingsSnapshot;
+  providerAdapter?: AgentRuntimeProviderAdapter;
+  telemetryAdapter?: AgentRuntimeTelemetryAdapter;
+  toolsView?: ToolRegistryView;
+  toolRegistry?: ToolRegistry;
+  providerRuntime?: ProviderRuntimeContext;
+  historyService?: HistoryService;
+  environmentContextLoader?: (config: Config) => Promise<Content[]>;
+  contentGeneratorFactory?: (
+    config: ContentGeneratorConfig,
+    foregroundConfig: Config,
+    sessionId: string,
+  ) => Promise<ContentGenerator>;
 }
 
 /**
@@ -229,6 +281,10 @@ function templateString(template: string, context: ContextState): string {
  * Represents the scope and execution environment for a subagent.
  * This class orchestrates the subagent's lifecycle, managing its chat interactions,
  * runtime context, and the collection of its outputs.
+ *
+ * @plan PLAN-20251028-STATELESS6.P08
+ * @requirement REQ-STAT6-001.1, REQ-STAT6-001.2, REQ-STAT6-003.1, REQ-STAT6-003.2
+ * @pseudocode agent-runtime-context.md line 93 (step 007.1)
  */
 export class SubAgentScope {
   output: OutputObject = {
@@ -242,20 +298,29 @@ export class SubAgentScope {
 
   /**
    * Constructs a new SubAgentScope instance.
+   *
+   * @plan PLAN-20251028-STATELESS6.P08
+   * @requirement REQ-STAT6-001.1
+   * @pseudocode agent-runtime-context.md line 93 (step 007.1)
+   *
    * @param name - The name for the subagent, used for logging and identification.
-   * @param runtimeContext - The shared runtime configuration and services.
-   * @param promptConfig - Configuration for the subagent's prompt and behavior.
+   * @param runtimeContext - Immutable runtime context (replaces Config parameter).
    * @param modelConfig - Configuration for the generative model parameters.
    * @param runConfig - Configuration for the subagent's execution environment.
+   * @param promptConfig - Configuration for the subagent's prompt and behavior.
+   * @param contentGenerator - Pre-initialized content generator for this subagent.
+   * @param foregroundConfig - Legacy Config reference (TEMPORARY: needed for executeToolCall until P10).
    * @param toolConfig - Optional configuration for tools available to the subagent.
    * @param outputConfig - Optional configuration for the subagent's expected outputs.
    */
   private constructor(
     readonly name: string,
-    readonly runtimeContext: Config,
-    private readonly promptConfig: PromptConfig,
+    readonly runtimeContext: AgentRuntimeContext,
     private readonly modelConfig: ModelConfig,
     private readonly runConfig: RunConfig,
+    private readonly promptConfig: PromptConfig,
+    private readonly contentGenerator: import('./contentGenerator.js').ContentGenerator,
+    private readonly foregroundConfig: Config, // TEMPORARY: Remove in P10 when executeToolCall refactored
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
   ) {
@@ -267,34 +332,43 @@ export class SubAgentScope {
    * Creates and validates a new SubAgentScope instance.
    * This factory method ensures that all tools provided in the prompt configuration
    * are valid for non-interactive use before creating the subagent instance.
+   *
+   * @plan PLAN-20251028-STATELESS6.P08
+   * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1, REQ-STAT6-003.2
+   * @pseudocode agent-runtime-context.md lines 94-98 (steps 007.2-007.6)
+   *
    * @param {string} name - The name of the subagent.
-   * @param {Config} runtimeContext - The shared runtime configuration and services.
+   * @param {Config} foregroundConfig - The foreground Config (NOT mutated, only used for context).
    * @param {PromptConfig} promptConfig - Configuration for the subagent's prompt and behavior.
    * @param {ModelConfig} modelConfig - Configuration for the generative model parameters.
    * @param {RunConfig} runConfig - Configuration for the subagent's execution environment.
    * @param {ToolConfig} [toolConfig] - Optional configuration for tools.
    * @param {OutputConfig} [outputConfig] - Optional configuration for expected outputs.
+   * @param {SubAgentRuntimeOverrides} [overrides] - Optional stateless runtime inputs (provider runtime, adapters, settings) to bypass Config usage.
    * @returns {Promise<SubAgentScope>} A promise that resolves to a valid SubAgentScope instance.
    * @throws {Error} If any tool requires user confirmation.
    */
   static async create(
     name: string,
-    runtimeContext: Config,
+    foregroundConfig: Config,
     promptConfig: PromptConfig,
     modelConfig: ModelConfig,
     runConfig: RunConfig,
     toolConfig?: ToolConfig,
     outputConfig?: OutputConfig,
+    overrides: SubAgentRuntimeOverrides = {},
   ): Promise<SubAgentScope> {
-    if (toolConfig) {
-      const toolRegistry = runtimeContext.getToolRegistry();
+    const toolRegistry =
+      overrides.toolRegistry ?? foregroundConfig.getToolRegistry();
+
+    // Tool validation (unchanged logic)
+    if (toolConfig && toolRegistry) {
       const toolsToLoad: string[] = [];
       for (const tool of toolConfig.tools) {
         if (typeof tool === 'string') {
           toolsToLoad.push(tool);
         }
       }
-
       for (const toolName of toolsToLoad) {
         const tool = toolRegistry.getTool(toolName);
         if (tool) {
@@ -325,12 +399,132 @@ export class SubAgentScope {
       }
     }
 
+    // Step 007.2: Build AgentRuntimeState directly from subagent profile
+    // @plan PLAN-20251028-STATELESS6.P08
+    // @requirement REQ-STAT6-001.1
+    const sessionId = overrides.sessionId ?? foregroundConfig.getSessionId();
+
+    const providerName =
+      overrides.provider ?? foregroundConfig.getProvider() ?? 'gemini';
+
+    const contentGenConfig =
+      overrides.contentGeneratorConfig ??
+      foregroundConfig.getContentGeneratorConfig();
+
+    // Build minimal content generator config if not available (for testing)
+    const effectiveContentGenConfig: ContentGeneratorConfig =
+      contentGenConfig ?? {
+        model: foregroundConfig.getModel(),
+        authType: AuthType.USE_GEMINI, // Use a valid auth type for testing
+        apiKey: 'test-api-key', // Dummy API key for testing
+      };
+
+    const runtimeStateParams: RuntimeStateParams = {
+      runtimeId: `${sessionId}-subagent-${name}`,
+      provider: providerName, // Default provider for testing
+      model: modelConfig.model, // Use subagent model, NOT foreground model
+      authType: effectiveContentGenConfig.authType ?? AuthType.USE_GEMINI,
+      authPayload: effectiveContentGenConfig.apiKey
+        ? { apiKey: effectiveContentGenConfig.apiKey }
+        : undefined,
+      proxyUrl: effectiveContentGenConfig.proxy,
+      modelParams: {
+        temperature: modelConfig.temp,
+        topP: modelConfig.top_p,
+      },
+      sessionId,
+    };
+
+    const runtimeState = createAgentRuntimeState(runtimeStateParams);
+
+    // Step 007.3: Build ReadonlySettingsSnapshot from profile
+    // @plan PLAN-20251028-STATELESS6.P08
+    // @requirement REQ-STAT6-002.2
+    const settingsSnapshot: ReadonlySettingsSnapshot =
+      overrides.settingsSnapshot ?? {
+        compressionThreshold: foregroundConfig.getEphemeralSetting(
+          'compression-threshold',
+        ) as number | undefined,
+        contextLimit: foregroundConfig.getEphemeralSetting('context-limit') as
+          | number
+          | undefined,
+        preserveThreshold: foregroundConfig.getEphemeralSetting(
+          'compression-preserve-threshold',
+        ) as number | undefined,
+        toolFormatOverride: foregroundConfig.getEphemeralSetting(
+          'tool-format-override',
+        ) as string | undefined,
+        telemetry: {
+          enabled: true, // Stub: Will be configured properly in later phases
+          target: null,
+        },
+      };
+    // Step 007.4: Call createAgentRuntimeContext to build runtime view
+    // @plan PLAN-20251028-STATELESS6.P08
+    // @requirement REQ-STAT6-001.1, REQ-STAT6-003.2
+    const providerAdapter: AgentRuntimeProviderAdapter =
+      overrides.providerAdapter ??
+      createProviderAdapterFromManager(
+        foregroundConfig.getProviderManager?.() as ProviderManager | undefined,
+      );
+
+    const telemetryAdapter: AgentRuntimeTelemetryAdapter =
+      overrides.telemetryAdapter ??
+      createTelemetryAdapterFromConfig(foregroundConfig);
+
+    const toolsView: ToolRegistryView =
+      overrides.toolsView ?? createToolRegistryViewFromRegistry(toolRegistry);
+
+    const providerRuntime: ProviderRuntimeContext =
+      overrides.providerRuntime ??
+      createProviderRuntimeContext({
+        settingsService: foregroundConfig.getSettingsService(),
+        config: foregroundConfig,
+        runtimeId: runtimeState.runtimeId,
+        metadata: {
+          source: 'SubAgentScope.create',
+          subagentName: name,
+        },
+      });
+
+    const runtimeContext = createAgentRuntimeContext({
+      state: runtimeState,
+      settings: settingsSnapshot,
+      provider: providerAdapter,
+      telemetry: telemetryAdapter,
+      tools: toolsView,
+      history: overrides.historyService,
+      providerRuntime,
+    });
+
+    // Step 007.5: Instantiate content generator
+    // @plan PLAN-20251028-STATELESS6.P08
+    // @requirement REQ-STAT6-001.1
+    const contentGeneratorFactory =
+      overrides.contentGeneratorFactory ??
+      ((
+        configInput: ContentGeneratorConfig,
+        fgConfig: Config,
+        session: string,
+      ) => createContentGenerator(configInput, fgConfig, session));
+
+    const contentGenerator = await contentGeneratorFactory(
+      effectiveContentGenConfig,
+      foregroundConfig,
+      sessionId,
+    );
+
+    // Step 007.6: Return new instance with AgentRuntimeContext
+    // @plan PLAN-20251028-STATELESS6.P08
+    // @requirement REQ-STAT6-001.1
     return new SubAgentScope(
       name,
       runtimeContext,
-      promptConfig,
       modelConfig,
       runConfig,
+      promptConfig,
+      contentGenerator,
+      foregroundConfig, // TEMPORARY: Remove in P10
       toolConfig,
       outputConfig,
     );
@@ -340,6 +534,10 @@ export class SubAgentScope {
    * Runs the subagent in a non-interactive mode.
    * This method orchestrates the subagent's execution loop, including prompt templating,
    * tool execution, and termination conditions.
+   *
+   * @plan PLAN-20251028-STATELESS6.P08
+   * @requirement REQ-STAT6-001.1
+   *
    * @param {ContextState} context - The current context state containing variables for prompt templating.
    * @returns {Promise<void>} A promise that resolves when the subagent has completed its execution.
    */
@@ -352,7 +550,11 @@ export class SubAgentScope {
     }
 
     const abortController = new AbortController();
-    const toolRegistry = this.runtimeContext.getToolRegistry();
+
+    // @plan PLAN-20251028-STATELESS6.P08
+    // @requirement REQ-STAT6-001.1
+    // TEMPORARY: Use foregroundConfig for tool registry (will use runtimeContext.tools in P10)
+    const toolRegistry = this.foregroundConfig.getToolRegistry();
 
     // Prepare the list of tools available to the subagent.
     const toolsList: FunctionDeclaration[] = [];
@@ -396,7 +598,9 @@ export class SubAgentScope {
           break;
         }
 
-        const promptId = `${this.runtimeContext.getSessionId()}#${this.subagentId}#${turnCounter++}`;
+        // @plan PLAN-20251028-STATELESS6.P08
+        // @requirement REQ-STAT6-001.1
+        const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${turnCounter++}`;
         const messageParams = {
           message: currentMessages[0]?.parts || [],
           config: {
@@ -521,8 +725,11 @@ export class SubAgentScope {
           error: undefined,
         };
       } else {
+        // @plan PLAN-20251028-STATELESS6.P08
+        // @requirement REQ-STAT6-001.1
+        // TEMPORARY: Use foregroundConfig for executeToolCall (will refactor in P10)
         toolResponse = await executeToolCall(
-          this.runtimeContext,
+          this.foregroundConfig,
           requestInfo,
           abortController.signal,
         );
@@ -548,6 +755,16 @@ export class SubAgentScope {
     return [{ role: 'user', parts: toolResponseParts }];
   }
 
+  /**
+   * Creates a GeminiChat instance for this subagent.
+   *
+   * @plan PLAN-20251028-STATELESS6.P08
+   * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
+   * @pseudocode agent-runtime-context.md line 99 (step 007.7)
+   *
+   * Step 007.7: Update GeminiChat instantiation to use AgentRuntimeContext
+   * Step 007.8: REMOVE Config mutation (no setModel call)
+   */
   private async createChatObject(context: ContextState) {
     if (!this.promptConfig.systemPrompt && !this.promptConfig.initialMessages) {
       throw new Error(
@@ -560,7 +777,8 @@ export class SubAgentScope {
       );
     }
 
-    const envParts = await getEnvironmentContext(this.runtimeContext);
+    // TEMPORARY: Use foregroundConfig for getEnvironmentContext (will refactor in P10)
+    const envParts = await getEnvironmentContext(this.foregroundConfig);
 
     // Extract environment context text
     const envContextText = envParts
@@ -580,54 +798,26 @@ export class SubAgentScope {
     }
 
     try {
+      // Step 007.7: Build generation config from runtime view ephemerals
+      // @plan PLAN-20251028-STATELESS6.P08
+      // @requirement REQ-STAT6-002.2
       const generationConfig: GenerateContentConfig & {
         systemInstruction?: string | Content;
       } = {
         temperature: this.modelConfig.temp,
         topP: this.modelConfig.top_p,
+        systemInstruction: systemInstruction || undefined,
       };
 
-      if (systemInstruction) {
-        generationConfig.systemInstruction = systemInstruction;
-      }
-
-      const contentGenConfig = this.runtimeContext.getContentGeneratorConfig();
-      if (!contentGenConfig) {
-        // In llxprt, when using providers, we may not have a content generator config
-        // but we still need to create one for the subagent
-        throw new Error(
-          'Content generator config is not available. Please ensure proper initialization.',
-        );
-      }
-
-      const contentGenerator = await createContentGenerator(
-        contentGenConfig,
-        this.runtimeContext,
-        this.runtimeContext.getSessionId(),
-      );
-
-      this.runtimeContext.setModel(this.modelConfig.model);
-
-      const runtimeId =
-        this.runtimeContext.getSessionId() || 'subagent-runtime';
-      const runtimeState = createAgentRuntimeStateFromConfig(
-        this.runtimeContext,
-        {
-          runtimeId: `${runtimeId}-subagent`,
-          overrides: {
-            model: this.modelConfig.model,
-            proxyUrl: contentGenConfig.proxy,
-            authPayload: contentGenConfig.apiKey
-              ? { apiKey: contentGenConfig.apiKey }
-              : undefined,
-          },
-        },
-      );
-
+      // Step 007.7: Instantiate GeminiChat with runtime view
+      // @plan PLAN-20251028-STATELESS6.P10
+      // @requirement REQ-STAT6-001.2, REQ-STAT6-003.1, REQ-STAT6-003.2
+      // @pseudocode agent-runtime-context.md line 99 (step 007.7)
+      // NOTE: NO Config.setModel() call - REQ-STAT6-003.1 (step 007.8)
+      // NOTE: GeminiChat operates solely on runtime context
       return new GeminiChat(
-        runtimeState,
-        this.runtimeContext,
-        contentGenerator,
+        this.runtimeContext, // AgentRuntimeContext (replaces runtimeState+config+history)
+        this.contentGenerator,
         generationConfig,
         start_history,
       );

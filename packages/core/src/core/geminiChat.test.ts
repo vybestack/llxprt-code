@@ -32,6 +32,15 @@ import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '../runtime/AgentRuntimeState.js';
+import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
+import {
+  createProviderAdapterFromManager,
+  createTelemetryAdapterFromConfig,
+  createToolRegistryViewFromRegistry,
+} from '../runtime/runtimeAdapters.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import * as providerRuntime from '../runtime/providerRuntimeContext.js';
+import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 // Mocks
 const mockModelsModule = {
@@ -48,6 +57,7 @@ describe('GeminiChat', () => {
   const config: GenerateContentConfig = {};
   let runtimeState: AgentRuntimeState;
   let runtimeSetup: ReturnType<typeof createGeminiChatRuntime>;
+  let providerRuntimeSnapshot: ProviderRuntimeContext;
 
   let mockProvider: {
     name: string;
@@ -106,6 +116,13 @@ describe('GeminiChat', () => {
 
     mockConfig = runtimeSetup.config;
 
+    // Set up provider runtime context so GeminiChat can access it
+    providerRuntimeSnapshot = {
+      ...runtimeSetup.runtime,
+      config: mockConfig,
+    };
+    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
+
     // Disable 429 simulation for tests
     setSimulate429(false);
     // Create a mock ContentGenerator that matches the expected interface
@@ -125,13 +142,28 @@ describe('GeminiChat', () => {
       sessionId: 'test-session-id',
     });
 
-    chat = new GeminiChat(
-      runtimeState,
-      mockConfig,
-      mockContentGenerator,
-      config,
-      [],
-    );
+    const historyService = new HistoryService();
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 60000,
+        preserveThreshold: 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+      },
+      provider: createProviderAdapterFromManager(
+        mockConfig.getProviderManager?.(),
+      ),
+      telemetry: createTelemetryAdapterFromConfig(mockConfig as Config),
+      tools: createToolRegistryViewFromRegistry(mockConfig.getToolRegistry?.()),
+      providerRuntime: providerRuntimeSnapshot,
+    });
+
+    chat = new GeminiChat(view, mockContentGenerator, config, []);
   });
 
   afterEach(() => {
@@ -178,9 +210,15 @@ describe('GeminiChat', () => {
         tools: undefined,
         config: mockConfig,
       });
+      expect(callArg.settings).toBe(providerRuntimeSnapshot.settingsService);
       expect(callArg.runtime).toBeDefined();
       expect(callArg.runtime?.config).toBe(mockConfig);
       expect(callArg.runtime?.settingsService).toBeDefined();
+      expect(callArg.runtime?.metadata).toEqual(
+        expect.objectContaining({
+          source: 'GeminiChat.trySendMessage',
+        }),
+      );
     });
 
     it('should trigger compression when pending tokens exceed threshold', async () => {
@@ -276,9 +314,17 @@ describe('GeminiChat', () => {
         tools: undefined,
         config: mockConfig,
       });
+      expect(streamCallArg.settings).toBe(
+        providerRuntimeSnapshot.settingsService,
+      );
       expect(streamCallArg.runtime).toBeDefined();
       expect(streamCallArg.runtime?.config).toBe(mockConfig);
       expect(streamCallArg.runtime?.settingsService).toBeDefined();
+      expect(streamCallArg.runtime?.metadata).toEqual(
+        expect.objectContaining({
+          source: 'GeminiChat.generateRequest',
+        }),
+      );
     });
   });
 
@@ -377,13 +423,29 @@ describe('GeminiChat', () => {
         authType: AuthType.LOGIN_WITH_GOOGLE,
         sessionId: 'test-session-id',
       });
-      chat = new GeminiChat(
-        runtimeState,
-        mockConfig,
-        mockModelsModule,
-        config,
-        [],
-      );
+      const historyService2 = new HistoryService();
+      const view2 = createAgentRuntimeContext({
+        state: runtimeState,
+        history: historyService2,
+        settings: {
+          compressionThreshold: 0.8,
+          contextLimit: 60000,
+          preserveThreshold: 0.2,
+          telemetry: {
+            enabled: true,
+            target: null,
+          },
+        },
+        provider: createProviderAdapterFromManager(
+          mockConfig.getProviderManager(),
+        ),
+        telemetry: createTelemetryAdapterFromConfig(mockConfig as Config),
+        tools: createToolRegistryViewFromRegistry(
+          mockConfig.getToolRegistry?.(),
+        ),
+        providerRuntime: providerRuntimeSnapshot,
+      });
+      chat = new GeminiChat(view2, mockModelsModule, config, []);
       const firstUserInput: Content = {
         role: 'user',
         parts: [{ text: 'First user input' }],
@@ -433,13 +495,32 @@ describe('GeminiChat', () => {
         authType: AuthType.LOGIN_WITH_GOOGLE,
         sessionId: 'test-session-id',
       });
-      chat = new GeminiChat(
-        runtimeState,
-        mockConfig,
-        mockModelsModule,
-        config,
-        [initialUser, initialModel],
-      );
+      const historyService3 = new HistoryService();
+      const view3 = createAgentRuntimeContext({
+        state: runtimeState,
+        history: historyService3,
+        settings: {
+          compressionThreshold: 0.8,
+          contextLimit: 60000,
+          preserveThreshold: 0.2,
+          telemetry: {
+            enabled: true,
+            target: null,
+          },
+        },
+        provider: createProviderAdapterFromManager(
+          mockConfig.getProviderManager(),
+        ),
+        telemetry: createTelemetryAdapterFromConfig(mockConfig as Config),
+        tools: createToolRegistryViewFromRegistry(
+          mockConfig.getToolRegistry?.(),
+        ),
+        providerRuntime: providerRuntimeSnapshot,
+      });
+      chat = new GeminiChat(view3, mockModelsModule, config, [
+        initialUser,
+        initialModel,
+      ]);
 
       // New interaction
       const currentUserInput: Content = {
@@ -1280,6 +1361,25 @@ describe('GeminiChat', () => {
         throw new Error('Expected text part in final model response');
       }
       expect(modelPart.text).toBe('Single tool processed');
+    });
+  });
+
+  describe('stateless runtime context compliance', () => {
+    it('should not rely on global provider runtime context', async () => {
+      const getRuntimeSpy = vi
+        .spyOn(providerRuntime, 'getActiveProviderRuntimeContext')
+        .mockImplementation(() => {
+          throw new Error(
+            'REGRESSION: GeminiChat accessed global provider runtime context',
+          );
+        });
+
+      await expect(
+        chat.sendMessage({ message: 'stateless-check' }, 'stateless-prompt'),
+      ).resolves.toBeDefined();
+
+      expect(getRuntimeSpy).not.toHaveBeenCalled();
+      getRuntimeSpy.mockRestore();
     });
   });
 });

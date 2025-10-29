@@ -6,11 +6,11 @@
 
 ## Executive Summary
 
-PLAN-20251028-STATELESS6 is currently in **early planning stage** with significant gaps that prevent execution:
+PLAN-20251028-STATELESS6 is currently in **early planning stage** with gaps that still prevent execution, although several planning artifacts have now been drafted:
 
-- ❌ **No pseudocode written** (Phase P05 not started)
-- ❌ **Vague test strategy** (Phase P04 incomplete)
-- ❌ **Missing runtime view interface** (GeminiRuntimeView doesn't exist)
+- ⚠️ **Pseudocode drafted** (Phase P05 captured in `analysis/pseudocode/agent-runtime-context.md`, awaiting verification)
+- ⚠️ **Test strategy expanded** (Phase P04 now lists concrete cases; property coverage & telemetry checks still need validation)
+- ❌ **Missing runtime view interface** (AgentRuntimeContext not yet implemented in codebase)
 - ❌ **Incomplete AgentRuntimeState** (lacks ephemeral settings, telemetry config)
 - ⚠️ **setModel mutation unaddressed** (subagent.ts:609 still mutates shared Config)
 
@@ -107,7 +107,7 @@ interface AgentRuntimeState {
 - ❌ Provider manager accessor (for runtime provider switching)
 - ❌ Tool registry reference (for diagnostics)
 
-**Architectural Gap:** AgentRuntimeState was designed for provider/model/auth only. STATELESS6 requires a superset "GeminiRuntimeView" that includes runtime settings.
+**Architectural Gap:** AgentRuntimeState was designed for provider/model/auth only. STATELESS6 requires a superset "AgentRuntimeContext" that includes runtime settings.
 
 ---
 
@@ -140,7 +140,7 @@ REQ-STAT6-003: Independent runtime views with isolated history/telemetry
 ```
 
 **Gaps:**
-- ❌ No interface specification for GeminiRuntimeView
+- ❌ No interface specification for AgentRuntimeContext
 - ❌ No definition of "immutable data for API calls" (what fields?)
 - ❌ No specification of ephemeral settings format in runtime view
 
@@ -158,28 +158,24 @@ Integration: Dual runtime view scenario (P09)
 
 ### 2.3 Phase P05: Pseudocode
 
-**Status:** ❌ NOT STARTED
+**Status:** ✅ Draft completed (pending verification)
 
-**Current Content (geminiChat-runtime-view.md):**
-```markdown
-> Draft detailed pseudocode during Phase P05. Outline should cover:
-> 1. GeminiRuntimeView structure ...
-> 2. Adapter enabling existing Config-based callers ...
-> ...
-```
+**Delivered Content (`analysis/pseudocode/agent-runtime-context.md`):**
+- Steps 001–004 define `ReadonlySettingsSnapshot`, `ToolRegistryView`, `AgentRuntimeContext`, and factory options.
+- Steps 005 & 009 describe the builder implementation, default handling, telemetry/provider/tool adapters, and immutability requirements.
+- Step 006 outlines the GeminiChat constructor refactor to consume the injected view.
+- Step 007 captures the SubAgentScope refactor, including runtime view construction and generator wiring.
+- Step 008 provides the transitional Config adapter.
+- Step 010 documents traceability expectations for downstream phases.
 
-**Critical Gap:** This is just a TODO list, not actual pseudocode. Without this, Phases P06-P10 cannot proceed.
-
-**Required Pseudocode Artifacts:**
-1. **GeminiRuntimeView interface definition** (fields, methods, read-only accessors)
-2. **Runtime view builder** (from AgentRuntimeState + ephemeral overrides)
-3. **GeminiChat constructor refactor** (accept view instead of config)
-4. **SubAgentScope.createChatObject refactor** (build isolated view, no setModel)
-5. **Telemetry adapter** (extract metadata from view instead of Config)
+**Remaining Risks:**
+- Step 005.4 (telemetry enrichment) still needs concrete metadata structure before implementation.
+- Step 007.5 references a content generator bridge helper whose responsibilities should be clarified in P06/P08 tasks.
+- Config adapter deprecation timeline (step 008) is not yet captured in later phases.
 
 ### 2.4 Phases P06-P10: Implementation
 
-**Status:** ❌ BLOCKED (waiting on P05 pseudocode)
+**Status:** ⚠️ BLOCKED (pending P05 verification and expanded P04 coverage)
 
 **Execution Tracker:** All phases marked ⬜ (not started)
 
@@ -243,7 +239,7 @@ const subagentRuntimeState = createAgentRuntimeState({
 
 **Step 2:** Build runtime view from state
 ```typescript
-const runtimeView = buildGeminiRuntimeView(subagentRuntimeState, {
+const runtimeView = buildAgentRuntimeContext(subagentRuntimeState, {
   compressionThreshold: 0.8,  // Subagent-specific override
   contextLimit: 40000,         // Subagent-specific override
   // ... other ephemerals ...
@@ -261,17 +257,17 @@ return new GeminiChat(
 );
 ```
 
-**Dependency:** Requires GeminiRuntimeView interface (Phase P05) and GeminiChat refactor (Phase P10).
+**Dependency:** Requires AgentRuntimeContext interface (Phase P05) and GeminiChat refactor (Phase P10).
 
 ---
 
 ## 4. Interface Design Requirements (Missing)
 
-### 4.1 GeminiRuntimeView Interface (DRAFT - Not in Plan)
+### 4.1 AgentRuntimeContext Interface (DRAFT - Not in Plan)
 
 **Required Fields:**
 ```typescript
-interface GeminiRuntimeView {
+interface AgentRuntimeContext {
   // Runtime identity
   readonly runtimeId: string;
   readonly sessionId: string;
@@ -316,22 +312,22 @@ interface GeminiRuntimeView {
 }
 ```
 
-**Gap:** This interface doesn't exist in the codebase. Phase P05 pseudocode must define it.
+**Gap:** Interface captured in P05 pseudocode; implementation still absent from codebase.
 
 ### 4.2 Builder Function Signature (DRAFT - Not in Plan)
 
 ```typescript
-function buildGeminiRuntimeView(
+function buildAgentRuntimeContext(
   runtimeState: AgentRuntimeState,
   overrides?: {
     ephemerals?: Partial<EphemeralSettings>;
     telemetry?: Partial<TelemetryConfig>;
     headers?: Record<string, string>;
   }
-): GeminiRuntimeView
+): AgentRuntimeContext
 ```
 
-**Gap:** No builder exists. Phase P06 (stub) must introduce it.
+**Gap:** Builder workflow defined in P05 pseudocode steps 005/009; TypeScript implementation remains to be written in P06/P08.
 
 ### 4.3 Telemetry API Refactor (DRAFT - Not in Plan)
 
@@ -342,7 +338,7 @@ logApiRequest(config: Config, event: ApiRequestEvent): void
 
 **Required:**
 ```typescript
-logApiRequest(view: GeminiRuntimeView, event: ApiRequestEvent): void
+logApiRequest(view: AgentRuntimeContext, event: ApiRequestEvent): void
 // OR
 logApiRequest(metadata: TelemetryMetadata, event: ApiRequestEvent): void
 
@@ -441,24 +437,21 @@ it('should maintain isolated models during subagent execution', async () => {
 
 ### 6.1 Immediate Actions (Before Proceeding)
 
-1. **Complete Phase P05 Pseudocode** ✅ CRITICAL
-   - Define GeminiRuntimeView interface with all fields
-   - Specify builder function signature and logic
-   - Document GeminiChat constructor changes
-   - Show SubAgentScope refactor removing setModel
-   - Design telemetry API refactor
+1. **Review & Sign Off Phase P05 Pseudocode** ✅ CRITICAL
+   - Confirm AgentRuntimeContext/adapter definitions align with architectural goals
+   - Flesh out telemetry enrichment metadata (step 005.4)
+   - Validate SubAgentScope/GeminiChat refactor steps cover all Config touchpoints
 
-2. **Expand Phase P04 Test Strategy** ⚠️ HIGH PRIORITY
-   - List specific test cases for P07 (unit)
-   - Detail integration test scenario for P09
-   - Specify mutation detection approach
-   - Define verification criteria for each requirement
+2. **Finalize Phase P04 Test Strategy** ⚠️ HIGH PRIORITY
+   - Lock property-testing percentage and mutation thresholds
+   - Ensure telemetry assertions and isolation checks are explicit
+   - Add verification commands for marker/pseudocode compliance to P04a/P05a/P07a/P09a
 
 3. **Extend AgentRuntimeState** ⚠️ HIGH PRIORITY
    - Add ephemeral settings container
    - Add telemetry config
    - Add custom headers
-   - OR: Create separate GeminiRuntimeView wrapping AgentRuntimeState + ephemerals
+   - OR: Create separate AgentRuntimeContext wrapping AgentRuntimeState + ephemerals
 
 ### 6.2 Architecture Decisions Needed
 
@@ -477,9 +470,9 @@ interface AgentRuntimeState {
 - ❌ Mixes provider/model state with runtime settings
 - ❌ Violates STATELESS5 design (pure provider/model/auth)
 
-**Option B: Wrap with GeminiRuntimeView**
+**Option B: Wrap with AgentRuntimeContext**
 ```typescript
-interface GeminiRuntimeView {
+interface AgentRuntimeContext {
   state: AgentRuntimeState;  // Provider/model/auth
   ephemerals: EphemeralSettings;
   telemetry: TelemetryConfig;
@@ -500,7 +493,7 @@ interface GeminiRuntimeView {
 class ConfigToRuntimeViewAdapter {
   constructor(private config: Config) {}
 
-  toRuntimeView(): GeminiRuntimeView {
+  toRuntimeView(): AgentRuntimeContext {
     // Extract ephemerals from config.getEphemeralSetting()
     // Build view on-the-fly
   }
@@ -531,10 +524,10 @@ SubAgentScope.create(..., ephemeralOverrides: EphemeralSettings)
 | Phase | Ready? | Blocker(s) |
 |-------|--------|------------|
 | P03 | ⚠️ Partial | Missing dependency graph, telemetry API analysis |
-| P04 | ❌ No | Vague test strategy, no concrete test cases |
-| P05 | ❌ No | No pseudocode written (just TODO outline) |
-| P06 | ❌ No | Blocked on P05 interface definition |
-| P07 | ❌ No | Blocked on P05 pseudocode, P04 test cases |
+| P04 | ⚠️ Partial | Concrete tests drafted; telemetry/property coverage still open |
+| P05 | ⚠️ Partial | Draft steps 001–010 exist; verification & telemetry detail outstanding |
+| P06 | ❌ No | Blocked until P05 verified and builder API frozen |
+| P07 | ❌ No | Blocked until P05 verified and P04 telemetry/property cases finalized |
 | P08 | ❌ No | Blocked on P07 TDD setup |
 | P09 | ❌ No | Blocked on P08 implementation, P04 integration test spec |
 | P10 | ❌ No | Blocked on P09 integration TDD |
@@ -542,8 +535,8 @@ SubAgentScope.create(..., ephemeralOverrides: EphemeralSettings)
 **Overall Status:** ❌ NOT READY TO EXECUTE
 
 **Prerequisites for Execution:**
-1. Complete P05 pseudocode with interface definitions
-2. Expand P04 test strategy with concrete test cases
+1. Verify/finalize P05 pseudocode (interface, telemetry metadata, adapter plan)
+2. Lock P04 test strategy coverage (telemetry assertions, property/mutation thresholds)
 3. Make architectural decisions (wrap vs. extend, adapter vs. removal)
 4. Complete P03 analysis (dependency graph, telemetry API refactor plan)
 
@@ -553,23 +546,23 @@ SubAgentScope.create(..., ephemeralOverrides: EphemeralSettings)
 
 ### REQ-STAT6-001: No Config Mutation
 **Current:** ❌ FAILS (setModel at subagent.ts:609)
-**Plan Coverage:** ⚠️ Partial (identifies problem, lacks solution pseudocode)
-**Test Coverage:** ⚠️ Vague ("assert no mutation" without specifics)
+**Plan Coverage:** ✅ P05 steps 006/007 eliminate Config mutation via AgentRuntimeContext injection.
+**Test Coverage:** ⚠️ Partial (P04 strategy lists explicit setModel spy/history isolation tests; telemetry assertions still pending).
 
 ### REQ-STAT6-002: Runtime View Encapsulates Data
-**Current:** ❌ No GeminiRuntimeView exists
-**Plan Coverage:** ✅ Requirement defined
-**Test Coverage:** ❌ No tests specified for view construction
+**Current:** ❌ No AgentRuntimeContext exists
+**Plan Coverage:** ✅ P05 steps 001–005/009 define interface, builder, and immutability requirements.
+**Test Coverage:** ⚠️ Partial (unit tests for immutability/ephemerals documented; property thresholds & mutation configs need locking).
 
 ### REQ-STAT6-003: Independent Runtime Views
 **Current:** ❌ Shared Config violates independence
-**Plan Coverage:** ⚠️ Partial (goal stated, implementation unclear)
-**Test Coverage:** ⚠️ Vague ("dual runtime scenario" undefined)
+**Plan Coverage:** ✅ P05 step 007 and P09 integration scenario articulate isolation requirements.
+**Test Coverage:** ⚠️ Partial (integration tests describe telemetry/runtime-id assertions; success metrics still to be quantified).
 
-**Requirement-Test Traceability:** ⚠️ WEAK
-- Requirements are high-level goals
-- Tests don't specify how to verify requirements
-- Missing acceptance criteria for each requirement
+**Requirement-Test Traceability:** ⚠️ Improving
+- Requirements mapped to concrete P04 test cases and P05 pseudocode steps.
+- Need to record expected property/mutation coverage percentages in verification phases.
+- Verification phases must still enforce marker presence and pseudocode compliance.
 
 ---
 
@@ -582,30 +575,29 @@ PLAN-20251028-STATELESS6 correctly identifies the statelessness gaps left by STA
    - Config dependency in GeminiChat (ephemerals, telemetry, provider manager)
    - AgentRuntimeState incompleteness
 
-2. ❌ **Incomplete Solution Design**
-   - No GeminiRuntimeView interface defined
-   - No pseudocode for refactoring approach
-   - Vague test strategy without concrete test cases
-   - Missing telemetry API refactor plan
+2. ⚠️ **Solution Design Drafted, Needs Sign-off**
+   - AgentRuntimeContext interface and builder described in P05 pseudocode
+   - Telemetry enrichment metadata needs explicit schema
+   - Test strategy now includes concrete cases but must lock coverage expectations
+   - Telemetry API refactor approach still outlined at high level
 
-3. ❌ **Execution Blocked**
-   - Phase P05 (pseudocode) is a stub, not actual pseudocode
-   - Phases P06-P10 can't proceed without P05
-   - Test strategy too abstract to implement TDD phases
+3. ⚠️ **Execution Blocked Pending Verification**
+   - Phases P06-P10 waiting on P05 verification + telemetry/test strategy refinements
+   - Verification phases must incorporate pseudocode and marker compliance checks
 
-**Recommendation:** **PAUSE execution** and complete planning artifacts:
-1. Write actual P05 pseudocode with interface definitions
-2. Specify concrete test cases in P04
-3. Make architectural decisions (wrap vs. extend, adapter vs. removal)
-4. Then proceed with TDD implementation (P06-P10)
+**Recommendation:** **PAUSE execution** until planning artifacts are verified:
+1. Review and sign off P05 pseudocode (including telemetry enrichment details).
+2. Finalize P04 test strategy metrics (property %, mutation thresholds, telemetry assertions).
+3. Make architectural decisions (wrap vs. extend, adapter vs. removal) explicit in plan narrative.
+4. Update verification phases to enforce pseudocode + marker compliance before implementation.
 
-**Estimated Planning Completion:** 2-3 hours for thorough pseudocode and test specification.
+**Estimated Planning Completion:** ~2 additional hours for reviews and verification updates.
 
 ---
 
 **Next Steps:**
-1. Complete Phase P05 pseudocode (define GeminiRuntimeView interface, builder, refactorings)
-2. Expand Phase P04 test strategy (concrete test cases for P07 and P09)
-3. Complete Phase P03 analysis (dependency graph, telemetry refactor plan)
-4. Update execution tracker with realistic estimates
-5. Begin Phase P06 once prerequisites complete
+1. Conduct peer review of P05 pseudocode and capture action items in P05a.
+2. Augment Phase P04/P04a with telemetry coverage checks, property percentages, and mutation configs.
+3. Complete Phase P03 analysis (dependency graph, telemetry refactor plan).
+4. Update execution tracker/verification phases with new checks.
+5. Begin Phase P06 once prerequisites complete.

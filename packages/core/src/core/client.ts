@@ -30,6 +30,14 @@ import { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
+import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
+import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
+import {
+  createProviderAdapterFromManager,
+  createTelemetryAdapterFromConfig,
+  createToolRegistryViewFromRegistry,
+} from '../runtime/runtimeAdapters.js';
+import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
@@ -55,6 +63,7 @@ import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { subscribeToAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
+import type { ProviderManager } from '../providers/ProviderManager.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
@@ -669,9 +678,51 @@ export class GeminiClient {
             },
           }
         : this.generateContentConfig;
+      // @plan PLAN-20251028-STATELESS6.P10
+      // @requirement REQ-STAT6-001.2
+      // Create runtime context from config (foreground agent)
+      const settings: ReadonlySettingsSnapshot = {
+        compressionThreshold:
+          (this.config.getEphemeralSetting('compression-threshold') as
+            | number
+            | undefined) ?? 0.8,
+        contextLimit:
+          (this.config.getEphemeralSetting('context-limit') as
+            | number
+            | undefined) ?? 60000,
+        preserveThreshold:
+          (this.config.getEphemeralSetting('compression-preserve-threshold') as
+            | number
+            | undefined) ?? 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+      };
+
+      const providerRuntime = createProviderRuntimeContext({
+        settingsService: this.config.getSettingsService(),
+        config: this.config,
+        runtimeId: this.runtimeState.runtimeId,
+        metadata: { source: 'GeminiClient.startChat' },
+      });
+
+      const runtimeContext = createAgentRuntimeContext({
+        state: this.runtimeState,
+        settings,
+        provider: createProviderAdapterFromManager(
+          this.config.getProviderManager?.() as ProviderManager | undefined,
+        ),
+        telemetry: createTelemetryAdapterFromConfig(this.config),
+        tools: createToolRegistryViewFromRegistry(
+          this.config.getToolRegistry(),
+        ),
+        history: historyService,
+        providerRuntime,
+      });
+
       return new GeminiChat(
-        this.runtimeState,
-        this.config,
+        runtimeContext,
         this.getContentGenerator(),
         {
           systemInstruction,
@@ -679,7 +730,6 @@ export class GeminiClient {
           tools,
         },
         [], // Empty initial history since we're using HistoryService
-        historyService,
       );
     } catch (error) {
       await reportError(

@@ -12,11 +12,20 @@ import type { IProvider, GenerateChatOptions } from '../providers/IProvider.js';
 import { ProviderManager } from '../providers/ProviderManager.js';
 import { Config } from '../config/config.js';
 import type { ConfigParameters } from '../config/config.js';
-import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import {
+  createProviderRuntimeContext,
+  type ProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import type { ContentGenerator } from './contentGenerator.js';
 import { AuthType } from './contentGenerator.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
+import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
+import {
+  createProviderAdapterFromManager,
+  createTelemetryAdapterFromConfig,
+  createToolRegistryViewFromRegistry,
+} from '../runtime/runtimeAdapters.js';
 
 vi.mock('../utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
@@ -48,6 +57,7 @@ describe('GeminiChat runtime context', () => {
   let settingsService: SettingsService;
   let config: Config;
   let manager: ProviderManager;
+  let providerRuntime: ProviderRuntimeContext;
 
   beforeEach(() => {
     settingsService = new SettingsService();
@@ -57,14 +67,14 @@ describe('GeminiChat runtime context', () => {
     settingsService.set('providers.stub.apiKey', 'stub-api-key');
     settingsService.set('providers.stub.model', 'stub-model');
 
-    const runtime = createProviderRuntimeContext({
+    providerRuntime = createProviderRuntimeContext({
       settingsService,
       config,
       runtimeId: 'test.runtime',
       metadata: { source: 'geminiChat.runtime.test' },
     });
 
-    manager = new ProviderManager(runtime);
+    manager = new ProviderManager(providerRuntime);
     manager.setConfig(config);
     config.setProviderManager(manager);
   });
@@ -112,13 +122,29 @@ describe('GeminiChat runtime context', () => {
       authType: AuthType.USE_NONE,
       sessionId: config.getSessionId(),
     });
+    const historyService = new HistoryService();
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 60000,
+        preserveThreshold: 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+      },
+      provider: createProviderAdapterFromManager(config.getProviderManager()),
+      telemetry: createTelemetryAdapterFromConfig(config),
+      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      providerRuntime: { ...providerRuntime },
+    });
     const chat = new GeminiChat(
-      runtimeState,
-      config,
+      view,
       {} as unknown as ContentGenerator,
       generationConfig,
       [],
-      new HistoryService(),
     );
 
     const response = await chat.sendMessage(

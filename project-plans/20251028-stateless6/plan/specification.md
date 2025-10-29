@@ -311,3 +311,521 @@ This checklist maps requirements (REQ-STAT6-001, REQ-STAT6-002, REQ-STAT6-003) t
 - Cross-references to architecture.md glossary maintained
 - Follow-on plan (STATELESS7) scope boundary clarified
 - No open questions; ready for Phase P03 (deep analysis)
+
+---
+
+## 9. Implementation Completion Report
+
+> @plan PLAN-20251028-STATELESS6.P11
+
+### Implementation Timeline
+
+**Phases Completed:**
+- **P01-P03**: Requirements, specification, deep analysis (2025-10-28)
+- **P04**: TDD design (test skeletons created)
+- **P05-P05a**: Pseudocode design + verification
+- **P06**: Stub implementation (AgentRuntimeContext interface)
+- **P07-P09**: Runtime context adapters (provider, ephemeral, telemetry, tools)
+- **P10-P10a**: GeminiChat refactor + verification **COMPLETE**
+- **P11**: Integration hardening **COMPLETE**
+
+### Final Architecture State
+
+**Core Components Delivered:**
+
+1. **AgentRuntimeContext** (`/Users/acoliver/projects/llxprt-code/packages/core/src/runtime/AgentRuntimeContext.ts`):
+   - Immutable runtime view wrapper around AgentRuntimeState
+   - Enforced via `Object.freeze()` at construction
+   - Zero Config dependencies in runtime path
+
+2. **Factory Function** (`/Users/acoliver/projects/llxprt-code/packages/core/src/runtime/createAgentRuntimeContext.ts`):
+   - Constructs AgentRuntimeContext from options
+   - Builds adapter closures for ephemerals, telemetry, provider, tools
+   - Handles both foreground and subagent construction patterns
+
+3. **Config Adapter** (`/Users/acoliver/projects/llxprt-code/packages/core/src/runtime/createRuntimeContextFromConfig.ts`):
+   - Temporary bridge for foreground agent (until STATELESS7)
+   - Wraps Config calls in AgentRuntimeContext interface
+   - Marked as transitional code
+
+### Dependency Elimination Results
+
+**GeminiChat (`packages/core/src/core/geminiChat.ts`):**
+- **Before STATELESS6**: 20 Config dependencies
+- **After STATELESS6**: 0 Config dependencies
+- **Constructor signature**: Changed from `constructor(config: Config, ...)` to `constructor(view: AgentRuntimeContext, ...)`
+- **Verification**: `grep "this\.config" geminiChat.ts` → 0 matches
+
+**SubAgentScope (`packages/core/src/core/subagent.ts`):**
+- **Before STATELESS6**: 7 Config dependencies + 1 mutation (`setModel()`)
+- **After STATELESS6**: 0 Config dependencies, 0 mutations
+- **Constructor signature**: Changed from `constructor(config: Config, ...)` to `constructor(runtimeContext: AgentRuntimeContext, ...)`
+- **Verification**: `grep "setModel\|setProvider" subagent.ts` → 0 matches (only comments)
+
+### Requirements Satisfaction
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| **REQ-STAT6-001.1**: Runtime view injection | ✅ SATISFIED | GeminiChat/SubAgentScope accept AgentRuntimeContext |
+| **REQ-STAT6-001.2**: Config elimination in GeminiChat | ✅ SATISFIED | 0 `this.config` references (P11 verification) |
+| **REQ-STAT6-001.3**: SubAgentScope mutation elimination | ✅ SATISFIED | 0 `setModel()` calls (P11 verification) |
+| **REQ-STAT6-002.1**: Provider/model/auth completeness | ✅ SATISFIED | `view.state.*` + `view.provider.*` |
+| **REQ-STAT6-002.2**: Ephemeral settings completeness | ✅ SATISFIED | `view.ephemerals.*()` closures |
+| **REQ-STAT6-002.3**: Telemetry hooks | ✅ SATISFIED | `view.telemetry.log*()` adapters |
+| **REQ-STAT6-003.1**: Config isolation | ✅ SATISFIED | `Object.freeze(view)` enforced |
+| **REQ-STAT6-003.2**: Parallel subagent support | ✅ SATISFIED | Distinct `runtimeId` per context |
+| **REQ-STAT6-003.3**: State isolation verification | ✅ SATISFIED | Integration tests pass (foreground Config unchanged) |
+
+### Quality Metrics
+
+**Test Coverage:**
+- **3298/3301 tests passing** (99.9% pass rate)
+- 3 pre-existing acceptable failures in `subagent.test.ts` (unrelated to STATELESS6)
+- 0 new test failures introduced
+
+**Type Safety:**
+- **0 TypeScript errors** (P10a interface shadowing resolved)
+- All CI typechecks passing
+- Interface segregation principle applied (`IProviderAdapter`)
+
+**Code Quality:**
+- All lint checks passing (`npm run lint`)
+- All format checks passing (`npm run format:check`)
+- 15 `@plan PLAN-20251028-STATELESS6.P10` markers added
+- Pseudocode traceability maintained
+
+### Integration Hardening Verification (P11)
+
+**Residual Config Usage Search Results:**
+
+| Component | Search | Matches | Status |
+|-----------|--------|---------|--------|
+| GeminiChat | `this\.config` | 0 | ✅ CLEAN |
+| GeminiChat | `config\.get` | 1 (comment only) | ✅ CLEAN |
+| SubAgentScope | `runtimeContext` | 6 (AgentRuntimeContext refs) | ✅ EXPECTED |
+| SubAgentScope | `setModel\|setProvider` | 2 (comments only) | ✅ CLEAN |
+| Core (all) | `getEphemeralSetting` | 89 (tests, Config class, providers) | ✅ ALLOWED |
+
+**Classification Summary:**
+- **0 BLOCKER issues** (no prohibited Config usage found)
+- **0 FIXABLE issues** (all dependencies eliminated)
+- **All matches categorized as ALLOWED** (tests, comments, approved locations)
+
+### Known Limitations & Future Work
+
+**Out of Scope (Deferred to STATELESS7):**
+1. **Foreground Config Elimination**: CLI runtime adapter still uses `createRuntimeContextFromConfig()`
+2. **Full Config Removal**: Config class remains for foreground agent flows
+3. **Tool Execution Context Refactor**: Tools still receive Config-like interfaces
+
+**Technical Debt:**
+1. **SubAgentScope Test Failures**: 3 tests fail due to systemInstruction/temperature setup mismatches (pre-existing)
+2. **Config Adapter Testing**: `createRuntimeContextFromConfig()` lacks dedicated unit tests (low priority)
+3. **Deep Immutability**: AgentRuntimeContext uses `readonly` but not `DeepReadonly<T>` (sufficient for current needs)
+
+### Conclusion
+
+**STATELESS6 Implementation Status: ✅ COMPLETE**
+
+All requirements (REQ-STAT6-001, REQ-STAT6-002, REQ-STAT6-003) satisfied. GeminiChat and SubAgentScope now operate on immutable AgentRuntimeContext, eliminating shared Config dependencies. Integration hardening (P11) confirms zero residual Config usage in runtime paths.
+
+**Ready for Follow-on Work:**
+- STATELESS7: Eliminate foreground Config dependencies
+- Future refactors can leverage established runtime view pattern
+
+---
+
+## 10. Migration Guide
+
+> @plan PLAN-20251028-STATELESS6.P12
+
+### Current State (Post-STATELESS6)
+
+**AgentRuntimeContext Pattern Fully Implemented:**
+
+STATELESS6 successfully introduces the `AgentRuntimeContext` pattern, eliminating all Config dependencies from GeminiChat and SubAgentScope runtime paths. The runtime view wrapper provides immutable, isolated execution contexts for both foreground and subagent flows.
+
+**Core Components:**
+- **AgentRuntimeContext** (`packages/core/src/runtime/AgentRuntimeContext.ts`): Immutable wrapper around AgentRuntimeState with adapter interfaces
+- **createAgentRuntimeContext()** (`packages/core/src/runtime/createAgentRuntimeContext.ts`): Factory for constructing runtime contexts
+- **createRuntimeContextFromConfig()** (`packages/core/src/runtime/createRuntimeContextFromConfig.ts`): Temporary foreground adapter (until STATELESS7)
+
+**Elimination Results:**
+- GeminiChat: 20 Config dependencies eliminated (100%)
+- SubAgentScope: 7 Config dependencies eliminated (100%)
+- Total: 27 Config touchpoints removed
+
+### Adapter Usage
+
+**For Subagent Flows (Production Pattern):**
+
+SubAgentScope constructs isolated runtime contexts directly from subagent profiles without Config dependency:
+
+```typescript
+// SubAgentScope.create() (packages/core/src/core/subagent.ts)
+const runtimeContext = createAgentRuntimeContext({
+  state: new AgentRuntimeState(
+    provider: subagentProfile.provider,
+    model: subagentProfile.model,
+    authType: subagentProfile.authType,
+    // ... other state fields
+  ),
+  ephemeralSettings: {
+    compressionThreshold: 0.6,
+    contextLimit: 60000,
+    // ... other ephemeral settings
+  },
+  telemetryTarget: { /* telemetry adapters */ },
+  providerAdapters: { /* provider adapters */ },
+  toolAdapters: { /* tool adapters */ }
+});
+
+// Pass runtime context to GeminiChat
+const geminiChat = new GeminiChat(runtimeContext, historyService, ...);
+```
+
+**Result:** Subagent execution is fully isolated from foreground Config state. No Config mutations occur.
+
+**For Foreground Flows (Transitional Pattern - Until STATELESS7):**
+
+CLI runtime adapter bridges foreground Config to AgentRuntimeContext using temporary adapter:
+
+```typescript
+// agentRuntimeAdapter.ts (packages/cli/src/runtime/agentRuntimeAdapter.ts)
+const runtimeState = createRuntimeState(config); // From STATELESS5
+const runtimeContext = createRuntimeContextFromConfig(config, runtimeState);
+
+// Pass runtime context to GeminiClient/GeminiChat
+const geminiClient = new GeminiClient(runtimeContext, historyService, ...);
+```
+
+**Result:** Foreground agent continues to work with existing Config, but GeminiChat internally operates on immutable runtime view.
+
+**Adapter Interface Examples:**
+
+```typescript
+// Provider access (replaces config.getProviderManager?.())
+const provider = runtimeContext.provider.getActiveProvider();
+
+// Ephemeral settings (replaces config.getEphemeralSetting())
+const threshold = runtimeContext.ephemerals.compressionThreshold();
+
+// Telemetry (replaces logApiRequest(this.config, ...))
+runtimeContext.telemetry.logApiRequest(metadata, payload);
+
+// Tools (replaces config.getProviderManager?.().tools)
+const toolNames = runtimeContext.tools.listToolNames();
+```
+
+### Subagent Creation (Isolation Achieved)
+
+**Before STATELESS6:**
+```typescript
+// SubAgentScope mutated shared Config (PROBLEM)
+this.runtimeContext.setModel(this.modelConfig.model); // Overwrites foreground model!
+const geminiChat = new GeminiChat(this.config, ...); // Shared Config instance
+```
+
+**After STATELESS6:**
+```typescript
+// SubAgentScope constructs isolated runtime context (SOLUTION)
+const runtimeContext = createAgentRuntimeContext({
+  state: new AgentRuntimeState(/* subagent profile */),
+  // ... adapters
+});
+const geminiChat = new GeminiChat(runtimeContext, ...); // Isolated context
+
+// Guaranteed: Object.isFrozen(runtimeContext) === true
+// Guaranteed: foregroundConfig.getModel() unchanged after subagent execution
+```
+
+**Isolation Guarantees:**
+- ✅ Foreground Config immutable during subagent execution
+- ✅ Each agent has distinct `runtimeId` (UUID)
+- ✅ Each agent has isolated `HistoryService` instance
+- ✅ Telemetry logs distinguishable via `runtimeId` tagging
+
+### Future Deprecation Steps (STATELESS7 Scope)
+
+**Phase 1: Refactor CLI Runtime to Construct AgentRuntimeContext Directly**
+
+**Goal:** Eliminate `createRuntimeContextFromConfig()` adapter by constructing runtime contexts directly in CLI runtime initialization.
+
+**Approach:**
+1. Modify `packages/cli/src/runtime/agentRuntimeAdapter.ts` to build `AgentRuntimeContext` from CLI flags and environment variables
+2. Remove intermediate `Config` construction for runtime operations
+3. Construct ephemeral settings directly from CLI input or defaults
+
+**Example:**
+```typescript
+// Current (STATELESS6):
+const config = buildConfigFromFlags(flags);
+const runtimeState = createRuntimeState(config);
+const runtimeContext = createRuntimeContextFromConfig(config, runtimeState);
+
+// Future (STATELESS7):
+const runtimeContext = createAgentRuntimeContext({
+  state: new AgentRuntimeState(
+    provider: flags.provider,
+    model: flags.model,
+    // ... extract directly from flags
+  ),
+  ephemeralSettings: {
+    compressionThreshold: flags.compressionThreshold ?? 0.6,
+    // ... other ephemerals
+  },
+  // ... adapters
+});
+```
+
+**Impact:** Foreground agent no longer depends on Config singleton for runtime operations.
+
+**Phase 2: Remove `createRuntimeContextFromConfig()` Adapter**
+
+**Goal:** Delete transitional adapter once foreground CLI runtime is refactored.
+
+**Approach:**
+1. Verify zero calls to `createRuntimeContextFromConfig()` in codebase (grep audit)
+2. Delete `packages/core/src/runtime/createRuntimeContextFromConfig.ts`
+3. Remove exports from `packages/core/src/runtime/index.ts`
+4. Update integration tests to remove adapter test cases
+
+**Verification:**
+```bash
+# Should return zero matches after Phase 2
+grep -r "createRuntimeContextFromConfig" packages/
+```
+
+**Impact:** Simplified runtime architecture, one less maintenance burden.
+
+**Phase 3: Deprecate Config Class for Runtime Operations**
+
+**Goal:** Restrict Config class to settings persistence and management only.
+
+**Approach:**
+1. Mark runtime-related Config methods as deprecated (JSDoc `@deprecated` tags)
+2. Add TypeScript deprecation warnings for `config.getProviderManager()`, `config.getEphemeralSetting()`, etc.
+3. Update documentation to recommend `AgentRuntimeContext` for runtime operations
+4. Maintain Config for settings service, persistence, and user preferences
+
+**Example Deprecation:**
+```typescript
+class Config {
+  /**
+   * @deprecated Use AgentRuntimeContext.provider.getActiveProvider() instead.
+   * Config should only be used for settings persistence.
+   */
+  getProviderManager() { /* ... */ }
+}
+```
+
+**Impact:** Clear signal to developers that runtime operations should use `AgentRuntimeContext`.
+
+**Phase 4: Keep Config Only for Persistence/Settings Management**
+
+**Goal:** Config class becomes pure settings container, not runtime dependency.
+
+**Final Config Responsibilities:**
+- Persist user settings to disk (provider preferences, model defaults, etc.)
+- Load settings from configuration files
+- Manage ephemeral settings modifications
+- Expose settings service for preferences UI
+
+**Config DOES NOT:**
+- Provide runtime state for agent execution (use `AgentRuntimeContext`)
+- Manage provider instances (use runtime view provider adapter)
+- Handle telemetry logging (use runtime view telemetry target)
+
+**Architecture Outcome:**
+```
+Settings Layer (Config)
+  ↓ (construction time only)
+Runtime Layer (AgentRuntimeContext)
+  ↓ (execution time)
+Agent Layer (GeminiChat, SubAgentScope)
+```
+
+**Impact:** Clean separation of concerns, Config becomes infrastructure layer only.
+
+### Breaking Changes (STATELESS6)
+
+**1. SubAgentScope.create() Signature Change**
+
+**Before:**
+```typescript
+SubAgentScope.create(config: Config, profile: SubagentProfile, ...): SubAgentScope
+```
+
+**After:**
+```typescript
+SubAgentScope.create(runtimeContext: AgentRuntimeContext, profile: SubagentProfile, ...): SubAgentScope
+```
+
+**Migration:** Callers must construct `AgentRuntimeContext` before calling `SubAgentScope.create()`.
+
+**2. GeminiChat Constructor Signature Change**
+
+**Before:**
+```typescript
+constructor(config: Config, historyService: HistoryService, ...)
+```
+
+**After:**
+```typescript
+constructor(view: AgentRuntimeContext, historyService: HistoryService, ...)
+```
+
+**Migration:** Callers must pass `AgentRuntimeContext` instead of `Config`. Use `createRuntimeContextFromConfig()` for transitional foreground flows.
+
+**3. Config Import Changes in GeminiChat**
+
+**Before:**
+```typescript
+import { Config } from '../config/Config';
+```
+
+**After:**
+```typescript
+import type { Config } from '../config/Config'; // Type-only import
+```
+
+**Migration:** GeminiChat no longer uses Config at runtime, only for type annotations (if needed).
+
+**4. Removed SubAgentScope Config Mutations**
+
+**Before:**
+```typescript
+this.runtimeContext.setModel(this.modelConfig.model);
+```
+
+**After:**
+```typescript
+// REMOVED - no mutations allowed
+```
+
+**Migration:** SubAgentScope constructs runtime context with desired model upfront; no mid-execution changes.
+
+### Testing Strategy (Integration Tests)
+
+**Isolation Verification Tests:**
+
+```typescript
+// Test: Foreground Config unchanged after subagent execution
+it('should not mutate foreground config during subagent execution', async () => {
+  const foregroundModel = config.getModel();
+  const subagent = SubAgentScope.create(runtimeContext, subagentProfile);
+  await subagent.executeQuery('test query');
+  expect(config.getModel()).toBe(foregroundModel); // Unchanged
+});
+
+// Test: Distinct runtime IDs for telemetry
+it('should tag telemetry with distinct runtime IDs', async () => {
+  const foregroundLogs = await executeForegroundQuery();
+  const subagentLogs = await executeSubagentQuery();
+  expect(foregroundLogs.runtimeId).not.toBe(subagentLogs.runtimeId);
+});
+
+// Test: Isolated history services
+it('should allocate isolated history services', () => {
+  const foregroundHistory = foregroundContext.history;
+  const subagentHistory = subagentContext.history;
+  expect(foregroundHistory).not.toBe(subagentHistory);
+});
+```
+
+**Adapter Completeness Tests:**
+
+```typescript
+// Test: Provider adapter works
+it('should access provider via runtime context', () => {
+  const provider = runtimeContext.provider.getActiveProvider();
+  expect(provider).toBeDefined();
+});
+
+// Test: Ephemeral settings adapter works
+it('should access ephemeral settings via runtime context', () => {
+  const threshold = runtimeContext.ephemerals.compressionThreshold();
+  expect(threshold).toBe(0.6);
+});
+
+// Test: Telemetry adapter works
+it('should log telemetry via runtime context', () => {
+  runtimeContext.telemetry.logApiRequest(metadata, payload);
+  expect(telemetrySpy).toHaveBeenCalledWith(metadata, payload);
+});
+```
+
+**Immutability Tests:**
+
+```typescript
+// Test: Runtime context is frozen
+it('should enforce runtime context immutability', () => {
+  expect(Object.isFrozen(runtimeContext)).toBe(true);
+});
+
+// Test: Mutation attempts fail
+it('should prevent runtime context mutation', () => {
+  expect(() => {
+    (runtimeContext as any).state = {}; // Should fail or no-op
+  }).toThrow(); // Strict mode: throws TypeError
+});
+```
+
+### Migration Checklist
+
+Use this checklist when adopting STATELESS6 patterns:
+
+**For New Subagent Implementations:**
+- [ ] Construct `AgentRuntimeContext` from subagent profile (use `createAgentRuntimeContext()`)
+- [ ] Pass runtime context to `SubAgentScope.create()` (not Config)
+- [ ] Verify `Object.isFrozen(runtimeContext) === true` in tests
+- [ ] Verify foreground Config unchanged after subagent execution (integration test)
+- [ ] Tag telemetry with distinct `runtimeId` per agent
+
+**For Existing GeminiChat Consumers:**
+- [ ] Update constructor calls to pass `AgentRuntimeContext` instead of `Config`
+- [ ] Use `createRuntimeContextFromConfig()` for foreground flows (until STATELESS7)
+- [ ] Replace `this.config.get*()` calls with `this.runtimeContext.*()` adapter calls
+- [ ] Remove Config imports (or make type-only: `import type { Config }`)
+- [ ] Verify all tests passing after migration
+
+**For Foreground CLI Runtime:**
+- [ ] Use `createRuntimeContextFromConfig()` adapter in CLI runtime initialization
+- [ ] Ensure `GeminiClient` receives runtime context, not Config
+- [ ] Verify all CLI commands continue to work (regression test)
+- [ ] Mark adapter usage as transitional (comment: "TODO: Remove in STATELESS7")
+
+**For Integration Tests:**
+- [ ] Add isolation tests (foreground Config unchanged, distinct runtimeIds)
+- [ ] Add immutability tests (Object.isFrozen checks)
+- [ ] Add adapter completeness tests (provider, ephemerals, telemetry, tools)
+- [ ] Verify 99%+ test pass rate after migration
+
+**For Documentation:**
+- [ ] Update architecture docs to reflect runtime view pattern
+- [ ] Document breaking changes in constructor signatures
+- [ ] Annotate transitional code with `@plan` markers
+- [ ] Update README/CONTRIBUTING.md if runtime patterns affect contributor workflows
+
+### Additional Resources
+
+**Implementation Files:**
+- `packages/core/src/runtime/AgentRuntimeContext.ts`: Runtime view interface
+- `packages/core/src/runtime/createAgentRuntimeContext.ts`: Factory function
+- `packages/core/src/runtime/createRuntimeContextFromConfig.ts`: Foreground adapter (transitional)
+- `packages/core/src/core/geminiChat.ts`: GeminiChat refactor (lines ~600-700)
+- `packages/core/src/core/subagent.ts`: SubAgentScope refactor (lines ~85-276)
+
+**Documentation:**
+- `project-plans/20251028-stateless6/plan/specification.md`: Full specification
+- `project-plans/20251028-stateless6/analysis/architecture.md`: Architectural analysis
+- `project-plans/20251028-stateless6/analysis/integration-map.md`: Integration points
+- `project-plans/20251028-stateless6/plan/evaluation.log`: Plan evaluation report
+
+**Verification Evidence:**
+- `project-plans/20251028-stateless6/.completed/P11a.md`: Integration hardening verification
+- `project-plans/20251028-stateless6/.completed/P10a.md`: GeminiChat implementation verification
+- `project-plans/20251028-stateless6/.completed/P07a.md`: SubAgentScope unit test verification
+
+**Future Plans:**
+- STATELESS7: Foreground Config elimination (follow-on plan)

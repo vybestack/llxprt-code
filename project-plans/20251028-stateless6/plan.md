@@ -1,4 +1,4 @@
-# Plan: GeminiChat Stateless Runtime View
+# Plan: Stateless Agent Runtime Context
 
 Plan ID: PLAN-20251028-STATELESS6  
 Generated: 2025-10-28  
@@ -13,9 +13,9 @@ Requirements: REQ-STAT6-001, REQ-STAT6-002, REQ-STAT6-003
 | P03a | Analysis Verification | Validate analysis completeness per PLAN checklist. |
 | P04 | Requirements & Test Strategy | Define requirements and behavioural test plan for stateless runtime view. |
 | P04a | Requirements Verification | Confirm requirement coverage and traceability. |
-| P05 | Pseudocode: Runtime View | Produce detailed pseudocode for GeminiChatRuntimeView injection. |
+| P05 | Pseudocode: Runtime View | Produce detailed pseudocode for AgentRuntimeContext injection. |
 | P05a | Pseudocode Verification | Verify pseudocode completeness vs. analysis requirements. |
-| P06 | Stub Implementation | Introduce `GeminiRuntimeView` interface and adapter while preserving behaviour. |
+| P06 | Stub Implementation | Introduce `AgentRuntimeContext` interface and adapter while preserving behaviour. |
 | P06a | Stub Verification | Confirm stub phase maintains green build and markers. |
 | P07 | Unit TDD – SubAgentScope | Add failing unit specs preventing Config mutation (e.g., `setModel`). |
 | P07a | Unit TDD Verification | Document expected failures and coverage. |

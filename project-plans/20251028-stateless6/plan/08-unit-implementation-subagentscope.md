@@ -7,7 +7,7 @@
 - P07/P07a completed
 
 ## Objectives
-- Satisfy unit tests by refactoring SubAgentScope to consume `GeminiRuntimeView` and eliminate Config mutation.
+- Satisfy unit tests by refactoring SubAgentScope to consume `AgentRuntimeContext` and eliminate Config mutation.
 
 ## Tasks
 1. Update SubAgentScope constructor/factory per pseudocode steps 007.1–007.8.
