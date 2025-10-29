@@ -64,6 +64,7 @@ export enum GeminiEventType {
   LoopDetected = 'loop_detected',
   Citation = 'citation',
   Retry = 'retry',
+  SystemNotice = 'system_notice',
 }
 
 export type ServerGeminiRetryEvent = {
@@ -107,6 +108,11 @@ export type ThoughtSummary = {
 
 export type ServerGeminiContentEvent = {
   type: GeminiEventType.Content;
+  value: string;
+};
+
+export type ServerGeminiSystemNoticeEvent = {
+  type: GeminiEventType.SystemNotice;
   value: string;
 };
 
@@ -198,6 +204,7 @@ export type ServerGeminiCitationEvent = {
 // The original union type, now composed of the individual types
 export type ServerGeminiStreamEvent =
   | ServerGeminiContentEvent
+  | ServerGeminiSystemNoticeEvent
   | ServerGeminiToolCallRequestEvent
   | ServerGeminiToolCallResponseEvent
   | ServerGeminiToolCallConfirmationEvent

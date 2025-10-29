@@ -22,7 +22,11 @@ import type { ChatCompressionInfo } from './turn.js';
 import { CompressionStatus } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
-import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
+import {
+  getCoreSystemPromptAsync,
+  getCompressionPrompt,
+  drainPromptInstallerNotices,
+} from './prompts.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
@@ -142,6 +146,7 @@ export class GeminiClient {
   private lastComplexitySuggestionTurn?: number;
   private toolActivityCount = 0;
   private toolCallReminderLevel: 'none' | 'base' | 'escalated' = 'none';
+  private pendingInstallerNotices: string[] = [];
 
   /**
    * At any point in this conversation, was compression triggered without
@@ -169,6 +174,7 @@ export class GeminiClient {
       complexitySettings.suggestionCooldownMs ?? 300000;
 
     this.todoReminderService = new TodoReminderService();
+    this.pendingInstallerNotices = [];
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
@@ -552,6 +558,11 @@ export class GeminiClient {
         enabledToolNames,
       );
 
+      const installerNotices = await drainPromptInstallerNotices();
+      if (installerNotices.length > 0) {
+        this.pendingInstallerNotices.push(...installerNotices);
+      }
+
       // Add environment context to system instruction
       const envContextText = envParts
         .map((part) => ('text' in part ? part.text : ''))
@@ -829,6 +840,14 @@ export class GeminiClient {
         });
       } else {
         this.chat = await this.startChat();
+      }
+    }
+
+    if (this.pendingInstallerNotices.length > 0) {
+      const notices = [...this.pendingInstallerNotices];
+      this.pendingInstallerNotices = [];
+      for (const notice of notices) {
+        yield { type: GeminiEventType.SystemNotice, value: notice };
       }
     }
 

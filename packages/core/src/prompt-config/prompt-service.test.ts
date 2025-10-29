@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PromptService, type PromptServiceConfig } from './prompt-service.js';
 import type { PromptContext } from './types.js';
+import { PromptInstaller, type DefaultsMap } from './prompt-installer.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -144,6 +145,43 @@ describe('PromptService', () => {
       );
 
       await expect(service.initialize()).resolves.not.toThrow();
+    });
+
+    it('should surface installer notices once when defaults are newer than local prompts', async () => {
+      const baseDir = path.join(tempDir, 'prompts');
+      await fs.mkdir(baseDir, { recursive: true });
+      const userCorePath = path.join(baseDir, 'core.md');
+      await fs.writeFile(userCorePath, 'User customized content');
+
+      const defaultsDir = path.join(tempDir, 'defaults');
+      await fs.mkdir(defaultsDir, { recursive: true });
+      const defaultContent = '# Core Prompt\nNew default content';
+      const defaultFilePath = path.join(defaultsDir, 'core.md');
+      await fs.writeFile(defaultFilePath, defaultContent);
+      const defaultDate = new Date('2025-10-29T01:22:33.000Z');
+      await fs.utimes(defaultFilePath, defaultDate, defaultDate);
+
+      const service = new PromptService({ baseDir });
+      (service as unknown as { defaultContent: DefaultsMap }).defaultContent = {
+        'core.md': defaultContent,
+      };
+      const installer = (service as unknown as { installer: PromptInstaller })
+        .installer;
+      (
+        installer as unknown as { defaultSourceDirs: string[] }
+      ).defaultSourceDirs = [defaultsDir];
+
+      await service.initialize();
+
+      const notices = service.consumeInstallerNotices();
+      expect(notices).toHaveLength(1);
+      expect(notices[0]).toContain(userCorePath);
+      expect(notices[0]).toContain(
+        path.join(baseDir, 'core.md.20251029T012233'),
+      );
+
+      const secondBatch = service.consumeInstallerNotices();
+      expect(secondBatch).toHaveLength(0);
     });
   });
 

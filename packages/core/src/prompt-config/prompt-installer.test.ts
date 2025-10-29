@@ -199,35 +199,88 @@ describe('PromptInstaller', () => {
       expect(result.errors).toContain('Invalid base directory');
     });
 
-    it('should create review file when defaults are newer than local prompt', async () => {
+    it('should create timestamped review file when defaults are newer than local prompt', async () => {
       await fs.mkdir(testBaseDir, { recursive: true });
       const existingPath = path.join(testBaseDir, 'core.md');
       await fs.writeFile(existingPath, 'User customized content');
       const pastDate = new Date('2023-01-01T00:00:00.000Z');
       await fs.utimes(existingPath, pastDate, pastDate);
 
+      const defaultDir = path.join(testBaseDir, '__defaults__');
+      await fs.mkdir(defaultDir, { recursive: true });
+      const defaultPath = path.join(defaultDir, 'core.md');
+      const defaultContent = '# Core Prompt\nNew default content';
+      await fs.writeFile(defaultPath, defaultContent);
+      const defaultDate = new Date('2025-10-29T01:22:33.000Z');
+      await fs.utimes(defaultPath, defaultDate, defaultDate);
+
+      (
+        installer as unknown as { defaultSourceDirs: string[] }
+      ).defaultSourceDirs = [defaultDir];
+
       const result = await installer.install(testBaseDir, {
-        'core.md': '# Core Prompt\nNew default content',
+        'core.md': defaultContent,
       });
 
       expect(result.success).toBe(true);
       expect(result.installed).not.toContain('core.md');
       expect(result.skipped).toContain('core.md');
       expect(result.conflicts).toHaveLength(1);
+      expect(result.notices).toEqual([
+        `Warning: this version includes a newer version of ${path.join(testBaseDir, 'core.md')} which you customized. We put ${path.join(testBaseDir, 'core.md.20251029T012233')} next to it for your review.`,
+      ]);
 
       const conflict = result.conflicts[0];
       expect(conflict.path).toBe('core.md');
       expect(conflict.action).toBe('kept');
-      expect(conflict.reviewFile).toMatch(/^core\.md\.\d{8}.*llxprt-update$/);
+      expect(conflict.reviewFile).toBe('core.md.20251029T012233');
 
       const reviewPath = path.join(testBaseDir, conflict.reviewFile!);
       expect(existsSync(reviewPath)).toBe(true);
 
       const reviewContent = await fs.readFile(reviewPath, 'utf-8');
-      expect(reviewContent).toBe('# Core Prompt\nNew default content');
+      expect(reviewContent).toBe(defaultContent);
 
       const originalContent = await fs.readFile(existingPath, 'utf-8');
       expect(originalContent).toBe('User customized content');
+    });
+
+    it('should not recreate review file or warning when timestamped companion already exists', async () => {
+      await fs.mkdir(testBaseDir, { recursive: true });
+      const existingPath = path.join(testBaseDir, 'core.md');
+      await fs.writeFile(existingPath, 'User customized content');
+
+      const defaultDir = path.join(testBaseDir, '__defaults__');
+      await fs.mkdir(defaultDir, { recursive: true });
+      const defaultPath = path.join(defaultDir, 'core.md');
+      const defaultContent = '# Core Prompt\nNew default content';
+      await fs.writeFile(defaultPath, defaultContent);
+      const defaultDate = new Date('2025-10-29T01:22:33.000Z');
+      await fs.utimes(defaultPath, defaultDate, defaultDate);
+
+      (
+        installer as unknown as { defaultSourceDirs: string[] }
+      ).defaultSourceDirs = [defaultDir];
+
+      const firstResult = await installer.install(testBaseDir, {
+        'core.md': defaultContent,
+      });
+      expect(firstResult.success).toBe(true);
+      expect(firstResult.notices).toHaveLength(1);
+
+      const secondResult = await installer.install(testBaseDir, {
+        'core.md': defaultContent,
+      });
+
+      expect(secondResult.success).toBe(true);
+      expect(secondResult.notices).toHaveLength(0);
+      expect(secondResult.conflicts).toHaveLength(0);
+
+      const files = await fs.readdir(testBaseDir);
+      const reviewFiles = files.filter((file) =>
+        file.startsWith('core.md.20251029T012233'),
+      );
+      expect(reviewFiles).toHaveLength(1);
     });
 
     it('should set correct file permissions', async () => {
