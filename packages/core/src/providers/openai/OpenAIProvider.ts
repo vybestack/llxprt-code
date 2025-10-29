@@ -526,6 +526,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   override getDefaultModel(): string {
     // Return hardcoded default - do NOT call getModel() to avoid circular dependency
+    if (this.providerConfig?.defaultModel) {
+      return this.providerConfig.defaultModel;
+    }
     // Check if this is a Qwen provider instance based on baseURL
     const baseURL = this.getBaseURL();
     if (
