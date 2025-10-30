@@ -5,10 +5,21 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AuthDialog } from './AuthDialog.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
 import { renderWithProviders } from '../../test-utils/render.js';
+
+const mockGetAuthStatus = vi.fn();
+const mockToggleOAuthEnabled = vi.fn();
+
+vi.mock('../../providers/providerManagerInstance.js', () => ({
+  getOAuthManager: () => ({
+    toggleOAuthEnabled: mockToggleOAuthEnabled,
+    getAuthStatus: mockGetAuthStatus,
+  }),
+}));
+
+import { AuthDialog } from './AuthDialog.js';
 
 describe('AuthDialog', () => {
   const wait = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -20,6 +31,10 @@ describe('AuthDialog', () => {
     process.env.GEMINI_API_KEY = '';
     process.env.GEMINI_DEFAULT_AUTH_TYPE = '';
     vi.clearAllMocks();
+    mockGetAuthStatus.mockReset();
+    mockToggleOAuthEnabled.mockReset();
+    mockGetAuthStatus.mockResolvedValue([]);
+    mockToggleOAuthEnabled.mockResolvedValue(false);
   });
 
   afterEach(() => {
@@ -102,6 +117,72 @@ describe('AuthDialog', () => {
       expect(lastFrame()).toContain('OAuth Authentication');
       expect(lastFrame()).toContain('Gemini (Google OAuth)');
       expect(lastFrame()).toContain('Qwen (OAuth)');
+    });
+
+    it('should display authentication status for each provider', async () => {
+      mockGetAuthStatus.mockResolvedValue([
+        {
+          provider: 'gemini',
+          authenticated: true,
+          authType: 'oauth',
+          expiresIn: 3600,
+          oauthEnabled: true,
+        },
+        {
+          provider: 'qwen',
+          authenticated: false,
+          authType: 'none',
+          oauthEnabled: false,
+        },
+        {
+          provider: 'anthropic',
+          authenticated: true,
+          authType: 'oauth',
+          oauthEnabled: true,
+        },
+      ]);
+
+      const settings: LoadedSettings = new LoadedSettings(
+        {
+          settings: {
+            selectedAuthType: undefined,
+            customThemes: {},
+            mcpServers: {},
+          },
+          path: '',
+        },
+        {
+          settings: {},
+          path: '',
+        },
+        {
+          settings: {
+            customThemes: {},
+            mcpServers: {},
+            oauthEnabledProviders: {
+              gemini: true,
+              qwen: false,
+              anthropic: true,
+            },
+          },
+          path: '',
+        },
+        {
+          settings: { customThemes: {}, mcpServers: {} },
+          path: '',
+        },
+        true,
+      );
+
+      const { lastFrame } = renderWithProviders(
+        <AuthDialog onSelect={vi.fn()} settings={settings} />,
+      );
+      await wait();
+
+      const frame = lastFrame();
+      expect(frame).toContain('Gemini (Google OAuth) [ON] (Authenticated)');
+      expect(frame).toContain('Qwen (OAuth) [OFF] (Not authenticated)');
+      expect(frame).toContain('Anthropic Claude (OAuth) [ON] (Authenticated)');
     });
 
     it('should show OAuth options regardless of GEMINI_DEFAULT_AUTH_TYPE', () => {
