@@ -27,6 +27,11 @@ export interface ReadonlySettingsSnapshot {
     target: TelemetryTarget | null;
     redaction?: TelemetryRedactionConfig;
   };
+  /** Tool governance derived from profile ephemerals */
+  tools?: {
+    allowed?: string[];
+    disabled?: string[];
+  };
 }
 
 /**

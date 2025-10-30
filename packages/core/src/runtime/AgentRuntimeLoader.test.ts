@@ -22,6 +22,8 @@ import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { SettingsService } from '../settings/SettingsService.js';
 import { Config } from '../config/config.js';
+import { ToolRegistry } from '../tools/tool-registry.js';
+import { MockTool } from '../test-utils/tools.js';
 import type {
   ContentGenerator,
   ContentGeneratorConfig,
@@ -107,6 +109,10 @@ describe('AgentRuntimeLoader', () => {
       contextLimit: 10_000,
       preserveThreshold: 0.15,
       toolFormatOverride: 'json_schema',
+      tools: {
+        allowed: undefined,
+        disabled: undefined,
+      },
     };
     providerRuntime = createProviderRuntimeContext({
       settingsService: new SettingsService(),
@@ -226,5 +232,44 @@ describe('AgentRuntimeLoader', () => {
       contextLimit: 5_000,
       preserveThreshold: 0.25,
     });
+  });
+
+  it('filters tool registry view using allowed/disabled lists from settings snapshot', async () => {
+    const registry = new ToolRegistry(config);
+    registry.registerTool(
+      new MockTool('alpha', 'alpha', 'Alpha tool for testing.'),
+    );
+    registry.registerTool(
+      new MockTool('beta', 'beta', 'Beta tool for testing.'),
+    );
+
+    const bundle = await loadAgentRuntime({
+      profile: {
+        config,
+        state: runtimeState,
+        settings: {
+          ...settingsSnapshot,
+          tools: {
+            allowed: ['alpha'],
+            disabled: ['beta'],
+          },
+        },
+        providerRuntime,
+        toolRegistry: registry,
+        contentGeneratorConfig: createContentGeneratorConfig(),
+      },
+      overrides: {
+        providerAdapter,
+        telemetryAdapter,
+        contentGenerator: createStubGenerator('tools-filter'),
+      },
+    });
+
+    expect(bundle.toolsView.listToolNames()).toEqual(['alpha']);
+    expect(bundle.toolsView.getToolMetadata('alpha')).toMatchObject({
+      name: 'alpha',
+      description: 'Alpha tool for testing.',
+    });
+    expect(bundle.toolsView.getToolMetadata('beta')).toBeUndefined();
   });
 });

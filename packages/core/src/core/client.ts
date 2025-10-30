@@ -11,6 +11,7 @@ import {
   Part,
   Content,
   Tool,
+  FunctionDeclaration,
   GenerateContentResponse,
   SendMessageParameters,
 } from '@google/genai';
@@ -35,7 +36,11 @@ import { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
-import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
+import type {
+  ReadonlySettingsSnapshot,
+  ToolRegistryView,
+} from '../runtime/AgentRuntimeContext.js';
+import type { ToolRegistry } from '../tools/tool-registry.js';
 import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { retryWithBackoff } from '../utils/retry.js';
@@ -521,7 +526,17 @@ export class GeminiClient {
 
   async setTools(): Promise<void> {
     const toolRegistry = this.config.getToolRegistry();
-    const toolDeclarations = toolRegistry.getFunctionDeclarations();
+    if (!toolRegistry) {
+      return;
+    }
+
+    const toolsView =
+      typeof this.chat?.getToolsView === 'function'
+        ? this.chat.getToolsView()
+        : undefined;
+    const toolDeclarations = toolsView
+      ? this.buildToolDeclarationsFromView(toolRegistry, toolsView)
+      : toolRegistry.getFunctionDeclarations();
     this.updateTodoToolAvailabilityFromDeclarations(toolDeclarations);
 
     // Debug log for intermittent tool issues
@@ -598,9 +613,6 @@ export class GeminiClient {
     await this.lazyInitialize();
     const envParts = await getEnvironmentContext(this.config);
     const toolRegistry = this.config.getToolRegistry();
-    const toolDeclarations = toolRegistry.getFunctionDeclarations();
-    this.updateTodoToolAvailabilityFromDeclarations(toolDeclarations);
-    const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
     const enabledToolNames = this.getEnabledToolNamesForPrompt();
 
     // CRITICAL: Reuse stored HistoryService if available to preserve UI conversation display
@@ -708,6 +720,7 @@ export class GeminiClient {
           enabled: true,
           target: null,
         },
+        tools: this.getToolGovernanceEphemerals(),
       };
 
       const providerRuntime = createProviderRuntimeContext({
@@ -732,6 +745,13 @@ export class GeminiClient {
           contentGenerator: this.getContentGenerator(),
         },
       });
+
+      const filteredDeclarations = this.buildToolDeclarationsFromView(
+        toolRegistry,
+        runtimeBundle.toolsView,
+      );
+      this.updateTodoToolAvailabilityFromDeclarations(filteredDeclarations);
+      const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
 
       return new GeminiChat(
         runtimeBundle.runtimeContext,
@@ -1541,6 +1561,91 @@ export class GeminiClient {
       newTokenCount,
       compressionStatus: CompressionStatus.COMPRESSED,
     };
+  }
+
+  private getToolGovernanceEphemerals():
+    | {
+        allowed?: string[];
+        disabled?: string[];
+      }
+    | undefined {
+    const allowedList = this.readToolList(
+      this.config.getEphemeralSetting('tools.allowed'),
+    );
+    const disabledList = this.readToolList(
+      this.config.getEphemeralSetting('tools.disabled') ??
+        this.config.getEphemeralSetting('disabled-tools'),
+    );
+
+    const hasAllowed = allowedList.length > 0;
+    const hasDisabled = disabledList.length > 0;
+
+    if (!hasAllowed && !hasDisabled) {
+      return undefined;
+    }
+
+    return {
+      allowed: hasAllowed ? allowedList : undefined,
+      disabled: hasDisabled ? disabledList : undefined,
+    };
+  }
+
+  private readToolList(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const filtered = value.filter(
+      (entry): entry is string =>
+        typeof entry === 'string' && entry.trim().length > 0,
+    );
+    return filtered.length > 0 ? [...filtered] : [];
+  }
+
+  private buildToolDeclarationsFromView(
+    toolRegistry: ToolRegistry | undefined,
+    view: ToolRegistryView,
+  ): FunctionDeclaration[] {
+    if (!toolRegistry) {
+      return [];
+    }
+
+    const allowedNames = view.listToolNames();
+    if (allowedNames.length === 0) {
+      return [];
+    }
+
+    const declarations: FunctionDeclaration[] = [];
+    if (typeof toolRegistry.getAllTools === 'function') {
+      const toolsByName = new Map(
+        toolRegistry.getAllTools().map((tool) => [tool.name, tool]),
+      );
+      for (const name of allowedNames) {
+        const tool = toolsByName.get(name);
+        if (!tool) {
+          continue;
+        }
+        const schema = (tool as { schema?: FunctionDeclaration }).schema;
+        if (schema) {
+          declarations.push(schema);
+        }
+      }
+      return declarations;
+    }
+
+    if (typeof toolRegistry.getFunctionDeclarations === 'function') {
+      const declarationsByName = new Map(
+        toolRegistry
+          .getFunctionDeclarations()
+          .map((decl) => [decl.name, decl] as const),
+      );
+      for (const name of allowedNames) {
+        const declaration = declarationsByName.get(name);
+        if (declaration) {
+          declarations.push(declaration);
+        }
+      }
+    }
+    return declarations;
   }
 
   private getEnabledToolNamesForPrompt(): string[] {

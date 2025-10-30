@@ -233,6 +233,40 @@ export class ContextState {
   }
 }
 
+const readToolListFromSettings = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(
+    (entry): entry is string =>
+      typeof entry === 'string' && entry.trim().length > 0,
+  );
+};
+
+const buildToolGovernanceSnapshot = (
+  settingsService: SettingsService,
+): ReadonlySettingsSnapshot['tools'] => {
+  const allowed = readToolListFromSettings(
+    settingsService.get('tools.allowed'),
+  );
+  const disabled = readToolListFromSettings(
+    settingsService.get('tools.disabled') ??
+      settingsService.get('disabled-tools'),
+  );
+
+  const hasAllowed = allowed.length > 0;
+  const hasDisabled = disabled.length > 0;
+
+  if (!hasAllowed && !hasDisabled) {
+    return undefined;
+  }
+
+  return {
+    allowed: hasAllowed ? allowed : undefined,
+    disabled: hasDisabled ? disabled : undefined,
+  };
+};
+
 function createIsolatedSettingsService(
   foregroundConfig: Config,
   providerName: string,
@@ -517,6 +551,7 @@ export class SubAgentScope {
           enabled: true,
           target: null,
         },
+        tools: buildToolGovernanceSnapshot(runtimeSettingsService),
       };
     // Step 007.4: Call createAgentRuntimeContext to build runtime view
     // @plan PLAN-20251028-STATELESS6.P08

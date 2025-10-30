@@ -39,7 +39,10 @@ import { getCompressionPrompt } from './prompts.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 import { tokenLimit } from './tokenLimits.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
-import type { AgentRuntimeContext } from '../runtime/AgentRuntimeContext.js';
+import type {
+  AgentRuntimeContext,
+  ToolRegistryView,
+} from '../runtime/AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 export enum StreamEventType {
@@ -524,6 +527,10 @@ export class GeminiChat {
    */
   getHistoryService(): HistoryService {
     return this.historyService;
+  }
+
+  getToolsView(): ToolRegistryView {
+    return this.runtimeContext.tools;
   }
 
   /**
