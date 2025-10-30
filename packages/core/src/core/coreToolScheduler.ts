@@ -503,6 +503,7 @@ export class CoreToolScheduler {
         const contextAwareTool = call.tool as ContextAwareTool;
         contextAwareTool.context = {
           sessionId: this.config.getSessionId(),
+          agentId: call.request.agentId ?? DEFAULT_AGENT_ID,
           interactiveMode: true, // We're in interactive mode when using CoreToolScheduler
         };
       }
@@ -678,6 +679,7 @@ export class CoreToolScheduler {
             const contextAwareTool = toolInstance as ContextAwareTool;
             contextAwareTool.context = {
               sessionId: this.config.getSessionId(),
+              agentId: reqInfo.agentId ?? DEFAULT_AGENT_ID,
               interactiveMode: true, // We're in interactive mode when using CoreToolScheduler
             };
           }

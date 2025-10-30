@@ -32,6 +32,8 @@ import {
 } from '../index.js';
 import { Part, PartListUnion } from '@google/genai';
 import { MockModifiableTool, MockTool } from '../test-utils/tools.js';
+import type { ToolContext } from '../tools/tool-context.js';
+import type { ContextAwareTool } from '../tools/tool-context.js';
 
 class TestApprovalTool extends BaseDeclarativeTool<{ id: string }, ToolResult> {
   static readonly Name = 'testApprovalTool';
@@ -1483,5 +1485,69 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     // Verify approval mode was changed
     expect(approvalMode).toBe(ApprovalMode.AUTO_EDIT);
+  });
+});
+it('injects agentId into ContextAwareTool context', async () => {
+  class ContextAwareMockTool extends MockTool implements ContextAwareTool {
+    context?: ToolContext;
+  }
+
+  const contextAwareTool = new ContextAwareMockTool('context-tool');
+  contextAwareTool.executeFn.mockResolvedValue({
+    llmContent: 'ok',
+    returnDisplay: 'ok',
+  });
+
+  const toolRegistry = {
+    getTool: () => contextAwareTool,
+    getToolByName: () => contextAwareTool,
+    getFunctionDeclarations: () => [],
+    tools: new Map(),
+    discovery: {},
+    registerTool: () => {},
+    getToolByDisplayName: () => contextAwareTool,
+    getTools: () => [],
+    discoverTools: async () => {},
+    getAllTools: () => [],
+    getToolsByServer: () => [],
+  };
+
+  const mockConfig = {
+    getSessionId: () => 'session-123',
+    getUsageStatisticsEnabled: () => true,
+    getDebugMode: () => false,
+    getApprovalMode: () => ApprovalMode.DEFAULT,
+    getAllowedTools: () => [],
+    getToolRegistry: () => toolRegistry,
+    getContentGeneratorConfig: () => ({
+      model: 'test-model',
+      authType: 'oauth-personal',
+    }),
+  } as unknown as Config;
+
+  const scheduler = new CoreToolScheduler({
+    config: mockConfig,
+    onAllToolCallsComplete: vi.fn(),
+    onToolCallsUpdate: vi.fn(),
+    getPreferredEditor: () => 'vscode',
+    onEditorClose: vi.fn(),
+  });
+
+  const abortController = new AbortController();
+  const request = {
+    callId: 'ctx-1',
+    name: 'context-tool',
+    args: {},
+    isClientInitiated: false,
+    prompt_id: 'prompt-ctx',
+    agentId: 'agent-sub-42',
+  };
+
+  await scheduler.schedule([request], abortController.signal);
+
+  expect(contextAwareTool.context).toEqual({
+    sessionId: 'session-123',
+    agentId: 'agent-sub-42',
+    interactiveMode: true,
   });
 });
