@@ -16,3 +16,7 @@ The module `packages/core/src/runtime/AgentRuntimeLoader.ts` builds fully isolat
 ## Overrides
 
 The optional `overrides` parameter supports custom adapters (`providerAdapter`, `telemetryAdapter`, `toolsView`), reusable history, a pre-built `contentGenerator`, or a custom `contentGeneratorFactory`. When overrides are supplied, the loader skips the corresponding `Config` access, which keeps regression guards effective in stateless subagent tests.
+
+## Subagent Orchestrator Integration
+
+`SubagentOrchestrator` (see `packages/core/src/core/subagentOrchestrator.ts`) resolves a subagent's config/profile pair, composes a `ContentGeneratorConfig`, and calls `loadAgentRuntime` before launching `SubAgentScope`. The resulting bundle is threaded back into `SubAgentScope.create` via a `runtimeBundle` override so the scope skips the internal loader call. This keeps runtime assembly centralized while allowing the Task tool to manage agent ids and cleanup semantics around the returned history service.

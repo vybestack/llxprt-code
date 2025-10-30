@@ -39,7 +39,10 @@ import type {
   AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
-import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
+import {
+  loadAgentRuntime,
+  type AgentRuntimeLoaderResult,
+} from '../runtime/AgentRuntimeLoader.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
@@ -153,6 +156,7 @@ export interface SubAgentRuntimeOverrides {
     foregroundConfig: Config,
     sessionId: string,
   ) => Promise<ContentGenerator>;
+  runtimeBundle?: AgentRuntimeLoaderResult;
 }
 
 /**
@@ -391,6 +395,13 @@ export class SubAgentScope {
   }
 
   /**
+   * Returns the unique agent identifier assigned to this subagent scope.
+   */
+  getAgentId(): string {
+    return this.subagentId;
+  }
+
+  /**
    * Creates and validates a new SubAgentScope instance.
    * This factory method ensures that all tools provided in the prompt configuration
    * are valid for non-interactive use before creating the subagent instance.
@@ -464,124 +475,134 @@ export class SubAgentScope {
     // Step 007.2: Build AgentRuntimeState directly from subagent profile
     // @plan PLAN-20251028-STATELESS6.P08
     // @requirement REQ-STAT6-001.1
-    const sessionId = overrides.sessionId ?? foregroundConfig.getSessionId();
+    let runtimeBundle = overrides.runtimeBundle;
+    if (!runtimeBundle) {
+      const sessionId = overrides.sessionId ?? foregroundConfig.getSessionId();
 
-    const providerName =
-      overrides.provider ?? foregroundConfig.getProvider() ?? 'gemini';
+      const providerName =
+        overrides.provider ?? foregroundConfig.getProvider() ?? 'gemini';
 
-    const contentGenConfig =
-      overrides.contentGeneratorConfig ??
-      foregroundConfig.getContentGeneratorConfig();
+      const contentGenConfig =
+        overrides.contentGeneratorConfig ??
+        foregroundConfig.getContentGeneratorConfig();
 
-    // Build minimal content generator config if not available (for testing)
-    const effectiveContentGenConfig: ContentGeneratorConfig =
-      contentGenConfig ?? {
-        model: foregroundConfig.getModel(),
-        authType: AuthType.USE_GEMINI, // Use a valid auth type for testing
-        apiKey: 'test-api-key', // Dummy API key for testing
+      // Build minimal content generator config if not available (for testing)
+      const effectiveContentGenConfig: ContentGeneratorConfig =
+        contentGenConfig ?? {
+          model: foregroundConfig.getModel(),
+          authType: AuthType.USE_GEMINI, // Use a valid auth type for testing
+          apiKey: 'test-api-key', // Dummy API key for testing
+        };
+
+      const runtimeStateParams: RuntimeStateParams = {
+        runtimeId: `${sessionId}-subagent-${name}`,
+        provider: providerName, // Default provider for testing
+        model: modelConfig.model, // Use subagent model, NOT foreground model
+        authType: effectiveContentGenConfig.authType ?? AuthType.USE_GEMINI,
+        authPayload: effectiveContentGenConfig.apiKey
+          ? { apiKey: effectiveContentGenConfig.apiKey }
+          : undefined,
+        proxyUrl: effectiveContentGenConfig.proxy,
+        modelParams: {
+          temperature: modelConfig.temp,
+          topP: modelConfig.top_p,
+        },
+        sessionId,
       };
 
-    const runtimeStateParams: RuntimeStateParams = {
-      runtimeId: `${sessionId}-subagent-${name}`,
-      provider: providerName, // Default provider for testing
-      model: modelConfig.model, // Use subagent model, NOT foreground model
-      authType: effectiveContentGenConfig.authType ?? AuthType.USE_GEMINI,
-      authPayload: effectiveContentGenConfig.apiKey
-        ? { apiKey: effectiveContentGenConfig.apiKey }
-        : undefined,
-      proxyUrl: effectiveContentGenConfig.proxy,
-      modelParams: {
-        temperature: modelConfig.temp,
-        topP: modelConfig.top_p,
-      },
-      sessionId,
-    };
+      const runtimeState = createAgentRuntimeState(runtimeStateParams);
 
-    const runtimeState = createAgentRuntimeState(runtimeStateParams);
+      // Step 007.3: Build ReadonlySettingsSnapshot from profile
+      // @plan PLAN-20251028-STATELESS6.P08
+      // @requirement REQ-STAT6-002.2
+      const defaultSettingsService =
+        overrides.providerRuntime?.settingsService ??
+        createIsolatedSettingsService(
+          foregroundConfig,
+          providerName,
+          modelConfig.model,
+        );
 
-    // Step 007.3: Build ReadonlySettingsSnapshot from profile
-    // @plan PLAN-20251028-STATELESS6.P08
-    // @requirement REQ-STAT6-002.2
-    const defaultSettingsService =
-      overrides.providerRuntime?.settingsService ??
-      createIsolatedSettingsService(
-        foregroundConfig,
-        providerName,
-        modelConfig.model,
-      );
-
-    const providerRuntime: ProviderRuntimeContext =
-      overrides.providerRuntime ??
-      createProviderRuntimeContext({
-        settingsService: defaultSettingsService,
-        config: foregroundConfig,
-        runtimeId: runtimeState.runtimeId,
-        metadata: {
-          source: 'SubAgentScope.create',
-          subagentName: name,
-        },
-      });
-
-    const runtimeSettingsService = providerRuntime.settingsService;
-
-    if (
-      providerName &&
-      runtimeSettingsService.get('activeProvider') !== providerName
-    ) {
-      runtimeSettingsService.set('activeProvider', providerName);
-    }
-
-    const settingsSnapshot: ReadonlySettingsSnapshot =
-      overrides.settingsSnapshot ?? {
-        compressionThreshold:
-          (runtimeSettingsService.get('compression-threshold') as
-            | number
-            | undefined) ?? 0.8,
-        contextLimit:
-          (runtimeSettingsService.get('context-limit') as number | undefined) ??
-          60_000,
-        preserveThreshold:
-          (runtimeSettingsService.get('compression-preserve-threshold') as
-            | number
-            | undefined) ?? 0.2,
-        toolFormatOverride: runtimeSettingsService.get(
-          'tool-format-override',
-        ) as string | undefined,
-        telemetry: {
-          enabled: true,
-          target: null,
-        },
-        tools: buildToolGovernanceSnapshot(runtimeSettingsService),
-      };
-    // Step 007.4: Call createAgentRuntimeContext to build runtime view
-    // @plan PLAN-20251028-STATELESS6.P08
-    // @requirement REQ-STAT6-001.1, REQ-STAT6-003.2
-    const providerManager = overrides.providerAdapter
-      ? undefined
-      : new ProviderManager({
-          settingsService: runtimeSettingsService,
+      const providerRuntime: ProviderRuntimeContext =
+        overrides.providerRuntime ??
+        createProviderRuntimeContext({
+          settingsService: defaultSettingsService,
           config: foregroundConfig,
-          runtime: providerRuntime,
+          runtimeId: runtimeState.runtimeId,
+          metadata: {
+            source: 'SubAgentScope.create',
+            subagentName: name,
+          },
         });
 
-    const runtimeBundle = await loadAgentRuntime({
-      profile: {
-        config: foregroundConfig,
-        state: runtimeState,
-        settings: settingsSnapshot,
-        providerRuntime,
-        contentGeneratorConfig: effectiveContentGenConfig,
-        toolRegistry,
-        providerManager,
-      },
-      overrides: {
-        providerAdapter: overrides.providerAdapter,
-        telemetryAdapter: overrides.telemetryAdapter,
-        toolsView: overrides.toolsView,
-        historyService: overrides.historyService,
-        contentGeneratorFactory: overrides.contentGeneratorFactory,
-      },
-    });
+      const runtimeSettingsService = providerRuntime.settingsService;
+
+      if (
+        providerName &&
+        runtimeSettingsService.get('activeProvider') !== providerName
+      ) {
+        runtimeSettingsService.set('activeProvider', providerName);
+      }
+
+      const settingsSnapshot: ReadonlySettingsSnapshot =
+        overrides.settingsSnapshot ?? {
+          compressionThreshold:
+            (runtimeSettingsService.get('compression-threshold') as
+              | number
+              | undefined) ?? 0.8,
+          contextLimit:
+            (runtimeSettingsService.get('context-limit') as
+              | number
+              | undefined) ?? 60_000,
+          preserveThreshold:
+            (runtimeSettingsService.get('compression-preserve-threshold') as
+              | number
+              | undefined) ?? 0.2,
+          toolFormatOverride: runtimeSettingsService.get(
+            'tool-format-override',
+          ) as string | undefined,
+          telemetry: {
+            enabled: true,
+            target: null,
+          },
+          tools: buildToolGovernanceSnapshot(runtimeSettingsService),
+        };
+      // Step 007.4: Call createAgentRuntimeContext to build runtime view
+      // @plan PLAN-20251028-STATELESS6.P08
+      // @requirement REQ-STAT6-001.1, REQ-STAT6-003.2
+      const providerManager = overrides.providerAdapter
+        ? undefined
+        : new ProviderManager({
+            settingsService: runtimeSettingsService,
+            config: foregroundConfig,
+            runtime: providerRuntime,
+          });
+
+      runtimeBundle = await loadAgentRuntime({
+        profile: {
+          config: foregroundConfig,
+          state: runtimeState,
+          settings: settingsSnapshot,
+          providerRuntime,
+          contentGeneratorConfig: effectiveContentGenConfig,
+          toolRegistry,
+          providerManager,
+        },
+        overrides: {
+          providerAdapter: overrides.providerAdapter,
+          telemetryAdapter: overrides.telemetryAdapter,
+          toolsView: overrides.toolsView,
+          historyService: overrides.historyService,
+          contentGeneratorFactory: overrides.contentGeneratorFactory,
+        },
+      });
+    }
+
+    if (!runtimeBundle) {
+      throw new Error(
+        'SubAgentScope.create requires a runtime bundle after initialization.',
+      );
+    }
 
     // Step 007.6: Return new instance with AgentRuntimeContext
     // @plan PLAN-20251028-STATELESS6.P08

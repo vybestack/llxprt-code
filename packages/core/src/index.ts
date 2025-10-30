@@ -308,6 +308,6 @@ export * from './test-utils/index.js';
 
 // --- Subagent Feature: PLAN-20250117-SUBAGENTCONFIG ---
 export { SubagentManager } from './config/subagentManager.js';
-
+export { SubagentOrchestrator } from './core/subagentOrchestrator.js';
 export type { SubagentConfig } from './config/types.js';
 // --- End of Subagent Feature ---
