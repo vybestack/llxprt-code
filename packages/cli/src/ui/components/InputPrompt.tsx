@@ -823,14 +823,21 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
                 const renderedLine: React.ReactNode[] = [];
                 let charCount = 0;
+                let hasVisibleContent = false;
 
                 tokens.forEach((token, tokenIdx) => {
                   let display = token.text;
-                  if (isOnCursorLine) {
+                  const tokenLength = cpLen(token.text);
+                  const tokenStart = charCount;
+                  const tokenEnd = tokenStart + tokenLength;
+
+                  if (tokenLength > 0) {
+                    hasVisibleContent = true;
+                  }
+
+                  if (isOnCursorLine && tokenLength > 0) {
                     const relativeVisualColForHighlight =
                       cursorVisualColAbsolute;
-                    const tokenStart = charCount;
-                    const tokenEnd = tokenStart + cpLen(token.text);
 
                     if (
                       relativeVisualColForHighlight >= tokenStart &&
@@ -854,7 +861,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                           relativeVisualColForHighlight - tokenStart + 1,
                         );
                     }
-                    charCount = tokenEnd;
                   }
 
                   const color =
@@ -862,11 +868,14 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                       ? theme.text.accent
                       : undefined;
 
-                  renderedLine.push(
-                    <Text key={`token-${tokenIdx}`} color={color}>
-                      {display}
-                    </Text>,
-                  );
+                  if (tokenLength > 0) {
+                    renderedLine.push(
+                      <Text key={`token-${tokenIdx}`} color={color}>
+                        {display}
+                      </Text>,
+                    );
+                  }
+                  charCount = tokenEnd;
                 });
                 const currentLineGhost = isOnCursorLine ? inlineGhost : '';
 
@@ -886,6 +895,14 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                   isOnCursorLine &&
                   cursorVisualColAbsolute === cpLen(lineText) &&
                   currentLineGhost;
+
+                if (
+                  !hasVisibleContent &&
+                  !currentLineGhost &&
+                  renderedLine.length === 0
+                ) {
+                  renderedLine.push(<Text key="blank-placeholder"> </Text>);
+                }
 
                 return (
                   <Text

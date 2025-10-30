@@ -32,6 +32,7 @@ import {
 import * as clipboardUtils from '../utils/clipboardUtils.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import chalk from 'chalk';
+import stripAnsi from 'strip-ansi';
 
 vi.mock('../hooks/useShellHistory.js');
 vi.mock('../hooks/useCommandCompletion.js');
@@ -1321,6 +1322,32 @@ describe('InputPrompt', () => {
 
       const frame = stdout.lastFrame();
       expect(frame).toContain(`hello 👍${chalk.inverse(' ')}`);
+      unmount();
+    });
+
+    it('should render consecutive blank lines so they are visible while typing', async () => {
+      mockBuffer.text = 'first\n\n';
+      mockBuffer.lines = ['first', '', ''];
+      mockBuffer.viewportVisualLines = ['first', '', ''];
+      mockBuffer.allVisualLines = ['first', '', ''];
+      mockBuffer.visualCursor = [2, 0];
+      mockBuffer.cursor = [2, 0];
+
+      const { stdout, unmount } = renderWithProviders(
+        <InputPrompt {...props} />,
+      );
+      await wait();
+
+      const frame = stdout.lastFrame();
+      const blankContents = frame
+        .split('\n')
+        .filter((line) => line.startsWith('│') && line.endsWith('│'))
+        .map((line) => stripAnsi(line.slice(1, -1)));
+      const blankLinesRendered = blankContents.filter(
+        (content) => content.trim().length === 0,
+      ).length;
+
+      expect(blankLinesRendered).toBeGreaterThanOrEqual(2);
       unmount();
     });
   });
