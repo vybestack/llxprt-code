@@ -46,10 +46,14 @@ import { isTelemetrySdkInitialized } from './sdk.js';
 import { uiTelemetryService, UiEvent } from './uiTelemetry.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 
-const shouldLogUserPrompts = (config: Config): boolean =>
+type SessionConfig = Pick<Config, 'getSessionId'>;
+type TelemetryPromptConfig = Pick<Config, 'getTelemetryLogPromptsEnabled'>;
+type ToolLoggingConfig = SessionConfig & TelemetryPromptConfig;
+
+const shouldLogUserPrompts = (config: TelemetryPromptConfig): boolean =>
   config.getTelemetryLogPromptsEnabled();
 
-function getCommonAttributes(config: Config): LogAttributes {
+function getCommonAttributes(config: SessionConfig): LogAttributes {
   return {
     'session.id': config.getSessionId(),
   };
@@ -108,7 +112,10 @@ export function logUserPrompt(config: Config, event: UserPromptEvent): void {
   logger.emit(logRecord);
 }
 
-export function logToolCall(config: Config, event: ToolCallEvent): void {
+export function logToolCall(
+  config: ToolLoggingConfig,
+  event: ToolCallEvent,
+): void {
   if (process.env.VERBOSE === 'true') {
     console.log(`[TELEMETRY] logToolCall: ${event.function_name}`);
   }

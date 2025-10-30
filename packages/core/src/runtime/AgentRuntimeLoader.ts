@@ -60,6 +60,8 @@ export interface AgentRuntimeLoaderResult {
   telemetryAdapter: AgentRuntimeTelemetryAdapter;
   toolsView: ToolRegistryView;
   contentGenerator: ContentGenerator;
+  toolRegistry?: ToolRegistry;
+  settingsSnapshot?: ReadonlySettingsSnapshot;
 }
 
 export type ContentGeneratorFactory = (
@@ -232,5 +234,7 @@ export async function loadAgentRuntime(
     telemetryAdapter,
     toolsView,
     contentGenerator,
+    toolRegistry: profile.toolRegistry,
+    settingsSnapshot: profile.settings,
   };
 }

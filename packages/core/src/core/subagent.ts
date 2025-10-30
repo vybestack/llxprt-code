@@ -10,15 +10,12 @@
  * @pseudocode agent-runtime-context.md lines 92-101
  */
 import { reportError } from '../utils/errorReporting.js';
-import { Config } from '../config/config.js';
-import { SettingsService } from '../settings/SettingsService.js';
+import type { Config } from '../config/config.js';
 import { ToolCallRequestInfo } from './turn.js';
-import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import {
-  type ContentGeneratorConfig,
-  type ContentGenerator,
-} from './contentGenerator.js';
-import { getEnvironmentContext } from '../utils/environmentContext.js';
+  executeToolCall,
+  type ToolExecutionConfig,
+} from './nonInteractiveToolExecutor.js';
 import {
   Content,
   Part,
@@ -28,29 +25,14 @@ import {
   Type,
 } from '@google/genai';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
-import {
-  createAgentRuntimeState,
-  type RuntimeStateParams,
-} from '../runtime/AgentRuntimeState.js';
 import type {
   AgentRuntimeContext,
   ReadonlySettingsSnapshot,
-  AgentRuntimeProviderAdapter,
-  AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
+  ToolMetadata,
 } from '../runtime/AgentRuntimeContext.js';
-import {
-  loadAgentRuntime,
-  type AgentRuntimeLoaderResult,
-} from '../runtime/AgentRuntimeLoader.js';
-import {
-  createProviderRuntimeContext,
-  type ProviderRuntimeContext,
-} from '../runtime/providerRuntimeContext.js';
+import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
-import { AuthType } from './contentGenerator.js';
-import { ProviderManager } from '../providers/ProviderManager.js';
-import type { HistoryService } from '../services/history/HistoryService.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -140,24 +122,20 @@ export interface OutputConfig {
 }
 
 export interface SubAgentRuntimeOverrides {
-  sessionId?: string;
-  provider?: string;
-  contentGeneratorConfig?: ContentGeneratorConfig;
   settingsSnapshot?: ReadonlySettingsSnapshot;
-  providerAdapter?: AgentRuntimeProviderAdapter;
-  telemetryAdapter?: AgentRuntimeTelemetryAdapter;
-  toolsView?: ToolRegistryView;
   toolRegistry?: ToolRegistry;
-  providerRuntime?: ProviderRuntimeContext;
-  historyService?: HistoryService;
-  environmentContextLoader?: (config: Config) => Promise<Content[]>;
-  contentGeneratorFactory?: (
-    config: ContentGeneratorConfig,
-    foregroundConfig: Config,
-    sessionId: string,
-  ) => Promise<ContentGenerator>;
+  environmentContextLoader?: (runtime: AgentRuntimeContext) => Promise<Part[]>;
   runtimeBundle?: AgentRuntimeLoaderResult;
 }
+
+type EnvironmentContextLoader = (
+  runtime: AgentRuntimeContext,
+) => Promise<Part[]>;
+
+type ToolExecutionConfigShim = ToolExecutionConfig;
+
+const defaultEnvironmentContextLoader: EnvironmentContextLoader =
+  async () => [];
 
 /**
  * Configures the generative model parameters for the subagent.
@@ -237,71 +215,119 @@ export class ContextState {
   }
 }
 
-const readToolListFromSettings = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter(
-    (entry): entry is string =>
-      typeof entry === 'string' && entry.trim().length > 0,
-  );
-};
+const normalizeToolName = (name: string): string => name.trim().toLowerCase();
 
-const buildToolGovernanceSnapshot = (
-  settingsService: SettingsService,
-): ReadonlySettingsSnapshot['tools'] => {
-  const allowed = readToolListFromSettings(
-    settingsService.get('tools.allowed'),
-  );
-  const disabled = readToolListFromSettings(
-    settingsService.get('tools.disabled') ??
-      settingsService.get('disabled-tools'),
-  );
-
-  const hasAllowed = allowed.length > 0;
-  const hasDisabled = disabled.length > 0;
-
-  if (!hasAllowed && !hasDisabled) {
-    return undefined;
-  }
+function convertMetadataToFunctionDeclaration(
+  fallbackName: string,
+  metadata: ToolMetadata,
+): FunctionDeclaration {
+  const rawSchema =
+    metadata.parameterSchema && typeof metadata.parameterSchema === 'object'
+      ? { ...(metadata.parameterSchema as Record<string, unknown>) }
+      : {};
+  const properties =
+    (rawSchema.properties as Record<string, unknown> | undefined) ?? {};
 
   return {
-    allowed: hasAllowed ? allowed : undefined,
-    disabled: hasDisabled ? disabled : undefined,
+    name: metadata.name ?? fallbackName,
+    description: metadata.description ?? '',
+    parameters: {
+      ...rawSchema,
+      type: (rawSchema.type as Type | undefined) ?? Type.OBJECT,
+      properties,
+    } as FunctionDeclaration['parameters'],
   };
-};
+}
 
-function createIsolatedSettingsService(
-  foregroundConfig: Config,
-  providerName: string,
-  modelId: string,
-): SettingsService {
-  const sourceSettings = foregroundConfig.getSettingsService();
-  const subagentSettings = new SettingsService();
+async function validateToolsAgainstRuntime(params: {
+  toolConfig: ToolConfig;
+  toolRegistry: ToolRegistry;
+  toolsView: ToolRegistryView;
+}): Promise<void> {
+  const { toolConfig, toolRegistry, toolsView } = params;
+  const allowedNames = new Set(
+    (typeof toolsView.listToolNames === 'function'
+      ? toolsView.listToolNames()
+      : []
+    ).map(normalizeToolName),
+  );
 
-  const globalEphemerals = sourceSettings.getAllGlobalSettings();
-  for (const [key, value] of Object.entries(globalEphemerals)) {
-    if (key === 'activeProvider') {
+  for (const toolEntry of toolConfig.tools) {
+    if (typeof toolEntry !== 'string') {
       continue;
     }
-    subagentSettings.set(key, value);
-  }
 
-  if (providerName) {
-    subagentSettings.set('activeProvider', providerName);
-    const providerEphemerals =
-      sourceSettings.getProviderSettings(providerName) ?? {};
-    for (const [key, value] of Object.entries(providerEphemerals)) {
-      subagentSettings.setProviderSetting(providerName, key, value);
+    if (
+      allowedNames.size > 0 &&
+      !allowedNames.has(normalizeToolName(toolEntry))
+    ) {
+      throw new Error(
+        `Tool "${toolEntry}" is not permitted for this runtime bundle.`,
+      );
     }
-    subagentSettings.setProviderSetting(providerName, 'model', modelId);
+
+    const tool = toolRegistry.getTool(toolEntry);
+    if (!tool) {
+      continue;
+    }
+
+    const requiredParams = tool.schema.parameters?.required ?? [];
+    if (requiredParams.length > 0) {
+      console.warn(
+        `Cannot check tool "${toolEntry}" for interactivity because it requires parameters. Assuming it is safe for non-interactive use.`,
+      );
+      continue;
+    }
+
+    const invocation = tool.build({});
+    const confirmationDetails = await invocation.shouldConfirmExecute(
+      new AbortController().signal,
+    );
+    if (confirmationDetails) {
+      throw new Error(
+        `Tool "${toolEntry}" requires user confirmation and cannot be used in a non-interactive subagent.`,
+      );
+    }
+  }
+}
+
+function createToolExecutionConfig(
+  runtimeBundle: AgentRuntimeLoaderResult,
+  toolRegistry: ToolRegistry,
+  settingsSnapshot?: ReadonlySettingsSnapshot,
+): ToolExecutionConfig {
+  const ephemerals = buildEphemeralSettings(settingsSnapshot);
+
+  return {
+    getToolRegistry: () => toolRegistry,
+    getEphemeralSettings: () => ({ ...ephemerals }),
+    getEphemeralSetting: (key: string) => ephemerals[key],
+    getExcludeTools: () => [],
+    getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
+    getTelemetryLogPromptsEnabled: () =>
+      Boolean(settingsSnapshot?.telemetry?.enabled),
+  };
+}
+
+function buildEphemeralSettings(
+  snapshot?: ReadonlySettingsSnapshot,
+): Record<string, unknown> {
+  const ephemerals: Record<string, unknown> = {
+    emojifilter: 'auto',
+  };
+
+  if (!snapshot) {
+    return ephemerals;
   }
 
-  if (subagentSettings.get('streaming') === undefined) {
-    subagentSettings.set('streaming', 'enabled');
+  if (snapshot.tools?.allowed) {
+    ephemerals['tools.allowed'] = [...snapshot.tools.allowed];
+  }
+  if (snapshot.tools?.disabled) {
+    ephemerals['tools.disabled'] = [...snapshot.tools.disabled];
   }
 
-  return subagentSettings;
+  return ephemerals;
 }
 
 /**
@@ -375,7 +401,9 @@ export class SubAgentScope {
    * @param runConfig - Configuration for the subagent's execution environment.
    * @param promptConfig - Configuration for the subagent's prompt and behavior.
    * @param contentGenerator - Pre-initialized content generator for this subagent.
-   * @param foregroundConfig - Legacy Config reference (TEMPORARY: needed for executeToolCall until P10).
+   * @param toolRegistry - Active tool registry for execution and validation.
+   * @param toolExecutorContext - Stateless execution context used for tool invocations.
+   * @param environmentContextLoader - Function that resolves environment context for prompts.
    * @param toolConfig - Optional configuration for tools available to the subagent.
    * @param outputConfig - Optional configuration for the subagent's expected outputs.
    */
@@ -386,7 +414,8 @@ export class SubAgentScope {
     private readonly runConfig: RunConfig,
     private readonly promptConfig: PromptConfig,
     private readonly contentGenerator: import('./contentGenerator.js').ContentGenerator,
-    private readonly foregroundConfig: Config, // TEMPORARY: Remove in P10 when executeToolCall refactored
+    private readonly toolExecutorContext: ToolExecutionConfigShim,
+    private readonly environmentContextLoader: EnvironmentContextLoader,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
   ) {
@@ -411,7 +440,7 @@ export class SubAgentScope {
    * @pseudocode agent-runtime-context.md lines 94-98 (steps 007.2-007.6)
    *
    * @param {string} name - The name of the subagent.
-   * @param {Config} foregroundConfig - The foreground Config (NOT mutated, only used for context).
+   * @param {Config} _foregroundConfig - Retained for API compatibility (unused in stateless mode).
    * @param {PromptConfig} promptConfig - Configuration for the subagent's prompt and behavior.
    * @param {ModelConfig} modelConfig - Configuration for the generative model parameters.
    * @param {RunConfig} runConfig - Configuration for the subagent's execution environment.
@@ -423,7 +452,7 @@ export class SubAgentScope {
    */
   static async create(
     name: string,
-    foregroundConfig: Config,
+    _foregroundConfig: Config,
     promptConfig: PromptConfig,
     modelConfig: ModelConfig,
     runConfig: RunConfig,
@@ -431,182 +460,48 @@ export class SubAgentScope {
     outputConfig?: OutputConfig,
     overrides: SubAgentRuntimeOverrides = {},
   ): Promise<SubAgentScope> {
-    const toolRegistry =
-      overrides.toolRegistry ?? foregroundConfig.getToolRegistry();
-
-    // Tool validation (unchanged logic)
-    if (toolConfig && toolRegistry) {
-      const toolsToLoad: string[] = [];
-      for (const tool of toolConfig.tools) {
-        if (typeof tool === 'string') {
-          toolsToLoad.push(tool);
-        }
-      }
-      for (const toolName of toolsToLoad) {
-        const tool = toolRegistry.getTool(toolName);
-        if (tool) {
-          const requiredParams = tool.schema.parameters?.required ?? [];
-          if (requiredParams.length > 0) {
-            // This check is imperfect. A tool might require parameters but still
-            // be interactive (e.g., `delete_file(path)`). However, we cannot
-            // build a generic invocation without knowing what dummy parameters
-            // to provide. Crashing here because `build({})` fails is worse
-            // than allowing a potential hang later if an interactive tool is
-            // used. This is a best-effort check.
-            console.warn(
-              `Cannot check tool "${toolName}" for interactivity because it requires parameters. Assuming it is safe for non-interactive use.`,
-            );
-            continue;
-          }
-
-          const invocation = tool.build({});
-          const confirmationDetails = await invocation.shouldConfirmExecute(
-            new AbortController().signal,
-          );
-          if (confirmationDetails) {
-            throw new Error(
-              `Tool "${toolName}" requires user confirmation and cannot be used in a non-interactive subagent.`,
-            );
-          }
-        }
-      }
-    }
-
-    // Step 007.2: Build AgentRuntimeState directly from subagent profile
-    // @plan PLAN-20251028-STATELESS6.P08
-    // @requirement REQ-STAT6-001.1
-    let runtimeBundle = overrides.runtimeBundle;
-    if (!runtimeBundle) {
-      const sessionId = overrides.sessionId ?? foregroundConfig.getSessionId();
-
-      const providerName =
-        overrides.provider ?? foregroundConfig.getProvider() ?? 'gemini';
-
-      const contentGenConfig =
-        overrides.contentGeneratorConfig ??
-        foregroundConfig.getContentGeneratorConfig();
-
-      // Build minimal content generator config if not available (for testing)
-      const effectiveContentGenConfig: ContentGeneratorConfig =
-        contentGenConfig ?? {
-          model: foregroundConfig.getModel(),
-          authType: AuthType.USE_GEMINI, // Use a valid auth type for testing
-          apiKey: 'test-api-key', // Dummy API key for testing
-        };
-
-      const runtimeStateParams: RuntimeStateParams = {
-        runtimeId: `${sessionId}-subagent-${name}`,
-        provider: providerName, // Default provider for testing
-        model: modelConfig.model, // Use subagent model, NOT foreground model
-        authType: effectiveContentGenConfig.authType ?? AuthType.USE_GEMINI,
-        authPayload: effectiveContentGenConfig.apiKey
-          ? { apiKey: effectiveContentGenConfig.apiKey }
-          : undefined,
-        proxyUrl: effectiveContentGenConfig.proxy,
-        modelParams: {
-          temperature: modelConfig.temp,
-          topP: modelConfig.top_p,
-        },
-        sessionId,
-      };
-
-      const runtimeState = createAgentRuntimeState(runtimeStateParams);
-
-      // Step 007.3: Build ReadonlySettingsSnapshot from profile
-      // @plan PLAN-20251028-STATELESS6.P08
-      // @requirement REQ-STAT6-002.2
-      const defaultSettingsService =
-        overrides.providerRuntime?.settingsService ??
-        createIsolatedSettingsService(
-          foregroundConfig,
-          providerName,
-          modelConfig.model,
-        );
-
-      const providerRuntime: ProviderRuntimeContext =
-        overrides.providerRuntime ??
-        createProviderRuntimeContext({
-          settingsService: defaultSettingsService,
-          config: foregroundConfig,
-          runtimeId: runtimeState.runtimeId,
-          metadata: {
-            source: 'SubAgentScope.create',
-            subagentName: name,
-          },
-        });
-
-      const runtimeSettingsService = providerRuntime.settingsService;
-
-      if (
-        providerName &&
-        runtimeSettingsService.get('activeProvider') !== providerName
-      ) {
-        runtimeSettingsService.set('activeProvider', providerName);
-      }
-
-      const settingsSnapshot: ReadonlySettingsSnapshot =
-        overrides.settingsSnapshot ?? {
-          compressionThreshold:
-            (runtimeSettingsService.get('compression-threshold') as
-              | number
-              | undefined) ?? 0.8,
-          contextLimit:
-            (runtimeSettingsService.get('context-limit') as
-              | number
-              | undefined) ?? 60_000,
-          preserveThreshold:
-            (runtimeSettingsService.get('compression-preserve-threshold') as
-              | number
-              | undefined) ?? 0.2,
-          toolFormatOverride: runtimeSettingsService.get(
-            'tool-format-override',
-          ) as string | undefined,
-          telemetry: {
-            enabled: true,
-            target: null,
-          },
-          tools: buildToolGovernanceSnapshot(runtimeSettingsService),
-        };
-      // Step 007.4: Call createAgentRuntimeContext to build runtime view
-      // @plan PLAN-20251028-STATELESS6.P08
-      // @requirement REQ-STAT6-001.1, REQ-STAT6-003.2
-      const providerManager = overrides.providerAdapter
-        ? undefined
-        : new ProviderManager({
-            settingsService: runtimeSettingsService,
-            config: foregroundConfig,
-            runtime: providerRuntime,
-          });
-
-      runtimeBundle = await loadAgentRuntime({
-        profile: {
-          config: foregroundConfig,
-          state: runtimeState,
-          settings: settingsSnapshot,
-          providerRuntime,
-          contentGeneratorConfig: effectiveContentGenConfig,
-          toolRegistry,
-          providerManager,
-        },
-        overrides: {
-          providerAdapter: overrides.providerAdapter,
-          telemetryAdapter: overrides.telemetryAdapter,
-          toolsView: overrides.toolsView,
-          historyService: overrides.historyService,
-          contentGeneratorFactory: overrides.contentGeneratorFactory,
-        },
-      });
-    }
-
+    const runtimeBundle = overrides.runtimeBundle;
     if (!runtimeBundle) {
       throw new Error(
         'SubAgentScope.create requires a runtime bundle after initialization.',
       );
     }
 
-    // Step 007.6: Return new instance with AgentRuntimeContext
-    // @plan PLAN-20251028-STATELESS6.P08
-    // @requirement REQ-STAT6-001.1
+    const toolsView =
+      runtimeBundle.runtimeContext.tools ?? runtimeBundle.toolsView;
+    if (!toolsView) {
+      throw new Error(
+        'SubAgentScope.create requires a ToolRegistryView from the runtime bundle.',
+      );
+    }
+
+    const toolRegistry = overrides.toolRegistry ?? runtimeBundle.toolRegistry;
+    if (!toolRegistry) {
+      throw new Error(
+        'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
+      );
+    }
+
+    if (toolConfig) {
+      await validateToolsAgainstRuntime({
+        toolConfig,
+        toolRegistry,
+        toolsView,
+      });
+    }
+
+    const settingsSnapshot =
+      overrides.settingsSnapshot ?? runtimeBundle.settingsSnapshot;
+
+    const toolExecutorContext = createToolExecutionConfig(
+      runtimeBundle,
+      toolRegistry,
+      settingsSnapshot,
+    );
+
+    const environmentContextLoader =
+      overrides.environmentContextLoader ?? defaultEnvironmentContextLoader;
+
     return new SubAgentScope(
       name,
       runtimeBundle.runtimeContext,
@@ -614,7 +509,8 @@ export class SubAgentScope {
       runConfig,
       promptConfig,
       runtimeBundle.contentGenerator,
-      foregroundConfig, // TEMPORARY: Remove in P10
+      toolExecutorContext,
+      environmentContextLoader,
       toolConfig,
       outputConfig,
     );
@@ -641,27 +537,8 @@ export class SubAgentScope {
 
     const abortController = new AbortController();
 
-    // @plan PLAN-20251028-STATELESS6.P08
-    // @requirement REQ-STAT6-001.1
-    // TEMPORARY: Use foregroundConfig for tool registry (will use runtimeContext.tools in P10)
-    const toolRegistry = this.foregroundConfig.getToolRegistry();
-
-    // Prepare the list of tools available to the subagent.
-    const toolsList: FunctionDeclaration[] = [];
-    if (this.toolConfig) {
-      const toolsToLoad: string[] = [];
-      for (const tool of this.toolConfig.tools) {
-        if (typeof tool === 'string') {
-          toolsToLoad.push(tool);
-        } else {
-          toolsList.push(tool);
-        }
-      }
-      toolsList.push(
-        ...toolRegistry.getFunctionDeclarationsFiltered(toolsToLoad),
-      );
-    }
-    // Add local scope functions if outputs are expected.
+    const toolsList: FunctionDeclaration[] =
+      this.buildRuntimeFunctionDeclarations();
     if (this.outputConfig && this.outputConfig.outputs) {
       toolsList.push(...this.getScopeLocalFuncDefs());
     }
@@ -819,9 +696,8 @@ export class SubAgentScope {
       } else {
         // @plan PLAN-20251028-STATELESS6.P08
         // @requirement REQ-STAT6-001.1
-        // TEMPORARY: Use foregroundConfig for executeToolCall (will refactor in P10)
         toolResponse = await executeToolCall(
-          this.foregroundConfig,
+          this.toolExecutorContext,
           requestInfo,
           abortController.signal,
         );
@@ -869,8 +745,7 @@ export class SubAgentScope {
       );
     }
 
-    // TEMPORARY: Use foregroundConfig for getEnvironmentContext (will refactor in P10)
-    const envParts = await getEnvironmentContext(this.foregroundConfig);
+    const envParts = await this.environmentContextLoader(this.runtimeContext);
 
     // Extract environment context text
     const envContextText = envParts
@@ -923,6 +798,48 @@ export class SubAgentScope {
       // The calling function will handle the undefined return.
       return undefined;
     }
+  }
+
+  private buildRuntimeFunctionDeclarations(): FunctionDeclaration[] {
+    if (!this.toolConfig || this.toolConfig.tools.length === 0) {
+      return [];
+    }
+
+    const toolsView = this.runtimeContext.tools;
+    const listedNames =
+      typeof toolsView.listToolNames === 'function'
+        ? toolsView.listToolNames()
+        : [];
+    const allowedNames = new Set(listedNames.map(normalizeToolName));
+
+    const declarations: FunctionDeclaration[] = [];
+    for (const entry of this.toolConfig.tools) {
+      if (typeof entry !== 'string') {
+        declarations.push(entry);
+        continue;
+      }
+
+      if (
+        allowedNames.size > 0 &&
+        !allowedNames.has(normalizeToolName(entry))
+      ) {
+        console.warn(
+          `Tool "${entry}" is not permitted by the runtime view and will be skipped.`,
+        );
+        continue;
+      }
+
+      const metadata = toolsView.getToolMetadata(entry);
+      if (!metadata) {
+        console.warn(
+          `Tool "${entry}" is not available in the runtime view and will be skipped.`,
+        );
+        continue;
+      }
+
+      declarations.push(convertMetadataToFunctionDeclaration(entry, metadata));
+    }
+    return declarations;
   }
 
   /**

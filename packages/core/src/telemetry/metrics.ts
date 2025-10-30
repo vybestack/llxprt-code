@@ -40,7 +40,9 @@ let tokenUsageCounter: Counter | undefined;
 let fileOperationCounter: Counter | undefined;
 let isMetricsInitialized = false;
 
-function getCommonAttributes(config: Config): Attributes {
+type SessionConfig = Pick<Config, 'getSessionId'>;
+
+function getCommonAttributes(config: SessionConfig): Attributes {
   return {
     'session.id': config.getSessionId(),
   };
@@ -97,7 +99,7 @@ export function initializeMetrics(config: Config): void {
 }
 
 export function recordToolCallMetrics(
-  config: Config,
+  config: SessionConfig,
   functionName: string,
   durationMs: number,
   success: boolean,

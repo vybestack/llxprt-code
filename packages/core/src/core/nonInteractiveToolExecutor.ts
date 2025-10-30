@@ -15,7 +15,7 @@ import {
 } from '../index.js';
 import { Part } from '@google/genai';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
 import { ToolCallDecision } from '../telemetry/types.js';
 import { EmojiFilter, FilterResult } from '../filters/EmojiFilter.js';
@@ -28,7 +28,7 @@ let emojiFilter: EmojiFilter | null = null;
 
 const logger = new DebugLogger('llxprt:tool-executor');
 
-function buildToolGovernance(config: Config): {
+function buildToolGovernance(config: ToolExecutionConfig): {
   allowed: Set<string>;
   disabled: Set<string>;
   excluded: Set<string>;
@@ -78,7 +78,7 @@ function isToolBlocked(
  * Gets or creates the emoji filter instance based on current configuration
  * Always checks current configuration to ensure filter is up-to-date
  */
-function getOrCreateFilter(config: Config): EmojiFilter {
+function getOrCreateFilter(config: ToolExecutionConfig): EmojiFilter {
   // Get emojifilter from ephemeral settings or default to 'auto'
   const mode =
     (config.getEphemeralSetting('emojifilter') as
@@ -178,8 +178,18 @@ function filterFileModificationArgs(
  * Executes a single tool call non-interactively.
  * It does not handle confirmations, multiple calls, or live updates.
  */
+export type ToolExecutionConfig = Pick<
+  Config,
+  | 'getToolRegistry'
+  | 'getEphemeralSettings'
+  | 'getEphemeralSetting'
+  | 'getExcludeTools'
+  | 'getSessionId'
+  | 'getTelemetryLogPromptsEnabled'
+>;
+
 export async function executeToolCall(
-  config: Config,
+  config: ToolExecutionConfig,
   toolCallRequest: ToolCallRequestInfo,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResponseInfo> {
@@ -191,13 +201,20 @@ export async function executeToolCall(
     .find((candidate) => candidate.name === toolCallRequest.name);
   const governance = buildToolGovernance(config);
   const startTime = Date.now();
+  const telemetryConfig: Pick<
+    Config,
+    'getSessionId' | 'getTelemetryLogPromptsEnabled'
+  > = {
+    getSessionId: () => config.getSessionId(),
+    getTelemetryLogPromptsEnabled: () => config.getTelemetryLogPromptsEnabled(),
+  };
 
   if (knownTool && isToolBlocked(knownTool.name, governance)) {
     const error = new Error(
       `Tool "${toolCallRequest.name}" is disabled in the current profile.`,
     );
     const durationMs = Date.now() - startTime;
-    logToolCall(config, {
+    logToolCall(telemetryConfig, {
       'event.name': 'tool_call',
       'event.timestamp': new Date().toISOString(),
       function_name: toolCallRequest.name,
@@ -240,7 +257,7 @@ export async function executeToolCall(
       `Tool "${toolCallRequest.name}" not found in registry.`,
     );
     const durationMs = Date.now() - startTime;
-    logToolCall(config, {
+    logToolCall(telemetryConfig, {
       'event.name': 'tool_call',
       'event.timestamp': new Date().toISOString(),
       function_name: toolCallRequest.name,
@@ -331,7 +348,7 @@ export async function executeToolCall(
       // Handle blocking in error mode
       if (filterResult.blocked) {
         const durationMs = Date.now() - startTime;
-        logToolCall(config, {
+        logToolCall(telemetryConfig, {
           'event.name': 'tool_call',
           'event.timestamp': new Date().toISOString(),
           function_name: toolCallRequest.name,
@@ -410,7 +427,7 @@ export async function executeToolCall(
       }
     }
     const durationMs = Date.now() - startTime;
-    logToolCall(config, {
+    logToolCall(telemetryConfig, {
       'event.name': 'tool_call',
       'event.timestamp': new Date().toISOString(),
       function_name: toolCallRequest.name,
@@ -478,7 +495,7 @@ export async function executeToolCall(
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
     const durationMs = Date.now() - startTime;
-    logToolCall(config, {
+    logToolCall(telemetryConfig, {
       'event.name': 'tool_call',
       'event.timestamp': new Date().toISOString(),
       function_name: toolCallRequest.name,

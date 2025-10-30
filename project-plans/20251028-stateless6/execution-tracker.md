@@ -46,3 +46,9 @@
 **Final Verdict**: READY FOR INTEGRATION
 
 All 22 phases completed successfully. See evaluation.log for comprehensive assessment.
+
+## 2025-10-29 Remediation Addendum
+
+- Verified that `SubAgentScope.create` rejects missing runtime bundles and consumes the loader-provided `toolRegistry`/`settingsSnapshot` surfaces.
+- Added regression tests under `packages/core/src/core/subagent.test.ts` enforcing stateless tool registry usage and injected environment loaders.
+- Updated `executeToolCall` to operate on a stateless `ToolExecutionConfig` shim constructed from the runtime bundle.

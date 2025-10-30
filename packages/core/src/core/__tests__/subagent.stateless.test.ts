@@ -28,8 +28,10 @@ import { SettingsService } from '../../settings/SettingsService.js';
 import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
+  type ProviderRuntimeContext,
 } from '../../runtime/providerRuntimeContext.js';
 import * as RuntimeLoader from '../../runtime/AgentRuntimeLoader.js';
+import type { AgentRuntimeLoaderResult } from '../../runtime/AgentRuntimeLoader.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeProviderAdapter,
@@ -44,8 +46,10 @@ import type {
 } from '../subagent.js';
 import type { ToolRegistry } from '../../tools/tool-registry.js';
 import type { ContentGenerator } from '../contentGenerator.js';
+import type { Part } from '@google/genai';
 import { AuthType } from '../contentGenerator.js';
 import type { IProvider } from '../../providers/IProvider.js';
+import type { HistoryService } from '../../services/history/HistoryService.js';
 
 /**
  * Test helper: Create minimal Config for testing
@@ -108,6 +112,158 @@ function createTestRunConfig(): RunConfig {
   };
 }
 
+function createStatelessRuntimeBundle(options?: {
+  model?: string;
+  providerAdapter?: AgentRuntimeProviderAdapter;
+  telemetryAdapter?: AgentRuntimeTelemetryAdapter;
+  toolsView?: ToolRegistryView;
+  historyService?: HistoryService;
+  providerRuntime?: ProviderRuntimeContext;
+  toolRegistry?: ToolRegistry;
+}): AgentRuntimeLoaderResult {
+  const providerAdapter =
+    options?.providerAdapter ??
+    ({
+      getActiveProvider: vi.fn(
+        () =>
+          ({
+            name: 'gemini',
+            generateChatCompletion: vi.fn(async function* () {
+              yield { speaker: 'ai', blocks: [] };
+            }),
+            getDefaultModel: () =>
+              options?.model ?? 'gemini-2.0-flash-thinking-exp',
+            getServerTools: () => [],
+            invokeServerTool: vi.fn(),
+          }) as IProvider,
+      ),
+      setActiveProvider: vi.fn(),
+    } as AgentRuntimeProviderAdapter);
+
+  const telemetryAdapter =
+    options?.telemetryAdapter ??
+    ({
+      logApiRequest: vi.fn(),
+      logApiResponse: vi.fn(),
+      logApiError: vi.fn(),
+    } as AgentRuntimeTelemetryAdapter);
+
+  const toolsView =
+    options?.toolsView ??
+    ({
+      listToolNames: vi.fn(() => []),
+      getToolMetadata: vi.fn(() => undefined),
+    } as ToolRegistryView);
+
+  const history =
+    options?.historyService ??
+    ({
+      clear: vi.fn(),
+      add: vi.fn(),
+      getCuratedForProvider: vi.fn(() => []),
+      getIdGeneratorCallback: vi.fn(() => vi.fn()),
+      findUnmatchedToolCalls: vi.fn(() => []),
+    } as unknown as HistoryService);
+
+  const providerRuntime =
+    options?.providerRuntime ??
+    ({
+      runtimeId: 'runtime-bundle',
+      metadata: {},
+      settingsService: {
+        get: vi.fn(),
+        set: vi.fn(),
+      },
+    } as unknown as ProviderRuntimeContext);
+
+  const toolRegistry =
+    options?.toolRegistry ??
+    ({
+      getTool: vi.fn(),
+      getFunctionDeclarationsFiltered: vi.fn(() => []),
+      getAllTools: vi.fn(() => []),
+    } as unknown as ToolRegistry);
+
+  const runtimeState = Object.freeze({
+    runtimeId: 'runtime-bundle',
+    provider: 'gemini',
+    model: options?.model ?? 'gemini-2.0-flash-thinking-exp',
+    authType: AuthType.USE_PROVIDER,
+    sessionId: 'runtime-session',
+    authPayload: undefined,
+    proxyUrl: undefined,
+    modelParams: {
+      temperature: 0.7,
+      topP: 0.9,
+    },
+  });
+
+  const runtimeContext: AgentRuntimeContext = Object.freeze({
+    state: runtimeState,
+    history,
+    ephemerals: {
+      compressionThreshold: () => 0.8,
+      contextLimit: () => 60_000,
+      preserveThreshold: () => 0.2,
+      toolFormatOverride: () => undefined,
+    },
+    telemetry: telemetryAdapter,
+    provider: providerAdapter,
+    tools: toolsView,
+    providerRuntime,
+  });
+
+  return {
+    runtimeContext,
+    history,
+    providerAdapter,
+    telemetryAdapter,
+    toolsView,
+    contentGenerator: {
+      generateContent: vi.fn(),
+      generateContentStream: vi.fn(),
+      countTokens: vi.fn(),
+    } as unknown as ContentGenerator,
+    toolRegistry,
+  };
+}
+
+type EnvironmentLoader = (runtime: AgentRuntimeContext) => Promise<Part[]>;
+
+const DEFAULT_ENVIRONMENT_CONTEXT: Part[] = [{ text: 'Env Context' }];
+
+const createEnvironmentLoader = (): EnvironmentLoader =>
+  vi.fn(async () => DEFAULT_ENVIRONMENT_CONTEXT);
+
+function createRuntimeOverrides(
+  options: {
+    runtimeBundle?: AgentRuntimeLoaderResult;
+    environmentLoader?: EnvironmentLoader;
+    toolRegistry?: ToolRegistry;
+  } = {},
+): {
+  overrides: SubAgentRuntimeOverrides;
+  runtimeBundle: AgentRuntimeLoaderResult;
+  environmentLoader: EnvironmentLoader;
+} {
+  const runtimeBundle =
+    options.runtimeBundle ??
+    createStatelessRuntimeBundle({ toolRegistry: options.toolRegistry });
+  const environmentLoader =
+    options.environmentLoader ?? createEnvironmentLoader();
+
+  const overrides: SubAgentRuntimeOverrides = {
+    runtimeBundle,
+    environmentContextLoader: environmentLoader,
+  };
+
+  if (options.toolRegistry) {
+    overrides.toolRegistry = options.toolRegistry;
+  }
+
+  return { overrides, runtimeBundle, environmentLoader };
+}
+
 describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
   let foregroundConfig: Config;
 
@@ -143,12 +299,17 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       );
       const runConfig = createTestRunConfig();
 
+      const { overrides } = createRuntimeOverrides();
+
       await SubAgentScope.create(
         'test-subagent',
         foregroundConfig,
         promptConfig,
         modelConfig,
         runConfig,
+        undefined,
+        undefined,
+        overrides,
       );
 
       // THEN Config.setModel() should NEVER be called
@@ -180,12 +341,17 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       );
       const runConfig = createTestRunConfig();
 
+      const { overrides: providerOverrides } = createRuntimeOverrides();
+
       await SubAgentScope.create(
         'test-subagent',
         foregroundConfig,
         promptConfig,
         modelConfig,
         runConfig,
+        undefined,
+        undefined,
+        providerOverrides,
       );
 
       // THEN Config.setProvider() should NEVER be called
@@ -211,12 +377,17 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       );
       const runConfig = createTestRunConfig();
 
+      const { overrides: mutatorOverrides } = createRuntimeOverrides();
+
       await SubAgentScope.create(
         'test-subagent',
         foregroundConfig,
         promptConfig,
         modelConfig,
         runConfig,
+        undefined,
+        undefined,
+        mutatorOverrides,
       );
 
       // ZERO Config mutations allowed
@@ -225,13 +396,14 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
     });
   });
 
-  it('uses AgentRuntimeLoader to construct runtime bundle', async () => {
+  it('does not invoke AgentRuntimeLoader when runtime bundle supplied', async () => {
     foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
     const loaderSpy = vi.spyOn(RuntimeLoader, 'loadAgentRuntime');
 
     const promptConfig = createTestPromptConfig();
     const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
     const runConfig = createTestRunConfig();
+    const { overrides } = createRuntimeOverrides();
 
     await SubAgentScope.create(
       'test-subagent',
@@ -239,9 +411,12 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       promptConfig,
       modelConfig,
       runConfig,
+      undefined,
+      undefined,
+      overrides,
     );
 
-    expect(loaderSpy).toHaveBeenCalledTimes(1);
+    expect(loaderSpy).not.toHaveBeenCalled();
   });
 
   /**
@@ -265,12 +440,17 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       );
       const runConfig = createTestRunConfig();
 
+      const { overrides } = createRuntimeOverrides();
+
       const scope = await SubAgentScope.create(
         'test-subagent',
         foregroundConfig,
         promptConfig,
         modelConfig,
         runConfig,
+        undefined,
+        undefined,
+        overrides,
       );
 
       // WHEN SubAgentScope is created
@@ -296,12 +476,17 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       );
       const runConfig = createTestRunConfig();
 
+      const { overrides: frozenOverrides } = createRuntimeOverrides();
+
       const scope = await SubAgentScope.create(
         'test-subagent',
         foregroundConfig,
         promptConfig,
         modelConfig,
         runConfig,
+        undefined,
+        undefined,
+        frozenOverrides,
       );
 
       // Access internal runtimeContext (will fail with current Config-based implementation)
@@ -337,20 +522,28 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       const runConfig = createTestRunConfig();
 
       // Create two subagent scopes
+      const { overrides: overridesA } = createRuntimeOverrides();
       const scopeA = await SubAgentScope.create(
         'subagent-a',
         foregroundConfig,
         promptConfig,
         modelConfig1,
         runConfig,
+        undefined,
+        undefined,
+        overridesA,
       );
 
+      const { overrides: overridesB } = createRuntimeOverrides();
       const scopeB = await SubAgentScope.create(
         'subagent-b',
         foregroundConfig,
         promptConfig,
         modelConfig2,
         runConfig,
+        undefined,
+        undefined,
+        overridesB,
       );
 
       // Access runtime contexts (will fail with current Config-based implementation)
@@ -380,20 +573,28 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       const runConfig = createTestRunConfig();
 
       // Create two subagent scopes
+      const { overrides: histOverridesA } = createRuntimeOverrides();
       const scopeA = await SubAgentScope.create(
         'subagent-a',
         foregroundConfig,
         promptConfig,
         modelConfig,
         runConfig,
+        undefined,
+        undefined,
+        histOverridesA,
       );
 
+      const { overrides: histOverridesB } = createRuntimeOverrides();
       const scopeB = await SubAgentScope.create(
         'subagent-b',
         foregroundConfig,
         promptConfig,
         modelConfig,
         runConfig,
+        undefined,
+        undefined,
+        histOverridesB,
       );
 
       // Access runtime contexts
@@ -432,12 +633,21 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       );
       const runConfig = createTestRunConfig();
 
+      const { overrides } = createRuntimeOverrides({
+        runtimeBundle: createStatelessRuntimeBundle({
+          model: modelConfig.model,
+        }),
+      });
+
       const scope = await SubAgentScope.create(
         'test-subagent',
         foregroundConfig,
         promptConfig,
         modelConfig,
         runConfig,
+        undefined,
+        undefined,
+        overrides,
       );
 
       // Access runtime context (will fail with current Config-based implementation)
@@ -468,12 +678,21 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       );
       const runConfig = createTestRunConfig();
 
+      const { overrides: runtimeOverrides } = createRuntimeOverrides({
+        runtimeBundle: createStatelessRuntimeBundle({
+          model: modelConfig.model,
+        }),
+      });
+
       const scope = await SubAgentScope.create(
         'test-subagent',
         foregroundConfig,
         promptConfig,
         modelConfig,
         runConfig,
+        undefined,
+        undefined,
+        runtimeOverrides,
       );
 
       // Access runtime context
@@ -518,12 +737,16 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       // Should NOT throw because setModel should never be called
       // If this throws, it means the code is still using the legacy path
       // After P08: setModel is no longer called, so the mock never throws
+      const { overrides } = createRuntimeOverrides();
       const result = await SubAgentScope.create(
         'test-subagent',
         foregroundConfig,
         promptConfig,
         modelConfig,
         runConfig,
+        undefined,
+        undefined,
+        overrides,
       );
 
       // Verify that SubAgentScope was created successfully (setModel was NOT called)
@@ -533,6 +756,26 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
   });
 
   describe('Config Independence', () => {
+    it('throws if runtime bundle is omitted (enforces stateless runtime)', async () => {
+      foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
+
+      const promptConfig = createTestPromptConfig();
+      const modelConfig = createTestModelConfig(
+        'gemini-2.0-flash-thinking-exp',
+      );
+      const runConfig = createTestRunConfig();
+
+      await expect(
+        SubAgentScope.create(
+          'stateless-subagent',
+          foregroundConfig,
+          promptConfig,
+          modelConfig,
+          runConfig,
+        ),
+      ).rejects.toThrow('runtime bundle');
+    });
+
     it('should not read from foreground Config during runtime context construction', async () => {
       foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
 
@@ -578,12 +821,6 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       const runConfig = createTestRunConfig();
 
       const settingsService = new SettingsService();
-      const toolRegistry = {
-        getAllToolNames: () => [],
-        getTool: () => undefined,
-        getFunctionDeclarationsFiltered: () => [],
-      } as unknown as ToolRegistry;
-
       const providerRuntime = createProviderRuntimeContext({
         settingsService,
         runtimeId: 'override-runtime',
@@ -614,31 +851,15 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         getToolMetadata: () => undefined,
       };
 
-      const overrides: SubAgentRuntimeOverrides = {
-        sessionId: 'override-session',
-        provider: 'gemini',
-        contentGeneratorConfig: {
-          model: modelConfig.model,
-          authType: AuthType.USE_GEMINI,
-        },
-        settingsSnapshot: {
-          compressionThreshold: 0.8,
-          contextLimit: 60000,
-          preserveThreshold: 0.2,
-          telemetry: { enabled: true, target: null },
-        },
+      const runtimeBundle = createStatelessRuntimeBundle({
+        model: modelConfig.model,
         providerAdapter,
         telemetryAdapter,
         toolsView,
-        toolRegistry,
         providerRuntime,
-        contentGeneratorFactory: async () =>
-          ({
-            generateContent: vi.fn(),
-            generateContentStream: vi.fn(),
-            countTokens: vi.fn(),
-          }) as unknown as ContentGenerator,
-      };
+      });
+
+      const { overrides } = createRuntimeOverrides({ runtimeBundle });
 
       await expect(
         SubAgentScope.create(

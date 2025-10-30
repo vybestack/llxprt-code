@@ -26,6 +26,12 @@ PLAN-20251028-STATELESS6 demonstrates **STRONG integration analysis** and correc
 
 ---
 
+## 2025-10-29 Remediation Notes
+
+- Added enforcement tests (`should require runtime bundle`, `never passes foreground Config into executeToolCall`) under `packages/core/src/core/__tests__/subagent.stateless.test.ts` and `packages/core/src/core/subagent.test.ts`.
+- `SubAgentScope` now consumes the `AgentRuntimeLoaderResult` for tool governance instead of touching the foreground `Config`.
+- `executeToolCall` accepts a `ToolExecutionConfig` shim, keeping telemetry/tool filtering stateless.
+
 ## 1. Integration Requirements Compliance
 
 ### ✅ PASSES Integration Analysis (MOST CRITICAL)

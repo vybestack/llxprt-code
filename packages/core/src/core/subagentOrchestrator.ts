@@ -35,6 +35,7 @@ import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js
 import { SettingsService } from '../settings/SettingsService.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import { AuthType, type ContentGeneratorConfig } from './contentGenerator.js';
+import { getEnvironmentContext } from '../utils/environmentContext.js';
 
 const DEFAULT_RUN_CONFIG: RunConfig = {
   max_time_minutes: 10,
@@ -129,6 +130,8 @@ export class SubagentOrchestrator {
       request.outputConfig,
       {
         runtimeBundle: runtimeResult,
+        environmentContextLoader: async (_runtime) =>
+          getEnvironmentContext(this.options.foregroundConfig),
       },
     );
 
