@@ -299,11 +299,20 @@ export async function processImports(
             depth + 1,
           );
         } catch (error) {
-          if (debugMode) {
-            logger.warn(
-              `Failed to import ${fullPath}: ${hasMessage(error) ? error.message : 'Unknown error'}`,
-            );
+          const errorMessage = hasMessage(error)
+            ? error.message
+            : 'Unknown error';
+
+          // Only log errors in debug mode, unless they're not ENOENT (file not found) errors
+          // This prevents spurious error messages from cluttering the console when files
+          // are intentionally missing, addressing issue #391
+          if (debugMode && (!errorMessage.includes('ENOENT') || debugMode)) {
+            logger.warn(`Failed to import ${fullPath}: ${errorMessage}`);
+          } else if (!errorMessage.includes('ENOENT')) {
+            // Log non-ENOENT errors even in non-debug mode as they might be unexpected
+            logger.warn(`Failed to import ${fullPath}: ${errorMessage}`);
           }
+
           // Continue with other imports even if one fails
         }
       }
@@ -384,7 +393,17 @@ export async function processImports(
       } else if (typeof err === 'string') {
         message = err;
       }
-      logger.error(`Failed to import ${importPath}: ${message}`);
+
+      // Only log errors in debug mode, unless they're not ENOENT (file not found) errors
+      // This prevents spurious error messages from cluttering the console when files
+      // are intentionally missing, addressing issue #391
+      if (debugMode && (!message.includes('ENOENT') || debugMode)) {
+        logger.error(`Failed to import ${importPath}: ${message}`);
+      } else if (!message.includes('ENOENT')) {
+        // Log non-ENOENT errors even in non-debug mode as they might be unexpected
+        logger.error(`Failed to import ${importPath}: ${message}`);
+      }
+
       result += `<!-- Import failed: ${importPath} - ${message} -->`;
     }
   }
