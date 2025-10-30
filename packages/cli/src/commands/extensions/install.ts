@@ -96,11 +96,27 @@ export async function handleInstall(args: InstallArgs) {
       throw new Error('Either --source or --path must be provided.');
     }
 
-    const name = await installOrUpdateExtension(
-      installMetadata,
-      requestConsentNonInteractive,
+    const requestConsent = args.consent
+      ? () => Promise.resolve(true)
+      : requestConsentNonInteractive;
+    if (args.consent) {
+      debugLogger.log('You have consented to the following:');
+      debugLogger.log(INSTALL_WARNING_MESSAGE);
+    }
+
+    const workspaceDir = process.cwd();
+    const extensionManager = new ExtensionManager({
+      workspaceDir,
+      requestConsent,
+      requestSetting: promptForSetting,
+      settings: loadSettings(workspaceDir).merged,
+    });
+    await extensionManager.loadExtensions();
+    const extension =
+      await extensionManager.installOrUpdateExtension(installMetadata);
+    debugLogger.log(
+      `Extension "${extension.name}" installed successfully and enabled.`,
     );
-    console.log(`Extension "${name}" installed successfully and enabled.`);
   } catch (error) {
     console.error(getErrorMessage(error));
     process.exit(1);

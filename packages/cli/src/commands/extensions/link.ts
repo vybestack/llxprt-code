@@ -23,12 +23,18 @@ export async function handleLink(args: InstallArgs) {
       source: args.path,
       type: 'link',
     };
-    const extensionName = await installOrUpdateExtension(
-      installMetadata,
-      requestConsentNonInteractive,
-    );
-    console.log(
-      `Extension "${extensionName}" linked successfully and enabled.`,
+    const workspaceDir = process.cwd();
+    const extensionManager = new ExtensionManager({
+      workspaceDir,
+      requestConsent: requestConsentNonInteractive,
+      requestSetting: promptForSetting,
+      settings: loadSettings(workspaceDir).merged,
+    });
+    await extensionManager.loadExtensions();
+    const extension =
+      await extensionManager.installOrUpdateExtension(installMetadata);
+    debugLogger.log(
+      `Extension "${extension.name}" linked successfully and enabled.`,
     );
   } catch (error) {
     console.error(getErrorMessage(error));
