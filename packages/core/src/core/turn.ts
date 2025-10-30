@@ -34,6 +34,8 @@ import { DebugLogger } from '../debug/index.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
 import { UserTierId } from '../code_assist/types.js';
 
+export const DEFAULT_AGENT_ID = 'primary';
+
 // Define a structure for tools passed to the server
 export interface ServerTool {
   name: string;
@@ -85,6 +87,7 @@ export interface ToolCallRequestInfo {
   args: Record<string, unknown>;
   isClientInitiated: boolean;
   prompt_id: string;
+  agentId?: string;
 }
 
 export interface ToolCallResponseInfo {
@@ -93,6 +96,7 @@ export interface ToolCallResponseInfo {
   resultDisplay: ToolResultDisplay | undefined;
   error: Error | undefined;
   errorType: ToolErrorType | undefined;
+  agentId?: string;
 }
 
 export interface ServerToolCallConfirmationDetails {
@@ -222,6 +226,7 @@ export class Turn {
   constructor(
     private readonly chat: GeminiChat,
     private readonly prompt_id: string,
+    private readonly agentId: string = DEFAULT_AGENT_ID,
     private readonly providerName: string = 'backend',
   ) {
     this.pendingToolCalls = [];
@@ -424,6 +429,7 @@ export class Turn {
       args,
       isClientInitiated: false,
       prompt_id: this.prompt_id,
+      agentId: this.agentId ?? DEFAULT_AGENT_ID,
     };
 
     this.pendingToolCalls.push(toolCallRequest);

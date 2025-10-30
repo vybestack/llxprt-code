@@ -35,6 +35,7 @@ const createFakeCompletedToolCall = (
     args: { foo: 'bar' },
     isClientInitiated: false,
     prompt_id: 'prompt-id-1',
+    agentId: 'primary',
   };
   const tool = new MockTool(name);
 
@@ -58,6 +59,7 @@ const createFakeCompletedToolCall = (
         error: undefined,
         errorType: undefined,
         resultDisplay: 'Success!',
+        agentId: 'primary',
       },
       durationMs: duration,
       outcome,
@@ -81,6 +83,7 @@ const createFakeCompletedToolCall = (
         error: error || new Error('Tool failed'),
         errorType: ToolErrorType.UNKNOWN,
         resultDisplay: 'Failure!',
+        agentId: 'primary',
       },
       durationMs: duration,
       outcome,

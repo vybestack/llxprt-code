@@ -76,6 +76,7 @@ describe('executeToolCall', () => {
     // The executeFn is called via the MockToolInvocation, not directly
     expect(response).toStrictEqual({
       callId: 'call1',
+      agentId: 'primary',
       error: undefined,
       errorType: undefined,
       resultDisplay: 'Success!',
@@ -122,6 +123,7 @@ describe('executeToolCall', () => {
       'Tool "nonexistentTool" not found in registry.';
     expect(response).toStrictEqual({
       callId: 'call2',
+      agentId: 'primary',
       error: new Error(expectedErrorMessage),
       errorType: ToolErrorType.TOOL_NOT_REGISTERED,
       resultDisplay: expectedErrorMessage,
@@ -167,6 +169,7 @@ describe('executeToolCall', () => {
 
     expect(response).toStrictEqual({
       callId: 'call3',
+      agentId: 'primary',
       error: new Error('Invalid parameters'),
       errorType: ToolErrorType.UNHANDLED_EXCEPTION,
       responseParts: [
@@ -219,6 +222,7 @@ describe('executeToolCall', () => {
     );
     expect(response).toStrictEqual({
       callId: 'call4',
+      agentId: 'primary',
       error: new Error('Execution failed'),
       errorType: ToolErrorType.EXECUTION_FAILED,
       responseParts: [
@@ -266,6 +270,7 @@ describe('executeToolCall', () => {
 
     expect(response).toStrictEqual({
       callId: 'call5',
+      agentId: 'primary',
       error: new Error('Something went very wrong'),
       errorType: ToolErrorType.UNHANDLED_EXCEPTION,
       resultDisplay: 'Something went very wrong',
@@ -350,6 +355,7 @@ describe('executeToolCall', () => {
 
     expect(response).toStrictEqual({
       callId: 'call6',
+      agentId: 'primary',
       error: undefined,
       errorType: undefined,
       resultDisplay: 'Image processed',

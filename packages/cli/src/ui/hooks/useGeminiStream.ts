@@ -31,6 +31,7 @@ import {
   ServerGeminiCitationEvent,
   EmojiFilter,
   type EmojiFilterMode,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -431,6 +432,7 @@ export const useGeminiStream = (
                 args: toolArgs,
                 isClientInitiated: true,
                 prompt_id,
+                agentId: DEFAULT_AGENT_ID,
               };
               scheduleToolCalls([toolCallRequest], abortSignal);
               return { queryToSend: null, shouldProceed: false };
@@ -804,7 +806,10 @@ export const useGeminiStream = (
             );
             break;
           case ServerGeminiEventType.ToolCallRequest:
-            toolCallRequests.push(event.value);
+            toolCallRequests.push({
+              ...event.value,
+              agentId: event.value.agentId ?? DEFAULT_AGENT_ID,
+            });
             break;
           case ServerGeminiEventType.UserCancelled:
             handleUserCancelledEvent(userMessageTimestamp);

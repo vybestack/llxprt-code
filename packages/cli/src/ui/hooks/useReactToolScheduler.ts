@@ -160,7 +160,18 @@ export function useReactToolScheduler(
       request: ToolCallRequestInfo | ToolCallRequestInfo[],
       signal: AbortSignal,
     ) => {
-      scheduler.schedule(request, signal);
+      const ensureAgentId = (
+        req: ToolCallRequestInfo,
+      ): ToolCallRequestInfo => ({
+        ...req,
+        agentId: req.agentId ?? 'primary',
+      });
+
+      const normalizedRequest = Array.isArray(request)
+        ? request.map(ensureAgentId)
+        : ensureAgentId(request);
+
+      scheduler.schedule(normalizedRequest, signal);
     },
     [scheduler],
   );

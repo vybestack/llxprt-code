@@ -10,6 +10,7 @@ import {
   GeminiEventType,
   ServerGeminiToolCallRequestEvent,
   ServerGeminiErrorEvent,
+  DEFAULT_AGENT_ID,
 } from './turn.js';
 import { GenerateContentResponse, Part, Content } from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
@@ -63,6 +64,7 @@ describe('Turn', () => {
     turn = new Turn(
       mockChatInstance as unknown as GeminiChat,
       'prompt-id-1',
+      DEFAULT_AGENT_ID,
       'test',
     );
     mockGetHistory.mockReturnValue([]);

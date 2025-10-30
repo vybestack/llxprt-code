@@ -16,6 +16,7 @@ import {
   parseAndFormatApiError,
   createAgentRuntimeState,
   AuthType,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import type {
   ToolConfirmationPayload,
@@ -529,22 +530,30 @@ export class Task {
 
     const updatedRequests = await Promise.all(
       requests.map(async (request) => {
+        const normalizedRequest: ToolCallRequestInfo = {
+          ...request,
+          agentId: request.agentId ?? DEFAULT_AGENT_ID,
+        };
+
         if (
-          request.name === 'replace' &&
-          request.args &&
-          !request.args['newContent'] &&
-          request.args['file_path'] &&
-          request.args['old_string'] &&
-          request.args['new_string']
+          normalizedRequest.name === 'replace' &&
+          normalizedRequest.args &&
+          !normalizedRequest.args['newContent'] &&
+          normalizedRequest.args['file_path'] &&
+          normalizedRequest.args['old_string'] &&
+          normalizedRequest.args['new_string']
         ) {
           const newContent = await this.getProposedContent(
-            request.args['file_path'] as string,
-            request.args['old_string'] as string,
-            request.args['new_string'] as string,
+            normalizedRequest.args['file_path'] as string,
+            normalizedRequest.args['old_string'] as string,
+            normalizedRequest.args['new_string'] as string,
           );
-          return { ...request, args: { ...request.args, newContent } };
+          return {
+            ...normalizedRequest,
+            args: { ...normalizedRequest.args, newContent },
+          };
         }
-        return request;
+        return normalizedRequest;
       }),
     );
 

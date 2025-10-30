@@ -23,6 +23,7 @@ import {
   AnyToolInvocation,
   ContextAwareTool,
 } from '../index.js';
+import { DEFAULT_AGENT_ID } from './turn.js';
 import { Part, PartListUnion } from '@google/genai';
 import { getResponseTextFromParts } from '../utils/generateContentResponseUtilities.js';
 import {
@@ -260,6 +261,7 @@ const createErrorResponse = (
   ],
   resultDisplay: error.message,
   errorType,
+  agentId: request.agentId ?? DEFAULT_AGENT_ID,
 });
 
 interface CoreToolSchedulerOptions {
@@ -350,12 +352,18 @@ export class CoreToolScheduler {
           const durationMs = existingStartTime
             ? Date.now() - existingStartTime
             : undefined;
+          const response = {
+            ...(auxiliaryData as ToolCallResponseInfo),
+          };
+          if (!response.agentId) {
+            response.agentId = currentCall.request.agentId ?? DEFAULT_AGENT_ID;
+          }
           return {
             request: currentCall.request,
             tool: toolInstance,
             invocation,
             status: 'success',
-            response: auxiliaryData as ToolCallResponseInfo,
+            response,
             durationMs,
             outcome,
           } as SuccessfulToolCall;
@@ -364,11 +372,17 @@ export class CoreToolScheduler {
           const durationMs = existingStartTime
             ? Date.now() - existingStartTime
             : undefined;
+          const response = {
+            ...(auxiliaryData as ToolCallResponseInfo),
+          };
+          if (!response.agentId) {
+            response.agentId = currentCall.request.agentId ?? DEFAULT_AGENT_ID;
+          }
           return {
             request: currentCall.request,
             status: 'error',
             tool: toolInstance,
-            response: auxiliaryData as ToolCallResponseInfo,
+            response,
             durationMs,
             outcome,
           } as ErroredToolCall;
@@ -442,6 +456,7 @@ export class CoreToolScheduler {
               resultDisplay,
               error: undefined,
               errorType: undefined,
+              agentId: currentCall.request.agentId ?? DEFAULT_AGENT_ID,
             },
             durationMs,
             outcome,
@@ -616,7 +631,14 @@ export class CoreToolScheduler {
           'Cannot schedule new tool calls while other tool calls are actively running (executing or awaiting approval).',
         );
       }
-      const requestsToProcess = Array.isArray(request) ? request : [request];
+      const requestsToProcess = (
+        Array.isArray(request) ? request : [request]
+      ).map((req) => {
+        if (!req.agentId) {
+          req.agentId = DEFAULT_AGENT_ID;
+        }
+        return req;
+      });
       const governance = buildToolGovernance(this.config);
 
       const newToolCalls: ToolCall[] = requestsToProcess.map(
@@ -984,6 +1006,7 @@ export class CoreToolScheduler {
                 resultDisplay: toolResult.returnDisplay,
                 error: undefined,
                 errorType: undefined,
+                agentId: scheduledCall.request.agentId ?? DEFAULT_AGENT_ID,
               };
               this.setStatusInternal(callId, 'success', successResponse);
             } else {

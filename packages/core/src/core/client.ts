@@ -18,7 +18,12 @@ import {
   getDirectoryContextString,
   getEnvironmentContext,
 } from '../utils/environmentContext.js';
-import { Turn, ServerGeminiStreamEvent, GeminiEventType } from './turn.js';
+import {
+  Turn,
+  ServerGeminiStreamEvent,
+  GeminiEventType,
+  DEFAULT_AGENT_ID,
+} from './turn.js';
 import type { ChatCompressionInfo } from './turn.js';
 import { CompressionStatus } from './turn.js';
 import { Config } from '../config/config.js';
@@ -985,7 +990,12 @@ export class GeminiClient {
       const providerManager = contentGenConfig?.providerManager;
       const providerName =
         providerManager?.getActiveProviderName() || 'backend';
-      return new Turn(this.getChat(), prompt_id, providerName);
+      return new Turn(
+        this.getChat(),
+        prompt_id,
+        DEFAULT_AGENT_ID,
+        providerName,
+      );
     }
     // Ensure turns never exceeds MAX_TURNS to prevent infinite loops
     const boundedTurns = Math.min(turns, this.MAX_TURNS);
@@ -994,7 +1004,12 @@ export class GeminiClient {
       const providerManager = contentGenConfig?.providerManager;
       const providerName =
         providerManager?.getActiveProviderName() || 'backend';
-      return new Turn(this.getChat(), prompt_id, providerName);
+      return new Turn(
+        this.getChat(),
+        prompt_id,
+        DEFAULT_AGENT_ID,
+        providerName,
+      );
     }
 
     // Track the original model from the first call to detect model switching
@@ -1066,7 +1081,12 @@ export class GeminiClient {
     const providerManager = contentGenConfig?.providerManager;
     const providerName = providerManager?.getActiveProviderName() || 'backend';
 
-    const turn = new Turn(this.getChat(), prompt_id, providerName);
+    const turn = new Turn(
+      this.getChat(),
+      prompt_id,
+      DEFAULT_AGENT_ID,
+      providerName,
+    );
 
     const loopDetected = await this.loopDetector.turnStarted(signal);
     if (loopDetected) {

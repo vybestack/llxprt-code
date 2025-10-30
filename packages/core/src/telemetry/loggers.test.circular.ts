@@ -46,6 +46,7 @@ describe('Circular Reference Handling', () => {
       args: circularObject, // This would cause the original error
       isClientInitiated: false,
       prompt_id: 'test-prompt-id',
+      agentId: 'agent-circular',
     };
 
     const mockResponse: ToolCallResponseInfo = {
@@ -54,6 +55,7 @@ describe('Circular Reference Handling', () => {
       resultDisplay: undefined,
       error: undefined, // undefined means success
       errorType: undefined,
+      agentId: 'agent-circular',
     };
 
     const tool = new MockTool('mock-tool');
@@ -96,6 +98,7 @@ describe('Circular Reference Handling', () => {
       args: normalObject,
       isClientInitiated: false,
       prompt_id: 'test-prompt-id',
+      agentId: 'agent-circular',
     };
 
     const mockResponse: ToolCallResponseInfo = {
@@ -104,6 +107,7 @@ describe('Circular Reference Handling', () => {
       resultDisplay: undefined,
       error: undefined, // undefined means success
       errorType: undefined,
+      agentId: 'agent-circular',
     };
 
     const tool = new MockTool('mock-tool');

@@ -32,6 +32,7 @@ import {
   todoEvents,
   type TodoUpdateEvent,
   type Todo,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
@@ -739,6 +740,7 @@ class Session {
           typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
             ? 'mcp'
             : 'native',
+        agent_id: DEFAULT_AGENT_ID,
       });
 
       return {
@@ -874,6 +876,7 @@ class Session {
           typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
             ? 'mcp'
             : 'native',
+        agent_id: DEFAULT_AGENT_ID,
       });
 
       const functionResponseParts = convertToFunctionResponse(

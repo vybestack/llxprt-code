@@ -143,7 +143,7 @@ describe('runNonInteractive', () => {
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
-      expect.objectContaining({ name: 'testTool' }),
+      expect.objectContaining({ name: 'testTool', agentId: 'primary' }),
       expect.any(AbortSignal),
     );
     expect(mockGeminiClient.sendMessageStream).toHaveBeenNthCalledWith(
@@ -194,7 +194,11 @@ describe('runNonInteractive', () => {
 
     await runNonInteractive(mockConfig, 'Trigger tool error', 'prompt-id-3');
 
-    expect(mockCoreExecuteToolCall).toHaveBeenCalled();
+    expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
+      mockConfig,
+      expect.objectContaining({ name: 'errorTool', agentId: 'primary' }),
+      expect.any(AbortSignal),
+    );
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Error executing tool errorTool: Execution failed',
     );
@@ -260,7 +264,11 @@ describe('runNonInteractive', () => {
       'prompt-id-5',
     );
 
-    expect(mockCoreExecuteToolCall).toHaveBeenCalled();
+    expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
+      mockConfig,
+      expect.objectContaining({ name: 'nonexistentTool', agentId: 'primary' }),
+      expect.any(AbortSignal),
+    );
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Error executing tool nonexistentTool: Tool "nonexistentTool" not found in registry.',
     );

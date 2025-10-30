@@ -11,6 +11,7 @@ import {
   ToolCallResponseInfo,
   ToolErrorType,
   ToolResult,
+  DEFAULT_AGENT_ID,
 } from '../index.js';
 import { Part } from '@google/genai';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
@@ -182,6 +183,8 @@ export async function executeToolCall(
   toolCallRequest: ToolCallRequestInfo,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResponseInfo> {
+  const agentId = toolCallRequest.agentId ?? DEFAULT_AGENT_ID;
+  toolCallRequest.agentId = agentId;
   const toolRegistry = config.getToolRegistry();
   const knownTool = toolRegistry
     .getAllTools()
@@ -204,6 +207,7 @@ export async function executeToolCall(
       error: error.message,
       prompt_id: toolCallRequest.prompt_id,
       tool_type: 'native',
+      agent_id: agentId,
     });
     return {
       callId: toolCallRequest.callId,
@@ -226,6 +230,7 @@ export async function executeToolCall(
           },
         },
       ],
+      agentId,
     };
   }
 
@@ -245,6 +250,7 @@ export async function executeToolCall(
       error: error.message,
       prompt_id: toolCallRequest.prompt_id,
       tool_type: 'native',
+      agent_id: agentId,
     });
     // Ensure the response structure matches what the API expects for an error
     // Include both tool call and error response
@@ -271,6 +277,7 @@ export async function executeToolCall(
       resultDisplay: error.message,
       error,
       errorType: ToolErrorType.TOOL_NOT_REGISTERED,
+      agentId,
     };
   }
 
@@ -337,6 +344,7 @@ export async function executeToolCall(
             typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
               ? 'mcp'
               : 'native',
+          agent_id: agentId,
         });
 
         return {
@@ -362,6 +370,7 @@ export async function executeToolCall(
           resultDisplay: filterResult.error || 'Tool execution blocked',
           error: new Error(filterResult.error || 'Tool execution blocked'),
           errorType: ToolErrorType.INVALID_TOOL_PARAMS,
+          agentId,
         };
       }
 
@@ -419,6 +428,7 @@ export async function executeToolCall(
         typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
           ? 'mcp'
           : 'native',
+      agent_id: agentId,
     });
 
     // Add system feedback for warn mode if emojis were detected and filtered
@@ -463,6 +473,7 @@ export async function executeToolCall(
           : new Error(toolResult.error.message),
       errorType:
         toolResult.error === undefined ? undefined : toolResult.error.type,
+      agentId,
     };
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
@@ -482,6 +493,7 @@ export async function executeToolCall(
         typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
           ? 'mcp'
           : 'native',
+      agent_id: agentId,
     });
     return {
       callId: toolCallRequest.callId,
@@ -506,6 +518,7 @@ export async function executeToolCall(
       resultDisplay: error.message,
       error,
       errorType: ToolErrorType.UNHANDLED_EXCEPTION,
+      agentId,
     };
   }
 }

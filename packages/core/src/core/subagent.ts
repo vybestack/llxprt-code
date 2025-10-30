@@ -767,6 +767,7 @@ export class SubAgentScope {
         args: (functionCall.args ?? {}) as Record<string, unknown>,
         isClientInitiated: true,
         prompt_id: promptId,
+        agentId: this.subagentId,
       };
 
       let toolResponse;
@@ -782,6 +783,7 @@ export class SubAgentScope {
           responseParts: [{ text: `Emitted variable ${valName} successfully` }],
           resultDisplay: `Emitted variable ${valName} successfully`,
           error: undefined,
+          agentId: requestInfo.agentId,
         };
       } else {
         // @plan PLAN-20251028-STATELESS6.P08
