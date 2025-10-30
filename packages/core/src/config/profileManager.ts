@@ -192,6 +192,17 @@ export class ProfileManager {
       },
     };
 
+    const toolsAllowed = Array.isArray(settingsData.tools?.allowed)
+      ? [...(settingsData.tools?.allowed as string[])]
+      : [];
+    const toolsDisabled = Array.isArray(settingsData.tools?.disabled)
+      ? [...(settingsData.tools?.disabled as string[])]
+      : [];
+
+    profile.ephemeralSettings['tools.allowed'] = toolsAllowed;
+    profile.ephemeralSettings['tools.disabled'] = toolsDisabled;
+    profile.ephemeralSettings['disabled-tools'] = toolsDisabled;
+
     // Update current profile name in SettingsService
     if (settingsService.setCurrentProfileName) {
       settingsService.setCurrentProfileName(profileName);
@@ -231,6 +242,16 @@ export class ProfileManager {
           apiKey: profile.ephemeralSettings['auth-key'],
         },
       },
+      tools: {
+        allowed: Array.isArray(profile.ephemeralSettings['tools.allowed'])
+          ? [...(profile.ephemeralSettings['tools.allowed'] as string[])]
+          : [],
+        disabled: Array.isArray(profile.ephemeralSettings['tools.disabled'])
+          ? [...(profile.ephemeralSettings['tools.disabled'] as string[])]
+          : Array.isArray(profile.ephemeralSettings['disabled-tools'])
+            ? [...(profile.ephemeralSettings['disabled-tools'] as string[])]
+            : [],
+      },
     };
 
     // Update current profile name first
@@ -243,5 +264,17 @@ export class ProfileManager {
       throw new Error('SettingsService does not support profile import');
     }
     await settingsService.importFromProfile(settingsData);
+
+    if (settingsData.tools) {
+      const allowedList = Array.isArray(settingsData.tools.allowed)
+        ? settingsData.tools.allowed
+        : [];
+      const disabledList = Array.isArray(settingsData.tools.disabled)
+        ? settingsData.tools.disabled
+        : [];
+      settingsService.set('tools.allowed', allowedList);
+      settingsService.set('tools.disabled', disabledList);
+      settingsService.set('disabled-tools', disabledList);
+    }
   }
 }

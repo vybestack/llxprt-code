@@ -934,6 +934,11 @@ describe('Gemini Client (client.ts)', () => {
   });
 
   describe('sendMessageStream', () => {
+    beforeEach(() => {
+      (
+        client as unknown as { todoToolsAvailable: boolean }
+      ).todoToolsAvailable = true;
+    });
     it('emits a compression event when the context was automatically compressed', async () => {
       // Arrange
       const mockStream = (async function* () {
@@ -1368,6 +1373,84 @@ describe('Gemini Client (client.ts)', () => {
           part.text === 'Use TODO List to organize this effort.',
       ) as Part | undefined;
       expect(suffixPart).toBeUndefined();
+    });
+
+    it('skips todo reminders when todo tools are unavailable', async () => {
+      const analyzeComplexity = vi.fn().mockReturnValue({
+        complexityScore: 0.9,
+        isComplex: true,
+        detectedTasks: ['plan features', 'review backlog'],
+        sequentialIndicators: [],
+        questionCount: 0,
+        shouldSuggestTodos: true,
+      });
+
+      (
+        client as unknown as { complexityAnalyzer: ComplexityAnalyzer }
+      ).complexityAnalyzer = {
+        analyzeComplexity,
+      } as unknown as ComplexityAnalyzer;
+
+      const getComplexTaskSuggestion = vi.fn().mockReturnValue('todo-reminder');
+      const getEscalatedComplexTaskSuggestion = vi.fn();
+
+      (
+        client as unknown as { todoReminderService: TodoReminderService }
+      ).todoReminderService = {
+        getComplexTaskSuggestion,
+        getEscalatedComplexTaskSuggestion,
+      } as unknown as TodoReminderService;
+
+      (
+        client as unknown as { todoToolsAvailable: boolean }
+      ).todoToolsAvailable = false;
+
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield { type: GeminiEventType.Content, value: 'ack' };
+        })(),
+      );
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const request = [
+        {
+          text: 'Need to break down the architecture work and assign actions.',
+        },
+      ];
+
+      const stream = client.sendMessageStream(
+        request,
+        new AbortController().signal,
+        'prompt-id-unavailable-todo',
+      );
+      for await (const _event of stream) {
+        // exhaust iterator
+      }
+
+      const forwardedRequest = mockTurnRunFn.mock.calls[0][0] as Part[];
+      const suffixPart = forwardedRequest.find(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          part.text === 'Use TODO List to organize this effort.',
+      ) as Part | undefined;
+      expect(suffixPart).toBeUndefined();
+      expect(getComplexTaskSuggestion).not.toHaveBeenCalled();
+      expect(getEscalatedComplexTaskSuggestion).not.toHaveBeenCalled();
     });
 
     it('escalates to a stronger reminder after repeated complex turns without todo usage', async () => {

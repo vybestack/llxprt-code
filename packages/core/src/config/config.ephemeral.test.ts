@@ -179,6 +179,7 @@ describe('Config - Ephemeral Settings', () => {
       expect(allSettings).toEqual({
         'todo-continuation': true,
         'custom-setting': 'test-value',
+        tools: {},
       });
 
       // And modifying the returned object doesn't affect the config

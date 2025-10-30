@@ -26,6 +26,7 @@ const mockPath = path as vi.Mocked<typeof path>;
 const createMockSettingsService = (): vi.Mocked<ISettingsService> => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
+  set: vi.fn(),
   switchProvider: vi.fn(),
   onSettingsChanged: vi.fn(),
   on: vi.fn(),
@@ -205,6 +206,44 @@ describe('ProfileManager', () => {
         ),
       ).resolves.not.toThrow();
     });
+
+    it('should persist tool enablement lists from settings service', async () => {
+      const manager = new ProfileManager();
+      const payloadCapture: { value?: unknown } = {};
+
+      mockSettingsService.exportForProfile.mockResolvedValue({
+        defaultProvider: 'openai',
+        providers: {
+          openai: {
+            enabled: true,
+            model: 'test-model',
+          },
+        },
+        tools: {
+          allowed: ['file-reader'],
+          disabled: ['code-editor'],
+        },
+      });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockImplementation(async (_path, data: string) => {
+        payloadCapture.value = JSON.parse(data);
+      });
+
+      await manager.save(
+        'tool-profile',
+        mockSettingsService as unknown as SettingsService,
+      );
+
+      const serialized = payloadCapture.value as {
+        ephemeralSettings?: Record<string, unknown>;
+      };
+      expect(serialized.ephemeralSettings?.['tools.allowed']).toEqual([
+        'file-reader',
+      ]);
+      expect(serialized.ephemeralSettings?.['tools.disabled']).toEqual([
+        'code-editor',
+      ]);
+    });
   });
 
   describe('load method with SettingsService', () => {
@@ -235,6 +274,10 @@ describe('ProfileManager', () => {
             baseUrl: 'https://api.openai.com/v1',
             apiKey: 'test-key',
           },
+        },
+        tools: {
+          allowed: [],
+          disabled: [],
         },
       });
       expect(mockSettingsService.setCurrentProfileName).toHaveBeenCalledWith(

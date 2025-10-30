@@ -27,6 +27,52 @@ let emojiFilter: EmojiFilter | null = null;
 
 const logger = new DebugLogger('llxprt:tool-executor');
 
+function buildToolGovernance(config: Config): {
+  allowed: Set<string>;
+  disabled: Set<string>;
+  excluded: Set<string>;
+} {
+  const ephemerals =
+    typeof config.getEphemeralSettings === 'function'
+      ? config.getEphemeralSettings() || {}
+      : {};
+
+  const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
+    ? (ephemerals['tools.allowed'] as string[])
+    : [];
+  const disabledRaw = Array.isArray(ephemerals['tools.disabled'])
+    ? (ephemerals['tools.disabled'] as string[])
+    : Array.isArray(ephemerals['disabled-tools'])
+      ? (ephemerals['disabled-tools'] as string[])
+      : [];
+  const excludedRaw = config.getExcludeTools?.() ?? [];
+
+  const normalize = (name: string) => name.trim().toLowerCase();
+
+  return {
+    allowed: new Set(allowedRaw.map(normalize)),
+    disabled: new Set(disabledRaw.map(normalize)),
+    excluded: new Set(excludedRaw.map(normalize)),
+  };
+}
+
+function isToolBlocked(
+  toolName: string,
+  governance: ReturnType<typeof buildToolGovernance>,
+): boolean {
+  const canonical = toolName.trim().toLowerCase();
+  if (governance.excluded.has(canonical)) {
+    return true;
+  }
+  if (governance.disabled.has(canonical)) {
+    return true;
+  }
+  if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Gets or creates the emoji filter instance based on current configuration
  * Always checks current configuration to ensure filter is up-to-date
@@ -136,9 +182,54 @@ export async function executeToolCall(
   toolCallRequest: ToolCallRequestInfo,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResponseInfo> {
-  const tool = config.getToolRegistry().getTool(toolCallRequest.name);
-
+  const toolRegistry = config.getToolRegistry();
+  const knownTool = toolRegistry
+    .getAllTools()
+    .find((candidate) => candidate.name === toolCallRequest.name);
+  const governance = buildToolGovernance(config);
   const startTime = Date.now();
+
+  if (knownTool && isToolBlocked(knownTool.name, governance)) {
+    const error = new Error(
+      `Tool "${toolCallRequest.name}" is disabled in the current profile.`,
+    );
+    const durationMs = Date.now() - startTime;
+    logToolCall(config, {
+      'event.name': 'tool_call',
+      'event.timestamp': new Date().toISOString(),
+      function_name: toolCallRequest.name,
+      function_args: toolCallRequest.args,
+      duration_ms: durationMs,
+      success: false,
+      error: error.message,
+      prompt_id: toolCallRequest.prompt_id,
+      tool_type: 'native',
+    });
+    return {
+      callId: toolCallRequest.callId,
+      error,
+      errorType: ToolErrorType.TOOL_DISABLED,
+      resultDisplay: error.message,
+      responseParts: [
+        {
+          functionCall: {
+            id: toolCallRequest.callId,
+            name: toolCallRequest.name,
+            args: toolCallRequest.args,
+          },
+        },
+        {
+          functionResponse: {
+            id: toolCallRequest.callId,
+            name: toolCallRequest.name,
+            response: { error: error.message },
+          },
+        },
+      ],
+    };
+  }
+
+  const tool = toolRegistry.getTool(toolCallRequest.name);
   if (!tool) {
     const error = new Error(
       `Tool "${toolCallRequest.name}" not found in registry.`,

@@ -75,6 +75,23 @@ class MockSettingsService {
     this.settings = { ...this.settings, ...updates };
   }
 
+  set(key: string, value: unknown): void {
+    if (key.includes('.')) {
+      const segments = key.split('.');
+      let current = this.settings;
+      for (let i = 0; i < segments.length - 1; i++) {
+        const segment = segments[i];
+        if (typeof current[segment] !== 'object' || current[segment] === null) {
+          current[segment] = {};
+        }
+        current = current[segment] as Record<string, unknown>;
+      }
+      current[segments[segments.length - 1]] = value;
+    } else {
+      this.settings[key] = value;
+    }
+  }
+
   setCurrentProfileName(profileName: string | null): void {
     this.currentProfileName = profileName;
   }

@@ -17,7 +17,7 @@
  * They will pass after Phase P10 GeminiChat refactor.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Config } from '../config/config.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -32,18 +32,16 @@ import type {
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
 import type { IProvider } from '../providers/IProvider.js';
-import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import {
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
 import { SettingsService } from '../settings/SettingsService.js';
 
 const noopProviderAdapter: AgentRuntimeProviderAdapter = {
   getActiveProvider: () => ({ name: 'stub-provider' }) as IProvider,
   setActiveProvider: () => {},
-};
-
-const noopTelemetryAdapter: AgentRuntimeTelemetryAdapter = {
-  logApiRequest: () => {},
-  logApiResponse: () => {},
-  logApiError: () => {},
 };
 
 const noopToolsView: ToolRegistryView = {
@@ -68,11 +66,18 @@ function buildRuntimeContext(
     tools: ToolRegistryView;
   }> = {},
 ) {
+  const telemetryAdapter: AgentRuntimeTelemetryAdapter =
+    overrides.telemetry ?? {
+      logApiRequest: () => {},
+      logApiResponse: () => {},
+      logApiError: () => {},
+    };
+
   return createAgentRuntimeContext({
     state,
     settings: settings as ReadonlySettingsSnapshot,
     provider: overrides.provider ?? noopProviderAdapter,
-    telemetry: overrides.telemetry ?? noopTelemetryAdapter,
+    telemetry: telemetryAdapter,
     tools: overrides.tools ?? noopToolsView,
     providerRuntime: createProviderRuntimeStub(state.runtimeId),
   });
@@ -110,6 +115,9 @@ vi.mock('../core/contentGenerator.js', async (importOriginal) => {
 
 describe('GeminiChat Isolation Integration Tests', () => {
   beforeEach(() => {
+    setActiveProviderRuntimeContext(
+      createProviderRuntimeStub('foreground-bootstrap'),
+    );
     // Create a mock foreground config with specific model
     new Config({
       provider: 'gemini',
@@ -118,6 +126,10 @@ describe('GeminiChat Isolation Integration Tests', () => {
       targetDir: process.cwd(),
       sandbox: false,
     });
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   /**

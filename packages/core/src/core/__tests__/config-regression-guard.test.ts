@@ -67,8 +67,9 @@ describe('Config Regression Guards', () => {
       const filePath = resolve(__dirname, '../geminiChat.ts');
       const content = readFileSync(filePath, 'utf-8');
 
-      // Ensure runtime context is imported and used
-      expect(content).toContain('getActiveProviderRuntimeContext');
+      // Ensure runtime runtime adapters are the source of truth
+      expect(content).toContain('runtimeContext.providerRuntime');
+      expect(content).toContain('runtimeState.provider');
     });
   });
 

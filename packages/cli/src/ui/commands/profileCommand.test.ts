@@ -72,6 +72,33 @@ describe('profileCommand', () => {
         expect(result.content).toContain('fallback provider used');
       }
     });
+
+    it('refreshes Gemini tools after profile load', async () => {
+      const setToolsSpy = vi.fn();
+      const providerManagerMock = {
+        setActiveProvider: vi.fn(),
+        getActiveProvider: vi.fn().mockReturnValue({ name: 'openai' }),
+      };
+
+      const contextWithConfig = createMockCommandContext({
+        services: {
+          config: {
+            getGeminiClient: () => ({ setTools: setToolsSpy }),
+            getProviderManager: () => providerManagerMock,
+            setProvider: vi.fn(),
+          },
+        },
+      });
+
+      runtimeMocks.loadProfileByName.mockResolvedValue({
+        providerName: 'openai',
+        modelName: 'gpt-4',
+        infoMessages: [],
+      });
+
+      await load.action!(contextWithConfig, 'demo');
+      expect(setToolsSpy).toHaveBeenCalled();
+    });
   });
 
   describe('delete subcommand', () => {

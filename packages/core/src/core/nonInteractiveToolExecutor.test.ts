@@ -24,11 +24,12 @@ describe('executeToolCall', () => {
   let mockConfig: Config;
 
   beforeEach(() => {
-    mockTool = new MockTool();
+    mockTool = new MockTool('testTool');
 
     mockToolRegistry = {
       getTool: vi.fn(),
       getAllToolNames: vi.fn().mockReturnValue(['testTool', 'anotherTool']),
+      getAllTools: vi.fn().mockReturnValue([]),
     } as unknown as ToolRegistry;
 
     mockConfig = {
@@ -43,6 +44,8 @@ describe('executeToolCall', () => {
         authType: 'oauth-personal',
       }),
       getEphemeralSetting: vi.fn(),
+      getEphemeralSettings: vi.fn().mockReturnValue({}),
+      getExcludeTools: () => [],
     } as unknown as Config;
 
     abortController = new AbortController();
@@ -285,6 +288,40 @@ describe('executeToolCall', () => {
         },
       ],
     });
+  });
+
+  it('should block execution when tool is disabled in settings', async () => {
+    const request: ToolCallRequestInfo = {
+      callId: 'call-disabled',
+      name: 'testTool',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-id-disabled',
+    };
+    vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+    vi.mocked(mockToolRegistry.getAllTools).mockReturnValue([
+      mockTool,
+    ] as never[]);
+    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation((key) => {
+      if (key === 'tools.disabled') {
+        return ['testTool'];
+      }
+      return undefined;
+    });
+    vi.mocked(mockConfig.getEphemeralSettings).mockReturnValue({
+      'tools.disabled': ['testTool'],
+    });
+
+    const response = await executeToolCall(
+      mockConfig,
+      request,
+      abortController.signal,
+    );
+
+    expect(mockTool.executeFn).not.toHaveBeenCalled();
+    expect(response.error).toBeInstanceOf(Error);
+    expect(response.error?.message).toContain('disabled');
+    expect(response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
   });
 
   it('should correctly format llmContent with inlineData', async () => {

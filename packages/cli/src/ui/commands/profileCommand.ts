@@ -275,6 +275,18 @@ const loadCommand: SlashCommand = {
           }
           configService.setProvider?.(result.providerName);
         }
+
+        const geminiClient = configService.getGeminiClient?.();
+        if (geminiClient && typeof geminiClient.setTools === 'function') {
+          try {
+            await geminiClient.setTools();
+          } catch (error) {
+            logger.warn(
+              () =>
+                `[profile] failed to refresh Gemini tool schema after load: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
       }
 
       try {

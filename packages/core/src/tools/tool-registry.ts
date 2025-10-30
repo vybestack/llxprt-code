@@ -27,6 +27,8 @@ import type { EventEmitter } from 'node:events';
 
 type ToolParams = Record<string, unknown>;
 
+const normalizeToolName = (name: string): string => name.trim().toLowerCase();
+
 export class DiscoveredTool extends BaseTool<ToolParams, ToolResult> {
   constructor(
     private readonly config: Config,
@@ -189,6 +191,50 @@ export class ToolRegistry {
       this.config.getWorkspaceContext(),
       eventEmitter,
     );
+  }
+
+  private getToolGovernance(): {
+    allowed: Set<string>;
+    disabled: Set<string>;
+    excluded: Set<string>;
+  } {
+    const ephemerals =
+      typeof this.config.getEphemeralSettings === 'function'
+        ? this.config.getEphemeralSettings() || {}
+        : {};
+
+    const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
+      ? (ephemerals['tools.allowed'] as string[])
+      : [];
+    const disabledRaw = Array.isArray(ephemerals['tools.disabled'])
+      ? (ephemerals['tools.disabled'] as string[])
+      : Array.isArray(ephemerals['disabled-tools'])
+        ? (ephemerals['disabled-tools'] as string[])
+        : [];
+    const excludedRaw = this.config.getExcludeTools?.() ?? [];
+
+    return {
+      allowed: new Set(allowedRaw.map(normalizeToolName)),
+      disabled: new Set(disabledRaw.map(normalizeToolName)),
+      excluded: new Set(excludedRaw.map(normalizeToolName)),
+    };
+  }
+
+  private isToolActive(
+    toolName: string,
+    governance: ReturnType<ToolRegistry['getToolGovernance']>,
+  ): boolean {
+    const canonical = normalizeToolName(toolName);
+    if (governance.excluded.has(canonical)) {
+      return false;
+    }
+    if (governance.disabled.has(canonical)) {
+      return false;
+    }
+    if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -469,21 +515,11 @@ export class ToolRegistry {
    * @returns An array of FunctionDeclarations.
    */
   getFunctionDeclarations(): FunctionDeclaration[] {
-    // Get disabled tools from ephemeral settings
-    const ephemeralSettings = this.config.getEphemeralSettings() || {};
-    const disabledTools =
-      (ephemeralSettings['disabled-tools'] as string[]) || [];
-
-    // Also get globally excluded tools from configuration
-    const excludedTools = this.config.getExcludeTools() || [];
+    const governance = this.getToolGovernance();
 
     const declarations: FunctionDeclaration[] = [];
     this.tools.forEach((tool) => {
-      // Skip disabled tools and excluded tools
-      if (
-        !disabledTools.includes(tool.name) &&
-        !excludedTools.includes(tool.name)
-      ) {
+      if (this.isToolActive(tool.name, governance)) {
         declarations.push(tool.schema);
       }
     });
@@ -496,10 +532,11 @@ export class ToolRegistry {
    * @returns An array of FunctionDeclarations for the specified tools.
    */
   getFunctionDeclarationsFiltered(toolNames: string[]): FunctionDeclaration[] {
+    const governance = this.getToolGovernance();
     const declarations: FunctionDeclaration[] = [];
     for (const name of toolNames) {
       const tool = this.tools.get(name);
-      if (tool) {
+      if (tool && this.isToolActive(tool.name, governance)) {
         declarations.push(tool.schema);
       }
     }
@@ -527,19 +564,10 @@ export class ToolRegistry {
    * Returns an array of enabled tool instances (excludes disabled tools).
    */
   getEnabledTools(): AnyDeclarativeTool[] {
-    const ephemeralSettings = this.config.getEphemeralSettings() || {};
-    const disabledTools =
-      (ephemeralSettings['disabled-tools'] as string[]) || [];
-
-    // Also get globally excluded tools from configuration
-    const excludedTools = this.config.getExcludeTools() || [];
+    const governance = this.getToolGovernance();
 
     return Array.from(this.tools.values())
-      .filter(
-        (tool) =>
-          !disabledTools.includes(tool.name) &&
-          !excludedTools.includes(tool.name),
-      )
+      .filter((tool) => this.isToolActive(tool.name, governance))
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
@@ -564,16 +592,16 @@ export class ToolRegistry {
   getTool(name: string, context?: ToolContext): AnyDeclarativeTool | undefined {
     const tool = this.tools.get(name);
 
-    // Check if tool is disabled
-    const ephemeralSettings = this.config.getEphemeralSettings() || {};
-    const disabledTools =
-      (ephemeralSettings['disabled-tools'] as string[]) || [];
-
-    if (tool && disabledTools.includes(tool.name)) {
+    if (!tool) {
       return undefined;
     }
 
-    if (tool && context) {
+    const governance = this.getToolGovernance();
+    if (!this.isToolActive(tool.name, governance)) {
+      return undefined;
+    }
+
+    if (context) {
       // Inject context into tool instance
       if ('context' in tool) {
         (tool as unknown as { context: ToolContext }).context = context;

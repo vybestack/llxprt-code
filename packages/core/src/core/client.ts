@@ -145,6 +145,7 @@ export class GeminiClient {
   private lastPromptId?: string;
   private readonly complexityAnalyzer: ComplexityAnalyzer;
   private readonly todoReminderService: TodoReminderService;
+  private todoToolsAvailable = false;
   private lastComplexitySuggestionTime: number = 0;
   private readonly complexitySuggestionCooldown: number;
   private lastSentIdeContext: IdeContext | undefined;
@@ -300,6 +301,11 @@ export class GeminiClient {
   private processComplexityAnalysis(
     analysis: ComplexityAnalysisResult,
   ): string | undefined {
+    if (!this.todoToolsAvailable) {
+      this.consecutiveComplexTurns = 0;
+      return undefined;
+    }
+
     if (!analysis.isComplex || !analysis.shouldSuggestTodos) {
       this.consecutiveComplexTurns = 0;
       return undefined;
@@ -376,6 +382,9 @@ export class GeminiClient {
   }
 
   private recordModelActivity(event: ServerGeminiStreamEvent): void {
+    if (!this.todoToolsAvailable) {
+      return;
+    }
     if (
       event.type !== GeminiEventType.Content &&
       event.type !== GeminiEventType.ToolCallRequest
@@ -514,6 +523,7 @@ export class GeminiClient {
   async setTools(): Promise<void> {
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
+    this.updateTodoToolAvailabilityFromDeclarations(toolDeclarations);
 
     // Debug log for intermittent tool issues
     const logger = new DebugLogger('llxprt:client:setTools');
@@ -590,6 +600,7 @@ export class GeminiClient {
     const envParts = await getEnvironmentContext(this.config);
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
+    this.updateTodoToolAvailabilityFromDeclarations(toolDeclarations);
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
     const enabledToolNames = this.getEnabledToolNamesForPrompt();
 
@@ -1082,7 +1093,7 @@ export class GeminiClient {
         return turn;
       }
     }
-    if (this.toolCallReminderLevel !== 'none') {
+    if (this.todoToolsAvailable && this.toolCallReminderLevel !== 'none') {
       const reminderText =
         this.toolCallReminderLevel === 'escalated'
           ? TOOL_ESCALATED_TODO_MESSAGE
@@ -1533,5 +1544,19 @@ export class GeminiClient {
           .filter(Boolean),
       ),
     );
+  }
+
+  private updateTodoToolAvailabilityFromDeclarations(
+    declarations: Array<{ name?: string }>,
+  ): void {
+    const normalizedNames = new Set(
+      declarations
+        .map((decl) => decl?.name)
+        .filter((name): name is string => typeof name === 'string')
+        .map((name) => name.toLowerCase()),
+    );
+
+    this.todoToolsAvailable =
+      normalizedNames.has('todo_write') && normalizedNames.has('todo_read');
   }
 }
