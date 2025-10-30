@@ -378,6 +378,27 @@ export class OAuthManager {
   }
 
   /**
+   * Retrieve the stored OAuth token without refreshing it.
+   * Returns null if the provider is unknown or no token exists.
+   */
+  async peekStoredToken(providerName: string): Promise<OAuthToken | null> {
+    if (!providerName || typeof providerName !== 'string') {
+      throw new Error('Provider name must be a non-empty string');
+    }
+
+    if (!this.providers.has(providerName)) {
+      throw new Error(`Unknown provider: ${providerName}`);
+    }
+
+    try {
+      return await this.tokenStore.getToken(providerName);
+    } catch (error) {
+      console.debug(`Failed to load stored token for ${providerName}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Get OAuth token object for a specific provider
    * @param providerName - Name of the provider
    * @returns OAuth token if available, null otherwise

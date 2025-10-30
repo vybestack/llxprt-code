@@ -42,6 +42,9 @@ export function AuthDialog({
     }
     return enabled;
   });
+  const [authenticatedProviders, setAuthenticatedProviders] = useState<
+    Record<string, boolean>
+  >({});
 
   // Update enabledProviders state when settings change
   React.useEffect(() => {
@@ -55,17 +58,61 @@ export function AuthDialog({
     setEnabledProviders(enabled);
   }, [settings.merged.oauthEnabledProviders]);
 
+  const loadAuthStatuses = useCallback(async (): Promise<
+    Record<string, boolean>
+  > => {
+    try {
+      const { getOAuthManager } = await import(
+        '../../providers/providerManagerInstance.js'
+      );
+      const oauthManager = getOAuthManager();
+      if (!oauthManager || typeof oauthManager.getAuthStatus !== 'function') {
+        return {};
+      }
+      const statuses = await oauthManager.getAuthStatus();
+      const entries = statuses.map(
+        (status) => [status.provider, status.authenticated] as const,
+      );
+      return Object.fromEntries(entries);
+    } catch {
+      return {};
+    }
+  }, []);
+
+  React.useEffect(() => {
+    let active = true;
+    const run = async () => {
+      const nextStatuses = await loadAuthStatuses();
+      if (active) {
+        setAuthenticatedProviders(nextStatuses);
+      }
+    };
+    void run();
+
+    return () => {
+      active = false;
+    };
+  }, [loadAuthStatuses]);
+
+  const getAuthSuffix = (providerName: string): string => {
+    const status = authenticatedProviders[providerName];
+    if (status === undefined) {
+      return '';
+    }
+    return status ? ' (Authenticated)' : ' (Not authenticated)';
+  };
+
   const items = [
     {
-      label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}`,
+      label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}${getAuthSuffix('gemini')}`,
       value: 'oauth_gemini',
     },
     {
-      label: `Qwen (OAuth) ${enabledProviders.has('oauth_qwen') ? '[ON]' : '[OFF]'}`,
+      label: `Qwen (OAuth) ${enabledProviders.has('oauth_qwen') ? '[ON]' : '[OFF]'}${getAuthSuffix('qwen')}`,
       value: 'oauth_qwen',
     },
     {
-      label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}`,
+      label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}${getAuthSuffix('anthropic')}`,
       value: 'oauth_anthropic',
     },
     {
@@ -104,13 +151,18 @@ export function AuthDialog({
           const newState = await oauthManager.toggleOAuthEnabled(providerName);
 
           // Update local state to reflect the change
-          const newEnabledProviders = new Set(enabledProviders);
-          if (newState) {
-            newEnabledProviders.add(authMethod);
-          } else {
-            newEnabledProviders.delete(authMethod);
-          }
-          setEnabledProviders(newEnabledProviders);
+          setEnabledProviders((prev) => {
+            const next = new Set(prev);
+            if (newState) {
+              next.add(authMethod);
+            } else {
+              next.delete(authMethod);
+            }
+            return next;
+          });
+
+          const nextStatuses = await loadAuthStatuses();
+          setAuthenticatedProviders(nextStatuses);
         } catch (error) {
           setErrorMessage(`Failed to toggle ${providerName}: ${error}`);
         }
@@ -118,7 +170,7 @@ export function AuthDialog({
 
       // Don't close the dialog - let user continue toggling
     },
-    [onSelect, enabledProviders],
+    [onSelect, loadAuthStatuses],
   );
 
   useKeypress(
