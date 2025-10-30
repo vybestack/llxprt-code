@@ -169,6 +169,27 @@ Test
     expect(lastFrame()).toMatchSnapshot();
   });
 
+  it('wraps long table cells while preserving markdown styling', () => {
+    const text = `
+| Header 1 | Header 2 |
+|----------|----------|
+| **Important bold content that should exceed column width** | Regular text that also runs very long and should trigger wrapping behavior |
+`.replace(/\n/g, EOL);
+    const { lastFrame } = render(
+      <SettingsContext.Provider value={mockSettings}>
+        <MarkdownDisplay {...baseProps} text={text} terminalWidth={32} />
+      </SettingsContext.Provider>,
+    );
+    const frame = lastFrame();
+    expect(frame).toContain('┌────────────┬───────────────┐');
+    expect(frame).toContain('│ Header 1   │ Header 2      │');
+    expect(frame).toContain('│ Important  │ Regular text  │');
+    expect(frame).toContain('│ bold       │ that also     │');
+    expect(frame).toContain('│ width      │ behavior      │');
+    expect(frame).not.toContain('...');
+    expect(frame).toContain('└────────────┴───────────────┘');
+  });
+
   it('handles a table at the end of the input', () => {
     const text = `
 Some text before.
