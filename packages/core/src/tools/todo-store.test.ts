@@ -10,6 +10,7 @@ import { Todo } from './todo-schemas.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
 describe('TodoStore', () => {
   let tempDir: string;
@@ -160,6 +161,16 @@ describe('TodoStore', () => {
       const agentStore = new TodoStore(sessionId, 'different-agent');
       const agentResult = await agentStore.readTodos();
       expect(agentResult).toEqual([]);
+    });
+
+    it('should treat default agent id the same as session namespace', async () => {
+      const sessionStore = new TodoStore(sessionId);
+      await sessionStore.writeTodos(sampleTodos);
+
+      const primaryStore = new TodoStore(sessionId, DEFAULT_AGENT_ID);
+      const primaryResult = await primaryStore.readTodos();
+
+      expect(primaryResult).toEqual(sampleTodos);
     });
   });
 

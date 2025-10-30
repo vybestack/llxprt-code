@@ -12,6 +12,7 @@ import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { todoEvents, TodoUpdateEvent } from './todo-events.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
 import { formatTodoListForDisplay } from '../todo/todoFormatter.js';
+import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
 export interface TodoWriteParams {
   todos: Todo[];
@@ -156,15 +157,19 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
 
     // Set active todo ID if there's an in_progress todo
     if (isInteractive) {
+      const scopedAgentId = agentId ?? DEFAULT_AGENT_ID;
       const inProgressTodo = params.todos.find(
         (todo) => todo.status === 'in_progress',
       );
-      const contextTracker = TodoContextTracker.forSession(sessionId);
+      const contextTracker = TodoContextTracker.forAgent(
+        sessionId,
+        scopedAgentId,
+      );
       contextTracker.setActiveTodo(inProgressTodo ? inProgressTodo.id : null);
 
       const event: TodoUpdateEvent = {
         sessionId,
-        agentId,
+        agentId: scopedAgentId,
         todos: params.todos,
         timestamp: new Date(),
       };

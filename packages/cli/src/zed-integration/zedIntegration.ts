@@ -513,7 +513,8 @@ class Session {
     // Subscribe to todo events for this session
     todoEvents.onTodoUpdated((event: TodoUpdateEvent) => {
       // Only handle events for this session
-      if (event.sessionId === this.id) {
+      const eventAgentId = event.agentId ?? DEFAULT_AGENT_ID;
+      if (event.sessionId === this.id && eventAgentId === DEFAULT_AGENT_ID) {
         this.sendPlanUpdate(event.todos).catch((error) => {
           console.error('Failed to send plan update to Zed:', error);
         });

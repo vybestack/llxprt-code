@@ -51,7 +51,7 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
 
     const output = formatTodoListForDisplay(todos, {
       getLiveToolCalls: (todoId: string) =>
-        ToolCallTrackerService.getAllToolCalls(sessionId, todoId),
+        ToolCallTrackerService.getAllToolCalls(sessionId, todoId, agentId),
     });
 
     if (todos.length === 0) {
