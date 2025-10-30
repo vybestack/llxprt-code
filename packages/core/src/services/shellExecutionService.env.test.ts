@@ -31,7 +31,8 @@ describe('ShellExecutionService with LLXPRT_CODE environment variables', () => {
   });
 
   it('should use LLXPRT_CODE environment variable instead of GEMINI_CLI when executed in child_process mode', async () => {
-    const command = process.platform === 'win32' ? 'echo %LLXPRT_CODE%' : 'echo $LLXPRT_CODE';
+    const command =
+      process.platform === 'win32' ? 'echo %LLXPRT_CODE%' : 'echo $LLXPRT_CODE';
     const onOutputEvent = vi.fn();
     const abortController = new AbortController();
 
@@ -51,7 +52,8 @@ describe('ShellExecutionService with LLXPRT_CODE environment variables', () => {
   });
 
   it('should use LLXPRT_CODE environment variable instead of GEMINI_CLI when executed with pty', async () => {
-    const command = process.platform === 'win32' ? 'echo %LLXPRT_CODE%' : 'echo $LLXPRT_CODE';
+    const command =
+      process.platform === 'win32' ? 'echo %LLXPRT_CODE%' : 'echo $LLXPRT_CODE';
     const onOutputEvent = vi.fn();
     const abortController = new AbortController();
 
@@ -71,9 +73,10 @@ describe('ShellExecutionService with LLXPRT_CODE environment variables', () => {
   });
 
   it('should not set GEMINI_CLI environment variable', async () => {
-    const command = process.platform === 'win32' 
-      ? 'if defined GEMINI_CLI (echo GEMINI_CLI_SET) else (echo GEMINI_CLI_NOT_SET)'
-      : '[ -z "$GEMINI_CLI" ] && echo "GEMINI_CLI_NOT_SET" || echo "GEMINI_CLI_SET"';
+    const command =
+      process.platform === 'win32'
+        ? 'if defined GEMINI_CLI (echo GEMINI_CLI_SET) else (echo GEMINI_CLI_NOT_SET)'
+        : '[ -z "$GEMINI_CLI" ] && echo "GEMINI_CLI_NOT_SET" || echo "GEMINI_CLI_SET"';
     const onOutputEvent = vi.fn();
     const abortController = new AbortController();
 
