@@ -34,6 +34,7 @@ export async function updateExtension(
   requestConsent: (consent: string) => Promise<boolean>,
   currentState: ExtensionUpdateState,
   dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void,
+  enableExtensionReloading?: boolean,
 ): Promise<ExtensionUpdateInfo | undefined> {
   if (currentState === ExtensionUpdateState.UPDATING) {
     return undefined;
@@ -93,7 +94,9 @@ export async function updateExtension(
       type: 'SET_STATE',
       payload: {
         name: extension.name,
-        state: ExtensionUpdateState.UPDATED_NEEDS_RESTART,
+        state: enableExtensionReloading
+          ? ExtensionUpdateState.UPDATED
+          : ExtensionUpdateState.UPDATED_NEEDS_RESTART,
       },
     });
     return {
@@ -122,6 +125,7 @@ export async function updateAllUpdatableExtensions(
   extensions: GeminiCLIExtension[],
   extensionsState: Map<string, ExtensionUpdateStatus>,
   dispatch: (action: ExtensionUpdateAction) => void,
+  enableExtensionReloading?: boolean,
 ): Promise<ExtensionUpdateInfo[]> {
   return (
     await Promise.all(
@@ -138,6 +142,7 @@ export async function updateAllUpdatableExtensions(
             requestConsent,
             extensionsState.get(extension.name)!.status,
             dispatch,
+            enableExtensionReloading,
           ),
         ),
     )

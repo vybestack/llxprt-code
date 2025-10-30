@@ -65,6 +65,7 @@ export function createMockConfig(
     getEnableMessageBusIntegration: vi.fn().mockReturnValue(false),
     getMessageBus: vi.fn().mockReturnValue(defaultMessageBus),
     getPolicyEngine: vi.fn(),
+    getEnableExtensionReloading: vi.fn().mockReturnValue(false),
     getOrCreateScheduler: vi
       .fn()
       .mockImplementation(

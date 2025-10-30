@@ -365,6 +365,7 @@ export interface ConfigParameters {
   providerManager?: ProviderManager;
   provider?: string;
   extensions?: GeminiCLIExtension[];
+  enableExtensionReloading?: boolean;
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
   noBrowser?: boolean;
   summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
@@ -453,6 +454,7 @@ export class Config {
   private readonly _activeExtensions: ActiveExtension[];
   private readonly listExtensions: boolean;
   private readonly _extensions: GeminiCLIExtension[];
+  private readonly enableExtensionReloading: boolean;
   private readonly _blockedMcpServers: Array<{
     name: string;
     extensionName: string;
@@ -693,6 +695,7 @@ export class Config {
       params.enableShellOutputEfficiency ?? true;
     this.continueSession = params.continueSession ?? false;
     this.extensionManagement = params.extensionManagement ?? false;
+    this.enableExtensionReloading = params.enableExtensionReloading ?? false;
     this.storage = new Storage(this.targetDir);
     this.enablePromptCompletion = params.enablePromptCompletion ?? false;
     this.fileExclusions = new FileExclusions(this);
@@ -1329,6 +1332,10 @@ export class Config {
 
   getEnableExtensionReloading(): boolean {
     return this.enableExtensionReloading;
+  }
+
+  getExtensionEvents(): EventEmitter | undefined {
+    return this.eventEmitter;
   }
 
   getBlockedMcpServers(): Array<{ name: string; extensionName: string }> {

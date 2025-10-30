@@ -1157,14 +1157,27 @@ export const SETTINGS_SCHEMA = {
     description: 'Chat compression settings.',
     showInDialog: false,
   },
-  showLineNumbers: {
-    type: 'boolean',
-    label: 'Show Line Numbers',
-    category: 'General',
-    requiresRestart: false,
-    default: false,
-    description: 'Show line numbers in the chat.',
-    showInDialog: true,
+
+  experimental: {
+    type: 'object',
+    label: 'Experimental',
+    category: 'Experimental',
+    requiresRestart: true,
+    default: {},
+    description: 'Experimental features.',
+    showInDialog: false,
+    properties: {
+      extensionReloading: {
+        type: 'boolean',
+        label: 'Extension Reloading',
+        category: 'Experimental',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Enables extension loading/unloading within the CLI session.',
+        showInDialog: false,
+      },
+    },
   },
 
   // LLxprt-specific provider settings

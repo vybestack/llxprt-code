@@ -33,6 +33,18 @@ describe('McpClientManager', () => {
     vi.mocked(McpClient).mockReturnValue(
       mockedMcpClient as unknown as McpClient,
     );
+    const mockConfig = {
+      isTrustedFolder: () => true,
+      getMcpServers: () => ({
+        'test-server': {},
+      }),
+      getMcpServerCommand: () => '',
+      getPromptRegistry: () => ({} as PromptRegistry),
+      getDebugMode: () => false,
+      getWorkspaceContext: () => ({} as WorkspaceContext),
+      getEnableExtensionReloading: () => false,
+      getExtensionEvents: () => undefined,
+    } as unknown as Config;
     const manager = new McpClientManager(
       {
         'test-server': {},
@@ -42,10 +54,10 @@ describe('McpClientManager', () => {
       {} as PromptRegistry,
       false,
       {} as WorkspaceContext,
+      undefined,
+      mockConfig,
     );
-    await manager.discoverAllMcpTools({
-      isTrustedFolder: () => true,
-    } as unknown as Config);
+    await manager.discoverAllMcpTools();
     expect(mockedMcpClient.connect).toHaveBeenCalledOnce();
     expect(mockedMcpClient.discover).toHaveBeenCalledOnce();
   });
@@ -60,6 +72,18 @@ describe('McpClientManager', () => {
     vi.mocked(McpClient).mockReturnValue(
       mockedMcpClient as unknown as McpClient,
     );
+    const mockConfig = {
+      isTrustedFolder: () => false,
+      getMcpServers: () => ({
+        'test-server': {},
+      }),
+      getMcpServerCommand: () => '',
+      getPromptRegistry: () => ({} as PromptRegistry),
+      getDebugMode: () => false,
+      getWorkspaceContext: () => ({} as WorkspaceContext),
+      getEnableExtensionReloading: () => false,
+      getExtensionEvents: () => undefined,
+    } as unknown as Config;
     const manager = new McpClientManager(
       {
         'test-server': {},
@@ -69,10 +93,10 @@ describe('McpClientManager', () => {
       {} as PromptRegistry,
       false,
       {} as WorkspaceContext,
+      undefined,
+      mockConfig,
     );
-    await manager.discoverAllMcpTools({
-      isTrustedFolder: () => false,
-    } as unknown as Config);
+    await manager.discoverAllMcpTools();
     expect(mockedMcpClient.connect).not.toHaveBeenCalled();
     expect(mockedMcpClient.discover).not.toHaveBeenCalled();
   });

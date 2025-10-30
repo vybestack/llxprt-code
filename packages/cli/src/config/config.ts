@@ -1362,6 +1362,7 @@ export async function loadCliConfig(
     })),
     provider: finalProvider,
     extensions: allExtensions,
+    enableExtensionReloading: effectiveSettings.experimental?.extensionReloading,
     blockedMcpServers,
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
