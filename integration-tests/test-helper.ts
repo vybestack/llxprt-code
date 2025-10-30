@@ -187,6 +187,13 @@ export class InteractiveRun {
     }
   }
 
+  // Types an entire string at once, necessary for some things like commands
+  // but may run into paste detection issues for larger strings.
+  async sendText(text: string) {
+    this.ptyProcess.write(text);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
   async kill() {
     this.ptyProcess.kill();
   }
@@ -291,6 +298,8 @@ export class TestRig {
           selectedType: 'provider',
         },
       },
+      // Don't show the IDE connection dialog when running from VsCode
+      ide: { enabled: false, hasSeenNudge: true },
       ...settingsOverridesWithoutUi, // Allow tests to override/add settings
     };
     writeFileSync(

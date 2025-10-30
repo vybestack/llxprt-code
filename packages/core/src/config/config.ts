@@ -415,7 +415,7 @@ export class Config {
   private readonly toolDiscoveryCommand: string | undefined;
   private readonly toolCallCommand: string | undefined;
   private readonly mcpServerCommand: string | undefined;
-  private readonly mcpServers: Record<string, MCPServerConfig> | undefined;
+  private mcpServers: Record<string, MCPServerConfig> | undefined;
   private userMemory: string;
   private llxprtMdFileCount: number;
   private llxprtMdFilePaths: string[];
@@ -1037,6 +1037,10 @@ export class Config {
     return this.mcpServers;
   }
 
+  setMcpServers(mcpServers: Record<string, MCPServerConfig>): void {
+    this.mcpServers = mcpServers;
+  }
+
   getUserMemory(): string {
     return this.userMemory;
   }
@@ -1321,6 +1325,10 @@ export class Config {
 
   getActiveExtensions(): ActiveExtension[] {
     return this._activeExtensions;
+  }
+
+  getEnableExtensionReloading(): boolean {
+    return this.enableExtensionReloading;
   }
 
   getBlockedMcpServers(): Array<{ name: string; extensionName: string }> {

@@ -313,7 +313,6 @@ export class ToolRegistry {
       const newTools = this.buildCoreToolsMap();
 
       await this.config.getPromptRegistry().clear();
-      await this.discoverAndRegisterToolsFromCommand(newTools);
 
       const previousTools = this.tools;
       try {
@@ -323,6 +322,8 @@ export class ToolRegistry {
         this.tools = previousTools;
         throw error;
       }
+    });
+  }
     });
   }
 
@@ -345,6 +346,7 @@ export class ToolRegistry {
         }
       }
 
+<<<<<<< HEAD
       await this.config.getPromptRegistry().clear();
 
       const previousTools = this.tools;
@@ -356,6 +358,10 @@ export class ToolRegistry {
         throw error;
       }
     });
+=======
+    // discover tools using MCP servers, if configured
+    await this.mcpClientManager.discoverAllMcpTools();
+>>>>>>> cc081337b (Initial support for reloading extensions in the CLI - mcp servers only (#12239))
   }
 
   /**

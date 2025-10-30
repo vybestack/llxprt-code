@@ -61,7 +61,10 @@ export function createMockConfig(
     getHistory: vi.fn().mockReturnValue([]),
     getEmbeddingModel: vi.fn().mockReturnValue('text-embedding-004'),
     getSessionId: vi.fn().mockReturnValue('test-session-id'),
+    getUserTier: vi.fn(),
+    getEnableMessageBusIntegration: vi.fn().mockReturnValue(false),
     getMessageBus: vi.fn().mockReturnValue(defaultMessageBus),
+    getPolicyEngine: vi.fn(),
     getOrCreateScheduler: vi
       .fn()
       .mockImplementation(
