@@ -137,7 +137,7 @@ export class ShellExecutionService {
         detached: !isWindows,
         env: {
           ...process.env,
-          LLXPRT_CLI: '1',
+          LLXPRT_CODE: '1',
           TERM: 'xterm-256color',
           PAGER: 'cat',
         },
@@ -328,7 +328,7 @@ export class ShellExecutionService {
         rows,
         env: {
           ...process.env,
-          GEMINI_CLI: '1',
+          LLXPRT_CODE: '1',
           TERM: 'xterm-256color',
           PAGER: 'cat',
         },

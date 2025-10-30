@@ -71,7 +71,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       expect.objectContaining({
         shell: true,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: expect.objectContaining({ LLXPRT_CLI: '1' }),
+        env: expect.objectContaining({ LLXPRT_CODE: '1' }),
       }),
     );
 
