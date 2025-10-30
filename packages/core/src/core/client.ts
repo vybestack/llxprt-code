@@ -35,14 +35,9 @@ import { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
-import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import type { ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
-import {
-  createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
-  createToolRegistryViewFromRegistry,
-} from '../runtime/runtimeAdapters.js';
 import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
@@ -68,7 +63,6 @@ import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { subscribeToAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
-import type { ProviderManager } from '../providers/ProviderManager.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
@@ -723,23 +717,25 @@ export class GeminiClient {
         metadata: { source: 'GeminiClient.startChat' },
       });
 
-      const runtimeContext = createAgentRuntimeContext({
-        state: this.runtimeState,
-        settings,
-        provider: createProviderAdapterFromManager(
-          this.config.getProviderManager?.() as ProviderManager | undefined,
-        ),
-        telemetry: createTelemetryAdapterFromConfig(this.config),
-        tools: createToolRegistryViewFromRegistry(
-          this.config.getToolRegistry(),
-        ),
-        history: historyService,
-        providerRuntime,
+      const runtimeBundle = await loadAgentRuntime({
+        profile: {
+          config: this.config,
+          state: this.runtimeState,
+          settings,
+          providerRuntime,
+          contentGeneratorConfig: this.config.getContentGeneratorConfig(),
+          toolRegistry,
+          providerManager: this.config.getProviderManager?.(),
+        },
+        overrides: {
+          historyService,
+          contentGenerator: this.getContentGenerator(),
+        },
       });
 
       return new GeminiChat(
-        runtimeContext,
-        this.getContentGenerator(),
+        runtimeBundle.runtimeContext,
+        runtimeBundle.contentGenerator,
         {
           systemInstruction,
           ...generateContentConfigWithThinking,

@@ -15,7 +15,6 @@ import { SettingsService } from '../settings/SettingsService.js';
 import { ToolCallRequestInfo } from './turn.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import {
-  createContentGenerator,
   type ContentGeneratorConfig,
   type ContentGenerator,
 } from './contentGenerator.js';
@@ -40,12 +39,7 @@ import type {
   AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
 } from '../runtime/AgentRuntimeContext.js';
-import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
-import {
-  createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
-  createToolRegistryViewFromRegistry,
-} from '../runtime/runtimeAdapters.js';
+import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
@@ -527,7 +521,7 @@ export class SubAgentScope {
     // Step 007.4: Call createAgentRuntimeContext to build runtime view
     // @plan PLAN-20251028-STATELESS6.P08
     // @requirement REQ-STAT6-001.1, REQ-STAT6-003.2
-    const defaultProviderManager = overrides.providerAdapter
+    const providerManager = overrides.providerAdapter
       ? undefined
       : new ProviderManager({
           settingsService: runtimeSettingsService,
@@ -535,54 +529,35 @@ export class SubAgentScope {
           runtime: providerRuntime,
         });
 
-    const providerAdapter: AgentRuntimeProviderAdapter =
-      overrides.providerAdapter ??
-      createProviderAdapterFromManager(defaultProviderManager);
-
-    const telemetryAdapter: AgentRuntimeTelemetryAdapter =
-      overrides.telemetryAdapter ??
-      createTelemetryAdapterFromConfig(foregroundConfig);
-
-    const toolsView: ToolRegistryView =
-      overrides.toolsView ?? createToolRegistryViewFromRegistry(toolRegistry);
-
-    const runtimeContext = createAgentRuntimeContext({
-      state: runtimeState,
-      settings: settingsSnapshot,
-      provider: providerAdapter,
-      telemetry: telemetryAdapter,
-      tools: toolsView,
-      history: overrides.historyService,
-      providerRuntime,
+    const runtimeBundle = await loadAgentRuntime({
+      profile: {
+        config: foregroundConfig,
+        state: runtimeState,
+        settings: settingsSnapshot,
+        providerRuntime,
+        contentGeneratorConfig: effectiveContentGenConfig,
+        toolRegistry,
+        providerManager,
+      },
+      overrides: {
+        providerAdapter: overrides.providerAdapter,
+        telemetryAdapter: overrides.telemetryAdapter,
+        toolsView: overrides.toolsView,
+        historyService: overrides.historyService,
+        contentGeneratorFactory: overrides.contentGeneratorFactory,
+      },
     });
-
-    // Step 007.5: Instantiate content generator
-    // @plan PLAN-20251028-STATELESS6.P08
-    // @requirement REQ-STAT6-001.1
-    const contentGeneratorFactory =
-      overrides.contentGeneratorFactory ??
-      ((
-        configInput: ContentGeneratorConfig,
-        fgConfig: Config,
-        session: string,
-      ) => createContentGenerator(configInput, fgConfig, session));
-
-    const contentGenerator = await contentGeneratorFactory(
-      effectiveContentGenConfig,
-      foregroundConfig,
-      sessionId,
-    );
 
     // Step 007.6: Return new instance with AgentRuntimeContext
     // @plan PLAN-20251028-STATELESS6.P08
     // @requirement REQ-STAT6-001.1
     return new SubAgentScope(
       name,
-      runtimeContext,
+      runtimeBundle.runtimeContext,
       modelConfig,
       runConfig,
       promptConfig,
-      contentGenerator,
+      runtimeBundle.contentGenerator,
       foregroundConfig, // TEMPORARY: Remove in P10
       toolConfig,
       outputConfig,

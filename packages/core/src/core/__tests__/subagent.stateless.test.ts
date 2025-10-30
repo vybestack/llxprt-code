@@ -29,6 +29,7 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
 } from '../../runtime/providerRuntimeContext.js';
+import * as RuntimeLoader from '../../runtime/AgentRuntimeLoader.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeProviderAdapter,
@@ -222,6 +223,25 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       expect(setModelSpy).not.toHaveBeenCalled();
       expect(setProviderSpy).not.toHaveBeenCalled();
     });
+  });
+
+  it('uses AgentRuntimeLoader to construct runtime bundle', async () => {
+    foregroundConfig = createTestConfig({ model: 'gemini-2.0-flash-exp' });
+    const loaderSpy = vi.spyOn(RuntimeLoader, 'loadAgentRuntime');
+
+    const promptConfig = createTestPromptConfig();
+    const modelConfig = createTestModelConfig('gemini-2.0-flash-thinking-exp');
+    const runConfig = createTestRunConfig();
+
+    await SubAgentScope.create(
+      'test-subagent',
+      foregroundConfig,
+      promptConfig,
+      modelConfig,
+      runConfig,
+    );
+
+    expect(loaderSpy).toHaveBeenCalledTimes(1);
   });
 
   /**

@@ -5,6 +5,7 @@
  */
 
 import type { ProviderManager } from '../providers/ProviderManager.js';
+import type { IProviderManager } from '../providers/IProviderManager.js';
 import type { Config } from '../config/config.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import {
@@ -27,7 +28,7 @@ import type {
  * Creates a mutable provider adapter backed by a ProviderManager instance.
  */
 export function createProviderAdapterFromManager(
-  manager?: ProviderManager,
+  manager?: ProviderManager | IProviderManager,
 ): AgentRuntimeProviderAdapter {
   if (!manager) {
     return {
