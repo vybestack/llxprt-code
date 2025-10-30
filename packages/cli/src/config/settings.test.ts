@@ -98,7 +98,7 @@ describe('Settings Loading and Merging', () => {
     vi.resetAllMocks();
 
     // Set environment variables to override system paths
-    process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = '/mock/system/settings.json';
+    process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH = '/mock/system/settings.json';
     process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH =
       '/mock/system/system-defaults.json';
 
@@ -141,7 +141,7 @@ describe('Settings Loading and Merging', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     // Clean up environment variables
-    delete process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
+    delete process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH;
     delete process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH;
   });
 
@@ -1653,16 +1653,16 @@ describe('Settings Loading and Merging', () => {
       delete process.env.TEST_PORT;
     });
 
-    describe('when GEMINI_CLI_SYSTEM_SETTINGS_PATH is set', () => {
+    describe('when LLXPRT_CODE_SYSTEM_SETTINGS_PATH is set', () => {
       const MOCK_ENV_SYSTEM_SETTINGS_PATH = '/mock/env/system/settings.json';
 
       beforeEach(() => {
-        process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH =
+        process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH =
           MOCK_ENV_SYSTEM_SETTINGS_PATH;
       });
 
       afterEach(() => {
-        delete process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
+        delete process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH;
       });
 
       it('should load system settings from the path specified in the environment variable', () => {

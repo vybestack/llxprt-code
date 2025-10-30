@@ -102,8 +102,8 @@ const MIGRATION_MAP: Record<string, string> = {
 };
 */
 export function getSystemSettingsPath(): string {
-  if (process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH) {
-    return process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
+  if (process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH) {
+    return process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH;
   }
   if (platform() === 'darwin') {
     return '/Library/Application Support/LLxprt-Code/settings.json';
