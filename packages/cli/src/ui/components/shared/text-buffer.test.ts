@@ -409,6 +409,24 @@ describe('useTextBuffer', () => {
       expect(state.allVisualLines).toEqual(['123456789012345', 'ABCDEFG']);
     });
 
+    it('should keep consecutive empty visual lines within the viewport slice', () => {
+      const { result } = renderHook(() =>
+        useTextBuffer({
+          initialText: 'first',
+          viewport: { width: 40, height: 5 },
+          isValidPath: () => false,
+        }),
+      );
+
+      act(() => result.current.move('end'));
+      act(() => result.current.newline());
+      act(() => result.current.newline());
+
+      const state = getBufferState(result);
+      expect(state.lines).toEqual(['first', '', '']);
+      expect(state.viewportVisualLines.slice(0, 3)).toEqual(['first', '', '']);
+    });
+
     it('should initialize with multi-byte unicode characters and correct cursor offset', () => {
       const { result } = renderHook(() =>
         useTextBuffer({
