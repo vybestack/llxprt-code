@@ -154,6 +154,38 @@ const TILDE_KEYCODE_TO_NAME: Record<number, string> = {
   23: 'f11', // skipping 22 is intentional
   24: 'f12',
 };
+
+/**
+ * Check if a buffer could potentially be a valid kitty sequence or its prefix.
+ */
+function couldBeKittySequence(buffer: string): boolean {
+  // Kitty sequences always start with ESC[.
+  if (buffer.length === 0) return true;
+  if (buffer === ESC || buffer === `${ESC}[`) return true;
+
+  if (!buffer.startsWith(`${ESC}[`)) return false;
+
+  // Check for known kitty sequence patterns:
+  // 1. ESC[<digit> - could be CSI-u or tilde-coded
+  // 2. ESC[1;<digit> - parameterized functional
+  // 3. ESC[<letter> - legacy functional keys
+  // 4. ESC[Z - reverse tab
+  const afterCSI = buffer.slice(2);
+
+  // Check if it starts with a digit (could be CSI-u or parameterized)
+  if (/^\d/.test(afterCSI)) return true;
+
+  // Check for known single-letter sequences
+  if (/^[ABCDHFPQRSZ]/.test(afterCSI)) return true;
+
+  // Check for 1; pattern (parameterized sequences)
+  if (/^1;\d/.test(afterCSI)) return true;
+
+  // Anything else starting with ESC[ that doesn't match our patterns
+  // is likely not a kitty sequence we handle
+  return false;
+}
+
 export interface Key {
   name: string;
   ctrl: boolean;
@@ -273,33 +305,6 @@ export function KeypressProvider({
     let mouseSequenceBuffer = '';
 
     // Check if a buffer could potentially be a valid kitty sequence or its prefix
-    const couldBeKittySequence = (buffer: string): boolean => {
-      // Kitty sequences always start with ESC[.
-      if (buffer.length === 0) return true;
-      if (buffer === ESC || buffer === `${ESC}[`) return true;
-
-      if (!buffer.startsWith(`${ESC}[`)) return false;
-
-      // Check for known kitty sequence patterns:
-      // 1. ESC[<digit> - could be CSI-u or tilde-coded
-      // 2. ESC[1;<digit> - parameterized functional
-      // 3. ESC[<letter> - legacy functional keys
-      // 4. ESC[Z - reverse tab
-      const afterCSI = buffer.slice(2);
-
-      // Check if it starts with a digit (could be CSI-u or parameterized)
-      if (/^\d/.test(afterCSI)) return true;
-
-      // Check for known single-letter sequences
-      if (/^[ABCDHFPQRSZ]/.test(afterCSI)) return true;
-
-      // Check for 1; pattern (parameterized sequences)
-      if (/^1;\d/.test(afterCSI)) return true;
-
-      // Anything else starting with ESC[ that doesn't match our patterns
-      // is likely not a kitty sequence we handle
-      return false;
-    };
 
     // Temporary workaround for IME interference with Ctrl combinations
     // TODO: Replace with a more robust IME-aware input handling system
