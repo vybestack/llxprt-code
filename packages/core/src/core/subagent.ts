@@ -41,8 +41,8 @@ import {
   CoreToolScheduler,
   type CompletedToolCall,
   type OutputUpdateHandler,
-  type ToolCallsUpdateHandler,
 } from './coreToolScheduler.js';
+import type { SubagentSchedulerFactory } from './subagentScheduler.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -574,16 +574,7 @@ export class SubAgentScope {
   async runInteractive(
     context: ContextState,
     options?: {
-      schedulerFactory?: (args: {
-        onAllToolCallsComplete: (calls: CompletedToolCall[]) => Promise<void>;
-        outputUpdateHandler: OutputUpdateHandler;
-        onToolCallsUpdate?: ToolCallsUpdateHandler;
-      }) => {
-        schedule(
-          request: ToolCallRequestInfo | ToolCallRequestInfo[],
-          signal: AbortSignal,
-        ): Promise<void> | void;
-      };
+      schedulerFactory?: SubagentSchedulerFactory;
     },
   ): Promise<void> {
     const chat = await this.createChatObject(context);
@@ -618,7 +609,7 @@ export class SubAgentScope {
       }
     }
 
-    const schedulerConfig = this.createSchedulerConfig();
+    const schedulerConfig = this.createSchedulerConfig({ interactive: true });
     let pendingCompletedCalls: CompletedToolCall[] | null = null;
     let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
       null;
@@ -651,6 +642,7 @@ export class SubAgentScope {
 
     const scheduler = options?.schedulerFactory
       ? options.schedulerFactory({
+          schedulerConfig,
           onAllToolCallsComplete: handleCompletion,
           outputUpdateHandler,
           onToolCallsUpdate: undefined,
@@ -1182,11 +1174,15 @@ export class SubAgentScope {
     return [{ role: 'user', parts: toolResponseParts }];
   }
 
-  private createSchedulerConfig(): Config {
+  private createSchedulerConfig(options?: { interactive?: boolean }): Config {
+    const isInteractive = options?.interactive ?? false;
+
     const whitelist =
-      this.toolConfig?.tools?.filter(
-        (entry): entry is string => typeof entry === 'string',
-      ) ?? [];
+      !isInteractive && this.toolConfig
+        ? this.toolConfig.tools.filter(
+            (entry): entry is string => typeof entry === 'string',
+          )
+        : [];
 
     const getEphemeralSettings =
       typeof this.toolExecutorContext.getEphemeralSettings === 'function'
@@ -1206,8 +1202,11 @@ export class SubAgentScope {
         ? () => this.toolExecutorContext.getTelemetryLogPromptsEnabled()
         : () => this.config.getTelemetryLogPromptsEnabled();
 
-    const allowedTools =
-      whitelist.length > 0
+    const allowedTools = isInteractive
+      ? typeof this.config.getAllowedTools === 'function'
+        ? this.config.getAllowedTools()
+        : undefined
+      : whitelist.length > 0
         ? whitelist
         : typeof this.config.getAllowedTools === 'function'
           ? this.config.getAllowedTools()

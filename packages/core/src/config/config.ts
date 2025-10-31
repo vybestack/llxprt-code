@@ -36,6 +36,7 @@ import { TodoWrite } from '../tools/todo-write.js';
 import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
 import { TaskTool } from '../tools/task.js';
+import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import { ListSubagentsTool } from '../tools/list-subagents.js';
 import { GeminiClient } from '../core/client.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
@@ -358,6 +359,7 @@ export class Config {
   private providerManager?: ProviderManager;
   private profileManager?: ProfileManager;
   private subagentManager?: SubagentManager;
+  private subagentSchedulerFactory?: SubagentSchedulerFactory;
 
   setProviderManager(providerManager: ProviderManager) {
     this.providerManager = providerManager;
@@ -380,6 +382,18 @@ export class Config {
 
   getSubagentManager(): SubagentManager | undefined {
     return this.subagentManager;
+  }
+
+  setInteractiveSubagentSchedulerFactory(
+    factory: SubagentSchedulerFactory | undefined,
+  ): void {
+    this.subagentSchedulerFactory = factory;
+  }
+
+  getInteractiveSubagentSchedulerFactory():
+    | SubagentSchedulerFactory
+    | undefined {
+    return this.subagentSchedulerFactory;
   }
   private provider?: string;
   private readonly summarizeToolOutput:
@@ -1520,6 +1534,8 @@ export class Config {
       registerCoreTool(TaskTool, this, {
         profileManager,
         subagentManager,
+        schedulerFactoryProvider: () =>
+          this.getInteractiveSubagentSchedulerFactory(),
       });
     }
 

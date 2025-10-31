@@ -21,6 +21,7 @@ import {
   type OutputObject,
   type RunConfig,
 } from '../core/subagent.js';
+import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { SubagentManager } from '../config/subagentManager.js';
 import type { ProfileManager } from '../config/profileManager.js';
 import { ToolErrorType } from './tool-error.js';
@@ -71,11 +72,15 @@ export interface TaskToolDependencies {
   orchestratorFactory?: () => SubagentOrchestrator;
   profileManager?: ProfileManager;
   subagentManager?: SubagentManager;
+  schedulerFactoryProvider?: () => SubagentSchedulerFactory | undefined;
+  isInteractiveEnvironment?: () => boolean;
 }
 
 interface TaskToolInvocationDeps {
   createOrchestrator: () => SubagentOrchestrator;
   getToolRegistry?: () => ToolRegistry | undefined;
+  getSchedulerFactory?: () => SubagentSchedulerFactory | undefined;
+  isInteractiveEnvironment?: () => boolean;
 }
 
 /**
@@ -304,13 +309,17 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     try {
+      const environmentInteractive =
+        this.deps.isInteractiveEnvironment?.() ?? true;
       const shouldRunInteractive =
-        this.normalized.interactive === undefined
-          ? true
-          : this.normalized.interactive;
+        this.normalized.interactive ?? environmentInteractive;
 
       if (shouldRunInteractive && typeof scope.runInteractive === 'function') {
-        await scope.runInteractive(contextState);
+        const schedulerFactory = this.deps.getSchedulerFactory?.();
+        const interactiveOptions = schedulerFactory
+          ? { schedulerFactory }
+          : undefined;
+        await scope.runInteractive(contextState, interactiveOptions);
       } else {
         await scope.runNonInteractive(contextState);
       }
@@ -548,6 +557,10 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
         typeof this.config.getToolRegistry === 'function'
           ? () => this.config.getToolRegistry()
           : undefined,
+      getSchedulerFactory: this.dependencies.schedulerFactoryProvider,
+      isInteractiveEnvironment:
+        this.dependencies.isInteractiveEnvironment ??
+        (() => this.config.isInteractive()),
     });
   }
 

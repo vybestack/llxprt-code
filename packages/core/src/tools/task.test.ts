@@ -64,6 +64,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
     });
     const params: TaskToolParams = {
       subagent_name: 'helper',
@@ -125,6 +126,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
     });
     const invocation = tool.build({
       subagent_name: 'helper',
@@ -139,11 +141,54 @@ describe('TaskTool', () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
+  it('passes scheduler factory to runInteractive when available', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const scope = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi.fn().mockResolvedValue(undefined),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const schedulerFactory = vi.fn().mockReturnValue({
+      schedule: vi.fn(),
+    });
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-100',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
+      schedulerFactoryProvider: () => schedulerFactory,
+    });
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Explain thing',
+    });
+
+    await invocation.execute(new AbortController().signal, undefined);
+
+    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
+    const [, options] = scope.runInteractive.mock.calls[0];
+    expect(options?.schedulerFactory).toBe(schedulerFactory);
+    expect(scope.runNonInteractive).not.toHaveBeenCalled();
+  });
+
   it('surfaces launch errors with helpful messaging', async () => {
     const launch = vi.fn().mockRejectedValue(new Error('subagent missing'));
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
     });
 
     const invocation = tool.build({
@@ -160,6 +205,44 @@ describe('TaskTool', () => {
       "Unable to launch subagent 'unknown'",
     );
     expect(result.returnDisplay).toContain('Details: subagent missing');
+  });
+
+  it('defaults to non-interactive execution when environment is non-interactive', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const scope = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi.fn(),
+      runNonInteractive: vi.fn().mockResolvedValue(undefined),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-42',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => false,
+    });
+
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship the feature',
+    });
+
+    await invocation.execute(new AbortController().signal, undefined);
+
+    expect(scope.runInteractive).not.toHaveBeenCalled();
+    expect(scope.runNonInteractive).toHaveBeenCalledTimes(1);
   });
 
   it('cleans up and reports execution errors', async () => {
@@ -186,6 +269,7 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
     });
     const invocation = tool.build({
       subagent_name: 'helper',

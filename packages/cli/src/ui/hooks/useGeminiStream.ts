@@ -262,10 +262,12 @@ export const useGeminiStream = (
 
   const [toolCalls, scheduleToolCalls, markToolsAsSubmitted] =
     useReactToolScheduler(
-      async (completedToolCallsFromScheduler) => {
-        // This onComplete is called when ALL scheduled tools for a given batch are done.
-        if (completedToolCallsFromScheduler.length > 0) {
-          // Add the final state of these tools to the history for display.
+      async (schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
+        if (completedToolCallsFromScheduler.length === 0) {
+          return;
+        }
+
+        if (isPrimary) {
           addItem(
             mapTrackedToolCallsToDisplay(
               completedToolCallsFromScheduler as TrackedToolCall[],
@@ -273,11 +275,25 @@ export const useGeminiStream = (
             Date.now(),
           );
 
-          // Handle tool response submission immediately when tools complete
           await handleCompletedTools(
             completedToolCallsFromScheduler as TrackedToolCall[],
           );
+          return;
         }
+
+        const callIdsToMark = completedToolCallsFromScheduler.map(
+          (toolCall) => toolCall.request.callId,
+        );
+        if (callIdsToMark.length > 0) {
+          markToolsAsSubmitted(callIdsToMark);
+        }
+
+        addItem(
+          mapTrackedToolCallsToDisplay(
+            completedToolCallsFromScheduler as TrackedToolCall[],
+          ),
+          Date.now(),
+        );
       },
       config,
       setPendingHistoryItem,
