@@ -18,6 +18,7 @@ import {
   type ToolConfig,
   type OutputConfig,
 } from './subagent.js';
+import fs from 'node:fs';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -110,7 +111,7 @@ export class SubagentOrchestrator {
       request.behaviourPrompts,
     );
     const modelConfig = this.buildModelConfig(profile);
-    const runConfig = this.buildRunConfig(request.runConfig);
+    const runConfig = this.buildRunConfig(profile, request.runConfig);
 
     const agentRuntimeId = this.createRuntimeId(subagent.name);
     const runtimeResult = await this.createRuntimeBundle({
@@ -174,10 +175,31 @@ export class SubagentOrchestrator {
     basePrompt: string,
     additions?: string[],
   ): PromptConfig {
-    const merged = [basePrompt, ...(additions ?? [])]
+    const trimmedBase = basePrompt?.trim();
+    const trimmedAdditions = (additions ?? [])
       .map((part) => part?.trim())
-      .filter((part) => part && part.length > 0)
-      .join('\n\n');
+      .filter((part) => part && part.length > 0);
+
+    const promptSections: string[] = [];
+
+    if (trimmedBase) {
+      promptSections.push(trimmedBase);
+    }
+
+    if (trimmedAdditions.length > 0) {
+      const numberedInstructions = trimmedAdditions
+        .map((instruction, index) => `(${index + 1}) ${instruction}`)
+        .join('\n');
+      promptSections.push(
+        [
+          '--- CURRENT TASK DIRECTIVES ---',
+          'Follow these instructions precisely for this run. They take precedence over any default behaviours.',
+          numberedInstructions,
+        ].join('\n'),
+      );
+    }
+
+    const merged = promptSections.join('\n\n');
 
     return {
       systemPrompt: merged,
@@ -192,15 +214,34 @@ export class SubagentOrchestrator {
     };
   }
 
-  private buildRunConfig(custom?: RunConfig): RunConfig {
-    if (!custom) {
-      return { ...DEFAULT_RUN_CONFIG };
+  private buildRunConfig(profile: Profile, custom?: RunConfig): RunConfig {
+    const maxTime =
+      custom?.max_time_minutes ?? DEFAULT_RUN_CONFIG.max_time_minutes;
+
+    let hasExplicitMaxTurns = false;
+    const maxTurnsValue =
+      custom?.max_turns ??
+      this.getNumberSetting(profile.ephemeralSettings, ['maxTurnsPerPrompt']);
+
+    if (custom?.max_turns !== undefined) {
+      hasExplicitMaxTurns = true;
+    } else if (maxTurnsValue !== undefined) {
+      hasExplicitMaxTurns = true;
     }
-    return {
-      max_time_minutes:
-        custom.max_time_minutes ?? DEFAULT_RUN_CONFIG.max_time_minutes,
-      max_turns: custom.max_turns ?? DEFAULT_RUN_CONFIG.max_turns,
+
+    const runConfig: RunConfig = {
+      max_time_minutes: maxTime,
     };
+
+    if (hasExplicitMaxTurns) {
+      if (maxTurnsValue !== undefined && maxTurnsValue > 0) {
+        runConfig.max_turns = Math.floor(maxTurnsValue);
+      }
+    } else {
+      runConfig.max_turns = DEFAULT_RUN_CONFIG.max_turns;
+    }
+
+    return runConfig;
   }
 
   private baseSessionId(): string {
@@ -304,6 +345,29 @@ export class SubagentOrchestrator {
     const authKey = profile.ephemeralSettings['auth-key'];
     if (typeof authKey === 'string') {
       service.set(`providers.${provider}.apiKey`, authKey);
+    }
+    const authKeyfile = this.getStringSetting(profile.ephemeralSettings, [
+      'auth-keyfile',
+    ]);
+    if (authKeyfile) {
+      service.set('auth-keyfile', authKeyfile);
+      service.set(`providers.${provider}.apiKeyfile`, authKeyfile);
+      if (!service.get(`providers.${provider}.apiKey`)) {
+        try {
+          if (fs.existsSync(authKeyfile)) {
+            const content = fs.readFileSync(authKeyfile, 'utf8').trim();
+            if (content) {
+              service.set(`providers.${provider}.apiKey`, content);
+            }
+          }
+        } catch (error) {
+          console.warn(
+            `SubagentOrchestrator: unable to read auth key file '${authKeyfile}': ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
     }
 
     const contextLimit = this.getNumberSetting(profile.ephemeralSettings, [
@@ -472,6 +536,13 @@ export class SubagentOrchestrator {
       profile,
       modelConfig,
     );
+    const providerManager =
+      typeof this.options.foregroundConfig.getProviderManager === 'function'
+        ? this.options.foregroundConfig.getProviderManager()
+        : undefined;
+    if (providerManager) {
+      contentGeneratorConfig.providerManager = providerManager;
+    }
 
     const toolRegistry: ToolRegistry | undefined =
       typeof this.options.foregroundConfig.getToolRegistry === 'function'
@@ -486,6 +557,7 @@ export class SubagentOrchestrator {
         providerRuntime,
         contentGeneratorConfig,
         toolRegistry,
+        providerManager,
       },
     };
 

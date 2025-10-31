@@ -222,6 +222,19 @@ export function convertToFunctionResponse(
   ];
 }
 
+function extractAgentIdFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+  const candidate = metadata['agentId'];
+  if (typeof candidate === 'string' && candidate.trim().length > 0) {
+    return candidate;
+  }
+  return undefined;
+}
+
 function toParts(input: PartListUnion): Part[] {
   const parts: Part[] = [];
   for (const part of Array.isArray(input) ? input : [input]) {
@@ -988,6 +1001,9 @@ export class CoreToolScheduler {
                 callId,
                 toolResult.llmContent,
               );
+              const metadataAgentId = extractAgentIdFromMetadata(
+                toolResult.metadata as Record<string, unknown> | undefined,
+              );
               // Return BOTH the tool call and response as an array
               // This ensures they're always paired and added to history atomically
               const responseParts = [
@@ -1008,7 +1024,10 @@ export class CoreToolScheduler {
                 resultDisplay: toolResult.returnDisplay,
                 error: undefined,
                 errorType: undefined,
-                agentId: scheduledCall.request.agentId ?? DEFAULT_AGENT_ID,
+                agentId:
+                  metadataAgentId ??
+                  scheduledCall.request.agentId ??
+                  DEFAULT_AGENT_ID,
               };
               this.setStatusInternal(callId, 'success', successResponse);
             } else {

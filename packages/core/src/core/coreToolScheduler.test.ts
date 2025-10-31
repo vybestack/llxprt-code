@@ -271,6 +271,73 @@ describe('CoreToolScheduler', () => {
     expect(completedCalls[0].response.agentId).toBe('agent-sub-123');
   });
 
+  it('prefers tool result metadata agentId when present', async () => {
+    const mockTool = new MockTool('mockTool');
+    mockTool.executeFn.mockReturnValue({
+      llmContent: 'Tool executed',
+      returnDisplay: 'Tool executed',
+      metadata: { agentId: 'agent-meta-456' },
+    });
+
+    const toolRegistry = {
+      getTool: () => mockTool,
+      getToolByName: () => mockTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {},
+      registerTool: () => {},
+      getToolByDisplayName: () => mockTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+    };
+
+    const onAllToolCallsComplete = vi.fn();
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getAllowedTools: () => [],
+      getToolRegistry: () => toolRegistry,
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+    } as unknown as Config;
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      onAllToolCallsComplete,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    const abortController = new AbortController();
+    const request = {
+      callId: 'agent-call-meta',
+      name: 'mockTool',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-agent',
+      agentId: 'agent-request-123',
+    };
+
+    await scheduler.schedule(request, abortController.signal);
+
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
+
+    const [completedCalls] = onAllToolCallsComplete.mock.lastCall as [
+      ToolCall[],
+    ];
+    expect(completedCalls[0].status).toBe('success');
+    expect(completedCalls[0].request.agentId).toBe('agent-request-123');
+    expect(completedCalls[0].response.agentId).toBe('agent-meta-456');
+  });
+
   it('defaults agentId when scheduler receives a request without one', async () => {
     const mockTool = new MockTool('mockTool');
     mockTool.executeFn.mockReturnValue({

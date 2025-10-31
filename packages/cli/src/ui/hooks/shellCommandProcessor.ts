@@ -16,6 +16,7 @@ import {
   isBinary,
   ShellExecutionResult,
   ShellExecutionService,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import { type PartListUnion } from '@google/genai';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -122,6 +123,7 @@ export const useShellCommandProcessor = (
 
         setPendingHistoryItem({
           type: 'tool_group',
+          agentId: DEFAULT_AGENT_ID,
           tools: [initialToolDisplay],
         });
 
@@ -178,6 +180,7 @@ export const useShellCommandProcessor = (
               if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
                 setPendingHistoryItem({
                   type: 'tool_group',
+                  agentId: DEFAULT_AGENT_ID,
                   tools: [
                     {
                       ...initialToolDisplay,
@@ -243,6 +246,7 @@ export const useShellCommandProcessor = (
               addItemToHistory(
                 {
                   type: 'tool_group',
+                  agentId: DEFAULT_AGENT_ID,
                   tools: [finalToolDisplay],
                 } as HistoryItemWithoutId,
                 userMessageTimestamp,

@@ -96,6 +96,7 @@ describe('<ToolGroupMessage />', () => {
     terminalWidth: 80,
     config: mockConfig,
     isFocused: true,
+    agentId: 'helper-agent',
   };
 
   const defaultTodo: Todo = {

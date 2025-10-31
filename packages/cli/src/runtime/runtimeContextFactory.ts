@@ -5,6 +5,8 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import {
   Config,
   MultiProviderTokenStore,
@@ -15,6 +17,8 @@ import {
   type ProviderRuntimeContext,
   flushRuntimeAuthScope,
   type RuntimeAuthScopeFlushResult,
+  ProfileManager,
+  SubagentManager,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
 
@@ -193,6 +197,35 @@ export function createIsolatedRuntimeContext(
       model,
       settingsService,
     });
+
+  const configWithManagers = config as Config & {
+    getProfileManager?: () => ProfileManager | undefined;
+    setProfileManager?: (manager: ProfileManager) => void;
+    getSubagentManager?: () => SubagentManager | undefined;
+    setSubagentManager?: (manager: SubagentManager) => void;
+  };
+  const optionsConfigWithManagers = options.config as
+    | (Config & {
+        getProfileManager?: () => ProfileManager | undefined;
+        getSubagentManager?: () => SubagentManager | undefined;
+      })
+    | undefined;
+
+  const llxprtDir = path.join(os.homedir(), '.llxprt');
+  const resolvedProfileManager =
+    optionsConfigWithManagers?.getProfileManager?.() ??
+    configWithManagers.getProfileManager?.() ??
+    new ProfileManager(path.join(llxprtDir, 'profiles'));
+  const resolvedSubagentManager =
+    optionsConfigWithManagers?.getSubagentManager?.() ??
+    configWithManagers.getSubagentManager?.() ??
+    new SubagentManager(
+      path.join(llxprtDir, 'subagents'),
+      resolvedProfileManager,
+    );
+
+  configWithManagers.setProfileManager?.(resolvedProfileManager);
+  configWithManagers.setSubagentManager?.(resolvedSubagentManager);
 
   const resolvedSettingsService =
     config.getSettingsService() ?? settingsService;

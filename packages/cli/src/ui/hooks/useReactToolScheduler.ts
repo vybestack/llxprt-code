@@ -20,6 +20,7 @@ import {
   ToolCall,
   Status as CoreStatus,
   EditorType,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo } from 'react';
 import {
@@ -164,7 +165,7 @@ export function useReactToolScheduler(
         req: ToolCallRequestInfo,
       ): ToolCallRequestInfo => ({
         ...req,
-        agentId: req.agentId ?? 'primary',
+        agentId: req.agentId ?? DEFAULT_AGENT_ID,
       });
 
       const normalizedRequest = Array.isArray(request)
@@ -224,6 +225,18 @@ export function mapToDisplay(
   toolOrTools: TrackedToolCall[] | TrackedToolCall,
 ): HistoryItemToolGroup {
   const toolCalls = Array.isArray(toolOrTools) ? toolOrTools : [toolOrTools];
+
+  const groupAgentId =
+    toolCalls
+      .map((trackedCall) => {
+        const responseAgentId =
+          'response' in trackedCall ? trackedCall.response?.agentId : undefined;
+        return responseAgentId ?? trackedCall.request.agentId;
+      })
+      .find(
+        (agentId): agentId is string =>
+          typeof agentId === 'string' && agentId.trim().length > 0,
+      ) ?? DEFAULT_AGENT_ID;
 
   const toolDisplays = toolCalls.map(
     (trackedCall): IndividualToolCallDisplay => {
@@ -316,6 +329,7 @@ export function mapToDisplay(
 
   return {
     type: 'tool_group',
+    agentId: groupAgentId,
     tools: toolDisplays,
   };
 }

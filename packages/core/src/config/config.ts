@@ -5,6 +5,7 @@
  */
 
 import * as path from 'node:path';
+import os from 'node:os';
 import process from 'node:process';
 import {
   AuthType,
@@ -34,6 +35,8 @@ import { WebSearchTool } from '../tools/web-search.js';
 import { TodoWrite } from '../tools/todo-write.js';
 import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
+import { TaskTool } from '../tools/task.js';
+import { ListSubagentsTool } from '../tools/list-subagents.js';
 import { GeminiClient } from '../core/client.js';
 import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -72,6 +75,8 @@ import {
   FileSystemService,
   StandardFileSystemService,
 } from '../services/fileSystemService.js';
+import { ProfileManager } from './profileManager.js';
+import { SubagentManager } from './subagentManager.js';
 
 // Re-export OAuth config type
 export type { MCPOAuthConfig, AnyToolInvocation };
@@ -351,6 +356,8 @@ export class Config {
     extensionName: string;
   }>;
   private providerManager?: ProviderManager;
+  private profileManager?: ProfileManager;
+  private subagentManager?: SubagentManager;
 
   setProviderManager(providerManager: ProviderManager) {
     this.providerManager = providerManager;
@@ -358,6 +365,21 @@ export class Config {
 
   getProviderManager(): ProviderManager | undefined {
     return this.providerManager;
+  }
+  setProfileManager(manager: ProfileManager | undefined): void {
+    this.profileManager = manager;
+  }
+
+  getProfileManager(): ProfileManager | undefined {
+    return this.profileManager;
+  }
+
+  setSubagentManager(manager: SubagentManager | undefined): void {
+    this.subagentManager = manager;
+  }
+
+  getSubagentManager(): SubagentManager | undefined {
+    return this.subagentManager;
   }
   private provider?: string;
   private readonly summarizeToolOutput:
@@ -1396,12 +1418,39 @@ export class Config {
   async createToolRegistry(): Promise<ToolRegistry> {
     const registry = new ToolRegistry(this, this.eventEmitter);
 
+    const baseCoreTools = this.getCoreTools();
+    const effectiveCoreTools =
+      baseCoreTools && baseCoreTools.length > 0
+        ? [...baseCoreTools]
+        : undefined;
+
+    const matchesToolIdentifier = (value: string, target: string): boolean =>
+      value === target || value.startsWith(`${target}(`);
+
+    const ensureCoreToolIncluded = (identifier: string) => {
+      if (!effectiveCoreTools) {
+        return;
+      }
+      if (
+        !effectiveCoreTools.some((tool) =>
+          matchesToolIdentifier(tool, identifier),
+        )
+      ) {
+        effectiveCoreTools.push(identifier);
+      }
+    };
+
+    ensureCoreToolIncluded('TaskTool');
+    ensureCoreToolIncluded(TaskTool.Name);
+    ensureCoreToolIncluded('ListSubagentsTool');
+    ensureCoreToolIncluded(ListSubagentsTool.Name);
+
     // helper to create & register core tools that are enabled
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const registerCoreTool = (ToolClass: any, ...args: unknown[]) => {
       const className = ToolClass.name;
       const toolName = ToolClass.Name || className;
-      const coreTools = this.getCoreTools();
+      const coreTools = effectiveCoreTools;
       const excludeTools = this.getExcludeTools() || [];
 
       let isEnabled = true; // Enabled by default if coreTools is not set.
@@ -1452,6 +1501,31 @@ export class Config {
     registerCoreTool(TodoWrite);
     registerCoreTool(TodoRead);
     registerCoreTool(TodoPause);
+
+    let profileManager = this.getProfileManager();
+    if (!profileManager) {
+      const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
+      profileManager = new ProfileManager(profilesDir);
+      this.setProfileManager(profileManager);
+    }
+
+    let subagentManager = this.getSubagentManager();
+    if (!subagentManager && profileManager) {
+      const subagentsDir = path.join(os.homedir(), '.llxprt', 'subagents');
+      subagentManager = new SubagentManager(subagentsDir, profileManager);
+      this.setSubagentManager(subagentManager);
+    }
+
+    if (profileManager && subagentManager) {
+      registerCoreTool(TaskTool, this, {
+        profileManager,
+        subagentManager,
+      });
+    }
+
+    registerCoreTool(ListSubagentsTool, this, {
+      getSubagentManager: () => this.getSubagentManager(),
+    });
 
     await registry.discoverAllTools();
     return registry;

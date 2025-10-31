@@ -88,6 +88,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
       <ToolGroupMessage
         toolCalls={item.tools}
         groupId={item.id}
+        agentId={item.agentId}
         availableTerminalHeight={availableTerminalHeight}
         terminalWidth={terminalWidth}
         config={config}

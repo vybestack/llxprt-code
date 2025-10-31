@@ -10,6 +10,7 @@
  * @pseudocode agent-runtime-context.md lines 92-101
  */
 import { reportError } from '../utils/errorReporting.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import type { Config } from '../config/config.js';
 import { ToolCallRequestInfo } from './turn.js';
 import {
@@ -33,6 +34,8 @@ import type {
 } from '../runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
+import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
+import { TodoStore } from '../tools/todo-store.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -75,6 +78,10 @@ export interface OutputObject {
    * during its execution. These variables can be used by the calling agent.
    */
   emitted_vars: Record<string, string>;
+  /**
+   * The final natural language response produced by the subagent (if any).
+   */
+  final_message?: string;
   /**
    * The reason for the subagent's termination, indicating whether it completed
    * successfully, timed out, or encountered an error.
@@ -271,7 +278,11 @@ async function validateToolsAgainstRuntime(params: {
       continue;
     }
 
-    const requiredParams = tool.schema.parameters?.required ?? [];
+    const jsonSchema = tool.schema.parametersJsonSchema as
+      | { required?: string[] }
+      | undefined;
+    const requiredParams =
+      tool.schema.parameters?.required ?? jsonSchema?.required ?? [];
     if (requiredParams.length > 0) {
       console.warn(
         `Cannot check tool "${toolEntry}" for interactivity because it requires parameters. Assuming it is safe for non-interactive use.`,
@@ -279,14 +290,25 @@ async function validateToolsAgainstRuntime(params: {
       continue;
     }
 
-    const invocation = tool.build({});
-    const confirmationDetails = await invocation.shouldConfirmExecute(
-      new AbortController().signal,
-    );
-    if (confirmationDetails) {
-      throw new Error(
-        `Tool "${toolEntry}" requires user confirmation and cannot be used in a non-interactive subagent.`,
+    let invocation: ReturnType<typeof tool.build> | undefined;
+    try {
+      invocation = tool.build({});
+    } catch (error) {
+      console.warn(
+        `Tool "${toolEntry}" rejected empty parameters and will be skipped: ${error instanceof Error ? error.message : String(error)}`,
       );
+      continue;
+    }
+
+    if (invocation) {
+      const confirmationDetails = await invocation.shouldConfirmExecute(
+        new AbortController().signal,
+      );
+      if (confirmationDetails) {
+        throw new Error(
+          `Tool "${toolEntry}" requires user confirmation and cannot be used in a non-interactive subagent.`,
+        );
+      }
     }
   }
 }
@@ -384,6 +406,9 @@ export class SubAgentScope {
     emitted_vars: {},
   };
   private readonly subagentId: string;
+  private readonly logger = new DebugLogger('llxprt:subagent');
+  private readonly textToolParser = new GemmaToolCallParser();
+  private activeAbortController: AbortController | null = null;
 
   /** Optional callback for streaming text messages during execution */
   onMessage?: (message: string) => void;
@@ -536,6 +561,7 @@ export class SubAgentScope {
     }
 
     const abortController = new AbortController();
+    this.activeAbortController = abortController;
 
     const toolsList: FunctionDeclaration[] =
       this.buildRuntimeFunctionDeclarations();
@@ -543,8 +569,24 @@ export class SubAgentScope {
       toolsList.push(...this.getScopeLocalFuncDefs());
     }
 
+    this.logger.debug(
+      () =>
+        `Subagent ${this.subagentId} (${this.name}) starting run with toolCount=${toolsList.length} requestedOutputs=${
+          this.outputConfig
+            ? Object.keys(this.outputConfig.outputs).join(', ')
+            : 'none'
+        } runConfig=${JSON.stringify(this.runConfig)}`,
+    );
+
+    const behaviourPrompts =
+      (context.get('task_behaviour_prompts') as string[] | undefined) ?? [];
+    const initialInstruction =
+      behaviourPrompts.length > 0
+        ? behaviourPrompts.join('\n')
+        : 'Follow the task directives provided in the system prompt.';
+
     let currentMessages: Content[] = [
-      { role: 'user', parts: [{ text: 'Get Started!' }] },
+      { role: 'user', parts: [{ text: initialInstruction }] },
     ];
 
     const startTime = Date.now();
@@ -557,17 +599,30 @@ export class SubAgentScope {
           turnCounter >= this.runConfig.max_turns
         ) {
           this.output.terminate_reason = SubagentTerminateMode.MAX_TURNS;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached max turns (${this.runConfig.max_turns})`,
+          );
           break;
         }
         let durationMin = (Date.now() - startTime) / (1000 * 60);
         if (durationMin >= this.runConfig.max_time_minutes) {
           this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached time limit (${this.runConfig.max_time_minutes} minutes)`,
+          );
           break;
         }
 
         // @plan PLAN-20251028-STATELESS6.P08
         // @requirement REQ-STAT6-001.1
-        const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${turnCounter++}`;
+        const currentTurn = turnCounter++;
+        const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
+        this.logger.debug(
+          () =>
+            `Subagent ${this.subagentId} turn=${currentTurn} promptId=${promptId}`,
+        );
         const messageParams = {
           message: currentMessages[0]?.parts || [],
           config: {
@@ -581,25 +636,91 @@ export class SubAgentScope {
           promptId,
         );
 
-        const functionCalls: FunctionCall[] = [];
+        let functionCalls: FunctionCall[] = [];
         let textResponse = '';
         for await (const resp of responseStream) {
           if (abortController.signal.aborted) return;
           if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
-            functionCalls.push(...resp.value.functionCalls);
+            const chunkCalls = resp.value.functionCalls ?? [];
+            if (chunkCalls.length > 0) {
+              functionCalls.push(...chunkCalls);
+              this.logger.debug(
+                () =>
+                  `Subagent ${this.subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
+              );
+            }
           }
           if (resp.type === StreamEventType.CHUNK && resp.value.text) {
             textResponse += resp.value.text;
           }
         }
 
-        if (this.onMessage && textResponse) {
-          this.onMessage(textResponse);
+        if (textResponse) {
+          if (this.onMessage) {
+            this.onMessage(textResponse);
+          }
+
+          let cleanedText = textResponse;
+          try {
+            const parsedResult = this.textToolParser.parse(textResponse);
+            cleanedText = parsedResult.cleanedContent;
+            if (parsedResult.toolCalls.length > 0) {
+              const synthesizedCalls: FunctionCall[] = [];
+              parsedResult.toolCalls.forEach((call, index) => {
+                const normalizedName = this.normalizeToolName(call.name);
+                if (!normalizedName) {
+                  this.logger.debug(
+                    () =>
+                      `Subagent ${this.subagentId} could not map textual tool name '${call.name}' to a registered tool`,
+                  );
+                  return;
+                }
+                synthesizedCalls.push({
+                  id: `parsed_${this.subagentId}_${Date.now()}_${index}`,
+                  name: normalizedName,
+                  args: call.arguments ?? {},
+                });
+              });
+
+              if (synthesizedCalls.length > 0) {
+                functionCalls = [...functionCalls, ...synthesizedCalls];
+                this.logger.debug(
+                  () =>
+                    `Subagent ${this.subagentId} extracted ${synthesizedCalls.length} tool call(s) from text: ${synthesizedCalls
+                      .map((call) => call.name)
+                      .join(', ')}`,
+                );
+              }
+            }
+          } catch (error) {
+            this.logger.warn(
+              () =>
+                `Subagent ${this.subagentId} failed to parse textual tool calls: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+
+          textResponse = cleanedText;
+          const trimmedText = textResponse.trim();
+          if (trimmedText.length > 0) {
+            this.output.final_message = trimmedText;
+          }
+          const preview =
+            textResponse.length > 200
+              ? `${textResponse.slice(0, 200)}…`
+              : textResponse;
+          this.logger.debug(
+            () =>
+              `Subagent ${this.subagentId} model response (truncated): ${preview}`,
+          );
         }
 
         durationMin = (Date.now() - startTime) / (1000 * 60);
         if (durationMin >= this.runConfig.max_time_minutes) {
           this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached time limit after turn ${currentTurn}`,
+          );
           break;
         }
 
@@ -611,6 +732,21 @@ export class SubAgentScope {
           );
         } else {
           // Model stopped calling tools. Check if goal is met.
+          const todoReminder = await this.buildTodoCompletionPrompt();
+          if (todoReminder) {
+            this.logger.debug(
+              () =>
+                `Subagent ${this.subagentId} postponing completion until outstanding todos are addressed`,
+            );
+            currentMessages = [
+              {
+                role: 'user',
+                parts: [{ text: todoReminder }],
+              },
+            ];
+            continue;
+          }
+
           if (
             !this.outputConfig ||
             Object.keys(this.outputConfig.outputs).length === 0
@@ -625,6 +761,10 @@ export class SubAgentScope {
 
           if (remainingVars.length === 0) {
             this.output.terminate_reason = SubagentTerminateMode.GOAL;
+            this.logger.debug(
+              () =>
+                `Subagent ${this.subagentId} satisfied output requirements on turn ${currentTurn}`,
+            );
             break;
           }
 
@@ -632,7 +772,10 @@ export class SubAgentScope {
             ', ',
           )}. Please use the 'self.emitvalue' tool to emit them now, or continue working if necessary.`;
 
-          console.debug(nudgeMessage);
+          this.logger.debug(
+            () =>
+              `Subagent ${this.subagentId} nudging for outputs: ${remainingVars.join(', ')}`,
+          );
 
           currentMessages = [
             {
@@ -643,10 +786,29 @@ export class SubAgentScope {
         }
       }
     } catch (error) {
-      console.error('Error during subagent execution:', error);
+      this.logger.warn(
+        () =>
+          `Error during subagent execution for ${this.subagentId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
       throw error;
+    } finally {
+      this.activeAbortController = null;
     }
+  }
+
+  cancel(reason?: string): void {
+    if (this.activeAbortController?.signal.aborted) {
+      return;
+    }
+    if (!this.activeAbortController) {
+      return;
+    }
+    this.logger.warn(() => {
+      const suffix = reason ? `: ${reason}` : '';
+      return `Subagent ${this.subagentId} cancellation requested${suffix}`;
+    });
+    this.activeAbortController.abort();
   }
 
   /**
@@ -678,6 +840,11 @@ export class SubAgentScope {
         agentId: this.subagentId,
       };
 
+      this.logger.debug(
+        () =>
+          `Subagent ${this.subagentId} executing tool '${requestInfo.name}' with args=${JSON.stringify(requestInfo.args)}`,
+      );
+
       let toolResponse;
 
       // Handle scope-local tools first.
@@ -708,6 +875,17 @@ export class SubAgentScope {
           `Error executing tool ${functionCall.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
         );
       }
+      if (toolResponse.error) {
+        this.logger.warn(
+          () =>
+            `Subagent ${this.subagentId} tool '${functionCall.name}' failed: ${toolResponse.error?.message}`,
+        );
+      } else {
+        this.logger.debug(
+          () =>
+            `Subagent ${this.subagentId} tool '${functionCall.name}' completed successfully`,
+        );
+      }
 
       if (toolResponse.responseParts) {
         toolResponseParts.push(...toolResponse.responseParts);
@@ -721,6 +899,55 @@ export class SubAgentScope {
     }
 
     return [{ role: 'user', parts: toolResponseParts }];
+  }
+
+  private async buildTodoCompletionPrompt(): Promise<string | null> {
+    const sessionId = this.runtimeContext.state.sessionId;
+    if (!sessionId) {
+      return null;
+    }
+
+    try {
+      let todos = await new TodoStore(sessionId, this.subagentId).readTodos();
+      if (todos.length === 0) {
+        todos = await new TodoStore(sessionId).readTodos();
+      }
+
+      if (todos.length === 0) {
+        return null;
+      }
+
+      const outstanding = todos.filter((todo) => todo.status !== 'completed');
+
+      if (outstanding.length === 0) {
+        return null;
+      }
+
+      const previewCount = Math.min(3, outstanding.length);
+      const previewLines = outstanding
+        .slice(0, previewCount)
+        .map((todo) => `- ${todo.content}`);
+      if (outstanding.length > previewCount) {
+        previewLines.push(
+          `- ... and ${outstanding.length - previewCount} more`,
+        );
+      }
+
+      return [
+        'You still have todos in your todo list. Complete them before finishing.',
+        previewLines.length > 0
+          ? `Outstanding items:\n${previewLines.join('\n')}`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+    } catch (error) {
+      this.logger.warn(
+        () =>
+          `Subagent ${this.subagentId} could not inspect todos: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
   }
 
   /**
@@ -870,6 +1097,48 @@ export class SubAgentScope {
     };
 
     return [emitValueTool];
+  }
+
+  private normalizeToolName(rawName: string | undefined): string | null {
+    if (!rawName) {
+      return null;
+    }
+
+    const candidates = new Set<string>();
+    const trimmed = rawName.trim();
+    if (trimmed) {
+      candidates.add(trimmed);
+      candidates.add(trimmed.toLowerCase());
+    }
+
+    if (trimmed.endsWith('Tool')) {
+      const withoutSuffix = trimmed.slice(0, -4);
+      if (withoutSuffix) {
+        candidates.add(withoutSuffix);
+        candidates.add(withoutSuffix.toLowerCase());
+        candidates.add(this.toSnakeCase(withoutSuffix));
+      }
+    }
+
+    candidates.add(this.toSnakeCase(trimmed));
+
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      if (this.runtimeContext.tools.getToolMetadata(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  private toSnakeCase(value: string): string {
+    return value
+      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+      .replace(/[\s-]+/g, '_')
+      .toLowerCase();
   }
 
   /**

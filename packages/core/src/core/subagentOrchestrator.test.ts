@@ -181,6 +181,97 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     expect(runResult.scope).toBe(fakeScope);
   });
+
+  it('derives max_turns from profile maxTurnsPerPrompt when not provided explicitly', async () => {
+    const subagentConfig: SubagentConfig = {
+      name: 'planner-helper',
+      profile: 'planner-profile',
+      systemPrompt: 'Explain plans thoroughly.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const profileWithTurns: Profile = {
+      ...baseProfile,
+      ephemeralSettings: {
+        ...baseProfile.ephemeralSettings,
+        maxTurnsPerPrompt: 1_000,
+      },
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const subagentManager = {
+      loadSubagent,
+    } as unknown as SubagentManager;
+
+    const loadProfile = vi.fn().mockResolvedValue(profileWithTurns);
+    const profileManager = {
+      loadProfile,
+    } as unknown as ProfileManager;
+
+    const { factory } = createScopeFactory();
+    const runtimeBundle = createRuntimeBundle('profile-turns');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager,
+      profileManager,
+      foregroundConfig,
+      scopeFactory: factory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({ name: subagentConfig.name });
+
+    const [, , , , runConfigArg] = factory.mock.calls[0];
+    expect(runConfigArg.max_time_minutes).toBe(10);
+    expect(runConfigArg.max_turns).toBe(1_000);
+  });
+
+  it('omits max_turns when profile requests unlimited turns', async () => {
+    const subagentConfig: SubagentConfig = {
+      name: 'unbounded-helper',
+      profile: 'unbounded-profile',
+      systemPrompt: 'Work without turn limits.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const profileUnlimited: Profile = {
+      ...baseProfile,
+      ephemeralSettings: {
+        ...baseProfile.ephemeralSettings,
+        maxTurnsPerPrompt: -1,
+      },
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const subagentManager = {
+      loadSubagent,
+    } as unknown as SubagentManager;
+    const loadProfile = vi.fn().mockResolvedValue(profileUnlimited);
+    const profileManager = {
+      loadProfile,
+    } as unknown as ProfileManager;
+
+    const { factory } = createScopeFactory();
+    const runtimeBundle = createRuntimeBundle('profile-unbounded');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager,
+      profileManager,
+      foregroundConfig,
+      scopeFactory: factory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({ name: subagentConfig.name });
+
+    const [, , , , runConfigArg] = factory.mock.calls[0];
+    expect(runConfigArg.max_time_minutes).toBe(10);
+    expect(runConfigArg.max_turns).toBeUndefined();
+  });
 });
 
 describe('SubagentOrchestrator - Runtime Assembly', () => {

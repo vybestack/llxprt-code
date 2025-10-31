@@ -47,6 +47,8 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     /<invoke\s+name="(\w+)">(.*?)<\/invoke>/gs,
     // Format 6: Generic XML tool format
     /<tool>\s*<name>(\w+)<\/name>\s*<arguments>(.*?)<\/arguments>\s*<\/tool>/gs,
+    // Format 7: <use toolName with key="value" ...>
+    /<use\s+([a-zA-Z0-9_.-]+)([^>]*)>/gs,
   ];
 
   parse(content: string): {
@@ -69,7 +71,8 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       !content.includes('{"name":') &&
       !content.includes('<tool_call>') &&
       !content.includes('<invoke') &&
-      !content.includes('<tool>')
+      !content.includes('<tool>') &&
+      !content.includes('<use ')
     ) {
       return { cleanedContent: content, toolCalls: [] };
     }
@@ -112,6 +115,40 @@ export class GemmaToolCallParser implements ITextToolCallParser {
           // Format 6: Generic XML tool format
           const [fullMatch, toolName, xmlArgs] = match;
           matches.push({ fullMatch, toolName, args: xmlArgs });
+        } else if (pattern === this.patterns[6]) {
+          // Format 7: <use toolName ...>
+          const [fullMatch, toolNameRaw, attributeText] = match;
+          const toolName = toolNameRaw?.trim();
+          const args: Record<string, unknown> = {};
+
+          const attributeMatches = Array.from(
+            attributeText.matchAll(/([a-zA-Z0-9_.-]+)\s*=\s*"(.*?)"/g),
+          );
+
+          for (const [, key, rawValue] of attributeMatches) {
+            if (!key) continue;
+            const trimmedValue = rawValue.trim();
+            if (trimmedValue.startsWith('{') || trimmedValue.startsWith('[')) {
+              try {
+                args[key] = JSON.parse(trimmedValue);
+                continue;
+              } catch (_error) {
+                // fall back to string
+              }
+            }
+            if (/^-?\d+(\.\d+)?$/.test(trimmedValue)) {
+              args[key] = Number(trimmedValue);
+            } else if (
+              trimmedValue.toLowerCase() === 'true' ||
+              trimmedValue.toLowerCase() === 'false'
+            ) {
+              args[key] = trimmedValue.toLowerCase() === 'true';
+            } else {
+              args[key] = trimmedValue;
+            }
+          }
+
+          matches.push({ fullMatch, toolName, args });
         } else {
           // Format 1: tool name followed by JSON arguments
           const [fullMatch, toolName, jsonArgs] = match;

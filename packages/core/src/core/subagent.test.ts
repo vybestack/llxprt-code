@@ -52,6 +52,14 @@ import {
 } from '@google/genai';
 import { ToolErrorType } from '../tools/tool-error.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
+const mockReadTodos = vi.fn().mockResolvedValue([]);
+const TodoStoreMock = vi
+  .fn()
+  .mockImplementation(() => ({ readTodos: mockReadTodos }));
+
+vi.mock('../tools/todo-store.js', () => ({
+  TodoStore: TodoStoreMock,
+}));
 
 vi.mock('./geminiChat.js');
 vi.mock('./contentGenerator.js', async (importOriginal) => {
@@ -363,6 +371,9 @@ describe('subagent.ts', () => {
 
     beforeEach(async () => {
       vi.clearAllMocks();
+      mockReadTodos.mockReset();
+      mockReadTodos.mockResolvedValue([]);
+      TodoStoreMock.mockClear();
 
       vi.mocked(getEnvironmentContext).mockResolvedValue([
         { text: 'Env Context' },
@@ -1002,6 +1013,57 @@ describe('subagent.ts', () => {
         expect(mockSendMessageStream.mock.calls[0][0].message).toEqual([
           { text: 'Get Started!' },
         ]);
+      });
+
+      it('prompts the model to finish outstanding todos before completing', async () => {
+        const { config } = await createMockConfig();
+
+        mockSendMessageStream.mockImplementation(
+          createMockStream(['stop', 'stop']),
+        );
+
+        mockReadTodos
+          .mockResolvedValueOnce([]) // agent-scoped store (no todos)
+          .mockResolvedValueOnce([
+            {
+              id: 'todo-1',
+              content: 'Complete the technical report',
+              status: 'in_progress',
+              priority: 'high',
+            },
+          ])
+          .mockResolvedValueOnce([]) // agent-scoped store on second pass
+          .mockResolvedValueOnce([
+            {
+              id: 'todo-1',
+              content: 'Complete the technical report',
+              status: 'completed',
+              priority: 'high',
+            },
+          ]);
+
+        const { overrides } = createRuntimeOverrides();
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
+        const secondCallMessage =
+          mockSendMessageStream.mock.calls[1]?.[0]?.message;
+        expect(secondCallMessage?.[0]?.text ?? '').toContain(
+          'You still have todos in your todo list',
+        );
+        expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
+        expect(mockReadTodos).toHaveBeenCalledTimes(4);
       });
 
       it('should handle self.emitvalue and terminate with GOAL when outputs are met', async () => {

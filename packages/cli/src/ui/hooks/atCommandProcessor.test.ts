@@ -175,6 +175,7 @@ describe('handleAtCommand', () => {
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'tool_group',
+        agentId: 'primary',
         tools: [expect.objectContaining({ status: ToolCallStatus.Success })],
       }),
       125,
@@ -280,6 +281,7 @@ describe('handleAtCommand', () => {
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'tool_group',
+        agentId: 'primary',
         tools: [expect.objectContaining({ status: ToolCallStatus.Success })],
       }),
       125,
@@ -1130,7 +1132,7 @@ describe('handleAtCommand', () => {
     // Assert
     // It SHOULD be called for the tool_group
     expect(mockAddItem).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'tool_group' }),
+      expect.objectContaining({ type: 'tool_group', agentId: 'primary' }),
       999,
     );
 

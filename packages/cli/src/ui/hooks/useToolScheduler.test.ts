@@ -276,6 +276,7 @@ describe('useReactToolScheduler', () => {
         // Loosen the type for prevState to allow for more flexible updates in tests
         const prevState: Partial<HistoryItemToolGroup> = {
           type: 'tool_group', // Still default to tool_group for most cases
+          agentId: 'primary',
           tools: [],
         };
 
