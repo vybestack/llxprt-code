@@ -114,6 +114,8 @@ export type HistoryItemAbout = HistoryItemBase & {
    */
   key: string;
   ideClient: string;
+  provider: string;
+  baseURL: string;
 };
 
 export type HistoryItemHelp = HistoryItemBase & {
@@ -211,6 +213,8 @@ export type Message =
       keyfile: string;
       key: string;
       ideClient: string;
+      provider: string;
+      baseURL: string;
       content?: string; // Optional content, not really used for ABOUT
     }
   | {

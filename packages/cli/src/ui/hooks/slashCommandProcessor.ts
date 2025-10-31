@@ -127,6 +127,8 @@ export const useSlashCommandProcessor = (
           keyfile: message.keyfile,
           key: message.key,
           ideClient: message.ideClient,
+          provider: message.provider,
+          baseURL: message.baseURL,
         };
       } else if (message.type === MessageType.HELP) {
         historyItemContent = {
