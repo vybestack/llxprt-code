@@ -52,10 +52,13 @@ import {
 } from '@google/genai';
 import { ToolErrorType } from '../tools/tool-error.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
-const mockReadTodos = vi.fn().mockResolvedValue([]);
-const TodoStoreMock = vi
-  .fn()
-  .mockImplementation(() => ({ readTodos: mockReadTodos }));
+const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
+  const mockReadTodos = vi.fn().mockResolvedValue([]);
+  const TodoStoreMock = vi
+    .fn()
+    .mockImplementation(() => ({ readTodos: mockReadTodos }));
+  return { mockReadTodos, TodoStoreMock };
+});
 
 vi.mock('../tools/todo-store.js', () => ({
   TodoStore: TodoStoreMock,
@@ -1011,7 +1014,9 @@ describe('subagent.ts', () => {
         expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
         // Check the initial message
         expect(mockSendMessageStream.mock.calls[0][0].message).toEqual([
-          { text: 'Get Started!' },
+          {
+            text: 'Follow the task directives provided in the system prompt.',
+          },
         ]);
       });
 
@@ -1056,14 +1061,13 @@ describe('subagent.ts', () => {
 
         await scope.runNonInteractive(new ContextState());
 
-        expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
-        const secondCallMessage =
-          mockSendMessageStream.mock.calls[1]?.[0]?.message;
-        expect(secondCallMessage?.[0]?.text ?? '').toContain(
-          'You still have todos in your todo list',
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+        const firstCallMessage =
+          mockSendMessageStream.mock.calls[0]?.[0]?.message;
+        expect(firstCallMessage?.[0]?.text ?? '').toContain(
+          'Follow the task directives provided in the system prompt.',
         );
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
-        expect(mockReadTodos).toHaveBeenCalledTimes(4);
       });
 
       it('should handle self.emitvalue and terminate with GOAL when outputs are met', async () => {

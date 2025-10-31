@@ -53,6 +53,7 @@ export interface TaskToolParams {
 interface RunLimits {
   max_time_minutes: number;
   max_turns?: number;
+  interactive?: boolean;
 }
 
 interface TaskToolInvocationParams {
@@ -63,6 +64,7 @@ interface TaskToolInvocationParams {
   toolWhitelist?: string[];
   outputSpec?: Record<string, string>;
   context: Record<string, unknown>;
+  interactive?: boolean;
 }
 
 export interface TaskToolDependencies {
@@ -302,7 +304,16 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     try {
-      await scope.runNonInteractive(contextState);
+      const shouldRunInteractive =
+        this.normalized.interactive === undefined
+          ? true
+          : this.normalized.interactive;
+
+      if (shouldRunInteractive && typeof scope.runInteractive === 'function') {
+        await scope.runInteractive(contextState);
+      } else {
+        await scope.runNonInteractive(contextState);
+      }
       if (aborted) {
         await teardown();
         taskLogger.warn(
@@ -479,6 +490,11 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
                 description:
                   'Optional maximum number of turns before the subagent stops.',
               },
+              interactive: {
+                type: 'boolean',
+                description:
+                  'Set to false to force the subagent into non-interactive mode. Defaults to true.',
+              },
             },
           },
           tool_whitelist: {
@@ -555,11 +571,21 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       .filter((prompt): prompt is string => Boolean(prompt))
       .filter((prompt, index, array) => array.indexOf(prompt) === index);
 
-    const runLimits = params.run_limits ?? params.runLimits ?? undefined;
-    const runConfig =
-      runLimits && Object.keys(runLimits).length > 0
-        ? { ...runLimits }
-        : undefined;
+    const runLimits = (params.run_limits ?? params.runLimits ?? undefined) as
+      | Partial<RunLimits>
+      | undefined;
+
+    let interactive: boolean | undefined;
+    let runConfig: Partial<RunLimits> | undefined;
+    if (runLimits && Object.keys(runLimits).length > 0) {
+      const { interactive: interactiveFlag, ...rest } = runLimits;
+      if (Object.keys(rest).length > 0) {
+        runConfig = { ...rest } as Partial<RunLimits>;
+      }
+      if (typeof interactiveFlag === 'boolean') {
+        interactive = interactiveFlag;
+      }
+    }
 
     const toolWhitelist = (params.tool_whitelist ?? params.toolWhitelist ?? [])
       .map((tool) => tool?.trim())
@@ -578,6 +604,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       toolWhitelist: toolWhitelist.length > 0 ? toolWhitelist : undefined,
       outputSpec,
       context,
+      interactive,
     };
   }
 

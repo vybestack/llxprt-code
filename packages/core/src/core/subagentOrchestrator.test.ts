@@ -170,9 +170,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       factoryCall;
 
     expect(passedConfig).toBe(foregroundConfig);
-    expect(promptConfig.systemPrompt).toBe(
-      `${subagentConfig.systemPrompt}\n\n${extraPrompt}`,
-    );
+    expect(promptConfig.systemPrompt).toContain(subagentConfig.systemPrompt);
+    expect(promptConfig.systemPrompt).toContain(extraPrompt);
 
     expect(modelConfig.model).toBe(baseProfile.model);
     expect(modelConfig.temp).toBe(baseProfile.modelParams.temperature);

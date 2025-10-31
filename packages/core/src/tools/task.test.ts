@@ -26,6 +26,7 @@ describe('TaskTool', () => {
         emitted_vars: Record<string, string>;
         terminate_reason: SubagentTerminateMode;
       };
+      runInteractive: ReturnType<typeof vi.fn>;
       runNonInteractive: ReturnType<typeof vi.fn>;
       onMessage?: (message: string) => void;
     } = {
@@ -33,6 +34,14 @@ describe('TaskTool', () => {
         emitted_vars: { summary: 'done' },
         terminate_reason: SubagentTerminateMode.GOAL,
       },
+      runInteractive: vi
+        .fn()
+        .mockImplementation(async (context: ContextState) => {
+          expect(context).toBeInstanceOf(ContextState);
+          expect(context.get('task_goal')).toBe('Ship the feature');
+          expect(context.get('extra')).toBe('value');
+          scope.onMessage?.('progress update');
+        }),
       runNonInteractive: vi
         .fn()
         .mockImplementation(async (context: ContextState) => {
@@ -80,7 +89,8 @@ describe('TaskTool', () => {
         outputConfig: { outputs: { summary: 'Outcome summary' } },
       }),
     );
-    expect(scope.runNonInteractive).toHaveBeenCalledTimes(1);
+    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
+    expect(scope.runNonInteractive).not.toHaveBeenCalled();
     expect(updateOutput).toHaveBeenCalledWith('[agent-42] progress update');
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(result.metadata).toEqual({
@@ -90,6 +100,43 @@ describe('TaskTool', () => {
     });
     expect(result.llmContent).toContain('"agent_id": "agent-42"');
     expect(result.error).toBeUndefined();
+  });
+
+  it('falls back to non-interactive execution when interactive flag is disabled', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const scope = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi.fn(),
+      runNonInteractive: vi.fn().mockResolvedValue(undefined),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-77',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+    });
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship the feature',
+      run_limits: { interactive: false },
+    });
+
+    await invocation.execute(new AbortController().signal, undefined);
+
+    expect(scope.runInteractive).not.toHaveBeenCalled();
+    expect(scope.runNonInteractive).toHaveBeenCalledTimes(1);
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 
   it('surfaces launch errors with helpful messaging', async () => {
@@ -116,14 +163,15 @@ describe('TaskTool', () => {
   });
 
   it('cleans up and reports execution errors', async () => {
-    const runNonInteractive = vi.fn().mockRejectedValue(new Error('crashed'));
+    const runInteractive = vi.fn().mockRejectedValue(new Error('crashed'));
     const dispose = vi.fn().mockResolvedValue(undefined);
     const scope = {
       output: {
         emitted_vars: {},
         terminate_reason: SubagentTerminateMode.ERROR,
       },
-      runNonInteractive,
+      runInteractive,
+      runNonInteractive: vi.fn(),
       onMessage: undefined,
     };
     const launch = vi.fn().mockResolvedValue({
@@ -149,7 +197,8 @@ describe('TaskTool', () => {
       undefined,
     );
 
-    expect(runNonInteractive).toHaveBeenCalledTimes(1);
+    expect(runInteractive).toHaveBeenCalledTimes(1);
+    expect(scope.runNonInteractive).not.toHaveBeenCalled();
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(result.error?.message).toBe('crashed');
     expect(result.returnDisplay).toContain('Details: crashed');
@@ -167,10 +216,10 @@ describe('TaskTool', () => {
     });
 
     expect(() => tool.build({ goal_prompt: 'Do work' })).toThrow(
-      'Task tool requires a subagent_name.',
+      "params must have required property 'subagent_name'",
     );
     expect(() => tool.build({ subagent_name: 'helper' })).toThrow(
-      'Task tool requires a goal_prompt describing the assignment.',
+      "params must have required property 'goal_prompt'",
     );
   });
 });
