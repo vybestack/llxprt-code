@@ -27,6 +27,8 @@ export const aboutCommand: SlashCommand = {
     // model as the source of truth because it is guaranteed to be up-to-date
     // when users switch models via the /model or /provider commands.
     let modelVersion = 'Unknown';
+    let provider = 'Unknown';
+    let baseURL = '';
     try {
       // Dynamically import to avoid a hard dependency for tests that mock the
       // provider manager.
@@ -37,6 +39,37 @@ export const aboutCommand: SlashCommand = {
       const activeProvider = providerManager.getActiveProvider();
       if (activeProvider) {
         const providerName = providerManager.getActiveProviderName();
+        const providerImplementation = providerManager.getProviderByName(
+          providerName!,
+        );
+        if (providerImplementation) {
+          provider = providerImplementation.name;
+          // Try to get baseURL from provider fallback to empty string
+          try {
+            // Unwrap the provider if it's wrapped
+            let finalProvider: unknown = providerImplementation;
+            if (
+              'wrappedProvider' in providerImplementation &&
+              providerImplementation.wrappedProvider
+            ) {
+              finalProvider = providerImplementation.wrappedProvider;
+            }
+            // Try to call getBaseURL if available, using proper type checking
+            const providerWithGetBaseURL = finalProvider as {
+              getBaseURL?: () => string | undefined;
+            };
+            if (
+              providerWithGetBaseURL &&
+              typeof providerWithGetBaseURL.getBaseURL === 'function'
+            ) {
+              baseURL = providerWithGetBaseURL.getBaseURL?.() ?? '';
+            } else {
+              baseURL = '';
+            }
+          } catch {
+            baseURL = '';
+          }
+        }
         const currentModel = activeProvider.getCurrentModel
           ? activeProvider.getCurrentModel()
           : context.services.config?.getModel() || 'Unknown';
@@ -88,6 +121,8 @@ export const aboutCommand: SlashCommand = {
       keyfile: keyfilePath,
       key: keyStatus,
       ideClient,
+      provider,
+      baseURL,
     };
 
     context.ui.addItem(aboutItem, Date.now());

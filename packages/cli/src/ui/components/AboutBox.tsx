@@ -16,7 +16,11 @@ interface AboutBoxProps {
   modelVersion: string;
   selectedAuthType: string;
   gcpProject: string;
+  keyfile: string;
+  key: string;
   ideClient: string;
+  provider: string;
+  baseURL: string;
 }
 
 export const AboutBox: React.FC<AboutBoxProps> = ({
@@ -27,6 +31,8 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
   selectedAuthType,
   gcpProject,
   ideClient,
+  provider,
+  baseURL,
 }) => (
   <Box
     borderStyle="round"
@@ -73,6 +79,28 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
         <Text color={Colors.Foreground}>{modelVersion}</Text>
       </Box>
     </Box>
+    <Box flexDirection="row">
+      <Box width="35%">
+        <Text bold color={Colors.LightBlue}>
+          Provider
+        </Text>
+      </Box>
+      <Box>
+        <Text color={Colors.Foreground}>{provider}</Text>
+      </Box>
+    </Box>
+    {baseURL && (
+      <Box flexDirection="row">
+        <Box width="35%">
+          <Text bold color={Colors.LightBlue}>
+            Base URL
+          </Text>
+        </Box>
+        <Box>
+          <Text color={Colors.Foreground}>{baseURL}</Text>
+        </Box>
+      </Box>
+    )}
     <Box flexDirection="row">
       <Box width="35%">
         <Text bold color={Colors.LightBlue}>

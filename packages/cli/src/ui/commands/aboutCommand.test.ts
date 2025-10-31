@@ -120,6 +120,8 @@ describe('aboutCommand', () => {
         keyfile: '',
         key: '',
         ideClient: 'test-ide',
+        provider: 'Unknown',
+        baseURL: '',
       },
       expect.any(Number),
     );
@@ -180,6 +182,8 @@ describe('aboutCommand', () => {
         selectedAuthType: 'test-auth',
         gcpProject: 'test-gcp-project',
         ideClient: '',
+        provider: 'Unknown',
+        baseURL: '',
       }),
       expect.any(Number),
     );
