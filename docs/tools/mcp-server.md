@@ -788,13 +788,16 @@ This is the default transport for running local servers.
 
 ```bash
 # Basic syntax
-llxprt mcp add <name> <command> [args...]
+llxprt mcp add [options] <name> <command> [args...]
 
-# Example: Adding a local server
-llxprt mcp add my-stdio-server -e API_KEY=123 /path/to/server arg1 arg2 arg3
+# Example: Adding a local server with environment variables
+llxprt mcp add -e API_KEY=123 -e DEBUG=true my-stdio-server /path/to/server arg1 arg2 arg3
 
+# Example: Adding a local python server with server arguments
+llxprt mcp add python-server python server.py -- --server-arg my-value
 # Example: Adding a local python server
-llxprt mcp add python-server python server.py --port 8080
+gemini mcp add python-server python server.py -- --server-arg my-value
+>>>>>>> f8ff921c4 (Update mcp-server.md (#12310))
 ```
 
 #### Adding an HTTP server
