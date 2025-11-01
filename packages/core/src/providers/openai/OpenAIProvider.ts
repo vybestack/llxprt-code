@@ -1462,10 +1462,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const modelName = (this.getModel() || this.getDefaultModel()).toLowerCase();
     const logger = new DebugLogger('llxprt:provider:openai');
 
-    // Check for GLM-4.5 models (glm-4.5, glm-4-5)
-    if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
+    // Check for GLM-4 models (glm-4, glm-4.5, glm-4.6, glm-4-5, etc.)
+    if (modelName.includes('glm-4')) {
       logger.debug(
-        () => `Auto-detected 'qwen' format for GLM-4.5 model: ${modelName}`,
+        () => `Auto-detected 'qwen' format for GLM-4.x model: ${modelName}`,
       );
       return 'qwen';
     }

@@ -148,7 +148,7 @@ describe('GeminiChat', () => {
       history: historyService,
       settings: {
         compressionThreshold: 0.8,
-        contextLimit: 60000,
+        contextLimit: 200000,
         preserveThreshold: 0.2,
         telemetry: {
           enabled: true,
@@ -223,10 +223,20 @@ describe('GeminiChat', () => {
 
     it('should trigger compression when pending tokens exceed threshold', async () => {
       const historyService = chat.getHistoryService();
-      vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(30000);
+      // compressionThreshold: 0.8, contextLimit: 200000
+      // Threshold = 0.8 * 200000 = 160000 tokens
+      // Current: 100000 + Pending: 65000 = 165000 > 160000
+      // After compression, getTotalTokens should return a lower value
+      // First call: 100000 (before compression check)
+      // Subsequent calls: 50000 (after compression)
+      // Post-compression total: 50000 + 65000 + 65536 = 180536 < 200000 ✓
+      vi.spyOn(historyService, 'getTotalTokens')
+        .mockReturnValueOnce(100000)
+        .mockReturnValue(50000);
       vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        35000,
+        65000,
       );
+      vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue();
 
       const compressionSpy = vi
         .spyOn(
@@ -429,7 +439,7 @@ describe('GeminiChat', () => {
         history: historyService2,
         settings: {
           compressionThreshold: 0.8,
-          contextLimit: 60000,
+          contextLimit: 200000,
           preserveThreshold: 0.2,
           telemetry: {
             enabled: true,
@@ -501,7 +511,7 @@ describe('GeminiChat', () => {
         history: historyService3,
         settings: {
           compressionThreshold: 0.8,
-          contextLimit: 60000,
+          contextLimit: 200000,
           preserveThreshold: 0.2,
           telemetry: {
             enabled: true,

@@ -1450,7 +1450,13 @@ export class GeminiClient {
     if (!force) {
       const threshold =
         contextPercentageThreshold ?? COMPRESSION_TOKEN_THRESHOLD;
-      if (originalTokenCount < threshold * tokenLimit(model)) {
+      const userContextLimit = this.config.getEphemeralSetting(
+        'context-limit',
+      ) as number | undefined;
+      if (
+        originalTokenCount <
+        threshold * tokenLimit(model, userContextLimit)
+      ) {
         return {
           originalTokenCount,
           newTokenCount: originalTokenCount,
@@ -1545,12 +1551,15 @@ export class GeminiClient {
       if (typeof compressedChat.getHistoryService === 'function') {
         const historyService = compressedChat.getHistoryService();
         if (historyService) {
+          const userContextLimit = this.config.getEphemeralSetting(
+            'context-limit',
+          ) as number | undefined;
           // @plan PLAN-20251027-STATELESS5.P10
           // @requirement REQ-STAT5-003.1
           historyService.emit('tokensUpdated', {
             totalTokens: newTokenCount,
             addedTokens: newTokenCount - originalTokenCount,
-            tokenLimit: tokenLimit(this.runtimeState.model),
+            tokenLimit: tokenLimit(this.runtimeState.model, userContextLimit),
           });
         }
       }

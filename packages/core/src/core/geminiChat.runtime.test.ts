@@ -128,7 +128,7 @@ describe('GeminiChat runtime context', () => {
       history: historyService,
       settings: {
         compressionThreshold: 0.8,
-        contextLimit: 60000,
+        contextLimit: 128000,
         preserveThreshold: 0.2,
         telemetry: {
           enabled: true,

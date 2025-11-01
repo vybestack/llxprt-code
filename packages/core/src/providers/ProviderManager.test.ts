@@ -13,7 +13,11 @@ import {
   resetSettingsService,
 } from '../settings/settingsServiceInstance.js';
 import { SettingsService } from '../settings/SettingsService.js';
-import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import {
+  clearActiveProviderRuntimeContext,
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
 
 describe('ProviderManager provider ordering', () => {
   const createProvider = (name: string): IProvider =>
@@ -28,6 +32,11 @@ describe('ProviderManager provider ordering', () => {
 
   beforeEach(() => {
     resetSettingsService();
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   it('prioritizes core providers and sorts remaining alphabetically', () => {
@@ -64,6 +73,7 @@ describe('ProviderPerformanceTracker', () => {
 
   beforeEach(() => {
     resetSettingsService();
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     registerSettingsService(new SettingsService());
     mockProvider = {
       name: 'test-provider',
