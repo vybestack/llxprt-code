@@ -745,6 +745,81 @@ describe('subagent.ts', () => {
         );
       });
 
+      it('propagates tool whitelist into tool executor ephemerals', async () => {
+        const { config, toolRegistry } = await createMockConfig({
+          getTool: vi.fn().mockImplementation((name: string) => {
+            if (name === 'read_file') {
+              return {
+                name: 'read_file',
+                displayName: 'Read File',
+                schema: {
+                  name: 'read_file',
+                  parameters: { type: 'object', properties: {} },
+                },
+                build: vi.fn(),
+              };
+            }
+            return undefined;
+          }),
+        });
+        const toolConfig: ToolConfig = { tools: ['read_file'] };
+
+        mockSendMessageStream.mockImplementation(
+          createMockStream([
+            [
+              {
+                id: 'call1',
+                name: 'read_file',
+                args: { file_path: 'README.md' },
+              },
+            ],
+            'stop',
+          ]),
+        );
+
+        vi.mocked(executeToolCall).mockResolvedValue({
+          callId: 'call1',
+          responseParts: [{ text: 'file content' }],
+          resultDisplay: 'ok',
+          agentId: 'subagent-1',
+        } as Awaited<ReturnType<typeof executeToolCall>>);
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry,
+          toolsView: {
+            listToolNames: () => ['read_file'],
+            getToolMetadata: () => ({
+              name: 'read_file',
+              description: 'Reads a file',
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry,
+        });
+
+        const scope = await SubAgentScope.create(
+          'stateless-agent',
+          config,
+          { systemPrompt: 'Tool whitelist' },
+          defaultModelConfig,
+          defaultRunConfig,
+          toolConfig,
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        const [toolExecutorConfig] = vi.mocked(executeToolCall).mock.calls[0];
+        const ephemerals =
+          toolExecutorConfig.getEphemeralSettings?.() ??
+          ({} as Record<string, unknown>);
+        expect(ephemerals['tools.allowed']).toEqual(['read_file']);
+      });
+
       it('never passes foreground Config into executeToolCall', async () => {
         const { config } = await createMockConfig();
         const runtimeBundle = createStatelessRuntimeBundle();

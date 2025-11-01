@@ -196,9 +196,6 @@ export async function executeToolCall(
   const agentId = toolCallRequest.agentId ?? DEFAULT_AGENT_ID;
   toolCallRequest.agentId = agentId;
   const toolRegistry = config.getToolRegistry();
-  const knownTool = toolRegistry
-    .getAllTools()
-    .find((candidate) => candidate.name === toolCallRequest.name);
   const governance = buildToolGovernance(config);
   const startTime = Date.now();
   const telemetryConfig: Pick<
@@ -209,7 +206,7 @@ export async function executeToolCall(
     getTelemetryLogPromptsEnabled: () => config.getTelemetryLogPromptsEnabled(),
   };
 
-  if (knownTool && isToolBlocked(knownTool.name, governance)) {
+  if (isToolBlocked(toolCallRequest.name, governance)) {
     const error = new Error(
       `Tool "${toolCallRequest.name}" is disabled in the current profile.`,
     );

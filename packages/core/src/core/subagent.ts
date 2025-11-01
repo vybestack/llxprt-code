@@ -293,8 +293,35 @@ function createToolExecutionConfig(
   runtimeBundle: AgentRuntimeLoaderResult,
   toolRegistry: ToolRegistry,
   settingsSnapshot?: ReadonlySettingsSnapshot,
+  toolConfig?: ToolConfig,
 ): ToolExecutionConfig {
   const ephemerals = buildEphemeralSettings(settingsSnapshot);
+
+  if (toolConfig && Array.isArray(toolConfig.tools)) {
+    const normalizedWhitelist = toolConfig.tools
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0)
+      .map((entry) => entry.toLowerCase());
+
+    if (normalizedWhitelist.length > 0) {
+      const existingAllowed = Array.isArray(ephemerals['tools.allowed'])
+        ? (ephemerals['tools.allowed'] as string[])
+            .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+            .filter((entry) => entry.length > 0)
+            .map((entry) => entry.toLowerCase())
+        : [];
+
+      const allowedSet =
+        existingAllowed.length > 0
+          ? normalizedWhitelist.filter((entry) =>
+              existingAllowed.includes(entry),
+            )
+          : normalizedWhitelist;
+
+      ephemerals['tools.allowed'] = Array.from(new Set(allowedSet));
+    }
+  }
 
   return {
     getToolRegistry: () => toolRegistry,
@@ -499,6 +526,7 @@ export class SubAgentScope {
       runtimeBundle,
       toolRegistry,
       settingsSnapshot,
+      toolConfig,
     );
 
     const environmentContextLoader =
@@ -1507,14 +1535,25 @@ export class SubAgentScope {
     const start_history = [...(this.promptConfig.initialMessages ?? [])];
 
     // Build system instruction with environment context
-    let systemInstruction = this.promptConfig.systemPrompt
+    const personaPrompt = this.promptConfig.systemPrompt
       ? this.buildChatSystemPrompt(context)
-      : envContextText;
+      : '';
 
-    // If we have both env context and system prompt, combine them
-    if (this.promptConfig.systemPrompt && envContextText) {
-      systemInstruction = `${envContextText}\n\n${systemInstruction}`;
+    let systemInstruction = personaPrompt;
+
+    if (envContextText && envContextText.trim().length > 0) {
+      systemInstruction = personaPrompt
+        ? `${personaPrompt}\n\n${envContextText.trim()}`
+        : envContextText.trim();
     }
+
+    this.logger.debug(() => {
+      const preview =
+        systemInstruction && systemInstruction.length > 0
+          ? systemInstruction.slice(0, 1200)
+          : '<empty>';
+      return `System instruction preview: ${preview}`;
+    });
 
     try {
       // Step 007.7: Build generation config from runtime view ephemerals

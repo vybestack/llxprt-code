@@ -1,7 +1,7 @@
 ## Tool: list_subagents
 
-Use this tool to enumerate all configured subagents that are available in the current workspace. It returns their names, associated profiles, and a short description so you can decide which helper to launch.
+Call this tool to discover which subagents are registered and currently available. The response includes each subagent’s name, the profile it will run under, and any summary notes supplied by the user. Look for analysis-focused helpers such as `joethecoder` before attempting any whole-repository review yourself.
 
-- Call it when you need to know what specialized subagents exist.
-- Do **not** invent subagent names; always rely on the tool output.
-- After reading the tool result, decide whether another request (for example, launching a subagent with the `task` tool) is necessary.
+- Use this before delegating work so you reference a real subagent name.
+- Never guess or fabricate subagent identifiers—if it is not in the tool output, you cannot launch it.
+- Treat the result as read-only metadata; if you need the subagent to act, follow up with the `task` tool using one of the returned names.

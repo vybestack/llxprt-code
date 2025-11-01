@@ -61,19 +61,20 @@ const LLXPRT_DIR = '.llxprt';
 
 const logger = new DebugLogger('llxprt:config');
 
-const READ_ONLY_TOOL_NAMES: readonly string[] = [
+export const READ_ONLY_TOOL_NAMES = [
   'glob',
   'search_file_content',
   'read_file',
   'read_many_files',
   'list_directory',
+  'ls',
   'list_subagents',
   'google_web_search',
   'web_fetch',
   'todo_read',
   'task',
   'self.emitvalue',
-];
+] as const;
 
 const EDIT_TOOL_NAME = 'replace';
 

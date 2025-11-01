@@ -329,6 +329,42 @@ describe('executeToolCall', () => {
     expect(response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
   });
 
+  it('should report tool as disabled when excluded by approval policy even if not registered', async () => {
+    const request: ToolCallRequestInfo = {
+      callId: 'call-policy-disabled',
+      name: 'write_file',
+      args: { content: 'example', file_path: 'reports/output.md' },
+      isClientInitiated: false,
+      prompt_id: 'prompt-id-policy',
+    };
+
+    vi.mocked(mockToolRegistry.getTool).mockReturnValue(undefined);
+    vi.mocked(mockToolRegistry.getAllTools).mockReturnValue([]);
+    vi.mocked(mockToolRegistry.getAllToolNames).mockReturnValue([
+      'read_file',
+      'glob',
+    ]);
+    vi.mocked(mockConfig.getEphemeralSettings).mockReturnValue({
+      'tools.allowed': ['read_file', 'glob'],
+    });
+
+    const response = await executeToolCall(
+      mockConfig,
+      request,
+      abortController.signal,
+    );
+
+    expect(mockTool.executeFn).not.toHaveBeenCalled();
+    expect(response.error).toBeInstanceOf(Error);
+    expect(response.error?.message).toBe(
+      'Tool "write_file" is disabled in the current profile.',
+    );
+    expect(response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
+    expect(response.resultDisplay).toBe(
+      'Tool "write_file" is disabled in the current profile.',
+    );
+  });
+
   it('should correctly format llmContent with inlineData', async () => {
     const request: ToolCallRequestInfo = {
       callId: 'call6',

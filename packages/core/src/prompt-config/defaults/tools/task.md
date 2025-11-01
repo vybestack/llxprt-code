@@ -1,8 +1,8 @@
 ## Tool: task
 
-Launches a named subagent to work on a specific goal.
+Use this tool to launch a registered subagent so it can execute the assignment on your behalf.
 
-- Provide the `subagent_name` plus a clear `goal_prompt`.
-- Add any run limits, behavioural prompts, context variables, or tool whitelist the subagent needs.
-- After calling this tool, wait for the resulting subagent status and outputs; do not try to perform the task yourself.
-- Use this when the assignment should be delegated to another specialized agent.
+- Supply `subagent_name` exactly as returned by `list_subagents` (for codebase analysis tasks this is typically `joethecoder` unless the user specifies another specialist).
+- Set `goal_prompt` to a concise, actionable description of the work. Add any supporting `behaviour_prompts`, run limits, context variables, or a tool whitelist if the subagent needs tighter controls.
+- Once dispatched, let the subagent finish. Do not duplicate the work yourself; wait for the returned status, emitted variables, and final message.
+- If the tool reports that the subagent is unavailable or the launch fails, explain the error instead of retrying blindly.
