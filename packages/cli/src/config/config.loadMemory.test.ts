@@ -107,6 +107,7 @@ describe('loadCliConfig memory discovery', () => {
       screenReader: undefined,
       useSmartEdit: undefined,
       sessionSummary: undefined,
+      dumponerror: undefined,
       promptWords: [],
       set: undefined,
     };

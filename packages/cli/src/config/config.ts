@@ -83,6 +83,7 @@ export interface CliArgs {
   screenReader: boolean | undefined;
   useSmartEdit: boolean | undefined;
   sessionSummary: string | undefined;
+  dumponerror: boolean | undefined;
   promptWords: string[] | undefined;
   set: string[] | undefined;
 }
@@ -232,6 +233,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         .option('session-summary', {
           type: 'string',
           description: 'File to write session summary to.',
+        })
+        .option('dumponerror', {
+          type: 'boolean',
+          description: 'Dump request body to ~/.llxprt/dumps/ on API errors.',
+          default: false,
         })
         .deprecateOption(
           'telemetry',
@@ -487,6 +493,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     screenReader: result.screenReader as boolean | undefined,
     useSmartEdit: result.useSmartEdit as boolean | undefined,
     sessionSummary: result.sessionSummary as string | undefined,
+    dumponerror: result.dumponerror as boolean | undefined,
     allowedTools: result.allowedTools as string[] | undefined,
     promptWords: result.promptWords as string[] | undefined,
     set: result.set as string[] | undefined,
@@ -915,6 +922,7 @@ export async function loadCliConfig(
     fileFiltering: effectiveSettings.fileFiltering,
     checkpointing:
       argv.checkpointing || effectiveSettings.checkpointing?.enabled,
+    dumpOnError: argv.dumponerror || false,
     proxy:
       argv.proxy ||
       process.env.HTTPS_PROXY ||

@@ -244,6 +244,7 @@ export interface ConfigParameters {
     disableFuzzySearch?: boolean;
   };
   checkpointing?: boolean;
+  dumpOnError?: boolean;
   proxy?: string;
   cwd: string;
   fileDiscoveryService?: FileDiscoveryService;
@@ -320,6 +321,7 @@ export class Config {
   private fileDiscoveryService: FileDiscoveryService | null = null;
   private gitService: GitService | undefined = undefined;
   private readonly checkpointing: boolean;
+  private readonly dumpOnError: boolean;
   private readonly proxy: string | undefined;
   private readonly cwd: string;
   private readonly bugCommand: BugCommandSettings | undefined;
@@ -422,6 +424,7 @@ export class Config {
       disableFuzzySearch: params.fileFiltering?.disableFuzzySearch ?? false,
     };
     this.checkpointing = params.checkpointing ?? false;
+    this.dumpOnError = params.dumpOnError ?? false;
     this.proxy = params.proxy;
     this.cwd = params.cwd ?? process.cwd();
     this.fileDiscoveryService = params.fileDiscoveryService ?? null;
@@ -975,6 +978,10 @@ export class Config {
 
   getCheckpointingEnabled(): boolean {
     return this.checkpointing;
+  }
+
+  getDumpOnError(): boolean {
+    return this.dumpOnError;
   }
 
   getProxy(): string | undefined {

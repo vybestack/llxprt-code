@@ -332,12 +332,10 @@ export class ContentConverters {
 
     // Handle tool responses specially - they should have 'tool' speaker
     // Tool responses come from user role but are tool speaker in IContent
+    // Check if ANY block is a tool_response (not just if ALL are)
+    const hasToolResponse = blocks.some((b) => b.type === 'tool_response');
     const finalSpeaker: 'human' | 'ai' | 'tool' =
-      content.role === 'user' &&
-      blocks.length > 0 &&
-      blocks.every((b) => b.type === 'tool_response')
-        ? 'tool'
-        : speaker;
+      content.role === 'user' && hasToolResponse ? 'tool' : speaker;
 
     const result: IContent = {
       speaker: finalSpeaker,

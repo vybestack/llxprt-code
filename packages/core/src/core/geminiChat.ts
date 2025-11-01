@@ -1956,8 +1956,9 @@ export class GeminiChat {
       };
     }
 
-    // Mixed content or function calls - must be from AI
+    // Mixed content or function calls - could be from AI or tool
     let hasAIContent = false;
+    let hasToolContent = false;
 
     for (const part of parts) {
       if (typeof part === 'string') {
@@ -1974,6 +1975,7 @@ export class GeminiChat {
         } as ToolCallBlock);
       } else if ('functionResponse' in part && part.functionResponse) {
         // Single function response in mixed content
+        hasToolContent = true; // Tool responses come from tools
         blocks.push({
           type: 'tool_response',
           callId: part.functionResponse.id || '',
@@ -1985,9 +1987,12 @@ export class GeminiChat {
       }
     }
 
-    // If we have function calls, it's AI content; otherwise assume human
+    // Determine speaker based on content type
+    // Tool responses take precedence (tool responses with text are still tool messages)
+    // Function calls are AI messages
+    // Pure text defaults to human
     return {
-      speaker: hasAIContent ? 'ai' : 'human',
+      speaker: hasToolContent ? 'tool' : hasAIContent ? 'ai' : 'human',
       blocks,
     };
   }

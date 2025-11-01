@@ -980,6 +980,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       stream: streamingEnabled,
     };
 
+    // Special handling for Cerebras GLM: need a user message with content in the request body
+    // This is a workaround for a Cerebras bug where they block calls without text
+    // even though it's a tool response that shouldn't require it.
+    if (
+      this.getModel()?.toLowerCase().includes('glm') &&
+      this.getBaseURL()?.includes('cerebras') &&
+      formattedTools &&
+      formattedTools.length > 0
+    ) {
+      // Add a dummy user message with content to bypass Cerebras validation
+      requestBody.messages.push({ role: 'user', content: '\n' });
+    }
+
     const modelParams = await this.resolveModelParams();
     if (modelParams) {
       Object.assign(requestBody, modelParams);
@@ -1054,6 +1067,34 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     const customHeaders = this.getCustomHeaders();
 
+    // Log the request body before making the API call
+    this.logger.debug(() => `[OpenAIProvider] Request body:`, {
+      model: requestBody.model,
+      messageCount: requestBody.messages.length,
+      hasTools:
+        'tools' in requestBody &&
+        requestBody.tools &&
+        requestBody.tools.length > 0,
+      toolCount: 'tools' in requestBody ? requestBody.tools?.length : 0,
+      streaming: requestBody.stream,
+      lastThreeMessages: requestBody.messages.slice(-3),
+      messagesWithToolCalls: requestBody.messages.filter(
+        (m: OpenAI.Chat.ChatCompletionMessageParam) =>
+          'tool_calls' in m && m.tool_calls,
+      ),
+      messagesWithToolRole: requestBody.messages.filter(
+        (m: OpenAI.Chat.ChatCompletionMessageParam) => m.role === 'tool',
+      ),
+      fullRequestBody: requestBody,
+    });
+
+    // Check if dumponerror is enabled from either CLI flag or ephemeral setting
+    const ephemeralSettingsForDump =
+      this.providerConfig?.getEphemeralSettings?.() || {};
+    const dumpOnError =
+      this.globalConfig?.getDumpOnError?.() ||
+      ephemeralSettingsForDump['dumponerror'] === 'enabled';
+
     try {
       response = await retryWithBackoff(
         () =>
@@ -1069,6 +1110,69 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         },
       );
     } catch (error) {
+      // Log the error details
+      this.logger.error(() => `[OpenAIProvider] API call failed:`, {
+        error,
+        errorType: error?.constructor?.name,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStatus: (error as { status?: number })?.status,
+        errorHeaders: (error as { headers?: Headers })?.headers,
+        errorBody: (error as { error?: unknown })?.error,
+        model,
+        baseURL: this.getBaseURL(),
+      });
+
+      // Dump request body on error if enabled
+      if (dumpOnError) {
+        try {
+          const fs = await import('fs');
+          const path = await import('path');
+          const os = await import('os');
+
+          const homeDir = os.homedir();
+          const dumpDir = path.join(homeDir, '.llxprt', 'dumps');
+
+          // Ensure dumps directory exists
+          if (!fs.existsSync(dumpDir)) {
+            fs.mkdirSync(dumpDir, { recursive: true });
+          }
+
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const dumpFilePath = path.join(
+            dumpDir,
+            `request-dump-${timestamp}.json`,
+          );
+
+          const dumpContent = JSON.stringify(
+            {
+              timestamp: new Date().toISOString(),
+              error: {
+                message: error instanceof Error ? error.message : String(error),
+                status: (error as { status?: number })?.status,
+                type: (error as { type?: string })?.type,
+                code: (error as { code?: string })?.code,
+                param: (error as { param?: string })?.param,
+                fullError: error,
+              },
+              request: requestBody,
+              baseURL: this.getBaseURL(),
+              model,
+              notes:
+                'This dump contains the ACTUAL request sent to the API in OpenAI format. Messages with role:tool have tool_call_id set.',
+            },
+            null,
+            2,
+          );
+
+          fs.writeFileSync(dumpFilePath, dumpContent, 'utf-8');
+          this.logger.debug(
+            () => `Request body dumped to ${dumpFilePath} (error occurred)`,
+          );
+        } catch (dumpError) {
+          this.logger.debug(() => `Failed to dump request body: ${dumpError}`);
+        }
+      }
+
       // Special handling for Cerebras/Qwen "Tool not present" errors
       const errorMessage = String(error);
       if (
@@ -1097,6 +1201,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Re-throw other errors as-is
       throw error;
     }
+
+    // Log successful response start
+    this.logger.debug(
+      () => `[OpenAIProvider] API call succeeded, processing response...`,
+      {
+        streaming: streamingEnabled,
+        model,
+      },
+    );
 
     // Check if response is streaming or not
     if (streamingEnabled) {
