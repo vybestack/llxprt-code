@@ -11,6 +11,10 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import * as versionUtils from '../../utils/version.js';
 import { MessageType } from '../types.js';
 import { MockFileSystem } from '../../providers/IFileSystem.js';
+import {
+  setFileSystem,
+  resetProviderManager,
+} from '../../providers/providerManagerInstance.js';
 import { USER_SETTINGS_PATH } from '../../config/settings.js';
 
 import { IdeClient } from '../../../../core/src/ide/ide-client.js';
@@ -19,18 +23,17 @@ vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
 }));
 
-const runtimeApi = {
-  getActiveProviderStatus: vi.fn().mockReturnValue({
-    providerName: 'test-provider',
-    modelName: 'test-model',
-    displayLabel: 'test-provider:test-model',
-  }),
-  getEphemeralSetting: vi.fn().mockReturnValue(''),
-};
-
-vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => runtimeApi,
-}));
+vi.mock('../../providers/providerManagerInstance.js', async () => {
+  const actual = await vi.importActual(
+    '../../providers/providerManagerInstance.js',
+  );
+  return {
+    ...actual,
+    getProviderManager: vi.fn(() => {
+      throw new Error('Provider manager not available in test');
+    }),
+  };
+});
 
 describe('aboutCommand', () => {
   let mockContext: CommandContext;
@@ -39,15 +42,10 @@ describe('aboutCommand', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    // Set up mock file system
+    // Reset provider manager and set up mock file system
+    resetProviderManager();
     mockFileSystem = new MockFileSystem();
-
-    runtimeApi.getActiveProviderStatus.mockReturnValue({
-      providerName: 'test-provider',
-      modelName: 'test-model',
-      displayLabel: 'test-provider:test-model',
-    });
-    runtimeApi.getEphemeralSetting.mockReturnValue('');
+    setFileSystem(mockFileSystem);
 
     // Set up mock settings file with controlled content
     mockFileSystem.setMockFile(
@@ -94,6 +92,7 @@ describe('aboutCommand', () => {
     });
     process.env = originalEnv;
     vi.clearAllMocks();
+    resetProviderManager();
   });
 
   it('should have the correct name and description', () => {
@@ -115,7 +114,7 @@ describe('aboutCommand', () => {
         cliVersion: 'test-version',
         osVersion: 'test-os',
         sandboxEnv: 'no sandbox',
-        modelVersion: 'test-provider:test-model',
+        modelVersion: 'test-model',
         selectedAuthType: 'test-auth',
         gcpProject: 'test-gcp-project',
         keyfile: '',
@@ -179,7 +178,7 @@ describe('aboutCommand', () => {
         cliVersion: 'test-version',
         osVersion: 'test-os',
         sandboxEnv: 'no sandbox',
-        modelVersion: 'test-provider:test-model',
+        modelVersion: 'test-model',
         selectedAuthType: 'test-auth',
         gcpProject: 'test-gcp-project',
         ideClient: '',

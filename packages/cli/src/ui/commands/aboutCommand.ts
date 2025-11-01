@@ -8,7 +8,6 @@ import { getCliVersion } from '../../utils/version.js';
 import { CommandKind, SlashCommand } from './types.js';
 import process from 'node:process';
 import { MessageType, type HistoryItemAbout } from '../types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const aboutCommand: SlashCommand = {
   name: 'about',
@@ -27,11 +26,62 @@ export const aboutCommand: SlashCommand = {
     // Determine the currently selected model. Prefer the active provider's
     // model as the source of truth because it is guaranteed to be up-to-date
     // when users switch models via the /model or /provider commands.
-    const runtime = getRuntimeApi();
-    const providerStatus = runtime.getActiveProviderStatus();
-    const modelVersion = providerStatus.providerName
-      ? `${providerStatus.providerName}:${providerStatus.modelName ?? 'Unknown'}`
-      : (providerStatus.modelName ?? 'Unknown');
+    let modelVersion = 'Unknown';
+    let provider = 'Unknown';
+    let baseURL = '';
+    try {
+      // Dynamically import to avoid a hard dependency for tests that mock the
+      // provider manager.
+      const { getProviderManager } = await import(
+        '../../providers/providerManagerInstance.js'
+      );
+      const providerManager = getProviderManager();
+      const activeProvider = providerManager.getActiveProvider();
+      if (activeProvider) {
+        const providerName = providerManager.getActiveProviderName();
+        const providerImplementation = providerManager.getProviderByName(
+          providerName!,
+        );
+        if (providerImplementation) {
+          provider = providerImplementation.name;
+          // Try to get baseURL from provider fallback to empty string
+          try {
+            // Unwrap the provider if it's wrapped
+            let finalProvider: unknown = providerImplementation;
+            if (
+              'wrappedProvider' in providerImplementation &&
+              providerImplementation.wrappedProvider
+            ) {
+              finalProvider = providerImplementation.wrappedProvider;
+            }
+            // Try to call getBaseURL if available, using proper type checking
+            const providerWithGetBaseURL = finalProvider as {
+              getBaseURL?: () => string | undefined;
+            };
+            if (
+              providerWithGetBaseURL &&
+              typeof providerWithGetBaseURL.getBaseURL === 'function'
+            ) {
+              baseURL = providerWithGetBaseURL.getBaseURL?.() ?? '';
+            } else {
+              baseURL = '';
+            }
+          } catch {
+            baseURL = '';
+          }
+        }
+        const currentModel = activeProvider.getCurrentModel
+          ? activeProvider.getCurrentModel()
+          : context.services.config?.getModel() || 'Unknown';
+        modelVersion = providerName
+          ? `${providerName}:${currentModel}`
+          : currentModel;
+      }
+    } catch {
+      // Fallback to config if the provider manager cannot be resolved (e.g. in
+      // unit tests).
+      modelVersion = context.services.config?.getModel() || 'Unknown';
+    }
 
     const cliVersion = await getCliVersion();
     const selectedAuthType =
@@ -43,13 +93,22 @@ export const aboutCommand: SlashCommand = {
       '';
 
     // Determine keyfile path and key status for the active provider (if any)
-    const keyfilePath =
-      (runtime.getEphemeralSetting('auth-keyfile') as string) || '';
+    let keyfilePath = '';
     const keyStatus = '';
-
-    // Get provider details from runtime
-    const provider = providerStatus.providerName || 'Unknown';
-    const baseURL = providerStatus.baseURL || '';
+    try {
+      const { getProviderManager } = await import(
+        '../../providers/providerManagerInstance.js'
+      );
+      const providerManager = getProviderManager();
+      const providerName = providerManager.getActiveProviderName();
+      if (providerName) {
+        keyfilePath =
+          context.services.settings.getProviderKeyfile?.(providerName) || '';
+        // We don't check for API keys anymore - they're only in profiles
+      }
+    } catch {
+      // Ignore errors and leave defaults
+    }
 
     const aboutItem: Omit<HistoryItemAbout, 'id'> = {
       type: MessageType.ABOUT,

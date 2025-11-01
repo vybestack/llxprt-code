@@ -1,0 +1,1171 @@
+
+> @vybestack/llxprt-code@0.5.0 test:ci
+> cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present && npm run test:scripts
+
+
+> @vybestack/llxprt-code-a2a-server@0.5.0 test:ci
+> vitest run --coverage
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt-code/packages/a2a-server
+      Coverage enabled with v8
+
+ ✓ src/persistence/gcs.test.ts (10 tests) 14ms
+stdout | src/agent/task.test.ts > Task > scheduleToolCalls should not modify the input requests array
+[INFO] 2025-11-01 14:46:28.064 PM -- [Task] Scheduling batch of 1 tool calls.
+[INFO] 2025-11-01 14:46:28.066 PM -- [Task] Scheduler tool calls updated:
+{
+  "0": "1 (error)"
+}
+[INFO] 2025-11-01 14:46:28.067 PM -- [Task] All tool calls completed by scheduler (batch):
+{
+  "0": "1"
+}
+
+stdout | src/agent/task.test.ts > Task > scheduleToolCalls should not modify the input requests array
+[INFO] 2025-11-01 14:46:28.067 PM -- [Task] Scheduler tool calls updated:
+
+ ✓ src/http/endpoints.test.ts (5 tests) 60ms
+ ✓ src/agent/task.test.ts (1 test) 7ms
+ ✓ src/http/app.test.ts (5 tests) 57ms
+
+ Test Files  4 passed (4)
+      Tests  21 passed (21)
+   Start at  14:46:24
+   Duration  3.65s (transform 1.39s, setup 0ms, collect 8.34s, tests 138ms, environment 1ms, prepare 634ms)
+
+JUNIT report written to /Users/acoliver/projects/llxprt-code/packages/a2a-server/junit.xml
+ % Coverage report from v8
+
+> @vybestack/llxprt-code@0.5.0 test:ci
+> npm run test:ci:covered && npm run test:ci:fast
+
+
+> @vybestack/llxprt-code@0.5.0 test:ci:covered
+> vitest run -c vitest.ci.covered.config.ts
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt-code/packages/cli
+      Coverage enabled with v8
+
+ ✓ src/ui/reducers/appReducer.test.ts (36 tests) 7ms
+
+ Test Files  1 passed (1)
+      Tests  36 passed (36)
+   Start at  14:46:29
+   Duration  1.39s (transform 88ms, setup 52ms, collect 62ms, tests 7ms, environment 425ms, prepare 85ms)
+
+JUNIT report written to /Users/acoliver/projects/llxprt-code/packages/cli/junit.covered.xml
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    6.54 |       40 |    6.25 |    6.54 |                   
+ contexts          |       0 |        0 |       0 |       0 |                   
+  ...chContext.tsx |       0 |        0 |       0 |       0 | 1-29              
+  ...ssContext.tsx |       0 |        0 |       0 |       0 | 1-760             
+  ...erContext.tsx |       0 |        0 |       0 |       0 | 1-120             
+  ...owContext.tsx |       0 |        0 |       0 |       0 | 1-87              
+  ...meContext.tsx |       0 |        0 |       0 |       0 | 1-203             
+  ...onContext.tsx |       0 |        0 |       0 |       0 | 1-165             
+  ...teContext.tsx |       0 |        0 |       0 |       0 | 1-61              
+  ...gsContext.tsx |       0 |        0 |       0 |       0 | 1-20              
+  ...ngContext.tsx |       0 |        0 |       0 |       0 | 1-22              
+  TodoContext.tsx  |       0 |        0 |       0 |       0 | 1-33              
+  TodoProvider.tsx |       0 |        0 |       0 |       0 | 1-105             
+  ...llContext.tsx |       0 |        0 |       0 |       0 | 1-30              
+  ...lProvider.tsx |       0 |        0 |       0 |       0 | 1-122             
+  ...deContext.tsx |       0 |        0 |       0 |       0 | 1-89              
+ reducers          |   77.87 |     90.9 |      50 |   77.87 |                   
+  appReducer.ts    |     100 |      100 |     100 |     100 |                   
+  ...ionReducer.ts |       0 |        0 |       0 |       0 | 1-52              
+-------------------|---------|----------|---------|---------|-------------------
+
+> @vybestack/llxprt-code@0.5.0 test:ci:fast
+> vitest run -c vitest.ci.fast.config.ts
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt-code/packages/cli
+
+ ✓ src/storage/ConversationStorage.test.ts (11 tests) 209ms
+ ✓ src/ui/commands/restoreCommand.test.ts (13 tests) 143ms
+ ✓ src/ui/utils/clipboardUtils.test.ts (6 tests) 369ms
+   ✓ clipboardUtils > clipboardHasImage > should return boolean on macOS  362ms
+ ✓ src/ui/commands/schema/argumentResolver.test.ts (42 tests) 264ms
+ ✓ src/integration-tests/test-utils.test.ts (14 tests) 821ms
+   ✓ Test Utilities > waitForFile > should timeout if file is not created  514ms
+ ✓ src/ui/utils/commandUtils.test.ts (26 tests) 166ms
+ ✓ src/ui/utils/updateCheck.test.ts (12 tests) 67ms
+ ✓ src/ui/commands/setupGithubCommand.test.ts (10 tests | 2 skipped) 174ms
+ ✓ src/ui/commands/test/setCommand.phase09.test.ts (13 tests) 31ms
+ ✓ src/ui/themes/theme-manager.test.ts (18 tests) 23ms
+ ✓ src/ui/themes/semantic-tokens.test.ts (13 tests) 19ms
+ ✓ src/ui/commands/setCommand.test.ts (13 tests) 7ms
+ ✓ src/ui/commands/test/setCommand.mutation.test.ts (12 tests) 7ms
+ ✓ src/ui/commands/statsCommand.test.ts (3 tests) 15ms
+ ✓ src/ui/commands/toolformatCommand.test.ts (6 tests) 4ms
+ ✓ src/ui/commands/copyCommand.test.ts (11 tests) 8ms
+ ✓ src/ui/commands/test/subagentCommand.schema.test.ts (6 tests) 7ms
+ ✓ src/services/todo-continuation/todoContinuationService.spec.ts (33 tests) 9ms
+ ✓ src/ui/commands/keyCommand.test.ts (4 tests) 16ms
+ ✓ src/ui/commands/bugCommand.test.ts (2 tests) 5ms
+ ✓ src/ui/themes/color-utils.test.ts (16 tests) 4ms
+ ✓ src/ui/reducers/appReducer.test.ts (36 tests) 5ms
+ ✓ src/providers/logging/LoggingProviderWrapper.test.ts (7 tests) 6ms
+ ✓ src/utils/privacy/ConversationDataRedactor.test.ts (10 tests) 6ms
+ ✓ src/commands/extensions/new.test.ts (4 tests) 16ms
+ ✓ src/config/settingsSchema.test.ts (14 tests) 21ms
+ ✓ src/utils/readStdin.test.ts (4 tests) 4ms
+ ✓ src/utils/userStartupWarnings.test.ts (5 tests) 32ms
+ ✓ src/commands/extensions/install.test.ts (3 tests) 11ms
+ ✓ src/utils/gitUtils.test.ts (12 tests) 10ms
+ ✓ src/utils/settingsUtils.test.ts (68 tests) 10ms
+ ✓ src/runtime/providerConfigUtils.test.ts (6 tests) 3ms
+ ✓ src/runtime/runtimeSettings.test.ts (9 tests) 8ms
+ ✓ src/services/CommandService.test.ts (11 tests) 12ms
+ ✓ src/utils/installationInfo.test.ts (16 tests) 5ms
+ ✓ src/config/logging/loggingConfig.test.ts (14 tests) 3ms
+ ✓ src/utils/envVarResolver.test.ts (16 tests) 5ms
+ ✓ src/commands/mcp/list.test.ts (4 tests) 8ms
+ ✓ src/ui/keyMatchers.test.ts (33 tests) 8ms
+ ✓ src/config/keyBindings.test.ts (3 tests) 5ms
+ ✓ src/validateNonInterActiveAuth.test.ts (9 tests) 12ms
+ ✓ src/utils/ConversationContext.test.ts (6 tests) 3ms
+ ✓ src/config/trustedFolders.test.ts (17 tests) 6ms
+ ✓ src/auth/oauth-manager-initialization.spec.ts (7 tests) 35ms
+ ✓ src/auth/anthropic-oauth-provider.local-flow.spec.ts (2 tests) 13ms
+ ✓ src/config/config.loadMemory.test.ts (1 test) 42ms
+ ✓ test/providers/providerAliases.test.ts (2 tests) 12ms
+ ✓ src/services/BuiltinCommandLoader.test.ts (4 tests) 4ms
+ ✓ src/commands/mcp.test.ts (3 tests) 6ms
+ ✓ src/config/cliEphemeralSettings.test.ts (6 tests) 4ms
+ ✓ src/ui/themes/semantic-resolver.test.ts (6 tests) 2ms
+ ✓ src/providers/provider-gemini-switching.test.ts (3 tests) 7ms
+ ✓ src/providers/providerManagerInstance.test.ts (5 tests) 5ms
+ ✓ src/ui/utils/responsive.test.ts (21 tests) 3ms
+ ✓ src/ui/utils/secureInputHandler.test.ts (25 tests) 9ms
+ ✓ src/ui/utils/highlight.test.ts (11 tests) 5ms
+ ✓ src/ui/utils/formatters.test.ts (14 tests) 3ms
+ ✓ src/ui/utils/displayUtils.test.ts (5 tests) 2ms
+ ✓ src/ui/themes/theme.test.ts (11 tests) 5ms
+ ✓ src/ui/commands/themeCommand.test.ts (2 tests) 3ms
+ ✓ src/ui/utils/computeStats.test.ts (12 tests) 6ms
+ ✓ src/ui/commands/profileCommand.test.ts (7 tests) 5ms
+ ✓ src/config/__tests__/profileBootstrap.test.ts (4 tests) 6ms
+ ✓ src/ui/commands/docsCommand.test.ts (3 tests) 10ms
+ ✓ src/ui/commands/extensionsCommand.test.ts (2 tests) 4ms
+ ✓ src/ui/commands/terminalSetupCommand.test.ts (5 tests) 4ms
+ ✓ src/runtime/__tests__/profileApplication.test.ts (4 tests) 5ms
+ ✓ src/test-utils/mockCommandContext.test.ts (3 tests) 3ms
+ ✓ src/providers/credentialPrecedence.test.ts (4 tests) 3ms
+ ❯ src/ui/commands/providerCommand.test.ts (1 test | 1 failed) 8ms
+   × providerCommand /provider save > saves provider alias configuration and refreshes aliases 8ms
+     → expected { type: 'message', …(2) } to deeply equal { type: 'message', …(2) }
+ ✓ src/auth/local-oauth-callback.spec.ts (2 tests) 21ms
+ ✓ src/ui/commands/helpCommand.test.ts (2 tests) 6ms
+ ✓ src/utils/cleanup.test.ts (4 tests) 2ms
+ ✓ src/config/auth.test.ts (8 tests) 39ms
+ ✓ src/ui/commands/editorCommand.test.ts (2 tests) 2ms
+ ✓ src/ui/commands/settingsCommand.test.ts (2 tests) 3ms
+ ✓ src/ui/App.quittingMessages.test.ts (1 test) 3ms
+ ✓ src/ui/useTodoPausePreserver.test.ts (1 test) 2ms
+ ✓ src/services/McpPromptLoader.test.ts (10 tests) 5ms
+ ✓ src/services/prompt-processors/argumentProcessor.test.ts (2 tests) 3ms
+ ✓ src/ui/utils/markdownUtilities.test.ts (7 tests) 4ms
+ ✓ src/utils/startupWarnings.test.ts (4 tests) 3ms
+ ✓ test/baseProvider.stateless.stub.test.ts (1 test) 2ms
+ ✓ src/config/settings.env.test.ts (2 tests) 2ms
+ ✓ src/auth/__tests__/oauthManager.safety.test.ts (3 tests) 2ms
+ ✓ test/openai.stateless.stub.test.ts (1 test) 3ms
+ ✓ src/config/extensions/variables.test.ts (1 test) 1ms
+ ✓ test/openaiResponses.stateless.stub.test.ts (1 test) 1ms
+ ↓ src/providers/logging/performance.test.ts (8 tests | 8 skipped)
+ ✓ src/config/__tests__/nonInteractiveTools.test.ts (1 test) 2ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 31 ⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/nonInteractiveCli.test.ts [ src/nonInteractiveCli.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/nonInteractiveCli.test.ts:7:1
+      5|  */
+      6| 
+      7| import {
+       | ^
+      8|   Config,
+      9|   executeToolCall,
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/32]⎯
+
+ FAIL  test/auth/authRuntimeScope.test.ts [ test/auth/authRuntimeScope.test.ts ]
+ FAIL  src/auth/oauth-manager.spec.ts [ src/auth/oauth-manager.spec.ts ]
+ FAIL  src/config/extension.test.ts [ src/config/extension.test.ts ]
+ FAIL  src/integration-tests/runtime-isolation.test.ts [ src/integration-tests/runtime-isolation.test.ts ]
+ FAIL  src/providers/providerManagerInstance.oauthRegistration.test.ts [ src/providers/providerManagerInstance.oauthRegistration.test.ts ]
+ FAIL  src/runtime/agentRuntimeAdapter.spec.ts [ src/runtime/agentRuntimeAdapter.spec.ts ]
+ FAIL  test/ui/commands/authCommand-logout.test.ts [ test/ui/commands/authCommand-logout.test.ts ]
+ FAIL  src/commands/extensions/uninstall.test.ts [ src/commands/extensions/uninstall.test.ts ]
+ FAIL  src/providers/logging/git-stats.test.ts [ src/providers/logging/git-stats.test.ts ]
+ FAIL  src/ui/commands/aboutCommand.test.ts [ src/ui/commands/aboutCommand.test.ts ]
+ FAIL  src/ui/commands/authCommand.test.ts [ src/ui/commands/authCommand.test.ts ]
+ FAIL  src/ui/commands/chatCommand.test.ts [ src/ui/commands/chatCommand.test.ts ]
+ FAIL  src/ui/commands/compressCommand.test.ts [ src/ui/commands/compressCommand.test.ts ]
+ FAIL  src/ui/commands/initCommand.test.ts [ src/ui/commands/initCommand.test.ts ]
+ FAIL  src/ui/commands/toolsCommand.test.ts [ src/ui/commands/toolsCommand.test.ts ]
+ FAIL  src/ui/hooks/useGeminiStream.subagent.spec.tsx [ src/ui/hooks/useGeminiStream.subagent.spec.tsx ]
+ FAIL  src/runtime/__tests__/runtimeIsolation.test.ts [ src/runtime/__tests__/runtimeIsolation.test.ts ]
+ FAIL  src/ui/commands/test/subagentCommand.test.ts [ src/ui/commands/test/subagentCommand.test.ts ]
+Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/32]⎯
+
+ FAIL  src/config/config.test.ts [ src/config/config.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/config/config.test.ts:155:1
+    153| vi.mock('node-gyp-build', () => ({}));
+    154| 
+    155| import { ProfileManager } from '@vybestack/llxprt-code-core';
+       | ^
+    156| import { loadCliConfig } from './config.js';
+    157| import { Settings } from './settings.js';
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/32]⎯
+
+ FAIL  src/config/settings.test.ts [ src/config/settings.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/config/settings.test.ts:53:1
+     51| 
+     52| // These imports will get the versions from the vi.mock('./settings.js…
+     53| import {
+       | ^
+     54|   loadSettings,
+     55|   USER_SETTINGS_PATH, // This IS the mocked path.
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/32]⎯
+
+ FAIL  src/services/FileCommandLoader.test.ts [ src/services/FileCommandLoader.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/services/FileCommandLoader.test.ts:8:1
+      6| 
+      7| import * as path from 'node:path';
+      8| import { Config, Storage } from '@vybestack/llxprt-code-core';
+       | ^
+      9| import mock from 'mock-fs';
+     10| import { FileCommandLoader } from './FileCommandLoader.js';
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/32]⎯
+
+ FAIL  src/utils/handleAutoUpdate.test.ts [ src/utils/handleAutoUpdate.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/utils/handleAutoUpdate.test.ts:8:1
+      6| 
+      7| import { describe, it, expect, vi, beforeEach, afterEach, Mock } from …
+      8| import { getInstallationInfo, PackageManager } from './installationInf…
+       | ^
+      9| import { updateEventEmitter } from './updateEventEmitter.js';
+     10| import { UpdateObject } from '../ui/utils/updateCheck.js';
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/32]⎯
+
+ FAIL  src/commands/mcp/add.test.ts [ src/commands/mcp/add.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/commands/mcp/add.ts:9:1
+      7| // File for 'llxprt mcp add' command
+      8| import type { CommandModule } from 'yargs';
+      9| import { loadSettings, SettingScope } from '../../config/settings.js';
+       | ^
+     10| import { MCPServerConfig } from '@vybestack/llxprt-code-core';
+     11| 
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/32]⎯
+
+ FAIL  src/commands/mcp/remove.test.ts [ src/commands/mcp/remove.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/commands/mcp/remove.test.ts:9:1
+      7| import { vi, describe, it, expect, beforeEach } from 'vitest';
+      8| import yargs from 'yargs';
+      9| import { loadSettings, SettingScope } from '../../config/settings.js';
+       | ^
+     10| import { removeCommand } from './remove.js';
+     11| 
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/32]⎯
+
+ FAIL  src/services/prompt-processors/shellProcessor.test.ts [ src/services/prompt-processors/shellProcessor.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/services/prompt-processors/shellProcessor.ts:7:1
+      5|  */
+      6| 
+      7| import {
+       | ^
+      8|   ApprovalMode,
+      9|   checkCommandPermissions,
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/32]⎯
+
+ FAIL  src/ui/commands/clearCommand.test.ts [ src/ui/commands/clearCommand.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/ui/commands/clearCommand.ts:7:1
+      5|  */
+      6| 
+      7| import { uiTelemetryService } from '@vybestack/llxprt-code-core';
+       | ^
+      8| import { CommandKind, SlashCommand } from './types.js';
+      9| 
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/32]⎯
+
+ FAIL  src/ui/commands/ideCommand.test.ts [ src/ui/commands/ideCommand.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/ui/commands/ideCommand.ts:8:1
+      6| 
+      7| import * as path from 'node:path';
+      8| import {
+       | ^
+      9|   Config,
+     10|   DetectedIde,
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/32]⎯
+
+ FAIL  src/ui/commands/mcpCommand.test.ts [ src/ui/commands/mcpCommand.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/ui/commands/mcpCommand.ts:15:1
+     13| } from './types.js';
+     14| import { type CommandArgumentSchema } from './schema/types.js';
+     15| import {
+       | ^
+     16|   DiscoveredMCPPrompt,
+     17|   DiscoveredMCPTool,
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/32]⎯
+
+ FAIL  src/ui/commands/memoryCommand.test.ts [ src/ui/commands/memoryCommand.test.ts ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/ui/commands/memoryCommand.ts:7:1
+      5|  */
+      6| 
+      7| import {
+       | ^
+      8|   getErrorMessage,
+      9|   loadServerHierarchicalMemory,
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/32]⎯
+
+ FAIL  src/ui/components/InputPrompt.paste.spec.tsx [ src/ui/components/InputPrompt.paste.spec.tsx ]
+Error: [vitest] There was an error when mocking a module. If you are using "vi.mock" factory, make sure there are no top level variables inside, since this call is hoisted to top of the file. Read more: https://vitest.dev/api/vi.html#vi-mock
+ ❯ src/ui/components/shared/text-buffer.ts:13:1
+     11| import { useState, useCallback, useEffect, useMemo, useReducer } from …
+     12| import stringWidth from 'string-width';
+     13| import { unescapePath } from '@vybestack/llxprt-code-core';
+       | ^
+     14| import {
+     15|   toCodePoints,
+
+Caused by: Error: Cannot find module '/@fs/Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js' imported from '/Users/acoliver/projects/llxprt-code/packages/core/dist/src/config/config.js'
+ ❯ ../core/src/config/config.ts:48:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_MODULE_NOT_FOUND' }
+Caused by: Error: Failed to load url /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js (resolved id: /Users/acoliver/projects/llxprt-code/packages/core/dist/src/telemetry/index.js) in /Users/acoliver/projects/llxprt-code/packages/core/dist/src/index.js. Does the file exist?
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-D5b0Zz6C.js:26109:33
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/32]⎯
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/commands/providerCommand.test.ts > providerCommand /provider save > saves provider alias configuration and refreshes aliases
+AssertionError: expected { type: 'message', …(2) } to deeply equal { type: 'message', …(2) }
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[32m-   "content": StringContaining "myalias",[39m
+[32m-   "messageType": "info",[39m
+[31m+   "content": "Failed to switch provider: MissingProviderRuntimeError(provider-runtime): runtime registration missing. Run activateIsolatedRuntimeContext() before invoking providers (REQ-SP4-004).",[39m
+[31m+   "messageType": "error",[39m
+[2m    "type": "message",[22m
+[2m  }[22m
+
+ ❯ src/ui/commands/providerCommand.test.ts:108:20
+    106|     const result = await providerCommand.action(context, 'save myalias…
+    107| 
+    108|     expect(result).toEqual({
+       |                    ^
+    109|       type: 'message',
+    110|       messageType: 'info',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/32]⎯
+
+
+ Test Files  32 failed | 88 passed | 1 skipped (121)
+      Tests  1 failed | 816 passed | 10 skipped (827)
+   Start at  14:46:31
+   Duration  25.32s (transform 5.65s, setup 6.60s, collect 47.78s, tests 2.88s, environment 91.60s, prepare 16.23s)
+
+JUNIT report written to /Users/acoliver/projects/llxprt-code/packages/cli/junit.fast.xml
+npm error Lifecycle script `test:ci:fast` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt-code/packages/cli
+npm error workspace @vybestack/llxprt-code@0.5.0
+npm error location /Users/acoliver/projects/llxprt-code/packages/cli
+npm error command failed
+npm error command sh -c vitest run -c vitest.ci.fast.config.ts
+npm error Lifecycle script `test:ci` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt-code/packages/cli
+npm error workspace @vybestack/llxprt-code@0.5.0
+npm error location /Users/acoliver/projects/llxprt-code/packages/cli
+npm error command failed
+npm error command sh -c npm run test:ci:covered && npm run test:ci:fast
+
+
+> @vybestack/llxprt-code-core@0.5.0 test:ci
+> vitest run --coverage
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt-code/packages/core
+      Coverage enabled with v8
+
+ ✓ src/services/history/orphaned-tools-comprehensive.test.ts (9 tests | 4 skipped) 1005ms
+ ✓ src/utils/toolOutputLimiter.test.ts (14 tests) 1420ms
+   ✓ toolOutputLimiter > limitOutputTokens > should warn when content exceeds limit in warn mode  540ms
+   ✓ toolOutputLimiter > limitOutputTokens > should truncate content in truncate mode  509ms
+ ✓ src/mcp/token-storage/file-token-storage.test.ts (16 tests) 1772ms
+ ✓ src/tools/glob.test.ts (34 tests) 1736ms
+ ✓ src/prompt-config/prompt-service.test.ts (45 tests) 2240ms
+ ✓ src/prompt-config/prompt-loader.test.ts (44 tests) 922ms
+   ✓ PromptLoader > watchFiles > should notify on file changes  306ms
+ ✓ src/services/history/compression-locking.test.ts (4 tests) 1144ms
+   ✓ Compression locking > should queue adds during compression  321ms
+   ✓ Compression locking > should serialize multiple compressions  401ms
+ ✓ src/services/history/circular-reference.test.ts (4 tests) 1209ms
+   ✓ Circular Reference Bug > should not create synthetic responses when tool responses exist in full history  335ms
+   ✓ Circular Reference Bug > should handle complex nested parameters without circular references  301ms
+ ✓ src/providers/openai/OpenAIProvider.stateful.integration.test.ts (2 tests | 1 skipped) 1135ms
+   ✓ OpenAIProvider Stateful Integration > should not break stateless models by correctly passing full message history  1131ms
+ ✓ src/integration-tests/geminiChat-isolation.integration.test.ts (11 tests) 1445ms
+   ✓ GeminiChat Isolation Integration Tests > History Isolation > should maintain independent history services between foreground and subagent  670ms
+   ✓ GeminiChat Isolation Integration Tests > History Isolation > should not share history between multiple subagents  712ms
+ ✓ src/integration/compression-duplicate-ids.test.ts (2 tests) 1820ms
+   ✓ Compression and duplicate tool call IDs > should not create duplicate tool IDs when rebuilding history after compression  1120ms
+   ✓ Compression and duplicate tool call IDs > should handle multiple compressions without duplicating IDs  303ms
+ ✓ src/tools/grep.test.ts (24 tests) 1151ms
+   ✓ GrepTool > execute > should find matches for a simple pattern in all files  519ms
+ ✓ src/services/history/findfiles-circular.test.ts (2 tests) 645ms
+   ✓ FindFiles Circular Reference Bug > getCuratedForProvider should handle FindFiles tool call with complex parameters  324ms
+   ✓ FindFiles Circular Reference Bug > should handle tool calls with deeply nested circular references  320ms
+ ✓ src/core/subagent.test.ts (27 tests) 2453ms
+ ✓ src/tools/ripGrep.test.ts (36 tests) 558ms
+ ✓ src/tools/read-file.test.ts (34 tests) 511ms
+ ✓ src/tools/shell.test.ts (35 tests) 896ms
+   ✓ ShellTool > execute > should wrap command on linux and parse pgrep output  429ms
+ ✓ src/debug/DebugLogger.test.ts (36 tests | 1 skipped) 606ms
+ ✓ src/tools/read-many-files.test.ts (32 tests) 930ms
+ ✓ src/services/history/HistoryService.test.ts (23 tests) 5151ms
+   ✓ HistoryService - Behavioral Tests > Realistic Conversation Flow > should handle multiple tool calls in sequence  394ms
+   ✓ HistoryService - Behavioral Tests > Realistic Conversation Flow > should handle mixed content types  358ms
+   ✓ HistoryService - Behavioral Tests > History Management > should validate and fix unmatched tool calls  373ms
+   ✓ HistoryService - Behavioral Tests > Token Management > should return history within token limits  326ms
+   ✓ HistoryService - Behavioral Tests > Token Management > should handle history summarization for old messages  316ms
+   ✓ HistoryService - Behavioral Tests > Import/Export > should export and import history via JSON  647ms
+   ✓ HistoryService - Behavioral Tests > Edge Cases > should handle thinking blocks appropriately  471ms
+   ✓ HistoryService - Behavioral Tests > ID Normalization Architecture - NEW FAILING TESTS > Base token offset > retains base offset after clearing history  347ms
+ ✓ src/prompt-config/prompt-installer.test.ts (49 tests) 524ms
+ ✓ src/core/client.test.ts (66 tests | 6 skipped) 574ms
+ ✓ src/services/loopDetectionService.test.ts (34 tests) 655ms
+   ✓ LoopDetectionService > Content Loop Detection > should not detect a loop for random content  405ms
+ ✓ src/prompt-config/prompt-resolver.test.ts (56 tests) 424ms
+ ✓ src/core/logger.test.ts (38 tests) 322ms
+ ✓ src/filters/EmojiFilter.property.test.ts (30 tests) 411ms
+ ✓ src/tools/shell.multibyte.test.ts (1 test) 501ms
+   ✓ ShellTool multibyte handling > preserves full multibyte output in returnDisplay  500ms
+ ✓ src/utils/bfsFileSearch.test.ts (11 tests) 261ms
+ ✓ src/utils/filesearch/fileSearch.test.ts (27 tests) 364ms
+ ✓ src/utils/fileUtils.test.ts (62 tests) 217ms
+ ❯ src/core/geminiChat.runtime.test.ts (1 test | 1 failed) 412ms
+   × GeminiChat runtime context > passes runtime context and tools to provider generateChatCompletion 411ms
+     → Request would exceed the 60000 token context window even after compression (projected 65539 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ✓ src/tools/mcp-tool.test.ts (42 tests) 221ms
+ ✓ src/utils/filesearch/crawler.test.ts (18 tests) 180ms
+ ✓ src/utils/gitIgnoreParser.test.ts (23 tests) 168ms
+ ✓ src/services/gitService.test.ts (14 tests) 170ms
+ ✓ src/auth/token-store.spec.ts (20 tests) 193ms
+ ✓ src/utils/memoryDiscovery.test.ts (16 tests) 377ms
+ ✓ src/core/coreToolScheduler.test.ts (28 tests | 6 skipped) 245ms
+ ✓ src/config/test/subagentManager.test.ts (23 tests) 232ms
+ ✓ src/providers/integration/multi-provider.integration.test.ts (12 tests | 1 skipped) 335ms
+   ✓ Multi-Provider Integration Tests > Error Handling > should handle missing API key  319ms
+ ✓ src/tools/edit.test.ts (42 tests) 327ms
+ ✓ src/mcp/oauth-provider.test.ts (19 tests) 154ms
+ ✓ src/tools/write-file.test.ts (25 tests) 260ms
+ ✓ src/providers/openai/__tests__/openai.stateless.test.ts (4 tests) 188ms
+ ✓ src/providers/gemini/__tests__/gemini.stateless.test.ts (5 tests) 152ms
+ ✓ src/telemetry/metrics.test.ts (11 tests) 33ms
+ ✓ src/core/prompts-async.test.ts (9 tests | 1 skipped) 175ms
+ ✓ src/utils/getFolderStructure.test.ts (15 tests) 219ms
+ ✓ src/providers/anthropic/__tests__/anthropic.stateless.test.ts (4 tests) 69ms
+ ✓ src/mcp/token-storage/keychain-token-storage.test.ts (24 tests) 117ms
+ ✓ src/tools/smart-edit.test.ts (18 tests) 186ms
+ ✓ src/services/fileDiscoveryService.test.ts (15 tests) 129ms
+ ✓ src/providers/anthropic/AnthropicProvider.oauth.test.ts (9 tests) 167ms
+ ✓ src/utils/environmentContext.test.ts (8 tests) 51ms
+ ✓ src/tools/memoryTool.test.ts (19 tests) 62ms
+ ✓ src/tools/modifiable-tool.test.ts (11 tests) 182ms
+ ✓ src/tools/web-fetch.integration.test.ts (22 tests) 191ms
+ ✓ src/tools/ls.test.ts (22 tests) 200ms
+ ✓ src/utils/errorReporting.test.ts (6 tests) 141ms
+ ✓ src/telemetry/uiTelemetry.test.ts (19 tests) 100ms
+ ✓ src/core/nonInteractiveToolExecutor.test.ts (8 tests) 35ms
+ ✓ src/config/config.test.ts (46 tests) 70ms
+ ✓ src/core/atomic-compression.test.ts (2 tests) 124ms
+ ✓ src/tools/todo-store.test.ts (13 tests) 43ms
+ ✓ src/core/prompts.test.ts (6 tests) 206ms
+ ✓ src/utils/workspaceContext.test.ts (34 tests) 51ms
+ ❯ src/core/geminiChat.test.ts (34 tests | 15 failed) 11448ms
+   × GeminiChat > sendMessage > should call generateContent with the correct parameters 395ms
+     → Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > sendMessage > should trigger compression when pending tokens exceed threshold 1ms
+     → Request would exceed the 60000 token context window even after compression (projected 130536 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > sendMessage > should not trigger compression when pending tokens stay under threshold 0ms
+     → Request would exceed the 60000 token context window even after compression (projected 67036 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > sendMessageStream > should call generateContentStream with the correct parameters 249ms
+     → Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   ✓ GeminiChat > recordHistory > should add user input and a single model output to history 265ms
+   ✓ GeminiChat > recordHistory > should consolidate adjacent model outputs 254ms
+   ✓ GeminiChat > recordHistory > should handle a mix of user and model roles in outputContents (though unusual)  430ms
+   ✓ GeminiChat > recordHistory > should consolidate multiple adjacent model outputs correctly  351ms
+   ✓ GeminiChat > recordHistory > should not consolidate if roles are different between model outputs 257ms
+   ✓ GeminiChat > recordHistory > should merge with last history entry if it is also a model output  714ms
+   ✓ GeminiChat > recordHistory > should correctly merge consolidated new output with existing model history 288ms
+   ✓ GeminiChat > recordHistory > should handle empty modelOutput array  359ms
+   ✓ GeminiChat > recordHistory > should handle aggregating modelOutput  327ms
+   ✓ GeminiChat > recordHistory > should handle modelOutput with parts being undefined or empty (if they pass initial every check)  473ms
+   ✓ GeminiChat > recordHistory > should correctly handle automaticFunctionCallingHistory  453ms
+   ✓ GeminiChat > recordHistory > should add userInput if AFC history is present but empty 274ms
+   ✓ GeminiChat > recordHistory > should skip "thought" content from modelOutput  353ms
+   ✓ GeminiChat > recordHistory > should skip "thought" content even if it is the only content  386ms
+   ✓ GeminiChat > recordHistory > should correctly consolidate text parts when a thought part is in between 291ms
+   ✓ GeminiChat > recordHistory > should handle multiple thought parts correctly  372ms
+   ✓ GeminiChat > recordHistory > should handle thought part at the end of outputContents  341ms
+   ✓ GeminiChat > addHistory > should add a new content item to the history 289ms
+   ✓ GeminiChat > addHistory > should add multiple items correctly  346ms
+   × GeminiChat > sendMessageStream with retries > should yield a RETRY event when an invalid stream is encountered 338ms
+     → Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > sendMessageStream with retries > should retry on invalid content and succeed on the second attempt 334ms
+     → Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > sendMessageStream with retries > should fail after all retries on persistent invalid content 405ms
+     → expected error to be instance of EmptyStreamError
+   × GeminiChat > should correctly retry and append to an existing history mid-conversation 418ms
+     → Request would exceed the 60000 token context window even after compression (projected 65542 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > concurrency control > should queue a subsequent sendMessage call until the first one completes 317ms
+     → expected "spy" to be called 1 times, but got 0 times
+   × GeminiChat > should retry if the model returns a completely empty stream (no chunks) 269ms
+     → Request would exceed the 60000 token context window even after compression (projected 65539 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > should queue a subsequent sendMessageStream call until the first stream is fully consumed 353ms
+     → Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > should retry when all content is invalid and succeed on the second attempt 306ms
+     → Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > normalizeToolInteractionInput > should handle flattened tool call/response arrays from UI 388ms
+     → Request would exceed the 60000 token context window even after compression (projected 65582 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > normalizeToolInteractionInput > should handle single paired tool call/response (2 elements) 479ms
+     → Request would exceed the 60000 token context window even after compression (projected 65557 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+   × GeminiChat > stateless runtime context compliance > should not rely on global provider runtime context 373ms
+     → promise rejected "Error: Request would exceed the 60000 tok…" instead of resolving
+ ✓ src/prompt-config/prompt-cache.test.ts (42 tests) 95ms
+ ✓ src/parsers/TextToolCallParser.test.ts (15 tests) 46ms
+ ✓ src/tools/web-search.test.ts (9 tests) 107ms
+ ✓ src/tools/web-fetch.test.ts (7 tests) 27ms
+ ✓ src/code_assist/oauth2.test.ts (11 tests) 89ms
+ ✓ src/utils/userAccountManager.test.ts (23 tests) 62ms
+ ✓ src/auth/oauth-errors.spec.ts (38 tests | 2 skipped) 46ms
+ ✓ src/utils/editor.test.ts (108 tests) 83ms
+ ✓ src/utils/filesearch/ignore.test.ts (12 tests) 26ms
+ ✓ src/services/shellExecutionService.test.ts (30 tests) 86ms
+ ✓ src/telemetry/loggers.test.ts (12 tests) 10ms
+ ✓ src/utils/schemaValidator.test.ts (7 tests) 95ms
+ ✓ src/tools/diffOptions.test.ts (9 tests) 5ms
+ ✓ src/utils/memoryImportProcessor.test.ts (23 tests) 46ms
+ ✓ src/tools/task.test.ts (7 tests) 110ms
+ ✓ src/prompt-config/TemplateEngine.test.ts (31 tests) 23ms
+ ✓ src/services/complexity-analyzer.test.ts (6 tests) 8ms
+ ✓ src/code_assist/converter.test.ts (21 tests) 8ms
+ ✓ src/integration-tests/settings-remediation.test.ts (13 tests) 9ms
+ ✓ src/utils/retry.test.ts (14 tests) 22ms
+ ✓ src/services/ClipboardService.test.ts (7 tests) 131ms
+ ✓ src/tools/list-subagents.test.ts (4 tests) 105ms
+ ✓ src/runtime/AgentRuntimeState.spec.ts (48 tests) 153ms
+ ✓ src/ide/ide-installer.test.ts (10 tests) 9ms
+ ✓ src/debug/FileOutput.test.ts (15 tests) 12ms
+ ✓ src/providers/anthropic/AnthropicProvider.test.ts (13 tests) 37ms
+ ✓ src/filters/EmojiFilter.consistency.test.ts (58 tests) 13ms
+ ✓ src/code_assist/server.test.ts (7 tests) 22ms
+ ✓ src/hooks/tool-render-suppression-hook.test.ts (2 tests) 3ms
+ ✓ src/utils/generateContentResponseUtilities.test.ts (36 tests) 5ms
+ ✓ src/config/profileManager.test.ts (17 tests) 11ms
+ ✓ src/auth/precedence.test.ts (23 tests) 42ms
+ ✓ src/utils/summarizer.test.ts (8 tests) 20ms
+ ✓ src/mcp/file-token-store.test.ts (27 tests) 11ms
+ ✓ src/debug/ConfigurationManager.test.ts (25 tests) 12ms
+ ✓ src/auth/auth-integration.spec.ts (11 tests) 44ms
+ ✓ src/core/__tests__/subagent.stateless.test.ts (13 tests) 14ms
+ ✓ src/filters/EmojiFilter.test.ts (68 tests) 11ms
+ ✓ test/settings/SettingsService.spec.ts (31 tests) 7ms
+ ✓ src/ide/process-utils.test.ts (7 tests) 12ms
+ ✓ src/ide/ideContext.test.ts (16 tests) 27ms
+ ✓ src/ide/ide-client.test.ts (4 tests) 17ms
+ ✓ src/code_assist/setup.test.ts (7 tests) 6ms
+ ✓ src/config/flashFallback.test.ts (6 tests) 10ms
+ ✓ src/integration-tests/todo-system.test.ts (2 tests) 8ms
+ ✓ src/integration-tests/profile-integration.test.ts (4 tests) 5ms
+ ✓ src/tools/tool-registry.test.ts (17 tests) 18ms
+ ✓ src/tools/mcp-client.test.ts (42 tests) 17ms
+ ✓ src/config/endpoints.test.ts (26 tests) 6ms
+ ✓ src/integration-tests/provider-settings-integration.spec.ts (4 tests) 4ms
+ ✓ src/core/turn.test.ts (14 tests) 72ms
+ ✓ src/core/contentGenerator.test.ts (7 tests) 9ms
+ ✓ src/config/storage.test.ts (16 tests) 4ms
+ ✓ src/ide/detect-ide.test.ts (22 tests) 4ms
+ ✓ src/core/tokenLimits.test.ts (15 tests) 3ms
+ ✓ test/settings/model-diagnostics.test.ts (5 tests) 3ms
+ ✓ src/auth/precedence.adapter.test.ts (1 test) 2ms
+ ✓ src/core/googleGenAIWrapper.test.ts (3 tests) 5ms
+ ✓ src/core/subagentOrchestrator.test.ts (7 tests) 8ms
+ ✓ src/config/config.ephemeral.test.ts (10 tests) 5ms
+ ✓ src/config/config.alwaysAllow.test.ts (9 tests) 6ms
+ ✓ src/providers/openai/parseResponsesStream.responsesToolCalls.test.ts (7 tests) 13ms
+ ✓ src/services/shellExecutionService.env.test.ts (3 tests) 605ms
+   ✓ ShellExecutionService with LLXPRT_CODE environment variables > should use LLXPRT_CODE environment variable instead of GEMINI_CLI when executed with pty  579ms
+ ✓ src/tools/todo-write.test.ts (21 tests) 38ms
+ ✓ src/runtime/__tests__/AgentRuntimeState.stub.test.ts (13 tests | 10 skipped) 6ms
+ ✓ src/providers/BaseProvider.test.ts (21 tests) 16ms
+ ✓ src/utils/systemEncoding.test.ts (38 tests) 62ms
+ ✓ src/providers/openai/OpenAIProvider.modelParamsAndHeaders.test.ts (3 tests) 143ms
+ ✓ src/providers/providerManager.context.test.ts (2 tests) 3ms
+ ✓ src/mcp/token-storage/hybrid-token-storage.test.ts (11 tests) 9ms
+ ✓ src/utils/secure-browser-launcher.test.ts (14 tests) 78ms
+ ✓ src/mcp/token-store.test.ts (23 tests) 6ms
+ ✓ src/tools/todo-read.test.ts (13 tests) 8ms
+ ✓ src/runtime/__tests__/regression-guards.test.ts (13 tests) 15ms
+ ✓ src/services/history/ContentConverters.test.ts (30 tests) 8ms
+ ❯ src/core/geminiChat.contextlimit.test.ts (3 tests | 3 failed) 59ms
+   × GeminiChat Context Limit Enforcement > should enforce context window using user-configured context-limit 8ms
+     → Cannot read properties of undefined (reading 'model')
+   × GeminiChat Context Limit Enforcement > should not trigger compression when within context-limit 1ms
+     → Cannot read properties of undefined (reading 'model')
+   × GeminiChat Context Limit Enforcement > should use context-limit when available, falling back to default when not set 49ms
+     → Cannot read properties of undefined (reading 'model')
+ ✓ src/tools/todo-schemas.test.ts (26 tests) 21ms
+ ✓ src/providers/openai/openai-oauth.spec.ts (25 tests) 14ms
+ ✓ src/telemetry/telemetry.test.ts (2 tests) 10ms
+ ✓ src/providers/openai/buildResponsesRequest.test.ts (22 tests) 12ms
+ ✓ src/core/__tests__/geminiChat.runtimeState.test.ts (12 tests) 8ms
+ ✓ src/services/shellExecutionService.windows.multibyte.test.ts (5 tests | 1 skipped) 9ms
+ ✓ src/mcp/oauth-token-storage.test.ts (20 tests) 8ms
+ ✓ src/mcp/google-auth-provider.test.ts (4 tests) 9ms
+ ✓ src/providers/__tests__/ProviderManager.guard.test.ts (8 tests) 8ms
+ ✓ src/services/fileSystemService.test.ts (3 tests) 4ms
+ ✓ src/utils/filesearch/crawlCache.test.ts (9 tests) 17ms
+ ✓ src/providers/openai-responses/__tests__/openaiResponses.stateless.test.ts (4 tests) 13ms
+ ✓ src/utils/paths.test.ts (55 tests) 129ms
+ ✓ src/utils/ignorePatterns.test.ts (28 tests) 7ms
+ ✓ src/utils/installationManager.test.ts (4 tests) 7ms
+ ✓ src/providers/openai-responses/OpenAIResponsesProvider.headers.test.ts (1 test) 8ms
+ ✓ src/mcp/oauth-utils.test.ts (21 tests) 6ms
+ ✓ src/providers/logging/ProviderPerformanceTracker.test.ts (8 tests) 7ms
+ ✓ src/auth/__tests__/authRuntimeScope.test.ts (3 tests) 6ms
+ ✓ src/tools/ToolFormatter.test.ts (10 tests) 6ms
+ ✓ src/providers/__tests__/baseProvider.stateless.test.ts (3 tests) 6ms
+ ✓ src/tools/todo-pause.spec.ts (21 tests) 6ms
+ ✓ src/tools/tools.test.ts (11 tests) 6ms
+ ✓ src/utils/shell-utils.shellReplacement.test.ts (14 tests) 8ms
+ ✓ src/utils/unicodeUtils.test.ts (15 tests) 5ms
+ ✓ src/utils/partUtils.test.ts (23 tests) 4ms
+ ✓ src/providers/__tests__/LoggingProviderWrapper.stateless.test.ts (4 tests) 4ms
+ ✓ src/utils/memoryImportProcessor.issue391.test.ts (5 tests) 65ms
+ ✓ src/utils/shell-utils.test.ts (49 tests) 15ms
+ ✓ src/providers/providerInterface.compat.test.ts (2 tests) 5ms
+ ✓ src/core/__tests__/config-regression-guard.test.ts (6 tests) 6ms
+ ✓ src/utils/errorParsing.test.ts (23 tests) 7ms
+ ✓ src/core/__tests__/geminiClient.runtimeState.test.ts (13 tests) 10ms
+ ✓ src/providers/openai/estimateRemoteTokens.test.ts (10 tests) 5ms
+ ✓ src/runtime/AgentRuntimeLoader.test.ts (4 tests) 8ms
+ ✓ src/providers/openai/parseResponsesStream.test.ts (11 tests | 5 skipped) 2ms
+ ✓ src/prompt-config/defaults/manifest-loader.test.ts (2 tests) 3ms
+ ✓ src/providers/gemini/GeminiProvider.test.ts (8 tests) 7ms
+ ✓ src/services/shellExecutionService.multibyte.test.ts (2 tests) 8ms
+ ✓ src/runtime/AgentRuntimeContext.stateless.test.ts (2 tests) 12ms
+ ✓ src/providers/__tests__/BaseProvider.guard.test.ts (2 tests) 4ms
+ ✓ src/providers/openai/getOpenAIProviderInfo.context.test.ts (3 tests) 4ms
+ ✓ src/test-utils/__tests__/providerCallOptions.test.ts (2 tests) 4ms
+ ✓ src/providers/openai/buildResponsesRequest.undefined.test.ts (3 tests) 3ms
+ ✓ src/providers/openai/openaiRequestParams.test.ts (2 tests) 4ms
+ ✓ src/providers/openai/__tests__/formatArrayResponse.test.ts (13 tests) 3ms
+ ✓ src/providers/openai/buildResponsesRequest.stripToolCalls.test.ts (3 tests) 4ms
+ ❯ src/providers/ProviderManager.test.ts (3 tests | 1 failed) 19ms
+   × ProviderManager provider ordering > prioritizes core providers and sorts remaining alphabetically 13ms
+     → MissingProviderRuntimeError(provider-runtime): runtime registration missing. Run activateIsolatedRuntimeContext() before invoking providers (REQ-SP4-004).
+   ✓ ProviderPerformanceTracker > should accumulate session tokens correctly 3ms
+   ✓ ProviderPerformanceTracker > should reset session token usage 1ms
+ ✓ src/providers/anthropic/AnthropicProvider.toolFormatDetection.test.ts (2 tests) 2ms
+ ✓ src/providers/gemini/GeminiProvider.e2e.test.ts (3 tests) 4ms
+ ✓ src/tools/ToolFormatter.toResponsesTool.test.ts (6 tests) 8ms
+ ✓ src/mcp/token-storage/base-token-storage.test.ts (12 tests) 21ms
+ ✓ src/utils/sanitization.test.ts (14 tests) 3ms
+ ✓ src/providers/openai/ConversationCache.accumTokens.test.ts (9 tests) 3ms
+ ✓ src/parsers/TextToolCallParser.multibyte.test.ts (1 test) 7ms
+ ✓ src/services/tool-call-tracker-service.test.ts (6 tests) 4ms
+ ✓ src/runtime/providerRuntimeContext.test.ts (3 tests) 82ms
+ ✓ src/providers/openai/OpenAIProvider.setModel.test.ts (3 tests) 6ms
+ ✓ src/providers/ProviderManager.gemini-switch.test.ts (3 tests) 9ms
+ ✓ src/utils/safeJsonStringify.test.ts (8 tests) 3ms
+ ✓ src/utils/filesearch/result-cache.test.ts (3 tests) 3ms
+ ✓ src/runtime/RuntimeInvocationContext.failfast.test.ts (2 tests) 3ms
+ ✓ src/index.test.ts (1 test) 2ms
+ ✓ src/code_assist/oauth2.e2e.test.ts (1 test) 2ms
+ ↓ src/providers/openai/OpenAIProvider.callResponses.stateless.test.ts (5 tests | 5 skipped)
+ ↓ src/providers/openai/OpenAIProvider.integration.test.ts (3 tests | 3 skipped)
+ ↓ src/services/shellExecutionService.windows.test.ts (3 tests | 3 skipped)
+ ↓ src/providers/openai/ResponsesContextTrim.integration.test.ts (4 tests | 4 skipped)
+ ↓ src/providers/__tests__/BaseProvider.guard.stub.test.ts (1 test | 1 skipped)
+ ✓ src/utils/tool-utils.test.ts (7 tests) 4ms
+ ↓ src/services/history/orphaned-tools.test.ts (6 tests | 6 skipped)
+ ✓ src/tools/mcp-client-manager.test.ts (2 tests) 3ms
+ ✓ src/core/__tests__/compression-logic.test.ts (1 test) 2ms
+ ✓ src/core/__tests__/compression.test.ts (1 test) 2ms
+ ↓ src/providers/openai/OpenAIProvider.responsesIntegration.test.ts (6 tests | 6 skipped)
+ ❯ src/providers/openai/OpenAIProvider.toolFormatDetection.test.ts (2 tests | 1 failed) 8ms
+   × OpenAIProvider tool format detection > detects qwen format for GLM models 7ms
+     → expected 'openai' to be 'qwen' // Object.is equality
+   ✓ OpenAIProvider tool format detection > keeps openai format for non-GLM models 0ms
+ ✓ src/providers/anthropic/AnthropicProvider.modelParams.test.ts (1 test) 2ms
+ ✓ src/auth/qwen-device-flow.spec.ts (24 tests) 40641ms
+   ✓ QwenDeviceFlow - Behavioral Tests > Token Polling > should poll for token until authorization completes  10010ms
+   ✓ QwenDeviceFlow - Behavioral Tests > Token Polling > should use correct Qwen token endpoint  1763ms
+   ✓ QwenDeviceFlow - Behavioral Tests > Token Polling > should respect server-specified polling interval  10013ms
+   ✓ QwenDeviceFlow - Behavioral Tests > Error Handling > should handle network failures with retry logic  18763ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 21 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/core/geminiChat.contextlimit.test.ts > GeminiChat Context Limit Enforcement > should enforce context window using user-configured context-limit
+TypeError: Cannot read properties of undefined (reading 'model')
+ ❯ new GeminiChat src/core/geminiChat.ts:377:37
+    375|     validateHistory(initialHistory);
+    376| 
+    377|     const model = this.runtimeState.model;
+       |                                     ^
+    378|     this.logger.debug('GeminiChat initialized:', {
+    379|       model,
+ ❯ src/core/geminiChat.contextlimit.test.ts:69:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/21]⎯
+
+ FAIL  src/core/geminiChat.contextlimit.test.ts > GeminiChat Context Limit Enforcement > should not trigger compression when within context-limit
+TypeError: Cannot read properties of undefined (reading 'model')
+ ❯ new GeminiChat src/core/geminiChat.ts:377:37
+    375|     validateHistory(initialHistory);
+    376| 
+    377|     const model = this.runtimeState.model;
+       |                                     ^
+    378|     this.logger.debug('GeminiChat initialized:', {
+    379|       model,
+ ❯ src/core/geminiChat.contextlimit.test.ts:89:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/21]⎯
+
+ FAIL  src/core/geminiChat.contextlimit.test.ts > GeminiChat Context Limit Enforcement > should use context-limit when available, falling back to default when not set
+TypeError: Cannot read properties of undefined (reading 'model')
+ ❯ new GeminiChat src/core/geminiChat.ts:377:37
+    375|     validateHistory(initialHistory);
+    376| 
+    377|     const model = this.runtimeState.model;
+       |                                     ^
+    378|     this.logger.debug('GeminiChat initialized:', {
+    379|       model,
+ ❯ src/core/geminiChat.contextlimit.test.ts:110:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/21]⎯
+
+ FAIL  src/core/geminiChat.runtime.test.ts > GeminiChat runtime context > passes runtime context and tools to provider generateChatCompletion
+Error: Request would exceed the 60000 token context window even after compression (projected 65539 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.sendMessage src/core/geminiChat.ts:624:5
+ ❯ src/core/geminiChat.runtime.test.ts:150:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > sendMessage > should call generateContent with the correct parameters
+Error: Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.sendMessage src/core/geminiChat.ts:624:5
+ ❯ src/core/geminiChat.test.ts:194:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > sendMessage > should trigger compression when pending tokens exceed threshold
+Error: Request would exceed the 60000 token context window even after compression (projected 130536 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.sendMessage src/core/geminiChat.ts:624:5
+ ❯ src/core/geminiChat.test.ts:240:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > sendMessage > should not trigger compression when pending tokens stay under threshold
+Error: Request would exceed the 60000 token context window even after compression (projected 67036 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.sendMessage src/core/geminiChat.ts:624:5
+ ❯ src/core/geminiChat.test.ts:264:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > sendMessageStream > should call generateContentStream with the correct parameters
+Error: Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.makeApiCallAndProcessStream src/core/geminiChat.ts:1212:5
+ ❯ src/core/geminiChat.ts:968:28
+ ❯ src/core/geminiChat.test.ts:296:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > sendMessageStream with retries > should yield a RETRY event when an invalid stream is encountered
+Error: Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.makeApiCallAndProcessStream src/core/geminiChat.ts:1212:5
+ ❯ src/core/geminiChat.ts:968:28
+ ❯ src/core/geminiChat.test.ts:771:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > sendMessageStream with retries > should retry on invalid content and succeed on the second attempt
+Error: Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.makeApiCallAndProcessStream src/core/geminiChat.ts:1212:5
+ ❯ src/core/geminiChat.ts:968:28
+ ❯ src/core/geminiChat.test.ts:809:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > sendMessageStream with retries > should fail after all retries on persistent invalid content
+AssertionError: expected error to be instance of EmptyStreamError
+
+[32m- Expected:[39m 
+[Function EmptyStreamError]
+
+[31m+ Received:[39m 
+Error {
+  "message": "Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.",
+}
+
+ ❯ src/core/geminiChat.test.ts:863:7
+    861|       }
+    862| 
+    863|       await expect(consumeStreamAndExpectError()).rejects.toThrow(
+       |       ^
+    864|         EmptyStreamError,
+    865|       );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > should correctly retry and append to an existing history mid-conversation
+Error: Request would exceed the 60000 token context window even after compression (projected 65542 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.makeApiCallAndProcessStream src/core/geminiChat.ts:1212:5
+ ❯ src/core/geminiChat.ts:968:28
+ ❯ src/core/geminiChat.test.ts:907:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > concurrency control > should queue a subsequent sendMessage call until the first one completes
+AssertionError: expected "spy" to be called 1 times, but got 0 times
+ ❯ src/core/geminiChat.test.ts:1008:51
+    1006|       // 5. CRUCIAL CHECK: At this point, only the first API call shou…
+    1007|       // The second call should be waiting on `sendPromise`.
+    1008|       expect(mockProvider.generateChatCompletion).toHaveBeenCalledTime…
+       |                                                   ^
+    1009| 
+    1010|       // 6. Unblock the first API call and wait for the first message …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > should retry if the model returns a completely empty stream (no chunks)
+Error: Request would exceed the 60000 token context window even after compression (projected 65539 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.makeApiCallAndProcessStream src/core/geminiChat.ts:1212:5
+ ❯ src/core/geminiChat.ts:968:28
+ ❯ src/core/geminiChat.test.ts:1051:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > should queue a subsequent sendMessageStream call until the first stream is fully consumed
+Error: Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.makeApiCallAndProcessStream src/core/geminiChat.ts:1212:5
+ ❯ src/core/geminiChat.ts:968:28
+ ❯ src/core/geminiChat.test.ts:1121:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > should retry when all content is invalid and succeed on the second attempt
+Error: Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.makeApiCallAndProcessStream src/core/geminiChat.ts:1212:5
+ ❯ src/core/geminiChat.ts:968:28
+ ❯ src/core/geminiChat.test.ts:1195:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > normalizeToolInteractionInput > should handle flattened tool call/response arrays from UI
+Error: Request would exceed the 60000 token context window even after compression (projected 65582 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.makeApiCallAndProcessStream src/core/geminiChat.ts:1212:5
+ ❯ src/core/geminiChat.ts:968:28
+ ❯ src/core/geminiChat.test.ts:1266:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > normalizeToolInteractionInput > should handle single paired tool call/response (2 elements)
+Error: Request would exceed the 60000 token context window even after compression (projected 65557 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ GeminiChat.makeApiCallAndProcessStream src/core/geminiChat.ts:1212:5
+ ❯ src/core/geminiChat.ts:968:28
+ ❯ src/core/geminiChat.test.ts:1342:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/21]⎯
+
+ FAIL  src/core/geminiChat.test.ts > GeminiChat > stateless runtime context compliance > should not rely on global provider runtime context
+AssertionError: promise rejected "Error: Request would exceed the 60000 tok…" instead of resolving
+ ❯ src/core/geminiChat.test.ts:1379:7
+    1377|       await expect(
+    1378|         chat.sendMessage({ message: 'stateless-check' }, 'stateless-pr…
+    1379|       ).resolves.toBeDefined();
+       |       ^
+    1380| 
+    1381|       expect(getRuntimeSpy).not.toHaveBeenCalled();
+
+Caused by: Error: Request would exceed the 60000 token context window even after compression (projected 65539 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+ ❯ GeminiChat.sendMessage src/core/geminiChat.ts:624:5
+ ❯ src/core/geminiChat.test.ts:1377:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/21]⎯
+
+ FAIL  src/providers/ProviderManager.test.ts > ProviderManager provider ordering > prioritizes core providers and sorts remaining alphabetically
+MissingProviderRuntimeError: MissingProviderRuntimeError(provider-runtime): runtime registration missing. Run activateIsolatedRuntimeContext() before invoking providers (REQ-SP4-004).
+ ❯ getActiveProviderRuntimeContext src/runtime/providerRuntimeContext.ts:83:9
+     81|   }
+     82| 
+     83|   throw new MissingProviderRuntimeError({
+       |         ^
+     84|     providerKey: 'provider-runtime',
+     85|     missingFields: ['runtime registration'],
+ ❯ ensureFallback src/providers/ProviderManager.ts:122:20
+ ❯ ProviderManager.resolveInit src/providers/ProviderManager.ts:128:24
+ ❯ new ProviderManager src/providers/ProviderManager.ts:98:27
+ ❯ src/providers/ProviderManager.test.ts:34:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/21]⎯
+
+ FAIL  src/providers/openai/OpenAIProvider.toolFormatDetection.test.ts > OpenAIProvider tool format detection > detects qwen format for GLM models
+AssertionError: expected 'openai' to be 'qwen' // Object.is equality
+
+Expected: [32m"qwen"[39m
+Received: [31m"openai"[39m
+
+ ❯ src/providers/openai/OpenAIProvider.toolFormatDetection.test.ts:34:38
+     32|     vi.spyOn(provider, 'getModel').mockReturnValue('openai:hf:zai-org/…
+     33| 
+     34|     expect(provider.getToolFormat()).toBe('qwen');
+       |                                      ^
+     35|   });
+     36| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/21]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 2 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ processTicksAndRejections node:internal/process/task_queues:105:5
+ ❯ GeminiChat.sendMessage src/core/geminiChat.ts:624:5
+
+This error originated in "src/core/geminiChat.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: Request would exceed the 60000 token context window even after compression (projected 65537 tokens including system prompt and a 65536 token completion budget). Reduce earlier history or lower maxOutputTokens.
+ ❯ GeminiChat.enforceContextWindow src/core/geminiChat.ts:1626:11
+
+ ❯ processTicksAndRejections node:internal/process/task_queues:105:5
+ ❯ GeminiChat.sendMessage src/core/geminiChat.ts:624:5
+
+This error originated in "src/core/geminiChat.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  5 failed | 209 passed | 7 skipped (221)
+      Tests  21 failed | 3360 passed | 66 skipped (3447)
+     Errors  2 errors
+   Start at  14:46:57
+   Duration  43.28s (transform 7.52s, setup 5.67s, collect 153.31s, tests 94.97s, environment 34ms, prepare 30.55s)
+
+JUNIT report written to /Users/acoliver/projects/llxprt-code/packages/core/junit.xml
+npm error Lifecycle script `test:ci` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt-code/packages/core
+npm error workspace @vybestack/llxprt-code-core@0.5.0
+npm error location /Users/acoliver/projects/llxprt-code/packages/core
+npm error command failed
+npm error command sh -c vitest run --coverage
+
+
+> llxprt-code-vscode-ide-companion@0.5.0 test:ci
+> vitest run --coverage
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt-code/packages/vscode-ide-companion
+      Coverage enabled with v8
+
+ ✓ src/open-files-manager.test.ts (17 tests) 42ms
+ ✓ src/extension.test.ts (4 tests) 9ms
+ ✓ src/extension-multi-folder.test.ts (5 tests | 1 skipped) 9ms
+
+ Test Files  3 passed (3)
+      Tests  25 passed | 1 skipped (26)
+   Start at  14:47:41
+   Duration  865ms (transform 164ms, setup 0ms, collect 582ms, tests 60ms, environment 0ms, prepare 274ms)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   37.22 |       75 |    47.5 |   37.22 |                   
+ ...-ide-companion |       0 |        0 |       0 |       0 |                   
+  esbuild.js       |       0 |        0 |       0 |       0 | 1-69              
+ ...panion/scripts |       0 |        0 |       0 |       0 |                   
+  ...te-notices.js |       0 |        0 |       0 |       0 | 1-158             
+ ...-companion/src |   44.81 |    78.18 |   48.64 |   44.81 |                   
+  diff-manager.ts  |   23.15 |       75 |      20 |   23.15 | ...40-241,244-269 
+  extension.ts     |   57.35 |       75 |      50 |   57.35 | ...33-137,142-156 
+  ide-schemas.ts   |     100 |      100 |     100 |     100 |                   
+  ide-server.ts    |   26.37 |       60 |      50 |   26.37 | ...62-377,389-408 
+  ...es-manager.ts |   94.36 |    84.84 |     100 |   94.36 | ...85,143-144,151 
+ ...nion/src/utils |   83.33 |    66.66 |     100 |   83.33 |                   
+  logger.ts        |   83.33 |    66.66 |     100 |   83.33 | 15-16             
+-------------------|---------|----------|---------|---------|-------------------
