@@ -798,12 +798,18 @@ export class SubAgentScope {
           },
         ];
       }
+      this.finalizeOutput();
     } catch (error) {
       this.logger.warn(
         () =>
           `Error during subagent execution for ${this.subagentId}: ${error instanceof Error ? error.message : String(error)}`,
       );
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
+      if (!this.output.final_message) {
+        this.output.final_message =
+          error instanceof Error ? error.message : String(error);
+      }
+      this.finalizeOutput();
       throw error;
     } finally {
       this.activeAbortController = null;
@@ -1045,12 +1051,18 @@ export class SubAgentScope {
           ];
         }
       }
+      this.finalizeOutput();
     } catch (error) {
       this.logger.warn(
         () =>
           `Error during subagent execution for ${this.subagentId}: ${error instanceof Error ? error.message : String(error)}`,
       );
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
+      if (!this.output.final_message) {
+        this.output.final_message =
+          error instanceof Error ? error.message : String(error);
+      }
+      this.finalizeOutput();
       throw error;
     } finally {
       this.activeAbortController = null;
@@ -1227,6 +1239,48 @@ export class SubAgentScope {
           ? this.config.getApprovalMode()
           : ApprovalMode.DEFAULT,
     } as unknown as Config;
+  }
+
+  private finalizeOutput(): void {
+    const message = this.output.final_message;
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return;
+    }
+
+    const emittedVars = this.output.emitted_vars ?? {};
+    const emittedEntries = Object.entries(emittedVars)
+      .filter(
+        ([, value]) =>
+          value !== undefined &&
+          value !== null &&
+          String(value).trim().length > 0,
+      )
+      .map(([key, value]) => `${key}=${String(value)}`);
+
+    let baseMessage: string;
+    switch (this.output.terminate_reason) {
+      case SubagentTerminateMode.GOAL:
+        baseMessage = 'Completed the requested task.';
+        break;
+      case SubagentTerminateMode.TIMEOUT:
+        baseMessage = 'Stopped because the time limit was reached.';
+        break;
+      case SubagentTerminateMode.MAX_TURNS:
+        baseMessage =
+          'Stopped because the maximum number of turns was reached.';
+        break;
+      case SubagentTerminateMode.ERROR:
+      default:
+        baseMessage = 'Stopped due to an unrecoverable error.';
+        break;
+    }
+
+    const varsSuffix =
+      emittedEntries.length > 0
+        ? ` Emitted variables: ${emittedEntries.join(', ')}.`
+        : '';
+
+    this.output.final_message = `${baseMessage}${varsSuffix}`.trim();
   }
 
   private isFatalToolError(errorType: ToolErrorType | undefined): boolean {

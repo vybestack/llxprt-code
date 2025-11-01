@@ -252,4 +252,6 @@ export const TOOL_DEFAULTS: Record<string, string> = {
   'tools/todo-pause.md': loadMarkdownFile('tools/todo-pause.md'),
   'tools/web-fetch.md': loadMarkdownFile('tools/web-fetch.md'),
   'tools/web-search.md': loadMarkdownFile('tools/web-search.md'),
+  'tools/list-subagents.md': loadMarkdownFile('tools/list-subagents.md'),
+  'tools/task.md': loadMarkdownFile('tools/task.md'),
 };

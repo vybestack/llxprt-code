@@ -1010,6 +1010,9 @@ describe('subagent.ts', () => {
 
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
         expect(scope.output.emitted_vars).toEqual({});
+        expect(scope.output.final_message).toMatch(
+          /Completed the requested task/i,
+        );
         expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
         // Check the initial message
         expect(mockSendMessageStream.mock.calls[0][0].message).toEqual([
@@ -1108,6 +1111,7 @@ describe('subagent.ts', () => {
 
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
         expect(scope.output.emitted_vars).toEqual({ result: 'Success!' });
+        expect(scope.output.final_message).toContain('result=Success');
         expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
 
         // Check the tool response sent back in the second call
