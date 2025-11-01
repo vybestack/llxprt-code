@@ -47,6 +47,10 @@ export const aboutCommand: SlashCommand = {
       (runtime.getEphemeralSetting('auth-keyfile') as string) || '';
     const keyStatus = '';
 
+    // Get provider details from runtime
+    const provider = providerStatus.providerName || 'Unknown';
+    const baseURL = providerStatus.baseURL || '';
+
     const aboutItem: Omit<HistoryItemAbout, 'id'> = {
       type: MessageType.ABOUT,
       cliVersion,
@@ -58,6 +62,8 @@ export const aboutCommand: SlashCommand = {
       keyfile: keyfilePath,
       key: keyStatus,
       ideClient,
+      provider,
+      baseURL,
     };
 
     context.ui.addItem(aboutItem, Date.now());

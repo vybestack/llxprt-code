@@ -28,6 +28,7 @@ import {
   type Profile,
   ShellTool,
   EditTool,
+  WriteFileTool,
   MCPServerConfig,
   SettingsService,
   DebugLogger,
@@ -56,6 +57,7 @@ import {
   setCliRuntimeContext,
   switchActiveProvider,
 } from '../runtime/runtimeSettings.js';
+import { applyCliSetArguments } from './cliEphemeralSettings.js';
 
 const LLXPRT_DIR = '.llxprt';
 
@@ -137,7 +139,9 @@ export interface CliArgs {
   screenReader: boolean | undefined;
   useSmartEdit: boolean | undefined;
   sessionSummary: string | undefined;
+  dumponerror: boolean | undefined;
   promptWords: string[] | undefined;
+  set: string[] | undefined;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {
@@ -285,6 +289,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         .option('session-summary', {
           type: 'string',
           description: 'File to write session summary to.',
+        })
+        .option('dumponerror', {
+          type: 'boolean',
+          description: 'Dump request body to ~/.llxprt/dumps/ on API errors.',
+          default: false,
         })
         .deprecateOption(
           'telemetry',
@@ -447,6 +456,20 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         // Handle comma-separated values
         dirs.flatMap((dir) => dir.split(',').map((d) => d.trim())),
     })
+    .option('set', {
+      type: 'array',
+      string: true,
+      description: 'Set an ephemeral setting via key=value (can be repeated)',
+      coerce: (entries: unknown[]) =>
+        entries.map((entry) => {
+          if (typeof entry !== 'string') {
+            throw new Error(
+              `Invalid value for --set: ${String(entry)}. Expected key=value string.`,
+            );
+          }
+          return entry;
+        }),
+    })
     .option('profile-load', {
       type: 'string',
       description: 'Load a saved profile configuration on startup',
@@ -455,7 +478,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       type: 'boolean',
       description:
         'If true, when refreshing memory, LLXPRT.md files should be loaded from all directories that are added. If false, LLXPRT.md files should only be loaded from the primary working directory.',
-      default: false,
     })
     // Register MCP subcommands
     .command(mcpCommand);
@@ -527,8 +549,10 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     screenReader: result.screenReader as boolean | undefined,
     useSmartEdit: result.useSmartEdit as boolean | undefined,
     sessionSummary: result.sessionSummary as string | undefined,
+    dumponerror: result.dumponerror as boolean | undefined,
     allowedTools: result.allowedTools as string[] | undefined,
     promptWords: result.promptWords as string[] | undefined,
+    set: result.set as string[] | undefined,
   };
 
   return cliArgs;
@@ -771,17 +795,34 @@ export async function loadCliConfig(
     ...effectiveSettings.fileFiltering,
   };
 
-  const includeDirectories = (effectiveSettings.includeDirectories || [])
+  const includeDirectoriesFromSettings =
+    effectiveSettings.includeDirectories || [];
+  const includeDirectoriesFromCli = argv.includeDirectories || [];
+  const includeDirectories = includeDirectoriesFromSettings
     .map(resolvePath)
-    .concat((argv.includeDirectories || []).map(resolvePath));
+    .concat(includeDirectoriesFromCli.map(resolvePath));
+
+  const includeDirectoriesProvided = includeDirectories.length > 0;
+  const cliLoadMemoryPreference = argv.loadMemoryFromIncludeDirectories;
+  const settingsLoadMemoryPreference =
+    effectiveSettings.loadMemoryFromIncludeDirectories;
+
+  let resolvedLoadMemoryFromIncludeDirectories =
+    cliLoadMemoryPreference ?? settingsLoadMemoryPreference ?? false;
+
+  if (
+    !resolvedLoadMemoryFromIncludeDirectories &&
+    includeDirectoriesProvided &&
+    cliLoadMemoryPreference === undefined &&
+    settingsLoadMemoryPreference !== true
+  ) {
+    resolvedLoadMemoryFromIncludeDirectories = true;
+  }
 
   // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
   const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
     cwd,
-    effectiveSettings.loadMemoryFromIncludeDirectories ||
-      argv.loadMemoryFromIncludeDirectories
-      ? includeDirectories
-      : [],
+    resolvedLoadMemoryFromIncludeDirectories ? includeDirectories : [],
     debugMode,
     fileService,
     effectiveSettings,
@@ -836,7 +877,7 @@ export async function loadCliConfig(
     switch (approvalMode) {
       case ApprovalMode.DEFAULT:
         // In default non-interactive mode, all tools that require approval are excluded.
-        extraExcludes.push(ShellTool.Name, EditTool.Name);
+        extraExcludes.push(ShellTool.Name, EditTool.Name, WriteFileTool.Name);
         break;
       case ApprovalMode.AUTO_EDIT:
         // In auto-edit non-interactive mode, only tools that still require a prompt are excluded.
@@ -943,10 +984,7 @@ export async function loadCliConfig(
     sandbox: sandboxConfig,
     targetDir: cwd,
     includeDirectories,
-    loadMemoryFromIncludeDirectories:
-      argv.loadMemoryFromIncludeDirectories ||
-      effectiveSettings.loadMemoryFromIncludeDirectories ||
-      false,
+    loadMemoryFromIncludeDirectories: resolvedLoadMemoryFromIncludeDirectories,
     debugMode,
     question,
     fullContext: argv.allFiles || false,
@@ -990,6 +1028,7 @@ export async function loadCliConfig(
     fileFiltering: effectiveSettings.fileFiltering,
     checkpointing:
       argv.checkpointing || effectiveSettings.checkpointing?.enabled,
+    dumpOnError: argv.dumponerror || false,
     proxy:
       argv.proxy ||
       process.env.HTTPS_PROXY ||
@@ -1214,6 +1253,7 @@ export async function loadCliConfig(
       'api-version',
       'custom-headers',
       'shell-replacement',
+      'authOnly',
     ];
 
     for (const key of ephemeralKeys) {
@@ -1222,6 +1262,15 @@ export async function loadCliConfig(
         enhancedConfig.setEphemeralSetting(key, value);
       }
     }
+  }
+
+  const cliSetResult = applyCliSetArguments(enhancedConfig, argv.set);
+
+  if (Object.keys(cliSetResult.modelParams).length > 0) {
+    const configWithCliParams = enhancedConfig as Config & {
+      _cliModelParams?: Record<string, unknown>;
+    };
+    configWithCliParams._cliModelParams = cliSetResult.modelParams;
   }
 
   // Store profile model params on the config for later application

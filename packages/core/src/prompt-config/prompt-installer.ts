@@ -10,6 +10,9 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { existsSync } from 'fs';
+import { fileURLToPath } from 'node:url';
+import process from 'node:process';
+import type { Stats } from 'fs';
 
 // Constants
 export const DEFAULT_BASE_DIR = '~/.llxprt/prompts';
@@ -27,12 +30,36 @@ export interface InstallOptions {
   verbose?: boolean; // Detailed logging
 }
 
+export type PromptConflictReason =
+  | 'default-newer'
+  | 'user-newer'
+  | 'content-diff';
+
+export interface PromptConflictDetails {
+  path: string;
+  userTimestamp?: string;
+  defaultTimestamp?: string;
+  reason: PromptConflictReason;
+}
+
+export interface PromptConflictSummary extends PromptConflictDetails {
+  action: 'kept' | 'overwritten';
+  reviewFile?: string;
+}
+
+type ExistingFileDecision =
+  | { action: 'same' }
+  | { action: 'keep'; conflict: PromptConflictSummary; notice: string | null }
+  | { action: 'resolved' };
+
 export interface InstallResult {
   success: boolean;
   installed: string[];
   skipped: string[];
   errors: string[];
   baseDir?: string;
+  conflicts: PromptConflictSummary[];
+  notices: string[];
 }
 
 export interface UninstallOptions {
@@ -81,6 +108,8 @@ export type DefaultsMap = z.infer<typeof DefaultsMapSchema>;
  * PromptInstaller handles installation, validation, and maintenance of prompt files
  */
 export class PromptInstaller {
+  private defaultSourceDirs: string[] | null = null;
+
   /**
    * Install default prompt files
    * @param baseDir - Base directory for prompts (defaults to DEFAULT_BASE_DIR)
@@ -96,6 +125,8 @@ export class PromptInstaller {
     const installed: string[] = [];
     const skipped: string[] = [];
     const errors: string[] = [];
+    const conflicts: PromptConflictSummary[] = [];
+    const notices: string[] = [];
 
     // Prepare installation
     let expandedBaseDir = baseDir;
@@ -111,6 +142,8 @@ export class PromptInstaller {
         skipped: [],
         errors: ['Invalid base directory'],
         baseDir: expandedBaseDir,
+        conflicts: [],
+        notices: [],
       };
     }
 
@@ -161,12 +194,47 @@ export class PromptInstaller {
       }
 
       // Check existing file
-      if (!options?.dryRun && existsSync(fullPath) && !options?.force) {
-        skipped.push(relativePath);
-        if (options?.verbose) {
-          console.log('Preserving existing:', relativePath);
+      if (existsSync(fullPath) && !options?.force) {
+        const decision = await this.handleExistingFile(
+          expandedBaseDir,
+          relativePath,
+          fullPath,
+          content,
+          !options?.dryRun,
+        ).catch((error) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          errors.push(`Failed to evaluate ${relativePath}: ${message}`);
+          return { action: 'same' } as ExistingFileDecision;
+        });
+
+        if (decision.action === 'same') {
+          skipped.push(relativePath);
+          if (options?.verbose) {
+            console.log('Preserving existing:', relativePath);
+          }
+          continue;
         }
-        continue;
+
+        if (decision.action === 'resolved') {
+          skipped.push(relativePath);
+          if (options?.verbose) {
+            console.log(
+              'Default update already provided for review:',
+              relativePath,
+            );
+          }
+          continue;
+        }
+
+        if (decision.action === 'keep') {
+          conflicts.push(decision.conflict);
+          if (decision.notice) {
+            notices.push(decision.notice);
+          }
+          skipped.push(relativePath);
+          continue;
+        }
       }
 
       // Write file
@@ -265,7 +333,147 @@ export class PromptInstaller {
       skipped,
       errors,
       baseDir: expandedBaseDir,
+      conflicts,
+      notices,
     };
+  }
+
+  private async handleExistingFile(
+    expandedBaseDir: string,
+    relativePath: string,
+    fullPath: string,
+    content: string,
+    createReviewCopy: boolean,
+  ): Promise<ExistingFileDecision> {
+    const existingContent = await fs.readFile(fullPath, 'utf-8');
+    if (existingContent === content) {
+      return { action: 'same' };
+    }
+
+    const userStats = await fs.stat(fullPath);
+    const defaultStats = await this.getDefaultFileStats(relativePath);
+    const reason = this.determineConflictReason(userStats, defaultStats);
+
+    const timestamp = this.getReviewTimestamp(defaultStats);
+    const reviewRelativePath = this.generateReviewFilename(
+      relativePath,
+      timestamp,
+    );
+    const reviewFullPath = path.join(expandedBaseDir, reviewRelativePath);
+
+    if (existsSync(reviewFullPath)) {
+      return { action: 'resolved' };
+    }
+
+    if (createReviewCopy) {
+      await fs.mkdir(path.dirname(reviewFullPath), {
+        recursive: true,
+        mode: 0o755,
+      });
+      await fs.writeFile(reviewFullPath, content, { mode: 0o644 });
+    }
+
+    const conflict: PromptConflictSummary = {
+      path: relativePath,
+      action: 'kept',
+      reviewFile: reviewRelativePath,
+      reason,
+      userTimestamp: userStats.mtime.toISOString(),
+      defaultTimestamp: defaultStats?.mtime.toISOString(),
+    };
+
+    const notice = this.buildConflictNotice(
+      path.join(expandedBaseDir, relativePath),
+      reviewFullPath,
+    );
+
+    return {
+      action: 'keep',
+      conflict,
+      notice,
+    };
+  }
+
+  private getDefaultSourceDirectories(): string[] {
+    if (this.defaultSourceDirs) {
+      return this.defaultSourceDirs;
+    }
+
+    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+    const candidates = new Set<string>();
+    candidates.add(path.join(moduleDir, 'defaults'));
+    candidates.add(path.join(moduleDir, '..', 'defaults'));
+    candidates.add(path.join(moduleDir, '..', '..', 'defaults'));
+    candidates.add(
+      path.join(moduleDir, '..', '..', 'src', 'prompt-config', 'defaults'),
+    );
+    candidates.add(path.join(process.cwd(), 'bundle'));
+    candidates.add(
+      path.join(process.cwd(), 'packages/core/src/prompt-config/defaults'),
+    );
+
+    this.defaultSourceDirs = Array.from(candidates);
+    return this.defaultSourceDirs;
+  }
+
+  private async getDefaultFileStats(
+    relativePath: string,
+  ): Promise<Stats | null> {
+    for (const baseDir of this.getDefaultSourceDirectories()) {
+      const candidate = path.join(baseDir, relativePath);
+      try {
+        const stats = await fs.stat(candidate);
+        if (stats.isFile()) {
+          return stats;
+        }
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  private determineConflictReason(
+    userStats: Stats | null,
+    defaultStats: Stats | null,
+  ): PromptConflictReason {
+    if (userStats && defaultStats) {
+      if (defaultStats.mtimeMs > userStats.mtimeMs) {
+        return 'default-newer';
+      }
+      if (userStats.mtimeMs > defaultStats.mtimeMs) {
+        return 'user-newer';
+      }
+    }
+    return 'content-diff';
+  }
+
+  private generateReviewFilename(
+    relativePath: string,
+    timestamp: string,
+  ): string {
+    return `${relativePath}.${timestamp}`;
+  }
+
+  private formatTimestamp(date: Date): string {
+    const year = date.getUTCFullYear().toString();
+    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = date.getUTCDate().toString().padStart(2, '0');
+    const hours = date.getUTCHours().toString().padStart(2, '0');
+    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
+  }
+
+  private getReviewTimestamp(defaultStats: Stats | null): string {
+    if (defaultStats) {
+      return this.formatTimestamp(defaultStats.mtime);
+    }
+    return this.formatTimestamp(new Date(0));
+  }
+
+  private buildConflictNotice(userPath: string, reviewPath: string): string {
+    return `Warning: this version includes a newer version of ${userPath} which you customized. We put ${reviewPath} next to it for your review.`;
   }
 
   /**

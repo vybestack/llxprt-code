@@ -22,6 +22,7 @@ LLxprt Code is a powerful fork of [Google's Gemini CLI](https://github.com/googl
 ## Key Features
 
 - **Multi-Provider Support**: Direct access to OpenAI (o3), Anthropic (Claude), Google Gemini, plus OpenRouter, Fireworks, and local models
+- **Installable Provider Aliases**: Save `/provider` setups as reusable configs and load OpenAI-compatible endpoints instantly
 - **Enhanced Theme Support**: Beautiful themes applied consistently across the entire tool
 - **Full Gemini CLI Compatibility**: All original features work seamlessly, including Google authentication via `/auth`
 - **Local Model Support**: Run models locally with LM Studio, llama.cpp, or any OpenAI-compatible server

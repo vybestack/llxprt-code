@@ -15,6 +15,50 @@ import {
 import { SettingsService } from '../settings/SettingsService.js';
 import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
+describe('ProviderManager provider ordering', () => {
+  const createProvider = (name: string): IProvider =>
+    ({
+      name,
+      getModels: vi.fn().mockResolvedValue([]),
+      getDefaultModel: vi.fn().mockReturnValue('test-model'),
+      generateChatCompletion: vi.fn(),
+      getServerTools: vi.fn().mockReturnValue([]),
+      invokeServerTool: vi.fn().mockRejectedValue(new Error('Not implemented')),
+    }) as unknown as IProvider;
+
+  beforeEach(() => {
+    resetSettingsService();
+  });
+
+  it('prioritizes core providers and sorts remaining alphabetically', () => {
+    const manager = new ProviderManager();
+
+    const providerNames = [
+      'openai-responses',
+      'gamma',
+      'anthropic',
+      'beta',
+      'gemini',
+      'openai',
+      'alpha',
+    ];
+
+    for (const name of providerNames) {
+      manager.registerProvider(createProvider(name));
+    }
+
+    expect(manager.listProviders()).toEqual([
+      'anthropic',
+      'gemini',
+      'openai',
+      'openai-responses',
+      'alpha',
+      'beta',
+      'gamma',
+    ]);
+  });
+});
+
 describe('ProviderPerformanceTracker', () => {
   let mockProvider: IProvider;
 

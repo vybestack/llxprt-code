@@ -5,7 +5,6 @@
  */
 
 import { OAuthToken, AuthStatus, TokenStore } from './types.js';
-import { type OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { getSettingsService } from '@vybestack/llxprt-code-core';
 
@@ -23,33 +22,6 @@ function isAuthOnlyEnabled(value: unknown): boolean {
     }
   }
   return false;
-}
-
-/**
- * Interface for OAuth provider abstraction
- * Each provider (e.g., Google, Qwen) implements this interface
- */
-export interface OAuthProvider {
-  /** Provider name (e.g., 'gemini', 'qwen') */
-  name: string;
-
-  /**
-   * Initiate OAuth authentication flow
-   * This starts the device flow or opens browser for auth
-   */
-  initiateAuth(): Promise<void>;
-
-  /**
-   * Get current OAuth token for this provider
-   * @returns OAuth token if available, null otherwise
-   */
-  getToken(): Promise<OAuthToken | null>;
-
-  /**
-   * Refresh token if it's expired or about to expire
-   * @returns Refreshed token or null if refresh failed
-   */
-  refreshIfNeeded(): Promise<OAuthToken | null>;
 }
 
 function isLoggingWrapperCandidate(
@@ -90,6 +62,33 @@ export function unwrapLoggingProvider<T extends OAuthProvider | undefined>(
   }
 
   return current as T;
+}
+
+/**
+ * Interface for OAuth provider abstraction
+ * Each provider (e.g., Google, Qwen) implements this interface
+ */
+export interface OAuthProvider {
+  /** Provider name (e.g., 'gemini', 'qwen') */
+  name: string;
+
+  /**
+   * Initiate OAuth authentication flow
+   * This starts the device flow or opens browser for auth
+   */
+  initiateAuth(): Promise<void>;
+
+  /**
+   * Get current OAuth token for this provider
+   * @returns OAuth token if available, null otherwise
+   */
+  getToken(): Promise<OAuthToken | null>;
+
+  /**
+   * Refresh token if it's expired or about to expire
+   * @returns Refreshed token or null if refresh failed
+   */
+  refreshIfNeeded(): Promise<OAuthToken | null>;
 }
 
 /**
@@ -138,8 +137,10 @@ export class OAuthManager {
 
     this.providers.set(provider.name, provider);
 
-    // IMPORTANT: Do not call provider.getToken() here. OAuth registration must stay lazy to avoid prompting during setup.
-    // This fixes issue 308 where OAuth was being initialized during MCP operations.
+    // CRITICAL FIX: Remove automatic OAuth provider initialization
+    // OAuth providers should only initialize when actually needed
+    // The "lazy initialization pattern" should be controlled by usage, not registration
+    // This fixes issue 308 where OAuth was being initialized during MCP operations
   }
 
   /**
@@ -197,20 +198,9 @@ export class OAuthManager {
 
     // Get all registered providers and check their status
     for (const [providerName, _provider] of this.providers) {
-      const oauthEnabled = this.isOAuthEnabled(providerName);
-
-      if (!oauthEnabled) {
-        statuses.push({
-          provider: providerName,
-          authenticated: false,
-          authType: 'none',
-          oauthEnabled,
-        });
-        continue;
-      }
-
       try {
         const token = await this.tokenStore.getToken(providerName);
+        const oauthEnabled = this.isOAuthEnabled(providerName);
 
         if (token) {
           // Provider is authenticated, calculate time until expiry
@@ -235,6 +225,7 @@ export class OAuthManager {
         }
       } catch (_error) {
         // If we can't get token status, consider it unauthenticated
+        const oauthEnabled = this.isOAuthEnabled(providerName);
         statuses.push({
           provider: providerName,
           authenticated: false,
@@ -380,10 +371,7 @@ export class OAuthManager {
    * @param providerName - Name of the provider
    * @returns Access token string if available, null otherwise
    */
-  async getToken(
-    providerName: string,
-    _metadata?: OAuthTokenRequestMetadata,
-  ): Promise<string | null> {
+  async getToken(providerName: string): Promise<string | null> {
     // Check if OAuth is enabled for this provider
     if (!this.isOAuthEnabled(providerName)) {
       return null;
@@ -430,14 +418,32 @@ export class OAuthManager {
   }
 
   /**
+   * Retrieve the stored OAuth token without refreshing it.
+   * Returns null if the provider is unknown or no token exists.
+   */
+  async peekStoredToken(providerName: string): Promise<OAuthToken | null> {
+    if (!providerName || typeof providerName !== 'string') {
+      throw new Error('Provider name must be a non-empty string');
+    }
+
+    if (!this.providers.has(providerName)) {
+      throw new Error(`Unknown provider: ${providerName}`);
+    }
+
+    try {
+      return await this.tokenStore.getToken(providerName);
+    } catch (error) {
+      console.debug(`Failed to load stored token for ${providerName}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Get OAuth token object for a specific provider
    * @param providerName - Name of the provider
    * @returns OAuth token if available, null otherwise
    */
-  async getOAuthToken(
-    providerName: string,
-    _metadata?: OAuthTokenRequestMetadata,
-  ): Promise<OAuthToken | null> {
+  async getOAuthToken(providerName: string): Promise<OAuthToken | null> {
     if (!providerName || typeof providerName !== 'string') {
       throw new Error('Provider name must be a non-empty string');
     }
@@ -455,9 +461,8 @@ export class OAuthManager {
       }
 
       // 2. Check if token expires within 30 seconds (30000ms)
-      // Note: token.expiry is in seconds, not milliseconds
-      const now = Date.now() / 1000; // Convert to seconds
-      const thirtySecondsFromNow = now + 30;
+      const now = Date.now();
+      const thirtySecondsFromNow = now + 30000;
 
       if (token.expiry <= thirtySecondsFromNow) {
         // 3. Token is expired or about to expire, try refresh

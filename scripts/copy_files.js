@@ -26,7 +26,7 @@ import path from 'path';
 const sourceDir = path.join('src');
 const targetDir = path.join('dist', 'src');
 
-const extensionsToCopy = ['.md', '.json', '.sb'];
+const extensionsToCopy = ['.md', '.json', '.config', '.sb', '.png'];
 
 function copyFilesRecursive(source, target) {
   if (!fs.existsSync(target)) {

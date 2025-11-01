@@ -6,10 +6,11 @@
 
 /// <reference types="vitest" />
 import { defineConfig } from 'vitest/config';
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const inkStubPath = resolve(__dirname, './test-utils/ink-stub.ts');
 
 const isMultiRuntimeGuardrailRun =
   process.argv.includes('--run') &&
@@ -47,6 +48,9 @@ export default defineConfig({
   resolve: {
     conditions: ['node', 'import', 'module', 'browser', 'default'],
     extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json'],
+    alias: {
+      ink: inkStubPath,
+    },
   },
   test: {
     include: ['**/*.{test,spec}.?(c|m)[jt]s?(x)', 'config.test.ts'],

@@ -77,6 +77,8 @@ describe('<HistoryItemDisplay />', () => {
       keyfile: 'test-keyfile',
       key: 'test-key',
       ideClient: 'test-ide',
+      provider: 'test-provider',
+      baseURL: 'test-url',
     };
     const { lastFrame } = render(
       <HistoryItemDisplay {...baseItem} item={item} />,

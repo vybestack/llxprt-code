@@ -36,6 +36,12 @@ import {
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
+import {
+  retryWithBackoff,
+  getErrorStatus,
+  isNetworkTransientError,
+} from '../../utils/retry.js';
+import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 export class AnthropicProvider extends BaseProvider {
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
@@ -525,11 +531,56 @@ export class AnthropicProvider extends BaseProvider {
   detectToolFormat(): ToolFormat {
     // @plan PLAN-20251023-STATELESS-HARDENING.P08: Don't reference deprecated instance fields
     // Tools format should be derived from runtime context only
-    // This implementation is kept for backward compatibility but should be updated
-    // in a future follow-up to use ephemeral settings via options.config.getEphemeralSettings()
+    try {
+      const settingsService = getSettingsService();
 
-    // Default to 'anthropic' format for now
-    return 'anthropic';
+      // First check SettingsService for toolFormat override in provider settings
+      // Note: This is synchronous access to cached settings, not async
+      const currentSettings = settingsService['settings'];
+      const providerSettings = currentSettings?.providers?.[this.name];
+      const toolFormatOverride = providerSettings?.toolFormat as
+        | ToolFormat
+        | 'auto'
+        | undefined;
+
+      // If explicitly set to a specific format (not 'auto'), use it
+      if (toolFormatOverride && toolFormatOverride !== 'auto') {
+        return toolFormatOverride;
+      }
+
+      // Auto-detect based on model name if set to 'auto' or not set
+      const modelName = this.getCurrentModel().toLowerCase();
+
+      // Check for GLM models which require Qwen handling
+      if (modelName.includes('glm-')) {
+        return 'qwen';
+      }
+
+      // Check for qwen models
+      if (modelName.includes('qwen')) {
+        return 'qwen';
+      }
+
+      // Default to 'anthropic' format
+      return 'anthropic';
+    } catch (error) {
+      this.getLogger().debug(
+        () => `Failed to detect tool format from SettingsService: ${error}`,
+      );
+
+      // Fallback detection without SettingsService
+      const modelName = this.getCurrentModel().toLowerCase();
+
+      if (modelName.includes('glm-')) {
+        return 'qwen';
+      }
+
+      if (modelName.includes('qwen')) {
+        return 'qwen';
+      }
+
+      return 'anthropic';
+    }
   }
 
   override getToolFormat(): ToolFormat {
@@ -1011,16 +1062,25 @@ export class AnthropicProvider extends BaseProvider {
       );
     }
 
-    // Make the API call directly with type assertion
+    // Make the API call with retry logic
     const customHeaders = this.getCustomHeaders();
-    const response = customHeaders
-      ? await client.messages.create(
-          requestBody as Parameters<typeof client.messages.create>[0],
-          { headers: customHeaders },
-        )
-      : await client.messages.create(
-          requestBody as Parameters<typeof client.messages.create>[0],
-        );
+    const apiCall = () =>
+      customHeaders
+        ? client.messages.create(
+            requestBody as Parameters<typeof client.messages.create>[0],
+            { headers: customHeaders },
+          )
+        : client.messages.create(
+            requestBody as Parameters<typeof client.messages.create>[0],
+          );
+
+    const { maxAttempts, initialDelayMs } = this.getRetryConfig();
+    const response = await retryWithBackoff(apiCall, {
+      maxAttempts,
+      initialDelayMs,
+      shouldRetry: this.shouldRetryAnthropicResponse.bind(this),
+      trackThrottleWaitTime: this.throttleTracker,
+    });
 
     if (streamingEnabled) {
       // Handle streaming response - response is already a Stream when streaming is enabled
@@ -1160,5 +1220,35 @@ export class AnthropicProvider extends BaseProvider {
 
       yield result;
     }
+  }
+
+  private getRetryConfig(): { maxAttempts: number; initialDelayMs: number } {
+    const ephemeralSettings =
+      this.providerConfig?.getEphemeralSettings?.() || {};
+    const maxAttempts =
+      (ephemeralSettings['retries'] as number | undefined) ?? 6;
+    const initialDelayMs =
+      (ephemeralSettings['retrywait'] as number | undefined) ?? 4000;
+    return { maxAttempts, initialDelayMs };
+  }
+
+  private shouldRetryAnthropicResponse(error: unknown): boolean {
+    const status = getErrorStatus(error);
+    if (status === 429 || (status && status >= 500 && status < 600)) {
+      this.getLogger().debug(
+        () => `Will retry Anthropic request due to status ${status}`,
+      );
+      return true;
+    }
+
+    if (isNetworkTransientError(error)) {
+      this.getLogger().debug(
+        () =>
+          'Will retry Anthropic request due to transient network error signature.',
+      );
+      return true;
+    }
+
+    return false;
   }
 }

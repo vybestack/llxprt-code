@@ -77,6 +77,10 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
         selectedAuthType={item.selectedAuthType}
         gcpProject={item.gcpProject}
         ideClient={item.ideClient}
+        provider={item.provider}
+        baseURL={item.baseURL}
+        keyfile={item.keyfile}
+        key={item.key}
       />
     )}
     {item.type === 'help' && <Help commands={slashCommands} />}

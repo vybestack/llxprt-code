@@ -91,9 +91,17 @@ export class AuthCommandExecutor {
 
       let status = `OAuth for ${provider}: ${isEnabled ? 'ENABLED' : 'DISABLED'}`;
       if (isEnabled && isAuthenticated) {
-        // Lines 70-85: Show token expiry information @pseudocode lines 70-85
-        const token = await this.oauthManager.getOAuthToken(provider);
-        if (token && token.expiry) {
+        let token = null;
+        try {
+          token = await this.oauthManager.peekStoredToken(provider);
+        } catch (error) {
+          console.debug(
+            `Failed to read stored OAuth token for ${provider}:`,
+            error,
+          );
+        }
+
+        if (token && typeof token.expiry === 'number') {
           // Lines 72-76: Calculate time until expiry
           const expiryDate = new Date(token.expiry * 1000);
           const timeUntilExpiry = Math.max(0, token.expiry - Date.now() / 1000);

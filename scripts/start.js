@@ -77,7 +77,7 @@ if (bootstrapSnapshot.bootstrapArgs.providerOverride) {
 if (process.env.DEBUG) {
   // If this is not set, the debugger will pause on the outer process rather
   // than the relaunched process making it harder to debug.
-  env.GEMINI_CLI_NO_RELAUNCH = 'true';
+  env.LLXPRT_CODE_NO_RELAUNCH = 'true';
 }
 const child = spawn('node', nodeArgs, { stdio: 'inherit', env });
 

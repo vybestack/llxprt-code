@@ -1847,10 +1847,13 @@ export function useTextBuffer({
     [newline, move, deleteWordLeft, deleteWordRight, backspace, del, insert],
   );
 
-  const renderedVisualLines = useMemo(
-    () => visualLines.slice(visualScrollRow, visualScrollRow + viewport.height),
-    [visualLines, visualScrollRow, viewport.height],
-  );
+  const renderedVisualLines = useMemo(() => {
+    const endIndex = Math.min(
+      visualLines.length,
+      Math.max(visualScrollRow + viewport.height, visualCursor[0] + 1),
+    );
+    return visualLines.slice(visualScrollRow, endIndex);
+  }, [visualLines, visualScrollRow, viewport.height, visualCursor]);
 
   const replaceRange = useCallback(
     (

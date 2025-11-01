@@ -55,6 +55,7 @@ import {
   setProviderApiKey,
   setProviderBaseUrl,
 } from './providers/providerConfigUtils.js';
+import { resolveCredentialPrecedence } from './providers/credentialPrecedence.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
@@ -106,7 +107,7 @@ function getNodeMemoryArgs(config: Config): string[] {
     );
   }
 
-  if (process.env.LLXPRT_CLI_NO_RELAUNCH) {
+  if (process.env.LLXPRT_CODE_NO_RELAUNCH) {
     return [];
   }
 
@@ -124,7 +125,7 @@ function getNodeMemoryArgs(config: Config): string[] {
 
 async function relaunchWithAdditionalArgs(additionalArgs: string[]) {
   const nodeArgs = [...additionalArgs, ...process.argv.slice(1)];
-  const newEnv = { ...process.env, LLXPRT_CLI_NO_RELAUNCH: 'true' };
+  const newEnv = { ...process.env, LLXPRT_CODE_NO_RELAUNCH: 'true' };
 
   const child = spawn(process.execPath, nodeArgs, {
     stdio: 'inherit',
@@ -501,219 +502,72 @@ export async function main() {
         await setActiveModel(configModel);
       }
 
-      // Apply profile model params if loaded AND provider was NOT specified via CLI
-      const configWithProfile = config as Config & {
+      // Apply CLI and profile model params before first request
+      const configWithParams = config as Config & {
         _profileModelParams?: Record<string, unknown>;
+        _cliModelParams?: Record<string, unknown>;
       };
+      const mergedModelParams: Record<string, unknown> = {};
+
+      if (!argv.provider && configWithParams._profileModelParams) {
+        Object.assign(mergedModelParams, configWithParams._profileModelParams);
+      }
+
+      if (configWithParams._cliModelParams) {
+        Object.assign(mergedModelParams, configWithParams._cliModelParams);
+      }
+
       if (
-        !argv.provider &&
-        configWithProfile._profileModelParams &&
-        activeProvider
+        activeProvider &&
+        'setModelParams' in activeProvider &&
+        typeof activeProvider.setModelParams === 'function'
       ) {
-        const profileParams = configWithProfile._profileModelParams;
         const existingParams = getActiveModelParams();
 
-        for (const [key, value] of Object.entries(profileParams)) {
+        for (const [key, value] of Object.entries(mergedModelParams)) {
           setActiveModelParam(key, value);
         }
 
         for (const key of Object.keys(existingParams)) {
-          if (!(key in profileParams)) {
+          if (!(key in mergedModelParams)) {
             clearActiveModelParam(key);
           }
         }
-      }
 
-      // Apply ephemeral settings from profile ONLY if provider was NOT specified via CLI
-      if (!argv.provider) {
-        const authKey = config.getEphemeralSetting('auth-key') as string;
-        const authKeyfile = config.getEphemeralSetting(
-          'auth-keyfile',
-        ) as string;
-        const baseUrl = config.getEphemeralSetting('base-url') as string;
-
-        // Only apply profile auth settings if no CLI auth args were provided
-        if (!argv.key && !argv.keyfile) {
-          if (authKey) {
-            const result = await setProviderApiKey(authKey);
-            if (config.getDebugMode()) {
-              console.debug(result.message);
-            }
-          } else if (authKeyfile) {
-            try {
-              const resolvedPath = authKeyfile.replace(/^~/, os.homedir());
-              const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
-              if (apiKey) {
-                const result = await setProviderApiKey(apiKey);
-                config.setEphemeralSetting('auth-keyfile', resolvedPath);
-                if (config.getDebugMode()) {
-                  console.debug(result.message);
-                }
-              }
-            } catch (error) {
-              console.error(
-                chalk.red(
-                  `Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
-                ),
-              );
-            }
-          }
-        }
-
-        // Only apply profile base URL if not overridden by CLI
-        if (!argv.baseurl && baseUrl !== undefined) {
-          const result = await setProviderBaseUrl(baseUrl);
-          if (!result.success && config.getDebugMode()) {
-            console.debug(result.message);
-          }
+        if (Object.keys(mergedModelParams).length > 0) {
+          activeProvider.setModelParams(mergedModelParams);
+        } else if (Object.keys(existingParams).length > 0) {
+          activeProvider.setModelParams({});
         }
       }
+
+      const includeProfileEphemeral = argv.provider === undefined;
+      const profileKey = includeProfileEphemeral
+        ? (config.getEphemeralSetting('auth-key') as string | undefined)
+        : undefined;
+      const profileKeyfile = includeProfileEphemeral
+        ? (config.getEphemeralSetting('auth-keyfile') as string | undefined)
+        : undefined;
+      const profileBaseUrl = includeProfileEphemeral
+        ? (config.getEphemeralSetting('base-url') as string | undefined)
+        : undefined;
+
+      await applyProviderCredentials({
+        providerManager,
+        settings,
+        config,
+        cliKey: argv.key,
+        cliKeyfile: argv.keyfile,
+        cliBaseUrl: argv.baseurl,
+        profileKey,
+        profileKeyfile,
+        profileBaseUrl,
+      });
 
       // No need to set auth type when using a provider
     } catch (e) {
       console.error(chalk.red((e as Error).message));
       process.exit(1);
-    }
-  }
-
-  // Apply ephemeral settings from profile if provider came from profile (not CLI)
-  // This handles the case where profile was loaded via --profile-load
-  if (!argv.provider && (argv.profileLoad || settings.merged.defaultProfile)) {
-    const activeProvider = providerManager.getActiveProvider();
-    if (activeProvider) {
-      // Apply ephemeral settings from profile to the provider
-      // BUT only if not overridden by CLI arguments
-      const authKey = config.getEphemeralSetting('auth-key') as string;
-      const authKeyfile = config.getEphemeralSetting('auth-keyfile') as string;
-      const baseUrl = config.getEphemeralSetting('base-url') as string;
-
-      // Only apply profile auth settings if no CLI auth args were provided
-      if (!argv.key && !argv.keyfile) {
-        if (authKey) {
-          const result = await setProviderApiKey(authKey);
-          if (config.getDebugMode()) {
-            console.debug(result.message);
-          }
-        } else if (authKeyfile) {
-          try {
-            const resolvedPath = authKeyfile.replace(/^~/, os.homedir());
-            const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
-            if (apiKey) {
-              const result = await setProviderApiKey(apiKey);
-              config.setEphemeralSetting('auth-keyfile', resolvedPath);
-              if (config.getDebugMode()) {
-                console.debug(result.message);
-              }
-            }
-          } catch (error) {
-            console.error(
-              chalk.red(
-                `Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-            );
-          }
-        }
-      }
-
-      // Only apply profile base URL if not overridden by CLI
-      if (!argv.baseurl && baseUrl !== undefined) {
-        const result = await setProviderBaseUrl(baseUrl);
-        if (!result.success && config.getDebugMode()) {
-          console.debug(result.message);
-        }
-      }
-
-      // Apply profile model params if loaded
-      const configWithProfile = config as Config & {
-        _profileModelParams?: Record<string, unknown>;
-      };
-      if (
-        configWithProfile._profileModelParams &&
-        Object.keys(configWithProfile._profileModelParams).length > 0
-      ) {
-        const profileParams = configWithProfile._profileModelParams;
-        const existingParams = getActiveModelParams();
-
-        for (const [key, value] of Object.entries(profileParams)) {
-          setActiveModelParam(key, value);
-        }
-
-        for (const key of Object.keys(existingParams)) {
-          if (!(key in profileParams)) {
-            clearActiveModelParam(key);
-          }
-        }
-      }
-    }
-  }
-
-  // Process CLI-provided credentials (--key, --keyfile, --baseurl)
-  if (argv.key || argv.keyfile || argv.baseurl) {
-    // Provider-specific credentials are now handled directly
-
-    // Handle --key
-    if (argv.key) {
-      const result = await setProviderApiKey(argv.key);
-      if (!result.success) {
-        console.error(chalk.red(result.message));
-        process.exit(1);
-      }
-      if (config.getDebugMode()) {
-        console.debug(result.message);
-      }
-    }
-
-    // Handle --keyfile
-    if (argv.keyfile) {
-      try {
-        // Read the API key from file
-        const resolvedPath = argv.keyfile.replace(/^~/, os.homedir());
-        const apiKey = await fs.readFile(resolvedPath, 'utf-8');
-        const trimmedKey = apiKey.trim();
-
-        if (!trimmedKey) {
-          console.error(chalk.red('The specified file is empty'));
-          process.exit(1);
-        }
-
-        const result = await setProviderApiKey(trimmedKey);
-
-        if (!result.success) {
-          console.error(chalk.red(result.message));
-          process.exit(1);
-        }
-
-        // Store the keyfile path in ephemeral settings for reference
-        // This helps track that we're using a keyfile vs direct key
-        config.setEphemeralSetting('auth-keyfile', resolvedPath);
-        // Don't clear auth-key - setProviderApiKey already sets it in settings
-        // The auth-key will be used immediately, and auth-keyfile is stored
-        // for future reference (e.g., when reloading profiles)
-
-        const message = `API key loaded from ${resolvedPath} for provider '${providerManager.getActiveProviderName()}'`;
-        if (config.getDebugMode()) {
-          console.debug(message);
-        }
-      } catch (error) {
-        console.error(
-          chalk.red(
-            `Failed to process keyfile: ${error instanceof Error ? error.message : String(error)}`,
-          ),
-        );
-        process.exit(1);
-      }
-    }
-
-    // Handle --baseurl
-    if (argv.baseurl) {
-      const result = await setProviderBaseUrl(argv.baseurl);
-      if (!result.success) {
-        console.error(chalk.red(result.message));
-        process.exit(1);
-      }
-      if (config.getDebugMode()) {
-        console.debug(result.message);
-      }
     }
   }
 
@@ -876,6 +730,142 @@ export async function main() {
   // Call cleanup before process.exit, which causes cleanup to not run
   await runExitCleanup();
   process.exit(0);
+}
+
+type ActiveProviderManager = ReturnType<
+  typeof createProviderManager
+>['manager'];
+
+interface ProviderCredentialOptions {
+  providerManager: ActiveProviderManager;
+  settings: LoadedSettings;
+  config: Config;
+  cliKey?: string;
+  cliKeyfile?: string;
+  cliBaseUrl?: string;
+  profileKey?: string;
+  profileKeyfile?: string;
+  profileBaseUrl?: string;
+}
+
+async function applyProviderCredentials({
+  providerManager,
+  settings: _settings,
+  config,
+  cliKey,
+  cliKeyfile,
+  cliBaseUrl,
+  profileKey,
+  profileKeyfile,
+  profileBaseUrl,
+}: ProviderCredentialOptions) {
+  const resolved = resolveCredentialPrecedence({
+    cliKey,
+    cliKeyfile,
+    cliBaseUrl,
+    profileKey,
+    profileKeyfile,
+    profileBaseUrl,
+  });
+
+  const debugMode = config.getDebugMode();
+  const authOnlySetting = config.getEphemeralSetting('authOnly');
+  const authOnly =
+    authOnlySetting === true ||
+    (typeof authOnlySetting === 'string' &&
+      authOnlySetting.toLowerCase() === 'true');
+
+  if (!authOnly && resolved.inlineKey) {
+    const result = await setProviderApiKey(resolved.inlineKey);
+    if (!result.success) {
+      console.error(chalk.red(result.message));
+      if (resolved.inlineSource === 'cli') {
+        process.exit(1);
+      }
+    } else if (debugMode) {
+      console.debug(result.message);
+    }
+
+    if (resolved.inlineSource === 'cli') {
+      config.setEphemeralSetting('auth-keyfile', undefined);
+    }
+  } else if (!authOnly && resolved.keyfilePath) {
+    const resolvedPath = resolved.keyfilePath.replace(/^~/, os.homedir());
+    try {
+      const apiKey = await fs.readFile(resolvedPath, 'utf-8');
+      const trimmedKey = apiKey.trim();
+
+      if (!trimmedKey) {
+        const message = 'The specified file is empty';
+        if (resolved.keyfileSource === 'cli') {
+          console.error(chalk.red(message));
+          process.exit(1);
+        }
+        return;
+      }
+
+      const result = await setProviderApiKey(trimmedKey);
+
+      if (!result.success) {
+        console.error(chalk.red(result.message));
+        if (resolved.keyfileSource === 'cli') {
+          process.exit(1);
+        }
+      } else if (debugMode) {
+        console.debug(result.message);
+      }
+
+      if (resolved.keyfileSource === 'cli') {
+        config.setEphemeralSetting('auth-keyfile', resolvedPath);
+        const message = `API key loaded from ${resolvedPath} for provider '${providerManager.getActiveProviderName()}'`;
+        if (debugMode) {
+          console.debug(message);
+        }
+      }
+    } catch (error) {
+      const message = `Failed to load keyfile ${resolvedPath}: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(chalk.red(message));
+      if (resolved.keyfileSource === 'cli') {
+        process.exit(1);
+      }
+    }
+  } else if (
+    authOnly &&
+    debugMode &&
+    (resolved.inlineKey || resolved.keyfilePath)
+  ) {
+    console.debug(
+      'authOnly enabled, skipping CLI/profile API key application in favor of OAuth',
+    );
+  }
+
+  if (resolved.baseUrl && resolved.baseUrlSource === 'cli') {
+    const result = await setProviderBaseUrl(resolved.baseUrl);
+    if (!result.success) {
+      console.error(chalk.red(result.message));
+      process.exit(1);
+    }
+    if (debugMode) {
+      console.debug(result.message);
+    }
+    config.setEphemeralSetting('base-url', resolved.baseUrl);
+  } else if (
+    resolved.baseUrl &&
+    resolved.baseUrlSource === 'profile' &&
+    resolved.baseUrl !== 'none'
+  ) {
+    const activeProvider = providerManager.getActiveProvider();
+    if (
+      activeProvider &&
+      'setBaseUrl' in activeProvider &&
+      typeof (activeProvider as { setBaseUrl?: (url: string) => void })
+        .setBaseUrl === 'function'
+    ) {
+      (activeProvider as { setBaseUrl: (url: string) => void }).setBaseUrl(
+        resolved.baseUrl,
+      );
+    }
+  }
 }
 
 function setWindowTitle(title: string, settings: LoadedSettings) {

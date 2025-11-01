@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "engines": {
     "node": ">=20"
   },
@@ -14,7 +14,7 @@
     "url": "git+https://github.com/vybestack/llxprt-code.git"
   },
   "config": {
-    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.1.19"
+    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.5.0"
   },
   "scripts": {
     "start": "node scripts/start.js",
@@ -90,6 +90,7 @@
     "fast-check": "^4.3.0",
     "glob": "^10.4.5",
     "globals": "^16.0.0",
+    "ink": "^6.3.1",
     "json": "^11.0.0",
     "lodash": "^4.17.21",
     "memfs": "^4.17.2",

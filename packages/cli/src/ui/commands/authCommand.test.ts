@@ -10,6 +10,8 @@ import { OAuthManager } from '../../auth/oauth-manager.js';
 import { CommandContext } from './types.js';
 
 // Mock OAuth manager and dependencies
+const peekStoredTokenMock = vi.fn();
+const getOAuthTokenMock = vi.fn();
 const mockOAuthManager = {
   registerProvider: vi.fn(),
   toggleOAuthEnabled: vi.fn(),
@@ -17,7 +19,8 @@ const mockOAuthManager = {
   isAuthenticated: vi.fn(),
   getAuthStatus: vi.fn(),
   getToken: vi.fn(),
-  getOAuthToken: vi.fn(),
+  getOAuthToken: getOAuthTokenMock,
+  peekStoredToken: peekStoredTokenMock,
   getSupportedProviders: vi.fn().mockReturnValue(['gemini', 'qwen']),
   getHigherPriorityAuth: vi.fn(),
   logout: vi.fn(),
@@ -29,6 +32,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    peekStoredTokenMock.mockReset();
+    getOAuthTokenMock.mockReset();
     executor = new AuthCommandExecutor(mockOAuthManager);
     mockContext = {
       services: {
@@ -72,6 +77,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const mockIsEnabled = vi.fn().mockReturnValue(true);
       const mockIsAuthenticated = vi.fn().mockResolvedValue(true);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      peekStoredTokenMock.mockResolvedValue(null);
       (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
       (mockOAuthManager.isAuthenticated as unknown) = mockIsAuthenticated;
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
@@ -88,6 +94,46 @@ describe('AuthCommandExecutor OAuth Support', () => {
         messageType: 'info',
         content: 'OAuth for gemini: ENABLED (authenticated)',
       });
+      expect(peekStoredTokenMock).toHaveBeenCalledWith('gemini');
+      expect(getOAuthTokenMock).not.toHaveBeenCalled();
+    });
+
+    it('@given stored OAuth token @when provider status requested @then shows expiry without refreshing token', async () => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2025-01-01T00:00:00.000Z');
+        vi.setSystemTime(now);
+
+        const mockIsEnabled = vi.fn().mockReturnValue(true);
+        const mockIsAuthenticated = vi.fn().mockResolvedValue(true);
+        const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+        const expirySeconds = Math.floor(Date.now() / 1000) + 7200; // 2 hours later
+        peekStoredTokenMock.mockResolvedValue({
+          access_token: 'stored-token',
+          token_type: 'Bearer',
+          expiry: expirySeconds,
+        });
+        (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
+        (mockOAuthManager.isAuthenticated as unknown) = mockIsAuthenticated;
+        (mockOAuthManager.getHigherPriorityAuth as unknown) =
+          mockGetHigherPriority;
+
+        const result = await executor.execute(mockContext, 'gemini');
+
+        expect(result).toEqual({
+          type: 'message',
+          messageType: 'info',
+          content:
+            'gemini OAuth: Enabled and authenticated\n' +
+            'Token expires: 2025-01-01T02:00:00.000Z\n' +
+            'Time remaining: 2h 0m\n' +
+            'Use /auth gemini logout to sign out',
+        });
+        expect(peekStoredTokenMock).toHaveBeenCalledWith('gemini');
+        expect(getOAuthTokenMock).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('@given user enters /auth gemini enable @when provider specified with action @then toggles OAuth enablement for Gemini', async () => {

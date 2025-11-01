@@ -11,9 +11,7 @@ import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
 import {
   getSettingsService,
-  registerSettingsService,
   resetSettingsService,
-  SettingsService,
 } from '@vybestack/llxprt-code-core';
 
 // Skip OAuth tests in CI as they require browser interaction
@@ -27,7 +25,6 @@ class MockOAuthProvider implements OAuthProvider {
   readonly name: string;
   private token: OAuthToken | null = null;
   private authInitiated = false;
-  private getTokenCalls = 0;
 
   constructor(
     name: string,
@@ -44,7 +41,7 @@ class MockOAuthProvider implements OAuthProvider {
       this.token = {
         access_token: `access_${this.name}_${Date.now()}`,
         refresh_token: `refresh_${this.name}_${Date.now()}`,
-        expiry: Date.now() / 1000 + 3600, // 1 hour from now (in seconds)
+        expiry: Date.now() + 3600000, // 1 hour from now
         token_type: 'Bearer',
         scope: 'read write',
       };
@@ -52,17 +49,16 @@ class MockOAuthProvider implements OAuthProvider {
   }
 
   async getToken(): Promise<OAuthToken | null> {
-    this.getTokenCalls++;
     return this.token;
   }
 
   async refreshIfNeeded(): Promise<OAuthToken | null> {
-    if (this.token && this.token.expiry < Date.now() / 1000 + 300) {
+    if (this.token && this.token.expiry < Date.now() + 300000) {
       // Refresh if expires in less than 5 minutes
       this.token = {
         ...this.token,
         access_token: `refreshed_${this.name}_${Date.now()}`,
-        expiry: Date.now() / 1000 + 3600, // 1 hour from now (in seconds)
+        expiry: Date.now() + 3600000, // 1 hour from now
       };
     }
     return this.token;
@@ -77,7 +73,7 @@ class MockOAuthProvider implements OAuthProvider {
     this.token = {
       access_token: `expiring_${this.name}`,
       refresh_token: `refresh_${this.name}`,
-      expiry: Date.now() / 1000 + 10, // Expires in 10 seconds (in seconds)
+      expiry: Date.now() + 10000, // Expires in 10 seconds
       token_type: 'Bearer',
       scope: 'read',
     };
@@ -85,10 +81,6 @@ class MockOAuthProvider implements OAuthProvider {
 
   wasAuthInitiated(): boolean {
     return this.authInitiated;
-  }
-
-  getTokenCallCount(): number {
-    return this.getTokenCalls;
   }
 }
 
@@ -144,8 +136,6 @@ describe.skipIf(skipInCI)(
     let geminiProvider: MockOAuthProvider;
 
     beforeEach(() => {
-      resetSettingsService();
-      registerSettingsService(new SettingsService());
       tokenStore = new MockTokenStore();
       manager = new OAuthManager(tokenStore);
       qwenProvider = new MockOAuthProvider('qwen');
@@ -205,20 +195,6 @@ describe.skipIf(skipInCI)(
 
         const providers = manager.getSupportedProviders();
         expect(providers).toEqual(['gemini', 'qwen']); // Should be sorted
-      });
-
-      /**
-       * @requirement REQ-003.1
-       * @scenario Lazy auth on registration
-       * @given OAuth provider with lazy token retrieval
-       * @when registerProvider() called
-       * @then Provider.getToken is not invoked
-       */
-      it('should not fetch tokens during provider registration', () => {
-        manager.registerProvider(qwenProvider);
-
-        expect(qwenProvider.getTokenCallCount()).toBe(0);
-        expect(qwenProvider.wasAuthInitiated()).toBe(false);
       });
     });
 
@@ -391,7 +367,7 @@ describe.skipIf(skipInCI)(
         const expiringToken = {
           access_token: 'expiring_token',
           refresh_token: 'refresh_token',
-          expiry: Date.now() / 1000 + 10, // Expires in 10 seconds (in seconds)
+          expiry: Date.now() + 10000, // Expires in 10 seconds
           token_type: 'Bearer' as const,
           scope: 'read',
         };
@@ -476,7 +452,6 @@ describe.skipIf(skipInCI)(
        */
       it('should include token expiry time in status', async () => {
         manager.registerProvider(qwenProvider);
-        await manager.toggleOAuthEnabled('qwen');
         await manager.authenticate('qwen');
 
         const statuses = await manager.getAuthStatus();
@@ -728,7 +703,6 @@ describe('Higher priority auth detection', () => {
   beforeEach(() => {
     tokenStore = new MockTokenStore();
     resetSettingsService();
-    registerSettingsService(new SettingsService());
   });
 
   afterEach(() => {

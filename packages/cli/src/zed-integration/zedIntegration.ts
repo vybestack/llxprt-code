@@ -314,6 +314,7 @@ class GeminiAgent {
           if (activeProvider) {
             const configWithProfile = sessionConfig as Config & {
               _profileModelParams?: Record<string, unknown>;
+              _cliModelParams?: Record<string, unknown>;
             };
             if (
               configWithProfile._profileModelParams &&
@@ -331,6 +332,53 @@ class GeminiAgent {
                 if (!(key in profileParams)) {
                   clearActiveModelParam(key);
                 }
+              }
+
+              // Apply base URL from ephemeral settings if available
+              const ephemeralBaseUrl = this.config.getEphemeralSetting(
+                'base-url',
+              ) as string | undefined;
+              if (
+                ephemeralBaseUrl &&
+                ephemeralBaseUrl !== 'none' &&
+                'setBaseUrl' in activeProvider &&
+                typeof (
+                  activeProvider as { setBaseUrl?: (url: string) => void }
+                ).setBaseUrl === 'function'
+              ) {
+                this.logger.debug(
+                  () => `Setting base URL: ${ephemeralBaseUrl}`,
+                );
+                (
+                  activeProvider as { setBaseUrl: (url: string) => void }
+                ).setBaseUrl(ephemeralBaseUrl);
+              }
+
+              const mergedModelParams = {
+                ...(configWithProfile._profileModelParams || {}),
+                ...(configWithProfile._cliModelParams || {}),
+              };
+              if (
+                Object.keys(mergedModelParams).length > 0 &&
+                'setModelParams' in activeProvider &&
+                typeof (
+                  activeProvider as {
+                    setModelParams?: (
+                      params: Record<string, unknown> | undefined,
+                    ) => void;
+                  }
+                ).setModelParams === 'function'
+              ) {
+                this.logger.debug(
+                  () => 'Setting model params from profile/CLI overrides',
+                );
+                (
+                  activeProvider as {
+                    setModelParams: (
+                      params: Record<string, unknown> | undefined,
+                    ) => void;
+                  }
+                ).setModelParams(mergedModelParams);
               }
             }
           }

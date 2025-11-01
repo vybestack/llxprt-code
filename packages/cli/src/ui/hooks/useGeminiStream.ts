@@ -63,6 +63,8 @@ import {
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { useKeypress } from './useKeypress.js';
 
+const SYSTEM_NOTICE_EVENT = 'system_notice' as const;
+
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   const resultParts: Part[] = [];
   for (const item of list) {
@@ -810,6 +812,16 @@ export const useGeminiStream = (
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
       for await (const event of stream) {
+        if ((event as { type?: unknown }).type === SYSTEM_NOTICE_EVENT) {
+          const value =
+            typeof (event as { value?: unknown }).value === 'string'
+              ? ((event as { value: string }).value as string)
+              : null;
+          if (value) {
+            addItem({ type: MessageType.INFO, text: value }, Date.now());
+          }
+          continue;
+        }
         switch (event.type) {
           case ServerGeminiEventType.Thought:
             setThought(event.value);
@@ -866,11 +878,8 @@ export const useGeminiStream = (
           case ServerGeminiEventType.Retry:
             // Will add the missing logic later
             break;
-          default: {
-            // enforces exhaustive switch-case
-            const unreachable: never = event;
-            return unreachable;
-          }
+          default:
+            break;
         }
       }
       if (toolCallRequests.length > 0) {
@@ -887,6 +896,7 @@ export const useGeminiStream = (
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
       handleCitationEvent,
+      addItem,
     ],
   );
 

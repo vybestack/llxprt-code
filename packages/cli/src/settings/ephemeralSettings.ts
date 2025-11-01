@@ -45,6 +45,8 @@ export const ephemeralSettingHelp: Record<string, string> = {
     'Maximum number of turns allowed per prompt before stopping (default: 100, -1 for unlimited)',
   authOnly:
     'Force providers to use OAuth authentication only, ignoring API keys and environment variables',
+  dumponerror:
+    'Dump API request body to ~/.llxprt/dumps/ on errors (enabled/disabled, default: disabled)',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
@@ -201,7 +203,7 @@ export function parseEphemeralSettingValue(
     }
   }
 
-  if (key === 'streaming') {
+  if (key === 'streaming' || key === 'dumponerror') {
     const validModes = ['enabled', 'disabled'];
     if (typeof parsedValue === 'boolean') {
       parsedValue = parsedValue ? 'enabled' : 'disabled';
@@ -224,7 +226,7 @@ export function parseEphemeralSettingValue(
     } else {
       return {
         success: false,
-        message: `Invalid streaming mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
+        message: `Invalid ${key} mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
       };
     }
   }

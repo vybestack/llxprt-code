@@ -400,6 +400,73 @@ describe('KeypressContext - Kitty Protocol', () => {
         }),
       );
     });
+
+    it('should detect bracketed paste without fallback when running under Node 24', async () => {
+      const originalNodeVersion = process.versions.node;
+      const originalEnv = process.env['PASTE_WORKAROUND'];
+      Object.defineProperty(process.versions, 'node', {
+        value: '24.1.0',
+        configurable: true,
+      });
+      delete process.env['PASTE_WORKAROUND'];
+
+      const keyHandler = vi.fn();
+      const pastedText = 'Line 1\nLine 2\nLine 3';
+
+      const { result, unmount } = renderHook(() => useKeypressContext(), {
+        wrapper,
+      });
+
+      try {
+        act(() => {
+          result.current.subscribe(keyHandler);
+        });
+
+        act(() => {
+          stdin.sendPaste(pastedText);
+        });
+
+        await waitFor(() => {
+          expect(keyHandler).toHaveBeenCalledWith(
+            expect.objectContaining({
+              paste: true,
+              sequence: pastedText,
+            }),
+          );
+        });
+      } finally {
+        unmount();
+        Object.defineProperty(process.versions, 'node', {
+          value: originalNodeVersion,
+          configurable: true,
+        });
+        if (originalEnv === undefined) {
+          delete process.env['PASTE_WORKAROUND'];
+        } else {
+          process.env['PASTE_WORKAROUND'] = originalEnv;
+        }
+      }
+    });
+
+    it('should ignore empty string data events without crashing', async () => {
+      const keyHandler = vi.fn();
+
+      const { result, unmount } = renderHook(() => useKeypressContext(), {
+        wrapper,
+      });
+
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      expect(() => {
+        act(() => {
+          stdin.emit('data', '');
+        });
+      }).not.toThrow();
+
+      unmount();
+    });
   });
 
   describe('debug keystroke logging', () => {

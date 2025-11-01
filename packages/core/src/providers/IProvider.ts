@@ -104,6 +104,16 @@ export interface IProvider {
    * @param params Parameters to merge with existing, or undefined to clear all
    */
   getModelParams?(): Record<string, unknown> | undefined;
+
+  /**
+   * Clear authentication cache (for OAuth logout)
+   */
+  clearAuthCache?(): void;
+
+  /**
+   * Clear authentication settings (keys and keyfiles)
+   */
+  clearAuth?(): void;
 }
 
 // Re-export the interfaces for convenience

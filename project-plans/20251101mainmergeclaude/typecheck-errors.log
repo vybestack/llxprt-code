@@ -1,0 +1,48 @@
+
+> @vybestack/llxprt-code@0.5.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+
+> @vybestack/llxprt-code-a2a-server@0.5.0 typecheck
+> tsc --noEmit
+
+
+> @vybestack/llxprt-code@0.5.0 typecheck
+> tsc --noEmit
+
+src/gemini.tsx(856,25): error TS2339: Property 'setBaseUrl' does not exist on type 'IProvider'.
+src/gemini.tsx(857,22): error TS2339: Property 'setBaseUrl' does not exist on type 'IProvider'.
+src/ui/commands/aboutCommand.ts(52,36): error TS2339: Property 'baseURL' does not exist on type 'ProviderRuntimeStatus'.
+src/ui/components/messages/ToolGroupMessage.test.tsx(102,9): error TS2451: Cannot redeclare block-scoped variable 'defaultTodo'.
+src/ui/components/messages/ToolGroupMessage.test.tsx(123,9): error TS2451: Cannot redeclare block-scoped variable 'renderWithContexts'.
+src/ui/components/messages/ToolGroupMessage.test.tsx(152,9): error TS2451: Cannot redeclare block-scoped variable 'defaultTodo'.
+src/ui/components/messages/ToolGroupMessage.test.tsx(173,9): error TS2451: Cannot redeclare block-scoped variable 'renderWithContexts'.
+src/zed-integration/zedIntegration.ts(356,32): error TS2349: This expression is not callable.
+  Type '{}' has no call signatures.
+npm error Lifecycle script `typecheck` failed with error:
+npm error code 2
+npm error path /Users/acoliver/projects/llxprt-code/packages/cli
+npm error workspace @vybestack/llxprt-code@0.5.0
+npm error location /Users/acoliver/projects/llxprt-code/packages/cli
+npm error command failed
+npm error command sh -c tsc --noEmit
+
+
+> @vybestack/llxprt-code-core@0.5.0 typecheck
+> tsc --noEmit
+
+src/providers/anthropic/AnthropicProvider.ts(534,31): error TS2552: Cannot find name 'getSettingsService'. Did you mean 'settingsService'?
+src/providers/anthropic/AnthropicProvider.ts(1237,12): error TS2339: Property 'logger' does not exist on type 'AnthropicProvider'.
+src/providers/anthropic/AnthropicProvider.ts(1244,12): error TS2339: Property 'logger' does not exist on type 'AnthropicProvider'.
+npm error Lifecycle script `typecheck` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt-code/packages/core
+npm error workspace @vybestack/llxprt-code-core@0.5.0
+npm error location /Users/acoliver/projects/llxprt-code/packages/core
+npm error command failed
+npm error command sh -c tsc --noEmit
+
+
+> @vybestack/llxprt-code-test-utils@0.5.0 typecheck
+> tsc --noEmit
+

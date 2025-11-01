@@ -730,12 +730,30 @@ export function getActiveProviderStatus(): ProviderRuntimeStatus {
     const displayLabel = modelName
       ? `${provider.name}:${modelName}`
       : provider.name;
+
+    // Try to get baseURL from provider if it has the method
+    let baseURL: string | undefined;
+    try {
+      if (
+        'getBaseURL' in provider &&
+        typeof (provider as { getBaseURL?: () => string | undefined })
+          .getBaseURL === 'function'
+      ) {
+        baseURL = (
+          provider as { getBaseURL: () => string | undefined }
+        ).getBaseURL();
+      }
+    } catch {
+      baseURL = undefined;
+    }
+
     return {
       providerName: provider.name,
       modelName,
       displayLabel,
       isPaidMode: provider.isPaidMode?.(),
       authType,
+      baseURL,
     };
   } catch {
     const providerName =
@@ -852,6 +870,7 @@ const PROFILE_EPHEMERAL_KEYS: readonly string[] = [
   'socket-keepalive',
   'socket-nodelay',
   'streaming',
+  'dumponerror',
   'retries',
   'retrywait',
   'maxTurnsPerPrompt',
@@ -1160,6 +1179,7 @@ export interface ProviderRuntimeStatus {
   displayLabel: string;
   isPaidMode?: boolean;
   authType?: AuthType;
+  baseURL?: string;
 }
 
 /**

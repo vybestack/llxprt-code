@@ -40,7 +40,7 @@ Successfully merged the final 3 commits from upstream gemini-cli into llxprt-cod
 - Build: ✅ Passing
 - Lint: ✅ Passing
 - Tests: ⚠️ 3 failures (unchanged from previous batches)
-  - 2 paste tests in `InputPrompt.paste.test.tsx`
+  - 2 paste tests in `InputPrompt.paste.spec.tsx`
   - 1 llxprtignore test in `ls.test.ts`
 
 ## Key Architectural Changes
