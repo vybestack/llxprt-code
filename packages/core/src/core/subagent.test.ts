@@ -433,7 +433,7 @@ describe('subagent.ts', () => {
         expect(scope).toBeInstanceOf(SubAgentScope);
       });
 
-      it('should throw an error if a tool requires confirmation', async () => {
+      it('does not preflight tools even when they request confirmation', async () => {
         const mockTool = {
           schema: { parameters: { type: Type.OBJECT, properties: {} } },
           build: vi.fn().mockReturnValue({
@@ -467,23 +467,22 @@ describe('subagent.ts', () => {
 
         const toolConfig: ToolConfig = { tools: ['risky_tool'] };
 
-        await expect(
-          SubAgentScope.create(
-            'test-agent',
-            config,
-            promptConfig,
-            defaultModelConfig,
-            defaultRunConfig,
-            toolConfig,
-            undefined,
-            overrides,
-          ),
-        ).rejects.toThrow(
-          'Tool "risky_tool" requires user confirmation and cannot be used in a non-interactive subagent.',
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          toolConfig,
+          undefined,
+          overrides,
         );
+
+        expect(scope).toBeInstanceOf(SubAgentScope);
+        expect(mockTool.build).not.toHaveBeenCalled();
       });
 
-      it('should succeed if tools do not require confirmation', async () => {
+      it('avoids eagerly building tools when confirmation is not required', async () => {
         const mockTool = {
           schema: { parameters: { type: Type.OBJECT, properties: {} } },
           build: vi.fn().mockReturnValue({
@@ -522,7 +521,9 @@ describe('subagent.ts', () => {
           undefined,
           overrides,
         );
+
         expect(scope).toBeInstanceOf(SubAgentScope);
+        expect(mockTool.build).not.toHaveBeenCalled();
       });
 
       it('should skip interactivity check and warn for tools with required parameters', async () => {
@@ -584,10 +585,8 @@ describe('subagent.ts', () => {
 
         expect(scope).toBeInstanceOf(SubAgentScope);
 
-        // Check that the warning was logged
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          'Cannot check tool "tool_with_params" for interactivity because it requires parameters. Assuming it is safe for non-interactive use.',
-        );
+        // Ensure no warnings were emitted for parameterised tool checks
+        expect(consoleWarnSpy).not.toHaveBeenCalled();
 
         // Ensure build was never called
         expect(mockToolWithParams.build).not.toHaveBeenCalled();
@@ -1274,6 +1273,116 @@ describe('subagent.ts', () => {
             text: 'ERROR: Tool failed catastrophically',
           },
         ]);
+      });
+
+      it('fails fast when a tool is disabled in the current profile', async () => {
+        const listToolNames = () => ['write_file'];
+        const getToolMetadata = () => ({
+          name: 'write_file',
+          description: 'Write files to disk',
+          parameterSchema: {
+            type: 'object',
+            properties: {
+              path: { type: 'string' },
+              content: { type: 'string' },
+            },
+          },
+        });
+
+        const { config } = await createMockConfig({
+          getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
+            {
+              name: 'write_file',
+              description: 'Write files to disk',
+              parameters: {
+                type: Type.OBJECT,
+                properties: {
+                  path: { type: Type.STRING },
+                  content: { type: Type.STRING },
+                },
+              },
+            } as FunctionDeclaration,
+          ]),
+          getTool: vi.fn().mockReturnValue({}),
+        });
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry: config.getToolRegistry(),
+          toolsView: {
+            listToolNames,
+            getToolMetadata,
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry: config.getToolRegistry(),
+        });
+
+        mockSendMessageStream.mockImplementation(
+          createMockStream([
+            [
+              {
+                id: 'call_write',
+                name: 'write_file',
+                args: {
+                  path: 'reports/joetest.md',
+                  content: 'hello',
+                },
+              },
+            ],
+            'stop',
+          ]),
+        );
+
+        vi.mocked(executeToolCall).mockResolvedValue({
+          callId: 'call_write',
+          responseParts: [
+            {
+              functionCall: {
+                id: 'call_write',
+                name: 'write_file',
+                args: {
+                  path: 'reports/joetest.md',
+                  content: 'hello',
+                },
+              },
+            },
+            {
+              functionResponse: {
+                id: 'call_write',
+                name: 'write_file',
+                response: {
+                  error:
+                    'Tool "write_file" is disabled in the current profile.',
+                },
+              },
+            },
+          ],
+          resultDisplay:
+            'Tool "write_file" is disabled in the current profile.',
+          error: new Error(
+            'Tool "write_file" is disabled in the current profile.',
+          ),
+          errorType: ToolErrorType.TOOL_DISABLED,
+          agentId: 'test-agent',
+        });
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          { tools: ['write_file'] },
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+        expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
+        expect(scope.output.final_message).toContain(
+          'Tool "write_file" is not available',
+        );
       });
 
       it('should nudge the model if it stops before emitting all required variables', async () => {

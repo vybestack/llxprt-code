@@ -185,15 +185,20 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     if (effectiveWhitelist && effectiveWhitelist.length > 0) {
+      const whitelistSet = new Set(
+        effectiveWhitelist.filter((name): name is string => Boolean(name)),
+      );
       launchRequest.toolConfig = {
-        tools: effectiveWhitelist,
+        tools: Array.from(whitelistSet),
       };
     }
 
     taskLogger.debug(() => {
       const summary =
-        effectiveWhitelist && effectiveWhitelist.length > 0
-          ? `${effectiveWhitelist.length} tools`
+        launchRequest.toolConfig &&
+        launchRequest.toolConfig.tools &&
+        launchRequest.toolConfig.tools.length > 0
+          ? `${launchRequest.toolConfig.tools.length} tools`
           : 'no tools provided';
       return `Prepared launch request for '${subagentName}': runConfig=${JSON.stringify(runConfig ?? {})}, toolConfig=${summary}`;
     });

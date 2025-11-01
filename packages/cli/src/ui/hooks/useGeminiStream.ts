@@ -1045,7 +1045,36 @@ export const useGeminiStream = (
           },
         );
 
-      const todoPauseTriggered = completedAndReadyToSubmitTools.some(
+      const [primaryTools, externalTools] =
+        completedAndReadyToSubmitTools.reduce<
+          [
+            Array<TrackedCompletedToolCall | TrackedCancelledToolCall>,
+            Array<TrackedCompletedToolCall | TrackedCancelledToolCall>,
+          ]
+        >(
+          (acc, toolCall) => {
+            const agentId = toolCall.request.agentId ?? DEFAULT_AGENT_ID;
+            if (agentId === DEFAULT_AGENT_ID) {
+              acc[0].push(toolCall);
+            } else {
+              acc[1].push(toolCall);
+            }
+            return acc;
+          },
+          [[], []],
+        );
+
+      if (externalTools.length > 0) {
+        markToolsAsSubmitted(
+          externalTools.map((toolCall) => toolCall.request.callId),
+        );
+      }
+
+      if (primaryTools.length === 0) {
+        return;
+      }
+
+      const todoPauseTriggered = primaryTools.some(
         (tc) => tc.request.name === 'todo_pause' && tc.status === 'success',
       );
 
@@ -1054,7 +1083,7 @@ export const useGeminiStream = (
       }
 
       // Finalize any client-initiated tools as soon as they are done.
-      const clientTools = completedAndReadyToSubmitTools.filter(
+      const clientTools = primaryTools.filter(
         (t) => t.request.isClientInitiated,
       );
       if (clientTools.length > 0) {
@@ -1062,7 +1091,7 @@ export const useGeminiStream = (
       }
 
       // Identify new, successful save_memory calls that we haven't processed yet.
-      const newSuccessfulMemorySaves = completedAndReadyToSubmitTools.filter(
+      const newSuccessfulMemorySaves = primaryTools.filter(
         (t) =>
           t.request.name === 'save_memory' &&
           t.status === 'success' &&
@@ -1078,7 +1107,7 @@ export const useGeminiStream = (
         );
       }
 
-      const geminiTools = completedAndReadyToSubmitTools.filter(
+      const geminiTools = primaryTools.filter(
         (t) => !t.request.isClientInitiated,
       );
 

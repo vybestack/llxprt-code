@@ -37,12 +37,14 @@ import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js'
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import { TodoStore } from '../tools/todo-store.js';
+import { ToolResultDisplay } from '../tools/tools.js';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
   type OutputUpdateHandler,
 } from './coreToolScheduler.js';
 import type { SubagentSchedulerFactory } from './subagentScheduler.js';
+import { ToolErrorType } from '../tools/tool-error.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -283,39 +285,6 @@ async function validateToolsAgainstRuntime(params: {
     const tool = toolRegistry.getTool(toolEntry);
     if (!tool) {
       continue;
-    }
-
-    const jsonSchema = tool.schema.parametersJsonSchema as
-      | { required?: string[] }
-      | undefined;
-    const requiredParams =
-      tool.schema.parameters?.required ?? jsonSchema?.required ?? [];
-    if (requiredParams.length > 0) {
-      console.warn(
-        `Cannot check tool "${toolEntry}" for interactivity because it requires parameters. Assuming it is safe for non-interactive use.`,
-      );
-      continue;
-    }
-
-    let invocation: ReturnType<typeof tool.build> | undefined;
-    try {
-      invocation = tool.build({});
-    } catch (error) {
-      console.warn(
-        `Tool "${toolEntry}" rejected empty parameters and will be skipped: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      continue;
-    }
-
-    if (invocation) {
-      const confirmationDetails = await invocation.shouldConfirmExecute(
-        new AbortController().signal,
-      );
-      if (confirmationDetails) {
-        throw new Error(
-          `Tool "${toolEntry}" requires user confirmation and cannot be used in a non-interactive subagent.`,
-        );
-      }
     }
   }
 }
@@ -737,6 +706,24 @@ export class SubAgentScope {
             responseParts = responseParts.concat(
               this.buildPartsFromCompletedCalls(completedCalls),
             );
+            const fatalCall = completedCalls.find(
+              (call) =>
+                call.status === 'error' &&
+                this.isFatalToolError(call.response.errorType),
+            );
+            if (fatalCall) {
+              const fatalMessage = this.buildToolUnavailableMessage(
+                fatalCall.request.name,
+                fatalCall.response.resultDisplay,
+                fatalCall.response.error,
+              );
+              this.logger.warn(
+                () =>
+                  `Subagent ${this.subagentId} cannot use tool '${fatalCall.request.name}': ${fatalMessage}`,
+              );
+              responseParts.push({ text: fatalMessage });
+              this.output.final_message = fatalMessage;
+            }
           }
 
           if (responseParts.length === 0) {
@@ -1131,6 +1118,7 @@ export class SubAgentScope {
           responseParts: [{ text: `Emitted variable ${valName} successfully` }],
           resultDisplay: `Emitted variable ${valName} successfully`,
           error: undefined,
+          errorType: undefined,
           agentId: requestInfo.agentId,
         };
       } else {
@@ -1158,6 +1146,21 @@ export class SubAgentScope {
           () =>
             `Subagent ${this.subagentId} tool '${functionCall.name}' completed successfully`,
         );
+      }
+
+      if (this.isFatalToolError(toolResponse.errorType)) {
+        const fatalMessage = this.buildToolUnavailableMessage(
+          functionCall.name as string,
+          toolResponse.resultDisplay,
+          toolResponse.error,
+        );
+        this.logger.warn(
+          () =>
+            `Subagent ${this.subagentId} cannot use tool '${functionCall.name}': ${fatalMessage}`,
+        );
+        toolResponseParts.push({ text: fatalMessage });
+        this.output.final_message = fatalMessage;
+        continue;
       }
 
       if (toolResponse.responseParts) {
@@ -1224,6 +1227,46 @@ export class SubAgentScope {
           ? this.config.getApprovalMode()
           : ApprovalMode.DEFAULT,
     } as unknown as Config;
+  }
+
+  private isFatalToolError(errorType: ToolErrorType | undefined): boolean {
+    return (
+      errorType === ToolErrorType.TOOL_DISABLED ||
+      errorType === ToolErrorType.TOOL_NOT_REGISTERED
+    );
+  }
+
+  private buildToolUnavailableMessage(
+    toolName: string,
+    resultDisplay?: ToolResultDisplay,
+    error?: Error,
+  ): string {
+    const detail = this.extractToolDetail(resultDisplay, error);
+    const baseMessage = `Tool "${toolName}" is not available in this environment.`;
+    return detail
+      ? `${baseMessage} ${detail}`
+      : `${baseMessage} Please continue without using it.`;
+  }
+
+  private extractToolDetail(
+    resultDisplay?: ToolResultDisplay,
+    error?: Error,
+  ): string | undefined {
+    if (error?.message) {
+      return error.message;
+    }
+    if (typeof resultDisplay === 'string') {
+      return resultDisplay;
+    }
+    if (
+      resultDisplay &&
+      typeof resultDisplay === 'object' &&
+      'message' in resultDisplay &&
+      typeof (resultDisplay as { message?: unknown }).message === 'string'
+    ) {
+      return (resultDisplay as { message: string }).message;
+    }
+    return undefined;
   }
 
   private handleEmitValueCall(request: ToolCallRequestInfo): Part[] {

@@ -16,24 +16,11 @@ import {
   FatalTurnLimitedError,
   EmojiFilter,
   type EmojiFilterMode,
-  type IContent,
 } from '@vybestack/llxprt-code-core';
-import { Content, Part, FunctionCall } from '@google/genai';
+import { Content, Part } from '@google/genai';
 
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
-
-function partsToPlainText(parts: Part[]): string {
-  return parts
-    .map((part) => {
-      if (part && typeof part === 'object' && 'text' in part) {
-        const textValue = (part as { text?: unknown }).text;
-        return typeof textValue === 'string' ? textValue : '';
-      }
-      return '';
-    })
-    .join('');
-}
 
 export async function runNonInteractive(
   config: Config,
@@ -85,79 +72,6 @@ export async function runNonInteractive(
       throw new FatalInputError(
         'Exiting due to an error processing the @ command.',
       );
-    }
-
-    const providerManager = config.getProviderManager?.();
-    const activeProvider =
-      providerManager && typeof providerManager.getActiveProvider === 'function'
-        ? providerManager.getActiveProvider()
-        : null;
-    const useGeminiPipeline =
-      !activeProvider || activeProvider.name === 'gemini';
-
-    if (!useGeminiPipeline) {
-      const userText = partsToPlainText(processedQuery as Part[]);
-      const humanContent: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: userText }],
-      };
-
-      const pendingToolCalls: FunctionCall[] = [];
-      const responseIterator = activeProvider.generateChatCompletion([
-        humanContent,
-      ]);
-
-      for await (const content of responseIterator) {
-        for (const block of content.blocks ?? []) {
-          if (block.type === 'text') {
-            let outputValue = block.text ?? '';
-            if (emojiFilter) {
-              const filterResult = emojiFilter.filterStreamChunk(outputValue);
-              if (filterResult.blocked) {
-                process.stderr.write(
-                  '[Error: Response blocked due to emoji detection]\n',
-                );
-                continue;
-              }
-
-              outputValue =
-                typeof filterResult.filtered === 'string'
-                  ? (filterResult.filtered as string)
-                  : '';
-
-              if (filterResult.systemFeedback) {
-                process.stderr.write(
-                  `Warning: ${filterResult.systemFeedback}\n`,
-                );
-              }
-            }
-
-            if (outputValue) {
-              process.stdout.write(outputValue);
-            }
-          } else if (block.type === 'tool_call') {
-            pendingToolCalls.push({
-              name: block.name,
-              args: block.parameters as Record<string, unknown>,
-              id: block.id,
-            });
-          }
-        }
-      }
-
-      const remainingBuffered = emojiFilter?.flushBuffer?.();
-      if (remainingBuffered) {
-        process.stdout.write(remainingBuffered);
-      }
-
-      if (pendingToolCalls.length > 0) {
-        console.warn(
-          '[bootstrap] Tool calls returned during non-interactive execution are not yet supported; ignoring.',
-        );
-      }
-
-      process.stdout.write('\n');
-      return;
     }
 
     let currentMessages: Content[] = [
@@ -236,10 +150,36 @@ export async function runNonInteractive(
         for (const requestFromModel of functionCalls) {
           const callId =
             requestFromModel.callId ?? `${requestFromModel.name}-${Date.now()}`;
+          const rawArgs = requestFromModel.args ?? {};
+          let normalizedArgs: Record<string, unknown>;
+          if (typeof rawArgs === 'string') {
+            try {
+              const parsed = JSON.parse(rawArgs);
+              normalizedArgs =
+                parsed && typeof parsed === 'object'
+                  ? (parsed as Record<string, unknown>)
+                  : {};
+            } catch (error) {
+              console.error(
+                `Failed to parse tool arguments for ${requestFromModel.name}: ${error instanceof Error ? error.message : String(error)}`,
+              );
+              normalizedArgs = {};
+            }
+          } else if (Array.isArray(rawArgs)) {
+            console.error(
+              `Unexpected array arguments for tool ${requestFromModel.name}; coercing to empty object.`,
+            );
+            normalizedArgs = {};
+          } else if (rawArgs && typeof rawArgs === 'object') {
+            normalizedArgs = rawArgs as Record<string, unknown>;
+          } else {
+            normalizedArgs = {};
+          }
+
           const requestInfo: ToolCallRequestInfo = {
             callId,
             name: requestFromModel.name,
-            args: (requestFromModel.args ?? {}) as Record<string, unknown>,
+            args: normalizedArgs,
             isClientInitiated: false,
             prompt_id: requestFromModel.prompt_id ?? prompt_id,
             agentId: requestFromModel.agentId ?? 'primary',

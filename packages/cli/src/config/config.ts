@@ -28,7 +28,6 @@ import {
   type Profile,
   ShellTool,
   EditTool,
-  WriteFileTool,
   MCPServerConfig,
   SettingsService,
   DebugLogger,
@@ -61,6 +60,47 @@ import {
 const LLXPRT_DIR = '.llxprt';
 
 const logger = new DebugLogger('llxprt:config');
+
+const READ_ONLY_TOOL_NAMES: readonly string[] = [
+  'glob',
+  'search_file_content',
+  'read_file',
+  'read_many_files',
+  'list_directory',
+  'list_subagents',
+  'google_web_search',
+  'web_fetch',
+  'todo_read',
+  'task',
+  'self.emitvalue',
+];
+
+const EDIT_TOOL_NAME = 'replace';
+
+const normalizeToolNameForPolicy = (name: string): string =>
+  name.trim().toLowerCase();
+
+const buildNormalizedToolSet = (value: unknown): Set<string> => {
+  const normalized = new Set<string>();
+  if (!value) {
+    return normalized;
+  }
+
+  const entries =
+    Array.isArray(value) && value.length > 0
+      ? value
+      : typeof value === 'string' && value.trim().length > 0
+        ? [value]
+        : [];
+
+  for (const entry of entries) {
+    if (typeof entry === 'string' && entry.trim().length > 0) {
+      normalized.add(normalizeToolNameForPolicy(entry));
+    }
+  }
+
+  return normalized;
+};
 
 export interface CliArgs {
   model: string | undefined;
@@ -795,7 +835,7 @@ export async function loadCliConfig(
     switch (approvalMode) {
       case ApprovalMode.DEFAULT:
         // In default non-interactive mode, all tools that require approval are excluded.
-        extraExcludes.push(ShellTool.Name, EditTool.Name, WriteFileTool.Name);
+        extraExcludes.push(ShellTool.Name, EditTool.Name);
         break;
       case ApprovalMode.AUTO_EDIT:
         // In auto-edit non-interactive mode, only tools that still require a prompt are excluded.
@@ -1083,6 +1123,62 @@ export async function loadCliConfig(
           error instanceof Error ? error.message : String(error)
         }`,
     );
+  }
+
+  const explicitAllowedTools = buildNormalizedToolSet(
+    argv.allowedTools && argv.allowedTools.length > 0
+      ? argv.allowedTools
+      : (settings.allowedTools ?? []),
+  );
+
+  const profileAllowedTools = buildNormalizedToolSet(
+    enhancedConfig.getEphemeralSetting('tools.allowed'),
+  );
+
+  const applyToolGovernancePolicy = (
+    allowedSet: Set<string> | undefined,
+  ): void => {
+    if (allowedSet === undefined) {
+      enhancedConfig.setEphemeralSetting('tools.allowed', undefined);
+    } else {
+      enhancedConfig.setEphemeralSetting(
+        'tools.allowed',
+        Array.from(allowedSet).sort(),
+      );
+    }
+  };
+
+  if (!interactive) {
+    if (approvalMode === ApprovalMode.YOLO) {
+      if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
+        const finalAllowed = new Set(profileAllowedTools);
+        explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
+        applyToolGovernancePolicy(finalAllowed);
+      } else {
+        applyToolGovernancePolicy(undefined);
+      }
+    } else {
+      const baseAllowed = new Set<string>(
+        READ_ONLY_TOOL_NAMES.map(normalizeToolNameForPolicy),
+      );
+      explicitAllowedTools.forEach((tool) => baseAllowed.add(tool));
+      if (approvalMode === ApprovalMode.AUTO_EDIT) {
+        baseAllowed.add(EDIT_TOOL_NAME);
+      }
+
+      const finalAllowed =
+        profileAllowedTools.size > 0
+          ? new Set(
+              [...baseAllowed].filter((tool) => profileAllowedTools.has(tool)),
+            )
+          : baseAllowed;
+
+      applyToolGovernancePolicy(finalAllowed);
+    }
+  } else if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
+    const finalAllowed = new Set(profileAllowedTools);
+    explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
+    applyToolGovernancePolicy(finalAllowed);
   }
 
   // Apply emojifilter setting from settings.json to SettingsService

@@ -38,11 +38,6 @@ import type { ToolRegistry } from '../tools/tool-registry.js';
 import { AuthType, type ContentGeneratorConfig } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 
-const DEFAULT_RUN_CONFIG: RunConfig = {
-  max_time_minutes: 10,
-  max_turns: 20,
-};
-
 type RuntimeLoader = (
   options: AgentRuntimeLoaderOptions,
 ) => Promise<AgentRuntimeLoaderResult>;
@@ -215,30 +210,28 @@ export class SubagentOrchestrator {
   }
 
   private buildRunConfig(profile: Profile, custom?: RunConfig): RunConfig {
-    const maxTime =
-      custom?.max_time_minutes ?? DEFAULT_RUN_CONFIG.max_time_minutes;
-
-    let hasExplicitMaxTurns = false;
-    const maxTurnsValue =
-      custom?.max_turns ??
-      this.getNumberSetting(profile.ephemeralSettings, ['maxTurnsPerPrompt']);
-
-    if (custom?.max_turns !== undefined) {
-      hasExplicitMaxTurns = true;
-    } else if (maxTurnsValue !== undefined) {
-      hasExplicitMaxTurns = true;
-    }
+    const profileMaxTime = this.getNumberSetting(profile.ephemeralSettings, [
+      'subagent.max_time_minutes',
+      'max_time_minutes',
+    ]);
 
     const runConfig: RunConfig = {
-      max_time_minutes: maxTime,
+      max_time_minutes:
+        custom?.max_time_minutes ??
+        (profileMaxTime !== undefined
+          ? profileMaxTime
+          : Number.POSITIVE_INFINITY),
     };
 
-    if (hasExplicitMaxTurns) {
-      if (maxTurnsValue !== undefined && maxTurnsValue > 0) {
-        runConfig.max_turns = Math.floor(maxTurnsValue);
-      }
-    } else {
-      runConfig.max_turns = DEFAULT_RUN_CONFIG.max_turns;
+    const profileMaxTurns = this.getNumberSetting(profile.ephemeralSettings, [
+      'maxTurnsPerPrompt',
+    ]);
+
+    const maxTurns =
+      custom?.max_turns !== undefined ? custom.max_turns : profileMaxTurns;
+
+    if (maxTurns !== undefined && maxTurns > 0) {
+      runConfig.max_turns = Math.floor(maxTurns);
     }
 
     return runConfig;

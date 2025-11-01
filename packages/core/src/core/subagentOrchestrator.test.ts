@@ -223,7 +223,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     await orchestrator.launch({ name: subagentConfig.name });
 
     const [, , , , runConfigArg] = factory.mock.calls[0];
-    expect(runConfigArg.max_time_minutes).toBe(10);
+    expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
     expect(runConfigArg.max_turns).toBe(1_000);
   });
 
@@ -268,7 +268,45 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     await orchestrator.launch({ name: subagentConfig.name });
 
     const [, , , , runConfigArg] = factory.mock.calls[0];
-    expect(runConfigArg.max_time_minutes).toBe(10);
+    expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
+    expect(runConfigArg.max_turns).toBeUndefined();
+  });
+
+  it('defaults to unlimited runtime when neither profile nor request specify limits', async () => {
+    const subagentConfig: SubagentConfig = {
+      name: 'default-helper',
+      profile: 'default-profile',
+      systemPrompt: 'Assist without additional limits.',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const subagentManager = {
+      loadSubagent,
+    } as unknown as SubagentManager;
+
+    const loadProfile = vi.fn().mockResolvedValue(baseProfile);
+    const profileManager = {
+      loadProfile,
+    } as unknown as ProfileManager;
+
+    const { factory } = createScopeFactory();
+    const runtimeBundle = createRuntimeBundle('default-runtime');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager,
+      profileManager,
+      foregroundConfig,
+      scopeFactory: factory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({ name: subagentConfig.name });
+
+    const [, , , , runConfigArg] = factory.mock.calls[0];
+    expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
     expect(runConfigArg.max_turns).toBeUndefined();
   });
 });
