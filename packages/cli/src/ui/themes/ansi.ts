@@ -26,6 +26,7 @@ const ansiColors: ColorsTheme = {
   Comment: 'gray',
   DimComment: '#5a5a5a',
   Gray: 'gray',
+  DarkGray: 'gray',
   GradientColors: ['cyan', 'green'],
 };
 

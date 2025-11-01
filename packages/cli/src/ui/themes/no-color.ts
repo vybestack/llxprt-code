@@ -22,6 +22,7 @@ const noColorColorsTheme: ColorsTheme = {
   Comment: '',
   DimComment: '',
   Gray: '',
+  DarkGray: '',
 };
 
 export const NoColorTheme: Theme = new Theme(
