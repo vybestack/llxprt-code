@@ -71,12 +71,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Detect if this is a Qwen endpoint
     // CRITICAL FIX: For now, only use base URL check in constructor since `this.name` isn't available yet
     // The name-based check will be handled in the supportsOAuth() method after construction
-    const isQwenEndpoint = !!(
-      baseURL &&
-      (baseURL.includes('dashscope.aliyuncs.com') ||
-        baseURL.includes('api.qwen.com') ||
-        baseURL.includes('qwen'))
-    );
+    let isQwenEndpoint = false;
+    if (baseURL) {
+      try {
+        const hostname = new URL(baseURL).hostname.toLowerCase();
+        isQwenEndpoint =
+          hostname === 'dashscope.aliyuncs.com' ||
+          hostname.endsWith('.dashscope.aliyuncs.com') ||
+          hostname === 'api.qwen.com' ||
+          hostname.endsWith('.qwen.com');
+      } catch {
+        const lowered = baseURL.toLowerCase();
+        isQwenEndpoint =
+          lowered.includes('dashscope.aliyuncs.com') ||
+          lowered.includes('api.qwen.com') ||
+          lowered.includes('qwen.com');
+      }
+    }
     const forceQwenOAuth = Boolean(
       (config as { forceQwenOAuth?: boolean } | undefined)?.forceQwenOAuth,
     );
