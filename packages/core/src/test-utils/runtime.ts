@@ -161,6 +161,43 @@ export function createRuntimeConfigStub(
   return Object.assign(base, overrides) as unknown as Config;
 }
 
+interface TestRuntimeInitOptions {
+  runtimeId?: string;
+  metadata?: Record<string, unknown>;
+  configOverrides?: Partial<Record<string, unknown>>;
+}
+
+/**
+ * Initializes a lightweight provider runtime context for test environments.
+ * Returns the created settings service, config stub, and runtime context.
+ */
+export function initializeTestProviderRuntime(
+  options: TestRuntimeInitOptions = {},
+): {
+  settingsService: SettingsService;
+  config: Config;
+  runtime: ProviderRuntimeContext;
+} {
+  const settingsService = new SettingsService();
+  const config = createRuntimeConfigStub(settingsService, {
+    ...(options.configOverrides ?? {}),
+  });
+  const runtime = createProviderRuntimeContext({
+    settingsService,
+    config,
+    runtimeId:
+      options.runtimeId ??
+      `test.provider.runtime.${Math.random().toString(36).slice(2, 10)}`,
+    metadata: {
+      source: 'test-utils#initializeTestProviderRuntime',
+      ...(options.metadata ?? {}),
+    },
+  });
+
+  setActiveProviderRuntimeContext(runtime);
+  return { settingsService, config, runtime };
+}
+
 function requireVi() {
   const viGlobal = (globalThis as { vi?: (typeof import('vitest'))['vi'] }).vi;
   if (viGlobal) {

@@ -2,10 +2,9 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
-import {
-  getSettingsService,
-  resetSettingsService,
-} from '../../settings/settingsServiceInstance.js';
+import { resetSettingsService } from '../../settings/settingsServiceInstance.js';
+import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';
+import type { SettingsService } from '../../settings/SettingsService.js';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -17,12 +16,28 @@ const originalDebug = console.debug;
 describe.skip('ResponsesContextTrim Integration', () => {
   let provider: OpenAIResponsesProvider;
   let consoleWarnMock: typeof vi.fn;
+  let settingsService: SettingsService;
 
   beforeEach(() => {
     vi.clearAllMocks();
     resetSettingsService();
+    const runtime = initializeTestProviderRuntime({
+      runtimeId: `responses-context-trim.integration.${Math.random()
+        .toString(36)
+        .slice(2, 10)}`,
+      metadata: {
+        suite: 'OpenAIResponsesProvider.contextTrim.integration',
+      },
+      configOverrides: {
+        getProvider: () => 'openai-responses',
+        getModel: () => 'o3-mini',
+        getEphemeralSettings: () => ({ model: 'o3-mini' }),
+      },
+    });
+    settingsService = runtime.settingsService;
     provider = new OpenAIResponsesProvider('test-api-key');
-    const settingsService = getSettingsService();
+    provider.setRuntimeSettingsService?.(settingsService);
+    provider.setConfig?.(runtime.config);
     settingsService.set('model', 'o3-mini');
     settingsService.setProviderSetting(provider.name, 'model', 'o3-mini');
 
