@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { execSync, spawn } from 'child_process';
+import { execSync, execFileSync, spawn } from 'child_process';
 
 export type EditorType =
   | 'vscode'
@@ -148,7 +148,12 @@ export function getDiffCommand(
     case 'emacs':
       return {
         command: 'emacs',
-        args: ['--eval', `(ediff "${oldPath}" "${newPath}")`],
+        args: [
+          '--eval',
+          '(ediff (car (cdr command-line-args-left)) (car (cddr command-line-args-left)))',
+          oldPath,
+          newPath,
+        ],
       };
     default:
       return null;
@@ -180,10 +185,10 @@ export async function openDiff(
       case 'cursor':
       case 'zed':
         // Use spawn for GUI-based editors to avoid blocking the entire process
+        // Security: Remove shell: true - spawn() with args array is safe without shell
         return new Promise((resolve, reject) => {
           const childProcess = spawn(diffCommand.command, diffCommand.args, {
             stdio: 'inherit',
-            shell: true,
           });
 
           childProcess.on('close', (code) => {
@@ -202,13 +207,9 @@ export async function openDiff(
       case 'vim':
       case 'emacs':
       case 'neovim': {
-        // Use execSync for terminal-based editors
-        const command =
-          process.platform === 'win32'
-            ? `${diffCommand.command} ${diffCommand.args.join(' ')}`
-            : `${diffCommand.command} ${diffCommand.args.map((arg) => `"${arg}"`).join(' ')}`;
+        // Security: Use execFileSync which doesn't invoke a shell
         try {
-          execSync(command, {
+          execFileSync(diffCommand.command, diffCommand.args, {
             stdio: 'inherit',
             encoding: 'utf8',
           });

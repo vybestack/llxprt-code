@@ -162,6 +162,15 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     value: unknown,
   ): void {
     const keys = key.split('.');
+
+    // Security: Check for dangerous keys that can pollute prototypes
+    const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
+    for (const k of keys) {
+      if (dangerousKeys.includes(k)) {
+        throw new Error(`Cannot set dangerous property: ${k}`);
+      }
+    }
+
     let current = obj;
 
     for (let i = 0; i < keys.length - 1; i++) {
