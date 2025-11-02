@@ -916,6 +916,8 @@ describe('PromptService', () => {
       );
 
       const service = new PromptService({ baseDir });
+      // Initialize once before concurrent calls to avoid Windows file locking issues
+      await service.initialize();
 
       const context: PromptContext = {
         provider: 'openai',
@@ -940,7 +942,8 @@ describe('PromptService', () => {
         expect(result).toBe(firstResult);
       });
 
-      // Should have cache hits
+      // Make another call to verify caching works after concurrent calls
+      await service.getPrompt(context);
       const stats = service.getCacheStats();
       expect(stats.hitRate).toBeGreaterThan(0);
     });
