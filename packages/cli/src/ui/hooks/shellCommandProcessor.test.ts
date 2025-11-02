@@ -146,6 +146,7 @@ describe('useShellCommandProcessor', () => {
     );
     expect(setPendingHistoryItemMock).toHaveBeenCalledWith({
       type: 'tool_group',
+      agentId: 'primary',
       tools: [
         expect.objectContaining({
           name: 'Shell Command',

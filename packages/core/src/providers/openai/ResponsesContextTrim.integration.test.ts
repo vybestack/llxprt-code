@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import {
+  getSettingsService,
+  resetSettingsService,
+} from '../../settings/settingsServiceInstance.js';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -16,8 +20,11 @@ describe.skip('ResponsesContextTrim Integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetSettingsService();
     provider = new OpenAIResponsesProvider('test-api-key');
-    provider.setModel('o3-mini');
+    const settingsService = getSettingsService();
+    settingsService.set('model', 'o3-mini');
+    settingsService.setProviderSetting(provider.name, 'model', 'o3-mini');
 
     // Mock console.warn to capture warnings
     consoleWarnMock = vi.fn();

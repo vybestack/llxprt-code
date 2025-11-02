@@ -5,7 +5,7 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-import { IProvider } from './IProvider.js';
+import { IProvider, GenerateChatOptions } from './IProvider.js';
 import { IModel } from './IModel.js';
 import { IProviderManager } from './IProviderManager.js';
 import { Config } from '../config/config.js';
@@ -23,12 +23,60 @@ import type {
   ProviderContext,
   ProviderComparison,
 } from './types.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import type { SettingsService } from '../settings/SettingsService.js';
+import {
+  getActiveProviderRuntimeContext,
+  type ProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
+import {
+  MissingProviderRuntimeError,
+  ProviderRuntimeNormalizationError,
+} from './errors.js';
+import { createRuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
+
+const PROVIDER_CAPABILITY_HINTS: Record<
+  string,
+  Partial<ProviderCapabilities>
+> = {
+  gemini: {
+    hasModelSelection: true,
+    hasApiKeyConfig: true,
+    hasBaseUrlConfig: false,
+  },
+  openai: {
+    hasModelSelection: true,
+    hasApiKeyConfig: true,
+    hasBaseUrlConfig: true,
+  },
+  'openai-responses': {
+    hasModelSelection: false,
+    hasApiKeyConfig: true,
+    hasBaseUrlConfig: true,
+  },
+  anthropic: {
+    hasModelSelection: true,
+    hasApiKeyConfig: true,
+    hasBaseUrlConfig: true,
+  },
+};
+
+interface ProviderManagerInit {
+  runtime?: ProviderRuntimeContext;
+  config?: Config;
+  settingsService?: SettingsService;
+}
 
 export class ProviderManager implements IProviderManager {
   private providers: Map<string, IProvider>;
   private serverToolsProvider: IProvider | null;
   private config?: Config;
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P05
+   * @requirement REQ-SP-001
+   * @pseudocode provider-invocation.md lines 8-15
+   */
+  private settingsService: SettingsService;
+  private runtime?: ProviderRuntimeContext;
   private providerCapabilities: Map<string, ProviderCapabilities> = new Map();
   private sessionTokenUsage: {
     input: number;
@@ -46,9 +94,82 @@ export class ProviderManager implements IProviderManager {
     total: 0,
   };
 
-  constructor() {
+  constructor(init?: ProviderManagerInit | ProviderRuntimeContext) {
+    const resolved = this.resolveInit(init);
     this.providers = new Map<string, IProvider>();
     this.serverToolsProvider = null;
+    this.settingsService = resolved.settingsService;
+    this.config = resolved.config ?? this.config;
+    this.runtime = resolved.runtime;
+  }
+
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P05
+   * @requirement REQ-SP-001
+   * @pseudocode provider-invocation.md lines 8-15
+   * @plan:PLAN-20251018-STATELESSPROVIDER2.P03
+   * @requirement:REQ-SP2-002
+   * @pseudocode multi-runtime-baseline.md lines 3-4
+   */
+  private resolveInit(init?: ProviderManagerInit | ProviderRuntimeContext): {
+    settingsService: SettingsService;
+    config?: Config;
+    runtime?: ProviderRuntimeContext;
+  } {
+    let fallback: ProviderRuntimeContext | null = null;
+    const ensureFallback = (): ProviderRuntimeContext => {
+      if (!fallback) {
+        fallback = getActiveProviderRuntimeContext();
+      }
+      return fallback;
+    };
+
+    if (!init) {
+      const resolved = ensureFallback();
+      return {
+        settingsService: resolved.settingsService,
+        config: resolved.config,
+        runtime: resolved,
+      };
+    }
+
+    if (
+      typeof init === 'object' &&
+      init !== null &&
+      'settingsService' in init &&
+      ('runtimeId' in init || 'metadata' in init)
+    ) {
+      const context = init as ProviderRuntimeContext;
+      return {
+        settingsService: context.settingsService,
+        config: context.config,
+        runtime: context,
+      };
+    }
+
+    const initObj = init as ProviderManagerInit;
+    const runtime = initObj.runtime;
+    let settingsService =
+      initObj.settingsService ?? runtime?.settingsService ?? null;
+    let config: Config | undefined =
+      initObj.config ?? runtime?.config ?? undefined;
+
+    if (!settingsService || !config) {
+      const resolved = ensureFallback();
+      settingsService = settingsService ?? resolved.settingsService;
+      config = config ?? resolved.config;
+      return {
+        settingsService,
+        config,
+        runtime: runtime ?? resolved,
+      };
+    }
+
+    return {
+      settingsService,
+      config,
+      runtime,
+    };
   }
 
   setConfig(config: Config): void {
@@ -57,6 +178,9 @@ export class ProviderManager implements IProviderManager {
     const newLoggingEnabled = config.getConversationLoggingEnabled();
 
     this.config = config;
+    this.runtime = this.runtime
+      ? { ...this.runtime, config }
+      : { settingsService: this.settingsService, config };
 
     // If logging state changed, update provider wrapping
     if (oldLoggingEnabled !== newLoggingEnabled) {
@@ -64,6 +188,11 @@ export class ProviderManager implements IProviderManager {
     }
   }
 
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 3-5
+   */
   private updateProviderWrapping(): void {
     // Re-wrap all providers (ALWAYS wrap for token tracking)
     const providers = new Map(this.providers);
@@ -75,14 +204,15 @@ export class ProviderManager implements IProviderManager {
         baseProvider = provider.wrappedProvider as IProvider;
       }
 
+      this.syncProviderRuntime(baseProvider);
+
       // ALWAYS wrap with LoggingProviderWrapper for token tracking
       let finalProvider = baseProvider;
       if (this.config) {
-        baseProvider.setConfig?.(this.config);
         finalProvider = new LoggingProviderWrapper(baseProvider, this.config);
-        finalProvider.setConfig?.(this.config);
       }
 
+      this.syncProviderRuntime(finalProvider);
       this.providers.set(name, finalProvider);
 
       // Update server tools provider reference if needed
@@ -92,18 +222,334 @@ export class ProviderManager implements IProviderManager {
     }
   }
 
-  registerProvider(provider: IProvider): void {
-    if (this.config) {
-      provider.setConfig?.(this.config);
+  /**
+   * @plan PLAN-20250218-STATELESSPROVIDER.P05
+   * @requirement REQ-SP-001
+   * @pseudocode provider-invocation.md lines 8-15
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
+   * @requirement:REQ-SP4-001
+   * @pseudocode provider-runtime-handling.md lines 10-15
+   */
+  private syncProviderRuntime(provider: IProvider): void {
+    const runtimeAware = provider as IProvider & {
+      setRuntimeSettingsService?: (settingsService: SettingsService) => void;
+      setConfig?: (config: Config) => void;
+      setRuntimeContextResolver?: (
+        resolver: () => ProviderRuntimeContext,
+      ) => void;
+      setOptionsNormalizer?: (
+        normalizer: (
+          options: GenerateChatOptions,
+          providerName: string,
+        ) => GenerateChatOptions,
+      ) => void;
+    };
+    runtimeAware.setRuntimeSettingsService?.(this.settingsService);
+    if (this.config && runtimeAware.setConfig) {
+      runtimeAware.setConfig(this.config);
+    }
+    if (
+      runtimeAware.setRuntimeContextResolver &&
+      typeof runtimeAware.setRuntimeContextResolver === 'function'
+    ) {
+      runtimeAware.setRuntimeContextResolver(() =>
+        this.snapshotRuntimeContext('ProviderManager.syncProviderRuntime'),
+      );
+    }
+    if (
+      runtimeAware.setOptionsNormalizer &&
+      typeof runtimeAware.setOptionsNormalizer === 'function'
+    ) {
+      runtimeAware.setOptionsNormalizer((options, providerName) =>
+        this.normalizeRuntimeInputs(options, providerName),
+      );
+    }
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
+   * @requirement:REQ-SP4-001
+   * @pseudocode provider-runtime-handling.md lines 10-15
+   */
+  private snapshotRuntimeContext(source: string): ProviderRuntimeContext {
+    const baseRuntime: ProviderRuntimeContext = this.runtime ?? {
+      settingsService: this.settingsService,
+      config: this.config,
+      runtimeId: 'provider-manager.default-runtime',
+      metadata: { source: 'ProviderManager', requirement: 'REQ-SP4-001' },
+    };
+
+    if (!this.runtime) {
+      this.runtime = baseRuntime;
+    } else if (!this.runtime.config && baseRuntime.config) {
+      this.runtime = { ...this.runtime, config: baseRuntime.config };
     }
 
+    const settingsService = baseRuntime.settingsService;
+    if (!settingsService) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['settings'],
+        stage: source,
+        metadata: {
+          requirement: 'REQ-SP4-001',
+          hint: 'ProviderManager requires a SettingsService to construct runtime contexts.',
+        },
+      });
+    }
+
+    const config = baseRuntime.config ?? this.config;
+    if (!config) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['config'],
+        stage: source,
+        metadata: {
+          requirement: 'REQ-SP4-001',
+          hint: 'Call ProviderManager.setConfig before invoking providers.',
+        },
+      });
+    }
+
+    const baseMetadata = baseRuntime.metadata ?? {};
+    const callMetadata: Record<string, unknown> = {
+      ...baseMetadata,
+      source,
+      requirement: 'REQ-SP4-001',
+      generatedAt: new Date().toISOString(),
+    };
+
+    const baseId = baseRuntime.runtimeId;
+    const callRuntimeId =
+      typeof baseId === 'string' && baseId.trim() !== ''
+        ? `${baseId}:${Math.random().toString(36).slice(2, 10)}`
+        : `provider-manager:${source}:${Date.now().toString(36)}`;
+
+    return {
+      settingsService,
+      config,
+      runtimeId: callRuntimeId,
+      metadata: callMetadata,
+    };
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * @requirement:REQ-SP4-003
+   * @requirement:REQ-SP4-004
+   * @requirement:REQ-SP4-005
+   * @pseudocode provider-runtime-handling.md lines 10-16
+   *
+   * Normalize runtime inputs per call - no stored settings/config fallbacks.
+   * This method enforces that all runtime context is provided per-call and that
+   * providers cannot rely on stored state.
+   */
+  normalizeRuntimeInputs(
+    rawOptions: GenerateChatOptions,
+    providerName?: string,
+  ): GenerateChatOptions {
+    const runtimeId = rawOptions.runtime?.runtimeId || 'unknown';
+    const targetProvider = providerName || this.getActiveProviderName();
+
+    // REQ-SP4-002: Check for required settings service and config in runtime context
+    const settingsService =
+      rawOptions.settings ?? rawOptions.runtime?.settingsService;
+    const config = rawOptions.config ?? rawOptions.runtime?.config;
+
+    if (!settingsService) {
+      throw new ProviderRuntimeNormalizationError({
+        providerKey: 'ProviderManager',
+        message:
+          'ProviderManager requires call-scoped settings; legacy provider state is disabled.',
+        requirement: 'REQ-SP4-002',
+        runtimeId,
+        stage: 'normalizeRuntimeInputs',
+        metadata: {
+          hint: 'SettingsService must be provided in options.settings or runtime.settingsService',
+        },
+      });
+    }
+
+    if (!config) {
+      throw new ProviderRuntimeNormalizationError({
+        providerKey: 'ProviderManager',
+        message:
+          'ProviderManager requires call-scoped config; legacy provider state is disabled.',
+        requirement: 'REQ-SP4-002',
+        runtimeId,
+        stage: 'normalizeRuntimeInputs',
+        metadata: {
+          hint: 'Config must be provided in options.config or runtime.config',
+        },
+      });
+    }
+
+    // REQ-SP4-003: Compose normalized.resolved with runtime helpers
+    const providerSettings =
+      settingsService.getProviderSettings(targetProvider);
+    const providerInstance = this.providers.get(targetProvider);
+    const resolved = {
+      model:
+        rawOptions.resolved?.model ??
+        config.getModel?.() ??
+        (providerSettings.model as string | undefined) ??
+        (providerInstance
+          ? this.getStoredModelName(providerInstance)
+          : undefined),
+      baseURL:
+        rawOptions.resolved?.baseURL ??
+        (providerSettings.baseURL as string | undefined),
+      authToken:
+        rawOptions.resolved?.authToken ??
+        (providerSettings.apiKey as string | undefined),
+      telemetry: {
+        ...rawOptions.resolved?.telemetry,
+        runtimeId,
+        normalizedAt: new Date().toISOString(),
+        provider: targetProvider,
+      },
+    };
+
+    // REQ-SP4-003: Validate required fields in resolved options
+    const missingFields: string[] = [];
+    if (!resolved.model) missingFields.push('model');
+    // Note: Gemini and some providers don't require baseURL/authToken in all configurations
+    const baseUrlOptionalProviders = new Set([
+      'gemini',
+      'openai',
+      'openai-responses',
+      'anthropic',
+    ]);
+    if (!resolved.baseURL && !baseUrlOptionalProviders.has(targetProvider)) {
+      missingFields.push('baseURL');
+    }
+    if (!resolved.authToken && targetProvider !== 'gemini') {
+      // Check if provider can resolve auth lazily (e.g., via OAuth)
+      // If the provider has getAuthToken(), it can handle its own auth precedence
+      const providerInstance = this.providers.get(targetProvider);
+
+      // Check for getAuthToken on the actual provider
+      // (might be wrapped in LoggingProviderWrapper)
+      interface ProviderWithWrapper {
+        wrappedProvider?: IProvider;
+      }
+      interface ProviderWithAuth {
+        getAuthToken?: () => Promise<string>;
+      }
+
+      let actualProvider: IProvider | undefined = providerInstance;
+      if (providerInstance && 'wrappedProvider' in providerInstance) {
+        actualProvider = (providerInstance as ProviderWithWrapper)
+          .wrappedProvider;
+      }
+
+      const canResolveAuth =
+        actualProvider &&
+        'getAuthToken' in actualProvider &&
+        typeof (actualProvider as ProviderWithAuth).getAuthToken === 'function';
+
+      if (!canResolveAuth) {
+        // Only fail for providers without lazy auth resolution capability
+        missingFields.push('authToken');
+      }
+      // Otherwise let the provider run its multi-modal precedence chain:
+      // 1. Manual key (from /key)
+      // 2. Keyfile (from /keyfile)
+      // 3. Environment variables
+      // 4. OAuth token (if enabled)
+    }
+
+    if (missingFields.length > 0) {
+      throw new ProviderRuntimeNormalizationError({
+        providerKey: 'ProviderManager',
+        message: `Incomplete runtime resolution (${missingFields.join(', ')}) for runtimeId=${runtimeId}`,
+        requirement: 'REQ-SP4-003',
+        runtimeId,
+        stage: 'normalizeRuntimeInputs',
+        metadata: { missingFields, provider: targetProvider },
+      });
+    }
+
+    // REQ-SP4-005: Ensure normalized.userMemory and metadata derive from runtime context
+    const userMemory = rawOptions.userMemory ?? config.getUserMemory?.();
+    const metadata = {
+      ...rawOptions.metadata,
+      ...rawOptions.runtime?.metadata,
+      _normalized: true,
+      _normalizationTime: new Date().toISOString(),
+      _runtimeId: runtimeId,
+      _provider: targetProvider,
+    };
+
+    const normalizedRuntime: ProviderRuntimeContext = {
+      ...(rawOptions.runtime ?? {}),
+      settingsService,
+      config,
+      runtimeId,
+      metadata,
+    };
+
+    const userMemorySnapshot =
+      typeof userMemory === 'string' ? userMemory : config.getUserMemory?.();
+
+    const invocation =
+      rawOptions.invocation ??
+      createRuntimeInvocationContext({
+        runtime: normalizedRuntime,
+        settings: settingsService,
+        providerName: targetProvider,
+        ephemeralsSnapshot: this.buildEphemeralsSnapshot(
+          settingsService,
+          targetProvider,
+        ),
+        telemetry: resolved.telemetry,
+        metadata,
+        userMemory: userMemorySnapshot ?? undefined,
+        fallbackRuntimeId: runtimeId,
+      });
+
+    return {
+      ...rawOptions,
+      settings: settingsService,
+      config,
+      runtime: normalizedRuntime,
+      resolved,
+      userMemory,
+      metadata,
+      invocation,
+    };
+  }
+
+  private buildEphemeralsSnapshot(
+    settingsService: SettingsService,
+    providerName: string,
+  ): Record<string, unknown> {
+    const globalEphemerals = settingsService.getAllGlobalSettings();
+    const providerEphemerals =
+      settingsService.getProviderSettings(providerName);
+    const snapshot: Record<string, unknown> = {
+      ...globalEphemerals,
+    };
+    snapshot[providerName] = { ...providerEphemerals };
+    return snapshot;
+  }
+
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 3-5
+   */
+  registerProvider(provider: IProvider): void {
+    this.syncProviderRuntime(provider);
     // ALWAYS wrap provider to enable token tracking
     // (LoggingProviderWrapper handles both token tracking AND conversation logging)
     let finalProvider = provider;
     if (this.config) {
       finalProvider = new LoggingProviderWrapper(provider, this.config);
-      finalProvider.setConfig?.(this.config);
     }
+
+    this.syncProviderRuntime(finalProvider);
 
     this.providers.set(provider.name, finalProvider);
 
@@ -121,12 +567,11 @@ export class ProviderManager implements IProviderManager {
     }
 
     // If this is the default provider and no provider is active, set it as active
-    const settingsService = getSettingsService();
-    const currentActiveProvider = settingsService.get(
+    const currentActiveProvider = this.settingsService.get(
       'activeProvider',
     ) as string;
     if (provider.isDefault && !currentActiveProvider) {
-      settingsService.set('activeProvider', provider.name);
+      this.settingsService.set('activeProvider', provider.name);
     }
 
     // If registering Gemini and we don't have a serverToolsProvider, use it
@@ -140,25 +585,31 @@ export class ProviderManager implements IProviderManager {
     }
   }
 
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @requirement REQ-SP2-001
+   * @pseudocode base-provider-call-contract.md lines 3-5
+   */
   setActiveProvider(name: string): void {
     if (!this.providers.has(name)) {
       throw new Error('Provider not found');
     }
 
     // Store reference to the current active provider before switching
-    const settingsService = getSettingsService();
     const previousProviderName =
-      (settingsService.get('activeProvider') as string) || '';
+      (this.settingsService.get('activeProvider') as string) || '';
 
     // Only clear state from the provider we're switching FROM
     // BUT never clear the serverToolsProvider's state
     if (previousProviderName && previousProviderName !== name) {
       const previousProvider = this.providers.get(previousProviderName);
-      if (previousProvider && previousProvider.clearState) {
-        // Don't clear state if this provider is also the serverToolsProvider
-        if (previousProvider !== this.serverToolsProvider) {
-          previousProvider.clearState();
-        }
+      if (
+        previousProvider &&
+        previousProvider !== this.serverToolsProvider &&
+        'clearState' in previousProvider
+      ) {
+        const candidate = previousProvider as { clearState?: () => void };
+        candidate.clearState?.();
       }
     }
 
@@ -180,7 +631,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     // Update SettingsService as the single source of truth
-    settingsService.set('activeProvider', name);
+    this.settingsService.set('activeProvider', name);
 
     // If switching to Gemini, use it as both active and serverTools provider
     // BUT only if we don't already have a Gemini serverToolsProvider with auth state
@@ -201,19 +652,42 @@ export class ProviderManager implements IProviderManager {
   }
 
   clearActiveProvider(): void {
-    const settingsService = getSettingsService();
-    settingsService.set('activeProvider', '');
+    this.settingsService.set('activeProvider', '');
   }
 
   getActiveProvider(): IProvider {
-    const settingsService = getSettingsService();
     const activeProviderName =
-      (settingsService.get('activeProvider') as string) || '';
+      (this.settingsService.get('activeProvider') as string) || '';
 
-    if (!activeProviderName) {
+    let resolvedName = activeProviderName;
+
+    if (!resolvedName) {
+      const preferredFromConfig = this.config?.getProvider?.();
+      if (preferredFromConfig && this.providers.has(preferredFromConfig)) {
+        resolvedName = preferredFromConfig;
+      } else if (this.providers.has('openai')) {
+        resolvedName = 'openai';
+      } else {
+        const firstProvider = this.providers.keys().next();
+        resolvedName = firstProvider.done ? '' : firstProvider.value;
+      }
+
+      if (resolvedName) {
+        try {
+          this.setActiveProvider(resolvedName);
+        } catch (error) {
+          throw new Error(
+            `Unable to set default provider '${resolvedName}': ${String(error)}`,
+          );
+        }
+      }
+    }
+
+    if (!resolvedName) {
       throw new Error('No active provider set');
     }
-    const provider = this.providers.get(activeProviderName);
+
+    const provider = this.providers.get(resolvedName);
     if (!provider) {
       throw new Error('Active provider not found');
     }
@@ -253,14 +727,12 @@ export class ProviderManager implements IProviderManager {
   }
 
   getActiveProviderName(): string {
-    const settingsService = getSettingsService();
-    return (settingsService.get('activeProvider') as string) || '';
+    return (this.settingsService.get('activeProvider') as string) || '';
   }
 
   hasActiveProvider(): boolean {
-    const settingsService = getSettingsService();
     const activeProviderName =
-      (settingsService.get('activeProvider') as string) || '';
+      (this.settingsService.get('activeProvider') as string) || '';
     return activeProviderName !== '' && this.providers.has(activeProviderName);
   }
 
@@ -311,35 +783,59 @@ export class ProviderManager implements IProviderManager {
     return capabilityScore > 0.7;
   }
 
+  private getStoredModelName(provider: IProvider): string {
+    const providerSettings = this.settingsService.getProviderSettings(
+      provider.name,
+    );
+    const storedModel = providerSettings.model as string | undefined;
+    if (storedModel && typeof storedModel === 'string' && storedModel.trim()) {
+      return storedModel;
+    }
+
+    if (
+      this.config &&
+      typeof this.config.getProvider === 'function' &&
+      this.config.getProvider() === provider.name
+    ) {
+      const configModel = this.config.getModel();
+      if (configModel) {
+        return configModel;
+      }
+    }
+
+    return provider.getDefaultModel?.() ?? '';
+  }
+
   private captureProviderCapabilities(
     provider: IProvider,
   ): ProviderCapabilities {
+    const hints = PROVIDER_CAPABILITY_HINTS[provider.name] ?? {};
+
     return {
       supportsStreaming: true, // All current providers support streaming
       supportsTools: provider.getServerTools().length > 0,
       supportsVision: this.detectVisionSupport(provider),
       maxTokens: this.getProviderMaxTokens(provider),
       supportedFormats: this.getSupportedToolFormats(provider),
-      hasModelSelection: typeof provider.setModel === 'function',
-      hasApiKeyConfig: typeof provider.setApiKey === 'function',
-      hasBaseUrlConfig: typeof provider.setBaseUrl === 'function',
+      hasModelSelection: hints.hasModelSelection ?? true,
+      hasApiKeyConfig: hints.hasApiKeyConfig ?? true,
+      hasBaseUrlConfig: hints.hasBaseUrlConfig ?? true,
       supportsPaidMode: typeof provider.isPaidMode === 'function',
     };
   }
 
   private detectVisionSupport(provider: IProvider): boolean {
     // Provider-specific vision detection logic
+    const model = this.getStoredModelName(provider).toLowerCase();
     switch (provider.name) {
       case 'gemini': {
         return true;
       }
       case 'openai': {
-        const model = provider.getCurrentModel?.() || '';
         return model.includes('vision') || model.includes('gpt-4');
       }
       case 'anthropic': {
-        const claudeModel = provider.getCurrentModel?.() || '';
-        return claudeModel.includes('claude-3');
+        return model.includes('claude-3');
       }
       default:
         return false;
@@ -347,7 +843,7 @@ export class ProviderManager implements IProviderManager {
   }
 
   private getProviderMaxTokens(provider: IProvider): number {
-    const model = provider.getCurrentModel?.() || '';
+    const model = this.getStoredModelName(provider).toLowerCase();
 
     switch (provider.name) {
       case 'gemini':
@@ -383,10 +879,15 @@ export class ProviderManager implements IProviderManager {
     provider: IProvider,
     capabilities: ProviderCapabilities,
   ): ProviderContext {
+    const providerSettings = this.settingsService.getProviderSettings(
+      provider.name,
+    );
+    const toolFormatSetting =
+      (providerSettings.toolFormat as string | undefined) ?? 'auto';
     return {
       providerName: provider.name,
-      currentModel: provider.getCurrentModel?.() || 'unknown',
-      toolFormat: provider.getToolFormat?.() || 'unknown',
+      currentModel: this.getStoredModelName(provider) || 'unknown',
+      toolFormat: toolFormatSetting,
       isPaidMode: provider.isPaidMode?.() || false,
       capabilities,
       sessionStartTime: Date.now(),
@@ -520,10 +1021,102 @@ export class ProviderManager implements IProviderManager {
   getProviderCapabilities(
     providerName?: string,
   ): ProviderCapabilities | undefined {
-    const settingsService = getSettingsService();
     const name =
-      providerName || (settingsService.get('activeProvider') as string) || '';
+      providerName ||
+      (this.settingsService.get('activeProvider') as string) ||
+      '';
     return this.providerCapabilities.get(name);
+  }
+
+  /* @plan:PLAN-20251023-STATELESS-HARDENING.P06 */
+  /* @requirement:REQ-SP4-004 */
+  prepareStatelessProviderInvocation(context?: ProviderRuntimeContext): void {
+    const stage = 'ProviderManager.prepareStatelessProviderInvocation';
+    const runtimeContext = context ?? this.runtime;
+
+    if (!runtimeContext) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['runtime'],
+        requirement: 'REQ-SP4-004',
+        stage,
+        metadata: {
+          hint: 'Register CLI runtime context before invoking providers.',
+        },
+      });
+    }
+
+    if (!runtimeContext.settingsService) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['settings'],
+        requirement: 'REQ-SP4-004',
+        stage,
+        metadata: {
+          runtimeId: runtimeContext.runtimeId,
+          hint: 'ProviderManager requires a SettingsService for stateless invocation.',
+        },
+      });
+    }
+
+    const resolvedConfig = runtimeContext.config ?? this.config;
+    if (!resolvedConfig) {
+      throw new MissingProviderRuntimeError({
+        providerKey: 'ProviderManager',
+        missingFields: ['config'],
+        requirement: 'REQ-SP4-004',
+        stage,
+        metadata: {
+          runtimeId: runtimeContext.runtimeId,
+          hint: 'ProviderManager requires Config before stateless invocation.',
+        },
+      });
+    }
+
+    const statelessMetadata: Record<string, unknown> = {
+      ...(runtimeContext.metadata ?? {}),
+      statelessHardening: 'strict',
+      statelessProviderMode: 'strict',
+      statelessGuards: true,
+      statelessMode: 'strict',
+      requirement: 'REQ-SP4-004',
+      source: stage,
+      preparedAt: new Date().toISOString(),
+    };
+
+    this.runtime = {
+      ...runtimeContext,
+      settingsService: runtimeContext.settingsService,
+      config: resolvedConfig,
+      metadata: statelessMetadata,
+    };
+    this.settingsService = runtimeContext.settingsService;
+    this.config = resolvedConfig;
+
+    for (const provider of this.providers.values()) {
+      this.attachStatelessRuntimeMetadata(provider, statelessMetadata);
+    }
+  }
+
+  private attachStatelessRuntimeMetadata(
+    provider: IProvider,
+    metadata: Record<string, unknown>,
+  ): void {
+    const statelessAware = provider as IProvider & {
+      attachStatelessRuntimeMetadata?: (
+        metadata: Record<string, unknown>,
+      ) => void;
+      wrappedProvider?: IProvider;
+    };
+
+    statelessAware.attachStatelessRuntimeMetadata?.(metadata);
+
+    if (statelessAware.wrappedProvider) {
+      this.attachStatelessRuntimeMetadata(
+        statelessAware.wrappedProvider as IProvider,
+        metadata,
+      );
+    }
   }
 
   compareProviders(provider1: string, provider2: string): ProviderComparison {

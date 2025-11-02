@@ -64,7 +64,8 @@ export async function validateNonInteractiveAuth(
     if (
       serverToolsProvider &&
       serverToolsProvider.name === 'gemini' &&
-      serverToolsProvider.setConfig
+      'setConfig' in serverToolsProvider &&
+      typeof serverToolsProvider.setConfig === 'function'
     ) {
       serverToolsProvider.setConfig(nonInteractiveConfig);
     }
@@ -99,7 +100,8 @@ export async function validateNonInteractiveAuth(
     if (
       serverToolsProvider &&
       serverToolsProvider.name === 'gemini' &&
-      serverToolsProvider.setConfig
+      'setConfig' in serverToolsProvider &&
+      typeof serverToolsProvider.setConfig === 'function'
     ) {
       serverToolsProvider.setConfig(nonInteractiveConfig);
     }

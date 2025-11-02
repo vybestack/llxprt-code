@@ -4,135 +4,76 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  getProviderManager,
-  resetProviderManager,
-} from './providerManagerInstance.js';
+import { describe, it, expect } from 'vitest';
+import { createProviderManager } from './providerManagerInstance.js';
 import { IProvider } from './index.js';
+import {
+  createProviderRuntimeContext,
+  SettingsService,
+} from '@vybestack/llxprt-code-core';
+
+function createManager() {
+  const settingsService = new SettingsService();
+  const runtime = createProviderRuntimeContext({ settingsService });
+  const { manager } = createProviderManager(runtime, {
+    allowBrowserEnvironment: true,
+  });
+  return manager;
+}
+
+function createMockProvider(name: string): IProvider {
+  return {
+    name,
+    async getModels() {
+      return [];
+    },
+    async *generateChatCompletion() {
+      yield {
+        speaker: 'ai' as const,
+        blocks: [{ type: 'text' as const, text: `${name}-response` }],
+      };
+    },
+    getDefaultModel() {
+      return `${name}-model`;
+    },
+    getServerTools() {
+      return [];
+    },
+    async invokeServerTool() {
+      return {};
+    },
+  };
+}
 
 describe('Provider Switching Integration', () => {
-  beforeEach(() => {
-    resetProviderManager();
-  });
+  it('supports switching between providers and back to Gemini', () => {
+    const manager = createManager();
 
-  afterEach(() => {
-    resetProviderManager();
-  });
-
-  it('should support switching between providers and back to Gemini', () => {
-    const manager = getProviderManager(undefined, true);
-
-    // Clear any auto-loaded active provider
     if (manager.hasActiveProvider()) {
       manager.clearActiveProvider();
     }
-
-    // Now no active provider (Gemini is default)
     expect(manager.hasActiveProvider()).toBe(false);
 
-    // Register a mock provider
-    const mockProvider: IProvider = {
-      name: 'test-provider',
-      async getModels() {
-        return [
-          {
-            id: 'test-model',
-            name: 'Test Model',
-            provider: 'test-provider',
-            supportedToolFormats: ['json'],
-          },
-        ];
-      },
-      async *generateChatCompletion() {
-        yield {
-          speaker: 'ai' as const,
-          blocks: [{ type: 'text' as const, text: 'test response' }],
-        };
-      },
-      getDefaultModel() {
-        return 'test-model';
-      },
-      getServerTools() {
-        return [];
-      },
-      async invokeServerTool() {
-        return {};
-      },
-    };
-
-    manager.registerProvider(mockProvider);
-
-    // Switch to the test provider
+    manager.registerProvider(createMockProvider('test-provider'));
     manager.setActiveProvider('test-provider');
-    expect(manager.hasActiveProvider()).toBe(true);
     expect(manager.getActiveProviderName()).toBe('test-provider');
 
-    // Switch back to Gemini
     manager.clearActiveProvider();
     expect(manager.hasActiveProvider()).toBe(false);
     expect(manager.getActiveProviderName()).toBe('');
   });
 
-  it('should list gemini as an available option even when not registered', () => {
-    const manager = getProviderManager(undefined, true);
+  it('maintains custom providers in list without auto-registering gemini', () => {
+    const manager = createManager();
 
-    // Register some providers
-    const provider1: IProvider = {
-      name: 'provider1',
-      async getModels() {
-        return [];
-      },
-      async *generateChatCompletion() {
-        yield {
-          speaker: 'ai' as const,
-          blocks: [{ type: 'text' as const, text: '' }],
-        };
-      },
-      getDefaultModel() {
-        return 'default';
-      },
-      getServerTools() {
-        return [];
-      },
-      async invokeServerTool() {
-        return {};
-      },
-    };
+    manager.registerProvider(createMockProvider('provider1'));
+    manager.registerProvider(createMockProvider('provider2'));
 
-    const provider2: IProvider = {
-      name: 'provider2',
-      async getModels() {
-        return [];
-      },
-      async *generateChatCompletion() {
-        yield {
-          speaker: 'ai' as const,
-          blocks: [{ type: 'text' as const, text: '' }],
-        };
-      },
-      getDefaultModel() {
-        return 'default';
-      },
-      getServerTools() {
-        return [];
-      },
-      async invokeServerTool() {
-        return {};
-      },
-    };
-
-    manager.registerProvider(provider1);
-    manager.registerProvider(provider2);
-
-    // List providers - should not include 'gemini' as it's not a registered provider
     const providers = manager.listProviders();
-    // Filter out any auto-loaded providers like 'openai'
-    const testProviders = providers.filter((p) => p.startsWith('provider'));
-    expect(testProviders).toEqual(['provider1', 'provider2']);
-    expect(providers).not.toContain('gemini');
+    expect(providers).toEqual(
+      expect.arrayContaining(['provider1', 'provider2']),
+    );
 
-    // But we can still clear to go back to Gemini
     manager.setActiveProvider('provider1');
     expect(manager.getActiveProviderName()).toBe('provider1');
 

@@ -1,0 +1,7 @@
+@plan:PLAN-20251020-STATELESSPROVIDER3.P07a
+command: node -e "import('./packages/cli/src/runtime/profileApplication.js').catch(err => console.log(err.message))"
+output:
+  (no output)
+command: node -e "import('./packages/cli/src/runtime/profileApplication.js').then(m => m.applyProfileWithGuards()).catch(err => console.log(err.message))"
+output:
+  NotYetImplemented: PLAN-20251020-STATELESSPROVIDER3.P07

@@ -8,6 +8,7 @@
 import { GenerateContentResponseUsageMetadata } from '@google/genai';
 import { Config } from '../config/config.js';
 import { CompletedToolCall } from '../core/coreToolScheduler.js';
+import { DEFAULT_AGENT_ID } from '../core/turn.js';
 import { ToolConfirmationOutcome, FileDiff } from '../tools/tools.js';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import { AuthType } from '../core/contentGenerator.js';
@@ -138,6 +139,7 @@ export class ToolCallEvent {
   prompt_id: string;
   tool_type: 'native' | 'mcp';
   metadata?: Record<string, unknown>;
+  agent_id: string;
 
   constructor(call: CompletedToolCall) {
     this['event.name'] = 'tool_call';
@@ -156,6 +158,7 @@ export class ToolCallEvent {
       typeof call.tool !== 'undefined' && call.tool instanceof DiscoveredMCPTool
         ? 'mcp'
         : 'native';
+    this.agent_id = call.request.agentId ?? DEFAULT_AGENT_ID;
 
     if (
       call.status === 'success' &&

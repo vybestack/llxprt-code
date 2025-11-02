@@ -52,6 +52,9 @@ export enum AuthType {
   OAUTH_GEMINI = 'oauth_gemini',
   OAUTH_QWEN = 'oauth_qwen',
   OAUTH_ANTHROPIC = 'oauth_anthropic',
+  // Generic auth types for runtime state (Phase 5)
+  API_KEY = 'api-key',
+  OAUTH = 'oauth',
 }
 
 export type ContentGeneratorConfig = {

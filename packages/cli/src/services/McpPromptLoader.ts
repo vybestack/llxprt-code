@@ -144,24 +144,51 @@ export class McpPromptLoader implements ICommandLoader {
               };
             }
           },
-          completion: async (_: CommandContext, partialArg: string) => {
-            if (!prompt || !prompt.arguments) {
-              return [];
-            }
+          schema: [
+            {
+              kind: 'value',
+              name: 'argument',
+              description: 'Provide prompt argument (--name="value")',
+              /**
+               * @plan:PLAN-20251013-AUTOCOMPLETE.P11
+               * Schema completer replaces legacy MCP prompt completion.
+               */
+              completer: async (_ctx, partialArg, tokenInfo) => {
+                if (!prompt || !prompt.arguments) {
+                  return [];
+                }
 
-            const suggestions: string[] = [];
-            const usedArgNames = new Set(
-              (partialArg.match(/--([^=]+)/g) || []).map((s) => s.substring(2)),
-            );
+                const usedArgNames = new Set(
+                  [...tokenInfo.tokens, tokenInfo.partialToken]
+                    .filter(
+                      (token): token is string =>
+                        typeof token === 'string' && token.startsWith('--'),
+                    )
+                    .map((token) => token.slice(2).split('=')[0]),
+                );
 
-            for (const arg of prompt.arguments) {
-              if (!usedArgNames.has(arg.name)) {
-                suggestions.push(`--${arg.name}=""`);
-              }
-            }
+                const normalizedPartial = partialArg.toLowerCase();
 
-            return suggestions;
-          },
+                return prompt.arguments
+                  .filter((arg) => !usedArgNames.has(arg.name))
+                  .map((arg) => {
+                    const value = `--${arg.name}=""`;
+                    return {
+                      value,
+                      description:
+                        arg.description || 'Prompt argument placeholder',
+                    };
+                  })
+                  .filter((option) =>
+                    normalizedPartial.length === 0
+                      ? true
+                      : option.value
+                          .toLowerCase()
+                          .startsWith(normalizedPartial),
+                  );
+              },
+            },
+          ],
         };
         promptCommands.push(newPromptCommand);
       }

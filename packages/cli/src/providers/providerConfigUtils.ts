@@ -5,13 +5,13 @@
  */
 
 import {
-  ProviderManager,
-  Config,
-  AuthType,
   sanitizeForByteString,
   needsSanitization,
 } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from '../config/settings.js';
+import {
+  updateActiveProviderApiKey,
+  updateActiveProviderBaseUrl,
+} from '../runtime/runtimeSettings.js';
 
 /**
  * Sanitizes API keys to remove problematic characters that cause ByteString errors.
@@ -35,88 +35,30 @@ export interface ProviderConfigResult {
   success: boolean;
   message: string;
   isPaidMode?: boolean;
-  requiresAuthRefresh?: boolean;
 }
 
 /**
- * Sets or removes the API key for the active provider
+ * Sets or removes the API key for the active provider.
+ *
+ * @plan:PLAN-20250218-STATELESSPROVIDER.P07
+ * @requirement:REQ-SP-005
+ * @pseudocode:cli-runtime.md lines 9-15
  */
 export async function setProviderApiKey(
-  providerManager: ProviderManager,
-  settings: LoadedSettings,
   apiKey: string | undefined,
-  config?: Config,
 ): Promise<ProviderConfigResult> {
   try {
-    const activeProvider = providerManager.getActiveProvider();
-    const providerName = activeProvider.name;
-
-    // If no key provided or 'none', remove the key
-    if (
-      !apiKey ||
-      apiKey.trim() === '' ||
-      apiKey.trim().toLowerCase() === 'none'
-    ) {
-      // Clear the API key using the provider's setApiKey method (which now stores in SettingsService)
-      if (activeProvider.setApiKey) {
-        activeProvider.setApiKey('');
-
-        // If this is the Gemini provider, we might need to switch auth mode
-        const requiresAuthRefresh = providerName === 'gemini' && !!config;
-        if (requiresAuthRefresh && config) {
-          await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
-        }
-
-        // Check payment mode after auth refresh
-        const isPaidMode = activeProvider.isPaidMode?.() ?? true;
-        const paymentMessage =
-          !isPaidMode && providerName === 'gemini'
-            ? '\n✅ You are now in FREE MODE - using OAuth authentication'
-            : '';
-
-        return {
-          success: true,
-          message: `API key removed for provider '${providerName}'${paymentMessage}`,
-          isPaidMode,
-          requiresAuthRefresh,
-        };
-      } else {
-        return {
-          success: false,
-          message: `Provider '${providerName}' does not support API key updates`,
-        };
-      }
-    }
-
-    // Update the provider's API key (sanitized) - this will store in SettingsService
-    if (activeProvider.setApiKey) {
-      const sanitizedKey = sanitizeApiKey(apiKey);
-      activeProvider.setApiKey(sanitizedKey);
-
-      // If this is the Gemini provider, we need to refresh auth to use API key mode
-      const requiresAuthRefresh = providerName === 'gemini' && !!config;
-      if (requiresAuthRefresh && config) {
-        await config.refreshAuth(AuthType.USE_GEMINI);
-      }
-
-      // Check if we're now in paid mode
-      const isPaidMode = activeProvider.isPaidMode?.() ?? true;
-      const paymentWarning = isPaidMode
-        ? '\nWARNING: You are now in PAID MODE - API usage will be charged to your account'
-        : '';
-
-      return {
-        success: true,
-        message: `API key updated for provider '${providerName}'${paymentWarning}`,
-        isPaidMode,
-        requiresAuthRefresh,
-      };
-    } else {
-      return {
-        success: false,
-        message: `Provider '${providerName}' does not support API key updates`,
-      };
-    }
+    const trimmed = apiKey?.trim();
+    const normalized =
+      trimmed && trimmed.toLowerCase() !== 'none' && trimmed !== ''
+        ? sanitizeApiKey(trimmed)
+        : null;
+    const result = await updateActiveProviderApiKey(normalized);
+    return {
+      success: true,
+      message: result.message,
+      isPaidMode: result.isPaidMode,
+    };
   } catch (error) {
     return {
       success: false,
@@ -126,52 +68,24 @@ export async function setProviderApiKey(
 }
 
 /**
- * Sets or clears the base URL for the active provider
+ * Sets or clears the base URL for the active provider.
+ *
+ * @plan:PLAN-20250218-STATELESSPROVIDER.P07
+ * @requirement:REQ-SP-005
+ * @pseudocode:cli-runtime.md lines 9-15
  */
 export async function setProviderBaseUrl(
-  providerManager: ProviderManager,
-  settings: LoadedSettings,
   baseUrl: string | undefined,
 ): Promise<ProviderConfigResult> {
   try {
-    const activeProvider = providerManager.getActiveProvider();
-    const providerName = activeProvider.name;
-
-    if (!baseUrl || baseUrl.trim() === '') {
-      // Clear base URL to provider default
-      if (activeProvider.setBaseUrl) {
-        activeProvider.setBaseUrl(undefined);
-
-        // Don't need to remove from settings as we no longer save base URLs there
-
-        return {
-          success: true,
-          message: `Base URL cleared, provider '${providerName}' now uses default URL`,
-        };
-      } else {
-        return {
-          success: false,
-          message: `Provider '${providerName}' does not support base URL updates`,
-        };
-      }
-    }
-
-    // Update the provider's base URL
-    if (activeProvider.setBaseUrl) {
-      activeProvider.setBaseUrl(baseUrl);
-
-      // Don't save base URLs to settings - they should only be in profiles or ephemeral
-
-      return {
-        success: true,
-        message: `Base URL updated to '${baseUrl}' for provider '${providerName}'`,
-      };
-    } else {
-      return {
-        success: false,
-        message: `Provider '${providerName}' does not support base URL updates`,
-      };
-    }
+    const trimmed = baseUrl?.trim() ?? '';
+    const normalized =
+      trimmed === '' || trimmed.toLowerCase() === 'none' ? null : trimmed;
+    const result = await updateActiveProviderBaseUrl(normalized);
+    return {
+      success: true,
+      message: result.message,
+    };
   } catch (error) {
     return {
       success: false,

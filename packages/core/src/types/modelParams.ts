@@ -76,6 +76,10 @@ export interface EphemeralSettings {
   retrywait?: number;
   /** Force OAuth authentication and ignore API keys/env vars */
   authOnly?: boolean;
+  /** Explicit allow-list of tool names */
+  'tools.allowed'?: string[];
+  /** Explicit disable-list of tool names */
+  'tools.disabled'?: string[];
 }
 
 /**

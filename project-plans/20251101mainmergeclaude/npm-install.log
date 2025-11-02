@@ -1,0 +1,167 @@
+
+> @vybestack/llxprt-code@0.5.0 postinstall
+> node scripts/postinstall.cjs
+
+Building llxprt bundle for GitHub installation...
+Installing workspace dependencies...
+
+up to date, audited 1245 packages in 1s
+
+337 packages are looking for funding
+  run `npm fund` for details
+
+1 moderate severity vulnerability
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+Building packages...
+
+> @vybestack/llxprt-code@0.5.0 build
+> node scripts/build.js
+
+
+> @vybestack/llxprt-code@0.5.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+
+> @vybestack/llxprt-code-a2a-server@0.5.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.5.0 build
+> node ../../scripts/build_package.js
+
+../core/src/providers/anthropic/AnthropicProvider.ts(534,31): error TS2552: Cannot find name 'getSettingsService'. Did you mean 'settingsService'?
+../core/src/providers/anthropic/AnthropicProvider.ts(1237,12): error TS2339: Property 'logger' does not exist on type 'AnthropicProvider'.
+../core/src/providers/anthropic/AnthropicProvider.ts(1244,12): error TS2339: Property 'logger' does not exist on type 'AnthropicProvider'.
+src/gemini.tsx(856,25): error TS2339: Property 'setBaseUrl' does not exist on type 'IProvider'.
+src/gemini.tsx(857,22): error TS2339: Property 'setBaseUrl' does not exist on type 'IProvider'.
+src/ui/commands/aboutCommand.ts(52,36): error TS2339: Property 'baseURL' does not exist on type 'ProviderRuntimeStatus'.
+src/ui/components/messages/ToolGroupMessage.test.tsx(102,9): error TS2451: Cannot redeclare block-scoped variable 'defaultTodo'.
+src/ui/components/messages/ToolGroupMessage.test.tsx(123,9): error TS2451: Cannot redeclare block-scoped variable 'renderWithContexts'.
+src/ui/components/messages/ToolGroupMessage.test.tsx(152,9): error TS2451: Cannot redeclare block-scoped variable 'defaultTodo'.
+src/ui/components/messages/ToolGroupMessage.test.tsx(173,9): error TS2451: Cannot redeclare block-scoped variable 'renderWithContexts'.
+src/zed-integration/zedIntegration.ts(356,32): error TS2349: This expression is not callable.
+  Type '{}' has no call signatures.
+node:internal/errors:983
+  const err = new Error(message);
+              ^
+
+Error: Command failed: tsc --build tsconfig.build.json
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at checkExecSyncError (node:child_process:892:11)
+    at execSync (node:child_process:964:15)
+    at file:///Users/acoliver/projects/llxprt-code/scripts/build_package.js:41:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:327:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:663:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:99:5) {
+  status: 1,
+  signal: null,
+  output: [ null, null, null ],
+  pid: 71964,
+  stdout: null,
+  stderr: null
+}
+
+Node.js v24.1.0
+npm error Lifecycle script `build` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt-code/packages/cli
+npm error workspace @vybestack/llxprt-code@0.5.0
+npm error location /Users/acoliver/projects/llxprt-code/packages/cli
+npm error command failed
+npm error command sh -c node ../../scripts/build_package.js
+
+
+> @vybestack/llxprt-code-core@0.5.0 build
+> node ../../scripts/build_package.js
+
+src/providers/anthropic/AnthropicProvider.ts(534,31): error TS2552: Cannot find name 'getSettingsService'. Did you mean 'settingsService'?
+src/providers/anthropic/AnthropicProvider.ts(1237,12): error TS2339: Property 'logger' does not exist on type 'AnthropicProvider'.
+src/providers/anthropic/AnthropicProvider.ts(1244,12): error TS2339: Property 'logger' does not exist on type 'AnthropicProvider'.
+node:internal/errors:983
+  const err = new Error(message);
+              ^
+
+Error: Command failed: tsc --build tsconfig.json
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at checkExecSyncError (node:child_process:892:11)
+    at execSync (node:child_process:964:15)
+    at file:///Users/acoliver/projects/llxprt-code/scripts/build_package.js:41:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:327:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:663:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:99:5) {
+  status: 1,
+  signal: null,
+  output: [ null, null, null ],
+  pid: 72041,
+  stdout: null,
+  stderr: null
+}
+
+Node.js v24.1.0
+npm error Lifecycle script `build` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt-code/packages/core
+npm error workspace @vybestack/llxprt-code-core@0.5.0
+npm error location /Users/acoliver/projects/llxprt-code/packages/core
+npm error command failed
+npm error command sh -c node ../../scripts/build_package.js
+
+
+> @vybestack/llxprt-code-test-utils@0.5.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.5.0 build
+> npm run compile
+
+
+> llxprt-code-vscode-ide-companion@0.5.0 compile
+> npm run check-types && npm run lint && node esbuild.js
+
+
+> llxprt-code-vscode-ide-companion@0.5.0 check-types
+> tsc --noEmit
+
+
+> llxprt-code-vscode-ide-companion@0.5.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+node:internal/errors:983
+  const err = new Error(message);
+              ^
+
+Error: Command failed: npm run build --workspaces
+    at genericNodeError (node:internal/errors:983:15)
+    at wrappedFn (node:internal/errors:537:14)
+    at checkExecSyncError (node:child_process:892:11)
+    at execSync (node:child_process:964:15)
+    at file:///Users/acoliver/projects/llxprt-code/scripts/build.js:35:1
+    at ModuleJob.run (node:internal/modules/esm/module_job:327:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:663:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:99:5) {
+  status: 1,
+  signal: null,
+  output: [ null, null, null ],
+  pid: 71914,
+  stdout: null,
+  stderr: null
+}
+
+Node.js v24.1.0
+Failed to build llxprt bundle: Command failed: npm run build
+You may need to build manually with: npm run build && npm run bundle
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt-code
+npm error command failed
+npm error command sh -c node scripts/postinstall.cjs
+npm error A complete log of this run can be found in: /Users/acoliver/.npm/_logs/2025-11-01T17_41_13_781Z-debug-0.log

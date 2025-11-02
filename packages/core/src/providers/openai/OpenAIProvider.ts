@@ -26,9 +26,11 @@ import * as net from 'net';
 import { IContent } from '../../services/history/IContent.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
-import { BaseProvider } from '../BaseProvider.js';
+import {
+  BaseProvider,
+  NormalizedGenerateChatOptions,
+} from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import {
@@ -40,20 +42,22 @@ import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { IModel } from '../IModel.js';
 import { IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
-import {
-  retryWithBackoff,
-  isNetworkTransientError,
-} from '../../utils/retry.js';
+import { retryWithBackoff } from '../../utils/retry.js';
+import { resolveUserMemory } from '../utils/userMemory.js';
+import { resolveRuntimeAuthToken } from '../utils/authToken.js';
+import { filterOpenAIRequestParams } from './openaiRequestParams.js';
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   override readonly name: string = 'openai';
-  private logger: DebugLogger;
-  private toolFormatter: ToolFormatter;
+  private getLogger(): DebugLogger {
+    return new DebugLogger('llxprt:provider:openai');
+  }
 
-  private _cachedClient?: OpenAI;
-  private _cachedClientKey?: string;
-  private modelParams?: Record<string, unknown>;
-
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Constructor reduced to minimal initialization - no state captured
+   */
   constructor(
     apiKey: string | undefined,
     baseURL?: string,
@@ -73,6 +77,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         baseURL.includes('api.qwen.com') ||
         baseURL.includes('qwen'))
     );
+    const forceQwenOAuth = Boolean(
+      (config as { forceQwenOAuth?: boolean } | undefined)?.forceQwenOAuth,
+    );
 
     // Initialize base provider with auth configuration
     super(
@@ -81,384 +88,200 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         apiKey: normalizedApiKey,
         baseURL,
         envKeyNames: ['OPENAI_API_KEY'], // Support environment variable fallback
-        isOAuthEnabled: isQwenEndpoint && !!oauthManager,
-        oauthProvider: isQwenEndpoint ? 'qwen' : undefined,
+        isOAuthEnabled: (isQwenEndpoint || forceQwenOAuth) && !!oauthManager,
+        oauthProvider: isQwenEndpoint || forceQwenOAuth ? 'qwen' : undefined,
         oauthManager,
       },
       config,
     );
 
-    this.toolFormatter = new ToolFormatter();
-    // new DebugLogger('llxprt:core:toolformatter'), // TODO: Fix ToolFormatter constructor
-
-    // Setup debug logger
-    this.logger = new DebugLogger('llxprt:provider:openai');
-
-    this.loadModelParamsFromSettings().catch((error) => {
-      this.logger.debug(
-        () =>
-          `Failed to initialize model params from SettingsService: ${error}`,
-      );
-    });
-  }
-
-  private getSocketSettings():
-    | {
-        timeout: number;
-        keepAlive: boolean;
-        noDelay: boolean;
-      }
-    | undefined {
-    const settings = this.providerConfig?.getEphemeralSettings?.() || {};
-
-    const timeoutSetting = settings['socket-timeout'];
-    const keepAliveSetting = settings['socket-keepalive'];
-    const noDelaySetting = settings['socket-nodelay'];
-
-    const hasExplicitValue = (setting: unknown): boolean =>
-      setting !== undefined && setting !== null;
-
-    if (
-      !hasExplicitValue(timeoutSetting) &&
-      !hasExplicitValue(keepAliveSetting) &&
-      !hasExplicitValue(noDelaySetting)
-    ) {
-      return undefined;
-    }
-
-    const timeout =
-      typeof timeoutSetting === 'number' && Number.isFinite(timeoutSetting)
-        ? timeoutSetting
-        : Number(timeoutSetting) > 0
-          ? Number(timeoutSetting)
-          : 60000;
-
-    const keepAlive =
-      keepAliveSetting === undefined || keepAliveSetting === null
-        ? true
-        : keepAliveSetting !== false;
-
-    const noDelay =
-      noDelaySetting === undefined || noDelaySetting === null
-        ? true
-        : noDelaySetting !== false;
-
-    return {
-      timeout,
-      keepAlive,
-      noDelay,
-    };
-  }
-
-  private createSocketAwareFetch(config: {
-    timeout: number;
-    keepAlive: boolean;
-    noDelay: boolean;
-  }): typeof fetch {
-    const { timeout, keepAlive, noDelay } = config;
-    const maxRetries = 2;
-    const retryDelay = 1000;
-    const partialResponseThreshold = 2;
-
-    const buildHeaders = (init?: RequestInit): Record<string, string> => {
-      const baseHeaders: Record<string, string> = {
-        Accept: 'text/event-stream',
-        Connection: keepAlive ? 'keep-alive' : 'close',
-        'Cache-Control': 'no-cache',
-      };
-
-      if (!init?.headers) {
-        return baseHeaders;
-      }
-
-      const appendHeader = (key: string, value: string) => {
-        baseHeaders[key] = value;
-      };
-
-      const headers = init.headers;
-      if (headers instanceof Headers) {
-        headers.forEach((value, key) => {
-          appendHeader(key, value);
-        });
-      } else if (Array.isArray(headers)) {
-        headers.forEach(([key, value]) => {
-          if (typeof value === 'string') {
-            appendHeader(key, value);
-          }
-        });
-      } else if (typeof headers === 'object') {
-        Object.entries(headers).forEach(([key, value]) => {
-          if (typeof value === 'string') {
-            appendHeader(key, value);
-          } else if (Array.isArray(value)) {
-            appendHeader(key, (value as string[]).join(', '));
-          } else if (value !== undefined && value !== null) {
-            appendHeader(key, String(value));
-          }
-        });
-      }
-
-      return baseHeaders;
-    };
-
-    const collectResponseHeaders = (rawHeaders: http.IncomingHttpHeaders) => {
-      const headers = new Headers();
-      for (const [key, value] of Object.entries(rawHeaders)) {
-        if (!key) continue;
-        if (Array.isArray(value)) {
-          headers.append(key, value.join(', '));
-        } else if (value !== undefined) {
-          headers.append(key, value);
-        }
-      }
-      return headers;
-    };
-
-    const writeRequestBody = (req: http.ClientRequest, body: unknown): void => {
-      if (!body) {
-        req.end();
-        return;
-      }
-
-      if (typeof body === 'string' || body instanceof Buffer) {
-        req.write(body);
-        req.end();
-        return;
-      }
-
-      if (body instanceof ArrayBuffer) {
-        req.write(Buffer.from(body));
-        req.end();
-        return;
-      }
-
-      if (ArrayBuffer.isView(body)) {
-        req.write(Buffer.from(body.buffer, body.byteOffset, body.byteLength));
-        req.end();
-        return;
-      }
-
-      try {
-        req.write(body as Parameters<typeof req.write>[0]);
-      } catch {
-        req.write(String(body));
-      }
-      req.end();
-    };
-
-    const delay = (ms: number) =>
-      new Promise((resolve) => {
-        setTimeout(resolve, ms);
-      });
-
-    const makeRequest = async (
-      url: string,
-      init?: RequestInit,
-      attempt = 0,
-    ): Promise<Response> =>
-      new Promise((resolve, reject) => {
-        let parsedUrl: URL;
-        try {
-          parsedUrl = new URL(url);
-        } catch (error) {
-          reject(
-            new Error(
-              `Invalid URL provided to socket-aware fetch: ${url} (${String(error)})`,
-            ),
-          );
-          return;
-        }
-
-        const isHttps = parsedUrl.protocol === 'https:';
-        const httpModule = isHttps ? https : http;
-
-        const options: http.RequestOptions = {
-          hostname: parsedUrl.hostname,
-          port: parsedUrl.port ? Number(parsedUrl.port) : isHttps ? 443 : 80,
-          path: `${parsedUrl.pathname}${parsedUrl.search}`,
-          method: init?.method?.toUpperCase() || 'GET',
-          headers: buildHeaders(init),
-        };
-
-        const req = httpModule.request(options, (res) => {
-          const chunks: Buffer[] = [];
-          let chunkCount = 0;
-
-          res.on('data', (chunk) => {
-            chunkCount += 1;
-            if (typeof chunk === 'string') {
-              chunks.push(Buffer.from(chunk));
-            } else {
-              chunks.push(chunk);
-            }
-          });
-
-          res.on('end', () => {
-            const bodyBuffer = Buffer.concat(chunks);
-            resolve(
-              new Response(bodyBuffer, {
-                status: res.statusCode ?? 0,
-                statusText: res.statusMessage ?? '',
-                headers: collectResponseHeaders(res.headers),
-              }),
-            );
-          });
-
-          res.on('error', async (error) => {
-            if (
-              chunkCount >= partialResponseThreshold &&
-              attempt < maxRetries
-            ) {
-              await delay(retryDelay);
-              try {
-                const retryResponse = await makeRequest(url, init, attempt + 1);
-                resolve(retryResponse);
-                return;
-              } catch (retryError) {
-                reject(retryError);
-                return;
-              }
-            }
-
-            reject(new Error(`Response stream error: ${String(error)}`));
-          });
-        });
-
-        req.on('socket', (socket) => {
-          if (socket instanceof net.Socket) {
-            socket.setTimeout(timeout);
-            socket.setKeepAlive(keepAlive, 1000);
-            socket.setNoDelay(noDelay);
-          }
-        });
-
-        req.setTimeout(timeout, () => {
-          req.destroy(new Error(`Request timed out after ${timeout}ms`));
-        });
-
-        if (init?.signal) {
-          const abortHandler = () => {
-            const abortError = new Error('Request aborted');
-            (abortError as Error & { name: string }).name = 'AbortError';
-            req.destroy(abortError);
-          };
-
-          if (init.signal.aborted) {
-            abortHandler();
-            return;
-          }
-
-          init.signal.addEventListener('abort', abortHandler);
-          req.on('close', () => {
-            init.signal?.removeEventListener('abort', abortHandler);
-          });
-        }
-
-        req.on('error', async (error) => {
-          if (attempt < maxRetries) {
-            await delay(retryDelay);
-            try {
-              const retryResponse = await makeRequest(url, init, attempt + 1);
-              resolve(retryResponse);
-              return;
-            } catch (retryError) {
-              reject(retryError);
-              return;
-            }
-          }
-
-          reject(new Error(`Request failed: ${String(error)}`));
-        });
-
-        writeRequestBody(req, init?.body ?? null);
-      });
-
-    return async (
-      input: Parameters<typeof fetch>[0],
-      init?: Parameters<typeof fetch>[1],
-    ) => {
-      const url =
-        typeof input === 'string'
-          ? input
-          : input instanceof URL
-            ? input.href
-            : input.url;
-
-      if (typeof url !== 'string') {
-        return fetch(input, init);
-      }
-
-      return makeRequest(url, init);
-    };
-  }
-
-  private async loadModelParamsFromSettings(): Promise<void> {
-    const params = await this.getModelParamsFromSettings();
-    this.modelParams = params;
-  }
-
-  private async resolveModelParams(): Promise<
-    Record<string, unknown> | undefined
-  > {
-    if (this.modelParams) {
-      return this.modelParams;
-    }
-    const params = await this.getModelParamsFromSettings();
-    if (params) {
-      this.modelParams = params;
-    }
-    return params;
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-002
+    // No constructor-captured state - all values sourced from normalized options per call
   }
 
   /**
-   * Get or create OpenAI client instance
-   * Will use the API key from resolved auth
-   * @returns OpenAI client instance
+   * Create HTTP/HTTPS agents with socket configuration for local AI servers
+   * Returns undefined if no socket settings are configured
+   *
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Now sources ephemeral settings from call options instead of provider config
    */
-  private async getClient(): Promise<OpenAI> {
-    const resolvedKey = await this.getAuthToken();
-    // Use the unified getBaseURL() method from BaseProvider
-    const baseURL = this.getBaseURL();
-    const socketSettings = this.getSocketSettings();
-    const socketKey = socketSettings
-      ? JSON.stringify(socketSettings)
-      : 'default';
-    const clientKey = `${baseURL}-${resolvedKey}-${socketKey}`;
+  private createHttpAgents(
+    options?: NormalizedGenerateChatOptions,
+  ): { httpAgent: http.Agent; httpsAgent: https.Agent } | undefined {
+    // Get socket configuration from call options or fallback to provider config
+    const settingsFromInvocation = options?.invocation?.ephemerals;
+    const settings =
+      settingsFromInvocation ??
+      this.providerConfig?.getEphemeralSettings?.() ??
+      {};
 
-    // Clear cache if we have no valid auth (e.g., after logout)
-    if (!resolvedKey && this._cachedClient) {
-      this._cachedClient = undefined;
-      this._cachedClientKey = undefined;
+    // Check if any socket settings are explicitly configured
+    const hasSocketSettings =
+      'socket-timeout' in settings ||
+      'socket-keepalive' in settings ||
+      'socket-nodelay' in settings;
+
+    // Only create custom agents if socket settings are configured
+    if (!hasSocketSettings) {
+      return undefined;
     }
 
-    // Return cached client if available and auth hasn't changed
-    if (this._cachedClient && this._cachedClientKey === clientKey) {
-      return this._cachedClient;
+    // Socket configuration with defaults for when settings ARE configured
+    const socketTimeout = (settings['socket-timeout'] as number) || 60000; // 60 seconds default
+    const socketKeepAlive = settings['socket-keepalive'] !== false; // true by default
+    const socketNoDelay = settings['socket-nodelay'] !== false; // true by default
+
+    // Create HTTP agent with socket options
+    const httpAgent = new http.Agent({
+      keepAlive: socketKeepAlive,
+      keepAliveMsecs: 1000,
+      timeout: socketTimeout,
+    });
+
+    // Create HTTPS agent with socket options
+    const httpsAgent = new https.Agent({
+      keepAlive: socketKeepAlive,
+      keepAliveMsecs: 1000,
+      timeout: socketTimeout,
+    });
+
+    // Apply TCP_NODELAY if enabled (reduces latency for local servers)
+    if (socketNoDelay) {
+      const originalCreateConnection = httpAgent.createConnection;
+      httpAgent.createConnection = function (options, callback) {
+        const socket = originalCreateConnection.call(this, options, callback);
+        if (socket instanceof net.Socket) {
+          socket.setNoDelay(true);
+        }
+        return socket;
+      };
+
+      const originalHttpsCreateConnection = httpsAgent.createConnection;
+      httpsAgent.createConnection = function (options, callback) {
+        const socket = originalHttpsCreateConnection.call(
+          this,
+          options,
+          callback,
+        );
+        if (socket instanceof net.Socket) {
+          socket.setNoDelay(true);
+        }
+        return socket;
+      };
     }
 
-    const baseOptions: ConstructorParameters<typeof OpenAI>[0] & {
-      fetch?: typeof fetch;
-    } = {
-      apiKey: resolvedKey || '',
-      baseURL,
-      // CRITICAL: Disable OpenAI SDK's built-in retries so our retry logic can handle them
-      // This allows us to track throttle wait times properly
+    return { httpAgent, httpsAgent };
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Extract model parameters from normalized options instead of settings service
+   */
+  private extractModelParamsFromOptions(
+    options: NormalizedGenerateChatOptions,
+  ): Record<string, unknown> | undefined {
+    const providerSettings =
+      options.settings?.getProviderSettings(this.name) ?? {};
+    const configEphemerals = options.invocation?.ephemerals ?? {};
+
+    const filteredProviderParams = filterOpenAIRequestParams(providerSettings);
+    const filteredEphemeralParams = filterOpenAIRequestParams(configEphemerals);
+
+    if (!filteredProviderParams && !filteredEphemeralParams) {
+      return undefined;
+    }
+
+    return {
+      ...(filteredProviderParams ?? {}),
+      ...(filteredEphemeralParams ?? {}),
+    };
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Resolve runtime key from normalized options for client scoping
+   */
+  private resolveRuntimeKey(options: NormalizedGenerateChatOptions): string {
+    if (options.runtime?.runtimeId) {
+      return options.runtime.runtimeId;
+    }
+
+    const metadataRuntimeId = options.metadata?.runtimeId;
+    if (typeof metadataRuntimeId === 'string' && metadataRuntimeId.trim()) {
+      return metadataRuntimeId.trim();
+    }
+
+    const callId = options.settings.get('call-id');
+    if (typeof callId === 'string' && callId.trim()) {
+      return `call:${callId.trim()}`;
+    }
+
+    return 'openai.runtime.unscoped';
+  }
+
+  /**
+   * Tool formatter instances cannot be shared between stateless calls,
+   * so construct a fresh one for every invocation.
+   *
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   */
+  private createToolFormatter(): ToolFormatter {
+    return new ToolFormatter();
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P09
+   * @requirement:REQ-SP4-002
+   * Instantiates a fresh OpenAI client per call to preserve stateless behaviour.
+   */
+  private instantiateClient(
+    authToken: string,
+    baseURL?: string,
+    agents?: { httpAgent: http.Agent; httpsAgent: https.Agent },
+  ): OpenAI {
+    const clientOptions: Record<string, unknown> = {
+      apiKey: authToken || '',
       maxRetries: 0,
     };
 
-    if (socketSettings) {
-      baseOptions.timeout = socketSettings.timeout;
-      baseOptions.fetch = this.createSocketAwareFetch(socketSettings);
+    if (baseURL && baseURL.trim() !== '') {
+      clientOptions.baseURL = baseURL;
     }
 
-    // Create new client with current auth and optional socket configuration
-    // Cast to unknown then to the expected type to bypass TypeScript's structural checking
-    this._cachedClient = new OpenAI(
-      baseOptions as unknown as ConstructorParameters<typeof OpenAI>[0],
-    );
-    this._cachedClientKey = clientKey;
+    if (agents) {
+      clientOptions.httpAgent = agents.httpAgent;
+      clientOptions.httpsAgent = agents.httpsAgent;
+    }
 
-    return this._cachedClient;
+    return new OpenAI(
+      clientOptions as unknown as ConstructorParameters<typeof OpenAI>[0],
+    );
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P09
+   * @requirement:REQ-SP4-002
+   * Creates a client scoped to the active runtime metadata without caching.
+   */
+  protected async getClient(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<OpenAI> {
+    const authToken =
+      (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
+    if (!authToken) {
+      throw new Error(
+        `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
+      );
+    }
+    const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
+    const agents = this.createHttpAgents(options);
+    return this.instantiateClient(authToken, baseURL, agents);
   }
 
   /**
@@ -466,6 +289,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Qwen endpoints support OAuth, standard OpenAI does not
    */
   protected supportsOAuth(): boolean {
+    const providerConfig = this.providerConfig as IProviderConfig & {
+      forceQwenOAuth?: boolean;
+    };
+    if (providerConfig?.forceQwenOAuth) {
+      return true;
+    }
     // CRITICAL FIX: Check provider name first for cases where base URL is changed by profiles
     // This handles the cerebrasqwen3 profile case where base-url is changed to cerebras.ai
     // but the provider name is still 'qwen' due to Object.defineProperty override
@@ -492,7 +321,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     try {
       // Always try to fetch models, regardless of auth status
       // Local endpoints often work without authentication
-      const client = await this.getClient();
+      const authToken = await this.getAuthToken();
+      const baseURL = this.getBaseURL();
+      const agents = this.createHttpAgents();
+      const client = this.instantiateClient(authToken, baseURL, agents);
       const response = await client.models.list();
       const models: IModel[] = [];
 
@@ -514,7 +346,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       return models;
     } catch (error) {
-      this.logger.debug(() => `Error fetching models from OpenAI: ${error}`);
+      this.getLogger().debug(
+        () => `Error fetching models from OpenAI: ${error}`,
+      );
       // Return a hardcoded list as fallback
       return this.getFallbackModels();
     }
@@ -526,9 +360,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   override getDefaultModel(): string {
     // Return hardcoded default - do NOT call getModel() to avoid circular dependency
-    if (this.providerConfig?.defaultModel) {
-      return this.providerConfig.defaultModel;
-    }
     // Check if this is a Qwen provider instance based on baseURL
     const baseURL = this.getBaseURL();
     if (
@@ -541,16 +372,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Set the model to use for this provider
-   * This updates the model in ephemeral settings so it's immediately available
-   */
-  override setModel(modelId: string): void {
-    const settingsService = getSettingsService();
-    settingsService.set('model', modelId);
-    this.logger.debug(() => `Model set to: ${modelId}`);
-  }
-
-  /**
    * Get the currently selected model
    */
   override getCurrentModel(): string {
@@ -558,13 +379,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Clear the cached OpenAI client
-   * Should be called when authentication state changes (e.g., after logout)
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P09
+   * @requirement:REQ-SP4-002
+   * No-op retained for compatibility because clients are no longer cached.
    */
   // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
-  public clearClientCache(): void {
-    this._cachedClient = undefined;
-    this._cachedClientKey = undefined;
+  public clearClientCache(runtimeKey?: string): void {
+    void runtimeKey;
   }
 
   /**
@@ -574,22 +395,45 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const config = this.providerConfig as IProviderConfig & {
       forceQwenOAuth?: boolean;
     };
-    if (this.name === 'qwen' && config?.forceQwenOAuth) {
-      // For qwen with forceQwenOAuth, check OAuth directly
-      if (this.baseProviderConfig.oauthManager) {
-        try {
-          const oauthProviderName =
-            this.baseProviderConfig.oauthProvider || 'qwen';
-          const token =
-            await this.baseProviderConfig.oauthManager.getToken(
-              oauthProviderName,
-            );
-          return token !== null;
-        } catch {
-          return false;
-        }
+
+    const directApiKey = this.baseProviderConfig.apiKey;
+    if (typeof directApiKey === 'string' && directApiKey.trim() !== '') {
+      return true;
+    }
+
+    try {
+      const nonOAuthToken = await this.authResolver.resolveAuthentication({
+        settingsService: this.resolveSettingsService(),
+        includeOAuth: false,
+      });
+      if (typeof nonOAuthToken === 'string' && nonOAuthToken.trim() !== '') {
+        return true;
       }
-      return false;
+    } catch (error) {
+      if (process.env.DEBUG) {
+        this.getLogger().debug(
+          () =>
+            `[openai] non-OAuth authentication resolution failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    if (this.name === 'qwen' && config?.forceQwenOAuth) {
+      try {
+        const token = await this.authResolver.resolveAuthentication({
+          settingsService: this.resolveSettingsService(),
+          includeOAuth: true,
+        });
+        return typeof token === 'string' && token.trim() !== '';
+      } catch (error) {
+        if (process.env.DEBUG) {
+          this.getLogger().debug(
+            () =>
+              `[openai] forced OAuth authentication failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        return false;
+      }
     }
 
     // For non-qwen providers, use the normal check
@@ -606,19 +450,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       forceQwenOAuth?: boolean;
     };
     if (this.name === 'qwen' && config?.forceQwenOAuth) {
-      // Check cache first (short-lived cache to avoid repeated OAuth calls)
-      if (
-        this.cachedAuthToken &&
-        this.authCacheTimestamp &&
-        Date.now() - this.authCacheTimestamp < this.AUTH_CACHE_DURATION
-      ) {
-        return this.cachedAuthToken;
-      }
-
-      // Clear stale cache
-      this.cachedAuthToken = undefined;
-      this.authCacheTimestamp = undefined;
-
       // For qwen, skip directly to OAuth without checking SettingsService
       // Use 'qwen' as the provider name even if baseProviderConfig.oauthProvider is not set
       const oauthProviderName = this.baseProviderConfig.oauthProvider || 'qwen';
@@ -629,9 +460,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               oauthProviderName,
             );
           if (token) {
-            // Cache the token briefly
-            this.cachedAuthToken = token;
-            this.authCacheTimestamp = Date.now();
             return token;
           }
         } catch (error) {
@@ -729,24 +557,28 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Generate chat completion with IContent interface
-   * Internally converts to OpenAI API format, but only yields IContent
-   * @param contents Array of content blocks (text and tool_call)
-   * @param tools Array of available tools
+   * @plan PLAN-20250218-STATELESSPROVIDER.P04
+   * @requirement REQ-SP-001
+   * @pseudocode base-provider.md lines 7-15
+   * @pseudocode provider-invocation.md lines 8-12
    */
-  override async *generateChatCompletion(
-    contents: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
-    }>,
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P09
+   * @requirement:REQ-SP4-002
+   * Generate chat completion with per-call client instantiation.
+   */
+  protected override async *generateChatCompletionWithOptions(
+    options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    const callFormatter = this.createToolFormatter();
+    const client = await this.getClient(options);
+    const runtimeKey = this.resolveRuntimeKey(options);
+    const { tools } = options;
+    const logger = new DebugLogger('llxprt:provider:openai');
+
     // Debug log what we receive
-    if (this.logger.enabled) {
-      this.logger.debug(
+    if (logger.enabled) {
+      logger.debug(
         () => `[OpenAIProvider] generateChatCompletion received tools:`,
         {
           hasTools: !!tools,
@@ -755,17 +587,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           isArray: Array.isArray(tools),
           firstToolName: tools?.[0]?.functionDeclarations?.[0]?.name,
           toolsStructure: tools ? 'available' : 'undefined',
+          runtimeKey,
         },
       );
     }
 
-    // Pass tools directly in Gemini format - they'll be converted in generateChatCompletionImpl
+    // Pass tools directly in Gemini format - they'll be converted per call
     const generator = this.generateChatCompletionImpl(
-      contents,
-      tools,
-      undefined,
-      undefined,
-      undefined,
+      options,
+      callFormatter,
+      client,
+      logger,
     );
 
     for await (const item of generator) {
@@ -851,23 +683,34 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Internal implementation for chat completion
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Internal implementation for chat completion using normalized options
    */
   private async *generateChatCompletionImpl(
-    contents: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
-    }>,
-    maxTokens?: number,
-    abortSignal?: AbortSignal,
-    modelName?: string,
+    options: NormalizedGenerateChatOptions,
+    toolFormatter: ToolFormatter,
+    client: OpenAI,
+    logger: DebugLogger,
   ): AsyncGenerator<IContent, void, unknown> {
-    // Always look up model from SettingsService
-    const model = modelName || this.getModel() || this.getDefaultModel();
+    const { contents, tools, metadata } = options;
+    const model = options.resolved.model || this.getDefaultModel();
+    const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
+    const ephemeralSettings = options.invocation?.ephemerals ?? {};
+
+    if (logger.enabled) {
+      const resolved = options.resolved;
+      logger.debug(() => `[OpenAIProvider] Resolved request context`, {
+        provider: this.name,
+        model,
+        resolvedModel: resolved.model,
+        resolvedBaseUrl: resolved.baseURL,
+        authTokenPresent: Boolean(resolved.authToken),
+        messageCount: contents.length,
+        toolCount: tools?.length ?? 0,
+        metadataKeys: Object.keys(metadata ?? {}),
+      });
+    }
 
     // Convert IContent to OpenAI messages format
     const messages = this.convertToOpenAIMessages(contents);
@@ -876,7 +719,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const detectedFormat = this.detectToolFormat();
 
     // Log the detected format for debugging
-    this.logger.debug(
+    logger.debug(
       () =>
         `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
       {
@@ -887,7 +730,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     );
 
     // Convert Gemini format tools to the detected format
-    let formattedTools = this.toolFormatter.convertGeminiToFormat(
+    let formattedTools = toolFormatter.convertGeminiToFormat(
       tools,
       detectedFormat,
     ) as
@@ -904,7 +747,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // CRITICAL FIX: Ensure we never pass an empty tools array
     // The OpenAI API errors when tools=[] but a tool call is attempted
     if (Array.isArray(formattedTools) && formattedTools.length === 0) {
-      this.logger.warn(
+      logger.warn(
         () =>
           `[OpenAIProvider] CRITICAL: Formatted tools is empty array! Setting to undefined to prevent API errors.`,
         {
@@ -919,8 +762,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Debug log the conversion result - enhanced logging for intermittent issues
-    if (this.logger.enabled && formattedTools) {
-      this.logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
+    if (logger.enabled && formattedTools) {
+      logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
         detectedFormat,
         inputHadTools: !!tools,
         inputToolsLength: tools?.length,
@@ -934,8 +777,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Get streaming setting from ephemeral settings (default: enabled)
-    const streamingSetting =
-      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
+    const streamingSetting = ephemeralSettings['streaming'];
     const streamingEnabled = streamingSetting !== 'disabled';
 
     // Get the system prompt
@@ -948,9 +790,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const toolNamesArg =
       tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
 
-    const userMemory = this.globalConfig?.getUserMemory
-      ? this.globalConfig.getUserMemory()
-      : '';
+    /**
+     * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+     * @requirement:REQ-SP4-003
+     * Source user memory from normalized options instead of global config
+     */
+    const userMemory = await resolveUserMemory(
+      options.userMemory,
+      () => options.invocation?.userMemory,
+    );
     const systemPrompt = await getCoreSystemPromptAsync(
       userMemory,
       model,
@@ -963,68 +811,62 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       ...messages,
     ];
 
+    const maxTokens =
+      (metadata?.maxTokens as number | undefined) ??
+      (ephemeralSettings['max-tokens'] as number | undefined);
+
     // Build request - only include tools if they exist and are not empty
     // IMPORTANT: Create a deep copy of tools to prevent mutation issues
     const requestBody: OpenAI.Chat.ChatCompletionCreateParams = {
       model,
       messages: messagesWithSystem,
-      ...(formattedTools && formattedTools.length > 0
-        ? {
-            // Deep clone the tools array to prevent any mutation issues
-            tools: JSON.parse(JSON.stringify(formattedTools)),
-            // Add tool_choice for Qwen/Cerebras to ensure proper tool calling
-            tool_choice: 'auto',
-          }
-        : {}),
-      max_tokens: maxTokens,
       stream: streamingEnabled,
     };
 
-    // Special handling for Cerebras GLM: need a user message with content in the request body
-    // This is a workaround for a Cerebras bug where they block calls without text
-    // even though it's a tool response that shouldn't require it.
-    if (
-      this.getModel()?.toLowerCase().includes('glm') &&
-      this.getBaseURL()?.includes('cerebras') &&
-      formattedTools &&
-      formattedTools.length > 0
-    ) {
-      // Add a dummy user message with content to bypass Cerebras validation
-      requestBody.messages.push({ role: 'user', content: '\n' });
+    if (formattedTools && formattedTools.length > 0) {
+      requestBody.tools = JSON.parse(JSON.stringify(formattedTools));
+      requestBody.tool_choice = 'auto';
     }
 
-    const modelParams = await this.resolveModelParams();
-    if (modelParams) {
-      Object.assign(requestBody, modelParams);
+    /**
+     * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+     * @requirement:REQ-SP4-002
+     * Extract per-call request overrides from normalized options instead of cached state
+     */
+    const requestOverrides = this.extractModelParamsFromOptions(options);
+    if (requestOverrides) {
+      if (logger.enabled) {
+        logger.debug(() => `[OpenAIProvider] Applying request overrides`, {
+          overrideKeys: Object.keys(requestOverrides),
+        });
+      }
+      Object.assign(requestBody, requestOverrides);
+    }
+
+    if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
+      requestBody.max_tokens = maxTokens;
     }
 
     // Debug log request summary for Cerebras/Qwen
+    const baseURL = options.resolved.baseURL ?? this.getBaseURL();
+
     if (
-      this.logger.enabled &&
-      (model.toLowerCase().includes('qwen') ||
-        this.getBaseURL()?.includes('cerebras'))
+      logger.enabled &&
+      (model.toLowerCase().includes('qwen') || baseURL?.includes('cerebras'))
     ) {
-      this.logger.debug(
-        () => `Request to ${this.getBaseURL()} for model ${model}:`,
-        {
-          baseURL: this.getBaseURL(),
-          model,
-          streamingEnabled,
-          hasTools: 'tools' in requestBody,
-          toolCount: formattedTools?.length || 0,
-          messageCount: messages.length,
-          toolsInRequest:
-            'tools' in requestBody ? requestBody.tools?.length : 'not included',
-        },
-      );
+      logger.debug(() => `Request to ${baseURL} for model ${model}:`, {
+        baseURL,
+        model,
+        streamingEnabled,
+        hasTools: 'tools' in requestBody,
+        toolCount: formattedTools?.length || 0,
+        messageCount: messages.length,
+        toolsInRequest:
+          'tools' in requestBody ? requestBody.tools?.length : 'not included',
+      });
     }
 
-    // Get OpenAI client
-    const client = await this.getClient();
-
     // Get retry settings from ephemeral settings
-    const ephemeralSettings =
-      this.providerConfig?.getEphemeralSettings?.() || {};
     const maxRetries =
       (ephemeralSettings['retries'] as number | undefined) ?? 6; // Default for OpenAI
     const initialDelayMs =
@@ -1041,24 +883,32 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Log the exact tools being sent for debugging
-    if (this.logger.enabled && 'tools' in requestBody) {
-      this.logger.debug(
-        () => `[OpenAIProvider] Exact tools being sent to API:`,
-        {
-          toolCount: requestBody.tools?.length,
-          toolNames: requestBody.tools?.map((t) =>
-            'function' in t ? t.function?.name : undefined,
-          ),
-          firstTool: requestBody.tools?.[0],
-        },
-      );
+    if (logger.enabled && 'tools' in requestBody) {
+      logger.debug(() => `[OpenAIProvider] Exact tools being sent to API:`, {
+        toolCount: requestBody.tools?.length,
+        toolNames: requestBody.tools?.map((t) =>
+          'function' in t ? t.function?.name : undefined,
+        ),
+        firstTool: requestBody.tools?.[0],
+      });
     }
 
     // Wrap the API call with retry logic using centralized retry utility
+    if (logger.enabled) {
+      logger.debug(() => `[OpenAIProvider] Sending chat request`, {
+        model,
+        baseURL: baseURL ?? this.getBaseURL(),
+        streamingEnabled,
+        toolCount: formattedTools?.length ?? 0,
+        hasAuthToken: Boolean(options.resolved.authToken),
+        requestHasSystemPrompt: Boolean(systemPrompt?.length),
+        messageCount: messagesWithSystem.length,
+      });
+    }
     let response;
 
     // Debug log throttle tracker status
-    this.logger.debug(() => `Retry configuration:`, {
+    logger.debug(() => `Retry configuration:`, {
       hasThrottleTracker: !!this.throttleTracker,
       throttleTrackerType: typeof this.throttleTracker,
       maxRetries,
@@ -1067,33 +917,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     const customHeaders = this.getCustomHeaders();
 
-    // Log the request body before making the API call
-    this.logger.debug(() => `[OpenAIProvider] Request body:`, {
-      model: requestBody.model,
-      messageCount: requestBody.messages.length,
-      hasTools:
-        'tools' in requestBody &&
-        requestBody.tools &&
-        requestBody.tools.length > 0,
-      toolCount: 'tools' in requestBody ? requestBody.tools?.length : 0,
-      streaming: requestBody.stream,
-      lastThreeMessages: requestBody.messages.slice(-3),
-      messagesWithToolCalls: requestBody.messages.filter(
-        (m: OpenAI.Chat.ChatCompletionMessageParam) =>
-          'tool_calls' in m && m.tool_calls,
-      ),
-      messagesWithToolRole: requestBody.messages.filter(
-        (m: OpenAI.Chat.ChatCompletionMessageParam) => m.role === 'tool',
-      ),
-      fullRequestBody: requestBody,
-    });
-
-    // Check if dumponerror is enabled from either CLI flag or ephemeral setting
-    const ephemeralSettingsForDump =
-      this.providerConfig?.getEphemeralSettings?.() || {};
-    const dumpOnError =
-      this.globalConfig?.getDumpOnError?.() ||
-      ephemeralSettingsForDump['dumponerror'] === 'enabled';
+    if (logger.enabled) {
+      logger.debug(() => `[OpenAIProvider] Request body preview`, {
+        model: requestBody.model,
+        hasStop: 'stop' in requestBody,
+        hasMaxTokens: 'max_tokens' in requestBody,
+        hasResponseFormat: 'response_format' in requestBody,
+        overrideKeys: requestOverrides ? Object.keys(requestOverrides) : [],
+      });
+    }
 
     try {
       response = await retryWithBackoff(
@@ -1110,69 +942,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         },
       );
     } catch (error) {
-      // Log the error details
-      this.logger.error(() => `[OpenAIProvider] API call failed:`, {
-        error,
-        errorType: error?.constructor?.name,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorStatus: (error as { status?: number })?.status,
-        errorHeaders: (error as { headers?: Headers })?.headers,
-        errorBody: (error as { error?: unknown })?.error,
-        model,
-        baseURL: this.getBaseURL(),
-      });
-
-      // Dump request body on error if enabled
-      if (dumpOnError) {
-        try {
-          const fs = await import('fs');
-          const path = await import('path');
-          const os = await import('os');
-
-          const homeDir = os.homedir();
-          const dumpDir = path.join(homeDir, '.llxprt', 'dumps');
-
-          // Ensure dumps directory exists
-          if (!fs.existsSync(dumpDir)) {
-            fs.mkdirSync(dumpDir, { recursive: true });
-          }
-
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-          const dumpFilePath = path.join(
-            dumpDir,
-            `request-dump-${timestamp}.json`,
-          );
-
-          const dumpContent = JSON.stringify(
-            {
-              timestamp: new Date().toISOString(),
-              error: {
-                message: error instanceof Error ? error.message : String(error),
-                status: (error as { status?: number })?.status,
-                type: (error as { type?: string })?.type,
-                code: (error as { code?: string })?.code,
-                param: (error as { param?: string })?.param,
-                fullError: error,
-              },
-              request: requestBody,
-              baseURL: this.getBaseURL(),
-              model,
-              notes:
-                'This dump contains the ACTUAL request sent to the API in OpenAI format. Messages with role:tool have tool_call_id set.',
-            },
-            null,
-            2,
-          );
-
-          fs.writeFileSync(dumpFilePath, dumpContent, 'utf-8');
-          this.logger.debug(
-            () => `Request body dumped to ${dumpFilePath} (error occurred)`,
-          );
-        } catch (dumpError) {
-          this.logger.debug(() => `Failed to dump request body: ${dumpError}`);
-        }
-      }
-
       // Special handling for Cerebras/Qwen "Tool not present" errors
       const errorMessage = String(error);
       if (
@@ -1180,7 +949,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         (model.toLowerCase().includes('qwen') ||
           this.getBaseURL()?.includes('cerebras'))
       ) {
-        this.logger.error(
+        logger.error(
           'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
           {
             error,
@@ -1199,17 +968,30 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         throw enhancedError;
       }
       // Re-throw other errors as-is
+      const capturedErrorMessage =
+        error instanceof Error ? error.message : String(error);
+      const status =
+        typeof error === 'object' &&
+        error !== null &&
+        'status' in error &&
+        typeof (error as { status: unknown }).status === 'number'
+          ? (error as { status: number }).status
+          : undefined;
+
+      logger.error(
+        () =>
+          `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
+        {
+          model,
+          baseURL: baseURL ?? this.getBaseURL(),
+          streamingEnabled,
+          hasTools: formattedTools?.length ?? 0,
+          requestHasSystemPrompt: !!systemPrompt,
+          status,
+        },
+      );
       throw error;
     }
-
-    // Log successful response start
-    this.logger.debug(
-      () => `[OpenAIProvider] API call succeeded, processing response...`,
-      {
-        streaming: streamingEnabled,
-        model,
-      },
-    );
 
     // Check if response is streaming or not
     if (streamingEnabled) {
@@ -1254,7 +1036,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Check for finish_reason to detect proper stream ending
           if (choice.finish_reason) {
-            this.logger.debug(
+            logger.debug(
               () =>
                 `[Streaming] Stream finished with reason: ${choice.finish_reason}`,
               {
@@ -1268,7 +1050,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
             // If finish_reason is 'length', the response was cut off
             if (choice.finish_reason === 'length') {
-              this.logger.debug(
+              logger.debug(
                 () =>
                   `Response truncated due to length limit for model ${model}`,
               );
@@ -1296,7 +1078,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
             // Debug log for providers that need buffering
             if (shouldBufferText) {
-              this.logger.debug(
+              logger.debug(
                 () => `[Streaming] Chunk content for ${detectedFormat} format:`,
                 {
                   deltaContent,
@@ -1313,6 +1095,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               // Emit buffered text when we have a complete sentence or paragraph
               // Look for natural break points
               if (
+                textBuffer.includes('\n') ||
                 textBuffer.endsWith('. ') ||
                 textBuffer.endsWith('! ') ||
                 textBuffer.endsWith('? ') ||
@@ -1384,7 +1167,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             (model.toLowerCase().includes('qwen') ||
               this.getBaseURL()?.includes('cerebras'))
           ) {
-            this.logger.error(
+            logger.error(
               'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
               {
                 error,
@@ -1402,7 +1185,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             ).originalError = error;
             throw enhancedError;
           }
-          this.logger.error('Error processing streaming response:', error);
+          logger.error('Error processing streaming response:', error);
           throw error;
         }
       }
@@ -1496,7 +1279,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Log finish reason for debugging Qwen issues
       if (choice.finish_reason) {
-        this.logger.debug(
+        logger.debug(
           () =>
             `[Non-streaming] Response finish_reason: ${choice.finish_reason}`,
           {
@@ -1514,7 +1297,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         // Warn if the response was truncated
         if (choice.finish_reason === 'length') {
-          this.logger.warn(
+          logger.warn(
             () =>
               `Response truncated due to max_tokens limit for model ${model}. Consider increasing max_tokens.`,
           );
@@ -1597,49 +1380,72 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Update model parameters and persist them in the SettingsService.
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Memoization of model parameters disabled for stateless provider
    */
-  override setModelParams(params: Record<string, unknown> | undefined): void {
-    if (params === undefined) {
-      this.modelParams = undefined;
-      this.setModelParamsInSettings(undefined).catch((error) => {
-        this.logger.debug(
-          () => `Failed to clear model params in SettingsService: ${error}`,
-        );
-      });
-      return;
-    }
-
-    const updated = { ...(this.modelParams ?? {}) };
-
-    for (const [key, value] of Object.entries(params)) {
-      if (value === undefined || value === null) {
-        delete updated[key];
-      } else {
-        updated[key] = value;
-      }
-    }
-
-    this.modelParams = Object.keys(updated).length > 0 ? updated : undefined;
-
-    this.setModelParamsInSettings(this.modelParams).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist model params to SettingsService: ${error}`,
-      );
-    });
-  }
-
-  override getModelParams(): Record<string, unknown> | undefined {
-    return this.modelParams;
+  setModelParams(_params: Record<string, unknown> | undefined): void {
+    throw new Error(
+      'ProviderCacheError("Attempted to memoize model parameters for openai")',
+    );
   }
 
   /**
-   * Get the tool format for this provider
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Gets model parameters from SettingsService per call (stateless)
+   */
+  override getModelParams(): Record<string, unknown> | undefined {
+    try {
+      const settingsService = this.resolveSettingsService();
+      const providerSettings = settingsService.getProviderSettings(this.name);
+
+      const reservedKeys = new Set([
+        'enabled',
+        'apiKey',
+        'api-key',
+        'apiKeyfile',
+        'api-keyfile',
+        'baseUrl',
+        'base-url',
+        'model',
+        'toolFormat',
+        'tool-format',
+        'toolFormatOverride',
+        'tool-format-override',
+        'defaultModel',
+      ]);
+
+      const params: Record<string, unknown> = {};
+      if (providerSettings) {
+        for (const [key, value] of Object.entries(providerSettings)) {
+          if (reservedKeys.has(key) || value === undefined || value === null) {
+            continue;
+          }
+          params[key] = value;
+        }
+      }
+
+      return Object.keys(params).length > 0 ? params : undefined;
+    } catch (error) {
+      this.getLogger().debug(
+        () =>
+          `Failed to get OpenAI provider settings from SettingsService: ${error}`,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Get the tool format for this provider using normalized options
    * @returns The tool format to use
    */
   override getToolFormat(): string {
     const format = this.detectToolFormat();
-    this.logger.debug(() => `getToolFormat() called, returning: ${format}`, {
+    const logger = new DebugLogger('llxprt:provider:openai');
+    logger.debug(() => `getToolFormat() called, returning: ${format}`, {
       provider: this.name,
       model: this.getModel(),
       format,
@@ -1648,86 +1454,32 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Set tool format override for this provider
-   * @param format The format to use, or null to clear override
-   */
-  override setToolFormatOverride(format: string | null): void {
-    const settingsService = getSettingsService();
-    if (format === null) {
-      settingsService.setProviderSetting(this.name, 'toolFormat', 'auto');
-      this.logger.debug(() => `Tool format override cleared for ${this.name}`);
-    } else {
-      settingsService.setProviderSetting(this.name, 'toolFormat', format);
-      this.logger.debug(
-        () => `Tool format override set to '${format}' for ${this.name}`,
-      );
-    }
-
-    // Clear cached client to ensure new format takes effect
-    this._cachedClient = undefined;
-    this._cachedClientKey = undefined;
-  }
-
-  /**
    * Detects the tool call format based on the model being used
    * @returns The detected tool format ('openai' or 'qwen')
    */
   private detectToolFormat(): ToolFormat {
-    try {
-      // Check for toolFormat override in provider settings
-      const settingsService = getSettingsService();
-      const currentSettings = settingsService['settings'];
-      const providerSettings = currentSettings?.providers?.[this.name];
-      const toolFormatOverride = providerSettings?.toolFormat as
-        | ToolFormat
-        | 'auto'
-        | undefined;
-
-      // If explicitly set to a specific format (not 'auto'), use it
-      if (toolFormatOverride && toolFormatOverride !== 'auto') {
-        this.logger.debug(
-          () =>
-            `Using tool format override '${toolFormatOverride}' for ${this.name}`,
-        );
-        return toolFormatOverride;
-      }
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to detect tool format from SettingsService: ${error}`,
-      );
-    }
-
     // Auto-detect based on model name if set to 'auto' or not set
     const modelName = (this.getModel() || this.getDefaultModel()).toLowerCase();
+    const logger = new DebugLogger('llxprt:provider:openai');
 
-    // Check for GLM models (glm-4.5, glm-4-6, etc.) which require Qwen handling
-    if (modelName.includes('glm-')) {
-      this.logger.debug(
-        () => `Auto-detected 'qwen' format for GLM model: ${modelName}`,
-      );
-      return 'qwen';
-    }
-
-    // Check for MiniMax models (minimax, mini-max, etc.) which require Qwen handling
-    if (modelName.includes('minimax') || modelName.includes('mini-max')) {
-      this.logger.debug(
-        () => `Auto-detected 'qwen' format for MiniMax model: ${modelName}`,
+    // Check for GLM-4 models (glm-4, glm-4.5, glm-4.6, glm-4-5, etc.)
+    if (modelName.includes('glm-4')) {
+      logger.debug(
+        () => `Auto-detected 'qwen' format for GLM-4.x model: ${modelName}`,
       );
       return 'qwen';
     }
 
     // Check for qwen models
     if (modelName.includes('qwen')) {
-      this.logger.debug(
+      logger.debug(
         () => `Auto-detected 'qwen' format for Qwen model: ${modelName}`,
       );
       return 'qwen';
     }
 
     // Default to 'openai' format
-    this.logger.debug(
-      () => `Using default 'openai' format for model: ${modelName}`,
-    );
+    logger.debug(() => `Using default 'openai' format for model: ${modelName}`);
     return 'openai';
   }
 
@@ -1743,11 +1495,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
    * Determines whether a response should be retried based on error codes
    * @param error The error object from the API response
    * @returns true if the request should be retried, false otherwise
    */
   shouldRetryResponse(error: unknown): boolean {
+    const logger = new DebugLogger('llxprt:provider:openai');
+
     // Don't retry if we're streaming chunks - just continue processing
     if (
       error &&
@@ -1782,7 +1538,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Log what we're seeing
-    this.logger.debug(() => `shouldRetryResponse checking error:`, {
+    logger.debug(() => `shouldRetryResponse checking error:`, {
       hasError: !!error,
       errorType: error?.constructor?.name,
       status,
@@ -1791,19 +1547,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     });
 
     // Retry on 429 rate limit errors or 5xx server errors
-    if (status === 429 || (status && status >= 500 && status < 600)) {
-      this.logger.debug(() => `Will retry request due to status ${status}`);
-      return true;
+    const shouldRetry = Boolean(
+      status === 429 || (status && status >= 500 && status < 600),
+    );
+
+    if (shouldRetry) {
+      logger.debug(() => `Will retry request due to status ${status}`);
     }
 
-    if (isNetworkTransientError(error)) {
-      this.logger.debug(
-        () =>
-          'Will retry request due to transient network error signature (connection-level failure).',
-      );
-      return true;
-    }
-
-    return false;
+    return shouldRetry;
   }
 }

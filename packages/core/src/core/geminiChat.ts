@@ -21,7 +21,6 @@ import {
 import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { ContentGenerator } from './contentGenerator.js';
-import { Config } from '../config/config.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 import type {
@@ -31,29 +30,20 @@ import type {
   ToolResponseBlock,
   UsageStats,
 } from '../services/history/IContent.js';
-import type { IProvider } from '../providers/IProvider.js';
-// import { estimateTokens } from '../utils/toolOutputLimiter.js'; // Unused after retry stream refactor
-import {
-  logApiRequest,
-  logApiResponse,
-  logApiError,
-} from '../telemetry/loggers.js';
-import {
-  ApiErrorEvent,
-  ApiRequestEvent,
-  ApiResponseEvent,
-} from '../telemetry/types.js';
+import type { IProvider, ProviderToolset } from '../providers/IProvider.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { hasCycleInSchema } from '../tools/tools.js';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
 import { DebugLogger } from '../debug/index.js';
 import { getCompressionPrompt } from './prompts.js';
-import {
-  COMPRESSION_TOKEN_THRESHOLD,
-  COMPRESSION_PRESERVE_THRESHOLD,
-} from './compression-config.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 import { tokenLimit } from './tokenLimits.js';
+import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
+import type {
+  AgentRuntimeContext,
+  ToolRegistryView,
+} from '../runtime/AgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */
@@ -342,41 +332,63 @@ export class GeminiChat {
   private sendPromise: Promise<void> = Promise.resolve();
   // A promise to represent any ongoing compression operation
   private compressionPromise: Promise<void> | null = null;
-  private historyService: HistoryService;
   private logger = new DebugLogger('llxprt:gemini:chat');
   // Cache the compression threshold to avoid recalculating
   private cachedCompressionThreshold: number | null = null;
+  private readonly generationConfig: GenerateContentConfig;
 
+  /**
+   * Runtime state for stateless operation (Phase 6)
+   * @plan PLAN-20251028-STATELESS6.P10
+   * @requirement REQ-STAT6-001.2
+   * @pseudocode agent-runtime-context.md lines 83-91 (step 006)
+   */
+  private readonly runtimeState: AgentRuntimeState;
+  private readonly historyService: HistoryService;
+  private readonly runtimeContext: AgentRuntimeContext;
+
+  /**
+   * @plan PLAN-20251028-STATELESS6.P10
+   * @requirement REQ-STAT6-001.2, REQ-STAT6-002.2, REQ-STAT6-002.3
+   * @pseudocode agent-runtime-context.md lines 83-91 (step 006.1-006.2)
+   *
+   * Phase 6 constructor: Accept AgentRuntimeContext as first parameter
+   * Eliminates Config dependency by using runtime view adapters
+   */
   constructor(
-    private readonly config: Config,
+    view: AgentRuntimeContext,
     contentGenerator: ContentGenerator,
-    private readonly generationConfig: GenerateContentConfig = {},
+    generationConfig: GenerateContentConfig = {},
     initialHistory: Content[] = [],
-    historyService?: HistoryService,
   ) {
+    if (!view) {
+      throw new Error('AgentRuntimeContext is required for GeminiChat');
+    }
+
+    // Step 006.2: Extract runtime state and history from view
+    this.runtimeContext = view;
+    this.runtimeState = view.state;
+    this.historyService = view.history;
+    this.generationConfig = generationConfig;
+    void contentGenerator;
+
     validateHistory(initialHistory);
 
-    // Use provided HistoryService or create a new one
-    this.historyService = historyService || new HistoryService();
-
+    const model = this.runtimeState.model;
     this.logger.debug('GeminiChat initialized:', {
-      model: this.config.getModel(),
+      model,
       initialHistoryLength: initialHistory.length,
-      hasHistoryService: !!historyService,
+      hasHistoryService: !!this.historyService,
+      hasRuntimeState: true,
     });
 
-    // Convert and add initial history if provided
     if (initialHistory.length > 0) {
-      const currentModel = this.config.getModel();
-      this.logger.debug('Adding initial history to service:', {
-        count: initialHistory.length,
-      });
       const idGen = this.historyService.getIdGeneratorCallback();
       for (const content of initialHistory) {
         const matcher = this.makePositionMatcher();
         this.historyService.add(
           ContentConverters.toIContent(content, idGen, matcher),
-          currentModel,
+          model,
         );
       }
     }
@@ -410,56 +422,99 @@ export class GeminiChat {
     return JSON.stringify(contents);
   }
 
+  private buildProviderRuntime(
+    source: string,
+    metadata: Record<string, unknown> = {},
+  ): ProviderRuntimeContext {
+    const baseRuntime = this.runtimeContext.providerRuntime;
+    const runtimeId =
+      baseRuntime.runtimeId ?? this.runtimeState.runtimeId ?? 'geminiChat';
+
+    return {
+      ...baseRuntime,
+      runtimeId,
+      metadata: {
+        ...(baseRuntime.metadata ?? {}),
+        source,
+        ...metadata,
+      },
+    };
+  }
+
+  /**
+   * @plan PLAN-20251028-STATELESS6.P10
+   * @requirement REQ-STAT6-002.3
+   * @pseudocode agent-runtime-context.md line 88 (step 006.5)
+   */
   private async _logApiRequest(
     contents: Content[],
     model: string,
-    prompt_id: string,
+    promptId: string,
   ): Promise<void> {
     const requestText = this._getRequestTextFromContents(contents);
-    logApiRequest(
-      this.config,
-      new ApiRequestEvent(model, prompt_id, requestText),
-    );
+    // Step 006.5: Replace telemetry logging with view.telemetry adapter
+    this.runtimeContext.telemetry.logApiRequest({
+      model,
+      promptId,
+      requestText,
+      sessionId: this.runtimeState.sessionId,
+      runtimeId: this.runtimeState.runtimeId,
+      provider: this.runtimeState.provider,
+      authType: this.runtimeState.authType,
+      timestamp: Date.now(),
+    });
   }
 
+  /**
+   * @plan PLAN-20251028-STATELESS6.P10
+   * @requirement REQ-STAT6-002.3
+   * @pseudocode agent-runtime-context.md line 88 (step 006.5)
+   */
   private async _logApiResponse(
     durationMs: number,
-    prompt_id: string,
+    promptId: string,
     usageMetadata?: GenerateContentResponseUsageMetadata,
     responseText?: string,
   ): Promise<void> {
-    logApiResponse(
-      this.config,
-      new ApiResponseEvent(
-        this.config.getModel(),
-        durationMs,
-        prompt_id,
-        this.config.getContentGeneratorConfig()?.authType,
-        usageMetadata,
-        responseText,
-      ),
-    );
+    // Step 006.5: Replace telemetry logging with view.telemetry adapter
+    this.runtimeContext.telemetry.logApiResponse({
+      model: this.runtimeState.model,
+      promptId,
+      durationMs,
+      authType: this.runtimeState.authType,
+      sessionId: this.runtimeState.sessionId,
+      runtimeId: this.runtimeState.runtimeId,
+      provider: this.runtimeState.provider,
+      usageMetadata,
+      responseText,
+    });
   }
 
+  /**
+   * @plan PLAN-20251028-STATELESS6.P10
+   * @requirement REQ-STAT6-002.3
+   * @pseudocode agent-runtime-context.md line 88 (step 006.5)
+   */
   private _logApiError(
     durationMs: number,
     error: unknown,
-    prompt_id: string,
+    promptId: string,
   ): void {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorType = error instanceof Error ? error.name : 'unknown';
 
-    logApiError(
-      this.config,
-      new ApiErrorEvent(
-        this.config.getModel(),
-        errorMessage,
-        durationMs,
-        prompt_id,
-        this.config.getContentGeneratorConfig()?.authType,
-        errorType,
-      ),
-    );
+    // Step 006.5: Replace telemetry logging with view.telemetry adapter
+    this.runtimeContext.telemetry.logApiError({
+      model: this.runtimeState.model,
+      promptId,
+      durationMs,
+      error: errorMessage,
+      errorType,
+      authType: this.runtimeState.authType,
+      sessionId: this.runtimeState.sessionId,
+      runtimeId: this.runtimeState.runtimeId,
+      provider: this.runtimeState.provider,
+    });
   }
 
   setSystemInstruction(sysInstr: string) {
@@ -472,6 +527,10 @@ export class GeminiChat {
    */
   getHistoryService(): HistoryService {
     return this.historyService;
+  }
+
+  getToolsView(): ToolRegistryView {
+    return this.runtimeContext.tools;
   }
 
   /**
@@ -514,11 +573,54 @@ export class GeminiChat {
     // DO NOT add user content to history yet - use send-then-commit pattern
 
     // Get the active provider
-    const provider = this.getActiveProvider();
+    // @plan PLAN-20251028-STATELESS6.P10
+    // @requirement REQ-STAT6-002.2
+    // @pseudocode agent-runtime-context.md line 87 (step 006.4)
+    let provider = this.getActiveProvider();
     if (!provider) {
       throw new Error('No active provider configured');
     }
 
+    // Step 006.4: Replace providerManager access with view.provider adapter
+    const desiredProviderName = this.runtimeState.provider;
+    if (desiredProviderName && provider.name !== desiredProviderName) {
+      const previousProviderName = provider.name;
+      try {
+        this.runtimeContext.provider.setActiveProvider(desiredProviderName);
+        const updatedProvider =
+          this.runtimeContext.provider.getActiveProvider();
+        if (updatedProvider) {
+          provider = updatedProvider;
+        }
+        this.logger.debug(
+          () =>
+            `[GeminiChat] enforced provider switch to '${desiredProviderName}' (previous '${previousProviderName}')`,
+        );
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `[GeminiChat] provider switch skipped (read-only context): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    const activeAuthType = this.runtimeState.authType;
+    const providerBaseUrl = this.resolveProviderBaseUrl(provider);
+
+    // @plan PLAN-20251027-STATELESS5.P10
+    // @requirement REQ-STAT5-004.1
+    this.logger.debug(
+      () => '[GeminiChat] Active provider snapshot before stream/send',
+      {
+        providerName: provider.name,
+        providerDefaultModel: provider.getDefaultModel?.(),
+        configModel: this.runtimeState.model,
+        baseUrl: providerBaseUrl,
+        authType: activeAuthType,
+      },
+    );
+
+    // Enforce context window limits before proceeding
     await this.enforceContextWindow(pendingTokens, prompt_id, provider);
 
     // Check if provider supports IContent interface
@@ -534,9 +636,11 @@ export class GeminiChat {
     // Build request with history + new message(s)
     const iContents = [...currentHistory, ...userIContents];
 
+    // @plan PLAN-20251027-STATELESS5.P10
+    // @requirement REQ-STAT5-004.1
     this._logApiRequest(
       ContentConverters.toGeminiContents(iContents),
-      this.config.getModel(),
+      this.runtimeState.model,
       prompt_id,
     );
 
@@ -545,7 +649,10 @@ export class GeminiChat {
 
     try {
       const apiCall = async () => {
-        const modelToUse = this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
+        // @plan PLAN-20251027-STATELESS5.P10
+        // @requirement REQ-STAT5-004.1
+        const modelToUse =
+          this.runtimeState.model || DEFAULT_GEMINI_FLASH_MODEL;
 
         // Get tools in the format the provider expects
         const tools = this.generationConfig.tools;
@@ -605,18 +712,31 @@ export class GeminiChat {
         );
 
         // Call the provider directly with IContent
-        const streamResponse = provider.generateChatCompletion!(
-          iContents,
-          tools as
-            | Array<{
-                functionDeclarations: Array<{
-                  name: string;
-                  description?: string;
-                  parametersJsonSchema?: unknown;
-                }>;
-              }>
-            | undefined,
+        // @plan PLAN-20251027-STATELESS5.P10
+        // @requirement REQ-STAT5-004.1
+        this.logger.debug(
+          () => '[GeminiChat] Calling provider.generateChatCompletion',
+          {
+            providerName: provider.name,
+            model: this.runtimeState.model,
+            toolCount: tools?.length ?? 0,
+            baseUrl: this.resolveProviderBaseUrl(provider),
+            authType: this.runtimeState.authType,
+          },
         );
+        const runtimeContext = this.buildProviderRuntime(
+          'GeminiChat.trySendMessage',
+          { toolCount: tools?.length ?? 0 },
+        );
+
+        const streamResponse = provider.generateChatCompletion!({
+          contents: iContents,
+          tools: tools as ProviderToolset | undefined,
+          config: runtimeContext.config,
+          runtime: runtimeContext,
+          settings: runtimeContext.settingsService,
+          metadata: runtimeContext.metadata,
+        });
 
         // Collect all chunks from the stream
         let lastResponse: IContent | undefined;
@@ -655,7 +775,9 @@ export class GeminiChat {
         const outputContent = response.candidates?.[0]?.content;
 
         // Send-then-commit: Now that we have a successful response, add both user and model messages
-        const currentModel = this.config.getModel();
+        // @plan PLAN-20251027-STATELESS5.P10
+        // @requirement REQ-STAT5-004.1
+        const currentModel = this.runtimeState.model;
 
         // Handle AFC history or regular history
         const fullAutomaticFunctionCallingHistory =
@@ -773,8 +895,10 @@ export class GeminiChat {
     this.logger.debug(
       () => 'DEBUG [geminiChat]: ===== SEND MESSAGE STREAM START =====',
     );
+    // @plan PLAN-20251027-STATELESS5.P10
+    // @requirement REQ-STAT5-004.1
     this.logger.debug(
-      () => `DEBUG [geminiChat]: Model from config: ${this.config.getModel()}`,
+      () => `DEBUG [geminiChat]: Model from config: ${this.runtimeState.model}`,
     );
     this.logger.debug(
       () => `DEBUG [geminiChat]: Params: ${JSON.stringify(params, null, 2)}`,
@@ -833,7 +957,7 @@ export class GeminiChat {
 
         for (
           let attempt = 0;
-          attempt <= INVALID_CONTENT_RETRY_OPTIONS.maxAttempts;
+          attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts;
           attempt++
         ) {
           try {
@@ -886,6 +1010,156 @@ export class GeminiChat {
     })(this);
   }
 
+  async generateDirectMessage(
+    params: SendMessageParameters,
+    prompt_id: string,
+  ): Promise<GenerateContentResponse> {
+    const provider = this.getActiveProvider();
+    if (!provider) {
+      throw new Error('No active provider configured');
+    }
+
+    const userContent = normalizeToolInteractionInput(params.message);
+    const idGen = this.historyService.getIdGeneratorCallback();
+    const matcher = this.makePositionMatcher();
+    const userIContents: IContent[] = Array.isArray(userContent)
+      ? userContent.map((content) =>
+          ContentConverters.toIContent(content, idGen, matcher),
+        )
+      : [ContentConverters.toIContent(userContent, idGen, matcher)];
+
+    const requestContents = ContentConverters.toGeminiContents(userIContents);
+    // @plan PLAN-20251027-STATELESS5.P10
+    // @requirement REQ-STAT5-004.1
+    await this._logApiRequest(
+      requestContents,
+      this.runtimeState.model,
+      prompt_id,
+    );
+
+    const startTime = Date.now();
+    let aggregatedText = '';
+
+    try {
+      const response = await retryWithBackoff(
+        async () => {
+          const toolsFromConfig =
+            params.config?.tools && Array.isArray(params.config.tools)
+              ? (params.config.tools as Array<{
+                  functionDeclarations: Array<{
+                    name: string;
+                    description?: string;
+                    parametersJsonSchema?: unknown;
+                  }>;
+                }>)
+              : undefined;
+
+          const baseUrlForCall = this.resolveProviderBaseUrl(provider);
+          const activeAuthType = this.runtimeState.authType;
+
+          // @plan PLAN-20251027-STATELESS5.P10
+          // @requirement REQ-STAT5-004.1
+          this.logger.debug(
+            () =>
+              '[GeminiChat] Calling provider.generateChatCompletion (non-stream retry path)',
+            {
+              providerName: provider.name,
+              model: this.runtimeState.model,
+              toolCount: toolsFromConfig?.length ?? 0,
+              baseUrl: baseUrlForCall,
+              authType: activeAuthType,
+            },
+          );
+
+          const runtimeContext = this.buildProviderRuntime(
+            'GeminiChat.streamGeneration',
+            { toolCount: toolsFromConfig?.length ?? 0 },
+          );
+
+          const streamResponse = provider.generateChatCompletion({
+            contents: userIContents,
+            tools:
+              toolsFromConfig && toolsFromConfig.length > 0
+                ? (toolsFromConfig as ProviderToolset)
+                : undefined,
+            config: runtimeContext.config,
+            runtime: runtimeContext,
+            settings: runtimeContext.settingsService,
+            metadata: runtimeContext.metadata,
+          });
+
+          let lastResponse: IContent | undefined;
+          for await (const iContent of streamResponse) {
+            lastResponse = iContent;
+            for (const block of iContent.blocks ?? []) {
+              if (block.type === 'text') {
+                aggregatedText += block.text;
+              }
+            }
+          }
+
+          if (!lastResponse) {
+            throw new Error('No response from provider');
+          }
+
+          const directResponse = this.convertIContentToResponse(lastResponse);
+
+          if (aggregatedText.trim()) {
+            const candidate = directResponse.candidates?.[0];
+            if (candidate) {
+              const parts = candidate.content?.parts ?? [];
+              const hasText = parts.some(
+                (part) => 'text' in part && part.text?.trim(),
+              );
+              if (!hasText) {
+                candidate.content = candidate.content || {
+                  role: 'model',
+                  parts: [],
+                };
+                candidate.content.parts = [
+                  ...(candidate.content.parts || []),
+                  { text: aggregatedText },
+                ];
+              }
+            }
+            Object.defineProperty(directResponse, 'text', {
+              configurable: true,
+              get() {
+                return aggregatedText;
+              },
+            });
+          }
+
+          return directResponse;
+        },
+        {
+          shouldRetry: (error: unknown) => {
+            if (error instanceof Error && error.message) {
+              if (isSchemaDepthError(error.message)) return false;
+              if (error.message.includes('429')) return true;
+              if (error.message.match(/5\d{2}/)) return true;
+            }
+            return false;
+          },
+        },
+      );
+
+      const durationMs = Date.now() - startTime;
+      await this._logApiResponse(
+        durationMs,
+        prompt_id,
+        response.usageMetadata,
+        JSON.stringify(response),
+      );
+
+      return response;
+    } catch (error) {
+      const durationMs = Date.now() - startTime;
+      this._logApiError(durationMs, error, prompt_id);
+      throw error;
+    }
+  }
+
   private async makeApiCallAndProcessStream(
     _params: SendMessageParameters,
     promptId: string,
@@ -893,11 +1167,48 @@ export class GeminiChat {
     userContent: Content | Content[],
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     // Get the active provider
-    const provider = this.getActiveProvider();
+    let provider = this.getActiveProvider();
     if (!provider) {
       throw new Error('No active provider configured');
     }
 
+    // @plan PLAN-20251028-STATELESS6.P10
+    // @requirement REQ-STAT6-002.2
+    // @pseudocode agent-runtime-context.md line 87 (step 006.4)
+    const desiredProviderName = this.runtimeState.provider;
+    // Step 006.4: Replace providerManager access with view.provider adapter
+    if (desiredProviderName && provider.name !== desiredProviderName) {
+      const previousProviderName = provider.name;
+      try {
+        this.runtimeContext.provider.setActiveProvider(desiredProviderName);
+        provider = this.runtimeContext.provider.getActiveProvider();
+        this.logger.debug(
+          () =>
+            `[GeminiChat] enforced provider switch (stream path) to '${desiredProviderName}' (previous '${previousProviderName}')`,
+        );
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `[GeminiChat] provider switch skipped (stream path, read-only context): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    const activeAuthType = this.runtimeState.authType;
+    const providerBaseUrl = this.resolveProviderBaseUrl(provider);
+
+    this.logger.debug(
+      () => '[GeminiChat] Active provider snapshot before stream request',
+      {
+        providerName: provider.name,
+        providerDefaultModel: provider.getDefaultModel?.(),
+        configModel: this.runtimeState.model,
+        baseUrl: providerBaseUrl,
+        authType: activeAuthType,
+      },
+    );
+
+    // Enforce context window limits before proceeding
     await this.enforceContextWindow(pendingTokens, promptId, provider);
 
     // Check if provider supports IContent interface
@@ -944,18 +1255,31 @@ export class GeminiChat {
       const tools = this.generationConfig.tools;
 
       // Call the provider directly with IContent
-      const streamResponse = provider.generateChatCompletion!(
-        requestContents,
-        tools as
-          | Array<{
-              functionDeclarations: Array<{
-                name: string;
-                description?: string;
-                parametersJsonSchema?: unknown;
-              }>;
-            }>
-          | undefined,
+      this.logger.debug(
+        () =>
+          '[GeminiChat] Calling provider.generateChatCompletion (generatorRequest)',
+        {
+          providerName: provider.name,
+          model: this.runtimeState.model,
+          historyLength: requestContents.length,
+          toolCount: tools?.length ?? 0,
+          baseUrl: providerBaseUrl,
+          authType: activeAuthType,
+        },
       );
+      const runtimeContext = this.buildProviderRuntime(
+        'GeminiChat.generateRequest',
+        { historyLength: requestContents.length },
+      );
+
+      const streamResponse = provider.generateChatCompletion!({
+        contents: requestContents,
+        tools: tools as ProviderToolset | undefined,
+        config: runtimeContext.config,
+        runtime: runtimeContext,
+        settings: runtimeContext.settingsService,
+        metadata: runtimeContext.metadata,
+      });
 
       // Convert the IContent stream to GenerateContentResponse stream
       return (async function* (instance) {
@@ -1029,12 +1353,12 @@ export class GeminiChat {
   addHistory(content: Content): void {
     this.historyService.add(
       ContentConverters.toIContent(content),
-      this.config.getModel(),
+      this.runtimeState.model,
     );
   }
   setHistory(history: Content[]): void {
     this.historyService.clear();
-    const currentModel = this.config.getModel();
+    const currentModel = this.runtimeState.model;
     for (const content of history) {
       this.historyService.add(
         ContentConverters.toIContent(content),
@@ -1049,18 +1373,16 @@ export class GeminiChat {
 
   /**
    * Check if compression is needed based on token count
+   * @plan PLAN-20251028-STATELESS6.P10
+   * @requirement REQ-STAT6-002.2
+   * @pseudocode agent-runtime-context.md line 86 (step 006.3)
    */
   private shouldCompress(pendingTokens: number = 0): boolean {
     // Calculate compression threshold only if not cached
     if (this.cachedCompressionThreshold === null) {
-      const threshold =
-        (this.config.getEphemeralSetting('compression-threshold') as
-          | number
-          | undefined) ?? COMPRESSION_TOKEN_THRESHOLD;
-      const contextLimit =
-        (this.config.getEphemeralSetting('context-limit') as
-          | number
-          | undefined) ?? 60000; // Default context limit
+      // Step 006.3: Replace config.getEphemeralSetting with view.ephemerals
+      const threshold = this.runtimeContext.ephemerals.compressionThreshold();
+      const contextLimit = this.runtimeContext.ephemerals.contextLimit();
 
       this.cachedCompressionThreshold = threshold * contextLimit;
       this.logger.debug('Calculated compression threshold:', {
@@ -1126,7 +1448,7 @@ export class GeminiChat {
     try {
       return await this.historyService.estimateTokensForContents(
         contents,
-        this.config.getModel(),
+        this.runtimeState.model,
       );
     } catch (error) {
       this.logger.debug(
@@ -1236,23 +1558,13 @@ export class GeminiChat {
       providerParams as Record<string, unknown> | undefined,
     );
 
-    let configBudget: number | undefined;
-    if (typeof this.config.getEphemeralSetting === 'function') {
-      const candidateKeys = ['maxOutputTokens', 'max-output-tokens'];
-      for (const key of candidateKeys) {
-        const value = this.asNumber(this.config.getEphemeralSetting(key));
-        if (value !== undefined) {
-          configBudget = value;
-          break;
-        }
-      }
-    }
+    // @plan PLAN-20251028-STATELESS6.P10
+    // @requirement REQ-STAT6-002.2
+    // @pseudocode agent-runtime-context.md line 86 (step 006.3)
+    // Note: maxOutputTokens is not part of core ephemerals; removed config dependency
 
     return (
-      generationBudget ??
-      providerBudget ??
-      configBudget ??
-      GeminiChat.DEFAULT_COMPLETION_BUDGET
+      generationBudget ?? providerBudget ?? GeminiChat.DEFAULT_COMPLETION_BUDGET
     );
   }
 
@@ -1264,10 +1576,9 @@ export class GeminiChat {
     await this.historyService.waitForTokenUpdates();
 
     const completionBudget = Math.max(0, this.getCompletionBudget(provider));
-    const userContextLimit = this.config.getEphemeralSetting(
-      'context-limit',
-    ) as number | undefined;
-    const limit = tokenLimit(this.config.getModel(), userContextLimit);
+    // Merged from main: Use user context limit from ephemerals
+    const userContextLimit = this.runtimeContext.ephemerals.contextLimit();
+    const limit = tokenLimit(this.runtimeState.model, userContextLimit);
     const marginAdjustedLimit = Math.max(
       0,
       limit - GeminiChat.TOKEN_SAFETY_MARGIN,
@@ -1364,10 +1675,11 @@ export class GeminiChat {
     const curated = this.historyService.getCurated();
 
     // Calculate split point (keep last 30%)
+    // @plan PLAN-20251028-STATELESS6.P10
+    // @requirement REQ-STAT6-002.2
+    // @pseudocode agent-runtime-context.md line 86 (step 006.3)
     const preserveThreshold =
-      (this.config.getEphemeralSetting('compression-preserve-threshold') as
-        | number
-        | undefined) ?? COMPRESSION_PRESERVE_THRESHOLD;
+      this.runtimeContext.ephemerals.preserveThreshold();
     let splitIndex = Math.floor(curated.length * (1 - preserveThreshold));
 
     // Adjust for tool call boundaries
@@ -1435,10 +1747,38 @@ export class GeminiChat {
     historyToCompress: IContent[],
     _prompt_id: string,
   ): Promise<string> {
-    const provider = this.getActiveProvider();
-    if (!provider || !this.providerSupportsIContent(provider)) {
+    let provider = this.getActiveProvider();
+    if (!provider) {
+      throw new Error('No active provider configured');
+    }
+
+    // @plan PLAN-20251028-STATELESS6.P10
+    // @requirement REQ-STAT6-002.2
+    // @pseudocode agent-runtime-context.md line 87 (step 006.4)
+    const desiredProviderName = this.runtimeState.provider;
+    // Step 006.4: Replace providerManager access with view.provider adapter
+    if (desiredProviderName && provider.name !== desiredProviderName) {
+      try {
+        this.runtimeContext.provider.setActiveProvider(desiredProviderName);
+        provider = this.runtimeContext.provider.getActiveProvider();
+        this.logger.debug(
+          () =>
+            `[GeminiChat] enforced provider switch (compression) to '${desiredProviderName}'`,
+        );
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `[GeminiChat] provider switch skipped (compression, read-only context): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    if (!this.providerSupportsIContent(provider)) {
       throw new Error('Provider does not support compression');
     }
+
+    const activeAuthType = this.runtimeState.authType;
+    const providerBaseUrl = this.resolveProviderBaseUrl(provider);
 
     // Build compression request with system prompt and user history
     const compressionRequest: IContent[] = [
@@ -1467,10 +1807,30 @@ export class GeminiChat {
     ];
 
     // Direct provider call without tools for compression
-    const stream = provider.generateChatCompletion!(
-      compressionRequest,
-      undefined, // no tools for compression
+    this.logger.debug(
+      () =>
+        '[GeminiChat] Calling provider.generateChatCompletion (directCompression)',
+      {
+        providerName: provider.name,
+        model: this.runtimeState.model,
+        historyLength: compressionRequest.length,
+        baseUrl: providerBaseUrl,
+        authType: activeAuthType,
+      },
     );
+    const runtimeContext = this.buildProviderRuntime(
+      'GeminiChat.directCompression',
+      { historyLength: compressionRequest.length },
+    );
+
+    const stream = provider.generateChatCompletion!({
+      contents: compressionRequest,
+      tools: undefined,
+      config: runtimeContext.config,
+      runtime: runtimeContext,
+      settings: runtimeContext.settingsService,
+      metadata: runtimeContext.metadata,
+    });
 
     // Collect response
     let summary = '';
@@ -1494,7 +1854,7 @@ export class GeminiChat {
     // Clear and rebuild history atomically
     this.historyService.clear();
 
-    const currentModel = this.config.getModel();
+    const currentModel = this.runtimeState.model;
 
     // Add compressed summary as user message
     this.historyService.add(
@@ -1698,7 +2058,7 @@ export class GeminiChat {
     }
 
     // Part 4: Add the new turn (user and model parts) to the history service.
-    const currentModel = this.config.getModel();
+    const currentModel = this.runtimeState.model;
     for (const entry of newHistoryEntries) {
       this.historyService.add(entry, currentModel);
     }
@@ -1754,152 +2114,29 @@ export class GeminiChat {
     );
   }
 
-  /**
-   * Trim prompt contents to fit within token limit
-   * Strategy: Keep the most recent user message, trim older history and tool outputs
-   */
-  //   private _trimPromptContents(
-  //     contents: Content[],
-  //     maxTokens: number,
-  //   ): Content[] {
-  //     if (contents.length === 0) return contents;
-  //
-  //     // Always keep the last message (current user input)
-  //     const lastMessage = contents[contents.length - 1];
-  //     const result: Content[] = [];
-  //
-  //     // Reserve tokens for the last message and warning
-  //     const lastMessageTokens = estimateTokens(JSON.stringify(lastMessage));
-  //     const warningTokens = 200; // Reserve for warning message
-  //     let remainingTokens = maxTokens - lastMessageTokens - warningTokens;
-  //
-  //     if (remainingTokens <= 0) {
-  //       // Even the last message is too big, truncate it
-  //       return [this._truncateContent(lastMessage, maxTokens - warningTokens)];
-  //     }
-  //
-  //     // Add messages from most recent to oldest, stopping when we hit the limit
-  //     for (let i = contents.length - 2; i >= 0; i--) {
-  //       const content = contents[i];
-  //       const contentTokens = estimateTokens(JSON.stringify(content));
-  //
-  //       if (contentTokens <= remainingTokens) {
-  //         result.unshift(content);
-  //         remainingTokens -= contentTokens;
-  //       } else if (remainingTokens > 100) {
-  //         // Try to truncate this content to fit
-  //         const truncated = this._truncateContent(content, remainingTokens);
-  //         // Only add if we actually got some content back
-  //         if (truncated.parts && truncated.parts.length > 0) {
-  //           result.unshift(truncated);
-  //         }
-  //         break;
-  //       } else {
-  //         // No room left, stop
-  //         break;
-  //       }
-  //     }
-  //
-  //     // Add the last message
-  //     result.push(lastMessage);
-  //
-  //     return result;
-  //   }
-  //
-  /**
-   * Truncate a single content to fit within token limit
-   */
-  //   private _truncateContent(content: Content, maxTokens: number): Content {
-  //     if (!content.parts || content.parts.length === 0) {
-  //       return content;
-  //     }
-  //
-  //     const truncatedParts: Part[] = [];
-  //     let currentTokens = 0;
-  //
-  //     for (const part of content.parts) {
-  //       if ('text' in part && part.text) {
-  //         const partTokens = estimateTokens(part.text);
-  //         if (currentTokens + partTokens <= maxTokens) {
-  //           truncatedParts.push(part);
-  //           currentTokens += partTokens;
-  //         } else {
-  //           // Truncate this part
-  //           const remainingTokens = maxTokens - currentTokens;
-  //           if (remainingTokens > 10) {
-  //             const remainingChars = remainingTokens * 4;
-  //             truncatedParts.push({
-  //               text:
-  //                 part.text.substring(0, remainingChars) +
-  //                 '\n[...content truncated due to token limit...]',
-  //             });
-  //           }
-  //           break;
-  //         }
-  //       } else {
-  //         // Non-text parts (function calls, responses, etc) - NEVER truncate these
-  //         // Either include them fully or skip them entirely to avoid breaking JSON
-  //         const partTokens = estimateTokens(JSON.stringify(part));
-  //         if (currentTokens + partTokens <= maxTokens) {
-  //           truncatedParts.push(part);
-  //           currentTokens += partTokens;
-  //         } else {
-  //           // Skip this part entirely - DO NOT truncate function calls/responses
-  //           // Log what we're skipping for debugging
-  //           if (process.env.DEBUG || process.env.VERBOSE) {
-  //             let skipInfo = 'unknown part';
-  //             if ('functionCall' in part) {
-  //               const funcPart = part as { functionCall?: { name?: string } };
-  //               skipInfo = `functionCall: ${funcPart.functionCall?.name || 'unnamed'}`;
-  //             } else if ('functionResponse' in part) {
-  //               const respPart = part as { functionResponse?: { name?: string } };
-  //               skipInfo = `functionResponse: ${respPart.functionResponse?.name || 'unnamed'}`;
-  //             }
-  //             console.warn(
-  //               `INFO: Skipping ${skipInfo} due to token limit (needs ${partTokens} tokens, only ${maxTokens - currentTokens} available)`,
-  //             );
-  //           }
-  //           // Add a marker that content was omitted
-  //           if (
-  //             truncatedParts.length > 0 &&
-  //             !truncatedParts.some(
-  //               (p) =>
-  //                 'text' in p &&
-  //                 p.text?.includes(
-  //                   '[...function calls omitted due to token limit...]',
-  //                 ),
-  //             )
-  //           ) {
-  //             truncatedParts.push({
-  //               text: '[...function calls omitted due to token limit...]',
-  //             });
-  //           }
-  //           break;
-  //         }
-  //       }
-  //     }
-  //
-  //     return {
-  //       role: content.role,
-  //       parts: truncatedParts,
-  //     };
-  //   }
-
   private async maybeIncludeSchemaDepthContext(error: unknown): Promise<void> {
     // Check for potentially problematic cyclic tools with cyclic schemas
     // and include a recommendation to remove potentially problematic tools.
+    // @plan PLAN-20251028-STATELESS6.P10
+    // @requirement REQ-STAT6-001.2
+    // @pseudocode agent-runtime-context.md line 89 (step 006.6)
     if (isStructuredError(error) && isSchemaDepthError(error.message)) {
-      const tools = this.config.getToolRegistry().getAllTools();
+      // Step 006.6: Replace tool registry access with view.tools
+      // Note: ToolRegistryView provides read-only access; getAllTools() not available
+      // For diagnostic purposes, we can list tool names
+      const toolNames = this.runtimeContext.tools.listToolNames();
       const cyclicSchemaTools: string[] = [];
-      for (const tool of tools) {
-        if (
-          (tool.schema.parametersJsonSchema &&
-            hasCycleInSchema(tool.schema.parametersJsonSchema)) ||
-          (tool.schema.parameters && hasCycleInSchema(tool.schema.parameters))
-        ) {
-          cyclicSchemaTools.push(tool.displayName);
+
+      // Check each tool's metadata for cyclic schemas
+      for (const toolName of toolNames) {
+        const metadata = this.runtimeContext.tools.getToolMetadata(toolName);
+        if (metadata?.parameterSchema) {
+          if (hasCycleInSchema(metadata.parameterSchema)) {
+            cyclicSchemaTools.push(toolName);
+          }
         }
       }
+
       if (cyclicSchemaTools.length > 0) {
         const extraDetails =
           `\n\nThis error was probably caused by cyclic schema references in one of the following tools, try disabling them:\n\n - ` +
@@ -2092,15 +2329,14 @@ export class GeminiChat {
    * Get the active provider from the ProviderManager via Config
    */
   private getActiveProvider(): IProvider | undefined {
-    const providerManager = this.config.getProviderManager();
-    if (!providerManager) {
-      return undefined;
-    }
-
+    // @plan PLAN-20251028-STATELESS6.P10
+    // @requirement REQ-STAT6-002.2
+    // @pseudocode agent-runtime-context.md line 87 (step 006.4)
+    // Step 006.4: Replace providerManager access with view.provider adapter
     try {
-      return providerManager.getActiveProvider();
+      return this.runtimeContext.provider.getActiveProvider();
     } catch {
-      // No active provider set
+      // No active provider set or read-only context
       return undefined;
     }
   }
@@ -2118,6 +2354,23 @@ export class GeminiChat {
       typeof (provider as { generateChatCompletion?: unknown })
         .generateChatCompletion === 'function'
     );
+  }
+
+  private resolveProviderBaseUrl(provider: IProvider): string | undefined {
+    const candidate = provider as {
+      getBaseURL?: () => string;
+      baseURL?: string;
+    };
+
+    try {
+      if (typeof candidate.getBaseURL === 'function') {
+        return candidate.getBaseURL();
+      }
+    } catch {
+      // Ignore failures from provider-specific base URL accessors
+    }
+
+    return candidate.baseURL;
   }
 }
 

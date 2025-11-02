@@ -1,6 +1,8 @@
 # LLxprt Code Architecture Overview
 
-This document provides a high-level overview of the LLxprt Code's architecture.
+<!-- @plan:PLAN-20251018-STATELESSPROVIDER2.P20 @requirement:REQ-SP2-005 -->
+
+This document explains how LLxprt Code's stateless provider runtime, authentication, and tooling layers fit together after the PLAN-20251018-STATELESSPROVIDER2 rollout.
 
 ## Core components
 
@@ -49,14 +51,15 @@ A typical interaction with the LLxprt Code follows this flow:
 
 ## Provider System Architecture
 
-LLxprt Code's multi-provider architecture enables seamless switching between different LLM providers. This system is built on several key components:
+LLxprt Code's stateless multi-provider architecture enables seamless switching between different LLM providers while giving each runtime (CLI session, subagent, automation harness) an isolated state envelope. This system is built on several key components:
 
 ### Provider Registry
 
 The provider registry (`packages/core/src/providers/`) maintains a collection of provider implementations:
 
-- **Provider Interface:** Each provider implements a common interface for generating completions, handling streaming, and managing tool calls
-- **Dynamic Loading:** Providers are loaded on-demand when selected via `/provider` command or CLI arguments
+- **Provider Interface:** Each provider implements a common interface for generating completions, handling streaming, and managing tool calls.
+- **Runtime Binding:** Providers receive a `ProviderRuntimeContext` instance when they are invoked, giving access to runtime-specific configuration, logging, and telemetry without relying on global singletons.
+- **Dynamic Loading:** Providers are loaded on-demand when selected via `/provider` command, CLI arguments, or subagent configuration.
 - **Provider Types:**
   - `gemini`: Google Gemini models (default)
   - `openai`: OpenAI GPT models with Responses API support
@@ -69,10 +72,76 @@ The provider registry (`packages/core/src/providers/`) maintains a collection of
 
 The provider system supports multiple switching mechanisms:
 
-1. **Runtime Switching:** `/provider <name>` command changes the active provider
-2. **Model Selection:** `/model <name>` switches models within the current provider
-3. **API Key Management:** `/key` and `/keyfile` commands set provider credentials
-4. **Base URL Override:** `/baseurl` allows custom endpoints (local LLMs, proxies)
+1. **Runtime Switching:** `/provider <name>` command changes the active provider for the current runtime context without touching other contexts.
+2. **Model Selection:** `/model <name>` switches models within the current provider.
+3. **API Key Management:** `/key` and `/keyfile` commands set provider credentials that are stored on a per-runtime `SettingsService`.
+4. **Base URL Override:** `/baseurl` allows custom endpoints (local LLMs, proxies) scoped to the active runtime.
+
+### Stateless Provider Runtime
+
+The stateless provider runtime is centred around `ProviderRuntimeContext`, a lightweight container that bundles the `SettingsService`, telemetry emitters, logging channels, and contextual metadata for a single request pipeline. Contexts are created with `createProviderRuntimeContext` and registered with `setActiveProviderRuntimeContext`, and they can be nested or swapped without leaking state between callers.
+
+```mermaid
+flowchart LR
+    CLI[CLI Session] -->|createProviderRuntimeContext| R1((Runtime A))
+    Subagent1[Build Subagent] -->|createProviderRuntimeContext| R2((Runtime B))
+    Subagent2[Test Subagent] -->|createProviderRuntimeContext| R3((Runtime C))
+
+    R1 -->|SettingsService| S1[(settings snapshot)]
+    R2 -->|SettingsService| S2[(settings snapshot)]
+    R3 -->|SettingsService| S3[(settings snapshot)]
+
+    R1 -->|requests| ProviderRegistry
+    R2 -->|requests| ProviderRegistry
+    R3 -->|requests| ProviderRegistry
+```
+
+Each runtime context exposes:
+
+- `settingsService`: a scoped `SettingsService` instance with per-runtime overrides.
+- `metadata`: runtime identifiers (CLI session id, subagent name, automation worker id) plus runtime-auth scope diagnostics.
+- `telemetry`: a channel used by providers and tooling to emit runtime-scoped events.
+- `logger`: an adapter that captures provider-level diagnostics without mixing logs across contexts.
+
+### Runtime-scoped Authentication
+
+Runtime isolation now extends to provider authentication. The auth precedence resolver (`packages/core/src/auth/precedence.ts`) derives a `runtimeAuthScopeId` from each context's `runtimeId`, then caches credentials per `{runtimeAuthScopeId, providerId, profileId}` tuple. Scope metadata is attached to `ProviderRuntimeContext.metadata.runtimeAuthScope`, giving downstream tools enough data to emit audits or flush tokens.
+
+- **Credential lifecycle** – When CLI helpers or providers request credentials, the resolver first checks the scoped cache. Cache misses invoke provider-specific authenticators (API keys, OAuth, device flow) annotated with runtime metadata so audit logs can track which actor minted a token.
+- **Automatic revocation** – `SettingsService` event listeners monitor provider switches, profile swaps, and settings clears. Matching scoped tokens are invalidated immediately, ensuring credentials from subagents or temporary automations do not leak back to the CLI.
+- **Nested runtimes** – `activateIsolatedRuntimeContext` in `runtimeSettings.ts` calls `enterRuntimeScope` to push a child runtime. Nested scopes inherit metadata, but each receives a distinct `runtimeAuthScopeId` so revocation remains precise.
+- **OAuth managers** – The CLI registers an `OAuthManager` per runtime. Providers fetch tokens via the manager, which stores refresh state inside the runtime registry rather than global singletons.
+
+For a full walkthrough of the authentication handshake see `docs/auth/runtime-scoped-auth.stub.md`; the migration guide below summarises integration requirements.
+
+### Multi-context Orchestration
+
+Multiple contexts can operate simultaneously—for example when the CLI launches subagents or when automation scripts fan out provider workloads. The helper `withProviderRuntimeContext` (see `packages/cli/src/runtime/runtimeSettings.ts`) wraps asynchronous work, restoring the previous context on completion. Requests issued from different contexts remain isolated, and context switching is constant time.
+
+```ts
+import {
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core';
+import { withProviderRuntime } from '../runtime/runtimeSettings';
+
+await withProviderRuntime(async () => {
+  const runtime = createProviderRuntimeContext({
+    metadata: { origin: 'cli-subagent', agentId: 'reviewer' },
+  });
+  setActiveProviderRuntimeContext(runtime);
+  try {
+    await runSubagentJob(runtime);
+  } finally {
+    clearActiveProviderRuntimeContext();
+  }
+});
+```
+
+The snippet above demonstrates two contexts operating concurrently: the primary CLI context and a reviewer subagent. Each context captures its own provider credentials, tool settings, and telemetry buffers, and the runtime-scoped auth cache keeps those credentials segregated.
+
+> See the [Stateless Provider v2 migration guide](./migration/stateless-provider-v2.md) for integration details and upgrade guidance.
 
 ## Ephemeral Settings System
 

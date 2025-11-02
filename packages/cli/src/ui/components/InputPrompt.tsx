@@ -948,6 +948,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
             width={suggestionsWidth}
             scrollOffset={completion.visibleStartIndex}
             userInput={buffer.text}
+            activeHint={completion.activeHint}
           />
         </Box>
       )}

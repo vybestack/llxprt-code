@@ -10,14 +10,16 @@ import {
   checkCommandPermissions,
 } from './shell-utils.js';
 import { Config } from '../config/config.js';
-import { resetSettingsService } from '../settings/settingsServiceInstance.js';
+import { SettingsService } from '../settings/SettingsService.js';
+import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 describe('Shell replacement settings', () => {
   let config: Config;
+  let settingsService: SettingsService;
 
   beforeEach(() => {
-    // Reset SettingsService singleton to ensure clean state between tests
-    resetSettingsService();
+    clearActiveProviderRuntimeContext();
+    settingsService = new SettingsService();
 
     config = new Config({
       model: 'test-model',
@@ -28,6 +30,7 @@ describe('Shell replacement settings', () => {
       sessionId: 'test-session',
       debugMode: false,
       cwd: '.',
+      settingsService,
     });
   });
 
@@ -82,7 +85,6 @@ describe('Shell replacement settings', () => {
     });
 
     it('should allow command substitution when config setting is enabled', () => {
-      // Create config with shell replacement enabled
       const configWithShellReplacement = new Config({
         model: 'test-model',
         question: 'test question',
@@ -93,6 +95,7 @@ describe('Shell replacement settings', () => {
         debugMode: false,
         cwd: '.',
         shellReplacement: true,
+        settingsService: new SettingsService(),
       });
 
       const result = checkCommandPermissions(
@@ -104,7 +107,6 @@ describe('Shell replacement settings', () => {
     });
 
     it('should respect ephemeral setting over config setting', () => {
-      // Create config with shell replacement disabled
       const configWithShellReplacement = new Config({
         model: 'test-model',
         question: 'test question',
@@ -115,9 +117,9 @@ describe('Shell replacement settings', () => {
         debugMode: false,
         cwd: '.',
         shellReplacement: false,
+        settingsService: new SettingsService(),
       });
 
-      // Enable via ephemeral setting
       configWithShellReplacement.setEphemeralSetting('shell-replacement', true);
 
       const result = checkCommandPermissions(

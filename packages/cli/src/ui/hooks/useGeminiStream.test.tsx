@@ -15,6 +15,8 @@ import {
   MockInstance,
 } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import React from 'react';
+import * as ReactDOM from 'react-dom';
 import { useGeminiStream, mergePartListUnions } from './useGeminiStream.js';
 import { useKeypress } from './useKeypress.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
@@ -43,6 +45,84 @@ import {
   StreamingState,
 } from '../types.js';
 import { LoadedSettings } from '../../config/settings.js';
+
+const inkMock = vi.hoisted(() => {
+  const write = vi.fn();
+  const exit = vi.fn();
+  const setRawMode = vi.fn();
+  const noopComponent = vi.fn(() => null);
+
+  const module = {
+    Box: noopComponent,
+    Text: noopComponent,
+    Newline: noopComponent,
+    useStdout: vi.fn(() => ({
+      stdout: {
+        write,
+        columns: 80,
+        rows: 24,
+      },
+      write,
+    })),
+    useApp: vi.fn(() => ({ exit })),
+    useInput: vi.fn(),
+    useStdin: vi.fn(() => ({
+      stdin: {
+        setRawMode,
+        resume: vi.fn(),
+        pause: vi.fn(),
+        removeListener: vi.fn(),
+        off: vi.fn(),
+      },
+      setRawMode,
+      isRawModeSupported: true,
+    })),
+    useIsScreenReaderEnabled: vi.fn(() => false),
+    measureElement: vi.fn(() => ({ width: 0, height: 0 })),
+    DOMElement: class {},
+  };
+  (module as Record<string, unknown>).default = module;
+  return module;
+});
+
+vi.mock('ink', () => inkMock);
+
+type InternalCarrier = {
+  __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED?: {
+    S?: unknown;
+    T?: unknown;
+    H?: unknown;
+    [key: string]: unknown;
+  };
+};
+
+const ensureReactSharedInternals = () => {
+  const reactInternals = (React as typeof React & InternalCarrier)
+    .__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+  const domInternals = (ReactDOM as typeof ReactDOM & InternalCarrier)
+    .__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+
+  const shared = reactInternals ??
+    domInternals ?? {
+      S: null,
+      T: null,
+      H: null,
+    };
+
+  if (shared.S === undefined) shared.S = null;
+  if (shared.T === undefined) shared.T = null;
+  if (shared.H === undefined) shared.H = null;
+
+  if (typeof globalThis !== 'undefined') {
+    (
+      globalThis as typeof globalThis & {
+        ReactSharedInternals?: typeof shared;
+      }
+    ).ReactSharedInternals = shared;
+  }
+};
+
+ensureReactSharedInternals();
 
 // --- MOCKS ---
 const mockSendMessageStream = vi

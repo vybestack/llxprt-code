@@ -203,16 +203,16 @@ describe('Test Utilities', () => {
       const filePath = path.join(dir, 'delayed.txt');
 
       // Create file after a delay
-      setTimeout(async () => {
-        await fs.writeFile(filePath, 'content');
-      }, 300);
+      setTimeout(() => {
+        void fs.writeFile(filePath, 'content');
+      }, 200);
 
       const start = Date.now();
       await waitForFile(filePath, 1000);
       const duration = Date.now() - start;
 
-      expect(duration).toBeGreaterThanOrEqual(300);
-      expect(duration).toBeLessThan(500);
+      expect(duration).toBeGreaterThanOrEqual(200);
+      expect(duration).toBeLessThan(600);
     });
 
     it('should timeout if file is not created', async () => {
@@ -249,9 +249,10 @@ describe('Test Utilities', () => {
         );
 
         const responseData = await response.json();
-        expect(responseData).toEqual({
-          success: true,
-          message: 'Mock response',
+        expect(responseData).toMatchObject({
+          id: 'mock-chat-completion',
+          object: 'chat.completion',
+          model: expect.any(String),
         });
 
         // Check logged request

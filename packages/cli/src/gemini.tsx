@@ -26,7 +26,6 @@ import {
   SettingScope,
 } from './config/settings.js';
 import {
-  getSettingsService,
   Config,
   sessionId,
   AuthType,
@@ -35,6 +34,7 @@ import {
   FatalConfigError,
   uiTelemetryService,
   // IDE connection logging removed - telemetry disabled in llxprt
+  SettingsService,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -50,7 +50,7 @@ import {
 import { getCliVersion } from './utils/version.js';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
-import { getProviderManager } from './providers/providerManagerInstance.js';
+import { createProviderManager } from './providers/providerManagerInstance.js';
 import {
   setProviderApiKey,
   setProviderBaseUrl,
@@ -63,6 +63,16 @@ import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
+import {
+  registerCliProviderInfrastructure,
+  setCliRuntimeContext,
+  switchActiveProvider,
+  setActiveModel,
+  setActiveModelParam,
+  clearActiveModelParam,
+  getActiveModelParams,
+  loadProfileByName,
+} from './runtime/runtimeSettings.js';
 import { writeFileSync } from 'node:fs';
 
 export function validateDnsResolutionOrder(
@@ -311,12 +321,29 @@ export async function main() {
     console.debug = console.error;
   }
   const extensions = loadExtensions(workspaceRoot);
+
+  /**
+   * @plan:PLAN-20250218-STATELESSPROVIDER.P06
+   * @requirement:REQ-SP-005
+   * Seed the CLI runtime context with a scoped SettingsService before Config
+   * construction, mirroring pseudocode/cli-runtime.md:2-5.
+   */
+  const runtimeSettingsService = new SettingsService();
+  setCliRuntimeContext(runtimeSettingsService, undefined, {
+    metadata: { source: 'cli-bootstrap', stage: 'pre-config' },
+  });
+
   const config = await loadCliConfig(
     settings.merged,
     extensions,
     sessionId,
     argv,
+    process.cwd(),
+    { settingsService: runtimeSettingsService },
   );
+  setCliRuntimeContext(runtimeSettingsService, config, {
+    metadata: { source: 'cli-bootstrap', stage: 'post-config' },
+  });
 
   if (argv.sessionSummary) {
     registerCleanup(() => {
@@ -335,8 +362,35 @@ export async function main() {
   consolePatcher.patch();
   registerCleanup(consolePatcher.cleanup);
 
-  const providerManager = getProviderManager(config, false, settings);
-  config.setProviderManager(providerManager);
+  const { manager: providerManager, oauthManager } = createProviderManager(
+    {
+      settingsService: runtimeSettingsService,
+      config,
+      runtimeId: 'cli.providerManager',
+      metadata: { source: 'cli.getProviderManager' },
+    },
+    { config, allowBrowserEnvironment: false, settings },
+  );
+  registerCliProviderInfrastructure(providerManager, oauthManager);
+
+  const bootstrapProfileName =
+    typeof process.env.LLXPRT_BOOTSTRAP_PROFILE === 'string'
+      ? process.env.LLXPRT_BOOTSTRAP_PROFILE.trim()
+      : '';
+  if (
+    !argv.provider &&
+    bootstrapProfileName !== '' &&
+    runtimeSettingsService.getCurrentProfileName?.() !== null
+  ) {
+    try {
+      await loadProfileByName(bootstrapProfileName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[bootstrap] Failed to reapply profile '${bootstrapProfileName}' after provider manager initialization: ${message}`,
+      );
+    }
+  }
 
   // Initialize git stats service for tracking file changes when logging is enabled
   if (config.getConversationLoggingEnabled()) {
@@ -349,7 +403,8 @@ export async function main() {
   if (
     serverToolsProvider &&
     serverToolsProvider.name === 'gemini' &&
-    serverToolsProvider.setConfig
+    'setConfig' in serverToolsProvider &&
+    typeof serverToolsProvider.setConfig === 'function'
   ) {
     serverToolsProvider.setConfig(config);
   }
@@ -430,10 +485,8 @@ export async function main() {
   const configProvider = config.getProvider();
   if (configProvider) {
     try {
-      await providerManager.setActiveProvider(configProvider);
+      await switchActiveProvider(configProvider);
 
-      // Set the model after activating provider
-      // If no model specified, use the provider's default
       const activeProvider = providerManager.getActiveProvider();
       let configModel = config.getModel();
 
@@ -445,15 +498,8 @@ export async function main() {
         configModel = activeProvider.getDefaultModel();
       }
 
-      if (configModel && activeProvider.setModel) {
-        activeProvider.setModel(configModel);
-        // Also update the config with the resolved model
-        const settingsService = getSettingsService();
-        settingsService.setProviderSetting(
-          configProvider,
-          'model',
-          configModel,
-        );
+      if (configModel && configModel !== 'placeholder-model') {
+        await setActiveModel(configModel);
       }
 
       // Apply CLI and profile model params before first request
@@ -474,10 +520,25 @@ export async function main() {
       if (
         activeProvider &&
         'setModelParams' in activeProvider &&
-        activeProvider.setModelParams &&
-        Object.keys(mergedModelParams).length > 0
+        typeof activeProvider.setModelParams === 'function'
       ) {
-        activeProvider.setModelParams(mergedModelParams);
+        const existingParams = getActiveModelParams();
+
+        for (const [key, value] of Object.entries(mergedModelParams)) {
+          setActiveModelParam(key, value);
+        }
+
+        for (const key of Object.keys(existingParams)) {
+          if (!(key in mergedModelParams)) {
+            clearActiveModelParam(key);
+          }
+        }
+
+        if (Object.keys(mergedModelParams).length > 0) {
+          activeProvider.setModelParams(mergedModelParams);
+        } else if (Object.keys(existingParams).length > 0) {
+          activeProvider.setModelParams({});
+        }
       }
 
       const includeProfileEphemeral = argv.provider === undefined;
@@ -671,7 +732,9 @@ export async function main() {
   process.exit(0);
 }
 
-type ActiveProviderManager = ReturnType<typeof getProviderManager>;
+type ActiveProviderManager = ReturnType<
+  typeof createProviderManager
+>['manager'];
 
 interface ProviderCredentialOptions {
   providerManager: ActiveProviderManager;
@@ -687,7 +750,7 @@ interface ProviderCredentialOptions {
 
 async function applyProviderCredentials({
   providerManager,
-  settings,
+  settings: _settings,
   config,
   cliKey,
   cliKeyfile,
@@ -713,12 +776,7 @@ async function applyProviderCredentials({
       authOnlySetting.toLowerCase() === 'true');
 
   if (!authOnly && resolved.inlineKey) {
-    const result = await setProviderApiKey(
-      providerManager,
-      settings,
-      resolved.inlineKey,
-      config,
-    );
+    const result = await setProviderApiKey(resolved.inlineKey);
     if (!result.success) {
       console.error(chalk.red(result.message));
       if (resolved.inlineSource === 'cli') {
@@ -746,12 +804,7 @@ async function applyProviderCredentials({
         return;
       }
 
-      const result = await setProviderApiKey(
-        providerManager,
-        settings,
-        trimmedKey,
-        config,
-      );
+      const result = await setProviderApiKey(trimmedKey);
 
       if (!result.success) {
         console.error(chalk.red(result.message));
@@ -787,11 +840,7 @@ async function applyProviderCredentials({
   }
 
   if (resolved.baseUrl && resolved.baseUrlSource === 'cli') {
-    const result = await setProviderBaseUrl(
-      providerManager,
-      settings,
-      resolved.baseUrl,
-    );
+    const result = await setProviderBaseUrl(resolved.baseUrl);
     if (!result.success) {
       console.error(chalk.red(result.message));
       process.exit(1);
@@ -806,8 +855,15 @@ async function applyProviderCredentials({
     resolved.baseUrl !== 'none'
   ) {
     const activeProvider = providerManager.getActiveProvider();
-    if (activeProvider?.setBaseUrl) {
-      activeProvider.setBaseUrl(resolved.baseUrl);
+    if (
+      activeProvider &&
+      'setBaseUrl' in activeProvider &&
+      typeof (activeProvider as { setBaseUrl?: (url: string) => void })
+        .setBaseUrl === 'function'
+    ) {
+      (activeProvider as { setBaseUrl: (url: string) => void }).setBaseUrl(
+        resolved.baseUrl,
+      );
     }
   }
 }

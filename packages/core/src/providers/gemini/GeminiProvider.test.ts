@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GeminiProvider } from './GeminiProvider.js';
 import { IContent } from '../../services/history/IContent.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 
 const generateContentStreamMock = vi.hoisted(() => vi.fn());
 
@@ -36,6 +37,7 @@ const mockSettingsService = vi.hoisted(() => ({
   get: vi.fn(),
   getProviderSettings: vi.fn().mockReturnValue({}),
   updateSettings: vi.fn(),
+  getAllGlobalSettings: vi.fn().mockReturnValue({}),
 }));
 
 vi.mock('../../settings/settingsServiceInstance.js', () => ({
@@ -172,13 +174,28 @@ describe('GeminiProvider', () => {
         'X-Provider-Header': 'provider-value',
       },
     };
-
-    const generator = provider.generateChatCompletion([
-      {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'Hello' }],
-      },
-    ] as IContent[]);
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ] as IContent[],
+        settingsOverrides: {
+          global: {
+            'auth-key': 'test-api-key',
+            'custom-headers': customHeaders,
+            activeProvider: provider.name,
+          },
+          provider: {
+            'custom-headers': customHeaders,
+          },
+        },
+        runtimeId: 'gemini.custom-headers',
+      }),
+    );
 
     await generator.next();
 

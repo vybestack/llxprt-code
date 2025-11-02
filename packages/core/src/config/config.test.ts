@@ -22,6 +22,7 @@ import {
 import { GeminiClient } from '../core/client.js';
 import { GitService } from '../services/gitService.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import type { SettingsService } from '../settings/SettingsService.js';
 
 import { ShellTool } from '../tools/shell.js';
 import { ReadFileTool } from '../tools/read-file.js';
@@ -113,6 +114,7 @@ vi.mock('../settings/settingsServiceInstance.js', () => {
   return {
     getSettingsService: vi.fn(() => mockSettingsService),
     resetSettingsService: vi.fn(),
+    registerSettingsService: vi.fn(),
   };
 });
 
@@ -140,6 +142,8 @@ describe('Server Config (config.ts)', () => {
   const TELEMETRY_SETTINGS = { enabled: false };
   const EMBEDDING_MODEL = 'gemini-embedding';
   const SESSION_ID = 'test-session-id';
+  const sharedSettingsService =
+    getSettingsService() as unknown as SettingsService;
   const baseParams: ConfigParameters = {
     cwd: '/tmp',
     embeddingModel: EMBEDDING_MODEL,
@@ -152,6 +156,7 @@ describe('Server Config (config.ts)', () => {
     telemetry: TELEMETRY_SETTINGS,
     sessionId: SESSION_ID,
     model: MODEL,
+    settingsService: sharedSettingsService,
   };
 
   beforeEach(() => {
@@ -226,7 +231,13 @@ describe('Server Config (config.ts)', () => {
       expect(config.getContentGeneratorConfig()).toEqual(mockContentConfig);
       expect(config.getContentGeneratorConfig()?.model).toBe(newModel);
       expect(config.getModel()).toBe(newModel); // getModel() should return the updated model
-      expect(GeminiClient).toHaveBeenCalledWith(config);
+      expect(GeminiClient).toHaveBeenCalledWith(
+        config,
+        expect.objectContaining({
+          provider: expect.any(String),
+          model: newModel,
+        }),
+      );
       // Verify that fallback mode is reset
       expect(config.isInFallbackMode()).toBe(false);
     });
@@ -275,7 +286,12 @@ describe('Server Config (config.ts)', () => {
       expect(mockExistingClient.getHistory).toHaveBeenCalled();
 
       // Verify that new client was created and initialized
-      expect(GeminiClient).toHaveBeenCalledWith(config);
+      expect(GeminiClient).toHaveBeenCalledWith(
+        config,
+        expect.objectContaining({
+          provider: expect.any(String),
+        }),
+      );
 
       // Verify that history was stored BEFORE initialize was called
       expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
@@ -312,7 +328,12 @@ describe('Server Config (config.ts)', () => {
       await config.refreshAuth(authType);
 
       // Verify that new client was created and initialized
-      expect(GeminiClient).toHaveBeenCalledWith(config);
+      expect(GeminiClient).toHaveBeenCalledWith(
+        config,
+        expect.objectContaining({
+          provider: expect.any(String),
+        }),
+      );
       expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
 
       // Verify that setHistory was not called since there was no existing history

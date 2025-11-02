@@ -7,6 +7,7 @@
 // Export config
 export * from './config/config.js';
 export * from './config/profileManager.js';
+export * from './config/subagentManager.js';
 
 // Export services
 export * from './services/git-stats-service.js';
@@ -26,6 +27,7 @@ export * from './core/turn.js';
 export * from './core/geminiRequest.js';
 export * from './core/coreToolScheduler.js';
 export * from './core/nonInteractiveToolExecutor.js';
+export type { SubagentSchedulerFactory } from './core/subagentScheduler.js';
 
 export * from './code_assist/codeAssist.js';
 export * from './code_assist/oauth2.js';
@@ -59,6 +61,15 @@ export * from './utils/partUtils.js';
 export * from './utils/ide-trust.js';
 
 // Export auth system
+export {
+  AuthPrecedenceResolver,
+  type AuthPrecedenceConfig,
+  type OAuthManager,
+  flushRuntimeAuthScope,
+  type RuntimeAuthScopeFlushResult,
+  type RuntimeAuthScopeCacheEntrySummary,
+  type OAuthTokenRequestMetadata,
+} from './auth/precedence.js';
 export * from './auth/token-store.js';
 export * from './auth/types.js';
 export * from './auth/qwen-device-flow.js';
@@ -116,6 +127,8 @@ export * from './tools/todo-pause.js';
 export * from './tools/todo-schemas.js';
 export * from './tools/todo-store.js';
 export * from './tools/todo-events.js';
+export * from './tools/list-subagents.js';
+export * from './tools/task.js';
 export * from './todo/todoFormatter.js';
 
 // MCP OAuth
@@ -151,6 +164,10 @@ export type {
 } from './providers/types.js';
 // Export the actual interfaces too
 export * from './providers/IProvider.js';
+export type {
+  GenerateChatOptions,
+  ProviderToolset,
+} from './providers/IProvider.js';
 export * from './providers/ITool.js';
 export * from './providers/IModel.js';
 export * from './providers/IProviderManager.js';
@@ -193,6 +210,7 @@ export { SettingsService } from './settings/SettingsService.js';
 export {
   getSettingsService,
   resetSettingsService,
+  registerSettingsService,
 } from './settings/settingsServiceInstance.js';
 export type {
   ISettingsService,
@@ -205,6 +223,66 @@ export type {
   EventUnsubscribe,
 } from './settings/types.js';
 export type { TelemetrySettings as SettingsTelemetrySettings } from './settings/types.js';
+
+export {
+  createProviderRuntimeContext,
+  getActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
+  setProviderRuntimeContextFallback,
+} from './runtime/providerRuntimeContext.js';
+export type { ProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
+
+// @plan PLAN-20251027-STATELESS5.P06
+// Export AgentRuntimeState types and functions for CLI adapter integration
+export type {
+  AgentRuntimeState,
+  RuntimeStateParams,
+  RuntimeStateSnapshot,
+  RuntimeStateChangedEvent,
+  RuntimeStateChangeCallback,
+  UnsubscribeFunction,
+  AuthPayload,
+  ModelParams,
+  SanitizedAuthPayload,
+  RuntimeStateErrorCode,
+} from './runtime/AgentRuntimeState.js';
+export {
+  createAgentRuntimeState,
+  updateAgentRuntimeState,
+  updateAgentRuntimeStateBatch,
+  getAgentRuntimeStateSnapshot,
+  subscribeToAgentRuntimeState,
+  RuntimeStateError,
+  getProvider,
+  getModel,
+  getAuthType,
+  getAuthPayload,
+  getBaseUrl,
+  getSessionId,
+  getModelParams,
+} from './runtime/AgentRuntimeState.js';
+export type { RuntimeStateFromConfigOptions } from './runtime/runtimeStateFactory.js';
+export { createAgentRuntimeStateFromConfig as createRuntimeStateFromConfig } from './runtime/runtimeStateFactory.js';
+
+// @plan PLAN-20251028-STATELESS6.P06
+// Export AgentRuntimeContext types and factory for Config elimination
+export type {
+  AgentRuntimeContext,
+  AgentRuntimeContextFactoryOptions,
+  ReadonlySettingsSnapshot,
+  ToolRegistryView,
+  ToolMetadata,
+  ApiRequestEvent,
+  ApiResponseEvent,
+  ApiErrorEvent,
+  TelemetryRedactionConfig,
+  AgentRuntimeProviderAdapter,
+  AgentRuntimeTelemetryAdapter,
+} from './runtime/AgentRuntimeContext.js';
+export { TelemetryTarget } from './runtime/AgentRuntimeContext.js';
+export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.js';
 
 // Export emoji filter system
 export { EmojiFilter } from './filters/EmojiFilter.js';
@@ -228,6 +306,11 @@ export { Storage } from './config/storage.js';
 
 // Export models
 export * from './config/models.js';
-
-// Export test utils
+// Export test utils (note: vi globals accessed lazily inside helpers)
 export * from './test-utils/index.js';
+
+// --- Subagent Feature: PLAN-20250117-SUBAGENTCONFIG ---
+export { SubagentManager } from './config/subagentManager.js';
+export { SubagentOrchestrator } from './core/subagentOrchestrator.js';
+export type { SubagentConfig } from './config/types.js';
+// --- End of Subagent Feature ---

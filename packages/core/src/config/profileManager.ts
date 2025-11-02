@@ -5,7 +5,7 @@
  */
 
 import { Profile } from '../types/modelParams.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import type { SettingsService } from '../settings/SettingsService.js';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -13,12 +13,19 @@ import path from 'path';
 /**
  * Manages saving and loading of configuration profiles.
  * Profiles are stored in ~/.llxprt/profiles/<profileName>.json
+ *
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P04
+ * @requirement:REQ-018
  */
 export class ProfileManager {
   private profilesDir: string;
 
-  constructor() {
-    this.profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
+  /**
+   * @param profilesDir Optional custom directory for testing. If not provided, uses ~/.llxprt/profiles.
+   */
+  constructor(profilesDir?: string) {
+    this.profilesDir =
+      profilesDir || path.join(os.homedir(), '.llxprt', 'profiles');
   }
 
   /**
@@ -149,9 +156,17 @@ export class ProfileManager {
    * Save current settings to a profile through SettingsService
    * @param profileName The name of the profile to save
    */
-  async save(profileName: string): Promise<void> {
-    const settingsService = getSettingsService();
-
+  /**
+   * @plan:PLAN-20250218-STATELESSPROVIDER.P07
+   * @requirement:REQ-SP-005
+   * Persist profile data through the injected SettingsService instead of the
+   * legacy singleton accessor.
+   * @pseudocode:cli-runtime.md lines 9-11
+   */
+  async save(
+    profileName: string,
+    settingsService: SettingsService,
+  ): Promise<void> {
     // Use SettingsService to export current settings
     if (!settingsService.exportForProfile) {
       throw new Error('SettingsService does not support profile export');
@@ -177,6 +192,17 @@ export class ProfileManager {
       },
     };
 
+    const toolsAllowed = Array.isArray(settingsData.tools?.allowed)
+      ? [...(settingsData.tools?.allowed as string[])]
+      : [];
+    const toolsDisabled = Array.isArray(settingsData.tools?.disabled)
+      ? [...(settingsData.tools?.disabled as string[])]
+      : [];
+
+    profile.ephemeralSettings['tools.allowed'] = toolsAllowed;
+    profile.ephemeralSettings['tools.disabled'] = toolsDisabled;
+    profile.ephemeralSettings['disabled-tools'] = toolsDisabled;
+
     // Update current profile name in SettingsService
     if (settingsService.setCurrentProfileName) {
       settingsService.setCurrentProfileName(profileName);
@@ -190,9 +216,16 @@ export class ProfileManager {
    * Load a profile and apply through SettingsService
    * @param profileName The name of the profile to load
    */
-  async load(profileName: string): Promise<void> {
-    const settingsService = getSettingsService();
-
+  /**
+   * @plan:PLAN-20250218-STATELESSPROVIDER.P07
+   * @requirement:REQ-SP-005
+   * Apply profiles via the injected SettingsService rather than the singleton.
+   * @pseudocode:cli-runtime.md lines 9-11
+   */
+  async load(
+    profileName: string,
+    settingsService: SettingsService,
+  ): Promise<void> {
     // Load profile from file
     const profile = await this.loadProfile(profileName);
 
@@ -209,6 +242,16 @@ export class ProfileManager {
           apiKey: profile.ephemeralSettings['auth-key'],
         },
       },
+      tools: {
+        allowed: Array.isArray(profile.ephemeralSettings['tools.allowed'])
+          ? [...(profile.ephemeralSettings['tools.allowed'] as string[])]
+          : [],
+        disabled: Array.isArray(profile.ephemeralSettings['tools.disabled'])
+          ? [...(profile.ephemeralSettings['tools.disabled'] as string[])]
+          : Array.isArray(profile.ephemeralSettings['disabled-tools'])
+            ? [...(profile.ephemeralSettings['disabled-tools'] as string[])]
+            : [],
+      },
     };
 
     // Update current profile name first
@@ -221,5 +264,17 @@ export class ProfileManager {
       throw new Error('SettingsService does not support profile import');
     }
     await settingsService.importFromProfile(settingsData);
+
+    if (settingsData.tools) {
+      const allowedList = Array.isArray(settingsData.tools.allowed)
+        ? settingsData.tools.allowed
+        : [];
+      const disabledList = Array.isArray(settingsData.tools.disabled)
+        ? settingsData.tools.disabled
+        : [];
+      settingsService.set('tools.allowed', allowedList);
+      settingsService.set('tools.disabled', disabledList);
+      settingsService.set('disabled-tools', disabledList);
+    }
   }
 }

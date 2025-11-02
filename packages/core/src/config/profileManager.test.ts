@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ProfileManager } from './profileManager.js';
 import { ISettingsService } from '../settings/types.js';
 import { Profile } from '../types/modelParams.js';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import type { SettingsService } from '../settings/SettingsService.js';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -17,19 +17,16 @@ import path from 'path';
 vi.mock('fs/promises');
 vi.mock('os');
 vi.mock('path');
-vi.mock('../settings/settingsServiceInstance.js');
 
 const mockFs = fs as vi.Mocked<typeof fs>;
 const mockOs = os as vi.Mocked<typeof os>;
 const mockPath = path as vi.Mocked<typeof path>;
-const mockGetSettingsService = getSettingsService as vi.MockedFunction<
-  typeof getSettingsService
->;
 
 // Mock SettingsService
 const createMockSettingsService = (): vi.Mocked<ISettingsService> => ({
   getSettings: vi.fn(),
   updateSettings: vi.fn(),
+  set: vi.fn(),
   switchProvider: vi.fn(),
   onSettingsChanged: vi.fn(),
   on: vi.fn(),
@@ -68,9 +65,6 @@ describe('ProfileManager', () => {
 
     mockSettingsService = createMockSettingsService();
 
-    // Mock the getSettingsService to return our mock
-    mockGetSettingsService.mockReturnValue(mockSettingsService);
-
     profileManager = new ProfileManager();
 
     // No feature flags needed - SettingsService is always used
@@ -81,15 +75,7 @@ describe('ProfileManager', () => {
   });
 
   describe('constructor', () => {
-    it('should initialize with optional SettingsService', () => {
-      const managerWithService = new ProfileManager(mockSettingsService);
-      expect(managerWithService).toBeInstanceOf(ProfileManager);
-
-      const managerWithoutService = new ProfileManager();
-      expect(managerWithoutService).toBeInstanceOf(ProfileManager);
-    });
-
-    it('should work with SettingsService always available', () => {
+    it('should initialize with default profiles directory', () => {
       const manager = new ProfileManager();
       expect(manager).toBeInstanceOf(ProfileManager);
     });
@@ -181,7 +167,10 @@ describe('ProfileManager', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue();
 
-      await profileManager.save('test-profile');
+      await profileManager.save(
+        'test-profile',
+        mockSettingsService as unknown as SettingsService,
+      );
 
       expect(mockSettingsService.exportForProfile).toHaveBeenCalled();
       expect(mockSettingsService.setCurrentProfileName).toHaveBeenCalledWith(
@@ -210,7 +199,50 @@ describe('ProfileManager', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue();
 
-      await expect(manager.save('test-profile')).resolves.not.toThrow();
+      await expect(
+        manager.save(
+          'test-profile',
+          mockSettingsService as unknown as SettingsService,
+        ),
+      ).resolves.not.toThrow();
+    });
+
+    it('should persist tool enablement lists from settings service', async () => {
+      const manager = new ProfileManager();
+      const payloadCapture: { value?: unknown } = {};
+
+      mockSettingsService.exportForProfile.mockResolvedValue({
+        defaultProvider: 'openai',
+        providers: {
+          openai: {
+            enabled: true,
+            model: 'test-model',
+          },
+        },
+        tools: {
+          allowed: ['file-reader'],
+          disabled: ['code-editor'],
+        },
+      });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockImplementation(async (_path, data: string) => {
+        payloadCapture.value = JSON.parse(data);
+      });
+
+      await manager.save(
+        'tool-profile',
+        mockSettingsService as unknown as SettingsService,
+      );
+
+      const serialized = payloadCapture.value as {
+        ephemeralSettings?: Record<string, unknown>;
+      };
+      expect(serialized.ephemeralSettings?.['tools.allowed']).toEqual([
+        'file-reader',
+      ]);
+      expect(serialized.ephemeralSettings?.['tools.disabled']).toEqual([
+        'code-editor',
+      ]);
     });
   });
 
@@ -225,7 +257,10 @@ describe('ProfileManager', () => {
       mockFs.readFile.mockResolvedValue(profileJson);
       mockSettingsService.importFromProfile.mockResolvedValue();
 
-      await profileManager.load('test-profile');
+      await profileManager.load(
+        'test-profile',
+        mockSettingsService as unknown as SettingsService,
+      );
 
       expect(mockFs.readFile).toHaveBeenCalled();
       expect(mockSettingsService.importFromProfile).toHaveBeenCalledWith({
@@ -239,6 +274,10 @@ describe('ProfileManager', () => {
             baseUrl: 'https://api.openai.com/v1',
             apiKey: 'test-key',
           },
+        },
+        tools: {
+          allowed: [],
+          disabled: [],
         },
       });
       expect(mockSettingsService.setCurrentProfileName).toHaveBeenCalledWith(
@@ -254,7 +293,12 @@ describe('ProfileManager', () => {
       mockFs.readFile.mockResolvedValue(profileJson);
       mockSettingsService.importFromProfile.mockResolvedValue();
 
-      await expect(manager.load('test-profile')).resolves.not.toThrow();
+      await expect(
+        manager.load(
+          'test-profile',
+          mockSettingsService as unknown as SettingsService,
+        ),
+      ).resolves.not.toThrow();
       expect(mockSettingsService.importFromProfile).toHaveBeenCalled();
     });
   });

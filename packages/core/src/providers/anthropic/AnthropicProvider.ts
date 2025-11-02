@@ -1,13 +1,27 @@
+/**
+ * @plan PLAN-20251023-STATELESS-HARDENING.P08
+ * @requirement REQ-SP2-001
+ * @project-plans/debuglogging/requirements.md
+ */
+
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
+import type {
+  ToolUseBlock,
+  TextDelta,
+  InputJSONDelta,
+} from '@anthropic-ai/sdk/resources/messages/index.js';
 import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
-import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
+import {
+  BaseProvider,
+  BaseProviderConfig,
+  NormalizedGenerateChatOptions,
+} from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import {
   IContent,
   ContentBlock,
@@ -20,21 +34,26 @@ import {
   logDoubleEscapingInChunk,
 } from '../../tools/doubleEscapeUtils.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
+import { resolveUserMemory } from '../utils/userMemory.js';
 import {
   retryWithBackoff,
   getErrorStatus,
   isNetworkTransientError,
 } from '../../utils/retry.js';
+import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 export class AnthropicProvider extends BaseProvider {
-  private logger: DebugLogger;
-  private anthropic: Anthropic;
-  private toolFormatter: ToolFormatter;
-  toolFormat: ToolFormat = 'anthropic';
-  private _cachedAuthKey?: string; // Track cached auth key for client recreation
+  // @plan PLAN-20251023-STATELESS-HARDENING.P08
+  // All properties are stateless - no runtime/client caches or constructor-captured config
+  // @requirement REQ-SP4-002: Eliminate provider-level caching and memoization
+  // @requirement REQ-SP4-003: Auth tokens resolved per call via NormalizedGenerateChatOptions
 
-  // Model patterns for max output tokens
-  private modelTokenPatterns: Array<{ pattern: RegExp; tokens: number }> = [
+  // Model patterns for max output tokens - static configuration only
+  private static modelTokenPatterns: Array<{
+    pattern: RegExp;
+    tokens: number;
+  }> = [
     { pattern: /claude-.*opus-4/i, tokens: 32000 },
     { pattern: /claude-.*sonnet-4/i, tokens: 64000 },
     { pattern: /claude-.*haiku-4/i, tokens: 200000 }, // Future-proofing for Haiku 4
@@ -64,18 +83,9 @@ export class AnthropicProvider extends BaseProvider {
 
     super(baseConfig, config);
 
-    this.logger = new DebugLogger('llxprt:anthropic:provider');
-
-    const initialApiKey =
-      typeof apiKey === 'string' && apiKey.trim() !== '' ? apiKey : null;
-
-    this.anthropic = new Anthropic({
-      apiKey: initialApiKey,
-      baseURL: config?.baseUrl || baseURL,
-      dangerouslyAllowBrowser: true,
-    });
-
-    this.toolFormatter = new ToolFormatter();
+    // @plan PLAN-20251023-STATELESS-HARDENING.P08
+    // No logger instances stored as instance variables - create on demand
+    // @requirement REQ-SP4-002: Eliminate constructor-captured config and user-memory
   }
 
   /**
@@ -87,72 +97,155 @@ export class AnthropicProvider extends BaseProvider {
     return true;
   }
 
+  // @plan PLAN-20251023-STATELESS-HARDENING.P08
+  // Create loggers on-demand to avoid instance state
+  // @requirement REQ-SP4-002: Eliminate provider-level caching
+  private getLogger() {
+    return new DebugLogger('llxprt:anthropic:provider');
+  }
+
+  private getStreamingLogger() {
+    return new DebugLogger('llxprt:anthropic:streaming');
+  }
+
+  private getToolsLogger() {
+    return new DebugLogger('llxprt:anthropic:tools');
+  }
+
+  private getAuthLogger() {
+    return new DebugLogger('llxprt:anthropic:auth');
+  }
+
+  private getErrorsLogger() {
+    return new DebugLogger('llxprt:anthropic:errors');
+  }
+
+  private instantiateClient(authToken: string, baseURL?: string): Anthropic {
+    const isOAuthToken = authToken.startsWith('sk-ant-oat');
+    const clientConfig: Record<string, unknown> = {
+      dangerouslyAllowBrowser: true,
+    };
+
+    if (baseURL && baseURL.trim() !== '') {
+      clientConfig.baseURL = baseURL;
+    }
+
+    if (isOAuthToken) {
+      clientConfig.authToken = authToken;
+      clientConfig.defaultHeaders = {
+        'anthropic-beta': 'oauth-2025-04-20',
+      };
+    } else {
+      clientConfig.apiKey = authToken || '';
+    }
+
+    return new Anthropic(clientConfig as ClientOptions);
+  }
+
   /**
-   * @plan:PLAN-20250823-AUTHFIXES.P15
-   * @requirement:REQ-004
-   * Update the Anthropic client with resolved authentication if needed
+   * @plan PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement REQ-SP4-002
+   * @project-plans/20251023stateless4/analysis/pseudocode/provider-cache-elimination.md line 11
+   * Build provider client per call with fresh SDK instance
    */
-  private async updateClientWithResolvedAuth(): Promise<void> {
-    const resolvedToken = await this.getAuthToken();
-    if (!resolvedToken) {
+  private async buildProviderClient(
+    options: NormalizedGenerateChatOptions,
+    telemetry?: ProviderTelemetryContext,
+  ): Promise<{ client: Anthropic; authToken: string }> {
+    const authLogger = this.getAuthLogger();
+    const runtimeAuthToken = options.resolved.authToken;
+    let authToken: string | undefined;
+
+    if (
+      typeof runtimeAuthToken === 'string' &&
+      runtimeAuthToken.trim() !== ''
+    ) {
+      authToken = runtimeAuthToken;
+    } else if (
+      runtimeAuthToken &&
+      typeof runtimeAuthToken === 'object' &&
+      'provide' in runtimeAuthToken &&
+      typeof runtimeAuthToken.provide === 'function'
+    ) {
+      try {
+        const freshToken = await runtimeAuthToken.provide();
+        if (!freshToken) {
+          throw new Error(
+            `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
+          );
+        }
+        authToken = freshToken;
+        authLogger.debug(() => 'Refreshed OAuth token for call');
+      } catch (error) {
+        throw new Error(
+          `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003)."): ${error}`,
+        );
+      }
+    }
+
+    if (!authToken) {
+      authToken = await this.getAuthToken();
+    }
+
+    if (!authToken) {
+      authLogger.debug(
+        () => 'No authentication available for Anthropic API calls',
+      );
       throw new Error(
         'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
       );
     }
 
-    // Only recreate client if auth changed
-    if (this._cachedAuthKey !== resolvedToken) {
-      // Check if this is an OAuth token (starts with sk-ant-oat)
-      const isOAuthToken = resolvedToken.startsWith('sk-ant-oat');
+    authLogger.debug(() => 'Creating fresh client instance (stateless)');
+    const baseURL = options.resolved.baseURL;
+    const client = this.instantiateClient(authToken, baseURL);
 
-      // Use the unified getBaseURL() method from BaseProvider
-      const baseURL = this.getBaseURL();
+    telemetry?.record?.('stateless-provider.call', {
+      providerName: 'anthropic',
+      cacheEliminated: true,
+    });
 
-      if (isOAuthToken) {
-        // For OAuth tokens, use authToken field which sends Bearer token
-        // Don't pass apiKey at all - just authToken
-        const oauthConfig: Record<string, unknown> = {
-          authToken: resolvedToken, // Use authToken for OAuth Bearer tokens
-          apiKey: null, // Explicitly disable API key fallback when using OAuth
-          baseURL,
-          dangerouslyAllowBrowser: true,
-          defaultHeaders: {
-            'anthropic-beta': 'oauth-2025-04-20', // Still need the beta header
-          },
-        };
+    return { client, authToken };
+  }
 
-        this.anthropic = new Anthropic(oauthConfig as ClientOptions);
-      } else {
-        // Regular API key auth
-        this.anthropic = new Anthropic({
-          apiKey: resolvedToken,
-          baseURL,
-          dangerouslyAllowBrowser: true,
-        });
-      }
+  private createToolFormatter(): ToolFormatter {
+    return new ToolFormatter();
+  }
 
-      // Track the key to avoid unnecessary client recreation
-      this._cachedAuthKey = resolvedToken;
-    }
+  /**
+   * @plan PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement REQ-SP4-002
+   * @project-plans/20251023stateless4/analysis/pseudocode/provider-cache-elimination.md line 15
+   * No operation - stateless provider has no cache to clear
+   */
+  clearClientCache(_runtimeKey?: string): void {
+    this.getLogger().debug(
+      () => 'Cache clear called on stateless provider - no operation',
+    );
+  }
+
+  override clearAuthCache(): void {
+    this.getAuthLogger().debug(() => 'Clearing auth cache');
+    super.clearAuthCache();
   }
 
   override async getModels(): Promise<IModel[]> {
     const authToken = await this.getAuthToken();
     if (!authToken) {
+      this.getAuthLogger().debug(
+        () => 'No authentication available for model listing',
+      );
       throw new Error(
         'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
       );
     }
-
-    // Update client with resolved auth (handles OAuth vs API key)
-    await this.updateClientWithResolvedAuth();
 
     // Check if using OAuth - the models.list endpoint doesn't work with OAuth tokens
     const isOAuthToken = authToken.startsWith('sk-ant-oat');
 
     if (isOAuthToken) {
       // For OAuth, return only the working models
-      this.logger.debug(
+      this.getAuthLogger().debug(
         () => 'Using hardcoded model list for OAuth authentication',
       );
       return [
@@ -209,26 +302,31 @@ export class AnthropicProvider extends BaseProvider {
           name: 'Claude Haiku 4.5',
           provider: 'anthropic',
           supportedToolFormats: ['anthropic'],
-          contextWindow: 200000,
-          maxOutputTokens: 64000,
+          contextWindow: 500000,
+          maxOutputTokens: 16000,
         },
         {
           id: 'claude-haiku-4-5',
           name: 'Claude Haiku 4.5',
           provider: 'anthropic',
           supportedToolFormats: ['anthropic'],
-          contextWindow: 200000,
-          maxOutputTokens: 64000,
+          contextWindow: 500000,
+          maxOutputTokens: 16000,
         },
       ];
     }
 
     try {
+      // @plan PLAN-20251023-STATELESS-HARDENING.P08: Create fresh client for each operation
       // Fetch models from Anthropic API (beta endpoint) - only for API keys
       const models: IModel[] = [];
+      const baseURL = this.getBaseURL();
+      const client = this.instantiateClient(authToken, baseURL);
+
+      this.getLogger().debug(() => 'Fetching models from Anthropic API');
 
       // Handle pagination
-      for await (const model of this.anthropic.beta.models.list()) {
+      for await (const model of client.beta.models.list()) {
         models.push({
           id: model.id,
           name: model.display_name || model.id,
@@ -256,69 +354,24 @@ export class AnthropicProvider extends BaseProvider {
       addLatestAlias('opus');
       addLatestAlias('sonnet');
 
+      this.getLogger().debug(
+        () => `Fetched ${models.length} models from Anthropic API`,
+      );
       return models;
     } catch (error) {
-      this.logger.debug(() => `Failed to fetch Anthropic models: ${error}`);
+      this.getErrorsLogger().debug(
+        () => `Failed to fetch Anthropic models: ${error}`,
+      );
       return []; // Return empty array on error
     }
   }
 
-  override setApiKey(apiKey: string): void {
-    // Call base provider implementation
-    super.setApiKey(apiKey);
-
-    // Create a new Anthropic client with the updated API key
-    const resolvedBaseURL =
-      this.providerConfig?.baseUrl || this.baseProviderConfig.baseURL;
-    this.anthropic = new Anthropic({
-      apiKey,
-      baseURL: resolvedBaseURL,
-      dangerouslyAllowBrowser: true,
-    });
-  }
-
-  override setBaseUrl(baseUrl?: string): void {
-    // Call base provider implementation which stores in ephemeral settings
-    super.setBaseUrl?.(baseUrl);
-
-    // Create a new Anthropic client with the updated (or cleared) base URL
-    // Will be updated with actual token in updateClientWithResolvedAuth
-    const resolvedBaseURL = this.getBaseURL();
-    this.anthropic = new Anthropic({
-      apiKey: null, // Ensure env variables don't leak into OAuth-only flows
-      baseURL: resolvedBaseURL,
-      dangerouslyAllowBrowser: true,
-    });
-  }
-
-  override setModel(modelId: string): void {
-    // Update SettingsService as the source of truth
-    try {
-      const settingsService = getSettingsService();
-      settingsService.setProviderSetting(this.name, 'model', modelId);
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to persist model to SettingsService: ${error}`,
-      );
-    }
-    // No local caching - always look up from SettingsService
-  }
-
   override getCurrentModel(): string {
-    // Try to get from SettingsService first (source of truth)
-    try {
-      const settingsService = getSettingsService();
-      const providerSettings = settingsService.getProviderSettings(this.name);
-      if (providerSettings.model) {
-        return providerSettings.model as string;
-      }
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to get model from SettingsService: ${error}`,
-      );
-    }
-    // Always return from getDefaultModel, no caching
-    return this.getDefaultModel();
+    // Always return from getDefaultModel - providers must not cache model state
+    // @plan PLAN-20251023-STATELESS-HARDENING.P08 @requirement REQ-SP4-002
+    const defaultModel = this.getDefaultModel();
+    this.getLogger().debug(() => `Using default model: ${defaultModel}`);
+    return defaultModel;
   }
 
   override getDefaultModel(): string {
@@ -362,7 +415,8 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     // Try to match model patterns
-    for (const { pattern, tokens } of this.modelTokenPatterns) {
+    // @plan PLAN-20251023-STATELESS-HARDENING.P08: Use static instead of instance property
+    for (const { pattern, tokens } of AnthropicProvider.modelTokenPatterns) {
       if (pattern.test(modelId)) {
         return tokens;
       }
@@ -415,84 +469,51 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Set model parameters that will be merged into API calls
-   * @param params Parameters to merge with existing, or undefined to clear all
-   */
-  override setModelParams(params: Record<string, unknown> | undefined): void {
-    const settingsService = getSettingsService();
-
-    if (params === undefined) {
-      // Clear all model params
-      settingsService.setProviderSetting(this.name, 'temperature', undefined);
-      settingsService.setProviderSetting(this.name, 'max_tokens', undefined);
-      settingsService.setProviderSetting(this.name, 'top_p', undefined);
-      settingsService.setProviderSetting(this.name, 'top_k', undefined);
-    } else {
-      // Set each param individually
-      if ('temperature' in params) {
-        settingsService.setProviderSetting(
-          this.name,
-          'temperature',
-          params.temperature,
-        );
-      }
-      if ('max_tokens' in params) {
-        settingsService.setProviderSetting(
-          this.name,
-          'max_tokens',
-          params.max_tokens,
-        );
-      }
-      if ('top_p' in params) {
-        settingsService.setProviderSetting(this.name, 'top_p', params.top_p);
-      }
-      if ('top_k' in params) {
-        settingsService.setProviderSetting(this.name, 'top_k', params.top_k);
-      }
-      if ('stop_sequences' in params) {
-        settingsService.setProviderSetting(
-          this.name,
-          'stop_sequences',
-          params.stop_sequences,
-        );
-      }
-    }
-  }
-
-  /**
-   * Get current model parameters
+   * Get current model parameters from SettingsService per call
    * @returns Current parameters or undefined if not set
+   * @plan PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement REQ-SP4-003
+   * Gets model parameters from SettingsService per call (stateless)
    */
   override getModelParams(): Record<string, unknown> | undefined {
-    // Always get from SettingsService
-    const settingsService = getSettingsService();
-    const providerSettings = settingsService.getProviderSettings(this.name);
+    try {
+      const settingsService = this.resolveSettingsService();
+      const providerSettings = settingsService.getProviderSettings(this.name);
 
-    if (!providerSettings) {
+      const reservedKeys = new Set([
+        'enabled',
+        'apiKey',
+        'api-key',
+        'apiKeyfile',
+        'api-keyfile',
+        'baseUrl',
+        'base-url',
+        'model',
+        'toolFormat',
+        'tool-format',
+        'toolFormatOverride',
+        'tool-format-override',
+        'defaultModel',
+      ]);
+
+      const params: Record<string, unknown> = {};
+      if (providerSettings) {
+        for (const [key, value] of Object.entries(providerSettings)) {
+          if (reservedKeys.has(key) || value === undefined || value === null) {
+            continue;
+          }
+          params[key] = value;
+        }
+      }
+
+      return Object.keys(params).length > 0 ? params : undefined;
+    } catch (error) {
+      this.getLogger().debug(
+        () =>
+          `Failed to get Anthropic provider settings from SettingsService: ${error}`,
+      );
       return undefined;
     }
-
-    const params: Record<string, unknown> = {};
-    if (providerSettings.temperature !== undefined)
-      params.temperature = providerSettings.temperature;
-    if (providerSettings.max_tokens !== undefined)
-      params.max_tokens = providerSettings.max_tokens;
-    if (providerSettings.top_p !== undefined)
-      params.top_p = providerSettings.top_p;
-    if (providerSettings.top_k !== undefined)
-      params.top_k = providerSettings.top_k;
-    if (providerSettings.stop_sequences !== undefined)
-      params.stop_sequences = providerSettings.stop_sequences;
-
-    return Object.keys(params).length > 0 ? params : undefined;
-  }
-
-  /**
-   * Override clearAuthCache to also clear cached auth key
-   */
-  override clearAuthCache(): void {
-    super.clearAuthCache();
-    this._cachedAuthKey = undefined;
   }
 
   /**
@@ -508,6 +529,8 @@ export class AnthropicProvider extends BaseProvider {
    * @returns The detected tool format
    */
   detectToolFormat(): ToolFormat {
+    // @plan PLAN-20251023-STATELESS-HARDENING.P08: Don't reference deprecated instance fields
+    // Tools format should be derived from runtime context only
     try {
       const settingsService = getSettingsService();
 
@@ -541,7 +564,7 @@ export class AnthropicProvider extends BaseProvider {
       // Default to 'anthropic' format
       return 'anthropic';
     } catch (error) {
-      this.logger.debug(
+      this.getLogger().debug(
         () => `Failed to detect tool format from SettingsService: ${error}`,
       );
 
@@ -563,26 +586,6 @@ export class AnthropicProvider extends BaseProvider {
   override getToolFormat(): ToolFormat {
     // Use the same detection logic as detectToolFormat()
     return this.detectToolFormat();
-  }
-
-  /**
-   * Set tool format override for this provider
-   * @param format The format to use, or null to clear override
-   */
-  override setToolFormatOverride(format: string | null): void {
-    const settingsService = getSettingsService();
-    if (format === null) {
-      settingsService.setProviderSetting(this.name, 'toolFormat', 'auto');
-      this.logger.debug(() => `Tool format override cleared for ${this.name}`);
-    } else {
-      settingsService.setProviderSetting(this.name, 'toolFormat', format);
-      this.logger.debug(
-        () => `Tool format override set to '${format}' for ${this.name}`,
-      );
-    }
-
-    // Clear cached auth key to ensure new format takes effect
-    this._cachedAuthKey = undefined;
   }
 
   /**
@@ -637,19 +640,19 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * Generate chat completion with IContent interface
-   * Convert IContent directly to Anthropic API format
+   * @plan PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement REQ-SP4-002, REQ-SP4-003
+   * @project-plans/20251023stateless4/analysis/pseudocode/provider-cache-elimination.md line 11
    */
-  async *generateChatCompletion(
-    content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
-    }>,
+  protected override async *generateChatCompletionWithOptions(
+    options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    const { client, authToken } = await this.buildProviderClient(
+      options,
+      options.resolved.telemetry,
+    );
+    const callFormatter = this.createToolFormatter();
+    const { contents: content, tools } = options;
     // Convert IContent directly to Anthropic API format (no IMessage!)
     const anthropicMessages: Array<{
       role: 'user' | 'assistant';
@@ -671,15 +674,15 @@ export class AnthropicProvider extends BaseProvider {
     // let systemMessage: string | undefined;
 
     // Filter out orphaned tool responses at the beginning of the conversation
-    // TODO: Investigate post-0.2.2 - These shouldn't be truly orphaned since the same
-    // history works with OpenAI/Cerebras. Likely Anthropic has stricter formatting
-    // requirements for tool responses that we're not fully meeting yet.
+    // NOTE: These shouldn't be truly orphaned since the same history works with
+    // OpenAI/Cerebras. Likely Anthropic has stricter formatting requirements
+    // for tool responses that we're not fully meeting yet.
     let startIndex = 0;
     while (
       startIndex < content.length &&
       content[startIndex].speaker === 'tool'
     ) {
-      this.logger.debug(
+      this.getToolsLogger().debug(
         () => `Skipping orphaned tool response at beginning of conversation`,
       );
       startIndex++;
@@ -714,7 +717,7 @@ export class AnthropicProvider extends BaseProvider {
       try {
         return JSON.stringify(result);
       } catch (error) {
-        this.logger.debug(
+        this.getToolsLogger().debug(
           () =>
             `Failed to stringify tool result, falling back to string conversion: ${error}`,
         );
@@ -833,7 +836,7 @@ export class AnthropicProvider extends BaseProvider {
               try {
                 parametersObj = JSON.parse(parametersObj);
               } catch (e) {
-                this.logger.debug(
+                this.getToolsLogger().debug(
                   () => `Failed to parse tool parameters as JSON: ${e}`,
                 );
                 parametersObj = {};
@@ -901,7 +904,7 @@ export class AnthropicProvider extends BaseProvider {
       (id) => !toolUseIds.has(id),
     );
     if (orphanedResults.length > 0) {
-      this.logger.debug(
+      this.getToolsLogger().debug(
         () =>
           `Found ${orphanedResults.length} orphaned tool results, removing them`,
       );
@@ -932,7 +935,7 @@ export class AnthropicProvider extends BaseProvider {
     // Anthropic requires the first message to be from the user
     if (anthropicMessages.length > 0 && anthropicMessages[0].role !== 'user') {
       // If the first message is not from the user, add a minimal user message
-      this.logger.debug(
+      this.getLogger().debug(
         () => `First message is not from user, adding placeholder user message`,
       );
       anthropicMessages.unshift({
@@ -955,7 +958,7 @@ export class AnthropicProvider extends BaseProvider {
     const needsQwenParameterProcessing = detectedFormat === 'qwen';
 
     // Convert Gemini format tools to anthropic format (always for Anthropic API)
-    const anthropicTools = this.toolFormatter.convertGeminiToFormat(
+    const anthropicTools = callFormatter.convertGeminiToFormat(
       tools,
       'anthropic', // Always use anthropic format for the API structure
     ) as
@@ -970,21 +973,20 @@ export class AnthropicProvider extends BaseProvider {
         }>
       | undefined;
 
-    const flattenedToolNames =
-      tools?.flatMap((group) =>
-        group.functionDeclarations
-          .map((decl) => decl.name)
-          .filter((name): name is string => !!name),
-      ) ?? [];
-    const toolNamesArg =
-      tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
+    const toolNamesForPrompt =
+      tools === undefined
+        ? undefined
+        : Array.from(
+            new Set(
+              tools.flatMap((group) =>
+                group.functionDeclarations
+                  .map((decl) => decl.name)
+                  .filter((name): name is string => Boolean(name)),
+              ),
+            ),
+          );
 
-    // Ensure authentication
-    await this.updateClientWithResolvedAuth();
-
-    // Check OAuth mode
-    const authToken = await this.getAuthToken();
-    const isOAuth = authToken && authToken.startsWith('sk-ant-oat');
+    const isOAuth = authToken.startsWith('sk-ant-oat');
 
     // Get streaming setting from ephemeral settings (default: enabled)
     const streamingSetting =
@@ -992,18 +994,27 @@ export class AnthropicProvider extends BaseProvider {
     const streamingEnabled = streamingSetting !== 'disabled';
 
     // Build request with proper typing
-    const currentModel = this.getCurrentModel();
-    // Get the system prompt for non-OAuth mode
-    const userMemory = this.globalConfig?.getUserMemory
-      ? this.globalConfig.getUserMemory()
-      : '';
+    const currentModel = options.resolved.model;
+
+    // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
+    const userMemory = await resolveUserMemory(
+      options.userMemory,
+      () => options.invocation?.userMemory,
+    );
+
+    // Derive model parameters on demand from ephemeral settings
+    const configEphemeralSettings = options.invocation?.ephemerals ?? {};
+    const requestOverrides =
+      (configEphemeralSettings['anthropic'] as
+        | Record<string, unknown>
+        | undefined) || {};
 
     // For OAuth mode, inject core system prompt as the first human message
     if (isOAuth) {
       const corePrompt = await getCoreSystemPromptAsync(
         userMemory,
         currentModel,
-        toolNamesArg,
+        toolNamesForPrompt,
       );
       if (corePrompt) {
         anthropicMessages.unshift({
@@ -1014,14 +1025,18 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     const systemPrompt = !isOAuth
-      ? await getCoreSystemPromptAsync(userMemory, currentModel, toolNamesArg)
+      ? await getCoreSystemPromptAsync(
+          userMemory,
+          currentModel,
+          toolNamesForPrompt,
+        )
       : undefined;
     const requestBody = {
       model: currentModel,
       messages: anthropicMessages,
       max_tokens: this.getMaxTokensForModel(currentModel),
       stream: streamingEnabled,
-      ...(this.getModelParams() || {}),
+      ...requestOverrides, // Use derived ephemeral overrides instead of memoized instance state
       ...(isOAuth
         ? {
             system: "You are Claude Code, Anthropic's official CLI for Claude.",
@@ -1036,24 +1051,27 @@ export class AnthropicProvider extends BaseProvider {
 
     // Debug log the tools being sent to Anthropic
     if (anthropicTools && anthropicTools.length > 0) {
-      this.logger.debug(() => `[AnthropicProvider] Sending tools to API:`, {
-        toolCount: anthropicTools.length,
-        toolNames: anthropicTools.map((t) => t.name),
-        firstTool: anthropicTools[0],
-        requestHasTools: 'tools' in requestBody,
-      });
+      this.getToolsLogger().debug(
+        () => `[AnthropicProvider] Sending tools to API:`,
+        {
+          toolCount: anthropicTools.length,
+          toolNames: anthropicTools.map((t) => t.name),
+          firstTool: anthropicTools[0],
+          requestHasTools: 'tools' in requestBody,
+        },
+      );
     }
 
-    // Make the API call directly with type assertion
+    // Make the API call with retry logic
     const customHeaders = this.getCustomHeaders();
     const apiCall = () =>
       customHeaders
-        ? this.anthropic.messages.create(
-            requestBody as Parameters<typeof this.anthropic.messages.create>[0],
+        ? client.messages.create(
+            requestBody as Parameters<typeof client.messages.create>[0],
             { headers: customHeaders },
           )
-        : this.anthropic.messages.create(
-            requestBody as Parameters<typeof this.anthropic.messages.create>[0],
+        : client.messages.create(
+            requestBody as Parameters<typeof client.messages.create>[0],
           );
 
     const { maxAttempts, initialDelayMs } = this.getRetryConfig();
@@ -1072,41 +1090,56 @@ export class AnthropicProvider extends BaseProvider {
         | { id: string; name: string; input: string }
         | undefined;
 
+      this.getStreamingLogger().debug(() => 'Processing streaming response');
+
       for await (const chunk of stream) {
         if (chunk.type === 'content_block_start') {
           if (chunk.content_block.type === 'tool_use') {
+            const toolBlock = chunk.content_block as ToolUseBlock;
+            this.getStreamingLogger().debug(
+              () => `Starting tool use: ${toolBlock.name}`,
+            );
             currentToolCall = {
-              id: chunk.content_block.id,
-              name: chunk.content_block.name,
+              id: toolBlock.id,
+              name: toolBlock.name,
               input: '',
             };
           }
         } else if (chunk.type === 'content_block_delta') {
           if (chunk.delta.type === 'text_delta') {
+            const textDelta = chunk.delta as TextDelta;
+            this.getStreamingLogger().debug(
+              () => `Received text delta: ${textDelta.text.length} chars`,
+            );
             // Emit text immediately as IContent
             yield {
               speaker: 'ai',
-              blocks: [{ type: 'text', text: chunk.delta.text }],
+              blocks: [{ type: 'text', text: textDelta.text }],
             } as IContent;
           } else if (
             chunk.delta.type === 'input_json_delta' &&
             currentToolCall
           ) {
-            currentToolCall.input += chunk.delta.partial_json;
+            const jsonDelta = chunk.delta as InputJSONDelta;
+            currentToolCall.input += jsonDelta.partial_json;
 
             // Check for double-escaping patterns
             logDoubleEscapingInChunk(
-              chunk.delta.partial_json,
+              jsonDelta.partial_json,
               currentToolCall.name,
               needsQwenParameterProcessing ? 'qwen' : 'anthropic',
             );
           }
         } else if (chunk.type === 'content_block_stop') {
           if (currentToolCall) {
+            const activeToolCall = currentToolCall;
+            this.getStreamingLogger().debug(
+              () => `Completed tool use: ${activeToolCall.name}`,
+            );
             // Process tool parameters with double-escape handling
             const processedParameters = processToolParameters(
-              currentToolCall.input,
-              currentToolCall.name,
+              activeToolCall.input,
+              activeToolCall.name,
               needsQwenParameterProcessing ? 'qwen' : 'anthropic',
             );
 
@@ -1115,8 +1148,8 @@ export class AnthropicProvider extends BaseProvider {
               blocks: [
                 {
                   type: 'tool_call',
-                  id: this.normalizeToHistoryToolId(currentToolCall.id),
-                  name: currentToolCall.name,
+                  id: this.normalizeToHistoryToolId(activeToolCall.id),
+                  name: activeToolCall.name,
                   parameters: processedParameters,
                 },
               ],
@@ -1125,6 +1158,7 @@ export class AnthropicProvider extends BaseProvider {
           }
         } else if (chunk.type === 'message_delta' && chunk.usage) {
           // Emit usage metadata
+          this.getStreamingLogger().debug(() => `Received usage metadata`);
           yield {
             speaker: 'ai',
             blocks: [],
@@ -1201,14 +1235,14 @@ export class AnthropicProvider extends BaseProvider {
   private shouldRetryAnthropicResponse(error: unknown): boolean {
     const status = getErrorStatus(error);
     if (status === 429 || (status && status >= 500 && status < 600)) {
-      this.logger.debug(
+      this.getLogger().debug(
         () => `Will retry Anthropic request due to status ${status}`,
       );
       return true;
     }
 
     if (isNetworkTransientError(error)) {
-      this.logger.debug(
+      this.getLogger().debug(
         () =>
           'Will retry Anthropic request due to transient network error signature.',
       );

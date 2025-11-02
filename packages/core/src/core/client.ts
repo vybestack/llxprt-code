@@ -11,31 +11,42 @@ import {
   Part,
   Content,
   Tool,
+  FunctionDeclaration,
   GenerateContentResponse,
+  SendMessageParameters,
 } from '@google/genai';
 import {
   getDirectoryContextString,
   getEnvironmentContext,
 } from '../utils/environmentContext.js';
-import { Turn, ServerGeminiStreamEvent, GeminiEventType } from './turn.js';
+import {
+  Turn,
+  ServerGeminiStreamEvent,
+  GeminiEventType,
+  DEFAULT_AGENT_ID,
+} from './turn.js';
 import type { ChatCompressionInfo } from './turn.js';
 import { CompressionStatus } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
-import {
-  getCoreSystemPromptAsync,
-  getCompressionPrompt,
-  drainPromptInstallerNotices,
-} from './prompts.js';
+import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
+import type {
+  ReadonlySettingsSnapshot,
+  ToolRegistryView,
+} from '../runtime/AgentRuntimeContext.js';
+import type { ToolRegistry } from '../tools/tool-registry.js';
+import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
+  AuthType,
   ContentGenerator,
   ContentGeneratorConfig,
   createContentGenerator,
@@ -55,14 +66,15 @@ import {
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
+import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
+import { subscribeToAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
-const TODO_PROMPT_SUFFIX =
-  'Consider using a todo list to organize this multi-step work.';
+const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
 const TOOL_BASE_TODO_MESSAGE =
-  'Consider using a todo list to help organize your work if this is a complex task.';
+  'After this next tool call I need to call todo_write and create a todo list to organize this effort.';
 const TOOL_ESCALATED_TODO_MESSAGE =
-  'This task seems to involve multiple steps. A todo list might help track your progress.';
+  'I have already made several tool calls without a todo list. Immediately call todo_write after this next tool call to organize the work.';
 
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
@@ -137,6 +149,7 @@ export class GeminiClient {
   private lastPromptId?: string;
   private readonly complexityAnalyzer: ComplexityAnalyzer;
   private readonly todoReminderService: TodoReminderService;
+  private todoToolsAvailable = false;
   private lastComplexitySuggestionTime: number = 0;
   private readonly complexitySuggestionCooldown: number;
   private lastSentIdeContext: IdeContext | undefined;
@@ -146,7 +159,6 @@ export class GeminiClient {
   private lastComplexitySuggestionTurn?: number;
   private toolActivityCount = 0;
   private toolCallReminderLevel: 'none' | 'base' | 'escalated' = 'none';
-  private pendingInstallerNotices: string[] = [];
 
   /**
    * At any point in this conversation, was compression triggered without
@@ -154,15 +166,76 @@ export class GeminiClient {
    */
   private hasFailedCompressionAttempt = false;
 
-  constructor(private readonly config: Config) {
-    if (config.getProxy()) {
-      setGlobalDispatcher(new ProxyAgent(config.getProxy() as string));
+  /**
+   * Runtime state for stateless operation (Phase 5)
+   * @plan PLAN-20251027-STATELESS5.P10
+   * @requirement REQ-STAT5-003.1
+   * @pseudocode gemini-runtime.md lines 21-42
+   */
+  private readonly runtimeState: AgentRuntimeState;
+  private _historyService?: HistoryService;
+  private _unsubscribe?: () => void;
+
+  /**
+   * @plan PLAN-20251027-STATELESS5.P10
+   * @requirement REQ-STAT5-003.1
+   * @pseudocode gemini-runtime.md lines 11-66
+   *
+   * Phase 5 constructor: Accept optional AgentRuntimeState and HistoryService
+   * When provided, client operates in stateless mode using runtime state
+   * Otherwise falls back to Config-based operation (backward compatibility)
+   */
+  constructor(
+    private readonly config: Config,
+    runtimeState: AgentRuntimeState,
+    historyService?: HistoryService,
+  ) {
+    if (!runtimeState.provider || runtimeState.provider === '') {
+      throw new Error('AgentRuntimeState must have a valid provider');
+    }
+    if (!runtimeState.model || runtimeState.model === '') {
+      throw new Error('AgentRuntimeState must have a valid model');
+    }
+    if (
+      runtimeState.authType === AuthType.API_KEY &&
+      !runtimeState.authPayload?.apiKey
+    ) {
+      throw new Error(
+        'AgentRuntimeState must include apiKey when authType is API_KEY',
+      );
+    }
+    if (
+      runtimeState.authType === AuthType.OAUTH &&
+      !runtimeState.authPayload?.token
+    ) {
+      throw new Error(
+        'AgentRuntimeState must include token when authType is OAUTH',
+      );
     }
 
+    this.runtimeState = runtimeState;
+    this._historyService = historyService;
     this.logger = new DebugLogger('llxprt:core:client');
-    this.embeddingModel = config.getEmbeddingModel();
+
+    this._unsubscribe = subscribeToAgentRuntimeState(
+      runtimeState.runtimeId,
+      (event) => {
+        this.logger.debug('Runtime state changed', event);
+      },
+    );
+
+    void this._historyService;
+    void this._unsubscribe;
+
+    const proxyUrl = runtimeState.proxyUrl;
+    if (proxyUrl) {
+      setGlobalDispatcher(new ProxyAgent(proxyUrl as string));
+    }
+
+    const embeddingModel = config.getEmbeddingModel();
+    this.embeddingModel = embeddingModel || runtimeState.model;
     this.loopDetector = new LoopDetectionService(config);
-    this.lastPromptId = this.config.getSessionId();
+    this.lastPromptId = runtimeState.sessionId;
 
     // Initialize complexity analyzer with config settings
     const complexitySettings = config.getComplexityAnalyzerSettings();
@@ -174,7 +247,6 @@ export class GeminiClient {
       complexitySettings.suggestionCooldownMs ?? 300000;
 
     this.todoReminderService = new TodoReminderService();
-    this.pendingInstallerNotices = [];
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
@@ -233,6 +305,11 @@ export class GeminiClient {
   private processComplexityAnalysis(
     analysis: ComplexityAnalysisResult,
   ): string | undefined {
+    if (!this.todoToolsAvailable) {
+      this.consecutiveComplexTurns = 0;
+      return undefined;
+    }
+
     if (!analysis.isComplex || !analysis.shouldSuggestTodos) {
       this.consecutiveComplexTurns = 0;
       return undefined;
@@ -309,6 +386,9 @@ export class GeminiClient {
   }
 
   private recordModelActivity(event: ServerGeminiStreamEvent): void {
+    if (!this.todoToolsAvailable) {
+      return;
+    }
     if (
       event.type !== GeminiEventType.Content &&
       event.type !== GeminiEventType.ToolCallRequest
@@ -318,22 +398,15 @@ export class GeminiClient {
 
     this.toolActivityCount += 1;
 
-    // Always trigger reminders after a certain number of tool calls
-    // regardless of complexity - this is the core safety feature
-    if (this.toolActivityCount > 5) {
+    if (this.toolActivityCount > 4) {
       this.toolCallReminderLevel = 'escalated';
     } else if (
-      this.toolActivityCount === 5 &&
+      this.toolActivityCount === 4 &&
       this.toolCallReminderLevel === 'none'
     ) {
       this.toolCallReminderLevel = 'base';
     }
   }
-
-  /**
-   * Analyzes the current user request to determine if it's complex enough
-   * to warrant todo reminders
-   */
 
   async addHistory(content: Content) {
     // Ensure chat is initialized before adding history
@@ -453,7 +526,18 @@ export class GeminiClient {
 
   async setTools(): Promise<void> {
     const toolRegistry = this.config.getToolRegistry();
-    const toolDeclarations = toolRegistry.getFunctionDeclarations();
+    if (!toolRegistry) {
+      return;
+    }
+
+    const toolsView =
+      typeof this.chat?.getToolsView === 'function'
+        ? this.chat.getToolsView()
+        : undefined;
+    const toolDeclarations = toolsView
+      ? this.buildToolDeclarationsFromView(toolRegistry, toolsView)
+      : toolRegistry.getFunctionDeclarations();
+    this.updateTodoToolAvailabilityFromDeclarations(toolDeclarations);
 
     // Debug log for intermittent tool issues
     const logger = new DebugLogger('llxprt:client:setTools');
@@ -510,6 +594,17 @@ export class GeminiClient {
     });
   }
 
+  async generateDirectMessage(
+    params: SendMessageParameters,
+    promptId: string,
+  ): Promise<GenerateContentResponse> {
+    await this.lazyInitialize();
+    if (!this.chat) {
+      this.chat = await this.startChat([]);
+    }
+    return this.getChat().generateDirectMessage(params, promptId);
+  }
+
   async startChat(extraHistory?: Content[]): Promise<GeminiChat> {
     this.forceFullIdeContext = true;
     this.hasFailedCompressionAttempt = false;
@@ -518,8 +613,6 @@ export class GeminiClient {
     await this.lazyInitialize();
     const envParts = await getEnvironmentContext(this.config);
     const toolRegistry = this.config.getToolRegistry();
-    const toolDeclarations = toolRegistry.getFunctionDeclarations();
-    const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
     const enabledToolNames = this.getEnabledToolNamesForPrompt();
 
     // CRITICAL: Reuse stored HistoryService if available to preserve UI conversation display
@@ -539,7 +632,9 @@ export class GeminiClient {
 
     // Add extraHistory if provided
     if (extraHistory && extraHistory.length > 0) {
-      const currentModel = this.config.getModel();
+      // @plan PLAN-20251027-STATELESS5.P10
+      // @requirement REQ-STAT5-003.1
+      const currentModel = this.runtimeState.model;
       for (const content of extraHistory) {
         historyService.add(ContentConverters.toIContent(content), currentModel);
       }
@@ -547,7 +642,10 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
-      const model = this.config.getModel();
+      // @plan PLAN-20251027-STATELESS5.P10
+      // @requirement REQ-STAT5-003.1
+      const model = this.runtimeState.model;
+      // Provider name removed from prompt call signature
       const logger = new DebugLogger('llxprt:client:start');
       logger.debug(
         () => `DEBUG [client.startChat]: Model from config: ${model}`,
@@ -557,11 +655,6 @@ export class GeminiClient {
         model,
         enabledToolNames,
       );
-
-      const installerNotices = await drainPromptInstallerNotices();
-      if (installerNotices.length > 0) {
-        this.pendingInstallerNotices.push(...installerNotices);
-      }
 
       // Add environment context to system instruction
       const envContextText = envParts
@@ -594,8 +687,10 @@ export class GeminiClient {
           )}`,
       );
 
+      // @plan PLAN-20251027-STATELESS5.P10
+      // @requirement REQ-STAT5-003.1
       const generateContentConfigWithThinking = isThinkingSupported(
-        this.config.getModel(),
+        this.runtimeState.model,
       )
         ? {
             ...this.generateContentConfig,
@@ -605,16 +700,68 @@ export class GeminiClient {
             },
           }
         : this.generateContentConfig;
+      // @plan PLAN-20251028-STATELESS6.P10
+      // @requirement REQ-STAT6-001.2
+      // Create runtime context from config (foreground agent)
+      const settings: ReadonlySettingsSnapshot = {
+        compressionThreshold:
+          (this.config.getEphemeralSetting('compression-threshold') as
+            | number
+            | undefined) ?? 0.8,
+        contextLimit:
+          (this.config.getEphemeralSetting('context-limit') as
+            | number
+            | undefined) ?? 60000,
+        preserveThreshold:
+          (this.config.getEphemeralSetting('compression-preserve-threshold') as
+            | number
+            | undefined) ?? 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+        tools: this.getToolGovernanceEphemerals(),
+      };
+
+      const providerRuntime = createProviderRuntimeContext({
+        settingsService: this.config.getSettingsService(),
+        config: this.config,
+        runtimeId: this.runtimeState.runtimeId,
+        metadata: { source: 'GeminiClient.startChat' },
+      });
+
+      const runtimeBundle = await loadAgentRuntime({
+        profile: {
+          config: this.config,
+          state: this.runtimeState,
+          settings,
+          providerRuntime,
+          contentGeneratorConfig: this.config.getContentGeneratorConfig(),
+          toolRegistry,
+          providerManager: this.config.getProviderManager?.(),
+        },
+        overrides: {
+          historyService,
+          contentGenerator: this.getContentGenerator(),
+        },
+      });
+
+      const filteredDeclarations = this.buildToolDeclarationsFromView(
+        toolRegistry,
+        runtimeBundle.toolsView,
+      );
+      this.updateTodoToolAvailabilityFromDeclarations(filteredDeclarations);
+      const tools: Tool[] = [{ functionDeclarations: filteredDeclarations }];
+
       return new GeminiChat(
-        this.config,
-        this.getContentGenerator(),
+        runtimeBundle.runtimeContext,
+        runtimeBundle.contentGenerator,
         {
           systemInstruction,
           ...generateContentConfigWithThinking,
           tools,
         },
         [], // Empty initial history since we're using HistoryService
-        historyService,
       );
     } catch (error) {
       await reportError(
@@ -843,14 +990,6 @@ export class GeminiClient {
       }
     }
 
-    if (this.pendingInstallerNotices.length > 0) {
-      const notices = [...this.pendingInstallerNotices];
-      this.pendingInstallerNotices = [];
-      for (const notice of notices) {
-        yield { type: GeminiEventType.SystemNotice, value: notice };
-      }
-    }
-
     if (this.lastPromptId !== prompt_id) {
       this.loopDetector.reset(prompt_id);
       this.lastPromptId = prompt_id;
@@ -867,7 +1006,12 @@ export class GeminiClient {
       const providerManager = contentGenConfig?.providerManager;
       const providerName =
         providerManager?.getActiveProviderName() || 'backend';
-      return new Turn(this.getChat(), prompt_id, providerName);
+      return new Turn(
+        this.getChat(),
+        prompt_id,
+        DEFAULT_AGENT_ID,
+        providerName,
+      );
     }
     // Ensure turns never exceeds MAX_TURNS to prevent infinite loops
     const boundedTurns = Math.min(turns, this.MAX_TURNS);
@@ -876,18 +1020,23 @@ export class GeminiClient {
       const providerManager = contentGenConfig?.providerManager;
       const providerName =
         providerManager?.getActiveProviderName() || 'backend';
-      return new Turn(this.getChat(), prompt_id, providerName);
+      return new Turn(
+        this.getChat(),
+        prompt_id,
+        DEFAULT_AGENT_ID,
+        providerName,
+      );
     }
 
     // Track the original model from the first call to detect model switching
-    const initialModel = originalModel || this.config.getModel();
+    // @plan PLAN-20251027-STATELESS5.P10
+    // @requirement REQ-STAT5-003.1
+    const initialModel = originalModel || this.runtimeState.model;
 
-    // Only try compression if chat is properly initialized
-    if (this.chat && typeof this.chat.getHistoryService === 'function') {
-      const compressed = await this.tryCompressChat(prompt_id);
-      if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
-        yield { type: GeminiEventType.ChatCompressed, value: compressed };
-      }
+    const compressed = await this.tryCompressChat(prompt_id);
+
+    if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
+      yield { type: GeminiEventType.ChatCompressed, value: compressed };
     }
 
     // Prevent context updates from being sent while a tool call is
@@ -948,7 +1097,12 @@ export class GeminiClient {
     const providerManager = contentGenConfig?.providerManager;
     const providerName = providerManager?.getActiveProviderName() || 'backend';
 
-    const turn = new Turn(this.getChat(), prompt_id, providerName);
+    const turn = new Turn(
+      this.getChat(),
+      prompt_id,
+      DEFAULT_AGENT_ID,
+      providerName,
+    );
 
     const loopDetected = await this.loopDetector.turnStarted(signal);
     if (loopDetected) {
@@ -975,7 +1129,7 @@ export class GeminiClient {
         return turn;
       }
     }
-    if (this.toolCallReminderLevel !== 'none') {
+    if (this.todoToolsAvailable && this.toolCallReminderLevel !== 'none') {
       const reminderText =
         this.toolCallReminderLevel === 'escalated'
           ? TOOL_ESCALATED_TODO_MESSAGE
@@ -994,7 +1148,9 @@ export class GeminiClient {
     }
     if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
       // Check if model was switched during the call (likely due to quota error)
-      const currentModel = this.config.getModel();
+      // @plan PLAN-20251027-STATELESS5.P10
+      // @requirement REQ-STAT5-003.1
+      const currentModel = this.runtimeState.model;
       if (currentModel !== initialModel) {
         // Model was switched (likely due to quota error fallback)
         // Don't continue with recursive call to prevent unwanted Flash execution
@@ -1018,6 +1174,7 @@ export class GeminiClient {
     const modelToUse = model;
     try {
       const userMemory = this.config.getUserMemory();
+      // Provider name removed from prompt call signature
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
         modelToUse,
@@ -1152,6 +1309,7 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
+      // Provider name removed from prompt call signature
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
         modelToUse,
@@ -1266,7 +1424,9 @@ export class GeminiClient {
 
     // Note: chat variable used later in method
 
-    const model = this.config.getModel();
+    // @plan PLAN-20251027-STATELESS5.P10
+    // @requirement REQ-STAT5-003.1
+    const model = this.runtimeState.model;
     // Get the ACTUAL token count from the history service, not the curated subset
     const historyService = this.getChat().getHistoryService();
     const originalTokenCount = historyService
@@ -1394,10 +1554,12 @@ export class GeminiClient {
           const userContextLimit = this.config.getEphemeralSetting(
             'context-limit',
           ) as number | undefined;
+          // @plan PLAN-20251027-STATELESS5.P10
+          // @requirement REQ-STAT5-003.1
           historyService.emit('tokensUpdated', {
             totalTokens: newTokenCount,
             addedTokens: newTokenCount - originalTokenCount,
-            tokenLimit: tokenLimit(this.config.getModel(), userContextLimit),
+            tokenLimit: tokenLimit(this.runtimeState.model, userContextLimit),
           });
         }
       }
@@ -1408,6 +1570,91 @@ export class GeminiClient {
       newTokenCount,
       compressionStatus: CompressionStatus.COMPRESSED,
     };
+  }
+
+  private getToolGovernanceEphemerals():
+    | {
+        allowed?: string[];
+        disabled?: string[];
+      }
+    | undefined {
+    const allowedList = this.readToolList(
+      this.config.getEphemeralSetting('tools.allowed'),
+    );
+    const disabledList = this.readToolList(
+      this.config.getEphemeralSetting('tools.disabled') ??
+        this.config.getEphemeralSetting('disabled-tools'),
+    );
+
+    const hasAllowed = allowedList.length > 0;
+    const hasDisabled = disabledList.length > 0;
+
+    if (!hasAllowed && !hasDisabled) {
+      return undefined;
+    }
+
+    return {
+      allowed: hasAllowed ? allowedList : undefined,
+      disabled: hasDisabled ? disabledList : undefined,
+    };
+  }
+
+  private readToolList(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const filtered = value.filter(
+      (entry): entry is string =>
+        typeof entry === 'string' && entry.trim().length > 0,
+    );
+    return filtered.length > 0 ? [...filtered] : [];
+  }
+
+  private buildToolDeclarationsFromView(
+    toolRegistry: ToolRegistry | undefined,
+    view: ToolRegistryView,
+  ): FunctionDeclaration[] {
+    if (!toolRegistry) {
+      return [];
+    }
+
+    const allowedNames = view.listToolNames();
+    if (allowedNames.length === 0) {
+      return [];
+    }
+
+    const declarations: FunctionDeclaration[] = [];
+    if (typeof toolRegistry.getAllTools === 'function') {
+      const toolsByName = new Map(
+        toolRegistry.getAllTools().map((tool) => [tool.name, tool]),
+      );
+      for (const name of allowedNames) {
+        const tool = toolsByName.get(name);
+        if (!tool) {
+          continue;
+        }
+        const schema = (tool as { schema?: FunctionDeclaration }).schema;
+        if (schema) {
+          declarations.push(schema);
+        }
+      }
+      return declarations;
+    }
+
+    if (typeof toolRegistry.getFunctionDeclarations === 'function') {
+      const declarationsByName = new Map(
+        toolRegistry
+          .getFunctionDeclarations()
+          .map((decl) => [decl.name, decl] as const),
+      );
+      for (const name of allowedNames) {
+        const declaration = declarationsByName.get(name);
+        if (declaration) {
+          declarations.push(declaration);
+        }
+      }
+    }
+    return declarations;
   }
 
   private getEnabledToolNamesForPrompt(): string[] {
@@ -1427,5 +1674,19 @@ export class GeminiClient {
           .filter(Boolean),
       ),
     );
+  }
+
+  private updateTodoToolAvailabilityFromDeclarations(
+    declarations: Array<{ name?: string }>,
+  ): void {
+    const normalizedNames = new Set(
+      declarations
+        .map((decl) => decl?.name)
+        .filter((name): name is string => typeof name === 'string')
+        .map((name) => name.toLowerCase()),
+    );
+
+    this.todoToolsAvailable =
+      normalizedNames.has('todo_write') && normalizedNames.has('todo_read');
   }
 }

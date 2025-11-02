@@ -5,12 +5,12 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { toolsCommand } from './toolsCommand.tsx';
+import { toolsCommand } from './toolsCommand.ts';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import type { Tool } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-core';
 
-// Mock tools for testing
 const mockTools = [
   {
     name: 'file-reader',
@@ -27,17 +27,19 @@ const mockTools = [
 ] as Tool[];
 
 describe('toolsCommand', () => {
-  it('should display an error if the tool registry is unavailable', async () => {
+  it('reports missing tool registry', async () => {
     const mockContext = createMockCommandContext({
       services: {
         config: {
-          getToolRegistry: () => undefined,
+          getToolRegistry: vi.fn().mockReturnValue(undefined),
+          getSettingsService: vi.fn(),
         },
       },
+      ui: { addItem: vi.fn() },
     });
 
     if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, '');
+    await toolsCommand.action(mockContext, 'list');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -48,133 +50,114 @@ describe('toolsCommand', () => {
     );
   });
 
-  it('should display "No tools available" when none are found', async () => {
-    const mockContext = createMockCommandContext({
-      services: {
-        config: {
-          getToolRegistry: () => ({ getAllTools: () => [] as Tool[] }),
-          getEphemeralSettings: () => ({}),
-        },
-      },
-    });
+  it('lists available tools with status badges', async () => {
+    const settings = new SettingsService();
+    settings.set('tools.disabled', ['file-reader']);
 
-    if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, '');
-
-    expect(mockContext.ui.addItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        text: expect.stringContaining('No tools available'),
-      }),
-      expect.any(Number),
-    );
-  });
-
-  it('should list tools without descriptions by default', async () => {
     const mockContext = createMockCommandContext({
       services: {
         config: {
           getToolRegistry: () => ({ getAllTools: () => mockTools }),
-          getEphemeralSettings: () => ({}),
+          getSettingsService: () => settings,
+          getEphemeralSettings: () => ({ 'tools.disabled': ['file-reader'] }),
         },
       },
+      ui: { addItem: vi.fn() },
     });
 
     if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, '');
+    await toolsCommand.action(mockContext, 'list');
 
-    const message = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
-    expect(message).not.toContain('Reads files from the local system.');
-    expect(message).toContain('File Reader');
-    expect(message).toContain('Code Editor');
+    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+    expect(output).toContain('File Reader [disabled]');
+    expect(output).toContain('Code Editor [enabled]');
+    expect(output).toContain('Disabled tools: 1');
   });
 
-  it('should list tools with descriptions when "desc" arg is passed', async () => {
+  it('disables a tool using its friendly name', async () => {
+    const settings = new SettingsService();
     const mockContext = createMockCommandContext({
       services: {
         config: {
           getToolRegistry: () => ({ getAllTools: () => mockTools }),
+          getSettingsService: () => settings,
           getEphemeralSettings: () => ({}),
         },
       },
+      ui: { addItem: vi.fn() },
     });
 
     if (!toolsCommand.action) throw new Error('Action not defined');
-    await toolsCommand.action(mockContext, 'desc');
+    await toolsCommand.action(mockContext, 'disable "File Reader"');
 
-    const message = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
-    expect(message).toContain('Reads files from the local system.');
-    expect(message).toContain('Edits code files.');
+    expect(settings.get('tools.disabled')).toEqual(['file-reader']);
+    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+    expect(output).toContain("Disabled tool 'File Reader'");
   });
 
-  describe('disable/enable functionality', () => {
-    it('should return dialog action for disable', async () => {
-      const mockContext = createMockCommandContext({
-        services: {
-          config: {
-            getEphemeralSettings: () => ({}),
-            getToolRegistry: () =>
-              Promise.resolve({ getAllTools: () => mockTools }),
-          },
+  it('refreshes Gemini tool schema after disabling a tool', async () => {
+    const settings = new SettingsService();
+    const setToolsSpy = vi.fn();
+
+    const mockContext = createMockCommandContext({
+      services: {
+        config: {
+          getToolRegistry: () => ({ getAllTools: () => mockTools }),
+          getSettingsService: () => settings,
+          getEphemeralSettings: () => ({}),
+          getGeminiClient: () => ({ setTools: setToolsSpy }),
         },
-      });
-
-      if (!toolsCommand.action) throw new Error('Action not defined');
-      const result = await toolsCommand.action(mockContext, 'disable');
-
-      expect(result).toEqual({
-        type: 'dialog',
-        dialog: 'tools',
-      });
+      },
+      ui: { addItem: vi.fn() },
     });
 
-    it('should return dialog action for enable', async () => {
-      const mockContext = createMockCommandContext({
-        services: {
-          config: {
-            getEphemeralSettings: () => ({ 'disabled-tools': ['file-reader'] }),
-            getToolRegistry: () =>
-              Promise.resolve({ getAllTools: () => mockTools }),
-          },
-        },
-      });
+    if (!toolsCommand.action) throw new Error('Action not defined');
+    await toolsCommand.action(mockContext, 'disable code-editor');
 
-      if (!toolsCommand.action) throw new Error('Action not defined');
-      const result = await toolsCommand.action(mockContext, 'enable');
-
-      expect(result).toEqual({
-        type: 'dialog',
-        dialog: 'tools',
-      });
-    });
-
-    it('should show disabled tools in list', async () => {
-      const mockContext = createMockCommandContext({
-        services: {
-          config: {
-            getEphemeralSettings: () => ({ 'disabled-tools': ['file-reader'] }),
-            getToolRegistry: () =>
-              Promise.resolve({ getAllTools: () => mockTools }),
-          },
-        },
-      });
-
-      if (!toolsCommand.action) throw new Error('Action not defined');
-      await toolsCommand.action(mockContext, '');
-
-      const message = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
-      expect(message).toContain('[DISABLED]');
-      expect(message).toContain('1 tool(s) disabled');
-    });
+    expect(setToolsSpy).toHaveBeenCalled();
   });
 
-  describe('completion', () => {
-    it('should complete subcommands', async () => {
-      const mockContext = createMockCommandContext({});
+  it('enables a tool using its canonical name', async () => {
+    const settings = new SettingsService();
+    settings.set('tools.disabled', ['code-editor']);
 
-      if (!toolsCommand.completion) throw new Error('Completion not defined');
-      const completions = await toolsCommand.completion(mockContext, 'dis');
-
-      expect(completions).toContain('disable');
+    const mockContext = createMockCommandContext({
+      services: {
+        config: {
+          getToolRegistry: () => ({ getAllTools: () => mockTools }),
+          getSettingsService: () => settings,
+          getEphemeralSettings: () => ({ 'tools.disabled': ['code-editor'] }),
+        },
+      },
+      ui: { addItem: vi.fn() },
     });
+
+    if (!toolsCommand.action) throw new Error('Action not defined');
+    await toolsCommand.action(mockContext, 'enable code-editor');
+
+    expect(settings.get('tools.disabled')).toEqual([]);
+    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+    expect(output).toContain("Enabled tool 'Code Editor'");
+  });
+
+  it('errors when the requested tool cannot be resolved', async () => {
+    const settings = new SettingsService();
+    const mockContext = createMockCommandContext({
+      services: {
+        config: {
+          getToolRegistry: () => ({ getAllTools: () => mockTools }),
+          getSettingsService: () => settings,
+          getEphemeralSettings: () => ({}),
+        },
+      },
+      ui: { addItem: vi.fn() },
+    });
+
+    if (!toolsCommand.action) throw new Error('Action not defined');
+    await toolsCommand.action(mockContext, 'disable missing');
+
+    const output = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0];
+    expect(output.type).toBe(MessageType.ERROR);
+    expect(output.text).toContain('Tool "missing" not found');
   });
 });

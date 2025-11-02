@@ -20,6 +20,7 @@ export function createMockConfig(
     getToolRegistry: vi.fn().mockReturnValue({
       getTool: vi.fn(),
       getAllToolNames: vi.fn().mockReturnValue([]),
+      getAllTools: vi.fn().mockReturnValue([]),
     }),
     getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
     getIdeMode: vi.fn().mockReturnValue(false),

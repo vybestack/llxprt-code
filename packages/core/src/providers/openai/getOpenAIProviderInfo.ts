@@ -10,6 +10,7 @@
  */
 import { DebugLogger } from '../../debug/index.js';
 import { ProviderManager } from '../ProviderManager.js';
+import { getActiveProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
 import { ConversationCache } from './ConversationCache.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
 
@@ -45,7 +46,7 @@ export interface OpenAIProviderInfo {
  * @returns OpenAI provider info if available, null values otherwise
  */
 export function getOpenAIProviderInfo(
-  providerManager: ProviderManager | null | undefined,
+  providerManager?: ProviderManager | null,
 ): OpenAIProviderInfo {
   const result: OpenAIProviderInfo = {
     provider: null,
@@ -56,46 +57,85 @@ export function getOpenAIProviderInfo(
   };
 
   try {
-    // Check if provider manager is available
-    if (!providerManager || !providerManager.hasActiveProvider()) {
+    const runtime = getActiveProviderRuntimeContext();
+    const settingsService = runtime.settingsService;
+    const config = runtime.config;
+
+    const runtimeManager =
+      typeof config?.getProviderManager === 'function'
+        ? config.getProviderManager()
+        : undefined;
+    const manager = providerManager ?? runtimeManager ?? null;
+
+    const activeProviderName =
+      (manager?.hasActiveProvider?.()
+        ? manager.getActiveProviderName()
+        : undefined) ??
+      (typeof config?.getProvider === 'function'
+        ? config.getProvider()
+        : undefined);
+
+    if (activeProviderName !== 'openai') {
       return result;
     }
 
-    // Get the active provider
-    const activeProvider = providerManager.getActiveProvider();
-    if (!activeProvider || activeProvider.name !== 'openai') {
-      return result;
+    // Narrow to expected provider type using feature detection for ancillary data
+    let openaiProvider: OpenAIProviderLike | null = null;
+    if (manager && manager.hasActiveProvider()) {
+      const activeProvider = manager.getActiveProvider();
+      if (activeProvider?.name === 'openai') {
+        openaiProvider = activeProvider as unknown as OpenAIProviderLike;
+      }
     }
 
-    // Narrow to expected provider type using feature detection
-    const openaiProvider = activeProvider as unknown as OpenAIProviderLike;
     result.provider = openaiProvider;
 
-    // Access the conversation cache via public getter or lax cast
-    if (typeof openaiProvider.getConversationCache === 'function') {
-      result.conversationCache = openaiProvider.getConversationCache();
-    } else if ('conversationCache' in openaiProvider) {
-      // Cast only if property actually exists (type guard)
-      result.conversationCache =
-        (
-          openaiProvider as {
-            conversationCache?: ConversationCache;
-          }
-        ).conversationCache ?? null;
+    if (openaiProvider) {
+      if (typeof openaiProvider.getConversationCache === 'function') {
+        result.conversationCache = openaiProvider.getConversationCache();
+      } else if ('conversationCache' in openaiProvider) {
+        result.conversationCache =
+          (
+            openaiProvider as {
+              conversationCache?: ConversationCache;
+            }
+          ).conversationCache ?? null;
+      }
     }
 
-    // Get current model
-    result.currentModel = openaiProvider.getCurrentModel?.() || null;
+    const ephemeralModel = settingsService.get('model') as string | undefined;
+    const providerSettings =
+      settingsService.getProviderSettings('openai') ??
+      ({} as Record<string, unknown>);
+    const providerModel = providerSettings.model as string | undefined;
+    const configModel =
+      typeof config?.getModel === 'function' ? config.getModel() : undefined;
 
-    // Check if using Responses API (fall back to static list)
-    if (openaiProvider.shouldUseResponses && result.currentModel) {
-      result.isResponsesAPI = openaiProvider.shouldUseResponses(
-        result.currentModel,
-      );
+    const normalizedModel =
+      (typeof ephemeralModel === 'string' && ephemeralModel.trim() !== ''
+        ? ephemeralModel.trim()
+        : undefined) ??
+      providerModel ??
+      configModel;
+    result.currentModel = normalizedModel ?? null;
+
+    const configuredMode =
+      (providerSettings.apiMode as string | undefined) ??
+      (providerSettings.responsesMode as string | undefined) ??
+      (settingsService.get('responses-mode') as string | undefined);
+
+    if (configuredMode) {
+      result.isResponsesAPI = configuredMode.toLowerCase() === 'responses';
     } else if (result.currentModel) {
-      result.isResponsesAPI = (
-        RESPONSES_API_MODELS as readonly string[]
-      ).includes(result.currentModel);
+      if (openaiProvider?.shouldUseResponses) {
+        result.isResponsesAPI = openaiProvider.shouldUseResponses(
+          result.currentModel,
+        );
+      } else {
+        result.isResponsesAPI = (
+          RESPONSES_API_MODELS as readonly string[]
+        ).includes(result.currentModel);
+      }
     }
 
     // Note: Remote token info would need to be tracked separately during API calls

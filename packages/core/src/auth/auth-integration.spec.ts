@@ -6,6 +6,14 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+function integrationMetadata(provider: string): Record<string, unknown> {
+  return {
+    providerId: provider,
+    profileId: 'default',
+    runtimeAuthScopeId: `integration-${provider}`,
+  } satisfies Record<string, unknown>;
+}
+
 /**
  * Integration tests for complete auth precedence flow and provider coordination
  *
@@ -27,7 +35,7 @@ interface MockConfig {
 interface MockOAuthManager {
   toggleOAuthEnabled(provider: string): Promise<boolean>;
   isOAuthEnabled(provider: string): Promise<boolean>;
-  getToken(provider: string): Promise<string | null>;
+  getToken(provider: string, metadata?: unknown): Promise<string | null>;
   getHigherPriorityAuth(provider: string): Promise<string | null>;
   getAuthStatus(): Promise<
     Array<{
@@ -118,7 +126,10 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
           // Simulate provider precedence logic
           if (cliArg) return cliArg;
           if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
-          return await mockOAuthManager.getToken('qwen');
+          return await mockOAuthManager.getToken(
+            'qwen',
+            integrationMetadata('qwen'),
+          );
         },
       );
 
@@ -149,7 +160,10 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       vi.mocked(mockQwenProvider.resolveAuthentication).mockImplementation(
         async () => {
           if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
-          return await mockOAuthManager.getToken('qwen');
+          return await mockOAuthManager.getToken(
+            'qwen',
+            integrationMetadata('qwen'),
+          );
         },
       );
 
@@ -176,14 +190,18 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
 
       // When: Provider resolves authentication with OAuth only
       vi.mocked(mockQwenProvider.resolveAuthentication).mockImplementation(
-        async () => await mockOAuthManager.getToken('qwen'),
+        async () =>
+          await mockOAuthManager.getToken('qwen', integrationMetadata('qwen')),
       );
 
       const resolvedAuth = await mockQwenProvider.resolveAuthentication();
 
       // Then: Should use OAuth token (lowest precedence)
       expect(resolvedAuth).toBe('oauth-token-789');
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
     });
   });
 
@@ -283,13 +301,15 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
         .mockResolvedValueOnce(null) // First call - not authenticated
         .mockResolvedValue('oauth-token-123'); // Subsequent calls - authenticated
 
+      const oauthMetadata = integrationMetadata('qwen');
+
       // Mock provider API call that triggers lazy authentication
       if (mockQwenProvider.makeApiCall) {
         vi.mocked(mockQwenProvider.makeApiCall).mockImplementation(async () => {
-          const token = await mockOAuthManager.getToken('qwen');
+          const token = await mockOAuthManager.getToken('qwen', oauthMetadata);
           if (!token) {
             // Simulate lazy OAuth triggering
-            await mockOAuthManager.getToken('qwen'); // This would trigger OAuth in real implementation
+            await mockOAuthManager.getToken('qwen', oauthMetadata); // This would trigger OAuth in real implementation
             return 'api-call-success-with-oauth';
           }
           return 'api-call-success-cached';
@@ -300,7 +320,10 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
 
         // Then: Should succeed with OAuth
         expect(firstCallResult).toBe('api-call-success-with-oauth');
-        expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+        expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+          'qwen',
+          expect.anything(),
+        );
 
         // When: Make second API call (should use cached token)
         const secondCallResult = await mockQwenProvider.makeApiCall();
@@ -321,11 +344,12 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       // Given: OAuth disabled, no other auth methods
       vi.mocked(mockOAuthManager.isOAuthEnabled).mockResolvedValue(false);
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
+      const oauthMetadata = integrationMetadata('qwen');
 
       // Mock provider API call that checks authentication
       if (mockQwenProvider.makeApiCall) {
         vi.mocked(mockQwenProvider.makeApiCall).mockImplementation(async () => {
-          const token = await mockOAuthManager.getToken('qwen');
+          const token = await mockOAuthManager.getToken('qwen', oauthMetadata);
           if (!token) {
             throw new Error('No authentication available');
           }
@@ -339,7 +363,10 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       }
 
       // Then: OAuth should not have been triggered
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
       // No OAuth flow should have been initiated since it's disabled
     });
   });
@@ -362,11 +389,22 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       );
 
       // Mock provider authentication resolution
+      const qwenMetadata = {
+        providerId: 'qwen',
+        profileId: 'default',
+        runtimeAuthScopeId: 'integration-shared',
+      } satisfies Record<string, unknown>;
+      const geminiMetadata = {
+        providerId: 'gemini',
+        profileId: 'default',
+        runtimeAuthScopeId: 'integration-shared',
+      } satisfies Record<string, unknown>;
+
       vi.mocked(mockQwenProvider.resolveAuthentication).mockImplementation(
-        async () => await mockOAuthManager.getToken('qwen'),
+        async () => await mockOAuthManager.getToken('qwen', qwenMetadata),
       );
       vi.mocked(mockGeminiProvider.resolveAuthentication).mockImplementation(
-        async () => await mockOAuthManager.getToken('gemini'),
+        async () => await mockOAuthManager.getToken('gemini', geminiMetadata),
       );
 
       // When: Both providers resolve authentication
@@ -378,8 +416,14 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       expect(geminiAuth).toBe(null);
 
       // And: OAuth manager called for each provider independently
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('gemini');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'gemini',
+        expect.anything(),
+      );
     });
 
     /**
@@ -500,8 +544,14 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       );
 
       // Mock providers with different auth strategies
+      const qwenMetadata = {
+        providerId: 'qwen',
+        profileId: 'default',
+        runtimeAuthScopeId: 'integration-mixed',
+      } satisfies Record<string, unknown>;
+
       vi.mocked(mockQwenProvider.resolveAuthentication).mockImplementation(
-        async () => await mockOAuthManager.getToken('qwen'), // OAuth only
+        async () => await mockOAuthManager.getToken('qwen', qwenMetadata), // OAuth only
       );
       vi.mocked(mockGeminiProvider.resolveAuthentication).mockImplementation(
         async () => process.env.OPENAI_API_KEY || null, // Env var only
@@ -516,8 +566,14 @@ describe('Auth Integration: Complete Precedence Flow and Provider Coordination',
       expect(geminiAuth).toBe('env-api-key-for-gemini'); // Env var for Gemini
 
       // And: OAuth manager only called for OAuth-enabled provider
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
-      expect(mockOAuthManager.getToken).not.toHaveBeenCalledWith('gemini');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.anything(),
+      );
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalledWith(
+        'gemini',
+        expect.anything(),
+      );
     });
   });
 });

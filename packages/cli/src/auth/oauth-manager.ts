@@ -24,6 +24,46 @@ function isAuthOnlyEnabled(value: unknown): boolean {
   return false;
 }
 
+function isLoggingWrapperCandidate(
+  provider: unknown,
+): provider is { wrappedProvider?: unknown } {
+  return (
+    !!provider &&
+    typeof provider === 'object' &&
+    Object.prototype.hasOwnProperty.call(provider, 'wrappedProvider')
+  );
+}
+
+/**
+ * @plan PLAN-20251020-STATELESSPROVIDER3.P12
+ * @requirement REQ-SP3-003
+ * @pseudocode oauth-safety.md lines 1-17
+ */
+export function unwrapLoggingProvider<T extends OAuthProvider | undefined>(
+  provider: T,
+): T {
+  if (!provider) {
+    return provider;
+  }
+
+  const visited = new Set<unknown>();
+  let current: unknown = provider;
+
+  while (isLoggingWrapperCandidate(current)) {
+    if (visited.has(current)) {
+      break;
+    }
+    visited.add(current);
+    const next = current.wrappedProvider;
+    if (!next) {
+      break;
+    }
+    current = next;
+  }
+
+  return current as T;
+}
+
 /**
  * Interface for OAuth provider abstraction
  * Each provider (e.g., Google, Qwen) implements this interface
@@ -522,6 +562,10 @@ export class OAuthManager {
     }
   }
 
+  getTokenStore(): TokenStore {
+    return this.tokenStore;
+  }
+
   /**
    * Check for higher priority authentication methods
    * @param providerName - Name of the provider to check
@@ -591,55 +635,67 @@ export class OAuthManager {
    * CRITICAL FIX: Clear all auth caches for a provider after logout
    * This method finds and clears auth caches from both BaseProvider and provider-specific implementations
    * @param providerName - Name of the provider to clear caches for
+   *
+   * @plan PLAN-20251020-STATELESSPROVIDER3.P12
+   * @requirement REQ-SP3-003
+   * @pseudocode oauth-safety.md lines 1-17
    */
   private async clearProviderAuthCaches(providerName: string): Promise<void> {
     try {
       // Import ProviderManager to access active providers
       // Use dynamic import to avoid circular dependencies
-      const { getProviderManager } = await import(
-        '../providers/providerManagerInstance.js'
+      const { getCliProviderManager } = await import(
+        '../runtime/runtimeSettings.js'
       );
-      const providerManager = getProviderManager();
+      const providerManager = getCliProviderManager();
 
       // Get the provider instance to clear its auth cache
       const targetProvider = providerManager.getProviderByName(providerName);
+      const provider = unwrapLoggingProvider(
+        targetProvider as OAuthProvider | undefined,
+      );
 
-      if (targetProvider) {
-        // Clear BaseProvider auth cache
-        if (typeof targetProvider.clearAuthCache === 'function') {
-          targetProvider.clearAuthCache();
-        }
+      if (!provider) {
+        console.debug(
+          `Provider ${providerName} is not registered; skipping auth cache clear.`,
+        );
+        return;
+      }
 
-        // Clear provider-specific cached clients
-        // For AnthropicProvider: clear _cachedAuthKey
-        if ('_cachedAuthKey' in targetProvider) {
-          const provider = targetProvider as { _cachedAuthKey?: string };
-          provider._cachedAuthKey = undefined;
-        }
+      if (
+        'clearAuthCache' in provider &&
+        typeof provider.clearAuthCache === 'function'
+      ) {
+        provider.clearAuthCache();
+      }
 
-        // For GeminiProvider: clear any auth-related state
-        if (targetProvider.name === 'gemini') {
-          // Clear GeminiProvider auth state
-          if (
-            'clearAuthCache' in targetProvider &&
-            typeof targetProvider.clearAuthCache === 'function'
-          ) {
-            targetProvider.clearAuthCache();
-          }
-          // Clear any client instances that might be cached
-          if ('authMode' in targetProvider) {
-            const geminiProvider = targetProvider as { authMode?: string };
-            geminiProvider.authMode = 'none';
-          }
-        }
+      if ('_cachedAuthKey' in provider) {
+        const providerWithAuthKey = provider as {
+          _cachedAuthKey?: string | undefined;
+        };
+        providerWithAuthKey._cachedAuthKey = undefined;
+      }
 
-        // For providers extending BaseProvider: ensure auth cache is cleared
+      if (provider.name === 'gemini') {
         if (
-          'clearState' in targetProvider &&
-          typeof targetProvider.clearState === 'function'
+          'clearAuthCache' in provider &&
+          typeof provider.clearAuthCache === 'function'
         ) {
-          targetProvider.clearState();
+          provider.clearAuthCache();
         }
+        if (
+          'clearAuth' in provider &&
+          typeof provider.clearAuth === 'function'
+        ) {
+          (provider as { clearAuth: () => void }).clearAuth();
+        }
+      }
+
+      if (
+        'clearState' in provider &&
+        typeof provider.clearState === 'function'
+      ) {
+        provider.clearState();
       }
 
       console.debug(`Cleared auth caches for provider: ${providerName}`);

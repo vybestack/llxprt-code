@@ -6,7 +6,11 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { Mock } from 'vitest';
-import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
+import type {
+  ToolCall,
+  WaitingToolCall,
+  CompletedToolCall,
+} from './coreToolScheduler.js';
 import {
   CoreToolScheduler,
   ToolCall,
@@ -28,6 +32,8 @@ import {
 } from '../index.js';
 import { Part, PartListUnion } from '@google/genai';
 import { MockModifiableTool, MockTool } from '../test-utils/tools.js';
+import type { ToolContext } from '../tools/tool-context.js';
+import type { ContextAwareTool } from '../tools/tool-context.js';
 
 class TestApprovalTool extends BaseDeclarativeTool<{ id: string }, ToolResult> {
   static readonly Name = 'testApprovalTool';
@@ -198,6 +204,206 @@ describe('CoreToolScheduler', () => {
     expect(completedCalls[0].status).toBe('cancelled');
   });
 
+  it('propagates agentId from request to completed call payloads', async () => {
+    const mockTool = new MockTool('mockTool');
+    mockTool.executeFn.mockReturnValue({
+      llmContent: 'Tool executed',
+      returnDisplay: 'Tool executed',
+    });
+    const toolRegistry = {
+      getTool: () => mockTool,
+      getToolByName: () => mockTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {},
+      registerTool: () => {},
+      getToolByDisplayName: () => mockTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+    };
+
+    const onAllToolCallsComplete = vi.fn();
+    const onToolCallsUpdate = vi.fn();
+
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getAllowedTools: () => [],
+      getToolRegistry: () => toolRegistry,
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+    } as unknown as Config;
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    const abortController = new AbortController();
+    const request = {
+      callId: 'agent-call',
+      name: 'mockTool',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-agent',
+      agentId: 'agent-sub-123',
+    };
+
+    await scheduler.schedule([request], abortController.signal);
+
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
+
+    const completedCalls = onAllToolCallsComplete.mock
+      .calls[0][0] as CompletedToolCall[];
+
+    expect(completedCalls[0].request.agentId).toBe('agent-sub-123');
+    expect(completedCalls[0].response.agentId).toBe('agent-sub-123');
+  });
+
+  it('prefers tool result metadata agentId when present', async () => {
+    const mockTool = new MockTool('mockTool');
+    mockTool.executeFn.mockReturnValue({
+      llmContent: 'Tool executed',
+      returnDisplay: 'Tool executed',
+      metadata: { agentId: 'agent-meta-456' },
+    });
+
+    const toolRegistry = {
+      getTool: () => mockTool,
+      getToolByName: () => mockTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {},
+      registerTool: () => {},
+      getToolByDisplayName: () => mockTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+    };
+
+    const onAllToolCallsComplete = vi.fn();
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getAllowedTools: () => [],
+      getToolRegistry: () => toolRegistry,
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+    } as unknown as Config;
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      onAllToolCallsComplete,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    const abortController = new AbortController();
+    const request = {
+      callId: 'agent-call-meta',
+      name: 'mockTool',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-agent',
+      agentId: 'agent-request-123',
+    };
+
+    await scheduler.schedule(request, abortController.signal);
+
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
+
+    const [completedCalls] = onAllToolCallsComplete.mock.lastCall as [
+      ToolCall[],
+    ];
+    expect(completedCalls[0].status).toBe('success');
+    expect(completedCalls[0].request.agentId).toBe('agent-request-123');
+    expect(completedCalls[0].response.agentId).toBe('agent-meta-456');
+  });
+
+  it('defaults agentId when scheduler receives a request without one', async () => {
+    const mockTool = new MockTool('mockTool');
+    mockTool.executeFn.mockReturnValue({
+      llmContent: 'Tool executed',
+      returnDisplay: 'Tool executed',
+    });
+    const toolRegistry = {
+      getTool: () => mockTool,
+      getToolByName: () => mockTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {},
+      registerTool: () => {},
+      getToolByDisplayName: () => mockTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+    };
+
+    const onAllToolCallsComplete = vi.fn();
+    const onToolCallsUpdate = vi.fn();
+
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getAllowedTools: () => [],
+      getToolRegistry: () => toolRegistry,
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+    } as unknown as Config;
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    const abortController = new AbortController();
+    const requestWithoutAgent = {
+      callId: 'no-agent-call',
+      name: 'mockTool',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-default',
+    };
+
+    await scheduler.schedule([requestWithoutAgent], abortController.signal);
+
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+    });
+
+    const completedCalls = onAllToolCallsComplete.mock
+      .calls[0][0] as CompletedToolCall[];
+
+    expect(completedCalls[0].request.agentId).toBe('primary');
+    expect(completedCalls[0].response.agentId).toBe('primary');
+  });
+
   describe('getToolSuggestion', () => {
     it('should suggest the top N closest tool names for a typo', () => {
       // Create mocked tool registry
@@ -304,6 +510,7 @@ describe('CoreToolScheduler with payload', () => {
       );
     }
 
+    await waitForStatus(onToolCallsUpdate, 'success');
     expect(onAllToolCallsComplete).toHaveBeenCalled();
     const completedCalls = onAllToolCallsComplete.mock
       .calls[0][0] as ToolCall[];
@@ -902,6 +1109,7 @@ describe('CoreToolScheduler YOLO mode', () => {
 
     // Act
     await scheduler.schedule([request], abortController.signal);
+    await waitForStatus(onToolCallsUpdate, 'success');
 
     // Assert
     // 1. The tool's execute method was called directly.
@@ -1344,5 +1552,69 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     // Verify approval mode was changed
     expect(approvalMode).toBe(ApprovalMode.AUTO_EDIT);
+  });
+});
+it('injects agentId into ContextAwareTool context', async () => {
+  class ContextAwareMockTool extends MockTool implements ContextAwareTool {
+    context?: ToolContext;
+  }
+
+  const contextAwareTool = new ContextAwareMockTool('context-tool');
+  contextAwareTool.executeFn.mockResolvedValue({
+    llmContent: 'ok',
+    returnDisplay: 'ok',
+  });
+
+  const toolRegistry = {
+    getTool: () => contextAwareTool,
+    getToolByName: () => contextAwareTool,
+    getFunctionDeclarations: () => [],
+    tools: new Map(),
+    discovery: {},
+    registerTool: () => {},
+    getToolByDisplayName: () => contextAwareTool,
+    getTools: () => [],
+    discoverTools: async () => {},
+    getAllTools: () => [],
+    getToolsByServer: () => [],
+  };
+
+  const mockConfig = {
+    getSessionId: () => 'session-123',
+    getUsageStatisticsEnabled: () => true,
+    getDebugMode: () => false,
+    getApprovalMode: () => ApprovalMode.DEFAULT,
+    getAllowedTools: () => [],
+    getToolRegistry: () => toolRegistry,
+    getContentGeneratorConfig: () => ({
+      model: 'test-model',
+      authType: 'oauth-personal',
+    }),
+  } as unknown as Config;
+
+  const scheduler = new CoreToolScheduler({
+    config: mockConfig,
+    onAllToolCallsComplete: vi.fn(),
+    onToolCallsUpdate: vi.fn(),
+    getPreferredEditor: () => 'vscode',
+    onEditorClose: vi.fn(),
+  });
+
+  const abortController = new AbortController();
+  const request = {
+    callId: 'ctx-1',
+    name: 'context-tool',
+    args: {},
+    isClientInitiated: false,
+    prompt_id: 'prompt-ctx',
+    agentId: 'agent-sub-42',
+  };
+
+  await scheduler.schedule([request], abortController.signal);
+
+  expect(contextAwareTool.context).toEqual({
+    sessionId: 'session-123',
+    agentId: 'agent-sub-42',
+    interactiveMode: true,
   });
 });

@@ -11,10 +11,11 @@ import {
   ToolCallResponseInfo,
   ToolErrorType,
   ToolResult,
+  DEFAULT_AGENT_ID,
 } from '../index.js';
 import { Part } from '@google/genai';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
 import { ToolCallDecision } from '../telemetry/types.js';
 import { EmojiFilter, FilterResult } from '../filters/EmojiFilter.js';
@@ -27,11 +28,57 @@ let emojiFilter: EmojiFilter | null = null;
 
 const logger = new DebugLogger('llxprt:tool-executor');
 
+function buildToolGovernance(config: ToolExecutionConfig): {
+  allowed: Set<string>;
+  disabled: Set<string>;
+  excluded: Set<string>;
+} {
+  const ephemerals =
+    typeof config.getEphemeralSettings === 'function'
+      ? config.getEphemeralSettings() || {}
+      : {};
+
+  const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
+    ? (ephemerals['tools.allowed'] as string[])
+    : [];
+  const disabledRaw = Array.isArray(ephemerals['tools.disabled'])
+    ? (ephemerals['tools.disabled'] as string[])
+    : Array.isArray(ephemerals['disabled-tools'])
+      ? (ephemerals['disabled-tools'] as string[])
+      : [];
+  const excludedRaw = config.getExcludeTools?.() ?? [];
+
+  const normalize = (name: string) => name.trim().toLowerCase();
+
+  return {
+    allowed: new Set(allowedRaw.map(normalize)),
+    disabled: new Set(disabledRaw.map(normalize)),
+    excluded: new Set(excludedRaw.map(normalize)),
+  };
+}
+
+function isToolBlocked(
+  toolName: string,
+  governance: ReturnType<typeof buildToolGovernance>,
+): boolean {
+  const canonical = toolName.trim().toLowerCase();
+  if (governance.excluded.has(canonical)) {
+    return true;
+  }
+  if (governance.disabled.has(canonical)) {
+    return true;
+  }
+  if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Gets or creates the emoji filter instance based on current configuration
  * Always checks current configuration to ensure filter is up-to-date
  */
-function getOrCreateFilter(config: Config): EmojiFilter {
+function getOrCreateFilter(config: ToolExecutionConfig): EmojiFilter {
   // Get emojifilter from ephemeral settings or default to 'auto'
   const mode =
     (config.getEphemeralSetting('emojifilter') as
@@ -131,20 +178,40 @@ function filterFileModificationArgs(
  * Executes a single tool call non-interactively.
  * It does not handle confirmations, multiple calls, or live updates.
  */
+export type ToolExecutionConfig = Pick<
+  Config,
+  | 'getToolRegistry'
+  | 'getEphemeralSettings'
+  | 'getEphemeralSetting'
+  | 'getExcludeTools'
+  | 'getSessionId'
+  | 'getTelemetryLogPromptsEnabled'
+>;
+
 export async function executeToolCall(
-  config: Config,
+  config: ToolExecutionConfig,
   toolCallRequest: ToolCallRequestInfo,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResponseInfo> {
-  const tool = config.getToolRegistry().getTool(toolCallRequest.name);
-
+  const agentId = toolCallRequest.agentId ?? DEFAULT_AGENT_ID;
+  toolCallRequest.agentId = agentId;
+  const toolRegistry = config.getToolRegistry();
+  const governance = buildToolGovernance(config);
   const startTime = Date.now();
-  if (!tool) {
+  const telemetryConfig: Pick<
+    Config,
+    'getSessionId' | 'getTelemetryLogPromptsEnabled'
+  > = {
+    getSessionId: () => config.getSessionId(),
+    getTelemetryLogPromptsEnabled: () => config.getTelemetryLogPromptsEnabled(),
+  };
+
+  if (isToolBlocked(toolCallRequest.name, governance)) {
     const error = new Error(
-      `Tool "${toolCallRequest.name}" not found in registry.`,
+      `Tool "${toolCallRequest.name}" is disabled in the current profile.`,
     );
     const durationMs = Date.now() - startTime;
-    logToolCall(config, {
+    logToolCall(telemetryConfig, {
       'event.name': 'tool_call',
       'event.timestamp': new Date().toISOString(),
       function_name: toolCallRequest.name,
@@ -154,6 +221,50 @@ export async function executeToolCall(
       error: error.message,
       prompt_id: toolCallRequest.prompt_id,
       tool_type: 'native',
+      agent_id: agentId,
+    });
+    return {
+      callId: toolCallRequest.callId,
+      error,
+      errorType: ToolErrorType.TOOL_DISABLED,
+      resultDisplay: error.message,
+      responseParts: [
+        {
+          functionCall: {
+            id: toolCallRequest.callId,
+            name: toolCallRequest.name,
+            args: toolCallRequest.args,
+          },
+        },
+        {
+          functionResponse: {
+            id: toolCallRequest.callId,
+            name: toolCallRequest.name,
+            response: { error: error.message },
+          },
+        },
+      ],
+      agentId,
+    };
+  }
+
+  const tool = toolRegistry.getTool(toolCallRequest.name);
+  if (!tool) {
+    const error = new Error(
+      `Tool "${toolCallRequest.name}" not found in registry.`,
+    );
+    const durationMs = Date.now() - startTime;
+    logToolCall(telemetryConfig, {
+      'event.name': 'tool_call',
+      'event.timestamp': new Date().toISOString(),
+      function_name: toolCallRequest.name,
+      function_args: toolCallRequest.args,
+      duration_ms: durationMs,
+      success: false,
+      error: error.message,
+      prompt_id: toolCallRequest.prompt_id,
+      tool_type: 'native',
+      agent_id: agentId,
     });
     // Ensure the response structure matches what the API expects for an error
     // Include both tool call and error response
@@ -180,6 +291,7 @@ export async function executeToolCall(
       resultDisplay: error.message,
       error,
       errorType: ToolErrorType.TOOL_NOT_REGISTERED,
+      agentId,
     };
   }
 
@@ -233,7 +345,7 @@ export async function executeToolCall(
       // Handle blocking in error mode
       if (filterResult.blocked) {
         const durationMs = Date.now() - startTime;
-        logToolCall(config, {
+        logToolCall(telemetryConfig, {
           'event.name': 'tool_call',
           'event.timestamp': new Date().toISOString(),
           function_name: toolCallRequest.name,
@@ -246,6 +358,7 @@ export async function executeToolCall(
             typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
               ? 'mcp'
               : 'native',
+          agent_id: agentId,
         });
 
         return {
@@ -271,6 +384,7 @@ export async function executeToolCall(
           resultDisplay: filterResult.error || 'Tool execution blocked',
           error: new Error(filterResult.error || 'Tool execution blocked'),
           errorType: ToolErrorType.INVALID_TOOL_PARAMS,
+          agentId,
         };
       }
 
@@ -310,7 +424,7 @@ export async function executeToolCall(
       }
     }
     const durationMs = Date.now() - startTime;
-    logToolCall(config, {
+    logToolCall(telemetryConfig, {
       'event.name': 'tool_call',
       'event.timestamp': new Date().toISOString(),
       function_name: toolCallRequest.name,
@@ -328,6 +442,7 @@ export async function executeToolCall(
         typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
           ? 'mcp'
           : 'native',
+      agent_id: agentId,
     });
 
     // Add system feedback for warn mode if emojis were detected and filtered
@@ -372,11 +487,12 @@ export async function executeToolCall(
           : new Error(toolResult.error.message),
       errorType:
         toolResult.error === undefined ? undefined : toolResult.error.type,
+      agentId,
     };
   } catch (e) {
     const error = e instanceof Error ? e : new Error(String(e));
     const durationMs = Date.now() - startTime;
-    logToolCall(config, {
+    logToolCall(telemetryConfig, {
       'event.name': 'tool_call',
       'event.timestamp': new Date().toISOString(),
       function_name: toolCallRequest.name,
@@ -391,6 +507,7 @@ export async function executeToolCall(
         typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
           ? 'mcp'
           : 'native',
+      agent_id: agentId,
     });
     return {
       callId: toolCallRequest.callId,
@@ -415,6 +532,7 @@ export async function executeToolCall(
       resultDisplay: error.message,
       error,
       errorType: ToolErrorType.UNHANDLED_EXCEPTION,
+      agentId,
     };
   }
 }

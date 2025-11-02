@@ -21,15 +21,26 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
       getGlobalSettingsPath: vi.fn(
         () => '/mock/home/user/.llxprt/settings.json',
       ),
+      getGlobalLlxprtDir: vi.fn(() => '/mock/home/user/.llxprt'),
     },
     Config: vi.fn().mockImplementation((params) => ({
       getProvider: vi.fn(() => params.provider),
       getProviderManager: vi.fn(),
+      setProviderManager: vi.fn(),
       initialize: vi.fn(),
       getModel: vi.fn(),
       setModel: vi.fn(),
       setEphemeralSetting: vi.fn(),
+      getEphemeralSetting: vi.fn(() => undefined),
       getSettingsService: vi.fn(),
+      getConversationLoggingEnabled: vi.fn(() => false),
+      getDebugMode: vi.fn(() => false),
+      getToolRegistry: vi.fn(() => ({})),
+      getSandboxMountDir: vi.fn(() => ''),
+      getMemoryImportFormat: vi.fn(() => 'tree'),
+      getFolderTrust: vi.fn(() => true),
+      getIdeMode: vi.fn(() => false),
+      getFileDiscoveryService: vi.fn(() => ({ initialize: vi.fn() })),
     })),
   };
 });
@@ -199,7 +210,7 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
   });
 
   describe('Invalid profile handling', () => {
-    it('should throw error when loading non-existent profile', async () => {
+    it('should handle error when loading non-existent profile', async () => {
       const mockInstance = {
         loadProfile: vi
           .fn()
@@ -207,8 +218,11 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
       };
       MockedProfileManager.mockImplementation(() => mockInstance);
 
+      // Set profile via environment variable since bootstrap reads from process.env
+      process.env.LLXPRT_PROFILE = 'nonexistent';
+
       const cliArgs = {
-        profileLoad: 'nonexistent',
+        profileLoad: undefined,
         provider: undefined,
         model: undefined,
         sandbox: undefined,
@@ -244,20 +258,33 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
         promptWords: undefined,
       };
 
-      // Mock console.error to avoid actually logging during tests
+      // Mock console.error to verify error was logged
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
 
-      await expect(
-        loadCliConfig(settings, extensions, sessionId, cliArgs),
-      ).rejects.toThrow();
+      // Profile loading errors should be caught and handled gracefully
+      const config = await loadCliConfig(
+        settings,
+        extensions,
+        sessionId,
+        cliArgs,
+      );
+
+      // Verify the profile loading was attempted
       expect(mockInstance.loadProfile).toHaveBeenCalledWith('nonexistent');
+      // Verify the error was logged
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to load profile 'nonexistent'"),
+      );
+      // Verify a config was still returned (graceful degradation)
+      expect(config).toBeDefined();
 
       consoleSpy.mockRestore();
+      delete process.env.LLXPRT_PROFILE;
     });
 
-    it('should throw error when loading corrupted profile', async () => {
+    it('should handle error when loading corrupted profile', async () => {
       const mockInstance = {
         loadProfile: vi
           .fn()
@@ -265,8 +292,11 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
       };
       MockedProfileManager.mockImplementation(() => mockInstance);
 
+      // Set profile via environment variable since bootstrap reads from process.env
+      process.env.LLXPRT_PROFILE = 'corrupted';
+
       const cliArgs = {
-        profileLoad: 'corrupted',
+        profileLoad: undefined,
         provider: undefined,
         model: undefined,
         sandbox: undefined,
@@ -302,20 +332,33 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
         promptWords: undefined,
       };
 
-      // Mock console.error to avoid actually logging during tests
+      // Mock console.error to verify error was logged
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
 
-      await expect(
-        loadCliConfig(settings, extensions, sessionId, cliArgs),
-      ).rejects.toThrow();
+      // Profile loading errors should be caught and handled gracefully
+      const config = await loadCliConfig(
+        settings,
+        extensions,
+        sessionId,
+        cliArgs,
+      );
+
+      // Verify the profile loading was attempted
       expect(mockInstance.loadProfile).toHaveBeenCalledWith('corrupted');
+      // Verify the error was logged
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to load profile 'corrupted'"),
+      );
+      // Verify a config was still returned (graceful degradation)
+      expect(config).toBeDefined();
 
       consoleSpy.mockRestore();
+      delete process.env.LLXPRT_PROFILE;
     });
 
-    it('should throw error when loading invalid profile with missing fields', async () => {
+    it('should handle error when loading invalid profile with missing fields', async () => {
       const mockInstance = {
         loadProfile: vi
           .fn()
@@ -325,8 +368,11 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
       };
       MockedProfileManager.mockImplementation(() => mockInstance);
 
+      // Set profile via environment variable since bootstrap reads from process.env
+      process.env.LLXPRT_PROFILE = 'invalid';
+
       const cliArgs = {
-        profileLoad: 'invalid',
+        profileLoad: undefined,
         provider: undefined,
         model: undefined,
         sandbox: undefined,
@@ -362,20 +408,33 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
         promptWords: undefined,
       };
 
-      // Mock console.error to avoid actually logging during tests
+      // Mock console.error to verify error was logged
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
 
-      await expect(
-        loadCliConfig(settings, extensions, sessionId, cliArgs),
-      ).rejects.toThrow();
+      // Profile loading errors should be caught and handled gracefully
+      const config = await loadCliConfig(
+        settings,
+        extensions,
+        sessionId,
+        cliArgs,
+      );
+
+      // Verify the profile loading was attempted
       expect(mockInstance.loadProfile).toHaveBeenCalledWith('invalid');
+      // Verify the error was logged
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to load profile 'invalid'"),
+      );
+      // Verify a config was still returned (graceful degradation)
+      expect(config).toBeDefined();
 
       consoleSpy.mockRestore();
+      delete process.env.LLXPRT_PROFILE;
     });
 
-    it('should throw error for unsupported profile version', async () => {
+    it('should handle error for unsupported profile version', async () => {
       const mockInstance = {
         loadProfile: vi
           .fn()
@@ -383,8 +442,11 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
       };
       MockedProfileManager.mockImplementation(() => mockInstance);
 
+      // Set profile via environment variable since bootstrap reads from process.env
+      process.env.LLXPRT_PROFILE = 'old-version';
+
       const cliArgs = {
-        profileLoad: 'old-version',
+        profileLoad: undefined,
         provider: undefined,
         model: undefined,
         sandbox: undefined,
@@ -420,22 +482,35 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
         promptWords: undefined,
       };
 
-      // Mock console.error to avoid actually logging during tests
+      // Mock console.error to verify error was logged
       const consoleSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => {});
 
-      await expect(
-        loadCliConfig(settings, extensions, sessionId, cliArgs),
-      ).rejects.toThrow();
+      // Profile loading errors should be caught and handled gracefully
+      const config = await loadCliConfig(
+        settings,
+        extensions,
+        sessionId,
+        cliArgs,
+      );
+
+      // Verify the profile loading was attempted
       expect(mockInstance.loadProfile).toHaveBeenCalledWith('old-version');
+      // Verify the error was logged
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to load profile 'old-version'"),
+      );
+      // Verify a config was still returned (graceful degradation)
+      expect(config).toBeDefined();
 
       consoleSpy.mockRestore();
+      delete process.env.LLXPRT_PROFILE;
     });
   });
 
   describe('Invalid provider handling', () => {
-    it('should throw error when explicitly setting invalid provider without profile', async () => {
+    it('should accept explicitly set provider without profile', async () => {
       const cliArgs = {
         profileLoad: undefined,
         provider: 'nonexistent-provider',
@@ -473,7 +548,8 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
         promptWords: undefined,
       };
 
-      // Call loadCliConfig and verify it doesn't fallback to gemini
+      // Call loadCliConfig and verify it accepts the provider even if it doesn't exist
+      // This allows for custom/unknown providers to be used
       const config = await loadCliConfig(
         settings,
         extensions,

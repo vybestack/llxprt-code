@@ -20,12 +20,13 @@ import {
   ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
   ToolCallResponseInfo,
-  ToolCall, // Import from core
+  ToolCall,
   Status as ToolCallStatusType,
   ApprovalMode,
   AnyDeclarativeTool,
   AnyToolInvocation,
   MockTool,
+  CompletedToolCall,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItemWithoutId, HistoryItemToolGroup } from '../types.js';
 import { ToolCallStatus } from '../types.js';
@@ -132,6 +133,7 @@ describe('useReactToolScheduler in YOLO Mode', () => {
       callId: 'yoloCall',
       name: 'mockToolRequiresConfirmation',
       args: { data: 'any data' },
+      agentId: 'agent-yolo',
     } as any;
 
     act(() => {
@@ -155,31 +157,29 @@ describe('useReactToolScheduler in YOLO Mode', () => {
       undefined /*updateOutputFn*/,
     );
 
-    // Check that onComplete was called with success
-    expect(onComplete).toHaveBeenCalledWith([
-      expect.objectContaining({
-        status: 'success',
-        request,
-        response: expect.objectContaining({
-          resultDisplay: 'YOLO Formatted tool output',
-          responseParts: [
-            {
-              functionCall: {
-                id: 'yoloCall',
-                name: 'mockToolRequiresConfirmation',
-                args: { data: 'any data' },
-              },
-            },
-            {
-              functionResponse: {
-                id: 'yoloCall',
-                name: 'mockToolRequiresConfirmation',
-                response: { output: expectedOutput },
-              },
-            },
-          ],
-        }),
-      }),
+    const completedCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    expect(completedCalls).toHaveLength(1);
+    const completedCall = completedCalls[0];
+    expect(completedCall.status).toBe('success');
+    expect(completedCall.request.agentId).toBe('agent-yolo');
+    expect(completedCall.response?.resultDisplay).toBe(
+      'YOLO Formatted tool output',
+    );
+    expect(completedCall.response?.responseParts).toEqual([
+      {
+        functionCall: {
+          id: 'yoloCall',
+          name: 'mockToolRequiresConfirmation',
+          args: { data: 'any data' },
+        },
+      },
+      {
+        functionResponse: {
+          id: 'yoloCall',
+          name: 'mockToolRequiresConfirmation',
+          response: { output: expectedOutput },
+        },
+      },
     ]);
 
     // Ensure no confirmation UI was triggered (setPendingHistoryItem should not have been called with confirmation details)
@@ -189,6 +189,68 @@ describe('useReactToolScheduler in YOLO Mode', () => {
       return item?.tools?.[0]?.confirmationDetails;
     });
     expect(confirmationCall).toBeUndefined();
+  });
+});
+
+describe('useReactToolScheduler agentId propagation', () => {
+  let onComplete: Mock;
+  let setPendingHistoryItem: Mock;
+
+  beforeEach(() => {
+    onComplete = vi.fn();
+    setPendingHistoryItem = vi.fn();
+    mockToolRegistry.getTool.mockClear();
+    (mockTool.execute as Mock).mockReset();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  const renderScheduler = () =>
+    renderHook(() =>
+      useReactToolScheduler(
+        onComplete,
+        mockConfig as unknown as Config,
+        setPendingHistoryItem,
+        () => undefined,
+        () => {},
+      ),
+    );
+
+  it('defaults agentId to primary when schedule is invoked without one', async () => {
+    mockToolRegistry.getTool.mockReturnValue(mockTool);
+    (mockTool.execute as Mock).mockResolvedValue({
+      llmContent: 'default output',
+      returnDisplay: 'default output',
+    } as ToolResult);
+
+    const { result } = renderScheduler();
+    const schedule = result.current[1];
+    const requestWithoutAgent = {
+      callId: 'no-agent',
+      name: 'mockTool',
+      args: {},
+    } as ToolCallRequestInfo;
+
+    act(() => {
+      schedule(requestWithoutAgent, new AbortController().signal);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    const completedCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    expect(completedCalls[0].request.agentId).toBe('primary');
   });
 });
 
@@ -214,6 +276,7 @@ describe('useReactToolScheduler', () => {
         // Loosen the type for prevState to allow for more flexible updates in tests
         const prevState: Partial<HistoryItemToolGroup> = {
           type: 'tool_group', // Still default to tool_group for most cases
+          agentId: 'primary',
           tools: [],
         };
 
@@ -312,30 +375,27 @@ describe('useReactToolScheduler', () => {
       expect.any(AbortSignal),
       undefined /*updateOutputFn*/,
     );
-    expect(onComplete).toHaveBeenCalledWith([
-      expect.objectContaining({
-        status: 'success',
-        request,
-        response: expect.objectContaining({
-          resultDisplay: 'Formatted tool output',
-          responseParts: [
-            {
-              functionCall: {
-                id: 'call1',
-                name: 'mockTool',
-                args: { param: 'value' },
-              },
-            },
-            {
-              functionResponse: {
-                id: 'call1',
-                name: 'mockTool',
-                response: { output: 'Tool output' },
-              },
-            },
-          ],
-        }),
-      }),
+    const completedCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    expect(completedCalls).toHaveLength(1);
+    const completedCall = completedCalls[0];
+    expect(completedCall.status).toBe('success');
+    expect(completedCall.request.agentId).toBe('primary');
+    expect(completedCall.response?.resultDisplay).toBe('Formatted tool output');
+    expect(completedCall.response?.responseParts).toEqual([
+      {
+        functionCall: {
+          id: 'call1',
+          name: 'mockTool',
+          args: { param: 'value' },
+        },
+      },
+      {
+        functionResponse: {
+          id: 'call1',
+          name: 'mockTool',
+          response: { output: 'Tool output' },
+        },
+      },
     ]);
     expect(result.current[0]).toEqual([]);
   });
@@ -360,20 +420,13 @@ describe('useReactToolScheduler', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(onComplete).toHaveBeenCalledWith([
-      expect.objectContaining({
-        status: 'error',
-        request,
-        response: expect.objectContaining({
-          error: expect.objectContaining({
-            message: expect.stringMatching(
-              /Tool "nonexistentTool" not found in registry/,
-            ),
-          }),
-        }),
-      }),
-    ]);
-    const errorMessage = onComplete.mock.calls[0][0][0].response.error.message;
+    const completionArgs = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    expect(completionArgs).toHaveLength(1);
+    const failedCall = completionArgs[0];
+    expect(failedCall.status).toBe('error');
+    expect(failedCall.request.agentId).toBe('primary');
+    const errorMessage = failedCall.response?.error?.message ?? '';
+    expect(errorMessage).toContain('could not be loaded');
     expect(errorMessage).toContain('Did you mean one of:');
     expect(errorMessage).toContain('"mockTool"');
     expect(errorMessage).toContain('"anotherTool"');
@@ -403,15 +456,12 @@ describe('useReactToolScheduler', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(onComplete).toHaveBeenCalledWith([
-      expect.objectContaining({
-        status: 'error',
-        request,
-        response: expect.objectContaining({
-          error: confirmError,
-        }),
-      }),
-    ]);
+    const errorCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    expect(errorCalls).toHaveLength(1);
+    const errorCall = errorCalls[0];
+    expect(errorCall.status).toBe('error');
+    expect(errorCall.request.agentId).toBe('primary');
+    expect(errorCall.response?.error?.message).toBe(confirmError.message);
     expect(result.current[0]).toEqual([]);
   });
 
@@ -442,15 +492,12 @@ describe('useReactToolScheduler', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(onComplete).toHaveBeenCalledWith([
-      expect.objectContaining({
-        status: 'error',
-        request,
-        response: expect.objectContaining({
-          error: execError,
-        }),
-      }),
-    ]);
+    const executeCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
+    expect(executeCalls).toHaveLength(1);
+    const execCall = executeCalls[0];
+    expect(execCall.status).toBe('error');
+    expect(execCall.request.agentId).toBe('primary');
+    expect(execCall.response?.error?.message).toBe(execError.message);
     expect(result.current[0]).toEqual([]);
   });
 
@@ -703,7 +750,7 @@ describe('useReactToolScheduler', () => {
     });
 
     expect(onComplete).toHaveBeenCalledTimes(1);
-    const completedCalls = onComplete.mock.calls[0][0] as ToolCall[];
+    const completedCalls = onComplete.mock.calls[0][0] as CompletedToolCall[];
     expect(completedCalls.length).toBe(2);
 
     const call1Result = completedCalls.find(
@@ -846,6 +893,7 @@ describe('mapToDisplay', () => {
     ],
     resultDisplay: 'Test display output',
     error: undefined,
+    agentId: 'primary',
   } as any;
 
   // Define a more specific type for extraProps for these tests

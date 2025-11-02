@@ -75,6 +75,23 @@ class MockSettingsService {
     this.settings = { ...this.settings, ...updates };
   }
 
+  set(key: string, value: unknown): void {
+    if (key.includes('.')) {
+      const segments = key.split('.');
+      let current = this.settings;
+      for (let i = 0; i < segments.length - 1; i++) {
+        const segment = segments[i];
+        if (typeof current[segment] !== 'object' || current[segment] === null) {
+          current[segment] = {};
+        }
+        current = current[segment] as Record<string, unknown>;
+      }
+      current[segments[segments.length - 1]] = value;
+    } else {
+      this.settings[key] = value;
+    }
+  }
+
   setCurrentProfileName(profileName: string | null): void {
     this.currentProfileName = profileName;
   }
@@ -189,7 +206,7 @@ describe('Profile Integration Tests', () => {
     });
 
     // Save profile through new integrated method
-    await profileManager.save('test-profile');
+    await profileManager.save('test-profile', settingsService);
 
     // Verify the profile was saved to file
     expect(mockFs.writeFile).toHaveBeenCalled();
@@ -208,7 +225,7 @@ describe('Profile Integration Tests', () => {
     });
 
     // Load the profile
-    await profileManager.load('test-profile');
+    await profileManager.load('test-profile', settingsService);
 
     // Verify settings were restored
     const currentSettings = await settingsService.getSettings();
@@ -227,7 +244,7 @@ describe('Profile Integration Tests', () => {
     });
 
     // Load a profile
-    await profileManager.load('test-profile');
+    await profileManager.load('test-profile', settingsService);
 
     // Verify event was emitted
     expect(profileLoadedEvents).toHaveLength(1);
@@ -257,7 +274,9 @@ describe('Profile Integration Tests', () => {
     });
 
     // Both integrated and direct operations should work
-    await expect(manager.save('test-profile')).resolves.not.toThrow();
+    await expect(
+      manager.save('test-profile', settingsService),
+    ).resolves.not.toThrow();
 
     await expect(
       manager.saveProfile('test-profile', testProfile),

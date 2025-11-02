@@ -5,12 +5,16 @@
  */
 
 import React, { useMemo } from 'react';
-import { Box } from 'ink';
+import { Box, Text } from 'ink';
 import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { ToolMessage } from './ToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { Colors } from '../../colors.js';
-import { Config, formatTodoListForDisplay } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  DEFAULT_AGENT_ID,
+  formatTodoListForDisplay,
+} from '@vybestack/llxprt-code-core';
 import { SHELL_COMMAND_NAME } from '../../constants.js';
 import { useTodoContext } from '../../contexts/TodoContext.js';
 import { useToolCallContext } from '../../contexts/ToolCallContext.js';
@@ -18,6 +22,7 @@ import { useToolCallContext } from '../../contexts/ToolCallContext.js';
 interface ToolGroupMessageProps {
   groupId: number;
   toolCalls: IndividualToolCallDisplay[];
+  agentId?: string;
   availableTerminalHeight?: number;
   terminalWidth: number;
   config: Config;
@@ -77,6 +82,7 @@ const deriveTodoCount = (
 // Main component renders the border and maps the tools using ToolMessage
 export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   toolCalls,
+  agentId,
   availableTerminalHeight,
   terminalWidth,
   config,
@@ -195,6 +201,11 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
       borderColor={borderColor}
       gap={1}
     >
+      {agentId && agentId !== DEFAULT_AGENT_ID && (
+        <Box marginLeft={1}>
+          <Text color={Colors.AccentCyan}>{`Agent: ${agentId}`}</Text>
+        </Box>
+      )}
       {filteredToolCalls.map((tool) => {
         const isConfirming = toolAwaitingApproval?.callId === tool.callId;
         return (

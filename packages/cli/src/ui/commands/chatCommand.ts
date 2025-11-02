@@ -23,6 +23,7 @@ import {
 import path from 'path';
 import { HistoryItemWithoutId, MessageType } from '../types.js';
 import { Part } from '@google/genai';
+import { type CommandArgumentSchema } from './schema/types.js';
 
 interface ChatDetail {
   name: string;
@@ -67,6 +68,35 @@ const getSavedChatTags = async (
     return [];
   }
 };
+
+const checkpointSuggestionDescription = 'Saved conversation checkpoint';
+const chatTagSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'tag',
+    description: 'Select saved checkpoint',
+    /**
+     * @plan:PLAN-20251013-AUTOCOMPLETE.P11
+     * @requirement:REQ-004
+     * Schema completer replaces legacy checkpoint completion.
+     */
+    completer: async (ctx, partialArg) => {
+      const chatDetails = await getSavedChatTags(ctx, true);
+      const normalizedPartial = partialArg.toLowerCase();
+      return chatDetails
+        .map((chat) => chat.name)
+        .filter((name) =>
+          normalizedPartial.length === 0
+            ? true
+            : name.toLowerCase().startsWith(normalizedPartial),
+        )
+        .map((name) => ({
+          value: name,
+          description: checkpointSuggestionDescription,
+        }));
+    },
+  },
+];
 
 const listCommand: SlashCommand = {
   name: 'list',
@@ -176,6 +206,7 @@ const resumeCommand: SlashCommand = {
   description:
     'Resume a conversation from a checkpoint. Usage: /chat resume <tag>',
   kind: CommandKind.BUILT_IN,
+  schema: chatTagSchema,
   action: async (context, args) => {
     const tag = args.trim();
     if (!tag) {
@@ -262,18 +293,13 @@ const resumeCommand: SlashCommand = {
       clientHistory: conversation,
     };
   },
-  completion: async (context, partialArg) => {
-    const chatDetails = await getSavedChatTags(context, true);
-    return chatDetails
-      .map((chat) => chat.name)
-      .filter((name) => name.startsWith(partialArg));
-  },
 };
 
 const deleteCommand: SlashCommand = {
   name: 'delete',
   description: 'Delete a conversation checkpoint. Usage: /chat delete <tag>',
   kind: CommandKind.BUILT_IN,
+  schema: chatTagSchema,
   action: async (context, args): Promise<MessageActionReturn> => {
     const tag = args.trim();
     if (!tag) {
@@ -301,12 +327,6 @@ const deleteCommand: SlashCommand = {
         content: `Error: No checkpoint found with tag '${decodeTagName(tag)}'.`,
       };
     }
-  },
-  completion: async (context, partialArg) => {
-    const chatDetails = await getSavedChatTags(context, true);
-    return chatDetails
-      .map((chat) => chat.name)
-      .filter((name) => name.startsWith(partialArg));
   },
 };
 

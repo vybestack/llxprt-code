@@ -14,7 +14,7 @@ import React, {
 } from 'react';
 import { HistoryItem, MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { useRuntimeApi, getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { Config, getErrorMessage } from '@vybestack/llxprt-code-core';
 import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
 import { loadSettings } from '../../config/settings.js';
@@ -31,34 +31,6 @@ import {
   AppAction,
   AppState,
 } from '../reducers/appReducer.js';
-
-// Helper functions
-function getDisplayModelName(config: Config): string {
-  try {
-    const providerManager = getProviderManager();
-    if (providerManager.hasActiveProvider()) {
-      const provider = providerManager.getActiveProvider();
-      const model = provider.getCurrentModel?.() || 'unknown';
-      return `${provider.name}:${model}`;
-    }
-  } catch (_e) {
-    // Fall back to config model if provider manager fails
-  }
-  return config.getModel();
-}
-
-function getProviderPaymentMode(): boolean | undefined {
-  try {
-    const providerManager = getProviderManager();
-    if (providerManager.hasActiveProvider()) {
-      const provider = providerManager.getActiveProvider();
-      return provider.isPaidMode?.();
-    }
-  } catch (_e) {
-    // Return undefined if we can't determine payment mode
-  }
-  return undefined;
-}
 
 // Context type
 export interface SessionContextType {
@@ -104,21 +76,16 @@ export const SessionController: React.FC<SessionControllerProps> = ({
   config,
   isAuthenticating = false,
 }) => {
-  // Initialize state with current values
-  const getInitialProvider = () => {
-    try {
-      const providerManager = getProviderManager();
-      return providerManager.getActiveProvider().name;
-    } catch (_e) {
-      return undefined;
-    }
-  };
+  const runtime = useRuntimeApi();
+  const statusSnapshot = runtime.getActiveProviderStatus();
 
-  // Get initial state for the provider
   const initialState: SessionState = {
-    currentModel: getDisplayModelName(config),
-    isPaidMode: getProviderPaymentMode(),
-    lastProvider: getInitialProvider(),
+    currentModel:
+      statusSnapshot.providerName && statusSnapshot.modelName
+        ? `${statusSnapshot.providerName}:${statusSnapshot.modelName}`
+        : (statusSnapshot.modelName ?? config.getModel()),
+    isPaidMode: statusSnapshot.isPaidMode,
+    lastProvider: statusSnapshot.providerName ?? undefined,
     userTier: undefined,
     transientWarnings: [],
   };
@@ -148,16 +115,10 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   // Check payment mode change function
   const checkPaymentModeChange = useCallback(
     (forcePreviousProvider?: string) => {
-      const newPaymentMode = getProviderPaymentMode();
-      let currentProviderName: string | undefined;
-
-      try {
-        const providerManager = getProviderManager();
-        const provider = providerManager.getActiveProvider();
-        currentProviderName = provider.name;
-      } catch (_e) {
-        // ignore
-      }
+      const runtime = getRuntimeApi();
+      const status = runtime.getActiveProviderStatus();
+      const newPaymentMode = status.isPaidMode;
+      const currentProviderName = status.providerName ?? undefined;
 
       const previousProvider =
         forcePreviousProvider || sessionState.lastProvider;
@@ -174,42 +135,32 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         dispatch({ type: 'SET_PAID_MODE', payload: newPaymentMode });
         dispatch({ type: 'SET_LAST_PROVIDER', payload: currentProviderName });
 
-        try {
-          const providerManager = getProviderManager();
-          const provider = providerManager.getActiveProvider();
-
-          // Only show payment mode warnings for Gemini provider
-          if (provider.name === 'gemini') {
-            if (newPaymentMode === true) {
-              dispatch({
-                type: 'SET_TRANSIENT_WARNINGS',
-                payload: [
-                  `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
-                ],
-              });
-            } else if (newPaymentMode === false) {
-              dispatch({
-                type: 'SET_TRANSIENT_WARNINGS',
-                payload: [
-                  `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
-                ],
-              });
-            }
+        if (status.providerName === 'gemini') {
+          if (newPaymentMode === true) {
+            dispatch({
+              type: 'SET_TRANSIENT_WARNINGS',
+              payload: [
+                `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
+              ],
+            });
+          } else if (newPaymentMode === false) {
+            dispatch({
+              type: 'SET_TRANSIENT_WARNINGS',
+              payload: [
+                `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+              ],
+            });
           }
-
-          // Clear warning timer if exists
-          if (warningTimerRef.current) {
-            clearTimeout(warningTimerRef.current);
-          }
-
-          // Clear the warning after 10 seconds
-          warningTimerRef.current = setTimeout(() => {
-            dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
-            warningTimerRef.current = null;
-          }, 10000);
-        } catch (_e) {
-          // ignore
         }
+
+        if (warningTimerRef.current) {
+          clearTimeout(warningTimerRef.current);
+        }
+
+        warningTimerRef.current = setTimeout(() => {
+          dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
+          warningTimerRef.current = null;
+        }, 10000);
       }
     },
     [
@@ -277,12 +228,17 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   // Watch for model changes
   useEffect(() => {
     const checkModelChange = () => {
-      const displayModel = getDisplayModelName(config);
+      const runtime = getRuntimeApi();
+      const status = runtime.getActiveProviderStatus();
+      const displayModel =
+        status.providerName && status.modelName
+          ? `${status.providerName}:${status.modelName}`
+          : (status.modelName ?? config.getModel());
       if (displayModel !== sessionState.currentModel) {
         dispatch({ type: 'SET_CURRENT_MODEL', payload: displayModel });
       }
 
-      const paymentMode = getProviderPaymentMode();
+      const paymentMode = status.isPaidMode;
       if (paymentMode !== sessionState.isPaidMode) {
         dispatch({ type: 'SET_PAID_MODE', payload: paymentMode });
 
@@ -291,42 +247,32 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
           sessionState.isPaidMode !== undefined &&
           history.length > 0
         ) {
-          try {
-            const providerManager = getProviderManager();
-            const provider = providerManager.getActiveProvider();
-
-            // Only show payment mode warnings for Gemini provider
-            if (provider.name === 'gemini') {
-              if (paymentMode === true) {
-                dispatch({
-                  type: 'SET_TRANSIENT_WARNINGS',
-                  payload: [
-                    `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
-                  ],
-                });
-              } else if (paymentMode === false) {
-                dispatch({
-                  type: 'SET_TRANSIENT_WARNINGS',
-                  payload: [
-                    `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
-                  ],
-                });
-              }
+          if (status.providerName === 'gemini') {
+            if (paymentMode === true) {
+              dispatch({
+                type: 'SET_TRANSIENT_WARNINGS',
+                payload: [
+                  `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
+                ],
+              });
+            } else if (paymentMode === false) {
+              dispatch({
+                type: 'SET_TRANSIENT_WARNINGS',
+                payload: [
+                  `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+                ],
+              });
             }
-
-            // Clear warning timer if exists
-            if (warningTimerRef.current) {
-              clearTimeout(warningTimerRef.current);
-            }
-
-            // Clear the warning after 10 seconds
-            warningTimerRef.current = setTimeout(() => {
-              dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
-              warningTimerRef.current = null;
-            }, 10000);
-          } catch (_e) {
-            // ignore
           }
+
+          if (warningTimerRef.current) {
+            clearTimeout(warningTimerRef.current);
+          }
+
+          warningTimerRef.current = setTimeout(() => {
+            dispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
+            warningTimerRef.current = null;
+          }, 10000);
         }
       }
     };
@@ -347,6 +293,8 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     history.length,
     dispatch,
   ]);
+
+  // Flash fallback removed in main - no longer needed
 
   // Handle ADD_ITEM actions
   useEffect(() => {

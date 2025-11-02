@@ -12,6 +12,7 @@ import {
   Todo,
   ApprovalMode,
   todoEvents,
+  createRuntimeStateFromConfig,
   type TodoUpdateEvent,
   type Turn,
   type ServerGeminiStreamEvent,
@@ -62,7 +63,11 @@ describe('Todo Continuation Integration Tests', () => {
 
     await config.initialize();
 
-    geminiClient = new GeminiClient(config);
+    const runtimeState = createRuntimeStateFromConfig(config, {
+      runtimeId: `${sessionId}-todo-runtime`,
+    });
+
+    geminiClient = new GeminiClient(config, runtimeState);
   });
 
   afterEach(async () => {

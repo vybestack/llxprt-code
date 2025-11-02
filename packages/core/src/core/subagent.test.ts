@@ -14,10 +14,29 @@ import {
   RunConfig,
   OutputConfig,
   ToolConfig,
+  SubAgentRuntimeOverrides,
 } from './subagent.js';
 import { Config, ConfigParameters } from '../config/config.js';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
-import { createContentGenerator, AuthType } from './contentGenerator.js';
+import {
+  createContentGenerator,
+  AuthType,
+  type ContentGenerator,
+} from './contentGenerator.js';
+import { SettingsService } from '../settings/SettingsService.js';
+import {
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  type ProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
+import type {
+  AgentRuntimeContext,
+  AgentRuntimeProviderAdapter,
+  AgentRuntimeTelemetryAdapter,
+  ToolRegistryView,
+} from '../runtime/AgentRuntimeContext.js';
+import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
+import type { IProvider } from '../providers/IProvider.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
@@ -29,11 +48,30 @@ import {
   GenerateContentConfig,
   Type,
   GenerateContentResponse,
+  Part,
 } from '@google/genai';
 import { ToolErrorType } from '../tools/tool-error.js';
+import type { HistoryService } from '../services/history/HistoryService.js';
+const { mockReadTodos, TodoStoreMock } = vi.hoisted(() => {
+  const mockReadTodos = vi.fn().mockResolvedValue([]);
+  const TodoStoreMock = vi
+    .fn()
+    .mockImplementation(() => ({ readTodos: mockReadTodos }));
+  return { mockReadTodos, TodoStoreMock };
+});
+
+vi.mock('../tools/todo-store.js', () => ({
+  TodoStore: TodoStoreMock,
+}));
 
 vi.mock('./geminiChat.js');
-vi.mock('./contentGenerator.js');
+vi.mock('./contentGenerator.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./contentGenerator.js')>();
+  return {
+    ...actual,
+    createContentGenerator: vi.fn(),
+  };
+});
 vi.mock('../utils/environmentContext.js');
 vi.mock('./nonInteractiveToolExecutor.js');
 vi.mock('../ide/ide-client.js');
@@ -41,12 +79,17 @@ vi.mock('../ide/ide-client.js');
 async function createMockConfig(
   toolRegistryMocks = {},
 ): Promise<{ config: Config; toolRegistry: ToolRegistry }> {
+  const settingsService = new SettingsService();
+  setActiveProviderRuntimeContext(
+    createProviderRuntimeContext({ settingsService }),
+  );
   const configParams: ConfigParameters = {
     sessionId: 'test-session',
     model: DEFAULT_GEMINI_MODEL,
     targetDir: '.',
     debugMode: false,
     cwd: process.cwd(),
+    settingsService,
   };
   const config = new Config(configParams);
   await config.initialize();
@@ -136,8 +179,204 @@ describe('subagent.ts', () => {
       max_turns: 10,
     };
 
+    const createStatelessRuntimeBundle = (
+      options: {
+        toolsView?: ToolRegistryView;
+        providerAdapter?: AgentRuntimeProviderAdapter;
+        telemetryAdapter?: AgentRuntimeTelemetryAdapter;
+        contentGenerator?: ContentGenerator;
+        toolRegistry?: ToolRegistry;
+      } = {},
+    ): AgentRuntimeLoaderResult => {
+      const toolsView =
+        options.toolsView ??
+        ({
+          listToolNames: vi.fn(() => []),
+          getToolMetadata: vi.fn(() => undefined),
+        } as ToolRegistryView);
+
+      const providerAdapter =
+        options.providerAdapter ??
+        ({
+          getActiveProvider: vi.fn(
+            () =>
+              ({
+                name: 'gemini',
+                generateChatCompletion: vi.fn(async function* () {
+                  yield { speaker: 'ai', blocks: [] };
+                }),
+                getDefaultModel: () => defaultModelConfig.model,
+                getServerTools: () => [],
+                invokeServerTool: vi.fn(),
+              }) as IProvider,
+          ),
+          setActiveProvider: vi.fn(),
+        } as AgentRuntimeProviderAdapter);
+
+      const telemetryAdapter =
+        options.telemetryAdapter ??
+        ({
+          logApiRequest: vi.fn(),
+          logApiResponse: vi.fn(),
+          logApiError: vi.fn(),
+        } as AgentRuntimeTelemetryAdapter);
+
+      const history = {
+        clear: vi.fn(),
+        add: vi.fn(),
+        getCuratedForProvider: vi.fn(() => []),
+        getIdGeneratorCallback: vi.fn(() => vi.fn()),
+        findUnmatchedToolCalls: vi.fn(() => []),
+      } as unknown as HistoryService;
+
+      const toolRegistry =
+        options.toolRegistry ??
+        ({
+          getTool: vi.fn(),
+          getFunctionDeclarationsFiltered: vi.fn(() => []),
+          getAllTools: vi.fn(() => []),
+        } as unknown as ToolRegistry);
+
+      const runtimeContext: AgentRuntimeContext = {
+        state: {
+          runtimeId: 'runtime-123',
+          provider: 'gemini',
+          model: defaultModelConfig.model,
+          authType: AuthType.USE_PROVIDER,
+          sessionId: 'runtime-session',
+          authPayload: undefined,
+          proxyUrl: undefined,
+          modelParams: {
+            temperature: defaultModelConfig.temp,
+            topP: defaultModelConfig.top_p,
+          },
+        },
+        history,
+        ephemerals: {
+          compressionThreshold: () => 0.8,
+          contextLimit: () => 60_000,
+          preserveThreshold: () => 0.2,
+          toolFormatOverride: () => undefined,
+        },
+        telemetry: telemetryAdapter,
+        provider: providerAdapter,
+        tools: toolsView,
+        providerRuntime: {
+          runtimeId: 'runtime-123',
+          metadata: {},
+          settingsService: {
+            get: vi.fn(),
+            set: vi.fn(),
+          },
+        } as unknown as ProviderRuntimeContext,
+      };
+
+      const contentGenerator =
+        options.contentGenerator ??
+        ({
+          generateContent: vi.fn(),
+          generateContentStream: vi.fn(),
+          countTokens: vi.fn(),
+        } as unknown as ContentGenerator);
+
+      return {
+        runtimeContext,
+        history,
+        providerAdapter,
+        telemetryAdapter,
+        toolsView,
+        contentGenerator,
+        toolRegistry,
+      };
+    };
+
+    type EnvironmentLoader = (runtime: AgentRuntimeContext) => Promise<Part[]>;
+
+    const DEFAULT_ENV_CONTEXT: Part[] = [{ text: 'Env Context' }];
+
+    const defaultEnvironmentLoader = (): EnvironmentLoader =>
+      vi.fn(async () => DEFAULT_ENV_CONTEXT);
+
+    const createRuntimeOverrides = (
+      options: {
+        runtimeBundle?: AgentRuntimeLoaderResult;
+        environmentLoader?: EnvironmentLoader;
+        toolRegistry?: ToolRegistry;
+      } = {},
+    ): {
+      overrides: SubAgentRuntimeOverrides;
+      runtimeBundle: AgentRuntimeLoaderResult;
+      environmentLoader: EnvironmentLoader;
+    } => {
+      const runtimeBundle =
+        options.runtimeBundle ??
+        createStatelessRuntimeBundle({
+          toolRegistry: options.toolRegistry,
+        });
+
+      const environmentLoader =
+        options.environmentLoader ?? defaultEnvironmentLoader();
+
+      const overrides: SubAgentRuntimeOverrides = {
+        runtimeBundle,
+        environmentContextLoader: environmentLoader,
+      };
+
+      if (options.toolRegistry) {
+        overrides.toolRegistry = options.toolRegistry;
+      }
+
+      return { overrides, runtimeBundle, environmentLoader };
+    };
+
+    describe('Stateless compliance (STATELESS7)', () => {
+      it('should not read provider manager directly from Config', async () => {
+        const { config } = await createMockConfig();
+        const promptConfig: PromptConfig = { systemPrompt: 'Stateless' };
+        const getProviderManagerSpy = vi.spyOn(config, 'getProviderManager');
+
+        const providerAdapter: AgentRuntimeProviderAdapter = {
+          getActiveProvider: vi.fn(
+            () =>
+              ({
+                name: 'gemini',
+                generateChatCompletion: vi.fn(async function* () {
+                  yield { speaker: 'ai', blocks: [] };
+                }),
+                getDefaultModel: () => defaultModelConfig.model,
+                getServerTools: () => [],
+                invokeServerTool: vi.fn(),
+              }) as IProvider,
+          ),
+          setActiveProvider: vi.fn(),
+        };
+
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle: createStatelessRuntimeBundle({
+            providerAdapter,
+          }),
+        });
+
+        await SubAgentScope.create(
+          'stateless-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        expect(getProviderManagerSpy).not.toHaveBeenCalled();
+      });
+    });
+
     beforeEach(async () => {
       vi.clearAllMocks();
+      mockReadTodos.mockReset();
+      mockReadTodos.mockResolvedValue([]);
+      TodoStoreMock.mockClear();
 
       vi.mocked(getEnvironmentContext).mockResolvedValue([
         { text: 'Env Context' },
@@ -180,17 +419,21 @@ describe('subagent.ts', () => {
 
       it('should create a SubAgentScope successfully with minimal config', async () => {
         const { config } = await createMockConfig();
+        const { overrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
           promptConfig,
           defaultModelConfig,
           defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
         );
         expect(scope).toBeInstanceOf(SubAgentScope);
       });
 
-      it('should throw an error if a tool requires confirmation', async () => {
+      it('does not preflight tools even when they request confirmation', async () => {
         const mockTool = {
           schema: { parameters: { type: Type.OBJECT, properties: {} } },
           build: vi.fn().mockReturnValue({
@@ -206,24 +449,40 @@ describe('subagent.ts', () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           getTool: vi.fn().mockReturnValue(mockTool as any),
         });
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry: config.getToolRegistry(),
+          toolsView: {
+            listToolNames: () => ['risky_tool'],
+            getToolMetadata: () => ({
+              name: 'risky_tool',
+              description: 'Risky tool',
+              parameterSchema: { type: Type.OBJECT, properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry: config.getToolRegistry(),
+        });
 
         const toolConfig: ToolConfig = { tools: ['risky_tool'] };
 
-        await expect(
-          SubAgentScope.create(
-            'test-agent',
-            config,
-            promptConfig,
-            defaultModelConfig,
-            defaultRunConfig,
-            toolConfig,
-          ),
-        ).rejects.toThrow(
-          'Tool "risky_tool" requires user confirmation and cannot be used in a non-interactive subagent.',
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          toolConfig,
+          undefined,
+          overrides,
         );
+
+        expect(scope).toBeInstanceOf(SubAgentScope);
+        expect(mockTool.build).not.toHaveBeenCalled();
       });
 
-      it('should succeed if tools do not require confirmation', async () => {
+      it('avoids eagerly building tools when confirmation is not required', async () => {
         const mockTool = {
           schema: { parameters: { type: Type.OBJECT, properties: {} } },
           build: vi.fn().mockReturnValue({
@@ -233,6 +492,21 @@ describe('subagent.ts', () => {
         const { config } = await createMockConfig({
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           getTool: vi.fn().mockReturnValue(mockTool as any),
+        });
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry: config.getToolRegistry(),
+          toolsView: {
+            listToolNames: () => ['safe_tool'],
+            getToolMetadata: () => ({
+              name: 'safe_tool',
+              description: 'Safe tool',
+              parameterSchema: { type: Type.OBJECT, properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry: config.getToolRegistry(),
         });
 
         const toolConfig: ToolConfig = { tools: ['safe_tool'] };
@@ -244,8 +518,12 @@ describe('subagent.ts', () => {
           defaultModelConfig,
           defaultRunConfig,
           toolConfig,
+          undefined,
+          overrides,
         );
+
         expect(scope).toBeInstanceOf(SubAgentScope);
+        expect(mockTool.build).not.toHaveBeenCalled();
       });
 
       it('should skip interactivity check and warn for tools with required parameters', async () => {
@@ -270,6 +548,26 @@ describe('subagent.ts', () => {
         const { config } = await createMockConfig({
           getTool: vi.fn().mockReturnValue(mockToolWithParams),
         });
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry: config.getToolRegistry(),
+          toolsView: {
+            listToolNames: () => ['tool_with_params'],
+            getToolMetadata: () => ({
+              name: 'tool_with_params',
+              description: 'Tool with params',
+              parameterSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  path: { type: Type.STRING },
+                },
+              },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry: config.getToolRegistry(),
+        });
 
         const toolConfig: ToolConfig = { tools: ['tool_with_params'] };
 
@@ -281,19 +579,297 @@ describe('subagent.ts', () => {
           defaultModelConfig,
           defaultRunConfig,
           toolConfig,
+          undefined,
+          overrides,
         );
 
         expect(scope).toBeInstanceOf(SubAgentScope);
 
-        // Check that the warning was logged
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          'Cannot check tool "tool_with_params" for interactivity because it requires parameters. Assuming it is safe for non-interactive use.',
-        );
+        // Ensure no warnings were emitted for parameterised tool checks
+        expect(consoleWarnSpy).not.toHaveBeenCalled();
 
         // Ensure build was never called
         expect(mockToolWithParams.build).not.toHaveBeenCalled();
 
         consoleWarnSpy.mockRestore();
+      });
+    });
+
+    describe('stateless runtime enforcement', () => {
+      it('does not access foreground Config tool registry when runtime bundle provided', async () => {
+        const { config } = await createMockConfig();
+        const runtimeToolsView: ToolRegistryView = {
+          listToolNames: vi.fn(() => ['stateless.tool']),
+          getToolMetadata: vi.fn(() => ({
+            name: 'stateless.tool',
+            description: 'Runtime-only tool',
+            parameterSchema: {
+              type: 'object',
+              properties: {},
+            },
+          })),
+        };
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolsView: runtimeToolsView,
+        });
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        vi.spyOn(config, 'getToolRegistry').mockImplementation(() => {
+          throw new Error(
+            'REGRESSION: foreground Config tool registry should not be used',
+          );
+        });
+
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
+        const scope = await SubAgentScope.create(
+          'stateless-agent',
+          config,
+          { systemPrompt: 'Runtime only' },
+          defaultModelConfig,
+          defaultRunConfig,
+          { tools: ['stateless.tool'] },
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        expect(runtimeToolsView.getToolMetadata).toHaveBeenCalledWith(
+          'stateless.tool',
+        );
+      });
+
+      it('builds tool declarations from runtime tool view metadata', async () => {
+        const { config } = await createMockConfig({
+          getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
+            {
+              name: 'stateless.tool',
+              description: 'CONFIG description',
+              parameters: {
+                type: Type.OBJECT,
+                properties: {},
+              },
+            } as FunctionDeclaration,
+          ]),
+        });
+
+        const runtimeToolsView: ToolRegistryView = {
+          listToolNames: vi.fn(() => ['stateless.tool']),
+          getToolMetadata: vi.fn(() => ({
+            name: 'stateless.tool',
+            description: 'Runtime metadata description',
+            parameterSchema: {
+              type: 'object',
+              properties: {
+                sample: { type: 'string' },
+              },
+            },
+          })),
+        };
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolsView: runtimeToolsView,
+        });
+
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
+        const scope = await SubAgentScope.create(
+          'stateless-agent',
+          config,
+          { systemPrompt: 'Use runtime tools' },
+          defaultModelConfig,
+          defaultRunConfig,
+          { tools: ['stateless.tool'] },
+          undefined,
+          createRuntimeOverrides({ runtimeBundle }).overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        const [messageParams] = mockSendMessageStream.mock.calls[0] ?? [];
+        expect(messageParams).toBeDefined();
+        const toolGroups = messageParams?.config?.tools ?? [];
+        expect(toolGroups).toHaveLength(1);
+        const functionDeclarations = toolGroups[0]?.functionDeclarations ?? [];
+        expect(functionDeclarations).toHaveLength(1);
+        expect(functionDeclarations[0]?.description).toBe(
+          'Runtime metadata description',
+        );
+      });
+
+      it('prefers injected environment context loader over foreground Config', async () => {
+        const { config } = await createMockConfig();
+
+        vi.mocked(getEnvironmentContext).mockImplementation(() => {
+          throw new Error(
+            'REGRESSION: getEnvironmentContext should not be used',
+          );
+        });
+
+        const runtimeBundle = createStatelessRuntimeBundle();
+        const environmentLoader = vi.fn(
+          async (_runtime: AgentRuntimeContext) => [
+            { text: 'Runtime Env Context' },
+          ],
+        );
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          environmentLoader,
+        });
+
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+
+        const scope = await SubAgentScope.create(
+          'stateless-agent',
+          config,
+          { systemPrompt: 'Stateless env' },
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        expect(environmentLoader).toHaveBeenCalledTimes(1);
+        expect(environmentLoader).toHaveBeenCalledWith(
+          runtimeBundle.runtimeContext,
+        );
+
+        const generationConfig = getGenerationConfigFromMock();
+        expect(generationConfig.systemInstruction).toContain(
+          'Runtime Env Context',
+        );
+      });
+
+      it('propagates tool whitelist into tool executor ephemerals', async () => {
+        const { config, toolRegistry } = await createMockConfig({
+          getTool: vi.fn().mockImplementation((name: string) => {
+            if (name === 'read_file') {
+              return {
+                name: 'read_file',
+                displayName: 'Read File',
+                schema: {
+                  name: 'read_file',
+                  parameters: { type: 'object', properties: {} },
+                },
+                build: vi.fn(),
+              };
+            }
+            return undefined;
+          }),
+        });
+        const toolConfig: ToolConfig = { tools: ['read_file'] };
+
+        mockSendMessageStream.mockImplementation(
+          createMockStream([
+            [
+              {
+                id: 'call1',
+                name: 'read_file',
+                args: { file_path: 'README.md' },
+              },
+            ],
+            'stop',
+          ]),
+        );
+
+        vi.mocked(executeToolCall).mockResolvedValue({
+          callId: 'call1',
+          responseParts: [{ text: 'file content' }],
+          resultDisplay: 'ok',
+          agentId: 'subagent-1',
+        } as Awaited<ReturnType<typeof executeToolCall>>);
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry,
+          toolsView: {
+            listToolNames: () => ['read_file'],
+            getToolMetadata: () => ({
+              name: 'read_file',
+              description: 'Reads a file',
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry,
+        });
+
+        const scope = await SubAgentScope.create(
+          'stateless-agent',
+          config,
+          { systemPrompt: 'Tool whitelist' },
+          defaultModelConfig,
+          defaultRunConfig,
+          toolConfig,
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        const [toolExecutorConfig] = vi.mocked(executeToolCall).mock.calls[0];
+        const ephemerals =
+          toolExecutorConfig.getEphemeralSettings?.() ??
+          ({} as Record<string, unknown>);
+        expect(ephemerals['tools.allowed']).toEqual(['read_file']);
+      });
+
+      it('never passes foreground Config into executeToolCall', async () => {
+        const { config } = await createMockConfig();
+        const runtimeBundle = createStatelessRuntimeBundle();
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        const scope = await SubAgentScope.create(
+          'stateless-agent',
+          config,
+          { systemPrompt: 'Tool execution' },
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        vi.mocked(executeToolCall).mockResolvedValue({
+          callId: 'call-1',
+          responseParts: [{ text: 'ok' }],
+          resultDisplay: 'ok',
+        } as unknown as Awaited<ReturnType<typeof executeToolCall>>);
+
+        const fnCalls: FunctionCall[] = [
+          {
+            id: 'call-1',
+            name: 'externalTool',
+            args: {},
+          } as FunctionCall,
+        ];
+
+        const processFunctionCalls = (
+          scope as unknown as {
+            processFunctionCalls: (
+              calls: FunctionCall[],
+              abortController: AbortController,
+              promptId: string,
+            ) => Promise<Content[]>;
+          }
+        ).processFunctionCalls;
+
+        await processFunctionCalls.call(
+          scope,
+          fnCalls,
+          new AbortController(),
+          'prompt-1',
+        );
+
+        for (const call of vi.mocked(executeToolCall).mock.calls) {
+          expect(call[0]).not.toBe(config);
+        }
       });
     });
 
@@ -313,12 +889,17 @@ describe('subagent.ts', () => {
         // Model stops immediately
         mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
+        const runtimeBundle = createStatelessRuntimeBundle();
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
           promptConfig,
           defaultModelConfig,
           defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
         );
 
         await scope.runNonInteractive(context);
@@ -361,6 +942,7 @@ describe('subagent.ts', () => {
         // Model stops immediately
         mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
+        const { overrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
@@ -369,6 +951,7 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined, // ToolConfig
           outputConfig,
+          overrides,
         );
 
         await scope.runNonInteractive(context);
@@ -398,12 +981,16 @@ describe('subagent.ts', () => {
         // Model stops immediately
         mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
+        const { overrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
           promptConfig,
           defaultModelConfig,
           defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
         );
 
         await scope.runNonInteractive(context);
@@ -427,12 +1014,16 @@ describe('subagent.ts', () => {
         context.set('name', 'Agent');
         // 'missing' is not set
 
+        const { overrides: missingOverrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
           promptConfig,
           defaultModelConfig,
           defaultRunConfig,
+          undefined,
+          undefined,
+          missingOverrides,
         );
 
         // The error from templating causes the runNonInteractive to reject and the terminate_reason to be ERROR.
@@ -450,12 +1041,16 @@ describe('subagent.ts', () => {
         };
         const context = new ContextState();
 
+        const { overrides } = createRuntimeOverrides();
         const agent = await SubAgentScope.create(
           'TestAgent',
           config,
           promptConfig,
           defaultModelConfig,
           defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
         );
 
         await expect(agent.runNonInteractive(context)).rejects.toThrow(
@@ -473,12 +1068,16 @@ describe('subagent.ts', () => {
         // Model stops immediately
         mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
+        const { overrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
           promptConfig,
           defaultModelConfig,
           defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
           // No ToolConfig, No OutputConfig
         );
 
@@ -486,11 +1085,66 @@ describe('subagent.ts', () => {
 
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
         expect(scope.output.emitted_vars).toEqual({});
+        expect(scope.output.final_message).toMatch(
+          /Completed the requested task/i,
+        );
         expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
         // Check the initial message
         expect(mockSendMessageStream.mock.calls[0][0].message).toEqual([
-          { text: 'Get Started!' },
+          {
+            text: 'Follow the task directives provided in the system prompt.',
+          },
         ]);
+      });
+
+      it('prompts the model to finish outstanding todos before completing', async () => {
+        const { config } = await createMockConfig();
+
+        mockSendMessageStream.mockImplementation(
+          createMockStream(['stop', 'stop']),
+        );
+
+        mockReadTodos
+          .mockResolvedValueOnce([]) // agent-scoped store (no todos)
+          .mockResolvedValueOnce([
+            {
+              id: 'todo-1',
+              content: 'Complete the technical report',
+              status: 'in_progress',
+              priority: 'high',
+            },
+          ])
+          .mockResolvedValueOnce([]) // agent-scoped store on second pass
+          .mockResolvedValueOnce([
+            {
+              id: 'todo-1',
+              content: 'Complete the technical report',
+              status: 'completed',
+              priority: 'high',
+            },
+          ]);
+
+        const { overrides } = createRuntimeOverrides();
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+        const firstCallMessage =
+          mockSendMessageStream.mock.calls[0]?.[0]?.message;
+        expect(firstCallMessage?.[0]?.text ?? '').toContain(
+          'Follow the task directives provided in the system prompt.',
+        );
+        expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
       });
 
       it('should handle self.emitvalue and terminate with GOAL when outputs are met', async () => {
@@ -516,6 +1170,7 @@ describe('subagent.ts', () => {
           ]),
         );
 
+        const { overrides: emitOverrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
@@ -524,12 +1179,14 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           outputConfig,
+          emitOverrides,
         );
 
         await scope.runNonInteractive(new ContextState());
 
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
         expect(scope.output.emitted_vars).toEqual({ result: 'Success!' });
+        expect(scope.output.final_message).toContain('result=Success');
         expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
 
         // Check the tool response sent back in the second call
@@ -577,6 +1234,27 @@ describe('subagent.ts', () => {
           errorType: undefined, // Or ToolErrorType.NONE if available and appropriate
         });
 
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry: config.getToolRegistry(),
+          toolsView: {
+            listToolNames: () => ['list_files'],
+            getToolMetadata: () => ({
+              name: 'list_files',
+              description: 'Lists files',
+              parameterSchema: {
+                type: 'object',
+                properties: {
+                  path: { type: 'string' },
+                },
+              },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry: config.getToolRegistry(),
+        });
+
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
@@ -584,16 +1262,21 @@ describe('subagent.ts', () => {
           defaultModelConfig,
           defaultRunConfig,
           toolConfig,
+          undefined,
+          overrides,
         );
 
         await scope.runNonInteractive(new ContextState());
 
         // Check tool execution
-        expect(executeToolCall).toHaveBeenCalledWith(
-          config,
-          expect.objectContaining({ name: 'list_files', args: { path: '.' } }),
-          expect.any(AbortSignal),
-        );
+        const [toolExecutorConfig, toolRequest, abortSignal] =
+          vi.mocked(executeToolCall).mock.calls[0];
+        expect(toolRequest).toMatchObject({
+          name: 'list_files',
+          args: { path: '.' },
+        });
+        expect(abortSignal).toBeInstanceOf(AbortSignal);
+        expect(typeof toolExecutorConfig.getToolRegistry).toBe('function');
 
         // Check the response sent back to the model
         const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
@@ -632,6 +1315,22 @@ describe('subagent.ts', () => {
           errorType: ToolErrorType.INVALID_TOOL_PARAMS,
         });
 
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry: config.getToolRegistry(),
+          toolsView: {
+            listToolNames: () => ['failing_tool'],
+            getToolMetadata: () => ({
+              name: 'failing_tool',
+              description: 'Fails',
+              parameterSchema: { type: 'object', properties: {} },
+            }),
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry: config.getToolRegistry(),
+        });
+
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
@@ -639,6 +1338,8 @@ describe('subagent.ts', () => {
           defaultModelConfig,
           defaultRunConfig,
           toolConfig,
+          undefined,
+          overrides,
         );
 
         await scope.runNonInteractive(new ContextState());
@@ -651,6 +1352,116 @@ describe('subagent.ts', () => {
             text: 'ERROR: Tool failed catastrophically',
           },
         ]);
+      });
+
+      it('fails fast when a tool is disabled in the current profile', async () => {
+        const listToolNames = () => ['write_file'];
+        const getToolMetadata = () => ({
+          name: 'write_file',
+          description: 'Write files to disk',
+          parameterSchema: {
+            type: 'object',
+            properties: {
+              path: { type: 'string' },
+              content: { type: 'string' },
+            },
+          },
+        });
+
+        const { config } = await createMockConfig({
+          getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
+            {
+              name: 'write_file',
+              description: 'Write files to disk',
+              parameters: {
+                type: Type.OBJECT,
+                properties: {
+                  path: { type: Type.STRING },
+                  content: { type: Type.STRING },
+                },
+              },
+            } as FunctionDeclaration,
+          ]),
+          getTool: vi.fn().mockReturnValue({}),
+        });
+
+        const runtimeBundle = createStatelessRuntimeBundle({
+          toolRegistry: config.getToolRegistry(),
+          toolsView: {
+            listToolNames,
+            getToolMetadata,
+          },
+        });
+        const { overrides } = createRuntimeOverrides({
+          runtimeBundle,
+          toolRegistry: config.getToolRegistry(),
+        });
+
+        mockSendMessageStream.mockImplementation(
+          createMockStream([
+            [
+              {
+                id: 'call_write',
+                name: 'write_file',
+                args: {
+                  path: 'reports/joetest.md',
+                  content: 'hello',
+                },
+              },
+            ],
+            'stop',
+          ]),
+        );
+
+        vi.mocked(executeToolCall).mockResolvedValue({
+          callId: 'call_write',
+          responseParts: [
+            {
+              functionCall: {
+                id: 'call_write',
+                name: 'write_file',
+                args: {
+                  path: 'reports/joetest.md',
+                  content: 'hello',
+                },
+              },
+            },
+            {
+              functionResponse: {
+                id: 'call_write',
+                name: 'write_file',
+                response: {
+                  error:
+                    'Tool "write_file" is disabled in the current profile.',
+                },
+              },
+            },
+          ],
+          resultDisplay:
+            'Tool "write_file" is disabled in the current profile.',
+          error: new Error(
+            'Tool "write_file" is disabled in the current profile.',
+          ),
+          errorType: ToolErrorType.TOOL_DISABLED,
+          agentId: 'test-agent',
+        });
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          promptConfig,
+          defaultModelConfig,
+          defaultRunConfig,
+          { tools: ['write_file'] },
+          undefined,
+          overrides,
+        );
+
+        await scope.runNonInteractive(new ContextState());
+        expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
+        expect(scope.output.final_message).toContain(
+          'Tool "write_file" is not available',
+        );
       });
 
       it('should nudge the model if it stops before emitting all required variables', async () => {
@@ -678,6 +1489,7 @@ describe('subagent.ts', () => {
           ]),
         );
 
+        const { overrides: nudgeOverrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
@@ -686,6 +1498,7 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           outputConfig,
+          nudgeOverrides,
         );
 
         await scope.runNonInteractive(new ContextState());
@@ -739,12 +1552,16 @@ describe('subagent.ts', () => {
           ]),
         );
 
+        const { overrides: maxTurnOverrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
           promptConfig,
           defaultModelConfig,
           runConfig,
+          undefined,
+          undefined,
+          maxTurnOverrides,
         );
 
         await scope.runNonInteractive(new ContextState());
@@ -776,12 +1593,16 @@ describe('subagent.ts', () => {
         // The LLM call will hang until we resolve the promise.
         mockSendMessageStream.mockReturnValue(streamPromise);
 
+        const { overrides: timeoutOverrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
           promptConfig,
           defaultModelConfig,
           runConfig,
+          undefined,
+          undefined,
+          timeoutOverrides,
         );
 
         const runPromise = scope.runNonInteractive(new ContextState());
@@ -807,12 +1628,16 @@ describe('subagent.ts', () => {
         const { config } = await createMockConfig();
         mockSendMessageStream.mockRejectedValue(new Error('API Failure'));
 
+        const { overrides: errorOverrides } = createRuntimeOverrides();
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
           promptConfig,
           defaultModelConfig,
           defaultRunConfig,
+          undefined,
+          undefined,
+          errorOverrides,
         );
 
         await expect(

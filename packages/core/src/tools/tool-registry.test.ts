@@ -25,6 +25,11 @@ import { MockTool } from '../test-utils/tools.js';
 
 import { McpClientManager } from './mcp-client-manager.js';
 import { ToolErrorType } from './tool-error.js';
+import {
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
 
 vi.mock('node:fs');
 
@@ -124,6 +129,7 @@ describe('ToolRegistry', () => {
     vi.mocked(fs.statSync).mockReturnValue({
       isDirectory: () => true,
     } as fs.Stats);
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     config = new Config(baseConfigParams);
     toolRegistry = new ToolRegistry(config);
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -150,6 +156,7 @@ describe('ToolRegistry', () => {
   });
 
   afterEach(() => {
+    clearActiveProviderRuntimeContext();
     vi.restoreAllMocks();
   });
 
@@ -158,6 +165,29 @@ describe('ToolRegistry', () => {
       const tool = new MockTool();
       toolRegistry.registerTool(tool);
       expect(toolRegistry.getTool('mock-tool')).toBe(tool);
+    });
+  });
+
+  describe('tool governance filters', () => {
+    it('respects allowed and disabled lists when exposing declarations', () => {
+      const reader = new MockTool('file-reader');
+      const editor = new MockTool('code-editor');
+
+      toolRegistry.registerTool(reader);
+      toolRegistry.registerTool(editor);
+
+      config.setEphemeralSetting('tools.disabled', ['code-editor']);
+
+      const declarations = toolRegistry.getFunctionDeclarations();
+      expect(declarations.map((decl) => decl.name)).toEqual(['file-reader']);
+
+      config.setEphemeralSetting('tools.disabled', []);
+      config.setEphemeralSetting('tools.allowed', ['code-editor']);
+
+      const allowedDeclarations = toolRegistry.getFunctionDeclarations();
+      expect(allowedDeclarations.map((decl) => decl.name)).toEqual([
+        'code-editor',
+      ]);
     });
   });
 

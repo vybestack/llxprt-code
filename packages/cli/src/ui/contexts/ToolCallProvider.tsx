@@ -15,16 +15,19 @@ import { ToolCallContextType, ToolCallContext } from './ToolCallContext.js';
 import {
   ToolCallTrackerService,
   TodoToolCall,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 
 interface ToolCallProviderProps {
   children: React.ReactNode;
   sessionId: string;
+  agentId?: string;
 }
 
 export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
   children,
   sessionId,
+  agentId,
 }) => {
   // Store executing tool calls in state to trigger re-renders
   const [executingToolCalls, setExecutingToolCalls] = useState<
@@ -41,10 +44,14 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
   );
 
   // Update the state with current tool calls
+  const scopedAgentId = agentId ?? DEFAULT_AGENT_ID;
+
   const updateExecutingToolCalls = useCallback(() => {
     // Get all tool calls for this session
-    const allCalls =
-      ToolCallTrackerService.getAllToolCallsForSession(sessionId);
+    const allCalls = ToolCallTrackerService.getAllToolCallsForSession(
+      sessionId,
+      scopedAgentId,
+    );
 
     // Convert to the format we want for state
     const newExecutingToolCalls = new Map<string, TodoToolCall[]>();
@@ -53,12 +60,13 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
       const allToolCalls = ToolCallTrackerService.getAllToolCalls(
         sessionId,
         todoId,
+        scopedAgentId,
       );
       newExecutingToolCalls.set(todoId, allToolCalls);
     }
 
     setExecutingToolCalls(newExecutingToolCalls);
-  }, [sessionId]);
+  }, [scopedAgentId, sessionId]);
 
   // Set up subscription to tool call updates
   useEffect(() => {
@@ -72,6 +80,7 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
     const unsubscribe = ToolCallTrackerService.subscribeToUpdates(
       sessionId,
       updateExecutingToolCalls,
+      scopedAgentId,
     );
     unsubscribeRef.current = unsubscribe;
 
@@ -85,7 +94,7 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
         unsubscribeRef.current = null;
       }
     };
-  }, [sessionId, updateExecutingToolCalls]);
+  }, [scopedAgentId, sessionId, updateExecutingToolCalls]);
 
   const contextValue = useMemo<ToolCallContextType>(
     () => ({
@@ -97,11 +106,12 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
             updateExecutingToolCalls();
             callback();
           },
+          scopedAgentId,
         );
         return unsubscribe;
       },
     }),
-    [getExecutingToolCalls, sessionId, updateExecutingToolCalls],
+    [getExecutingToolCalls, scopedAgentId, sessionId, updateExecutingToolCalls],
   );
 
   return (

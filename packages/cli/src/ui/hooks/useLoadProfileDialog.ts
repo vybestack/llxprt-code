@@ -8,17 +8,9 @@ import { useCallback, useState } from 'react';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
-import { ProfileManager, AuthType, Config } from '@vybestack/llxprt-code-core';
-import {
-  LoadedSettings,
-  SettingScope,
-  Settings,
-} from '../../config/settings.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import {
-  setProviderApiKey,
-  setProviderBaseUrl,
-} from '../../providers/providerConfigUtils.js';
+import { Config } from '@vybestack/llxprt-code-core';
+import { LoadedSettings } from '../../config/settings.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface UseLoadProfileDialogParams {
   addMessage: (msg: {
@@ -34,10 +26,11 @@ interface UseLoadProfileDialogParams {
 export const useLoadProfileDialog = ({
   addMessage,
   appState,
-  config,
-  settings,
+  config: _config,
+  settings: _settings,
 }: UseLoadProfileDialogParams) => {
   const appDispatch = useAppDispatch();
+  const runtime = useRuntimeApi();
   const showDialog = appState.openDialogs.loadProfile;
   const [profiles, setProfiles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -51,8 +44,7 @@ export const useLoadProfileDialog = ({
     appDispatch({ type: 'OPEN_DIALOG', payload: 'loadProfile' });
 
     try {
-      const profileManager = new ProfileManager();
-      const availableProfiles = await profileManager.listProfiles();
+      const availableProfiles = await runtime.listSavedProfiles();
       setProfiles(availableProfiles);
     } catch (e) {
       addMessage({
@@ -65,7 +57,7 @@ export const useLoadProfileDialog = ({
     } finally {
       setIsLoading(false);
     }
-  }, [addMessage, appDispatch]);
+  }, [addMessage, appDispatch, runtime]);
 
   const closeDialog = useCallback(
     () => appDispatch({ type: 'CLOSE_DIALOG', payload: 'loadProfile' }),
@@ -75,75 +67,22 @@ export const useLoadProfileDialog = ({
   const handleSelect = useCallback(
     async (profileName: string) => {
       try {
-        // Load the profile
-        const profileManager = new ProfileManager();
-        const profile = await profileManager.loadProfile(profileName);
-
-        // Apply settings in the correct order:
-        // 1. Set provider first
-        const providerManager = config.getProviderManager();
-        if (providerManager) {
-          providerManager.setActiveProvider(profile.provider);
-
-          // Ensure provider manager is set on config
-          config.setProviderManager(providerManager);
-
-          // Update the provider in config
-          config.setProvider(profile.provider);
-        }
-
-        // 2. Set model second
-        config.setModel(profile.model);
-
-        // 3. Apply ephemeral settings third
-        for (const [key, value] of Object.entries(profile.ephemeralSettings)) {
-          // Special handling for auth-key and base-url
-          if (key === 'auth-key' && typeof value === 'string') {
-            // Set API key for the provider - use the concrete provider manager
-            const concreteProviderManager = getProviderManager();
-            await setProviderApiKey(
-              concreteProviderManager,
-              settings,
-              value,
-              config,
-            );
-          } else if (key === 'base-url' && typeof value === 'string') {
-            // Set base URL for the provider - use the concrete provider manager
-            const concreteProviderManager = getProviderManager();
-            await setProviderBaseUrl(concreteProviderManager, settings, value);
-          } else {
-            // Use setValue with SettingScope.User for other ephemeral settings
-            settings.setValue(SettingScope.User, key as keyof Settings, value);
-          }
-        }
-
-        // 4. Call provider.setModelParams()
-        const activeProvider = providerManager?.getActiveProvider();
-        if (
-          activeProvider &&
-          'setModelParams' in activeProvider &&
-          activeProvider.setModelParams
-        ) {
-          if (
-            profile.modelParams &&
-            Object.keys(profile.modelParams).length > 0
-          ) {
-            activeProvider.setModelParams(profile.modelParams);
-          }
-        }
-
-        // 5. Refresh auth to ensure provider is properly initialized
-        const currentAuthType =
-          config.getContentGeneratorConfig()?.authType ||
-          AuthType.LOGIN_WITH_GOOGLE;
-
-        await config.refreshAuth(currentAuthType);
-
+        const result = await runtime.loadProfileByName(profileName);
+        const extra = (result.infoMessages ?? [])
+          .map((message) => `\n- ${message}`)
+          .join('');
         addMessage({
           type: MessageType.INFO,
-          content: `Profile '${profileName}' loaded`,
+          content: `Profile '${profileName}' loaded${extra}`,
           timestamp: new Date(),
         });
+        for (const warning of result.warnings ?? []) {
+          addMessage({
+            type: MessageType.INFO,
+            content: `⚠ ${warning}`,
+            timestamp: new Date(),
+          });
+        }
       } catch (error) {
         // Handle specific error messages
         if (error instanceof Error) {
@@ -182,7 +121,7 @@ export const useLoadProfileDialog = ({
       }
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'loadProfile' });
     },
-    [addMessage, appDispatch, config, settings],
+    [addMessage, appDispatch, runtime],
   );
 
   return {

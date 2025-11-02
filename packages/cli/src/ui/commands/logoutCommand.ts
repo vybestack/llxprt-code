@@ -10,7 +10,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import { getOAuthManager } from '../../providers/providerManagerInstance.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const logoutCommand: SlashCommand = {
   name: 'logout',
@@ -34,7 +34,7 @@ export const logoutCommand: SlashCommand = {
     }
 
     try {
-      const oauthManager = getOAuthManager();
+      const oauthManager = getRuntimeApi().getCliOAuthManager();
       if (!oauthManager) {
         return {
           type: 'message',

@@ -5,6 +5,7 @@
  */
 
 import * as path from 'node:path';
+import os from 'node:os';
 import process from 'node:process';
 import {
   AuthType,
@@ -34,7 +35,12 @@ import { WebSearchTool } from '../tools/web-search.js';
 import { TodoWrite } from '../tools/todo-write.js';
 import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
+import { TaskTool } from '../tools/task.js';
+import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
+import { ListSubagentsTool } from '../tools/list-subagents.js';
 import { GeminiClient } from '../core/client.js';
+import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
+import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -58,12 +64,20 @@ import { MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import { IdeClient } from '../ide/ide-client.js';
 import { ideContext } from '../ide/ideContext.js';
 import type { Content } from '@google/genai';
-import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import { registerSettingsService } from '../settings/settingsServiceInstance.js';
 import { SettingsService } from '../settings/SettingsService.js';
+import {
+  createProviderRuntimeContext,
+  getActiveProviderRuntimeContext,
+  peekActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
 import {
   FileSystemService,
   StandardFileSystemService,
 } from '../services/fileSystemService.js';
+import { ProfileManager } from './profileManager.js';
+import { SubagentManager } from './subagentManager.js';
 
 // Re-export OAuth config type
 export type { MCPOAuthConfig, AnyToolInvocation };
@@ -279,14 +293,14 @@ export interface ConfigParameters {
   enablePromptCompletion?: boolean;
   eventEmitter?: EventEmitter;
   useSmartEdit?: boolean;
+  settingsService?: SettingsService;
 }
 
 export class Config {
   private toolRegistry!: ToolRegistry;
   private promptRegistry!: PromptRegistry;
   private readonly sessionId: string;
-  // Line 80: Get service instance
-  private settingsService = getSettingsService();
+  private readonly settingsService: SettingsService;
   private fileSystemService: FileSystemService;
   private contentGeneratorConfig!: ContentGeneratorConfig;
   private readonly embeddingModel: string;
@@ -311,6 +325,7 @@ export class Config {
   private telemetrySettings: TelemetrySettings;
   private readonly usageStatisticsEnabled: boolean;
   private geminiClient!: GeminiClient;
+  private runtimeState!: AgentRuntimeState;
   private readonly fileFiltering: {
     respectGitIgnore: boolean;
     respectLlxprtIgnore: boolean;
@@ -344,6 +359,9 @@ export class Config {
     extensionName: string;
   }>;
   private providerManager?: ProviderManager;
+  private profileManager?: ProfileManager;
+  private subagentManager?: SubagentManager;
+  private subagentSchedulerFactory?: SubagentSchedulerFactory;
 
   setProviderManager(providerManager: ProviderManager) {
     this.providerManager = providerManager;
@@ -351,6 +369,33 @@ export class Config {
 
   getProviderManager(): ProviderManager | undefined {
     return this.providerManager;
+  }
+  setProfileManager(manager: ProfileManager | undefined): void {
+    this.profileManager = manager;
+  }
+
+  getProfileManager(): ProfileManager | undefined {
+    return this.profileManager;
+  }
+
+  setSubagentManager(manager: SubagentManager | undefined): void {
+    this.subagentManager = manager;
+  }
+
+  getSubagentManager(): SubagentManager | undefined {
+    return this.subagentManager;
+  }
+
+  setInteractiveSubagentSchedulerFactory(
+    factory: SubagentSchedulerFactory | undefined,
+  ): void {
+    this.subagentSchedulerFactory = factory;
+  }
+
+  getInteractiveSubagentSchedulerFactory():
+    | SubagentSchedulerFactory
+    | undefined {
+    return this.subagentSchedulerFactory;
   }
   private provider?: string;
   private readonly summarizeToolOutput:
@@ -375,6 +420,42 @@ export class Config {
   private readonly useSmartEdit: boolean;
 
   constructor(params: ConfigParameters) {
+    const providedSettingsService = params.settingsService;
+    if (providedSettingsService) {
+      registerSettingsService(providedSettingsService);
+    }
+
+    const existingContext = peekActiveProviderRuntimeContext();
+    if (providedSettingsService) {
+      this.settingsService = providedSettingsService;
+    } else if (existingContext?.settingsService) {
+      this.settingsService = existingContext.settingsService;
+    } else {
+      this.settingsService = getActiveProviderRuntimeContext().settingsService;
+    }
+
+    const currentContext = peekActiveProviderRuntimeContext();
+    if (!currentContext) {
+      setActiveProviderRuntimeContext(
+        createProviderRuntimeContext({
+          settingsService: this.settingsService,
+          config: this,
+          runtimeId: providedSettingsService
+            ? 'injected-config'
+            : 'legacy-config',
+          metadata: { source: 'ConfigConstructor' },
+        }),
+      );
+    } else if (
+      currentContext.settingsService === this.settingsService &&
+      currentContext.config !== this
+    ) {
+      setActiveProviderRuntimeContext({
+        ...currentContext,
+        config: this,
+      });
+    }
+
     this.sessionId = params.sessionId;
     this.embeddingModel =
       params.embeddingModel ?? DEFAULT_GEMINI_EMBEDDING_MODEL;
@@ -467,6 +548,8 @@ export class Config {
     this.fileExclusions = new FileExclusions(this);
     this.eventEmitter = params.eventEmitter;
 
+    this.runtimeState = createAgentRuntimeStateFromConfig(this);
+
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
     }
@@ -511,7 +594,7 @@ export class Config {
 
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
-    this.geminiClient = new GeminiClient(this);
+    this.geminiClient = new GeminiClient(this, this.runtimeState);
 
     // Reserved for future model switching tracking
     void this._modelSwitchedDuringSession;
@@ -545,8 +628,22 @@ export class Config {
       newContentGeneratorConfig.providerManager = this.providerManager;
     }
 
+    const updatedRuntimeState = createAgentRuntimeStateFromConfig(this, {
+      runtimeId: this.runtimeState.runtimeId,
+      overrides: {
+        model: newContentGeneratorConfig.model,
+        authType:
+          newContentGeneratorConfig.authType ?? this.runtimeState.authType,
+        authPayload: newContentGeneratorConfig.apiKey
+          ? { apiKey: newContentGeneratorConfig.apiKey }
+          : undefined,
+        proxyUrl: newContentGeneratorConfig.proxy ?? this.runtimeState.proxyUrl,
+      },
+    });
+    this.runtimeState = updatedRuntimeState;
+
     // Create new client in local variable first
-    const newGeminiClient = new GeminiClient(this);
+    const newGeminiClient = new GeminiClient(this, this.runtimeState);
 
     // CRITICAL: Store both the history AND the HistoryService instance
     // This preserves both the API conversation context and the UI's conversation display
@@ -1342,12 +1439,39 @@ export class Config {
   async createToolRegistry(): Promise<ToolRegistry> {
     const registry = new ToolRegistry(this, this.eventEmitter);
 
+    const baseCoreTools = this.getCoreTools();
+    const effectiveCoreTools =
+      baseCoreTools && baseCoreTools.length > 0
+        ? [...baseCoreTools]
+        : undefined;
+
+    const matchesToolIdentifier = (value: string, target: string): boolean =>
+      value === target || value.startsWith(`${target}(`);
+
+    const ensureCoreToolIncluded = (identifier: string) => {
+      if (!effectiveCoreTools) {
+        return;
+      }
+      if (
+        !effectiveCoreTools.some((tool) =>
+          matchesToolIdentifier(tool, identifier),
+        )
+      ) {
+        effectiveCoreTools.push(identifier);
+      }
+    };
+
+    ensureCoreToolIncluded('TaskTool');
+    ensureCoreToolIncluded(TaskTool.Name);
+    ensureCoreToolIncluded('ListSubagentsTool');
+    ensureCoreToolIncluded(ListSubagentsTool.Name);
+
     // helper to create & register core tools that are enabled
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const registerCoreTool = (ToolClass: any, ...args: unknown[]) => {
       const className = ToolClass.name;
       const toolName = ToolClass.Name || className;
-      const coreTools = this.getCoreTools();
+      const coreTools = effectiveCoreTools;
       const excludeTools = this.getExcludeTools() || [];
 
       let isEnabled = true; // Enabled by default if coreTools is not set.
@@ -1398,6 +1522,33 @@ export class Config {
     registerCoreTool(TodoWrite);
     registerCoreTool(TodoRead);
     registerCoreTool(TodoPause);
+
+    let profileManager = this.getProfileManager();
+    if (!profileManager) {
+      const profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
+      profileManager = new ProfileManager(profilesDir);
+      this.setProfileManager(profileManager);
+    }
+
+    let subagentManager = this.getSubagentManager();
+    if (!subagentManager && profileManager) {
+      const subagentsDir = path.join(os.homedir(), '.llxprt', 'subagents');
+      subagentManager = new SubagentManager(subagentsDir, profileManager);
+      this.setSubagentManager(subagentManager);
+    }
+
+    if (profileManager && subagentManager) {
+      registerCoreTool(TaskTool, this, {
+        profileManager,
+        subagentManager,
+        schedulerFactoryProvider: () =>
+          this.getInteractiveSubagentSchedulerFactory(),
+      });
+    }
+
+    registerCoreTool(ListSubagentsTool, this, {
+      getSubagentManager: () => this.getSubagentManager(),
+    });
 
     await registry.discoverAllTools();
     return registry;

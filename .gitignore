@@ -60,6 +60,10 @@ research/
 packages/vscode-ide-companion/*.vsix
 tmp/
 
+# Stryker mutation testing temporary files
+.stryker-tmp/
+**/.stryker-tmp/
+
 # Test and debug files (should not be committed)
 test-*.txt
 test-*.sh

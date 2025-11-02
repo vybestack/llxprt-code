@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ToolRenderSuppressionHook } from '../hooks/tool-render-suppression-hook.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
 import { Config, ConfigParameters } from '../config/config.js';
+import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
 // Mock Config class
 vi.mock('../config/config.js', () => ({
@@ -15,6 +16,7 @@ vi.mock('../config/config.js', () => ({
     getSessionId: vi
       .fn()
       .mockReturnValue(params.sessionId || 'default-session'),
+    getAgentId: vi.fn().mockReturnValue(params.agentId || DEFAULT_AGENT_ID),
   })),
 }));
 
@@ -24,13 +26,19 @@ describe('ToolRenderSuppressionHook', () => {
 
   beforeEach(() => {
     // Reset the context tracker
-    const contextTracker = TodoContextTracker.forSession(sessionId);
+    const contextTracker = TodoContextTracker.forAgent(
+      sessionId,
+      DEFAULT_AGENT_ID,
+    );
     contextTracker.clearActiveTodo();
   });
 
   it('should suppress rendering when there is an active todo', () => {
     // Set up the context tracker with an active todo
-    const contextTracker = TodoContextTracker.forSession(sessionId);
+    const contextTracker = TodoContextTracker.forAgent(
+      sessionId,
+      DEFAULT_AGENT_ID,
+    );
     contextTracker.setActiveTodo(todoId);
 
     // Create a mock config
@@ -40,6 +48,7 @@ describe('ToolRenderSuppressionHook', () => {
       debugMode: false,
       cwd: '/test',
       model: 'test-model',
+      agentId: DEFAULT_AGENT_ID,
     } as ConfigParameters);
 
     // Check if rendering should be suppressed
@@ -51,7 +60,10 @@ describe('ToolRenderSuppressionHook', () => {
 
   it('should not suppress rendering when there is no active todo', () => {
     // Ensure there is no active todo
-    const contextTracker = TodoContextTracker.forSession(sessionId);
+    const contextTracker = TodoContextTracker.forAgent(
+      sessionId,
+      DEFAULT_AGENT_ID,
+    );
     contextTracker.clearActiveTodo();
 
     // Create a mock config
@@ -61,6 +73,7 @@ describe('ToolRenderSuppressionHook', () => {
       debugMode: false,
       cwd: '/test',
       model: 'test-model',
+      agentId: DEFAULT_AGENT_ID,
     } as ConfigParameters);
 
     // Check if rendering should be suppressed

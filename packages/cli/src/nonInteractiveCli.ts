@@ -17,7 +17,7 @@ import {
   EmojiFilter,
   type EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
-import { Content, Part, FunctionCall } from '@google/genai';
+import { Content, Part } from '@google/genai';
 
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
@@ -89,7 +89,7 @@ export async function runNonInteractive(
           'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
         );
       }
-      const functionCalls: FunctionCall[] = [];
+      const functionCalls: ToolCallRequestInfo[] = [];
 
       const responseStream = geminiClient.sendMessageStream(
         currentMessages[0]?.parts || [],
@@ -131,12 +131,11 @@ export async function runNonInteractive(
           process.stdout.write(outputValue);
         } else if (event.type === GeminiEventType.ToolCallRequest) {
           const toolCallRequest = event.value;
-          const fc: FunctionCall = {
-            name: toolCallRequest.name,
-            args: toolCallRequest.args,
-            id: toolCallRequest.callId,
+          const normalizedRequest: ToolCallRequestInfo = {
+            ...toolCallRequest,
+            agentId: toolCallRequest.agentId ?? 'primary',
           };
-          functionCalls.push(fc);
+          functionCalls.push(normalizedRequest);
         }
       }
 
@@ -148,14 +147,42 @@ export async function runNonInteractive(
       if (functionCalls.length > 0) {
         const toolResponseParts: Part[] = [];
 
-        for (const fc of functionCalls) {
-          const callId = fc.id ?? `${fc.name}-${Date.now()}`;
+        for (const requestFromModel of functionCalls) {
+          const callId =
+            requestFromModel.callId ?? `${requestFromModel.name}-${Date.now()}`;
+          const rawArgs = requestFromModel.args ?? {};
+          let normalizedArgs: Record<string, unknown>;
+          if (typeof rawArgs === 'string') {
+            try {
+              const parsed = JSON.parse(rawArgs);
+              normalizedArgs =
+                parsed && typeof parsed === 'object'
+                  ? (parsed as Record<string, unknown>)
+                  : {};
+            } catch (error) {
+              console.error(
+                `Failed to parse tool arguments for ${requestFromModel.name}: ${error instanceof Error ? error.message : String(error)}`,
+              );
+              normalizedArgs = {};
+            }
+          } else if (Array.isArray(rawArgs)) {
+            console.error(
+              `Unexpected array arguments for tool ${requestFromModel.name}; coercing to empty object.`,
+            );
+            normalizedArgs = {};
+          } else if (rawArgs && typeof rawArgs === 'object') {
+            normalizedArgs = rawArgs as Record<string, unknown>;
+          } else {
+            normalizedArgs = {};
+          }
+
           const requestInfo: ToolCallRequestInfo = {
             callId,
-            name: fc.name as string,
-            args: (fc.args ?? {}) as Record<string, unknown>,
+            name: requestFromModel.name,
+            args: normalizedArgs,
             isClientInitiated: false,
-            prompt_id,
+            prompt_id: requestFromModel.prompt_id ?? prompt_id,
+            agentId: requestFromModel.agentId ?? 'primary',
           };
 
           const toolResponse = await executeToolCall(
@@ -166,7 +193,7 @@ export async function runNonInteractive(
 
           if (toolResponse.error) {
             console.error(
-              `Error executing tool ${fc.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
+              `Error executing tool ${requestFromModel.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
             );
           }
 

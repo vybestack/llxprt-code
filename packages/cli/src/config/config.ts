@@ -25,11 +25,12 @@ import {
   TelemetryTarget,
   FileFilteringOptions,
   ProfileManager,
+  type Profile,
   ShellTool,
   EditTool,
   WriteFileTool,
   MCPServerConfig,
-  getSettingsService,
+  SettingsService,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
@@ -43,11 +44,66 @@ import { resolvePath } from '../utils/resolvePath.js';
 import { appEvents } from '../utils/events.js';
 
 import { isWorkspaceTrusted } from './trustedFolders.js';
+// @plan:PLAN-20251020-STATELESSPROVIDER3.P04
+import {
+  parseBootstrapArgs,
+  prepareRuntimeForProfile,
+  createBootstrapResult,
+} from './profileBootstrap.js';
+import {
+  applyProfileSnapshot,
+  getCliRuntimeContext,
+  registerCliProviderInfrastructure,
+  setCliRuntimeContext,
+  switchActiveProvider,
+} from '../runtime/runtimeSettings.js';
 import { applyCliSetArguments } from './cliEphemeralSettings.js';
 
 const LLXPRT_DIR = '.llxprt';
 
 const logger = new DebugLogger('llxprt:config');
+
+export const READ_ONLY_TOOL_NAMES = [
+  'glob',
+  'search_file_content',
+  'read_file',
+  'read_many_files',
+  'list_directory',
+  'ls',
+  'list_subagents',
+  'google_web_search',
+  'web_fetch',
+  'todo_read',
+  'task',
+  'self.emitvalue',
+] as const;
+
+const EDIT_TOOL_NAME = 'replace';
+
+const normalizeToolNameForPolicy = (name: string): string =>
+  name.trim().toLowerCase();
+
+const buildNormalizedToolSet = (value: unknown): Set<string> => {
+  const normalized = new Set<string>();
+  if (!value) {
+    return normalized;
+  }
+
+  const entries =
+    Array.isArray(value) && value.length > 0
+      ? value
+      : typeof value === 'string' && value.trim().length > 0
+        ? [value]
+        : [];
+
+  for (const entry of entries) {
+    if (typeof entry === 'string' && entry.trim().length > 0) {
+      normalized.add(normalizeToolNameForPolicy(entry));
+    }
+  }
+
+  return normalized;
+};
 
 export interface CliArgs {
   model: string | undefined;
@@ -551,24 +607,63 @@ export async function loadCliConfig(
   sessionId: string,
   argv: CliArgs,
   cwd: string = process.cwd(),
+  runtimeOverrides: { settingsService?: SettingsService } = {},
 ): Promise<Config> {
+  /**
+   * @plan PLAN-20251020-STATELESSPROVIDER3.P06
+   * @requirement REQ-SP3-001
+   * @pseudocode bootstrap-order.md lines 1-9
+   */
+  const bootstrapParsed = parseBootstrapArgs();
+  const parsedWithOverrides = {
+    bootstrapArgs: bootstrapParsed.bootstrapArgs,
+    runtimeMetadata: {
+      ...bootstrapParsed.runtimeMetadata,
+      settingsService:
+        runtimeOverrides.settingsService ??
+        bootstrapParsed.runtimeMetadata.settingsService,
+    },
+  };
+  const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
+  const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
+
   // Handle --load flag early to apply profile settings
   let effectiveSettings = settings;
   let profileModel: string | undefined;
   let profileProvider: string | undefined;
   let profileModelParams: Record<string, unknown> | undefined;
+  let profileBaseUrl: string | undefined;
+  let loadedProfile: Profile | null = null;
+  const profileWarnings: string[] = [];
+
+  const normaliseProfileName = (
+    value: string | null | undefined,
+  ): string | undefined => {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  };
 
   // Check for profile to load - either from CLI arg, env var, or default profile setting
   // BUT skip default profile if --provider is explicitly specified
   const profileToLoad =
-    argv.profileLoad ||
-    process.env.LLXPRT_PROFILE ||
-    (argv.provider === undefined ? settings.defaultProfile : undefined);
+    normaliseProfileName(bootstrapArgs.profileName) ??
+    normaliseProfileName(process.env.LLXPRT_PROFILE) ??
+    (argv.provider === undefined
+      ? normaliseProfileName(
+          typeof settings.defaultProfile === 'string'
+            ? settings.defaultProfile
+            : undefined,
+        )
+      : undefined);
 
   if (profileToLoad) {
     try {
       const profileManager = new ProfileManager();
       const profile = await profileManager.loadProfile(profileToLoad);
+      loadedProfile = profile;
 
       // Store profile values to apply after Config creation
       // Only use profile provider/model if --provider is not explicitly specified
@@ -577,11 +672,13 @@ export async function loadCliConfig(
         argv.provider !== undefined ? undefined : profile.provider;
       profileModel = argv.provider !== undefined ? undefined : profile.model;
       profileModelParams = profile.modelParams;
+      profileBaseUrl =
+        typeof profile.ephemeralSettings?.['base-url'] === 'string'
+          ? profile.ephemeralSettings['base-url']
+          : undefined;
 
-      logger.debug(
-        () =>
-          `Loaded profile ${profileToLoad}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`,
-      );
+      const loadSummary = `Loaded profile ${profileToLoad}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`;
+      logger.debug(() => loadSummary);
 
       // Check debug mode for logging
       const tempDebugMode =
@@ -600,9 +697,10 @@ export async function loadCliConfig(
         effectiveSettings = settings;
 
         if (tempDebugMode) {
-          logger.debug(
-            `Skipping profile ephemeral settings because --provider was specified`,
-          );
+          const skipMessage =
+            'Skipping profile ephemeral settings because --provider was specified';
+          logger.debug(skipMessage);
+          console.debug(`[DEBUG] ${skipMessage}`);
         }
       } else {
         effectiveSettings = {
@@ -612,18 +710,22 @@ export async function loadCliConfig(
       }
 
       if (tempDebugMode) {
-        logger.debug(
-          `Loaded profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
-        );
+        console.debug(loadSummary);
+        const detailedSummary = `Loaded profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`;
+        logger.debug(detailedSummary);
+        console.debug(detailedSummary);
       }
     } catch (error) {
-      // CRITICAL FIX: Throw error instead of continuing silently when profile is invalid
-      // This prevents the system from falling back to Gemini provider when profile is invalid
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed to load profile '${profileToLoad}': ${errorMessage}`,
-      );
+      const failureSummary = `Failed to load profile '${profileToLoad}': ${error instanceof Error ? error.message : String(error)}`;
+      logger.error(() => {
+        if (error instanceof Error && error.stack) {
+          return `${failureSummary}\n${error.stack}`;
+        }
+        return failureSummary;
+      });
+      console.error(failureSummary);
+      profileWarnings.push(failureSummary);
+      // Continue without the profile settings
     }
   }
 
@@ -832,13 +934,6 @@ export async function loadCliConfig(
   // Priority: CLI arg > Profile > Environment > Default
   let finalProvider: string;
   if (argv.provider) {
-    // CRITICAL FIX: Validate that the explicitly provided provider is valid
-    // Don't fallback to gemini silently if invalid provider is specified
-    if (argv.provider.trim() === '') {
-      throw new Error(
-        'Provider cannot be empty or whitespace. Please specify a valid provider or remove the --provider flag to use the default.',
-      );
-    }
     finalProvider = argv.provider;
   } else if (profileProvider && profileProvider.trim() !== '') {
     // Use profile provider only if it's not empty/whitespace
@@ -865,6 +960,17 @@ export async function loadCliConfig(
     // If no model specified and provider is gemini, use the Gemini default
     // For other providers, let them use their own default models (empty string means use provider default)
     (finalProvider === 'gemini' ? DEFAULT_GEMINI_MODEL : '');
+
+  // Ensure SettingsService reflects the selected model so Config#getModel picks it up
+  if (finalModel && finalModel.trim() !== '') {
+    const targetProviderForModel = finalProvider;
+    const settingsServiceForModel = runtimeState.runtime.settingsService;
+    settingsServiceForModel.setProviderSetting(
+      targetProviderForModel,
+      'model',
+      finalModel,
+    );
+  }
 
   // The screen reader argument takes precedence over the accessibility setting.
   const screenReader =
@@ -961,9 +1067,174 @@ export async function loadCliConfig(
 
   const enhancedConfig = config;
 
+  const bootstrapRuntimeId =
+    runtimeState.runtime.runtimeId ?? 'cli.runtime.bootstrap';
+  const baseBootstrapMetadata = {
+    ...(runtimeState.runtime.metadata ?? {}),
+    stage: 'post-config',
+  };
+
+  setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
+    runtimeId: bootstrapRuntimeId,
+    metadata: baseBootstrapMetadata,
+  });
+  if (runtimeState.oauthManager) {
+    registerCliProviderInfrastructure(
+      runtimeState.providerManager,
+      runtimeState.oauthManager,
+    );
+  }
+
+  let appliedProfileResult: Awaited<
+    ReturnType<typeof applyProfileSnapshot>
+  > | null = null;
+
+  logger.debug(
+    () =>
+      `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
+  );
+  if (loadedProfile && profileToLoad && argv.provider === undefined) {
+    const applyMetadata = {
+      ...baseBootstrapMetadata,
+      stage: 'profile-apply',
+      profileName: profileToLoad,
+    };
+
+    setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
+      runtimeId: bootstrapRuntimeId,
+      metadata: applyMetadata,
+    });
+    if (runtimeState.oauthManager) {
+      registerCliProviderInfrastructure(
+        runtimeState.providerManager,
+        runtimeState.oauthManager,
+      );
+    }
+
+    appliedProfileResult = await applyProfileSnapshot(loadedProfile, {
+      profileName: profileToLoad,
+    });
+
+    profileProvider = appliedProfileResult.providerName;
+    profileModel = appliedProfileResult.modelName;
+    if (appliedProfileResult.baseUrl) {
+      profileBaseUrl = appliedProfileResult.baseUrl;
+    }
+    if (appliedProfileResult.warnings.length > 0) {
+      profileWarnings.push(...appliedProfileResult.warnings);
+    }
+    logger.debug(
+      () =>
+        `[bootstrap] Applied profile '${profileToLoad}' -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
+    );
+  } else if (profileToLoad && argv.provider !== undefined) {
+    logger.debug(
+      () =>
+        `[bootstrap] Skipping profile application for '${profileToLoad}' because --provider was specified.`,
+    );
+  }
+
+  const bootstrapRuntimeContext = getCliRuntimeContext();
+  const bootstrapResult = createBootstrapResult({
+    runtime: bootstrapRuntimeContext,
+    providerManager: runtimeState.providerManager,
+    oauthManager: runtimeState.oauthManager,
+    bootstrapArgs,
+    profileApplication: {
+      providerName: profileProvider ?? finalProvider,
+      modelName: profileModel ?? finalModel,
+      ...(profileBaseUrl ? { baseUrl: profileBaseUrl } : {}),
+      warnings: profileWarnings.slice(),
+    },
+  });
+
+  if (bootstrapResult.profile.warnings.length > 0) {
+    for (const warning of bootstrapResult.profile.warnings) {
+      logger.warn(() => `[bootstrap] ${warning}`);
+    }
+  }
+
+  try {
+    await switchActiveProvider(finalProvider);
+  } catch (error) {
+    logger.warn(
+      () =>
+        `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
+  }
+
+  const explicitAllowedTools = buildNormalizedToolSet(
+    argv.allowedTools && argv.allowedTools.length > 0
+      ? argv.allowedTools
+      : (settings.allowedTools ?? []),
+  );
+
+  const profileAllowedTools = buildNormalizedToolSet(
+    enhancedConfig.getEphemeralSetting('tools.allowed'),
+  );
+
+  const applyToolGovernancePolicy = (
+    allowedSet: Set<string> | undefined,
+  ): void => {
+    if (allowedSet === undefined) {
+      enhancedConfig.setEphemeralSetting('tools.allowed', undefined);
+    } else {
+      enhancedConfig.setEphemeralSetting(
+        'tools.allowed',
+        Array.from(allowedSet).sort(),
+      );
+    }
+  };
+
+  if (!interactive) {
+    if (approvalMode === ApprovalMode.YOLO) {
+      if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
+        const finalAllowed = new Set(profileAllowedTools);
+        explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
+        applyToolGovernancePolicy(finalAllowed);
+      } else {
+        applyToolGovernancePolicy(undefined);
+      }
+    } else {
+      const baseAllowed = new Set<string>(
+        READ_ONLY_TOOL_NAMES.map(normalizeToolNameForPolicy),
+      );
+      explicitAllowedTools.forEach((tool) => baseAllowed.add(tool));
+      if (approvalMode === ApprovalMode.AUTO_EDIT) {
+        baseAllowed.add(EDIT_TOOL_NAME);
+      }
+
+      const finalAllowed =
+        profileAllowedTools.size > 0
+          ? new Set(
+              [...baseAllowed].filter((tool) => profileAllowedTools.has(tool)),
+            )
+          : baseAllowed;
+
+      applyToolGovernancePolicy(finalAllowed);
+    }
+  } else if (profileAllowedTools.size > 0 || explicitAllowedTools.size > 0) {
+    const finalAllowed = new Set(profileAllowedTools);
+    explicitAllowedTools.forEach((tool) => finalAllowed.add(tool));
+    applyToolGovernancePolicy(finalAllowed);
+  }
+
   // Apply emojifilter setting from settings.json to SettingsService
   // Only set if there isn't already an ephemeral setting (from /set command)
-  const settingsService = getSettingsService();
+  const settingsService = runtimeState.runtime.settingsService;
+  if (!runtimeOverrides.settingsService) {
+    /**
+     * @plan:PLAN-20250218-STATELESSPROVIDER.P06
+     * @requirement:REQ-SP-005
+     * Fallback path maintained temporarily until remaining entrypoints adopt
+     * runtime helpers. Remove once all callers supply a scoped SettingsService.
+     */
+    logger.warn(
+      '[cli-runtime] loadCliConfig called without runtime SettingsService override; using bootstrap-scoped instance (temporary compatibility path).',
+    );
+  }
   if (effectiveSettings.emojifilter && !settingsService.get('emojifilter')) {
     settingsService.set('emojifilter', effectiveSettings.emojifilter);
   }
@@ -1119,3 +1390,11 @@ export function loadEnvironment(): void {
     dotenv.config({ path: envFilePath, quiet: true });
   }
 }
+
+export {
+  getCliRuntimeConfig,
+  getCliRuntimeServices,
+  getCliProviderManager,
+  getActiveProviderStatus,
+  listProviders as listRuntimeProviders,
+} from '../runtime/runtimeSettings.js';

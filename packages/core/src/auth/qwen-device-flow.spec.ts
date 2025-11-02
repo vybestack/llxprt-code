@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createServer, type Server } from 'http';
 import { AddressInfo } from 'net';
 import { randomBytes, createHash } from 'crypto';
@@ -110,10 +110,17 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
       };
 
       const realDeviceFlow = new QwenDeviceFlow(realConfig);
-      // This will fail with a real network request, which is expected
+      const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response('Bad Request', {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
       await expect(realDeviceFlow.initiateDeviceFlow()).rejects.toThrow(
         'HTTP 400: Bad Request',
       );
+      fetchMock.mockRestore();
 
       // Verify the configuration contains the correct endpoint
       expect(realConfig.authorizationEndpoint).toBe(
@@ -281,6 +288,7 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
     it('should store PKCE verifier for later token exchange', async () => {
       testServer.removeAllListeners('request');
       let storedChallenge: string | undefined;
+      let verifierVerified = false;
 
       testServer.on('request', (req, res) => {
         if (req.url?.includes('device/code')) {
@@ -312,12 +320,12 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
             const params = new URLSearchParams(body);
             const verifier = params.get('code_verifier');
 
-            // Verify that the verifier produces the same challenge
             if (verifier && storedChallenge) {
               const expectedChallenge = createHash('sha256')
                 .update(verifier)
                 .digest('base64url');
               expect(expectedChallenge).toBe(storedChallenge);
+              verifierVerified = true;
             }
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -332,18 +340,12 @@ describe.skipIf(skipInCI)('QwenDeviceFlow - Behavioral Tests', () => {
         }
       });
 
-      // Test the requirement by initiating the flow then polling
       const deviceResult = await deviceFlow.initiateDeviceFlow();
       expect(deviceResult.device_code).toBe('test_device');
 
-      // The verifier verification happens in the mock server above
-      // This will timeout eventually, but the verifier matching is tested in the mock
-      try {
-        await deviceFlow.pollForToken('test_device');
-      } catch (error) {
-        // Expected to timeout or get a token - both are valid outcomes
-        expect(error).toBeDefined();
-      }
+      const tokenResult = await deviceFlow.pollForToken('test_device');
+      expect(tokenResult.access_token).toBe('test_token');
+      expect(verifierVerified).toBe(true);
     });
   });
 

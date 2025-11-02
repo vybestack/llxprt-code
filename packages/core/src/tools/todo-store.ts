@@ -8,6 +8,7 @@ import { Todo, TodoArraySchema } from './todo-schemas.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
 export class TodoStore {
   private readonly filePath: string;
@@ -17,9 +18,12 @@ export class TodoStore {
     // Ensure directory exists
     fs.mkdirSync(todoDir, { recursive: true });
 
+    const scopedAgentId =
+      agentId && agentId !== DEFAULT_AGENT_ID ? agentId : undefined;
+
     // Create filename based on session and agent
-    const fileName = agentId
-      ? `todo-${sessionId}-${agentId}.json`
+    const fileName = scopedAgentId
+      ? `todo-${sessionId}-${scopedAgentId}.json`
       : `todo-${sessionId}.json`;
     this.filePath = path.join(todoDir, fileName);
   }

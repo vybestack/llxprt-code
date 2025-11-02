@@ -14,6 +14,9 @@ import {
   MCPServerStatus,
   isNodeError,
   parseAndFormatApiError,
+  createAgentRuntimeState,
+  AuthType,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import type {
   ToolConfirmationPayload,
@@ -82,7 +85,19 @@ export class Task {
     this.contextId = contextId;
     this.config = config;
     this.scheduler = this.createScheduler();
-    this.geminiClient = new GeminiClient(this.config);
+    const contentConfig = this.config.getContentGeneratorConfig();
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: `${this.contextId}-task-runtime`,
+      provider: this.config.getProvider?.() ?? 'gemini',
+      model: this.config.getModel?.() ?? contentConfig?.model ?? 'gemini-pro',
+      authType: contentConfig?.authType ?? AuthType.USE_NONE,
+      authPayload: contentConfig?.apiKey
+        ? { apiKey: contentConfig.apiKey }
+        : undefined,
+      proxyUrl: this.config.getProxy?.(),
+      sessionId: this.config.getSessionId?.(),
+    });
+    this.geminiClient = new GeminiClient(this.config, runtimeState);
     this.pendingToolConfirmationDetails = new Map();
     this.taskState = 'submitted';
     this.eventBus = eventBus;
@@ -515,22 +530,30 @@ export class Task {
 
     const updatedRequests = await Promise.all(
       requests.map(async (request) => {
+        const normalizedRequest: ToolCallRequestInfo = {
+          ...request,
+          agentId: request.agentId ?? DEFAULT_AGENT_ID,
+        };
+
         if (
-          request.name === 'replace' &&
-          request.args &&
-          !request.args['newContent'] &&
-          request.args['file_path'] &&
-          request.args['old_string'] &&
-          request.args['new_string']
+          normalizedRequest.name === 'replace' &&
+          normalizedRequest.args &&
+          !normalizedRequest.args['newContent'] &&
+          normalizedRequest.args['file_path'] &&
+          normalizedRequest.args['old_string'] &&
+          normalizedRequest.args['new_string']
         ) {
           const newContent = await this.getProposedContent(
-            request.args['file_path'] as string,
-            request.args['old_string'] as string,
-            request.args['new_string'] as string,
+            normalizedRequest.args['file_path'] as string,
+            normalizedRequest.args['old_string'] as string,
+            normalizedRequest.args['new_string'] as string,
           );
-          return { ...request, args: { ...request.args, newContent } };
+          return {
+            ...normalizedRequest,
+            args: { ...normalizedRequest.args, newContent },
+          };
         }
-        return request;
+        return normalizedRequest;
       }),
     );
 

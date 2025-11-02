@@ -5,7 +5,13 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-import { IProvider, IModel, ITool } from './IProvider.js';
+import {
+  IProvider,
+  IModel,
+  ITool,
+  GenerateChatOptions,
+  ProviderToolset,
+} from './IProvider.js';
 import { IContent, UsageStats } from '../services/history/IContent.js';
 import { Config, RedactionConfig } from '../config/config.js';
 import {
@@ -20,6 +26,9 @@ import {
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
+import type { SettingsService } from '../settings/SettingsService.js';
+import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { MissingProviderRuntimeError } from './errors.js';
 
 export interface ConversationDataRedactor {
   redactMessage(content: IContent, provider: string): IContent;
@@ -173,24 +182,65 @@ class ConfigBasedRedactor implements ConversationDataRedactor {
 
 /**
  * @plan PLAN-20250909-TOKTRACK.P05
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+ * @requirement:REQ-SP4-004
+ * @requirement:REQ-SP4-005
+ * @pseudocode provider-runtime-handling.md lines 14-16
+ * @pseudocode logging-wrapper-adjustments.md lines 11-15
+ *
  * A minimal logging wrapper that acts as a transparent passthrough to the wrapped provider.
  * Only intercepts generateChatCompletion to log conversations while forwarding all other
  * methods directly to the wrapped provider without modification.
+ *
+ * In stateless hardening mode (P08), this wrapper:
+ * - Drops constructor-captured config/settings
+ * - Relies on per-call runtime metadata
+ * - Implements runtime context push/pop (via runtimeContextResolver)
+ * - Guards against missing runtime with MissingProviderRuntimeError
  */
 export class LoggingProviderWrapper implements IProvider {
   private conversationId: string;
   private turnNumber: number = 0;
-  private redactor: ConversationDataRedactor;
+  private redactor: ConversationDataRedactor | null = null;
   private performanceTracker: ProviderPerformanceTracker;
+  private runtimeContextResolver?: () => ProviderRuntimeContext;
+  private statelessRuntimeMetadata: Record<string, unknown> | null = null;
+  private optionsNormalizer:
+    | ((
+        options: GenerateChatOptions,
+        providerName: string,
+      ) => GenerateChatOptions)
+    | null = null;
 
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-004
+   * Constructor no longer captures config - it's provided per-call via options.
+   */
   constructor(
     private readonly wrapped: IProvider,
-    private readonly config: Config,
-    redactor?: ConversationDataRedactor,
+    configOrRedactor?: Config | ConversationDataRedactor | null,
+    legacyRedactor?: ConversationDataRedactor,
   ) {
     this.conversationId = this.generateConversationId();
-    this.redactor =
-      redactor || new ConfigBasedRedactor(config.getRedactionConfig());
+
+    // Handle legacy constructor signature for backward compatibility
+    // New usage should NOT pass config here - config comes per-call
+    if (configOrRedactor && 'redactMessage' in configOrRedactor) {
+      this.redactor = configOrRedactor as ConversationDataRedactor;
+    } else if (
+      configOrRedactor &&
+      'getConversationLoggingEnabled' in configOrRedactor
+    ) {
+      // Legacy usage - create redactor from config
+      const config = configOrRedactor as Config;
+      this.redactor = new ConfigBasedRedactor(config.getRedactionConfig());
+    }
+
+    if (legacyRedactor) {
+      this.redactor = legacyRedactor;
+    }
+
     this.performanceTracker = new ProviderPerformanceTracker(wrapped.name);
 
     // Set throttle tracker callback on the wrapped provider if it supports it
@@ -207,8 +257,40 @@ export class LoggingProviderWrapper implements IProvider {
     }
   }
 
+  /* @plan:PLAN-20251023-STATELESS-HARDENING.P06 */
+  /* @requirement:REQ-SP4-004 */
+  attachStatelessRuntimeMetadata(metadata: Record<string, unknown>): void {
+    this.statelessRuntimeMetadata = { ...metadata };
+  }
+
   /**
-   * Access to the wrapped provider for unwrapping if needed
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
+   * @requirement:REQ-SP4-001
+   * @pseudocode provider-runtime-handling.md lines 10-15
+   * Registers a resolver so runtime context is injected per invocation.
+   */
+  setRuntimeContextResolver(resolver: () => ProviderRuntimeContext): void {
+    this.runtimeContextResolver = resolver;
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Allows ProviderManager.normalizeRuntimeInputs to run per invocation.
+   */
+  setOptionsNormalizer(
+    normalizer: (
+      options: GenerateChatOptions,
+      providerName: string,
+    ) => GenerateChatOptions,
+  ): void {
+    this.optionsNormalizer = normalizer;
+  }
+
+  /**
+   * @plan PLAN-20251020-STATELESSPROVIDER3.P12
+   * @requirement REQ-SP3-003
+   * Access to the wrapped provider for unwrapping if needed.
    */
   get wrappedProvider(): IProvider {
     return this.wrapped;
@@ -232,55 +314,166 @@ export class LoggingProviderWrapper implements IProvider {
     return this.wrapped.getDefaultModel();
   }
 
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P06
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P05
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement REQ-SP2-001
+   * @requirement:REQ-SP4-001
+   * @requirement:REQ-SP4-004
+   * @requirement:REQ-SP4-005
+   * @pseudocode base-provider-call-contract.md lines 3-4
+   * @plan PLAN-20250218-STATELESSPROVIDER.P04
+   * @requirement REQ-SP-001
+   * @pseudocode base-provider.md lines 7-15
+   * @pseudocode provider-invocation.md lines 11-15
+   * @pseudocode provider-runtime-handling.md lines 14-16
+   */
   // Only method that includes logging - everything else is passthrough
-  async *generateChatCompletion(
+  generateChatCompletion(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent>;
+  generateChatCompletion(
     content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
+    tools?: ProviderToolset,
+  ): AsyncIterableIterator<IContent>;
+  async *generateChatCompletion(
+    contentOrOptions: IContent[] | GenerateChatOptions,
+    maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
+    let normalizedOptions: GenerateChatOptions = Array.isArray(contentOrOptions)
+      ? { contents: contentOrOptions, tools: maybeTools }
+      : { ...contentOrOptions };
+
+    // REQ-SP4-004: Runtime context push - inject runtime from resolver if available
+    const injectedRuntime = this.runtimeContextResolver?.();
+    const providedRuntime = normalizedOptions.runtime;
+
+    if (injectedRuntime) {
+      const mergedMetadata: Record<string, unknown> = {
+        ...(this.statelessRuntimeMetadata ?? {}),
+        ...(injectedRuntime.metadata ?? {}),
+        ...(providedRuntime?.metadata ?? {}),
+        ...(normalizedOptions.metadata ?? {}),
+        source: 'LoggingProviderWrapper.generateChatCompletion',
+        requirement: 'REQ-SP4-001',
+      };
+
+      normalizedOptions.runtime = {
+        ...injectedRuntime,
+        ...providedRuntime,
+        settingsService:
+          providedRuntime?.settingsService ?? injectedRuntime.settingsService,
+        config: providedRuntime?.config ?? injectedRuntime.config,
+        metadata: mergedMetadata,
+      };
+
+      normalizedOptions.settings =
+        normalizedOptions.settings ?? normalizedOptions.runtime.settingsService;
+      normalizedOptions.metadata = mergedMetadata;
+    }
+
+    if (!injectedRuntime && this.statelessRuntimeMetadata) {
+      normalizedOptions.metadata = {
+        ...(this.statelessRuntimeMetadata ?? {}),
+        ...(normalizedOptions.metadata ?? {}),
+      };
+    }
+
+    if (this.optionsNormalizer) {
+      normalizedOptions = this.optionsNormalizer(
+        normalizedOptions,
+        this.wrapped.name,
+      );
+    }
+
+    // REQ-SP4-004: Guard - ensure runtime context is present for stateless hardening
+    const runtimeId = normalizedOptions.runtime?.runtimeId ?? 'unknown';
+    if (!normalizedOptions.runtime?.settingsService) {
+      throw new MissingProviderRuntimeError({
+        providerKey: `LoggingProviderWrapper[${this.wrapped.name}]`,
+        missingFields: ['settings'],
+        requirement: 'REQ-SP4-004',
+        stage: 'generateChatCompletion',
+        metadata: {
+          hint: 'Runtime context must include settingsService for stateless hardening.',
+          runtimeId,
+        },
+      });
+    }
+
+    if (!normalizedOptions.runtime?.config) {
+      throw new MissingProviderRuntimeError({
+        providerKey: `LoggingProviderWrapper[${this.wrapped.name}]`,
+        missingFields: ['config'],
+        requirement: 'REQ-SP4-004',
+        stage: 'generateChatCompletion',
+        metadata: {
+          hint: 'Runtime context must include config for stateless hardening.',
+          runtimeId,
+        },
+      });
+    }
+
+    // Resolve config from runtime or legacy fallback
+    normalizedOptions.config =
+      normalizedOptions.config ?? normalizedOptions.runtime?.config;
+    const activeConfig = normalizedOptions.config;
+
+    const invocation = normalizedOptions.invocation;
+
+    // Prefer per-call redaction config from invocation context when available
+    if (invocation?.redaction) {
+      this.redactor = new ConfigBasedRedactor({
+        ...invocation.redaction,
+      });
+    } else if (!this.redactor && activeConfig) {
+      // REQ-SP4-004: Create per-call redactor if not already set
+      this.redactor = new ConfigBasedRedactor(
+        activeConfig.getRedactionConfig(),
+      );
+    }
+
     const promptId = this.generatePromptId();
     this.turnNumber++;
 
     // Log request if logging is enabled
-    if (this.config.getConversationLoggingEnabled()) {
-      await this.logRequest(content, tools, promptId);
+    if (activeConfig?.getConversationLoggingEnabled()) {
+      await this.logRequest(
+        activeConfig,
+        normalizedOptions.contents,
+        normalizedOptions.tools,
+        promptId,
+      );
     }
 
-    // Get stream from wrapped provider
-    const stream = this.wrapped.generateChatCompletion(content, tools);
+    // Get stream from wrapped provider using normalized options object
+    const stream = this.wrapped.generateChatCompletion(normalizedOptions);
 
     // Always process stream to extract token metrics
     // If logging not enabled, process for metrics only
-    if (!this.config.getConversationLoggingEnabled()) {
-      yield* this.processStreamForMetrics(stream);
+    if (!activeConfig?.getConversationLoggingEnabled()) {
+      yield* this.processStreamForMetrics(activeConfig, stream);
       return;
     }
 
     // Log the response stream (which also processes metrics)
-    yield* this.logResponseStream(stream, promptId);
+    yield* this.logResponseStream(activeConfig, stream, promptId);
   }
 
   private async logRequest(
+    config: Config,
     content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
+    tools?: ProviderToolset,
     promptId?: string,
   ): Promise<void> {
     try {
-      // Apply redaction to content and tools
-      const redactedContent = content.map((item) =>
-        this.redactor.redactMessage(item, this.wrapped.name),
-      );
+      // Apply redaction to content and tools (use redactor if available)
+      const redactedContent = this.redactor
+        ? content.map((item) =>
+            this.redactor!.redactMessage(item, this.wrapped.name),
+          )
+        : content;
       // Note: tools format is different now, keeping minimal logging for now
       const redactedTools = tools;
 
@@ -294,11 +487,11 @@ export class LoggingProviderWrapper implements IProvider {
         'default', // toolFormat is no longer passed in
       );
 
-      logConversationRequest(this.config, event);
+      logConversationRequest(config, event);
 
       // Also write to disk
       const fileWriter = getConversationFileWriter(
-        this.config.getConversationLogPath(),
+        config.getConversationLogPath(),
       );
       fileWriter.writeRequest(this.wrapped.name, redactedContent, {
         conversationId: this.conversationId,
@@ -318,6 +511,7 @@ export class LoggingProviderWrapper implements IProvider {
    * @plan PLAN-20250909-TOKTRACK
    */
   private async *processStreamForMetrics(
+    config: Config | undefined,
     stream: AsyncIterableIterator<IContent>,
   ): AsyncIterableIterator<IContent> {
     const startTime = performance.now();
@@ -343,7 +537,7 @@ export class LoggingProviderWrapper implements IProvider {
           this.extractTokenCountsFromTokenUsage(latestTokenUsage);
 
         // Accumulate token usage for session tracking
-        this.accumulateTokenUsage(tokenCounts);
+        this.accumulateTokenUsage(tokenCounts, config);
 
         // Record performance metrics (TPM tracks output tokens only)
         const outputTokens = tokenCounts.output_token_count;
@@ -363,6 +557,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async *logResponseStream(
+    config: Config,
     stream: AsyncIterableIterator<IContent>,
     promptId: string,
   ): AsyncIterableIterator<IContent> {
@@ -393,6 +588,7 @@ export class LoggingProviderWrapper implements IProvider {
     } catch (error) {
       const errorTime = performance.now();
       await this.logResponse(
+        config,
         '',
         promptId,
         errorTime - startTime,
@@ -406,6 +602,7 @@ export class LoggingProviderWrapper implements IProvider {
     if (responseComplete) {
       const totalTime = performance.now() - startTime;
       await this.logResponse(
+        config,
         responseContent,
         promptId,
         totalTime,
@@ -439,6 +636,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async logResponse(
+    config: Config,
     content: string,
     promptId: string,
     duration: number,
@@ -447,10 +645,9 @@ export class LoggingProviderWrapper implements IProvider {
     tokenUsage?: UsageStats,
   ): Promise<void> {
     try {
-      const redactedContent = this.redactor.redactResponseContent(
-        content,
-        this.wrapped.name,
-      );
+      const redactedContent = this.redactor
+        ? this.redactor.redactResponseContent(content, this.wrapped.name)
+        : content;
 
       // Extract token counts from the response or use provided tokenUsage
       const tokenCounts = tokenUsage
@@ -458,7 +655,7 @@ export class LoggingProviderWrapper implements IProvider {
         : this.extractTokenCountsFromResponse(content);
 
       // Accumulate token usage for session tracking
-      this.accumulateTokenUsage(tokenCounts);
+      this.accumulateTokenUsage(tokenCounts, config);
 
       // Record performance metrics (TPM tracks output tokens only)
       const outputTokens = tokenCounts.output_token_count;
@@ -474,7 +671,7 @@ export class LoggingProviderWrapper implements IProvider {
 
       // Log token usage to telemetry
       logTokenUsage(
-        this.config,
+        config,
         new TokenUsageEvent(
           this.wrapped.name,
           this.conversationId,
@@ -498,11 +695,11 @@ export class LoggingProviderWrapper implements IProvider {
         error ? String(error) : undefined,
       );
 
-      logConversationResponse(this.config, event);
+      logConversationResponse(config, event);
 
       // Also write to disk
       const fileWriter = getConversationFileWriter(
-        this.config.getConversationLogPath(),
+        config.getConversationLogPath(),
       );
       fileWriter.writeResponse(this.wrapped.name, redactedContent, {
         conversationId: this.conversationId,
@@ -632,13 +829,16 @@ export class LoggingProviderWrapper implements IProvider {
   /**
    * Accumulate token usage for session tracking
    */
-  private accumulateTokenUsage(tokenCounts: {
-    input_token_count: number;
-    output_token_count: number;
-    cached_content_token_count: number;
-    thoughts_token_count: number;
-    tool_token_count: number;
-  }): void {
+  private accumulateTokenUsage(
+    tokenCounts: {
+      input_token_count: number;
+      output_token_count: number;
+      cached_content_token_count: number;
+      thoughts_token_count: number;
+      tool_token_count: number;
+    },
+    config: Config | undefined,
+  ): void {
     // Map token counts to expected format
     const usage = {
       input: tokenCounts.input_token_count || 0,
@@ -649,7 +849,7 @@ export class LoggingProviderWrapper implements IProvider {
     };
 
     // Call accumulateSessionTokens if providerManager is available
-    const providerManager = this.config.getProviderManager();
+    const providerManager = config?.getProviderManager();
     if (providerManager) {
       try {
         console.debug(
@@ -666,7 +866,21 @@ export class LoggingProviderWrapper implements IProvider {
     }
   }
 
+  private resolveLoggingConfig(candidate?: unknown): Config | undefined {
+    if (
+      candidate &&
+      typeof candidate === 'object' &&
+      'getConversationLoggingEnabled' in candidate &&
+      typeof (candidate as { getConversationLoggingEnabled?: unknown })
+        .getConversationLoggingEnabled === 'function'
+    ) {
+      return candidate as Config;
+    }
+    return undefined;
+  }
+
   private async logToolCall(
+    config: Config | undefined,
     toolName: string,
     params: unknown,
     result: unknown,
@@ -674,6 +888,9 @@ export class LoggingProviderWrapper implements IProvider {
     success: boolean,
     error?: unknown,
   ): Promise<void> {
+    if (!config) {
+      return;
+    }
     try {
       const endTime = Date.now();
       const duration = endTime - startTime;
@@ -688,17 +905,22 @@ export class LoggingProviderWrapper implements IProvider {
         }
       }
 
+      // Redact tool parameters if redactor available
+      const redactedParams = this.redactor
+        ? this.redactor.redactToolCall({
+            type: 'function',
+            function: { name: toolName, parameters: params as object },
+          }).function.parameters
+        : (params as object);
+
       // Write to disk
       const fileWriter = getConversationFileWriter(
-        this.config.getConversationLogPath(),
+        config.getConversationLogPath(),
       );
       fileWriter.writeToolCall(this.wrapped.name, toolName, {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
-        params: this.redactor.redactToolCall({
-          type: 'function',
-          function: { name: toolName, parameters: params as object },
-        }).function.parameters,
+        params: redactedParams,
         result,
         duration,
         success,
@@ -711,28 +933,24 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   // All other methods are simple passthroughs to wrapped provider
-  setModel?(modelId: string): void {
-    this.wrapped.setModel?.(modelId);
-  }
-
   getCurrentModel?(): string {
     return this.wrapped.getCurrentModel?.() ?? '';
   }
 
-  setApiKey?(apiKey: string): void {
-    this.wrapped.setApiKey?.(apiKey);
-  }
-
-  setBaseUrl?(baseUrl?: string): void {
-    this.wrapped.setBaseUrl?.(baseUrl);
+  setRuntimeSettingsService?(settingsService: SettingsService): void {
+    /**
+     * @plan PLAN-20250218-STATELESSPROVIDER.P05
+     * @requirement REQ-SP-001
+     * @pseudocode provider-invocation.md lines 8-15
+     */
+    const runtimeAware = this.wrapped as IProvider & {
+      setRuntimeSettingsService?: (settings: SettingsService) => void;
+    };
+    runtimeAware.setRuntimeSettingsService?.(settingsService);
   }
 
   getToolFormat?(): string {
     return this.wrapped.getToolFormat?.() ?? '';
-  }
-
-  setToolFormatOverride?(format: string | null): void {
-    this.wrapped.setToolFormatOverride?.(format);
   }
 
   isPaidMode?(): boolean {
@@ -740,14 +958,23 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   clearState?(): void {
-    this.wrapped.clearState?.();
+    if ('clearState' in this.wrapped) {
+      const candidate = (this.wrapped as { clearState?: () => void })
+        .clearState;
+      candidate?.call(this.wrapped);
+    }
     // Reset conversation logging state
     this.conversationId = this.generateConversationId();
     this.turnNumber = 0;
   }
 
   setConfig?(config: unknown): void {
-    this.wrapped.setConfig?.(config);
+    if ('setConfig' in this.wrapped) {
+      const candidate = (
+        this.wrapped as { setConfig?: (value: unknown) => void }
+      ).setConfig;
+      candidate?.call(this.wrapped, config);
+    }
   }
 
   getServerTools(): string[] {
@@ -760,6 +987,7 @@ export class LoggingProviderWrapper implements IProvider {
     config?: unknown,
   ): Promise<unknown> {
     const startTime = Date.now();
+    const loggingConfig = this.resolveLoggingConfig(config);
 
     try {
       const result = await this.wrapped.invokeServerTool(
@@ -769,22 +997,33 @@ export class LoggingProviderWrapper implements IProvider {
       );
 
       // Log tool call if logging is enabled and result has metadata
-      if (this.config.getConversationLoggingEnabled()) {
-        await this.logToolCall(toolName, params, result, startTime, true);
+      if (loggingConfig?.getConversationLoggingEnabled()) {
+        await this.logToolCall(
+          loggingConfig,
+          toolName,
+          params,
+          result,
+          startTime,
+          true,
+        );
       }
 
       return result;
     } catch (error) {
       // Log failed tool call if logging is enabled
-      if (this.config.getConversationLoggingEnabled()) {
-        await this.logToolCall(toolName, params, null, startTime, false, error);
+      if (loggingConfig?.getConversationLoggingEnabled()) {
+        await this.logToolCall(
+          loggingConfig,
+          toolName,
+          params,
+          null,
+          startTime,
+          false,
+          error,
+        );
       }
       throw error;
     }
-  }
-
-  setModelParams?(params: Record<string, unknown> | undefined): void {
-    this.wrapped.setModelParams?.(params);
   }
 
   getModelParams?(): Record<string, unknown> | undefined {

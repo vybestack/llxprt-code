@@ -7,11 +7,18 @@
 import { type ReactNode } from 'react';
 import { Content } from '@google/genai';
 import { HistoryItemWithoutId } from '../types.js';
-import { Config, GitService, Logger } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  GitService,
+  Logger,
+  ProfileManager,
+  SubagentManager,
+} from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
 import { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type { HistoryItem } from '../types.js';
 import { SessionStatsState } from '../contexts/SessionContext.js';
+import type { CommandArgumentSchema } from './schema/types.js';
 
 // Grouped dependencies for clarity and easier mocking
 export interface CommandContext {
@@ -31,6 +38,8 @@ export interface CommandContext {
     settings: LoadedSettings;
     git: GitService | undefined;
     logger: Logger;
+    profileManager?: ProfileManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P06 @requirement:REQ-002
+    subagentManager?: SubagentManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P06 @requirement:REQ-002
   };
   // UI state and history management
   ui: {
@@ -203,11 +212,13 @@ export interface SlashCommand {
     | SlashCommandActionReturn
     | Promise<void | SlashCommandActionReturn>;
 
-  // Provides argument completion (e.g., completing a tag for `/chat resume <tag>`).
-  completion?: (
-    context: CommandContext,
-    partialArg: string,
-  ) => Promise<string[]>;
+  /**
+   * Schema-based completion for structured argument handling
+   * @plan:PLAN-20251013-AUTOCOMPLETE.P05
+   * @plan:PLAN-20251013-AUTOCOMPLETE.P11
+   * Legacy completion helpers removed; schema is the single source.
+   */
+  schema?: CommandArgumentSchema;
 
   subCommands?: SlashCommand[];
 }

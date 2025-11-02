@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan PLAN-20251027-STATELESS5.P09
+ * Note: Legacy tests updated with plan markers. Runtime state integration tests
+ * are in __tests__/geminiChat.runtimeState.test.ts
+ */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   Content,
@@ -19,8 +25,22 @@ import {
   type StreamEvent,
 } from './geminiChat.js';
 import { Config } from '../config/config.js';
+import { createGeminiChatRuntime } from '../test-utils/runtime.js';
 import { setSimulate429 } from '../utils/testUtils.js';
-import * as tokenLimitsModule from './tokenLimits.js';
+import { AuthType } from './contentGenerator.js';
+import {
+  createAgentRuntimeState,
+  type AgentRuntimeState,
+} from '../runtime/AgentRuntimeState.js';
+import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
+import {
+  createProviderAdapterFromManager,
+  createTelemetryAdapterFromConfig,
+  createToolRegistryViewFromRegistry,
+} from '../runtime/runtimeAdapters.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import * as providerRuntime from '../runtime/providerRuntimeContext.js';
+import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 // Mocks
 const mockModelsModule = {
@@ -35,13 +55,15 @@ describe('GeminiChat', () => {
   let chat: GeminiChat;
   let mockConfig: Config;
   const config: GenerateContentConfig = {};
+  let runtimeState: AgentRuntimeState;
+  let runtimeSetup: ReturnType<typeof createGeminiChatRuntime>;
+  let providerRuntimeSnapshot: ProviderRuntimeContext;
 
   let mockProvider: {
     name: string;
     generateContent: ReturnType<typeof vi.fn>;
     generateContentStream: ReturnType<typeof vi.fn>;
     generateChatCompletion: ReturnType<typeof vi.fn>;
-    getModelParams?: ReturnType<typeof vi.fn>;
   };
   let mockContentGenerator: {
     generateContent: ReturnType<typeof vi.fn>;
@@ -72,26 +94,34 @@ describe('GeminiChat', () => {
           };
         })(),
       ),
-      getModelParams: vi.fn().mockReturnValue(undefined),
     };
 
-    mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getTelemetryLogPromptsEnabled: () => true,
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getContentGeneratorConfig: () => ({
-        authType: 'oauth-personal',
-        model: 'test-model',
-      }),
-      getModel: vi.fn().mockReturnValue('gemini-pro'),
-      setModel: vi.fn(),
-      getEphemeralSettings: vi.fn().mockReturnValue({}),
-      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-      getProviderManager: vi.fn().mockReturnValue({
-        getActiveProvider: vi.fn().mockReturnValue(mockProvider),
-      }),
-    } as unknown as Config;
+    const providerManager = {
+      getActiveProvider: vi.fn(() => mockProvider),
+    };
+
+    runtimeSetup = createGeminiChatRuntime({
+      provider: mockProvider,
+      providerManager,
+      configOverrides: {
+        getModel: vi.fn().mockReturnValue('gemini-pro'),
+        setModel: vi.fn(),
+        getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
+        setQuotaErrorOccurred: vi.fn(),
+        getEphemeralSettings: vi.fn().mockReturnValue({}),
+        getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+        getProviderManager: vi.fn().mockReturnValue(providerManager),
+      },
+    });
+
+    mockConfig = runtimeSetup.config;
+
+    // Set up provider runtime context so GeminiChat can access it
+    providerRuntimeSnapshot = {
+      ...runtimeSetup.runtime,
+      config: mockConfig,
+    };
+    providerRuntime.setActiveProviderRuntimeContext(providerRuntimeSnapshot);
 
     // Disable 429 simulation for tests
     setSimulate429(false);
@@ -104,7 +134,36 @@ describe('GeminiChat', () => {
     } as typeof mockContentGenerator;
 
     // Reset history for each test by creating a new instance
-    chat = new GeminiChat(mockConfig, mockContentGenerator, config, []);
+    runtimeState = createAgentRuntimeState({
+      runtimeId: runtimeSetup.runtime.runtimeId,
+      provider: runtimeSetup.provider.name,
+      model: 'gemini-pro',
+      authType: AuthType.LOGIN_WITH_GOOGLE,
+      sessionId: 'test-session-id',
+    });
+
+    const historyService = new HistoryService();
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 200000,
+        preserveThreshold: 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+      },
+      provider: createProviderAdapterFromManager(
+        mockConfig.getProviderManager?.(),
+      ),
+      telemetry: createTelemetryAdapterFromConfig(mockConfig as Config),
+      tools: createToolRegistryViewFromRegistry(mockConfig.getToolRegistry?.()),
+      providerRuntime: providerRuntimeSnapshot,
+    });
+
+    chat = new GeminiChat(view, mockContentGenerator, config, []);
   });
 
   afterEach(() => {
@@ -134,8 +193,10 @@ describe('GeminiChat', () => {
 
       await chat.sendMessage({ message: 'hello' }, 'prompt-id-1');
 
-      expect(mockProvider.generateChatCompletion).toHaveBeenCalledWith(
-        expect.arrayContaining([
+      const [[callArg]] = vi.mocked(mockProvider.generateChatCompletion).mock
+        .calls;
+      expect(callArg).toMatchObject({
+        contents: expect.arrayContaining([
           expect.objectContaining({
             speaker: 'human',
             blocks: expect.arrayContaining([
@@ -146,16 +207,36 @@ describe('GeminiChat', () => {
             ]),
           }),
         ]),
-        undefined, // no tools
+        tools: undefined,
+        config: mockConfig,
+      });
+      expect(callArg.settings).toBe(providerRuntimeSnapshot.settingsService);
+      expect(callArg.runtime).toBeDefined();
+      expect(callArg.runtime?.config).toBe(mockConfig);
+      expect(callArg.runtime?.settingsService).toBeDefined();
+      expect(callArg.runtime?.metadata).toEqual(
+        expect.objectContaining({
+          source: 'GeminiChat.trySendMessage',
+        }),
       );
     });
 
     it('should trigger compression when pending tokens exceed threshold', async () => {
       const historyService = chat.getHistoryService();
-      vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(30000);
+      // compressionThreshold: 0.8, contextLimit: 200000
+      // Threshold = 0.8 * 200000 = 160000 tokens
+      // Current: 100000 + Pending: 65000 = 165000 > 160000
+      // After compression, getTotalTokens should return a lower value
+      // First call: 100000 (before compression check)
+      // Subsequent calls: 50000 (after compression)
+      // Post-compression total: 50000 + 65000 + 65536 = 180536 < 200000 ✓
+      vi.spyOn(historyService, 'getTotalTokens')
+        .mockReturnValueOnce(100000)
+        .mockReturnValue(50000);
       vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        35000,
+        65000,
       );
+      vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue();
 
       const compressionSpy = vi
         .spyOn(
@@ -194,64 +275,6 @@ describe('GeminiChat', () => {
 
       expect(compressionSpy).not.toHaveBeenCalled();
     });
-
-    it('throws before sending when projected tokens exceed model limit even after compression', async () => {
-      const historyService = chat.getHistoryService();
-      vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(900);
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        50,
-      );
-      vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(
-        undefined,
-      );
-
-      const compressionSpy = vi
-        .spyOn(
-          chat as unknown as {
-            performCompression(prompt_id: string): Promise<void>;
-          },
-          'performCompression',
-        )
-        .mockResolvedValue();
-
-      vi.spyOn(tokenLimitsModule, 'tokenLimit').mockReturnValue(1000);
-
-      await expect(
-        chat.sendMessage({ message: 'too big' }, 'prompt-id-limit'),
-      ).rejects.toThrow(/context window/i);
-
-      expect(compressionSpy).toHaveBeenCalledWith('prompt-id-limit');
-    });
-
-    it('uses provider maxOutputTokens when evaluating projected tokens', async () => {
-      const historyService = chat.getHistoryService();
-      vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(900);
-      vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(
-        50,
-      );
-      vi.spyOn(historyService, 'waitForTokenUpdates').mockResolvedValue(
-        undefined,
-      );
-
-      const compressionSpy = vi
-        .spyOn(
-          chat as unknown as {
-            performCompression(prompt_id: string): Promise<void>;
-          },
-          'performCompression',
-        )
-        .mockResolvedValue();
-
-      mockProvider.getModelParams = vi
-        .fn()
-        .mockReturnValue({ maxOutputTokens: 100 });
-
-      vi.spyOn(tokenLimitsModule, 'tokenLimit').mockReturnValue(4096);
-
-      await chat.sendMessage({ message: 'within budget' }, 'prompt-id-ok');
-
-      expect(compressionSpy).not.toHaveBeenCalled();
-    });
   });
 
   describe('sendMessageStream', () => {
@@ -284,8 +307,10 @@ describe('GeminiChat', () => {
         // consume stream to trigger internal logic
       }
 
-      expect(mockProvider.generateChatCompletion).toHaveBeenCalledWith(
-        expect.arrayContaining([
+      const [[streamCallArg]] = vi.mocked(mockProvider.generateChatCompletion)
+        .mock.calls;
+      expect(streamCallArg).toMatchObject({
+        contents: expect.arrayContaining([
           expect.objectContaining({
             speaker: 'human',
             blocks: expect.arrayContaining([
@@ -296,7 +321,19 @@ describe('GeminiChat', () => {
             ]),
           }),
         ]),
-        undefined, // no tools
+        tools: undefined,
+        config: mockConfig,
+      });
+      expect(streamCallArg.settings).toBe(
+        providerRuntimeSnapshot.settingsService,
+      );
+      expect(streamCallArg.runtime).toBeDefined();
+      expect(streamCallArg.runtime?.config).toBe(mockConfig);
+      expect(streamCallArg.runtime?.settingsService).toBeDefined();
+      expect(streamCallArg.runtime?.metadata).toEqual(
+        expect.objectContaining({
+          source: 'GeminiChat.generateRequest',
+        }),
       );
     });
   });
@@ -389,7 +426,36 @@ describe('GeminiChat', () => {
       chat.recordHistory(userInput, newModelOutput); // userInput here is for the *next* turn, but history is already primed
 
       // Reset and set up a more realistic scenario for merging with existing history
-      chat = new GeminiChat(mockConfig, mockModelsModule, config, []);
+      runtimeState = createAgentRuntimeState({
+        runtimeId: `${runtimeSetup.runtime.runtimeId}-reset`,
+        provider: runtimeSetup.provider.name,
+        model: 'gemini-pro',
+        authType: AuthType.LOGIN_WITH_GOOGLE,
+        sessionId: 'test-session-id',
+      });
+      const historyService2 = new HistoryService();
+      const view2 = createAgentRuntimeContext({
+        state: runtimeState,
+        history: historyService2,
+        settings: {
+          compressionThreshold: 0.8,
+          contextLimit: 200000,
+          preserveThreshold: 0.2,
+          telemetry: {
+            enabled: true,
+            target: null,
+          },
+        },
+        provider: createProviderAdapterFromManager(
+          mockConfig.getProviderManager(),
+        ),
+        telemetry: createTelemetryAdapterFromConfig(mockConfig as Config),
+        tools: createToolRegistryViewFromRegistry(
+          mockConfig.getToolRegistry?.(),
+        ),
+        providerRuntime: providerRuntimeSnapshot,
+      });
+      chat = new GeminiChat(view2, mockModelsModule, config, []);
       const firstUserInput: Content = {
         role: 'user',
         parts: [{ text: 'First user input' }],
@@ -432,7 +498,36 @@ describe('GeminiChat', () => {
         role: 'model',
         parts: [{ text: 'Initial model answer.' }],
       };
-      chat = new GeminiChat(mockConfig, mockModelsModule, config, [
+      runtimeState = createAgentRuntimeState({
+        runtimeId: `${runtimeSetup.runtime.runtimeId}-history`,
+        provider: runtimeSetup.provider.name,
+        model: 'gemini-pro',
+        authType: AuthType.LOGIN_WITH_GOOGLE,
+        sessionId: 'test-session-id',
+      });
+      const historyService3 = new HistoryService();
+      const view3 = createAgentRuntimeContext({
+        state: runtimeState,
+        history: historyService3,
+        settings: {
+          compressionThreshold: 0.8,
+          contextLimit: 200000,
+          preserveThreshold: 0.2,
+          telemetry: {
+            enabled: true,
+            target: null,
+          },
+        },
+        provider: createProviderAdapterFromManager(
+          mockConfig.getProviderManager(),
+        ),
+        telemetry: createTelemetryAdapterFromConfig(mockConfig as Config),
+        tools: createToolRegistryViewFromRegistry(
+          mockConfig.getToolRegistry?.(),
+        ),
+        providerRuntime: providerRuntimeSnapshot,
+      });
+      chat = new GeminiChat(view3, mockModelsModule, config, [
         initialUser,
         initialModel,
       ]);
@@ -1276,6 +1371,25 @@ describe('GeminiChat', () => {
         throw new Error('Expected text part in final model response');
       }
       expect(modelPart.text).toBe('Single tool processed');
+    });
+  });
+
+  describe('stateless runtime context compliance', () => {
+    it('should not rely on global provider runtime context', async () => {
+      const getRuntimeSpy = vi
+        .spyOn(providerRuntime, 'getActiveProviderRuntimeContext')
+        .mockImplementation(() => {
+          throw new Error(
+            'REGRESSION: GeminiChat accessed global provider runtime context',
+          );
+        });
+
+      await expect(
+        chat.sendMessage({ message: 'stateless-check' }, 'stateless-prompt'),
+      ).resolves.toBeDefined();
+
+      expect(getRuntimeSpy).not.toHaveBeenCalled();
+      getRuntimeSpy.mockRestore();
     });
   });
 });

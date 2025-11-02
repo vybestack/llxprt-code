@@ -4,9 +4,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { SettingsService } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 
 describe('Anthropic OAuth registration with environment key', () => {
+  let ensureOAuthProviderRegisteredMock: ReturnType<typeof vi.fn>;
+  let anthropicCtor: ReturnType<typeof vi.fn>;
+  let openaiCtor: ReturnType<typeof vi.fn>;
+  let openaiResponsesCtor: ReturnType<typeof vi.fn>;
+  let mockSettingsService: SettingsService;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    ensureOAuthProviderRegisteredMock = vi.fn();
+    anthropicCtor = vi.fn(() => ({}));
+    openaiCtor = vi.fn(() => ({}));
+    openaiResponsesCtor = vi.fn(() => ({}));
+    mockSettingsService = new SettingsService();
+  });
+
   afterEach(() => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
@@ -15,8 +33,6 @@ describe('Anthropic OAuth registration with environment key', () => {
   });
 
   it('registers Anthropic OAuth provider even when ANTHROPIC_API_KEY is set', async () => {
-    const ensureOAuthProviderRegisteredMock = vi.fn();
-
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
 
     vi.doMock('./oauth-provider-registration.js', () => ({
@@ -25,28 +41,19 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
-    const anthropicCtor = vi.fn(() => ({}) as unknown);
-
     vi.doMock('@vybestack/llxprt-code-core', async () => {
       const actual = await vi.importActual<
         typeof import('@vybestack/llxprt-code-core')
       >('@vybestack/llxprt-code-core');
 
       class MockProviderManager {
-        setConfig() {}
-        setActiveProvider() {}
-        registerProvider() {}
+        setConfig(): void {}
+        setActiveProvider(): void {}
+        registerProvider(): void {}
       }
 
       class MockGeminiProvider {
-        setConfig() {}
-      }
-
-      class MockConfig {
-        setProviderManager() {}
-        getEphemeralSettings() {
-          return {};
-        }
+        setConfig(): void {}
       }
 
       class MockProvider {}
@@ -54,7 +61,6 @@ describe('Anthropic OAuth registration with environment key', () => {
       return {
         ...actual,
         ProviderManager: MockProviderManager,
-        Config: MockConfig,
         GeminiProvider: MockGeminiProvider,
         OpenAIProvider: MockProvider,
         OpenAIResponsesProvider: MockProvider,
@@ -75,7 +81,6 @@ describe('Anthropic OAuth registration with environment key', () => {
       );
     expect(registeredAnthropic).toBe(true);
 
-    // Ensure anthropic provider constructor received oauthManager even when API key exists
     const ctorCalls = anthropicCtor.mock.calls;
     expect(ctorCalls).toHaveLength(1);
     const firstCall = ctorCalls[0] as unknown[] | undefined;
@@ -84,8 +89,6 @@ describe('Anthropic OAuth registration with environment key', () => {
   });
 
   it('ignores API keys when authOnly is enabled', async () => {
-    const ensureOAuthProviderRegisteredMock = vi.fn();
-
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
     process.env.OPENAI_API_KEY = 'sk-test-openai';
 
@@ -95,23 +98,19 @@ describe('Anthropic OAuth registration with environment key', () => {
       resetRegisteredProviders: vi.fn(),
     }));
 
-    const anthropicCtor = vi.fn(() => ({}));
-    const openaiCtor = vi.fn(() => ({}));
-    const openaiResponsesCtor = vi.fn(() => ({}));
-
     vi.doMock('@vybestack/llxprt-code-core', async () => {
       const actual = await vi.importActual<
         typeof import('@vybestack/llxprt-code-core')
       >('@vybestack/llxprt-code-core');
 
       class MockProviderManager {
-        setConfig() {}
-        setActiveProvider() {}
-        registerProvider() {}
+        setConfig(): void {}
+        setActiveProvider(): void {}
+        registerProvider(): void {}
       }
 
       class MockGeminiProvider {
-        setConfig() {}
+        setConfig(): void {}
       }
 
       return {
@@ -132,11 +131,14 @@ describe('Anthropic OAuth registration with environment key', () => {
 
     resetProviderManager();
     const mockConfig = {
-      setProviderManager() {},
+      setProviderManager(): void {},
       getEphemeralSettings() {
         return { authOnly: true };
       },
-    } as unknown as import('@vybestack/llxprt-code-core').Config;
+      getSettingsService() {
+        return mockSettingsService;
+      },
+    } as unknown as Config;
 
     getProviderManager(mockConfig, false, undefined);
 

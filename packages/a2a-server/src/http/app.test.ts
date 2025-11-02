@@ -87,6 +87,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
+    createRuntimeStateFromConfig: actual.createRuntimeStateFromConfig,
     MockTool: actual.MockTool, // Explicitly export MockTool
     GeminiClient: vi.fn().mockImplementation(() => ({
       sendMessageStream: sendMessageStreamSpy,

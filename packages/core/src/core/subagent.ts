@@ -4,12 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan PLAN-20251028-STATELESS6.P08
+ * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
+ * @pseudocode agent-runtime-context.md lines 92-101
+ */
 import { reportError } from '../utils/errorReporting.js';
-import { Config } from '../config/config.js';
-import { ToolCallRequestInfo } from './turn.js';
-import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import { createContentGenerator } from './contentGenerator.js';
-import { getEnvironmentContext } from '../utils/environmentContext.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+import { Config, ApprovalMode } from '../config/config.js';
+import { ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
+import {
+  executeToolCall,
+  type ToolExecutionConfig,
+} from './nonInteractiveToolExecutor.js';
 import {
   Content,
   Part,
@@ -17,8 +24,27 @@ import {
   GenerateContentConfig,
   FunctionDeclaration,
   Type,
+  Tool,
 } from '@google/genai';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
+import type {
+  AgentRuntimeContext,
+  ReadonlySettingsSnapshot,
+  ToolRegistryView,
+  ToolMetadata,
+} from '../runtime/AgentRuntimeContext.js';
+import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
+import type { ToolRegistry } from '../tools/tool-registry.js';
+import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
+import { TodoStore } from '../tools/todo-store.js';
+import { ToolResultDisplay } from '../tools/tools.js';
+import {
+  CoreToolScheduler,
+  type CompletedToolCall,
+  type OutputUpdateHandler,
+} from './coreToolScheduler.js';
+import type { SubagentSchedulerFactory } from './subagentScheduler.js';
+import { ToolErrorType } from '../tools/tool-error.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -61,6 +87,10 @@ export interface OutputObject {
    * during its execution. These variables can be used by the calling agent.
    */
   emitted_vars: Record<string, string>;
+  /**
+   * The final natural language response produced by the subagent (if any).
+   */
+  final_message?: string;
   /**
    * The reason for the subagent's termination, indicating whether it completed
    * successfully, timed out, or encountered an error.
@@ -106,6 +136,22 @@ export interface OutputConfig {
    */
   outputs: Record<string, string>;
 }
+
+export interface SubAgentRuntimeOverrides {
+  settingsSnapshot?: ReadonlySettingsSnapshot;
+  toolRegistry?: ToolRegistry;
+  environmentContextLoader?: (runtime: AgentRuntimeContext) => Promise<Part[]>;
+  runtimeBundle?: AgentRuntimeLoaderResult;
+}
+
+type EnvironmentContextLoader = (
+  runtime: AgentRuntimeContext,
+) => Promise<Part[]>;
+
+type ToolExecutionConfigShim = ToolExecutionConfig;
+
+const defaultEnvironmentContextLoader: EnvironmentContextLoader =
+  async () => [];
 
 /**
  * Configures the generative model parameters for the subagent.
@@ -185,6 +231,130 @@ export class ContextState {
   }
 }
 
+const normalizeToolName = (name: string): string => name.trim().toLowerCase();
+
+function convertMetadataToFunctionDeclaration(
+  fallbackName: string,
+  metadata: ToolMetadata,
+): FunctionDeclaration {
+  const rawSchema =
+    metadata.parameterSchema && typeof metadata.parameterSchema === 'object'
+      ? { ...(metadata.parameterSchema as Record<string, unknown>) }
+      : {};
+  const properties =
+    (rawSchema.properties as Record<string, unknown> | undefined) ?? {};
+
+  return {
+    name: metadata.name ?? fallbackName,
+    description: metadata.description ?? '',
+    parameters: {
+      ...rawSchema,
+      type: (rawSchema.type as Type | undefined) ?? Type.OBJECT,
+      properties,
+    } as FunctionDeclaration['parameters'],
+  };
+}
+
+async function validateToolsAgainstRuntime(params: {
+  toolConfig: ToolConfig;
+  toolRegistry: ToolRegistry;
+  toolsView: ToolRegistryView;
+}): Promise<void> {
+  const { toolConfig, toolRegistry, toolsView } = params;
+  const allowedNames = new Set(
+    (typeof toolsView.listToolNames === 'function'
+      ? toolsView.listToolNames()
+      : []
+    ).map(normalizeToolName),
+  );
+
+  for (const toolEntry of toolConfig.tools) {
+    if (typeof toolEntry !== 'string') {
+      continue;
+    }
+
+    if (
+      allowedNames.size > 0 &&
+      !allowedNames.has(normalizeToolName(toolEntry))
+    ) {
+      throw new Error(
+        `Tool "${toolEntry}" is not permitted for this runtime bundle.`,
+      );
+    }
+
+    const tool = toolRegistry.getTool(toolEntry);
+    if (!tool) {
+      continue;
+    }
+  }
+}
+
+function createToolExecutionConfig(
+  runtimeBundle: AgentRuntimeLoaderResult,
+  toolRegistry: ToolRegistry,
+  settingsSnapshot?: ReadonlySettingsSnapshot,
+  toolConfig?: ToolConfig,
+): ToolExecutionConfig {
+  const ephemerals = buildEphemeralSettings(settingsSnapshot);
+
+  if (toolConfig && Array.isArray(toolConfig.tools)) {
+    const normalizedWhitelist = toolConfig.tools
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0)
+      .map((entry) => entry.toLowerCase());
+
+    if (normalizedWhitelist.length > 0) {
+      const existingAllowed = Array.isArray(ephemerals['tools.allowed'])
+        ? (ephemerals['tools.allowed'] as string[])
+            .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+            .filter((entry) => entry.length > 0)
+            .map((entry) => entry.toLowerCase())
+        : [];
+
+      const allowedSet =
+        existingAllowed.length > 0
+          ? normalizedWhitelist.filter((entry) =>
+              existingAllowed.includes(entry),
+            )
+          : normalizedWhitelist;
+
+      ephemerals['tools.allowed'] = Array.from(new Set(allowedSet));
+    }
+  }
+
+  return {
+    getToolRegistry: () => toolRegistry,
+    getEphemeralSettings: () => ({ ...ephemerals }),
+    getEphemeralSetting: (key: string) => ephemerals[key],
+    getExcludeTools: () => [],
+    getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
+    getTelemetryLogPromptsEnabled: () =>
+      Boolean(settingsSnapshot?.telemetry?.enabled),
+  };
+}
+
+function buildEphemeralSettings(
+  snapshot?: ReadonlySettingsSnapshot,
+): Record<string, unknown> {
+  const ephemerals: Record<string, unknown> = {
+    emojifilter: 'auto',
+  };
+
+  if (!snapshot) {
+    return ephemerals;
+  }
+
+  if (snapshot.tools?.allowed) {
+    ephemerals['tools.allowed'] = [...snapshot.tools.allowed];
+  }
+  if (snapshot.tools?.disabled) {
+    ephemerals['tools.disabled'] = [...snapshot.tools.disabled];
+  }
+
+  return ephemerals;
+}
+
 /**
  * Replaces `${...}` placeholders in a template string with values from a context.
  *
@@ -228,6 +398,10 @@ function templateString(template: string, context: ContextState): string {
  * Represents the scope and execution environment for a subagent.
  * This class orchestrates the subagent's lifecycle, managing its chat interactions,
  * runtime context, and the collection of its outputs.
+ *
+ * @plan PLAN-20251028-STATELESS6.P08
+ * @requirement REQ-STAT6-001.1, REQ-STAT6-001.2, REQ-STAT6-003.1, REQ-STAT6-003.2
+ * @pseudocode agent-runtime-context.md line 93 (step 007.1)
  */
 export class SubAgentScope {
   output: OutputObject = {
@@ -235,26 +409,42 @@ export class SubAgentScope {
     emitted_vars: {},
   };
   private readonly subagentId: string;
+  private readonly logger = new DebugLogger('llxprt:subagent');
+  private readonly textToolParser = new GemmaToolCallParser();
+  private activeAbortController: AbortController | null = null;
 
   /** Optional callback for streaming text messages during execution */
   onMessage?: (message: string) => void;
 
   /**
    * Constructs a new SubAgentScope instance.
+   *
+   * @plan PLAN-20251028-STATELESS6.P08
+   * @requirement REQ-STAT6-001.1
+   * @pseudocode agent-runtime-context.md line 93 (step 007.1)
+   *
    * @param name - The name for the subagent, used for logging and identification.
-   * @param runtimeContext - The shared runtime configuration and services.
-   * @param promptConfig - Configuration for the subagent's prompt and behavior.
+   * @param runtimeContext - Immutable runtime context (replaces Config parameter).
    * @param modelConfig - Configuration for the generative model parameters.
    * @param runConfig - Configuration for the subagent's execution environment.
+   * @param promptConfig - Configuration for the subagent's prompt and behavior.
+   * @param contentGenerator - Pre-initialized content generator for this subagent.
+   * @param toolRegistry - Active tool registry for execution and validation.
+   * @param toolExecutorContext - Stateless execution context used for tool invocations.
+   * @param environmentContextLoader - Function that resolves environment context for prompts.
    * @param toolConfig - Optional configuration for tools available to the subagent.
    * @param outputConfig - Optional configuration for the subagent's expected outputs.
    */
   private constructor(
     readonly name: string,
-    readonly runtimeContext: Config,
-    private readonly promptConfig: PromptConfig,
+    readonly runtimeContext: AgentRuntimeContext,
     private readonly modelConfig: ModelConfig,
     private readonly runConfig: RunConfig,
+    private readonly promptConfig: PromptConfig,
+    private readonly contentGenerator: import('./contentGenerator.js').ContentGenerator,
+    private readonly toolExecutorContext: ToolExecutionConfigShim,
+    private readonly environmentContextLoader: EnvironmentContextLoader,
+    private readonly config: Config,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
   ) {
@@ -263,82 +453,405 @@ export class SubAgentScope {
   }
 
   /**
+   * Returns the unique agent identifier assigned to this subagent scope.
+   */
+  getAgentId(): string {
+    return this.subagentId;
+  }
+
+  /**
    * Creates and validates a new SubAgentScope instance.
    * This factory method ensures that all tools provided in the prompt configuration
    * are valid for non-interactive use before creating the subagent instance.
+   *
+   * @plan PLAN-20251028-STATELESS6.P08
+   * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1, REQ-STAT6-003.2
+   * @pseudocode agent-runtime-context.md lines 94-98 (steps 007.2-007.6)
+   *
    * @param {string} name - The name of the subagent.
-   * @param {Config} runtimeContext - The shared runtime configuration and services.
+   * @param {Config} foregroundConfig - Foreground configuration used for shared scheduler plumbing.
    * @param {PromptConfig} promptConfig - Configuration for the subagent's prompt and behavior.
    * @param {ModelConfig} modelConfig - Configuration for the generative model parameters.
    * @param {RunConfig} runConfig - Configuration for the subagent's execution environment.
    * @param {ToolConfig} [toolConfig] - Optional configuration for tools.
    * @param {OutputConfig} [outputConfig] - Optional configuration for expected outputs.
+   * @param {SubAgentRuntimeOverrides} [overrides] - Optional stateless runtime inputs (provider runtime, adapters, settings) to bypass Config usage.
    * @returns {Promise<SubAgentScope>} A promise that resolves to a valid SubAgentScope instance.
    * @throws {Error} If any tool requires user confirmation.
    */
   static async create(
     name: string,
-    runtimeContext: Config,
+    foregroundConfig: Config,
     promptConfig: PromptConfig,
     modelConfig: ModelConfig,
     runConfig: RunConfig,
     toolConfig?: ToolConfig,
     outputConfig?: OutputConfig,
+    overrides: SubAgentRuntimeOverrides = {},
   ): Promise<SubAgentScope> {
-    if (toolConfig) {
-      const toolRegistry = runtimeContext.getToolRegistry();
-      const toolsToLoad: string[] = [];
-      for (const tool of toolConfig.tools) {
-        if (typeof tool === 'string') {
-          toolsToLoad.push(tool);
-        }
-      }
-
-      for (const toolName of toolsToLoad) {
-        const tool = toolRegistry.getTool(toolName);
-        if (tool) {
-          const requiredParams = tool.schema.parameters?.required ?? [];
-          if (requiredParams.length > 0) {
-            // This check is imperfect. A tool might require parameters but still
-            // be interactive (e.g., `delete_file(path)`). However, we cannot
-            // build a generic invocation without knowing what dummy parameters
-            // to provide. Crashing here because `build({})` fails is worse
-            // than allowing a potential hang later if an interactive tool is
-            // used. This is a best-effort check.
-            console.warn(
-              `Cannot check tool "${toolName}" for interactivity because it requires parameters. Assuming it is safe for non-interactive use.`,
-            );
-            continue;
-          }
-
-          const invocation = tool.build({});
-          const confirmationDetails = await invocation.shouldConfirmExecute(
-            new AbortController().signal,
-          );
-          if (confirmationDetails) {
-            throw new Error(
-              `Tool "${toolName}" requires user confirmation and cannot be used in a non-interactive subagent.`,
-            );
-          }
-        }
-      }
+    const runtimeBundle = overrides.runtimeBundle;
+    if (!runtimeBundle) {
+      throw new Error(
+        'SubAgentScope.create requires a runtime bundle after initialization.',
+      );
     }
+
+    const toolsView =
+      runtimeBundle.runtimeContext.tools ?? runtimeBundle.toolsView;
+    if (!toolsView) {
+      throw new Error(
+        'SubAgentScope.create requires a ToolRegistryView from the runtime bundle.',
+      );
+    }
+
+    const toolRegistry = overrides.toolRegistry ?? runtimeBundle.toolRegistry;
+    if (!toolRegistry) {
+      throw new Error(
+        'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
+      );
+    }
+
+    if (toolConfig) {
+      await validateToolsAgainstRuntime({
+        toolConfig,
+        toolRegistry,
+        toolsView,
+      });
+    }
+
+    const settingsSnapshot =
+      overrides.settingsSnapshot ?? runtimeBundle.settingsSnapshot;
+
+    const toolExecutorContext = createToolExecutionConfig(
+      runtimeBundle,
+      toolRegistry,
+      settingsSnapshot,
+      toolConfig,
+    );
+
+    const environmentContextLoader =
+      overrides.environmentContextLoader ?? defaultEnvironmentContextLoader;
 
     return new SubAgentScope(
       name,
-      runtimeContext,
-      promptConfig,
+      runtimeBundle.runtimeContext,
       modelConfig,
       runConfig,
+      promptConfig,
+      runtimeBundle.contentGenerator,
+      toolExecutorContext,
+      environmentContextLoader,
+      foregroundConfig,
       toolConfig,
       outputConfig,
     );
+  }
+
+  private buildInitialMessages(context: ContextState): Content[] {
+    const behaviourPrompts =
+      (context.get('task_behaviour_prompts') as string[] | undefined) ?? [];
+    const initialInstruction =
+      behaviourPrompts.length > 0
+        ? behaviourPrompts.join('\n')
+        : 'Follow the task directives provided in the system prompt.';
+
+    return [
+      {
+        role: 'user',
+        parts: [{ text: initialInstruction }],
+      },
+    ];
+  }
+
+  /**
+   * Executes the subagent in interactive mode by routing tool calls through the
+   * shared CoreToolScheduler. Tests may supply a custom schedulerFactory to
+   * observe scheduling behaviour without touching the real scheduler.
+   */
+  async runInteractive(
+    context: ContextState,
+    options?: {
+      schedulerFactory?: SubagentSchedulerFactory;
+    },
+  ): Promise<void> {
+    const chat = await this.createChatObject(context);
+
+    if (!chat) {
+      this.output.terminate_reason = SubagentTerminateMode.ERROR;
+      return;
+    }
+
+    const abortController = new AbortController();
+    this.activeAbortController = abortController;
+
+    const functionDeclarations = this.buildRuntimeFunctionDeclarations();
+    if (this.outputConfig && this.outputConfig.outputs) {
+      functionDeclarations.push(...this.getScopeLocalFuncDefs());
+    }
+
+    if (
+      functionDeclarations.length > 0 &&
+      typeof (chat as { setTools?: (tools: Tool[]) => void }).setTools ===
+        'function'
+    ) {
+      try {
+        (chat as { setTools?: (tools: Tool[]) => void }).setTools?.([
+          { functionDeclarations },
+        ]);
+      } catch (error) {
+        this.logger.warn(
+          () =>
+            `Subagent ${this.subagentId} failed to register tools: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    const schedulerConfig = this.createSchedulerConfig({ interactive: true });
+    let pendingCompletedCalls: CompletedToolCall[] | null = null;
+    let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
+      null;
+
+    const awaitCompletedCalls = () => {
+      if (pendingCompletedCalls) {
+        const calls = pendingCompletedCalls;
+        pendingCompletedCalls = null;
+        return Promise.resolve(calls);
+      }
+      return new Promise<CompletedToolCall[]>((resolve) => {
+        completionResolver = resolve;
+      });
+    };
+
+    const outputUpdateHandler: OutputUpdateHandler = (_toolCallId, output) => {
+      if (output && this.onMessage) {
+        this.onMessage(output);
+      }
+    };
+
+    const handleCompletion = async (calls: CompletedToolCall[]) => {
+      if (completionResolver) {
+        completionResolver(calls);
+        completionResolver = null;
+      } else {
+        pendingCompletedCalls = calls;
+      }
+    };
+
+    const scheduler = options?.schedulerFactory
+      ? options.schedulerFactory({
+          schedulerConfig,
+          onAllToolCallsComplete: handleCompletion,
+          outputUpdateHandler,
+          onToolCallsUpdate: undefined,
+        })
+      : new CoreToolScheduler({
+          config: schedulerConfig,
+          outputUpdateHandler,
+          onAllToolCallsComplete: handleCompletion,
+          onToolCallsUpdate: undefined,
+          getPreferredEditor: () => undefined,
+          onEditorClose: () => {},
+        });
+
+    const startTime = Date.now();
+    let turnCounter = 0;
+    let currentMessages = this.buildInitialMessages(context);
+
+    try {
+      while (true) {
+        if (
+          this.runConfig.max_turns &&
+          turnCounter >= this.runConfig.max_turns
+        ) {
+          this.output.terminate_reason = SubagentTerminateMode.MAX_TURNS;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached max turns (${this.runConfig.max_turns})`,
+          );
+          break;
+        }
+
+        let durationMin = (Date.now() - startTime) / (1000 * 60);
+        if (durationMin >= this.runConfig.max_time_minutes) {
+          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached time limit (${this.runConfig.max_time_minutes} minutes)`,
+          );
+          break;
+        }
+
+        const currentTurn = turnCounter++;
+        const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
+        const providerName = this.runtimeContext.state.provider ?? 'backend';
+        const turn = new Turn(chat, promptId, this.subagentId, providerName);
+
+        let textResponse = '';
+        const parts = currentMessages[0]?.parts ?? [];
+
+        const stream = turn.run(parts, abortController.signal);
+        for await (const event of stream) {
+          if (abortController.signal.aborted) {
+            return;
+          }
+          if (event.type === GeminiEventType.Content && event.value) {
+            textResponse += event.value;
+            if (this.onMessage) {
+              this.onMessage(event.value);
+            }
+          } else if (
+            event.type === GeminiEventType.Error &&
+            event.value?.error
+          ) {
+            this.output.terminate_reason = SubagentTerminateMode.ERROR;
+            throw new Error(event.value.error.message);
+          }
+        }
+
+        if (textResponse.trim()) {
+          this.output.final_message = textResponse.trim();
+        }
+
+        const toolRequests = [...turn.pendingToolCalls];
+        if (toolRequests.length > 0) {
+          const manualParts: Part[] = [];
+          const schedulerRequests: ToolCallRequestInfo[] = [];
+
+          for (const request of toolRequests) {
+            if (request.name === 'self.emitvalue') {
+              manualParts.push(...this.handleEmitValueCall(request));
+            } else {
+              schedulerRequests.push(request);
+            }
+          }
+
+          let responseParts: Part[] = [...manualParts];
+
+          if (schedulerRequests.length > 0) {
+            const completionPromise = awaitCompletedCalls();
+            await scheduler.schedule(schedulerRequests, abortController.signal);
+            const completedCalls = await completionPromise;
+            responseParts = responseParts.concat(
+              this.buildPartsFromCompletedCalls(completedCalls),
+            );
+            const fatalCall = completedCalls.find(
+              (call) =>
+                call.status === 'error' &&
+                this.isFatalToolError(call.response.errorType),
+            );
+            if (fatalCall) {
+              const fatalMessage = this.buildToolUnavailableMessage(
+                fatalCall.request.name,
+                fatalCall.response.resultDisplay,
+                fatalCall.response.error,
+              );
+              this.logger.warn(
+                () =>
+                  `Subagent ${this.subagentId} cannot use tool '${fatalCall.request.name}': ${fatalMessage}`,
+              );
+              responseParts.push({ text: fatalMessage });
+              this.output.final_message = fatalMessage;
+            }
+          }
+
+          if (responseParts.length === 0) {
+            responseParts.push({
+              text: 'All tool calls failed. Please analyze the errors and try an alternative approach.',
+            });
+          }
+
+          currentMessages = [{ role: 'user', parts: responseParts }];
+          continue;
+        }
+
+        durationMin = (Date.now() - startTime) / (1000 * 60);
+        if (durationMin >= this.runConfig.max_time_minutes) {
+          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached time limit after turn ${currentTurn}`,
+          );
+          break;
+        }
+
+        const todoReminder = await this.buildTodoCompletionPrompt();
+        if (todoReminder) {
+          this.logger.debug(
+            () =>
+              `Subagent ${this.subagentId} postponing completion until outstanding todos are addressed`,
+          );
+          currentMessages = [
+            {
+              role: 'user',
+              parts: [{ text: todoReminder }],
+            },
+          ];
+          continue;
+        }
+
+        if (
+          !this.outputConfig ||
+          Object.keys(this.outputConfig.outputs).length === 0
+        ) {
+          this.output.terminate_reason = SubagentTerminateMode.GOAL;
+          break;
+        }
+
+        const remainingVars = Object.keys(this.outputConfig.outputs).filter(
+          (key) => !(key in this.output.emitted_vars),
+        );
+
+        if (remainingVars.length === 0) {
+          this.output.terminate_reason = SubagentTerminateMode.GOAL;
+          this.logger.debug(
+            () =>
+              `Subagent ${this.subagentId} satisfied output requirements on turn ${currentTurn}`,
+          );
+          break;
+        }
+
+        const nudgeMessage = `You have stopped calling tools but have not emitted the following required variables: ${remainingVars.join(
+          ', ',
+        )}. Please use the 'self.emitvalue' tool to emit them now, or continue working if necessary.`;
+
+        this.logger.debug(
+          () =>
+            `Subagent ${this.subagentId} nudging for outputs: ${remainingVars.join(', ')}`,
+        );
+
+        currentMessages = [
+          {
+            role: 'user',
+            parts: [{ text: nudgeMessage }],
+          },
+        ];
+      }
+      this.finalizeOutput();
+    } catch (error) {
+      this.logger.warn(
+        () =>
+          `Error during subagent execution for ${this.subagentId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      this.output.terminate_reason = SubagentTerminateMode.ERROR;
+      if (!this.output.final_message) {
+        this.output.final_message =
+          error instanceof Error ? error.message : String(error);
+      }
+      this.finalizeOutput();
+      throw error;
+    } finally {
+      this.activeAbortController = null;
+    }
   }
 
   /**
    * Runs the subagent in a non-interactive mode.
    * This method orchestrates the subagent's execution loop, including prompt templating,
    * tool execution, and termination conditions.
+   *
+   * @plan PLAN-20251028-STATELESS6.P08
+   * @requirement REQ-STAT6-001.1
+   *
    * @param {ContextState} context - The current context state containing variables for prompt templating.
    * @returns {Promise<void>} A promise that resolves when the subagent has completed its execution.
    */
@@ -351,31 +864,24 @@ export class SubAgentScope {
     }
 
     const abortController = new AbortController();
-    const toolRegistry = this.runtimeContext.getToolRegistry();
+    this.activeAbortController = abortController;
 
-    // Prepare the list of tools available to the subagent.
-    const toolsList: FunctionDeclaration[] = [];
-    if (this.toolConfig) {
-      const toolsToLoad: string[] = [];
-      for (const tool of this.toolConfig.tools) {
-        if (typeof tool === 'string') {
-          toolsToLoad.push(tool);
-        } else {
-          toolsList.push(tool);
-        }
-      }
-      toolsList.push(
-        ...toolRegistry.getFunctionDeclarationsFiltered(toolsToLoad),
-      );
-    }
-    // Add local scope functions if outputs are expected.
+    const toolsList: FunctionDeclaration[] =
+      this.buildRuntimeFunctionDeclarations();
     if (this.outputConfig && this.outputConfig.outputs) {
       toolsList.push(...this.getScopeLocalFuncDefs());
     }
 
-    let currentMessages: Content[] = [
-      { role: 'user', parts: [{ text: 'Get Started!' }] },
-    ];
+    this.logger.debug(
+      () =>
+        `Subagent ${this.subagentId} (${this.name}) starting run with toolCount=${toolsList.length} requestedOutputs=${
+          this.outputConfig
+            ? Object.keys(this.outputConfig.outputs).join(', ')
+            : 'none'
+        } runConfig=${JSON.stringify(this.runConfig)}`,
+    );
+
+    let currentMessages: Content[] = this.buildInitialMessages(context);
 
     const startTime = Date.now();
     let turnCounter = 0;
@@ -387,15 +893,30 @@ export class SubAgentScope {
           turnCounter >= this.runConfig.max_turns
         ) {
           this.output.terminate_reason = SubagentTerminateMode.MAX_TURNS;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached max turns (${this.runConfig.max_turns})`,
+          );
           break;
         }
         let durationMin = (Date.now() - startTime) / (1000 * 60);
         if (durationMin >= this.runConfig.max_time_minutes) {
           this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached time limit (${this.runConfig.max_time_minutes} minutes)`,
+          );
           break;
         }
 
-        const promptId = `${this.runtimeContext.getSessionId()}#${this.subagentId}#${turnCounter++}`;
+        // @plan PLAN-20251028-STATELESS6.P08
+        // @requirement REQ-STAT6-001.1
+        const currentTurn = turnCounter++;
+        const promptId = `${this.runtimeContext.state.sessionId}#${this.subagentId}#${currentTurn}`;
+        this.logger.debug(
+          () =>
+            `Subagent ${this.subagentId} turn=${currentTurn} promptId=${promptId}`,
+        );
         const messageParams = {
           message: currentMessages[0]?.parts || [],
           config: {
@@ -409,25 +930,91 @@ export class SubAgentScope {
           promptId,
         );
 
-        const functionCalls: FunctionCall[] = [];
+        let functionCalls: FunctionCall[] = [];
         let textResponse = '';
         for await (const resp of responseStream) {
           if (abortController.signal.aborted) return;
           if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
-            functionCalls.push(...resp.value.functionCalls);
+            const chunkCalls = resp.value.functionCalls ?? [];
+            if (chunkCalls.length > 0) {
+              functionCalls.push(...chunkCalls);
+              this.logger.debug(
+                () =>
+                  `Subagent ${this.subagentId} received ${chunkCalls.length} function calls on turn ${currentTurn}`,
+              );
+            }
           }
           if (resp.type === StreamEventType.CHUNK && resp.value.text) {
             textResponse += resp.value.text;
           }
         }
 
-        if (this.onMessage && textResponse) {
-          this.onMessage(textResponse);
+        if (textResponse) {
+          if (this.onMessage) {
+            this.onMessage(textResponse);
+          }
+
+          let cleanedText = textResponse;
+          try {
+            const parsedResult = this.textToolParser.parse(textResponse);
+            cleanedText = parsedResult.cleanedContent;
+            if (parsedResult.toolCalls.length > 0) {
+              const synthesizedCalls: FunctionCall[] = [];
+              parsedResult.toolCalls.forEach((call, index) => {
+                const normalizedName = this.normalizeToolName(call.name);
+                if (!normalizedName) {
+                  this.logger.debug(
+                    () =>
+                      `Subagent ${this.subagentId} could not map textual tool name '${call.name}' to a registered tool`,
+                  );
+                  return;
+                }
+                synthesizedCalls.push({
+                  id: `parsed_${this.subagentId}_${Date.now()}_${index}`,
+                  name: normalizedName,
+                  args: call.arguments ?? {},
+                });
+              });
+
+              if (synthesizedCalls.length > 0) {
+                functionCalls = [...functionCalls, ...synthesizedCalls];
+                this.logger.debug(
+                  () =>
+                    `Subagent ${this.subagentId} extracted ${synthesizedCalls.length} tool call(s) from text: ${synthesizedCalls
+                      .map((call) => call.name)
+                      .join(', ')}`,
+                );
+              }
+            }
+          } catch (error) {
+            this.logger.warn(
+              () =>
+                `Subagent ${this.subagentId} failed to parse textual tool calls: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+
+          textResponse = cleanedText;
+          const trimmedText = textResponse.trim();
+          if (trimmedText.length > 0) {
+            this.output.final_message = trimmedText;
+          }
+          const preview =
+            textResponse.length > 200
+              ? `${textResponse.slice(0, 200)}…`
+              : textResponse;
+          this.logger.debug(
+            () =>
+              `Subagent ${this.subagentId} model response (truncated): ${preview}`,
+          );
         }
 
         durationMin = (Date.now() - startTime) / (1000 * 60);
         if (durationMin >= this.runConfig.max_time_minutes) {
           this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached time limit after turn ${currentTurn}`,
+          );
           break;
         }
 
@@ -439,6 +1026,21 @@ export class SubAgentScope {
           );
         } else {
           // Model stopped calling tools. Check if goal is met.
+          const todoReminder = await this.buildTodoCompletionPrompt();
+          if (todoReminder) {
+            this.logger.debug(
+              () =>
+                `Subagent ${this.subagentId} postponing completion until outstanding todos are addressed`,
+            );
+            currentMessages = [
+              {
+                role: 'user',
+                parts: [{ text: todoReminder }],
+              },
+            ];
+            continue;
+          }
+
           if (
             !this.outputConfig ||
             Object.keys(this.outputConfig.outputs).length === 0
@@ -453,6 +1055,10 @@ export class SubAgentScope {
 
           if (remainingVars.length === 0) {
             this.output.terminate_reason = SubagentTerminateMode.GOAL;
+            this.logger.debug(
+              () =>
+                `Subagent ${this.subagentId} satisfied output requirements on turn ${currentTurn}`,
+            );
             break;
           }
 
@@ -460,7 +1066,10 @@ export class SubAgentScope {
             ', ',
           )}. Please use the 'self.emitvalue' tool to emit them now, or continue working if necessary.`;
 
-          console.debug(nudgeMessage);
+          this.logger.debug(
+            () =>
+              `Subagent ${this.subagentId} nudging for outputs: ${remainingVars.join(', ')}`,
+          );
 
           currentMessages = [
             {
@@ -470,11 +1079,36 @@ export class SubAgentScope {
           ];
         }
       }
+      this.finalizeOutput();
     } catch (error) {
-      console.error('Error during subagent execution:', error);
+      this.logger.warn(
+        () =>
+          `Error during subagent execution for ${this.subagentId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
+      if (!this.output.final_message) {
+        this.output.final_message =
+          error instanceof Error ? error.message : String(error);
+      }
+      this.finalizeOutput();
       throw error;
+    } finally {
+      this.activeAbortController = null;
     }
+  }
+
+  cancel(reason?: string): void {
+    if (this.activeAbortController?.signal.aborted) {
+      return;
+    }
+    if (!this.activeAbortController) {
+      return;
+    }
+    this.logger.warn(() => {
+      const suffix = reason ? `: ${reason}` : '';
+      return `Subagent ${this.subagentId} cancellation requested${suffix}`;
+    });
+    this.activeAbortController.abort();
   }
 
   /**
@@ -503,7 +1137,13 @@ export class SubAgentScope {
         args: (functionCall.args ?? {}) as Record<string, unknown>,
         isClientInitiated: true,
         prompt_id: promptId,
+        agentId: this.subagentId,
       };
+
+      this.logger.debug(
+        () =>
+          `Subagent ${this.subagentId} executing tool '${requestInfo.name}' with args=${JSON.stringify(requestInfo.args)}`,
+      );
 
       let toolResponse;
 
@@ -518,10 +1158,14 @@ export class SubAgentScope {
           responseParts: [{ text: `Emitted variable ${valName} successfully` }],
           resultDisplay: `Emitted variable ${valName} successfully`,
           error: undefined,
+          errorType: undefined,
+          agentId: requestInfo.agentId,
         };
       } else {
+        // @plan PLAN-20251028-STATELESS6.P08
+        // @requirement REQ-STAT6-001.1
         toolResponse = await executeToolCall(
-          this.runtimeContext,
+          this.toolExecutorContext,
           requestInfo,
           abortController.signal,
         );
@@ -531,6 +1175,32 @@ export class SubAgentScope {
         console.error(
           `Error executing tool ${functionCall.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
         );
+      }
+      if (toolResponse.error) {
+        this.logger.warn(
+          () =>
+            `Subagent ${this.subagentId} tool '${functionCall.name}' failed: ${toolResponse.error?.message}`,
+        );
+      } else {
+        this.logger.debug(
+          () =>
+            `Subagent ${this.subagentId} tool '${functionCall.name}' completed successfully`,
+        );
+      }
+
+      if (this.isFatalToolError(toolResponse.errorType)) {
+        const fatalMessage = this.buildToolUnavailableMessage(
+          functionCall.name as string,
+          toolResponse.resultDisplay,
+          toolResponse.error,
+        );
+        this.logger.warn(
+          () =>
+            `Subagent ${this.subagentId} cannot use tool '${functionCall.name}': ${fatalMessage}`,
+        );
+        toolResponseParts.push({ text: fatalMessage });
+        this.output.final_message = fatalMessage;
+        continue;
       }
 
       if (toolResponse.responseParts) {
@@ -547,6 +1217,302 @@ export class SubAgentScope {
     return [{ role: 'user', parts: toolResponseParts }];
   }
 
+  private createSchedulerConfig(options?: { interactive?: boolean }): Config {
+    const isInteractive = options?.interactive ?? false;
+
+    const whitelist =
+      !isInteractive && this.toolConfig
+        ? this.toolConfig.tools.filter(
+            (entry): entry is string => typeof entry === 'string',
+          )
+        : [];
+
+    const getEphemeralSettings =
+      typeof this.toolExecutorContext.getEphemeralSettings === 'function'
+        ? () => ({
+            ...this.toolExecutorContext.getEphemeralSettings!(),
+          })
+        : () => this.config.getEphemeralSettings();
+
+    const getExcludeTools =
+      typeof this.toolExecutorContext.getExcludeTools === 'function'
+        ? () => this.toolExecutorContext.getExcludeTools()
+        : () => this.config.getExcludeTools?.() ?? [];
+
+    const getTelemetryLogPromptsEnabled =
+      typeof this.toolExecutorContext.getTelemetryLogPromptsEnabled ===
+      'function'
+        ? () => this.toolExecutorContext.getTelemetryLogPromptsEnabled()
+        : () => this.config.getTelemetryLogPromptsEnabled();
+
+    const allowedTools = isInteractive
+      ? typeof this.config.getAllowedTools === 'function'
+        ? this.config.getAllowedTools()
+        : undefined
+      : whitelist.length > 0
+        ? whitelist
+        : typeof this.config.getAllowedTools === 'function'
+          ? this.config.getAllowedTools()
+          : undefined;
+
+    return {
+      getToolRegistry: () => this.toolExecutorContext.getToolRegistry(),
+      getSessionId: () => this.toolExecutorContext.getSessionId(),
+      getEphemeralSettings,
+      getExcludeTools,
+      getTelemetryLogPromptsEnabled,
+      getAllowedTools: () => allowedTools,
+      getApprovalMode: () =>
+        typeof this.config.getApprovalMode === 'function'
+          ? this.config.getApprovalMode()
+          : ApprovalMode.DEFAULT,
+    } as unknown as Config;
+  }
+
+  private finalizeOutput(): void {
+    const message = this.output.final_message;
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return;
+    }
+
+    const emittedVars = this.output.emitted_vars ?? {};
+    const emittedEntries = Object.entries(emittedVars)
+      .filter(
+        ([, value]) =>
+          value !== undefined &&
+          value !== null &&
+          String(value).trim().length > 0,
+      )
+      .map(([key, value]) => `${key}=${String(value)}`);
+
+    let baseMessage: string;
+    switch (this.output.terminate_reason) {
+      case SubagentTerminateMode.GOAL:
+        baseMessage = 'Completed the requested task.';
+        break;
+      case SubagentTerminateMode.TIMEOUT:
+        baseMessage = 'Stopped because the time limit was reached.';
+        break;
+      case SubagentTerminateMode.MAX_TURNS:
+        baseMessage =
+          'Stopped because the maximum number of turns was reached.';
+        break;
+      case SubagentTerminateMode.ERROR:
+      default:
+        baseMessage = 'Stopped due to an unrecoverable error.';
+        break;
+    }
+
+    const varsSuffix =
+      emittedEntries.length > 0
+        ? ` Emitted variables: ${emittedEntries.join(', ')}.`
+        : '';
+
+    this.output.final_message = `${baseMessage}${varsSuffix}`.trim();
+  }
+
+  private isFatalToolError(errorType: ToolErrorType | undefined): boolean {
+    return (
+      errorType === ToolErrorType.TOOL_DISABLED ||
+      errorType === ToolErrorType.TOOL_NOT_REGISTERED
+    );
+  }
+
+  private buildToolUnavailableMessage(
+    toolName: string,
+    resultDisplay?: ToolResultDisplay,
+    error?: Error,
+  ): string {
+    const detail = this.extractToolDetail(resultDisplay, error);
+    const baseMessage = `Tool "${toolName}" is not available in this environment.`;
+    return detail
+      ? `${baseMessage} ${detail}`
+      : `${baseMessage} Please continue without using it.`;
+  }
+
+  private extractToolDetail(
+    resultDisplay?: ToolResultDisplay,
+    error?: Error,
+  ): string | undefined {
+    if (error?.message) {
+      return error.message;
+    }
+    if (typeof resultDisplay === 'string') {
+      return resultDisplay;
+    }
+    if (
+      resultDisplay &&
+      typeof resultDisplay === 'object' &&
+      'message' in resultDisplay &&
+      typeof (resultDisplay as { message?: unknown }).message === 'string'
+    ) {
+      return (resultDisplay as { message: string }).message;
+    }
+    return undefined;
+  }
+
+  private handleEmitValueCall(request: ToolCallRequestInfo): Part[] {
+    const args = request.args ?? {};
+    const variableName =
+      typeof args.emit_variable_name === 'string'
+        ? args.emit_variable_name
+        : typeof args.emitVariableName === 'string'
+          ? args.emitVariableName
+          : '';
+    const variableValue =
+      typeof args.emit_variable_value === 'string'
+        ? args.emit_variable_value
+        : typeof args.emitVariableValue === 'string'
+          ? args.emitVariableValue
+          : '';
+
+    if (variableName && variableValue) {
+      this.output.emitted_vars[variableName] = variableValue;
+      const message = `Emitted variable ${variableName} successfully`;
+      if (this.onMessage) {
+        this.onMessage(`[${this.subagentId}] ${message}`);
+      }
+      return [
+        {
+          functionCall: {
+            id: request.callId,
+            name: request.name,
+            args: request.args,
+          },
+        },
+        {
+          functionResponse: {
+            id: request.callId,
+            name: request.name,
+            response: {
+              emit_variable_name: variableName,
+              emit_variable_value: variableValue,
+              message,
+            },
+          },
+        },
+      ];
+    }
+
+    const errorMessage =
+      'self.emitvalue requires emit_variable_name and emit_variable_value arguments.';
+    this.logger.warn(
+      () => `Subagent ${this.subagentId} failed to emit value: ${errorMessage}`,
+    );
+    return [
+      {
+        functionCall: {
+          id: request.callId,
+          name: request.name,
+          args: request.args,
+        },
+      },
+      {
+        functionResponse: {
+          id: request.callId,
+          name: request.name,
+          response: { error: errorMessage },
+        },
+      },
+    ];
+  }
+
+  private buildPartsFromCompletedCalls(
+    completedCalls: CompletedToolCall[],
+  ): Part[] {
+    const aggregate: Part[] = [];
+    for (const call of completedCalls) {
+      if (call.response?.responseParts?.length) {
+        aggregate.push(...call.response.responseParts);
+      } else {
+        aggregate.push({
+          text: `Tool ${call.request.name} completed without response.`,
+        });
+      }
+
+      if (call.status === 'error') {
+        const errorMessage =
+          call.response?.error?.message ??
+          call.response?.resultDisplay ??
+          'Tool execution failed.';
+        this.logger.warn(
+          () =>
+            `Subagent ${this.subagentId} tool '${call.request.name}' failed: ${errorMessage}`,
+        );
+      } else if (call.status === 'cancelled') {
+        this.logger.warn(
+          () =>
+            `Subagent ${this.subagentId} tool '${call.request.name}' was cancelled.`,
+        );
+      }
+
+      const display = call.response?.resultDisplay;
+      if (typeof display === 'string' && this.onMessage && display.trim()) {
+        this.onMessage(display);
+      }
+    }
+    return aggregate;
+  }
+
+  private async buildTodoCompletionPrompt(): Promise<string | null> {
+    const sessionId = this.runtimeContext.state.sessionId;
+    if (!sessionId) {
+      return null;
+    }
+
+    try {
+      let todos = await new TodoStore(sessionId, this.subagentId).readTodos();
+      if (todos.length === 0) {
+        todos = await new TodoStore(sessionId).readTodos();
+      }
+
+      if (todos.length === 0) {
+        return null;
+      }
+
+      const outstanding = todos.filter((todo) => todo.status !== 'completed');
+
+      if (outstanding.length === 0) {
+        return null;
+      }
+
+      const previewCount = Math.min(3, outstanding.length);
+      const previewLines = outstanding
+        .slice(0, previewCount)
+        .map((todo) => `- ${todo.content}`);
+      if (outstanding.length > previewCount) {
+        previewLines.push(
+          `- ... and ${outstanding.length - previewCount} more`,
+        );
+      }
+
+      return [
+        'You still have todos in your todo list. Complete them before finishing.',
+        previewLines.length > 0
+          ? `Outstanding items:\n${previewLines.join('\n')}`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+    } catch (error) {
+      this.logger.warn(
+        () =>
+          `Subagent ${this.subagentId} could not inspect todos: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Creates a GeminiChat instance for this subagent.
+   *
+   * @plan PLAN-20251028-STATELESS6.P08
+   * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
+   * @pseudocode agent-runtime-context.md line 99 (step 007.7)
+   *
+   * Step 007.7: Update GeminiChat instantiation to use AgentRuntimeContext
+   * Step 007.8: REMOVE Config mutation (no setModel call)
+   */
   private async createChatObject(context: ContextState) {
     if (!this.promptConfig.systemPrompt && !this.promptConfig.initialMessages) {
       throw new Error(
@@ -559,7 +1525,7 @@ export class SubAgentScope {
       );
     }
 
-    const envParts = await getEnvironmentContext(this.runtimeContext);
+    const envParts = await this.environmentContextLoader(this.runtimeContext);
 
     // Extract environment context text
     const envContextText = envParts
@@ -569,47 +1535,47 @@ export class SubAgentScope {
     const start_history = [...(this.promptConfig.initialMessages ?? [])];
 
     // Build system instruction with environment context
-    let systemInstruction = this.promptConfig.systemPrompt
+    const personaPrompt = this.promptConfig.systemPrompt
       ? this.buildChatSystemPrompt(context)
-      : envContextText;
+      : '';
 
-    // If we have both env context and system prompt, combine them
-    if (this.promptConfig.systemPrompt && envContextText) {
-      systemInstruction = `${envContextText}\n\n${systemInstruction}`;
+    let systemInstruction = personaPrompt;
+
+    if (envContextText && envContextText.trim().length > 0) {
+      systemInstruction = personaPrompt
+        ? `${personaPrompt}\n\n${envContextText.trim()}`
+        : envContextText.trim();
     }
 
+    this.logger.debug(() => {
+      const preview =
+        systemInstruction && systemInstruction.length > 0
+          ? systemInstruction.slice(0, 1200)
+          : '<empty>';
+      return `System instruction preview: ${preview}`;
+    });
+
     try {
+      // Step 007.7: Build generation config from runtime view ephemerals
+      // @plan PLAN-20251028-STATELESS6.P08
+      // @requirement REQ-STAT6-002.2
       const generationConfig: GenerateContentConfig & {
         systemInstruction?: string | Content;
       } = {
         temperature: this.modelConfig.temp,
         topP: this.modelConfig.top_p,
+        systemInstruction: systemInstruction || undefined,
       };
 
-      if (systemInstruction) {
-        generationConfig.systemInstruction = systemInstruction;
-      }
-
-      const contentGenConfig = this.runtimeContext.getContentGeneratorConfig();
-      if (!contentGenConfig) {
-        // In llxprt, when using providers, we may not have a content generator config
-        // but we still need to create one for the subagent
-        throw new Error(
-          'Content generator config is not available. Please ensure proper initialization.',
-        );
-      }
-
-      const contentGenerator = await createContentGenerator(
-        contentGenConfig,
-        this.runtimeContext,
-        this.runtimeContext.getSessionId(),
-      );
-
-      this.runtimeContext.setModel(this.modelConfig.model);
-
+      // Step 007.7: Instantiate GeminiChat with runtime view
+      // @plan PLAN-20251028-STATELESS6.P10
+      // @requirement REQ-STAT6-001.2, REQ-STAT6-003.1, REQ-STAT6-003.2
+      // @pseudocode agent-runtime-context.md line 99 (step 007.7)
+      // NOTE: NO Config.setModel() call - REQ-STAT6-003.1 (step 007.8)
+      // NOTE: GeminiChat operates solely on runtime context
       return new GeminiChat(
-        this.runtimeContext,
-        contentGenerator,
+        this.runtimeContext, // AgentRuntimeContext (replaces runtimeState+config+history)
+        this.contentGenerator,
         generationConfig,
         start_history,
       );
@@ -623,6 +1589,48 @@ export class SubAgentScope {
       // The calling function will handle the undefined return.
       return undefined;
     }
+  }
+
+  private buildRuntimeFunctionDeclarations(): FunctionDeclaration[] {
+    if (!this.toolConfig || this.toolConfig.tools.length === 0) {
+      return [];
+    }
+
+    const toolsView = this.runtimeContext.tools;
+    const listedNames =
+      typeof toolsView.listToolNames === 'function'
+        ? toolsView.listToolNames()
+        : [];
+    const allowedNames = new Set(listedNames.map(normalizeToolName));
+
+    const declarations: FunctionDeclaration[] = [];
+    for (const entry of this.toolConfig.tools) {
+      if (typeof entry !== 'string') {
+        declarations.push(entry);
+        continue;
+      }
+
+      if (
+        allowedNames.size > 0 &&
+        !allowedNames.has(normalizeToolName(entry))
+      ) {
+        console.warn(
+          `Tool "${entry}" is not permitted by the runtime view and will be skipped.`,
+        );
+        continue;
+      }
+
+      const metadata = toolsView.getToolMetadata(entry);
+      if (!metadata) {
+        console.warn(
+          `Tool "${entry}" is not available in the runtime view and will be skipped.`,
+        );
+        continue;
+      }
+
+      declarations.push(convertMetadataToFunctionDeclaration(entry, metadata));
+    }
+    return declarations;
   }
 
   /**
@@ -653,6 +1661,48 @@ export class SubAgentScope {
     };
 
     return [emitValueTool];
+  }
+
+  private normalizeToolName(rawName: string | undefined): string | null {
+    if (!rawName) {
+      return null;
+    }
+
+    const candidates = new Set<string>();
+    const trimmed = rawName.trim();
+    if (trimmed) {
+      candidates.add(trimmed);
+      candidates.add(trimmed.toLowerCase());
+    }
+
+    if (trimmed.endsWith('Tool')) {
+      const withoutSuffix = trimmed.slice(0, -4);
+      if (withoutSuffix) {
+        candidates.add(withoutSuffix);
+        candidates.add(withoutSuffix.toLowerCase());
+        candidates.add(this.toSnakeCase(withoutSuffix));
+      }
+    }
+
+    candidates.add(this.toSnakeCase(trimmed));
+
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      if (this.runtimeContext.tools.getToolMetadata(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  private toSnakeCase(value: string): string {
+    return value
+      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+      .replace(/[\s-]+/g, '_')
+      .toLowerCase();
   }
 
   /**

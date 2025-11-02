@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
+// createHash import removed - no longer needed without client caching
 import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
 import {
@@ -16,7 +18,6 @@ import { Config } from '../../config/config.js';
 import { AuthType } from '../../core/contentGenerator.js';
 import { AuthenticationRequiredError } from '../errors.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
-import { createCodeAssistContentGenerator } from '../../code_assist/codeAssist.js';
 import {
   Type,
   type Part,
@@ -25,14 +26,21 @@ import {
   type GenerateContentParameters,
   type GenerateContentResponse,
 } from '@google/genai';
-import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
-import { OAuthManager } from '../../auth/precedence.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import {
-  retryWithBackoff,
-  getErrorStatus,
-  isNetworkTransientError,
-} from '../../utils/retry.js';
+  BaseProvider,
+  BaseProviderConfig,
+  NormalizedGenerateChatOptions,
+} from '../BaseProvider.js';
+import { OAuthManager } from '../../auth/precedence.js';
+
+/**
+ * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+ * @requirement:REQ-SP4-002
+ * @pseudocode lines 10-14
+ *
+ * Removed module-level client cache to ensure stateless behavior.
+ * All runtime caches and cache-related types eliminated per REQ-SP4-002.
+ */
 
 /**
  * @plan PLAN-20250822-GEMINIFALLBACK.P12
@@ -60,7 +68,54 @@ interface GeminiResponseWithUsage {
   usageMetadata?: GeminiUsageMetadata;
 }
 
+type CodeAssistGeneratorFactory =
+  (typeof import('../../code_assist/codeAssist.js'))['createCodeAssistContentGenerator'];
+type CodeAssistContentGenerator = Awaited<
+  ReturnType<CodeAssistGeneratorFactory>
+>;
+
 export class GeminiProvider extends BaseProvider {
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * @pseudocode lines 10-14
+   *
+   * Removed cached state variables to ensure stateless behavior.
+   * Provider now resolves model, auth, and parameters per call.
+   * No instance state: authMode, model overrides, modelExplicitlySet, currentModel removed.
+   * @requirement:REQ-SP4-003: Auth/model/params come from NormalizedGenerateChatOptions
+   */
+  private readonly geminiOAuthManager?: OAuthManager;
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002, REQ-SP4-003
+   * @pseudocode lines 10-14
+   *
+   * Simplified constructor that only stores readonly OAuth manager.
+   * All other state is now resolved per call from NormalizedGenerateChatOptions.
+   * No loggers cached - created on demand like AnthropicProvider.
+   */
+  constructor(
+    apiKey?: string,
+    baseURL?: string,
+    config?: Config,
+    oauthManager?: OAuthManager,
+  ) {
+    const baseConfig: BaseProviderConfig = {
+      name: 'gemini',
+      apiKey,
+      baseURL,
+      envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+      isOAuthEnabled: !!oauthManager,
+      oauthProvider: oauthManager ? 'gemini' : undefined,
+      oauthManager,
+    };
+
+    super(baseConfig, config);
+    this.geminiOAuthManager = oauthManager;
+  }
+
   /**
    * @description Cleans a JSON Schema object to ensure it strictly conforms to the Gemini API's supported Schema definition.
    * This function acts as a whitelist, removing any properties not explicitly defined in the OpenAPI 3.03 Schema Object
@@ -140,37 +195,62 @@ export class GeminiProvider extends BaseProvider {
     return cleanedSchema as Schema;
   }
 
-  private logger: DebugLogger;
-  private authMode: GeminiAuthMode = 'none';
-  private currentModel: string = 'gemini-2.5-pro';
-  private modelExplicitlySet: boolean = false;
-  private modelParams?: Record<string, unknown>;
-  private geminiOAuthManager?: OAuthManager;
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Create loggers on-demand to avoid instance state, like AnthropicProvider
+   */
+  private getLogger(): DebugLogger {
+    return new DebugLogger('llxprt:gemini:provider');
+  }
 
-  constructor(
-    apiKey?: string,
+  private getToolsLogger(): DebugLogger {
+    return new DebugLogger('llxprt:gemini:tools');
+  }
+
+  /**
+   * @plan PLAN-20251018-STATELESSPROVIDER2.P12
+   * @requirement REQ-SP2-001
+   * @pseudocode anthropic-gemini-stateless.md lines 1-2
+   */
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Determine streaming preference from config settings per call
+   */
+  private getStreamingPreference(
+    _options: NormalizedGenerateChatOptions,
+  ): boolean {
+    const streamingSetting =
+      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
+    return streamingSetting !== 'disabled';
+  }
+
+  protected async createOAuthContentGenerator(
+    httpOptions: Record<string, unknown>,
+    config: Config,
     baseURL?: string,
-    config?: Config,
-    oauthManager?: OAuthManager,
-  ) {
-    // Initialize base provider with auth configuration
-    const baseConfig: BaseProviderConfig = {
-      name: 'gemini',
-      apiKey,
+  ): Promise<CodeAssistContentGenerator> {
+    const { createCodeAssistContentGenerator } = await import(
+      '../../code_assist/codeAssist.js'
+    );
+    return createCodeAssistContentGenerator(
+      httpOptions,
+      AuthType.LOGIN_WITH_GOOGLE,
+      config,
       baseURL,
-      envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-      isOAuthEnabled: false, // OAuth enablement will be checked dynamically
-      oauthProvider: 'gemini',
-      oauthManager, // Keep the manager for checking enablement
-    };
+    );
+  }
 
-    super(baseConfig, config, undefined);
-
-    this.logger = new DebugLogger('llxprt:gemini:provider');
-    this.geminiOAuthManager = oauthManager;
-
-    // Do not determine auth mode on instantiation.
-    // This will be done lazily when a chat completion is requested.
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * No operation - stateless provider has no cache to clear
+   */
+  clearClientCache(_runtimeKey?: string): void {
+    this.getLogger().debug(
+      () => 'Cache clear called on stateless provider - no operation',
+    );
   }
 
   /**
@@ -193,23 +273,26 @@ export class GeminiProvider extends BaseProvider {
   }
 
   /**
-   * Determines the best available authentication method based on environment variables
-   * and existing configuration. Now uses lazy evaluation with proper precedence chain.
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002, REQ-SP4-003
+   * Determines the best available authentication method per call without storing state.
+   * Returns both authMode and token - caller must handle both values.
    */
-  private async determineBestAuth(): Promise<string> {
+  private async determineBestAuth(): Promise<{
+    authMode: GeminiAuthMode;
+    token: string;
+  }> {
     // Re-check OAuth enablement state before determining auth
     this.updateOAuthState();
 
     // First check if we have Gemini-specific credentials
     if (this.hasVertexAICredentials()) {
-      this.authMode = 'vertex-ai';
       this.setupVertexAIAuth();
-      return 'USE_VERTEX_AI';
+      return { authMode: 'vertex-ai', token: 'USE_VERTEX_AI' };
     }
 
     if (this.hasGeminiAPIKey()) {
-      this.authMode = 'gemini-api-key';
-      return process.env.GEMINI_API_KEY!;
+      return { authMode: 'gemini-api-key', token: process.env.GEMINI_API_KEY! };
     }
 
     // No Gemini-specific credentials, check OAuth availability
@@ -231,16 +314,14 @@ export class GeminiProvider extends BaseProvider {
         (authMethodName?.startsWith('oauth-') ||
           (this.geminiOAuthManager && !token))
       ) {
-        this.authMode = 'oauth';
-        return 'USE_LOGIN_WITH_GOOGLE';
+        return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
       }
 
       // If we have a token but it's not for Gemini (e.g., from another provider),
       // we should still fall back to OAuth for Gemini web search - BUT ONLY IF OAUTH IS ENABLED
       if (!this.hasGeminiAPIKey() && !this.hasVertexAICredentials()) {
         if (isOAuthEnabled) {
-          this.authMode = 'oauth';
-          return 'USE_LOGIN_WITH_GOOGLE';
+          return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
         } else {
           // OAuth is disabled and no other auth method available
           throw new AuthenticationRequiredError(
@@ -251,11 +332,9 @@ export class GeminiProvider extends BaseProvider {
         }
       }
 
-      this.authMode = 'none';
-      return token || '';
+      return { authMode: 'none', token: token || '' };
     } catch (error) {
       // CRITICAL FIX: Only fall back to LOGIN_WITH_GOOGLE if OAuth is actually enabled
-      // Don't use it when OAuth has been disabled
       const manager = this.geminiOAuthManager as OAuthManager & {
         isOAuthEnabled?(provider: string): boolean;
       };
@@ -266,29 +345,24 @@ export class GeminiProvider extends BaseProvider {
         manager.isOAuthEnabled('gemini');
 
       if (isOAuthEnabled) {
-        this.authMode = 'oauth';
-        return 'USE_LOGIN_WITH_GOOGLE';
+        return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
       }
 
       // Handle case where no auth is available
       const authType = this.globalConfig?.getContentGeneratorConfig()?.authType;
       if (authType === AuthType.USE_NONE) {
-        this.authMode = 'none';
         throw new AuthenticationRequiredError(
           'Authentication is set to USE_NONE but no credentials are available',
-          this.authMode,
+          'none',
           ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
         );
       }
 
       // When used as serverToolsProvider without API key, fall back to OAuth ONLY if enabled
-      // This handles the case where Gemini is used for server tools but not as main provider
       if (!this.hasGeminiAPIKey() && !this.hasVertexAICredentials()) {
         if (isOAuthEnabled) {
-          this.authMode = 'oauth';
-          return 'USE_LOGIN_WITH_GOOGLE';
+          return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
         } else {
-          // OAuth is disabled and no other auth method available
           throw new AuthenticationRequiredError(
             'Web search requires Gemini authentication, but no API key is set and OAuth is disabled. Hint: call /auth gemini enable',
             'none',
@@ -364,13 +438,15 @@ export class GeminiProvider extends BaseProvider {
   override setConfig(config: Config): void {
     // Call base provider implementation
     super.setConfig?.(config);
+    this.refreshCachedSettings();
     // Sync with config model if user hasn't explicitly set a model
     // This ensures consistency between config and provider state
-    const configModel = config.getModel();
-
-    if (!this.modelExplicitlySet && configModel) {
-      this.currentModel = configModel;
-    }
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
+    // Removed model caching in stateless implementation
+    // const configModel = config.getModel();
+    // if (!this.modelExplicitlySet && configModel) {
+    //   this.currentModel = configModel;
+    // }
 
     // Update OAuth configuration based on OAuth manager state, not config authType
     // This ensures that if OAuth is disabled via /auth gemini disable, it stays disabled
@@ -379,9 +455,17 @@ export class GeminiProvider extends BaseProvider {
     // Clear auth cache when config changes to allow re-determination
   }
 
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Determine auth mode per call instead of using cached state
+   */
   async getModels(): Promise<IModel[]> {
+    // Determine auth mode for this call
+    const { authMode } = await this.determineBestAuth();
+
     // For OAuth mode, return fixed list of models
-    if (this.authMode === 'oauth') {
+    if (authMode === 'oauth') {
       return [
         {
           id: 'gemini-2.5-pro',
@@ -405,7 +489,7 @@ export class GeminiProvider extends BaseProvider {
     }
 
     // For API key modes (gemini-api-key or vertex-ai), try to fetch real models
-    if (this.authMode === 'gemini-api-key' || this.authMode === 'vertex-ai') {
+    if (authMode === 'gemini-api-key' || authMode === 'vertex-ai') {
       const apiKey = (await this.getAuthToken()) || process.env.GEMINI_API_KEY;
       if (apiKey) {
         try {
@@ -468,39 +552,24 @@ export class GeminiProvider extends BaseProvider {
     ];
   }
 
-  override setApiKey(apiKey: string): void {
-    // Call base provider implementation
-    super.setApiKey(apiKey);
-
-    // Set the API key as an environment variable so it can be used by the core library
-    // CRITICAL FIX: When clearing the key (empty string), delete the env var instead of setting to empty
-    if (apiKey && apiKey.trim() !== '') {
-      process.env.GEMINI_API_KEY = apiKey;
-    } else {
-      delete process.env.GEMINI_API_KEY;
-    }
-
-    // Clear auth cache when API key changes
-    this.clearAuthCache();
-  }
-
-  override setBaseUrl(baseUrl?: string): void {
-    // Call base provider implementation which stores in ephemeral settings
-    super.setBaseUrl?.(baseUrl);
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Gets the current authentication mode per call without caching
+   */
+  async getAuthMode(): Promise<GeminiAuthMode> {
+    const { authMode } = await this.determineBestAuth();
+    return authMode;
   }
 
   /**
-   * Gets the current authentication mode
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Gets the appropriate AuthType for the core library per call
    */
-  getAuthMode(): GeminiAuthMode {
-    return this.authMode;
-  }
-
-  /**
-   * Gets the appropriate AuthType for the core library
-   */
-  getCoreAuthType(): AuthType {
-    switch (this.authMode) {
+  async getCoreAuthType(): Promise<AuthType> {
+    const { authMode } = await this.determineBestAuth();
+    switch (authMode) {
       case 'oauth':
         return AuthType.LOGIN_WITH_GOOGLE;
       case 'gemini-api-key':
@@ -513,23 +582,34 @@ export class GeminiProvider extends BaseProvider {
   }
 
   /**
-   * Gets the current model ID
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * No caching - this method is now a no-op. Settings read on demand.
+   */
+  private refreshCachedSettings(): void {
+    // No operation - stateless provider doesn't cache settings
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Gets the current model ID from SettingsService per call
    */
   override getCurrentModel(): string {
     // Try to get from SettingsService first (source of truth)
     try {
-      const settingsService = getSettingsService();
+      const settingsService = this.resolveSettingsService();
       const providerSettings = settingsService.getProviderSettings(this.name);
       if (providerSettings.model) {
         return providerSettings.model as string;
       }
     } catch (error) {
-      this.logger.debug(
+      this.getLogger().debug(
         () => `Failed to get model from SettingsService: ${error}`,
       );
     }
-    // Fall back to cached value or default
-    return this.currentModel || this.getDefaultModel();
+    // In stateless mode, always return default since model should come from options
+    return this.getDefaultModel();
   }
 
   /**
@@ -540,68 +620,68 @@ export class GeminiProvider extends BaseProvider {
   }
 
   /**
-   * Sets the current model ID
-   */
-  override setModel(modelId: string): void {
-    // Update SettingsService as the source of truth
-    try {
-      const settingsService = getSettingsService();
-      settingsService.setProviderSetting(this.name, 'model', modelId);
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to persist model to SettingsService: ${error}`,
-      );
-    }
-
-    // Keep local cache for performance
-    this.currentModel = modelId;
-    this.modelExplicitlySet = true;
-
-    // Always update config if available, not just in OAuth mode
-    // This ensures the model is properly synchronized
-    if (this.globalConfig) {
-      this.globalConfig.setModel(modelId);
-    }
-  }
-
-  /**
-   * Sets additional model parameters to include in requests
-   */
-  override setModelParams(params: Record<string, unknown> | undefined): void {
-    if (params === undefined) {
-      this.modelParams = undefined;
-    } else {
-      this.modelParams = { ...this.modelParams, ...params };
-    }
-  }
-
-  /**
-   * Gets the current model parameters
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Gets model parameters from SettingsService per call
    */
   override getModelParams(): Record<string, unknown> | undefined {
-    return this.modelParams;
+    try {
+      const settingsService = this.resolveSettingsService();
+      const providerSettings = settingsService.getProviderSettings(this.name);
+
+      const reservedKeys = new Set([
+        'enabled',
+        'apiKey',
+        'api-key',
+        'apiKeyfile',
+        'api-keyfile',
+        'baseUrl',
+        'base-url',
+        'model',
+        'toolFormat',
+        'tool-format',
+        'toolFormatOverride',
+        'tool-format-override',
+        'defaultModel',
+      ]);
+
+      const params: Record<string, unknown> = {};
+      if (providerSettings) {
+        for (const [key, value] of Object.entries(providerSettings)) {
+          if (reservedKeys.has(key) || value === undefined || value === null) {
+            continue;
+          }
+          params[key] = value;
+        }
+      }
+
+      return Object.keys(params).length > 0 ? params : undefined;
+    } catch (error) {
+      this.getLogger().debug(
+        () =>
+          `Failed to get Gemini provider settings from SettingsService: ${error}`,
+      );
+      return undefined;
+    }
   }
 
   /**
-   * Checks if the current auth mode requires payment
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Checks if using paid mode synchronously via env vars (stateless check)
    */
   override isPaidMode(): boolean {
-    return this.authMode === 'gemini-api-key' || this.authMode === 'vertex-ai';
+    // Synchronous check based on environment variables only
+    return this.hasGeminiAPIKey() || this.hasVertexAICredentials();
   }
 
   /**
-   * Clears provider state but preserves explicitly set model
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * No state to clear in stateless implementation
    */
   override clearState(): void {
-    // Clear auth-related state
-    this.authMode = 'none';
-    // Only reset model if it wasn't explicitly set by user
-    if (!this.modelExplicitlySet) {
-      this.currentModel = 'gemini-2.5-pro';
-    }
-    // Note: We don't clear config or apiKey as they might be needed
-
-    // Clear auth cache
+    // No operation - stateless provider has no state to clear
     this.clearAuthCache();
   }
 
@@ -621,6 +701,7 @@ export class GeminiProvider extends BaseProvider {
   override clearAuthCache(): void {
     // Call the base implementation to clear the cached token
     super.clearAuthCache();
+    this.clearClientCache();
     // Don't clear the auth mode itself, just allow re-determination next time
   }
 
@@ -632,25 +713,33 @@ export class GeminiProvider extends BaseProvider {
   }
 
   /**
-   * Invoke a server tool (native provider tool)
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002
+   * Invoke a server tool using per-call auth resolution
    */
   override async invokeServerTool(
     toolName: string,
     params: unknown,
     _config?: unknown,
+    _signal?: AbortSignal,
   ): Promise<unknown> {
     if (toolName === 'web_search') {
-      this.logger.debug(
+      const logger = this.getToolsLogger();
+      logger.debug(
         () =>
           `invokeServerTool: web_search called with params: ${JSON.stringify(params)}`,
       );
-      this.logger.debug(
+      logger.debug(
         () =>
           `invokeServerTool: globalConfig is ${this.globalConfig ? 'set' : 'null/undefined'}`,
       );
-      this.logger.debug(
-        () => `invokeServerTool: current authMode is ${this.authMode}`,
-      );
+
+      // Check for abort before auth determination
+      if (_signal?.aborted) {
+        const error = new Error('Operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
 
       // Import the necessary modules dynamically
       const { GoogleGenAI } = await import('@google/genai');
@@ -660,25 +749,24 @@ export class GeminiProvider extends BaseProvider {
 
       let genAI: InstanceType<typeof GoogleGenAI>;
 
-      // Get authentication token lazily
-      this.logger.debug(
-        () => `invokeServerTool: about to call determineBestAuth()`,
-      );
-      const authToken = await this.determineBestAuth();
-      this.logger.debug(
-        () =>
-          `invokeServerTool: determineBestAuth returned, authMode is now ${this.authMode}`,
-      );
+      // Get authentication token and mode lazily per call
+      logger.debug(() => `invokeServerTool: about to call determineBestAuth()`);
+      const { authMode, token: authToken } = await this.determineBestAuth();
 
-      // Re-evaluate auth mode if we got a signal to use OAuth
-      if (authToken === 'USE_LOGIN_WITH_GOOGLE') {
-        this.authMode = 'oauth';
+      // Check for abort after auth determination
+      if (_signal?.aborted) {
+        const error = new Error('Operation was aborted');
+        error.name = 'AbortError';
+        throw error;
       }
+      logger.debug(
+        () =>
+          `invokeServerTool: determineBestAuth returned authMode=${authMode}`,
+      );
 
-      switch (this.authMode) {
+      switch (authMode) {
         case 'gemini-api-key': {
-          // This case should never happen if determineBestAuth worked correctly
-          // but add safety check
+          // Validate auth token
           if (
             !authToken ||
             authToken === 'USE_LOGIN_WITH_GOOGLE' ||
@@ -753,7 +841,7 @@ export class GeminiProvider extends BaseProvider {
 
         case 'oauth': {
           try {
-            this.logger.debug(
+            logger.debug(
               () => `invokeServerTool: OAuth case - creating content generator`,
             );
 
@@ -761,7 +849,7 @@ export class GeminiProvider extends BaseProvider {
             // create a minimal config for OAuth
             let configForOAuth = this.globalConfig;
             if (!configForOAuth) {
-              this.logger.debug(
+              logger.debug(
                 () =>
                   `invokeServerTool: globalConfig is null, creating minimal config for OAuth`,
               );
@@ -780,12 +868,11 @@ export class GeminiProvider extends BaseProvider {
             // For OAuth, use the code assist content generator
             // Note: Detailed logging is now handled by DebugLogger in codeAssist.ts with namespace llxprt:code:assist
             const oauthContentGenerator =
-              await createCodeAssistContentGenerator(
+              await this.createOAuthContentGenerator(
                 httpOptions,
-                AuthType.LOGIN_WITH_GOOGLE,
                 configForOAuth!,
               );
-            this.logger.debug(
+            logger.debug(
               () =>
                 `invokeServerTool: OAuth content generator created successfully`,
             );
@@ -803,7 +890,7 @@ export class GeminiProvider extends BaseProvider {
                 tools: [{ googleSearch: {} }],
               },
             };
-            this.logger.debug(
+            logger.debug(
               () =>
                 `invokeServerTool: making OAuth generateContent request with query: ${(params as { query: string }).query}`,
             );
@@ -812,26 +899,31 @@ export class GeminiProvider extends BaseProvider {
               oauthRequest,
               'web-search-oauth', // userPromptId for OAuth web search
             );
-            this.logger.debug(
+            logger.debug(
               () =>
                 `invokeServerTool: OAuth generateContent completed successfully`,
             );
             return result;
           } catch (error) {
-            this.logger.debug(
+            logger.debug(
               () => `invokeServerTool: ERROR in OAuth case: ${error}`,
             );
-            this.logger.debug(() => `invokeServerTool: Error details:`, error);
+            logger.debug(() => `invokeServerTool: Error details:`, error);
             throw error;
           }
         }
 
         default:
-          throw new Error(
-            `Web search not supported in auth mode: ${this.authMode}`,
-          );
+          throw new Error(`Web search not supported in auth mode: ${authMode}`);
       }
     } else if (toolName === 'web_fetch') {
+      // Check for abort before auth determination
+      if (_signal?.aborted) {
+        const error = new Error('Operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
+
       // Import the necessary modules dynamically
       const { GoogleGenAI } = await import('@google/genai');
 
@@ -843,10 +935,17 @@ export class GeminiProvider extends BaseProvider {
 
       let genAI: InstanceType<typeof GoogleGenAI>;
 
-      // Get authentication token lazily
-      const authToken = await this.determineBestAuth();
+      // Get authentication token and mode lazily per call
+      const { authMode, token: authToken } = await this.determineBestAuth();
 
-      switch (this.authMode) {
+      // Check for abort after auth determination
+      if (_signal?.aborted) {
+        const error = new Error('Operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      }
+
+      switch (authMode) {
         case 'gemini-api-key': {
           genAI = new GoogleGenAI({
             apiKey: authToken,
@@ -914,10 +1013,10 @@ export class GeminiProvider extends BaseProvider {
 
         case 'oauth': {
           // For OAuth, use the code assist content generator
-          const oauthContentGenerator = await createCodeAssistContentGenerator(
+          const oauthContentGenerator = await this.createOAuthContentGenerator(
             httpOptions,
-            AuthType.LOGIN_WITH_GOOGLE,
             this.globalConfig!,
+            this.getBaseURL(),
           );
 
           // For web fetch, always use gemini-2.5-flash regardless of the active model
@@ -942,9 +1041,7 @@ export class GeminiProvider extends BaseProvider {
         }
 
         default:
-          throw new Error(
-            `Web fetch not supported in auth mode: ${this.authMode}`,
-          );
+          throw new Error(`Web fetch not supported in auth mode: ${authMode}`);
       }
     } else {
       throw new Error(`Unknown server tool: ${toolName}`);
@@ -952,47 +1049,22 @@ export class GeminiProvider extends BaseProvider {
   }
 
   /**
-   * Generate chat completion with IContent interface
-   * Direct implementation for Gemini API with IContent interface
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-002, REQ-SP4-003
+   * Generate chat completion using per-call resolution of auth, model, and params
+   * All state comes from NormalizedGenerateChatOptions, no instance caching
    */
-  async *generateChatCompletion(
-    content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parametersJsonSchema?: unknown;
-      }>;
-    }>,
-    signal?: AbortSignal,
-    _toolFormat?: string,
+  protected override async *generateChatCompletionWithOptions(
+    options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    // First critical AbortSignal check for generateChatCompletion
-    if (signal?.aborted) {
-      const error = new Error('Operation was aborted');
-      error.name = 'AbortError';
-      throw error;
-    }
+    const streamingEnabled = this.getStreamingPreference(options);
+    const { contents: content, tools } = options;
 
-    // AbortSignal check before auth
-    if (signal?.aborted) {
-      const error = new Error('Operation was aborted');
-      error.name = 'AbortError';
-      throw error;
-    }
+    // Determine best auth method per call - no state storage
+    const { authMode, token: authToken } = await this.determineBestAuth();
 
-    // Determine best auth method
-    const authToken = await this.determineBestAuth();
-
-    // AbortSignal check after auth
-    if (signal?.aborted) {
-      const error = new Error('Operation was aborted');
-      error.name = 'AbortError';
-      throw error;
-    }
-
-    // Import necessary modules
-    const { GoogleGenAI } = await import('@google/genai');
+    // Model is resolved from options.resolved.model - no instance caching
+    const currentModel = options.resolved.model;
 
     // Convert IContent directly to Gemini format
     const contents: Array<{ role: string; parts: Part[] }> = [];
@@ -1082,156 +1154,39 @@ export class GeminiProvider extends BaseProvider {
         }))
       : undefined;
 
-    const flattenedToolNames =
-      tools?.flatMap((group) =>
-        group.functionDeclarations
-          .map((decl) => decl.name)
-          .filter((name): name is string => !!name),
-      ) ?? [];
-    const toolNamesArg =
-      tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
+    const toolNamesForPrompt =
+      tools === undefined
+        ? undefined
+        : Array.from(
+            new Set(
+              tools.flatMap((group) =>
+                group.functionDeclarations
+                  .map((decl) => decl.name)
+                  .filter((name): name is string => Boolean(name)),
+              ),
+            ),
+          );
+
+    const serverTools = ['web_search', 'web_fetch'];
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
+    // Get model params per call from ephemeral settings, not cached instance state
+    const requestOverrides = options.invocation?.ephemerals ?? {};
+    const requestConfig: Record<string, unknown> = {
+      serverTools,
+      ...(requestOverrides ?? {}),
+    };
+    if (geminiTools) {
+      requestConfig.tools = geminiTools;
+    }
 
     // Create appropriate client and generate content
+    const baseURL = options.resolved.baseURL ?? this.getBaseURL();
     const httpOptions = this.createHttpOptions();
-    const { maxAttempts, initialDelayMs } = this.getRetryConfig();
 
-    const stream: AsyncIterable<GenerateContentResponse> =
-      await retryWithBackoff(
-        async () => {
-          // AbortSignal check before client creation
-          if (signal?.aborted) {
-            const error = new Error('Operation was aborted');
-            error.name = 'AbortError';
-            throw error;
-          }
-
-          if (this.authMode === 'oauth') {
-            // OAuth mode
-            const configForOAuth = this.globalConfig || {
-              getProxy: () => undefined,
-              isBrowserLaunchSuppressed: () => false,
-              getNoBrowser: () => false,
-              getUserMemory: () => '',
-            };
-
-            const contentGenerator = await createCodeAssistContentGenerator(
-              httpOptions,
-              AuthType.LOGIN_WITH_GOOGLE,
-              configForOAuth as Config,
-              this.getBaseURL(),
-            );
-
-            const userMemory = this.globalConfig?.getUserMemory
-              ? this.globalConfig.getUserMemory()
-              : '';
-            const systemInstruction = await getCoreSystemPromptAsync(
-              userMemory,
-              this.currentModel,
-              toolNamesArg,
-            );
-
-            // For OAuth/CodeAssist mode, inject system prompt as first user message
-            // This ensures the CodeAssist endpoint receives the full context
-            // Similar to how AnthropicProvider handles OAuth mode
-            const contentsWithSystemPrompt = [
-              {
-                role: 'user',
-                parts: [
-                  {
-                    text: `<system>\n${systemInstruction}\n</system>\n\nUser provided conversation begins here:`,
-                  },
-                ],
-              },
-              ...contents,
-            ];
-
-            // Streaming request abort check
-            if (signal?.aborted) {
-              const error = new Error('Operation was aborted');
-
-              error.name = 'AbortError';
-
-              throw error;
-            }
-
-            const request = {
-              model: this.currentModel,
-              contents: contentsWithSystemPrompt,
-              // Still pass systemInstruction for SDK compatibility
-              systemInstruction,
-              config: {
-                tools: geminiTools,
-                ...this.modelParams,
-              },
-            };
-
-            return await contentGenerator.generateContentStream(
-              request,
-              'oauth-session',
-            );
-          } else {
-            // API key mode
-            // AbortSignal check before client creation
-            if (signal?.aborted) {
-              const error = new Error('Operation was aborted');
-              error.name = 'AbortError';
-              throw error;
-            }
-
-            const genAI = new GoogleGenAI({
-              apiKey: authToken,
-              vertexai: this.authMode === 'vertex-ai',
-              httpOptions: this.getBaseURL()
-                ? { ...httpOptions, baseUrl: this.getBaseURL() }
-                : httpOptions,
-            });
-
-            const contentGenerator = genAI.models;
-            const userMemory = this.globalConfig?.getUserMemory
-              ? this.globalConfig.getUserMemory()
-              : '';
-            const systemInstruction = await getCoreSystemPromptAsync(
-              userMemory,
-              this.currentModel,
-              toolNamesArg,
-            );
-
-            // Streaming request abort check
-            if (signal?.aborted) {
-              const error = new Error('Operation was aborted');
-              error.name = 'AbortError';
-              throw error;
-            }
-            const request = {
-              model: this.currentModel,
-              contents,
-              systemInstruction,
-              config: {
-                tools: geminiTools,
-                ...this.modelParams,
-              },
-            };
-
-            return await contentGenerator.generateContentStream(request);
-          }
-        },
-        {
-          maxAttempts,
-          initialDelayMs,
-          shouldRetry: this.shouldRetryGeminiResponse.bind(this),
-          trackThrottleWaitTime: this.throttleTracker,
-        },
-      );
-
-    // Stream responses as IContent
-    for await (const response of stream) {
-      // Critical streaming loop abort check
-      if (signal?.aborted) {
-        const error = new Error('Operation was aborted');
-        error.name = 'AbortError';
-        throw error;
-      }
-
+    const mapResponseToChunks = (
+      response: GenerateContentResponse,
+    ): IContent[] => {
+      const chunks: IContent[] = [];
       const text =
         response.candidates?.[0]?.content?.parts
           ?.filter((part: Part) => 'text' in part)
@@ -1246,17 +1201,14 @@ export class GeminiProvider extends BaseProvider {
               (part as { functionCall: FunctionCall }).functionCall,
           ) || [];
 
-      // Extract usage metadata from response
       const usageMetadata = (response as GeminiResponseWithUsage).usageMetadata;
 
-      // Yield text if present
       if (text) {
         const textContent: IContent = {
           speaker: 'ai',
           blocks: [{ type: 'text', text }],
         };
 
-        // Add usage metadata if present
         if (usageMetadata) {
           textContent.metadata = {
             usage: {
@@ -1270,10 +1222,9 @@ export class GeminiProvider extends BaseProvider {
           };
         }
 
-        yield textContent;
+        chunks.push(textContent);
       }
 
-      // Yield tool calls if present
       if (functionCalls.length > 0) {
         const blocks: ToolCallBlock[] = functionCalls.map(
           (call: FunctionCall) => ({
@@ -1291,7 +1242,6 @@ export class GeminiProvider extends BaseProvider {
           blocks,
         };
 
-        // Add usage metadata if present
         if (usageMetadata) {
           toolCallContent.metadata = {
             usage: {
@@ -1305,12 +1255,11 @@ export class GeminiProvider extends BaseProvider {
           };
         }
 
-        yield toolCallContent;
+        chunks.push(toolCallContent);
       }
 
-      // If we have usage metadata but no content blocks, emit a metadata-only response
       if (usageMetadata && !text && functionCalls.length === 0) {
-        yield {
+        chunks.push({
           speaker: 'ai',
           blocks: [],
           metadata: {
@@ -1323,38 +1272,194 @@ export class GeminiProvider extends BaseProvider {
                   (usageMetadata.candidatesTokenCount || 0),
             },
           },
+        } as IContent);
+      }
+
+      if (!usageMetadata && !text && functionCalls.length === 0) {
+        chunks.push({
+          speaker: 'ai',
+          blocks: [],
+        } as IContent);
+      }
+
+      return chunks;
+    };
+
+    let stream: AsyncIterable<GenerateContentResponse> | null = null;
+    let emitted = false;
+
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
+    // No caching - create client per call based on resolved authMode
+    if (authMode === 'oauth') {
+      const configForOAuth = this.globalConfig || {
+        getProxy: () => undefined,
+        isBrowserLaunchSuppressed: () => false,
+        getNoBrowser: () => false,
+        getUserMemory: () => '',
+      };
+
+      // Create OAuth content generator per call - no caching
+      const contentGenerator = await this.createOAuthContentGenerator(
+        httpOptions,
+        configForOAuth as Config,
+        baseURL,
+      );
+
+      const userMemory = this.globalConfig?.getUserMemory
+        ? this.globalConfig.getUserMemory()
+        : '';
+      const systemInstruction = await getCoreSystemPromptAsync(
+        userMemory,
+        currentModel,
+        toolNamesForPrompt,
+      );
+
+      const contentsWithSystemPrompt = [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `<system>\n${systemInstruction}\n</system>\n\nUser provided conversation begins here:`,
+            },
+          ],
+        },
+        ...contents,
+      ];
+
+      const oauthConfig = { ...requestConfig };
+      const oauthRequest = {
+        model: currentModel,
+        contents: contentsWithSystemPrompt,
+        systemInstruction,
+        config: oauthConfig,
+      };
+
+      // Use runtime metadata from options for session ID
+      const runtimeId = options.runtime?.runtimeId || 'default';
+      const sessionId = `oauth-session:${runtimeId}:${Math.random()
+        .toString(36)
+        .slice(2)}`;
+      const generatorWithStream = contentGenerator as {
+        generateContentStream: (
+          params: GenerateContentParameters,
+          sessionId?: string,
+        ) =>
+          | AsyncIterable<GenerateContentResponse>
+          | Promise<AsyncIterable<GenerateContentResponse>>;
+        generateContent?: (
+          params: GenerateContentParameters,
+          sessionId?: string,
+        ) => Promise<GenerateContentResponse>;
+      };
+
+      if (!streamingEnabled && generatorWithStream.generateContent) {
+        const response = await generatorWithStream.generateContent(
+          oauthRequest,
+          sessionId,
+        );
+        let yielded = false;
+        for (const chunk of mapResponseToChunks(
+          response as GenerateContentResponse,
+        )) {
+          yielded = true;
+          yield chunk;
+        }
+        if (!yielded) {
+          yield { speaker: 'ai', blocks: [] } as IContent;
+        }
+        return;
+      }
+
+      const oauthStream = await generatorWithStream.generateContentStream(
+        oauthRequest,
+        sessionId,
+      );
+      stream = oauthStream as AsyncIterable<GenerateContentResponse>;
+      if (streamingEnabled) {
+        emitted = true;
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            session: sessionId,
+            runtime: runtimeId,
+            authMode: 'oauth',
+          },
         } as IContent;
       }
-    }
-  }
+    } else {
+      // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
+      // Create Google GenAI client per call - no caching
+      const { GoogleGenAI } = await import('@google/genai');
 
-  private getRetryConfig(): { maxAttempts: number; initialDelayMs: number } {
-    const ephemeralSettings =
-      this.providerConfig?.getEphemeralSettings?.() || {};
-    const maxAttempts =
-      (ephemeralSettings['retries'] as number | undefined) ?? 6;
-    const initialDelayMs =
-      (ephemeralSettings['retrywait'] as number | undefined) ?? 4000;
-    return { maxAttempts, initialDelayMs };
-  }
+      const genAI = new GoogleGenAI({
+        apiKey: authToken,
+        vertexai: authMode === 'vertex-ai',
+        httpOptions: baseURL
+          ? { ...httpOptions, baseUrl: baseURL }
+          : httpOptions,
+      });
 
-  private shouldRetryGeminiResponse(error: unknown): boolean {
-    const status = getErrorStatus(error);
-    if (status === 429 || (status && status >= 500 && status < 600)) {
-      this.logger.debug(
-        () => `Will retry Gemini request due to status ${status}`,
+      const contentGenerator = genAI.models;
+      const userMemory = this.globalConfig?.getUserMemory
+        ? this.globalConfig.getUserMemory()
+        : '';
+      const systemInstruction = await getCoreSystemPromptAsync(
+        userMemory,
+        currentModel,
+        toolNamesForPrompt,
       );
-      return true;
+
+      const apiRequest = {
+        model: currentModel,
+        contents,
+        systemInstruction,
+        config: { ...requestConfig },
+      };
+
+      if (streamingEnabled) {
+        stream = await contentGenerator.generateContentStream(apiRequest);
+      } else {
+        const response = await contentGenerator.generateContent(apiRequest);
+        let yielded = false;
+        for (const chunk of mapResponseToChunks(response)) {
+          yielded = true;
+          yield chunk;
+        }
+        if (!yielded) {
+          yield { speaker: 'ai', blocks: [] } as IContent;
+        }
+        return;
+      }
     }
 
-    if (isNetworkTransientError(error)) {
-      this.logger.debug(
-        () =>
-          'Will retry Gemini request due to transient network error signature.',
-      );
-      return true;
+    if (stream) {
+      const iterator: AsyncIterator<GenerateContentResponse> =
+        typeof (stream as AsyncIterable<GenerateContentResponse>)[
+          Symbol.asyncIterator
+        ] === 'function'
+          ? (stream as AsyncIterable<GenerateContentResponse>)[
+              Symbol.asyncIterator
+            ]()
+          : (stream as unknown as AsyncIterator<GenerateContentResponse>);
+      while (true) {
+        const { value, done } = await iterator.next();
+        if (done) {
+          break;
+        }
+        const mapped = mapResponseToChunks(value);
+        if (mapped.length === 0) {
+          continue;
+        }
+        emitted = true;
+        for (const chunk of mapped) {
+          yield chunk;
+        }
+      }
     }
 
-    return false;
+    if (!emitted) {
+      yield { speaker: 'ai', blocks: [] } as IContent;
+    }
   }
 }

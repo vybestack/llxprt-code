@@ -68,6 +68,7 @@ describe('runNonInteractive', () => {
       getFullContext: vi.fn().mockReturnValue(false),
       getContentGeneratorConfig: vi.fn().mockReturnValue({}),
       getDebugMode: vi.fn().mockReturnValue(false),
+      getProviderManager: vi.fn().mockReturnValue(undefined),
     } as unknown as Config;
 
     const { handleAtCommand } = await import(
@@ -143,7 +144,7 @@ describe('runNonInteractive', () => {
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
-      expect.objectContaining({ name: 'testTool' }),
+      expect.objectContaining({ name: 'testTool', agentId: 'primary' }),
       expect.any(AbortSignal),
     );
     expect(mockGeminiClient.sendMessageStream).toHaveBeenNthCalledWith(
@@ -153,6 +154,71 @@ describe('runNonInteractive', () => {
       'prompt-id-2',
     );
     expect(processStdoutSpy).toHaveBeenCalledWith('Final answer');
+    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+  });
+
+  it('should execute tool calls when using a non-gemini provider', async () => {
+    const toolCallEvent: ServerGeminiStreamEvent = {
+      type: GeminiEventType.ToolCallRequest,
+      value: {
+        callId: 'call-1',
+        name: 'testTool',
+        args: { arg: 'value' },
+        isClientInitiated: false,
+        prompt_id: 'prompt-provider',
+      },
+    };
+    const finalResponse: ServerGeminiStreamEvent[] = [
+      { type: GeminiEventType.Content, value: 'All done' },
+    ];
+
+    mockGeminiClient.sendMessageStream
+      .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
+      .mockReturnValueOnce(createStreamFromEvents(finalResponse));
+
+    const providerManager = {
+      getActiveProvider: vi.fn().mockReturnValue({ name: 'openai' }),
+    };
+    (mockConfig.getProviderManager as unknown as vi.Mock).mockReturnValue(
+      providerManager,
+    );
+
+    mockCoreExecuteToolCall.mockResolvedValue({
+      callId: 'call-1',
+      responseParts: [
+        {
+          functionResponse: {
+            id: 'call-1',
+            name: 'testTool',
+            response: { output: 'tool result' },
+          },
+        },
+      ],
+    });
+
+    await runNonInteractive(
+      mockConfig,
+      'Use the non-gemini provider',
+      'prompt-provider',
+    );
+
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenNthCalledWith(
+      1,
+      [{ text: 'Use the non-gemini provider' }],
+      expect.any(AbortSignal),
+      'prompt-provider',
+    );
+    expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
+      mockConfig,
+      expect.objectContaining({
+        name: 'testTool',
+        callId: 'call-1',
+        agentId: 'primary',
+      }),
+      expect.any(AbortSignal),
+    );
+    expect(processStdoutSpy).toHaveBeenCalledWith('All done');
     expect(processStdoutSpy).toHaveBeenCalledWith('\n');
   });
 
@@ -194,7 +260,11 @@ describe('runNonInteractive', () => {
 
     await runNonInteractive(mockConfig, 'Trigger tool error', 'prompt-id-3');
 
-    expect(mockCoreExecuteToolCall).toHaveBeenCalled();
+    expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
+      mockConfig,
+      expect.objectContaining({ name: 'errorTool', agentId: 'primary' }),
+      expect.any(AbortSignal),
+    );
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Error executing tool errorTool: Execution failed',
     );
@@ -260,7 +330,11 @@ describe('runNonInteractive', () => {
       'prompt-id-5',
     );
 
-    expect(mockCoreExecuteToolCall).toHaveBeenCalled();
+    expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
+      mockConfig,
+      expect.objectContaining({ name: 'nonexistentTool', agentId: 'primary' }),
+      expect.any(AbortSignal),
+    );
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Error executing tool nonexistentTool: Tool "nonexistentTool" not found in registry.',
     );

@@ -11,6 +11,7 @@ import {
   CommandKind,
   MessageActionReturn,
 } from './types.js';
+import { type CommandArgumentSchema } from './schema/types.js';
 import {
   DiscoveredMCPPrompt,
   DiscoveredMCPTool,
@@ -30,6 +31,38 @@ const COLOR_RED = '\u001b[31m';
 const COLOR_CYAN = '\u001b[36m';
 const COLOR_GREY = '\u001b[90m';
 const RESET_COLOR = '\u001b[0m';
+
+const mcpAuthSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'server',
+    description: 'Select MCP server to authenticate',
+    /**
+     * @plan:PLAN-20251013-AUTOCOMPLETE.P11
+     * @requirement:REQ-004
+     * Schema completer replaces legacy server list.
+     */
+    completer: async (ctx, partialArg) => {
+      const { config } = ctx.services;
+      if (!config) {
+        return [];
+      }
+
+      const mcpServers = config.getMcpServers() || {};
+      const normalizedPartial = partialArg.toLowerCase();
+      return Object.keys(mcpServers)
+        .filter((name) =>
+          normalizedPartial.length === 0
+            ? true
+            : name.toLowerCase().startsWith(normalizedPartial),
+        )
+        .map((name) => ({
+          value: name,
+          description: 'Configured MCP server',
+        }));
+    },
+  },
+];
 
 const getMcpStatus = async (
   context: CommandContext,
@@ -323,6 +356,7 @@ const authCommand: SlashCommand = {
   name: 'auth',
   description: 'Authenticate with an OAuth-enabled MCP server',
   kind: CommandKind.BUILT_IN,
+  schema: mcpAuthSchema,
   action: async (
     context: CommandContext,
     args: string,
@@ -441,15 +475,6 @@ const authCommand: SlashCommand = {
         content: `Failed to authenticate with MCP server '${serverName}': ${getErrorMessage(error)}`,
       };
     }
-  },
-  completion: async (context: CommandContext, partialArg: string) => {
-    const { config } = context.services;
-    if (!config) return [];
-
-    const mcpServers = config.getMcpServers() || {};
-    return Object.keys(mcpServers).filter((name) =>
-      name.startsWith(partialArg),
-    );
   },
 };
 

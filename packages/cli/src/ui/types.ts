@@ -143,6 +143,7 @@ export type HistoryItemQuit = HistoryItemBase & {
 
 export type HistoryItemToolGroup = HistoryItemBase & {
   type: 'tool_group';
+  agentId?: string;
   tools: IndividualToolCallDisplay[];
 };
 

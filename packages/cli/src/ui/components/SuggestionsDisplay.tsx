@@ -21,10 +21,30 @@ interface SuggestionsDisplayProps {
   width: number;
   scrollOffset: number;
   userInput: string;
+  activeHint?: string;
 }
 
 export const MAX_SUGGESTIONS_TO_SHOW = 8;
 
+/**
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P08
+ * @requirement:REQ-002
+ * @requirement:REQ-003
+ * Feature flag enabled for hint display integration
+ */
+const SHOW_ARGUMENT_HINTS = true;
+
+/**
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P08
+ * @requirement:REQ-002
+ * @requirement:REQ-003
+ * @requirement:REQ-004
+ * @pseudocode UIHintRendering.md lines 4-7
+ * Full implementation of hint line rendering
+ * - Line 4: Modify SuggestionsDisplay to accept activeHint prop
+ * - Line 5-6: Render hint in dedicated line above suggestion list
+ * - Line 7: Ensure consistent height to avoid layout shift
+ */
 export function SuggestionsDisplay({
   suggestions,
   activeIndex,
@@ -32,6 +52,7 @@ export function SuggestionsDisplay({
   width,
   scrollOffset,
   userInput,
+  activeHint,
 }: SuggestionsDisplayProps) {
   // If we're not showing suggestions at all, return null
   if (!isLoading && suggestions.length === 0) {
@@ -66,7 +87,8 @@ export function SuggestionsDisplay({
   const hasScrollDown = endIndex < suggestions.length;
   const hasCounter = suggestions.length > MAX_SUGGESTIONS_TO_SHOW;
 
-  // Reserve consistent height
+  // Reserve consistent height (account for hint line when enabled)
+  const hintLines = SHOW_ARGUMENT_HINTS && activeHint ? 1 : 0;
   const actualSuggestionLines = isLoading ? 1 : visibleSuggestions.length;
   const linesToFill = MAX_SUGGESTIONS_TO_SHOW - actualSuggestionLines;
 
@@ -75,8 +97,17 @@ export function SuggestionsDisplay({
       flexDirection="column"
       paddingX={1}
       width={width}
-      minHeight={MAX_SUGGESTIONS_TO_SHOW + 2}
+      minHeight={MAX_SUGGESTIONS_TO_SHOW + 2 + hintLines}
     >
+      {/* Hint line - rendered when feature flag is enabled and hint is provided */}
+      {SHOW_ARGUMENT_HINTS && activeHint ? (
+        <Box marginBottom={1}>
+          <Text color={Colors.Gray} wrap="wrap">
+            {activeHint}
+          </Text>
+        </Box>
+      ) : null}
+
       {/* Scroll up indicator or placeholder */}
       {hasScrollUp ? <Text color={Colors.Foreground}>▲</Text> : <Text> </Text>}
 

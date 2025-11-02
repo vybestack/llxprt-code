@@ -13,6 +13,7 @@ import {
   getErrorMessage,
   isNodeError,
   unescapePath,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import {
   HistoryItem,
@@ -482,10 +483,11 @@ export async function handleAtCommand({
     }
 
     addItem(
-      { type: 'tool_group', tools: [toolCallDisplay] } as Omit<
-        HistoryItem,
-        'id'
-      >,
+      {
+        type: 'tool_group',
+        agentId: DEFAULT_AGENT_ID,
+        tools: [toolCallDisplay],
+      } as Omit<HistoryItem, 'id'>,
       userMessageTimestamp,
     );
     return { processedQuery: processedQueryParts, shouldProceed: true };
@@ -501,10 +503,11 @@ export async function handleAtCommand({
       confirmationDetails: undefined,
     };
     addItem(
-      { type: 'tool_group', tools: [toolCallDisplay] } as Omit<
-        HistoryItem,
-        'id'
-      >,
+      {
+        type: 'tool_group',
+        agentId: DEFAULT_AGENT_ID,
+        tools: [toolCallDisplay],
+      } as Omit<HistoryItem, 'id'>,
       userMessageTimestamp,
     );
     return { processedQuery: null, shouldProceed: false };

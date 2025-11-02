@@ -125,7 +125,10 @@ import { useSettingsCommand } from './hooks/useSettingsCommand.js';
 import { SettingsDialog } from './components/SettingsDialog.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
-import { getProviderManager } from '../providers/providerManagerInstance.js';
+import {
+  RuntimeContextProvider,
+  useRuntimeApi,
+} from './contexts/RuntimeContext.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
@@ -174,7 +177,9 @@ export const AppWrapper = (props: AppProps) => {
         <VimModeProvider settings={props.settings}>
           <ToolCallProvider sessionId={props.config.getSessionId()}>
             <TodoProvider sessionId={props.config.getSessionId()}>
-              <AppWithState {...props} />
+              <RuntimeContextProvider>
+                <AppWithState {...props} />
+              </RuntimeContextProvider>
             </TodoProvider>
           </ToolCallProvider>
         </VimModeProvider>
@@ -208,6 +213,7 @@ const App = (props: AppInternalProps) => {
     appState,
     appDispatch,
   } = props;
+  const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
@@ -550,7 +556,6 @@ const App = (props: AppInternalProps) => {
     exitEditorDialog,
   } = useEditorSettings(settings, appState, addItem);
 
-  const providerManager = getProviderManager(config, false, settings, addItem);
   const {
     showDialog: isProviderDialogOpen,
     openDialog: openProviderDialog,
@@ -584,33 +589,30 @@ const App = (props: AppInternalProps) => {
 
   const openProviderModelDialog = useCallback(async () => {
     try {
-      const activeProvider = providerManager.getActiveProvider();
-      if (activeProvider) {
-        const models = await activeProvider.getModels();
-        setProviderModels(models);
-      }
+      const models = await runtime.listAvailableModels();
+      setProviderModels(models);
     } catch (e) {
       console.error('Failed to load models:', e);
       setProviderModels([]);
     }
     await openProviderModelDialogRaw();
-  }, [providerManager, openProviderModelDialogRaw]);
+  }, [openProviderModelDialogRaw, runtime]);
 
   // Watch for model changes from config
   useEffect(() => {
     const checkModelChange = () => {
       const configModel = config.getModel();
-      const activeProvider = providerManager.getActiveProvider();
+      const providerModel = runtime.getActiveModelName();
+      const effectiveModel =
+        providerModel && providerModel.trim() !== ''
+          ? providerModel
+          : configModel;
 
-      // Get the actual current model from provider
-      const providerModel = activeProvider?.getCurrentModel?.() || configModel;
-
-      // Update UI if different from what we're showing
-      if (providerModel !== currentModel) {
+      if (effectiveModel !== currentModel) {
         console.debug(
-          `[Model Update] Updating footer from ${currentModel} to ${providerModel}`,
+          `[Model Update] Updating footer from ${currentModel} to ${effectiveModel}`,
         );
-        setCurrentModel(providerModel);
+        setCurrentModel(effectiveModel);
       }
     };
 
@@ -621,7 +623,7 @@ const App = (props: AppInternalProps) => {
     const interval = setInterval(checkModelChange, 500);
 
     return () => clearInterval(interval);
-  }, [config, providerManager, currentModel]); // Include currentModel in dependencies
+  }, [config, currentModel, runtime]); // Include currentModel in dependencies
 
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
@@ -726,35 +728,20 @@ const App = (props: AppInternalProps) => {
   // Poll for token metrics updates
   useEffect(() => {
     const updateTokenMetrics = () => {
-      const providerManager = getProviderManager();
-      if (providerManager) {
-        const metrics = providerManager.getProviderMetrics?.();
-        const usage = providerManager.getSessionTokenUsage?.();
+      const metrics = runtime.getActiveProviderMetrics();
+      const usage = runtime.getSessionTokenUsage();
 
-        const newMetrics = {
-          tokensPerMinute: metrics?.tokensPerMinute || 0,
-          throttleWaitTimeMs: metrics?.throttleWaitTimeMs || 0,
-          sessionTokenTotal: usage?.total || 0,
-        };
+      setTokenMetrics({
+        tokensPerMinute: metrics?.tokensPerMinute ?? 0,
+        throttleWaitTimeMs: metrics?.throttleWaitTimeMs ?? 0,
+        sessionTokenTotal: usage.total,
+      });
 
-        setTokenMetrics(newMetrics);
-
-        // Also update the telemetry service for other components
-        if (usage) {
-          uiTelemetryService.setTokenTrackingMetrics({
-            tokensPerMinute: metrics?.tokensPerMinute || 0,
-            throttleWaitTimeMs: metrics?.throttleWaitTimeMs || 0,
-            sessionTokenUsage: {
-              input: usage.input || 0,
-              output: usage.output || 0,
-              cache: usage.cache || 0,
-              tool: usage.tool || 0,
-              thought: usage.thought || 0,
-              total: usage.total || 0,
-            },
-          });
-        }
-      }
+      uiTelemetryService.setTokenTrackingMetrics({
+        tokensPerMinute: metrics?.tokensPerMinute ?? 0,
+        throttleWaitTimeMs: metrics?.throttleWaitTimeMs ?? 0,
+        sessionTokenUsage: usage,
+      });
     };
 
     // Update immediately
@@ -764,7 +751,7 @@ const App = (props: AppInternalProps) => {
     const interval = setInterval(updateTokenMetrics, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [runtime]);
 
   // Terminal and UI setup
   const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
@@ -896,28 +883,26 @@ const App = (props: AppInternalProps) => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
   }, [appDispatch]);
 
-  const handleOAuthCodeSubmit = useCallback(async (code: string) => {
-    const provider = (global as unknown as { __oauth_provider?: string })
-      .__oauth_provider;
+  const handleOAuthCodeSubmit = useCallback(
+    async (code: string) => {
+      const provider = (global as unknown as { __oauth_provider?: string })
+        .__oauth_provider;
 
-    if (provider === 'anthropic') {
-      // Get the OAuth manager from provider manager
-      const { getOAuthManager } = await import(
-        '../providers/providerManagerInstance.js'
-      );
-      const oauthManager = getOAuthManager();
+      if (provider === 'anthropic') {
+        const oauthManager = runtime.getCliOAuthManager();
 
-      if (oauthManager) {
-        const anthropicProvider = oauthManager.getProvider('anthropic');
-        if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
-          // This will resolve the promise in initiateAuth
-          (
-            anthropicProvider as { submitAuthCode: (code: string) => void }
-          ).submitAuthCode(code);
+        if (oauthManager) {
+          const anthropicProvider = oauthManager.getProvider('anthropic');
+          if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
+            (
+              anthropicProvider as { submitAuthCode: (code: string) => void }
+            ).submitAuthCode(code);
+          }
         }
       }
-    }
-  }, []);
+    },
+    [runtime],
+  );
 
   const {
     streamingState,

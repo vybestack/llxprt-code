@@ -3,6 +3,10 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { IMessage } from '../IMessage.js';
 import { ITool } from '../ITool.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import {
+  getSettingsService,
+  resetSettingsService,
+} from '../../settings/settingsServiceInstance.js';
 
 interface OpenAIProviderPrivate {
   callResponsesEndpoint: (
@@ -21,9 +25,16 @@ describe.skip('OpenAIProvider Responses Integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetSettingsService();
     provider = new OpenAIProvider('test-api-key');
     // Set a model that uses responses API
-    provider.setModel('gpt-4o-realtime');
+    const settingsService = getSettingsService();
+    settingsService.set('model', 'gpt-4o-realtime');
+    settingsService.setProviderSetting(
+      provider.name,
+      'model',
+      'gpt-4o-realtime',
+    );
   });
 
   afterEach(() => {

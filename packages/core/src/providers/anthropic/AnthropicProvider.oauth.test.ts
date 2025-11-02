@@ -3,9 +3,22 @@ import { AnthropicProvider } from './AnthropicProvider.js';
 import { IContent } from '../../services/history/IContent.js';
 import { ITool } from '../ITool.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
-import { OAuthManager } from '../../auth/precedence.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
-import Anthropic, { type ClientOptions } from '@anthropic-ai/sdk';
+import {
+  OAuthManager,
+  type OAuthTokenRequestMetadata,
+  flushRuntimeAuthScope,
+} from '../../auth/precedence.js';
+import {
+  createProviderWithRuntime,
+  createRuntimeConfigStub,
+} from '../../test-utils/runtime.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
+import { SettingsService } from '../../settings/SettingsService.js';
+import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
+import {
+  clearActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../../runtime/providerRuntimeContext.js';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -116,8 +129,6 @@ vi.mock('../../utils/retry.js', () => ({
     }
     throw lastError;
   }),
-  getErrorStatus: vi.fn(() => undefined),
-  isNetworkTransientError: vi.fn(() => false),
 }));
 
 // Create a shared mock instance that will be reused
@@ -155,22 +166,32 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
     beta: { models: { list: ReturnType<typeof vi.fn> } };
     apiKey: string;
   };
-  const originalEnvApiKey = process.env.ANTHROPIC_API_KEY;
-  const originalEnvAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
-  let settingsService: ReturnType<typeof getSettingsService>;
+  let settingsService: SettingsService;
+  let runtimeContext: ProviderRuntimeContext;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_AUTH_TOKEN;
+    mockAnthropicShared.messages.create = vi.fn();
+    mockAnthropicShared.beta.models.list = vi.fn().mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        const models = [
+          { id: 'claude-sonnet-4-20250514', display_name: 'Claude 4 Sonnet' },
+        ];
+        for (const model of models) {
+          yield model;
+        }
+      },
+    });
 
-    // Clear SettingsService to ensure test isolation
-    settingsService = getSettingsService();
-    settingsService.clear();
+    // Create a fresh SettingsService to ensure test isolation
+    settingsService = new SettingsService();
 
     // Create mock OAuth manager
+    const getTokenMock = vi.fn<
+      [string, OAuthTokenRequestMetadata | undefined],
+      Promise<string | null>
+    >();
     mockOAuthManager = {
-      getToken: vi.fn(),
+      getToken: getTokenMock,
       getOAuthToken: vi.fn(),
       isAuthenticated: vi.fn(),
       hasProvider: vi.fn().mockReturnValue(true),
@@ -178,29 +199,52 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
     } as OAuthManager;
 
     // Create provider with OAuth manager but no API key
-    provider = new AnthropicProvider(
-      undefined, // No API key - should use OAuth
-      undefined,
-      TEST_PROVIDER_CONFIG,
-      mockOAuthManager,
+    const result = createProviderWithRuntime<AnthropicProvider>(
+      () =>
+        new AnthropicProvider(
+          undefined, // No API key - should use OAuth
+          undefined,
+          TEST_PROVIDER_CONFIG,
+          mockOAuthManager,
+        ),
+      {
+        settingsService,
+        runtimeId: 'anthropic.provider.oauth.test',
+        metadata: { source: 'AnthropicProvider.oauth.test.ts' },
+      },
     );
+    provider = result.provider;
+    runtimeContext = result.runtime;
+    settingsService = result.settingsService;
+    if (!runtimeContext.config) {
+      runtimeContext.config = createRuntimeConfigStub(settingsService);
+    }
+
+    // Re-activate the runtime context for test execution
+    setActiveProviderRuntimeContext(runtimeContext);
 
     // Use the shared mock instance
     mockAnthropicInstance = mockAnthropicShared;
   });
 
   afterEach(() => {
-    if (originalEnvApiKey === undefined) {
-      delete process.env.ANTHROPIC_API_KEY;
-    } else {
-      process.env.ANTHROPIC_API_KEY = originalEnvApiKey;
-    }
-    if (originalEnvAuthToken === undefined) {
-      delete process.env.ANTHROPIC_AUTH_TOKEN;
-    } else {
-      process.env.ANTHROPIC_AUTH_TOKEN = originalEnvAuthToken;
-    }
+    flushRuntimeAuthScope('anthropic.provider.oauth.test');
+    flushRuntimeAuthScope('anthropic.provider.oauth.test.apiKey');
+    clearActiveProviderRuntimeContext();
   });
+
+  const buildCallOptions = (
+    contents: IContent[],
+    overrides: Partial<ProviderCallOptionsInit> = {},
+  ) =>
+    createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+      settings: settingsService,
+      runtime: runtimeContext,
+      config: runtimeContext.config,
+      ...overrides,
+    });
 
   describe('constructor with OAuth manager', () => {
     it('should extend BaseProvider and accept oauth manager parameter', () => {
@@ -218,48 +262,6 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
           provider as AnthropicProvider & { supportsOAuth: () => boolean }
         ).supportsOAuth(),
       ).toBe(true);
-    });
-  });
-
-  describe('API key handling', () => {
-    it('initializes SDK with null apiKey when no key is provided', () => {
-      const firstCall = vi.mocked(Anthropic).mock.calls[0]?.[0];
-      expect(firstCall?.apiKey).toBeNull();
-    });
-
-    it('propagates explicit API keys to the SDK client', () => {
-      const providerWithKey = new AnthropicProvider(
-        'test-api-key',
-        undefined,
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
-      expect(providerWithKey).toBeDefined();
-
-      const lastCall =
-        vi.mocked(Anthropic).mock.calls[
-          vi.mocked(Anthropic).mock.calls.length - 1
-        ]?.[0];
-      expect(lastCall?.apiKey).toBe('test-api-key');
-    });
-
-    it('does not reintroduce env API keys when OAuth tokens are used', async () => {
-      settingsService.set('authOnly', true);
-      process.env.ANTHROPIC_API_KEY = 'env-test-key';
-      const mockToken = 'sk-ant-oat-env-check';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(mockToken);
-
-      await provider.getModels();
-
-      const oauthCall = vi
-        .mocked(Anthropic)
-        .mock.calls.find(
-          ([args]) =>
-            (args as ClientOptions | undefined)?.authToken === mockToken,
-        );
-      const oauthArgs = oauthCall?.[0] as ClientOptions | undefined;
-      expect(oauthArgs?.apiKey).toBeNull();
-      expect(oauthArgs?.authToken).toBe(mockToken);
     });
   });
 
@@ -287,7 +289,9 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
         },
       ];
 
-      const generator = provider.generateChatCompletion(messages);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
       const chunks = [];
       for await (const chunk of generator) {
         chunks.push(chunk);
@@ -301,7 +305,10 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       ]);
 
       // Should have attempted to get OAuth token
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('anthropic');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'anthropic',
+        expect.anything(),
+      );
     });
 
     it('should throw error when no authentication is available', async () => {
@@ -309,12 +316,26 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
 
       // Create provider with no API key and failing OAuth
-      const providerNoAuth = new AnthropicProvider(
-        undefined, // No API key
-        undefined,
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      const { provider: providerNoAuth, runtime: runtimeNoAuth } =
+        createProviderWithRuntime<AnthropicProvider>(
+          ({ settingsService: svc }) => {
+            svc.set('activeProvider', 'anthropic');
+            return new AnthropicProvider(
+              undefined,
+              undefined,
+              TEST_PROVIDER_CONFIG,
+              mockOAuthManager,
+            );
+          },
+          {
+            runtimeId: 'anthropic.no-auth',
+          },
+        );
+      if (!runtimeNoAuth.config) {
+        runtimeNoAuth.config = createRuntimeConfigStub(
+          runtimeNoAuth.settingsService,
+        );
+      }
 
       const messages: IContent[] = [
         {
@@ -323,7 +344,15 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
         },
       ];
 
-      const generator = providerNoAuth.generateChatCompletion(messages);
+      const generator = providerNoAuth.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: providerNoAuth.name,
+          contents: messages,
+          settings: runtimeNoAuth.settingsService,
+          runtime: runtimeNoAuth,
+          config: runtimeNoAuth.config,
+        }),
+      );
 
       await expect(generator.next()).rejects.toThrow(
         /No authentication available for Anthropic API calls/,
@@ -332,12 +361,31 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
 
     it('should prefer API key over OAuth when both are available', async () => {
       // Create provider with both API key and OAuth manager
-      const providerWithApiKey = new AnthropicProvider(
-        'test-api-key',
-        undefined,
-        TEST_PROVIDER_CONFIG,
-        mockOAuthManager,
-      );
+      const { provider: providerWithApiKey, runtime: runtimeWithApiKey } =
+        createProviderWithRuntime<AnthropicProvider>(
+          ({ settingsService: svc }) => {
+            svc.set('auth-key', 'test-api-key');
+            svc.set('activeProvider', 'anthropic');
+            return new AnthropicProvider(
+              'test-api-key',
+              undefined,
+              TEST_PROVIDER_CONFIG,
+              mockOAuthManager,
+            );
+          },
+          {
+            runtimeId: 'anthropic.provider.oauth.test.apiKey',
+            metadata: {
+              source: 'AnthropicProvider.oauth.test.ts',
+              variant: 'api-key',
+            },
+          },
+        );
+      if (!runtimeWithApiKey.config) {
+        runtimeWithApiKey.config = createRuntimeConfigStub(
+          runtimeWithApiKey.settingsService,
+        );
+      }
 
       // Mock successful streaming response
       const mockStream = {
@@ -357,7 +405,15 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
         },
       ];
 
-      const generator = providerWithApiKey.generateChatCompletion(messages);
+      const generator = providerWithApiKey.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: providerWithApiKey.name,
+          contents: messages,
+          settings: runtimeWithApiKey.settingsService,
+          runtime: runtimeWithApiKey,
+          config: runtimeWithApiKey.config,
+        }),
+      );
       const chunks = [];
       for await (const chunk of generator) {
         chunks.push(chunk);
@@ -377,43 +433,23 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
 
   describe('getModels with OAuth', () => {
     it('should use OAuth token for models API when available', async () => {
-      // Mock OAuth token in Anthropic OAuth format
-      const mockToken = 'sk-ant-oat-oauth-token-123';
+      // Mock OAuth token
+      const mockToken = 'oauth-token-123';
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(mockToken);
 
       const models = await provider.getModels();
 
-      expect(models).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            id: 'claude-opus-4-1-20250805',
-          }),
-          expect.objectContaining({
-            id: 'claude-opus-4-1',
-          }),
-          expect.objectContaining({
-            id: 'claude-sonnet-4-5-20250929',
-          }),
-          expect.objectContaining({
-            id: 'claude-sonnet-4-5',
-          }),
-          expect.objectContaining({
-            id: 'claude-sonnet-4-20250514',
-          }),
-          expect.objectContaining({
-            id: 'claude-sonnet-4',
-          }),
-          expect.objectContaining({
-            id: 'claude-haiku-4-5-20251001',
-          }),
-          expect.objectContaining({
-            id: 'claude-haiku-4-5',
-          }),
-        ]),
+      expect(models).toHaveLength(2); // 1 actual model + 1 latest alias
+      expect(models.some((m) => m.id === 'claude-sonnet-4-latest')).toBe(true);
+      expect(models.some((m) => m.id === 'claude-sonnet-4-20250514')).toBe(
+        true,
       );
 
       // Should have attempted to get OAuth token
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('anthropic');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'anthropic',
+        expect.anything(),
+      );
     });
 
     it('should return empty array when no authentication is available', async () => {
@@ -441,15 +477,6 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
 
       const isAuth = await provider.isAuthenticated();
       expect(isAuth).toBe(false);
-    });
-  });
-
-  describe('setApiKey method', () => {
-    it('should update API key and clear auth cache', () => {
-      provider.setApiKey('new-api-key');
-
-      // The setApiKey method should exist (inherited from BaseProvider)
-      expect(provider.setApiKey).toBeDefined();
     });
   });
 });

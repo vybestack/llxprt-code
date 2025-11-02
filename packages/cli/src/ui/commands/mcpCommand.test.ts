@@ -29,6 +29,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     ...actual,
     getMCPServerStatus: vi.fn(),
     getMCPDiscoveryState: vi.fn(),
+    mcpServerRequiresOAuth: new Map<string, boolean>(),
     MCPOAuthProvider: {
       authenticate: vi.fn(),
     },
@@ -48,7 +49,7 @@ const isMessageAction = (result: unknown): result is MessageActionReturn =>
 
 // Helper function to create a mock DiscoveredMCPTool
 const createMockMCPTool = (
-  name: string,
+  serverToolName: string,
   serverName: string,
   description?: string,
 ) =>
@@ -58,10 +59,10 @@ const createMockMCPTool = (
       tool: vi.fn(),
     } as unknown as CallableTool,
     serverName,
-    name,
-    description || `Description for ${name}`,
+    serverToolName,
+    description || `Description for ${serverToolName}`,
     { type: Type.OBJECT, properties: {} },
-    name, // serverToolName same as name for simplicity
+    true,
   );
 
 describe('mcpCommand', () => {

@@ -5,7 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { IProvider, IContent } from '@vybestack/llxprt-code-core';
+import {
+  IProvider,
+  IContent,
+  GenerateChatOptions,
+  ProviderToolset,
+} from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 // Interfaces that will be implemented in the next phase
@@ -99,7 +104,10 @@ function createMockProvider(name: string, responseDelay = 0): IProvider {
   return {
     name,
     getModels: vi.fn().mockResolvedValue([]),
-    async *generateChatCompletion(_messages: IContent[]) {
+    async *generateChatCompletion(
+      _optionsOrMessages: GenerateChatOptions | IContent[],
+      _tools?: ProviderToolset,
+    ) {
       if (responseDelay > 0) {
         await new Promise((resolve) => setTimeout(resolve, responseDelay));
       }

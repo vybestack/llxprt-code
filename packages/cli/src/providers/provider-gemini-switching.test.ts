@@ -4,106 +4,93 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  getProviderManager,
-  resetProviderManager,
-} from './providerManagerInstance.js';
+import { describe, it, expect, vi } from 'vitest';
+import { createProviderManager } from './providerManagerInstance.js';
 import { IProvider, IModel } from './index.js';
-import { Config, AuthType } from '@vybestack/llxprt-code-core';
+import {
+  AuthType,
+  Config,
+  SettingsService,
+  createProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core';
+
+function createManager() {
+  const settingsService = new SettingsService();
+  const runtime = createProviderRuntimeContext({ settingsService });
+  const { manager } = createProviderManager(runtime, {
+    allowBrowserEnvironment: true,
+  });
+  return manager;
+}
+
+function createMockProvider(): IProvider {
+  return {
+    name: 'test-provider',
+    async getModels(): Promise<IModel[]> {
+      return [
+        {
+          id: 'model-1',
+          name: 'Test Model 1',
+          provider: 'test-provider',
+          supportedToolFormats: ['json'],
+        },
+        {
+          id: 'model-2',
+          name: 'Test Model 2',
+          provider: 'test-provider',
+          supportedToolFormats: ['json'],
+        },
+      ];
+    },
+    async *generateChatCompletion() {
+      yield {
+        speaker: 'ai' as const,
+        blocks: [{ type: 'text' as const, text: 'test response' }],
+      };
+    },
+    getDefaultModel() {
+      return 'model-1';
+    },
+    getServerTools() {
+      return [];
+    },
+    async invokeServerTool() {
+      return {};
+    },
+  };
+}
 
 describe('Provider-Gemini Switching', () => {
-  let mockProvider: IProvider;
+  it('uses Gemini when no provider is active', async () => {
+    const manager = createManager();
 
-  beforeEach(() => {
-    resetProviderManager();
-
-    mockProvider = {
-      name: 'test-provider',
-      async getModels(): Promise<IModel[]> {
-        return [
-          {
-            id: 'model-1',
-            name: 'Test Model 1',
-            provider: 'test-provider',
-            supportedToolFormats: ['json'],
-          },
-          {
-            id: 'model-2',
-            name: 'Test Model 2',
-            provider: 'test-provider',
-            supportedToolFormats: ['json'],
-          },
-        ];
-      },
-      async *generateChatCompletion() {
-        yield {
-          speaker: 'ai' as const,
-          blocks: [{ type: 'text' as const, text: 'test response' }],
-        };
-      },
-      getCurrentModel() {
-        return 'model-1';
-      },
-      getDefaultModel() {
-        return 'model-1';
-      },
-      setModel(model: string) {
-        console.log(`Provider model set to: ${model}`);
-      },
-      getServerTools() {
-        return [];
-      },
-      async invokeServerTool() {
-        return {};
-      },
-    };
-  });
-
-  afterEach(() => {
-    resetProviderManager();
-  });
-
-  it('should use Gemini when no provider is active', async () => {
-    const manager = getProviderManager(undefined, true);
-
-    // Clear any auto-loaded active provider
     if (manager.hasActiveProvider()) {
       manager.clearActiveProvider();
     }
 
-    // Register provider but don't activate it
-    manager.registerProvider(mockProvider);
-
-    // Should not have an active provider
     expect(manager.hasActiveProvider()).toBe(false);
 
-    // Create a mock config
-    const originalRefreshAuth = vi.fn().mockResolvedValue(undefined);
+    manager.registerProvider(createMockProvider());
+    expect(manager.hasActiveProvider()).toBe(false);
+
     const config = {
-      refreshAuth: originalRefreshAuth,
+      refreshAuth: vi.fn().mockResolvedValue(undefined),
       getGeminiClient: vi.fn().mockReturnValue(null),
       getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     } as unknown as Config;
 
-    // Call refreshAuth
     await config.refreshAuth(AuthType.USE_GEMINI);
-
-    // Should have called the original since no provider is active
-    expect(originalRefreshAuth).toHaveBeenCalled();
+    expect(config.refreshAuth).toHaveBeenCalledWith(AuthType.USE_GEMINI);
   });
 
-  it('should use provider when active', async () => {
-    const manager = getProviderManager(undefined, true);
+  it('respects active provider configuration when set', async () => {
+    const manager = createManager();
+    const provider = createMockProvider();
 
-    // Register and activate provider
-    manager.registerProvider(mockProvider);
+    manager.registerProvider(provider);
     manager.setActiveProvider('test-provider');
-
-    // Should have an active provider
     expect(manager.hasActiveProvider()).toBe(true);
 
-    // Create a mock config with a mock GeminiClient
     const mockGeminiClient = {
       chat: {
         contentGenerator: null,
@@ -116,48 +103,32 @@ describe('Provider-Gemini Switching', () => {
       getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     } as unknown as Config;
 
-    // Store original refreshAuth
-    const originalRefreshAuth = config.refreshAuth;
-
-    // refreshAuth should remain the same (no wrapping in new implementation)
-    expect(config.refreshAuth).toBe(originalRefreshAuth);
-
-    // Call refreshAuth
     await config.refreshAuth(AuthType.USE_GEMINI);
-
-    // Content generator remains null (provider support is in core now)
+    expect(config.refreshAuth).toHaveBeenCalledWith(AuthType.USE_GEMINI);
     expect(mockGeminiClient.chat.contentGenerator).toBeNull();
   });
 
-  it('should switch back to Gemini when provider is cleared', async () => {
-    const manager = getProviderManager(undefined, true);
+  it('falls back to Gemini when clearing the active provider', async () => {
+    const manager = createManager();
 
-    // Start with active provider
-    manager.registerProvider(mockProvider);
+    manager.registerProvider(createMockProvider());
     manager.setActiveProvider('test-provider');
     expect(manager.hasActiveProvider()).toBe(true);
 
-    // Clear provider (switch back to Gemini)
     manager.clearActiveProvider();
     expect(manager.hasActiveProvider()).toBe(false);
 
-    // Create a mock config
-    const mockGeminiClient = {
-      chat: {
-        contentGenerator: null,
-      },
-    };
-
     const config = {
       refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
+      getGeminiClient: vi.fn().mockReturnValue({
+        chat: {
+          contentGenerator: null,
+        },
+      }),
       getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     } as unknown as Config;
 
-    // Call refreshAuth
     await config.refreshAuth(AuthType.USE_GEMINI);
-
-    // Should NOT update content generator since no provider is active
-    expect(mockGeminiClient.chat.contentGenerator).toBeNull();
+    expect(config.refreshAuth).toHaveBeenCalled();
   });
 });

@@ -21,6 +21,24 @@ vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+// Mock loadConfig to avoid authentication requirements
+vi.mock('../config/config.js', () => ({
+  loadConfig: vi.fn().mockImplementation(async () => ({
+    // Return a minimal Config-like object that satisfies test needs
+    getContentGeneratorConfig: vi
+      .fn()
+      .mockReturnValue({ model: 'gemini-pro', authType: 'USE_GEMINI' }),
+    getSessionId: () => 'test-session',
+    getModel: () => 'gemini-pro',
+  })),
+  loadSettings: vi.fn().mockReturnValue({}),
+  loadExtensions: vi.fn().mockReturnValue([]),
+  loadEnvironment: vi.fn(),
+  setTargetDir: vi
+    .fn()
+    .mockImplementation((settings) => settings?.workspacePath || process.cwd()),
+}));
+
 // Mock Task.create to avoid its complex setup
 vi.mock('../agent/task.js', () => {
   class MockTask {

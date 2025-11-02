@@ -269,8 +269,16 @@ export const providerCommand: SlashCommand = {
 
       // Also clear base URL on the new provider if it has the method
       const newProvider = providerManager.getActiveProvider();
-      if (newProvider && newProvider.setBaseUrl) {
-        newProvider.setBaseUrl(undefined);
+      if (
+        newProvider &&
+        'setBaseUrl' in newProvider &&
+        typeof (
+          newProvider as { setBaseUrl?: (url: string | undefined) => void }
+        ).setBaseUrl === 'function'
+      ) {
+        (
+          newProvider as { setBaseUrl: (url: string | undefined) => void }
+        ).setBaseUrl(undefined);
       }
 
       // Use SettingsService for provider switching
@@ -313,8 +321,14 @@ export const providerCommand: SlashCommand = {
 
         // Clear model parameters on the new provider
         const newProvider = providerManager.getActiveProvider();
-        if (newProvider.setModelParams) {
-          newProvider.setModelParams({});
+        if (
+          'setModelParams' in newProvider &&
+          typeof (newProvider as { setModelParams?: (params: object) => void })
+            .setModelParams === 'function'
+        ) {
+          (
+            newProvider as { setModelParams: (params: object) => void }
+          ).setModelParams({});
         }
 
         // Ensure provider manager is set on config
@@ -352,8 +366,14 @@ export const providerCommand: SlashCommand = {
 
         // Set the model on both the provider and config
         if (defaultModel) {
-          if (activeProvider.setModel) {
-            activeProvider.setModel(defaultModel);
+          if (
+            'setModel' in activeProvider &&
+            typeof (activeProvider as { setModel?: (model: string) => void })
+              .setModel === 'function'
+          ) {
+            (activeProvider as { setModel: (model: string) => void }).setModel(
+              defaultModel,
+            );
           }
           context.services.config.setModel(defaultModel);
         }

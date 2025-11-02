@@ -12,6 +12,7 @@ import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod as _validateAuthMethod } from '../../config/auth.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 interface AuthDialogProps {
   onSelect: (authMethod: AuthType | undefined, scope: SettingScope) => void;
@@ -27,6 +28,7 @@ export function AuthDialog({
   settings,
   initialErrorMessage,
 }: AuthDialogProps): React.JSX.Element {
+  const runtime = useRuntimeApi();
   const [errorMessage, setErrorMessage] = useState<string | null>(
     initialErrorMessage || null,
   );
@@ -42,9 +44,6 @@ export function AuthDialog({
     }
     return enabled;
   });
-  const [authenticatedProviders, setAuthenticatedProviders] = useState<
-    Record<string, boolean>
-  >({});
 
   // Update enabledProviders state when settings change
   React.useEffect(() => {
@@ -58,61 +57,17 @@ export function AuthDialog({
     setEnabledProviders(enabled);
   }, [settings.merged.oauthEnabledProviders]);
 
-  const loadAuthStatuses = useCallback(async (): Promise<
-    Record<string, boolean>
-  > => {
-    try {
-      const { getOAuthManager } = await import(
-        '../../providers/providerManagerInstance.js'
-      );
-      const oauthManager = getOAuthManager();
-      if (!oauthManager || typeof oauthManager.getAuthStatus !== 'function') {
-        return {};
-      }
-      const statuses = await oauthManager.getAuthStatus();
-      const entries = statuses.map(
-        (status) => [status.provider, status.authenticated] as const,
-      );
-      return Object.fromEntries(entries);
-    } catch {
-      return {};
-    }
-  }, []);
-
-  React.useEffect(() => {
-    let active = true;
-    const run = async () => {
-      const nextStatuses = await loadAuthStatuses();
-      if (active) {
-        setAuthenticatedProviders(nextStatuses);
-      }
-    };
-    void run();
-
-    return () => {
-      active = false;
-    };
-  }, [loadAuthStatuses]);
-
-  const getAuthSuffix = (providerName: string): string => {
-    const status = authenticatedProviders[providerName];
-    if (status === undefined) {
-      return '';
-    }
-    return status ? ' (Authenticated)' : ' (Not authenticated)';
-  };
-
   const items = [
     {
-      label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}${getAuthSuffix('gemini')}`,
+      label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}`,
       value: 'oauth_gemini',
     },
     {
-      label: `Qwen (OAuth) ${enabledProviders.has('oauth_qwen') ? '[ON]' : '[OFF]'}${getAuthSuffix('qwen')}`,
+      label: `Qwen (OAuth) ${enabledProviders.has('oauth_qwen') ? '[ON]' : '[OFF]'}`,
       value: 'oauth_qwen',
     },
     {
-      label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}${getAuthSuffix('anthropic')}`,
+      label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}`,
       value: 'oauth_anthropic',
     },
     {
@@ -141,28 +96,20 @@ export function AuthDialog({
 
       // Use the actual oauthManager to toggle the provider
       // This will call the same code as /auth gemini enable/disable
-      const { getOAuthManager } = await import(
-        '../../providers/providerManagerInstance.js'
-      );
-      const oauthManager = getOAuthManager();
+      const oauthManager = runtime.getCliOAuthManager();
 
       if (oauthManager) {
         try {
           const newState = await oauthManager.toggleOAuthEnabled(providerName);
 
           // Update local state to reflect the change
-          setEnabledProviders((prev) => {
-            const next = new Set(prev);
-            if (newState) {
-              next.add(authMethod);
-            } else {
-              next.delete(authMethod);
-            }
-            return next;
-          });
-
-          const nextStatuses = await loadAuthStatuses();
-          setAuthenticatedProviders(nextStatuses);
+          const newEnabledProviders = new Set(enabledProviders);
+          if (newState) {
+            newEnabledProviders.add(authMethod);
+          } else {
+            newEnabledProviders.delete(authMethod);
+          }
+          setEnabledProviders(newEnabledProviders);
         } catch (error) {
           setErrorMessage(`Failed to toggle ${providerName}: ${error}`);
         }
@@ -170,7 +117,7 @@ export function AuthDialog({
 
       // Don't close the dialog - let user continue toggling
     },
-    [onSelect, loadAuthStatuses],
+    [onSelect, enabledProviders, runtime],
   );
 
   useKeypress(
@@ -217,7 +164,7 @@ export function AuthDialog({
         <Text color={Colors.Gray}>(Use Enter to select, ESC to close)</Text>
       </Box>
       <Box marginTop={1}>
-        <Text>Terms of Services and Privacy Notice for LLxprt Code</Text>
+        <Text>Terms of Services and Privacy Notice for Gemini CLI</Text>
       </Box>
       <Box marginTop={1}>
         <Text color={Colors.AccentBlue}>

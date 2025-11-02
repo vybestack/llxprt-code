@@ -47,6 +47,10 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     /<invoke\s+name="(\w+)">(.*?)<\/invoke>/gs,
     // Format 6: Generic XML tool format
     /<tool>\s*<name>(\w+)<\/name>\s*<arguments>(.*?)<\/arguments>\s*<\/tool>/gs,
+    // Format 7: <use toolName with key="value" ...>
+    /<use\s+([a-zA-Z0-9_.-]+)([^>]*)>/gs,
+    // Format 8: <use_toolName with key="value" ...>
+    /<use_([a-zA-Z0-9_.-]+)([^>]*)>/gs,
   ];
 
   parse(content: string): {
@@ -69,7 +73,8 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       !content.includes('{"name":') &&
       !content.includes('<tool_call>') &&
       !content.includes('<invoke') &&
-      !content.includes('<tool>')
+      !content.includes('<tool>') &&
+      !content.includes('<use ')
     ) {
       return { cleanedContent: content, toolCalls: [] };
     }
@@ -112,6 +117,43 @@ export class GemmaToolCallParser implements ITextToolCallParser {
           // Format 6: Generic XML tool format
           const [fullMatch, toolName, xmlArgs] = match;
           matches.push({ fullMatch, toolName, args: xmlArgs });
+        } else if (
+          pattern === this.patterns[6] ||
+          pattern === this.patterns[7]
+        ) {
+          // Format 7: <use toolName ...>
+          const [fullMatch, toolNameRaw, attributeText] = match;
+          const toolName = toolNameRaw?.trim();
+          const args: Record<string, unknown> = {};
+
+          const attributeMatches = Array.from(
+            attributeText.matchAll(/([a-zA-Z0-9_.-]+)\s*=\s*"(.*?)"/g),
+          );
+
+          for (const [, key, rawValue] of attributeMatches) {
+            if (!key) continue;
+            const trimmedValue = rawValue.trim();
+            if (trimmedValue.startsWith('{') || trimmedValue.startsWith('[')) {
+              try {
+                args[key] = JSON.parse(trimmedValue);
+                continue;
+              } catch (_error) {
+                // fall back to string
+              }
+            }
+            if (/^-?\d+(\.\d+)?$/.test(trimmedValue)) {
+              args[key] = Number(trimmedValue);
+            } else if (
+              trimmedValue.toLowerCase() === 'true' ||
+              trimmedValue.toLowerCase() === 'false'
+            ) {
+              args[key] = trimmedValue.toLowerCase() === 'true';
+            } else {
+              args[key] = trimmedValue;
+            }
+          }
+
+          matches.push({ fullMatch, toolName, args });
         } else {
           // Format 1: tool name followed by JSON arguments
           const [fullMatch, toolName, jsonArgs] = match;
@@ -210,6 +252,8 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, '') // Remove function_calls wrapper
       .replace(/<invoke[\s\S]*?<\/invoke>/g, '') // Remove any remaining invoke tags
       .replace(/<tool>[\s\S]*?<\/tool>/g, '') // Remove any remaining tool tags
+      .replace(/<\/use_[a-zA-Z0-9_.-]+>/g, '') // Remove closing custom use_ tags
+      .replace(/<\/use>/g, '') // Remove generic closing use tags
       // .replace(/<think>[\s\S]*?<\/think>/g, '') // Keep think tags visible by default
       .replace(/<tool_call>\s*\{[^}]*$/gm, '') // Remove incomplete tool calls
       .replace(/\{"name"\s*:\s*"[^"]*"\s*,?\s*"arguments"\s*:\s*\{[^}]*$/gm, '') // Remove incomplete JSON tool calls

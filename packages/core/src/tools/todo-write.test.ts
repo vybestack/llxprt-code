@@ -8,6 +8,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TodoWrite, TodoWriteParams } from './todo-write.js';
 import { TodoStore } from './todo-store.js';
 import { Todo } from './todo-schemas.js';
+import { todoEvents } from './todo-events.js';
+import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
 // Mock TodoStore
 vi.mock('./todo-store.js');
@@ -315,6 +317,55 @@ describe('TodoWrite', () => {
 
       expect(result.llmContent).toContain('Todo Progress');
       expect(result.returnDisplay).toContain('Todo Progress');
+    });
+
+    it('should emit todo updates scoped with provided agent id', async () => {
+      const interactiveTool = Object.assign(
+        Object.create(Object.getPrototypeOf(tool)),
+        tool,
+      );
+      interactiveTool.context = {
+        sessionId: 'test-session-123',
+        agentId: 'agent-special',
+        interactiveMode: true,
+      };
+
+      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
+      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
+      const emitSpy = vi.spyOn(todoEvents, 'emitTodoUpdated');
+
+      await interactiveTool.execute({ todos: validTodos }, abortSignal);
+
+      expect(emitSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'test-session-123',
+          agentId: 'agent-special',
+        }),
+      );
+    });
+
+    it('should emit todo updates using default agent id when missing', async () => {
+      const interactiveTool = Object.assign(
+        Object.create(Object.getPrototypeOf(tool)),
+        tool,
+      );
+      interactiveTool.context = {
+        sessionId: 'test-session-123',
+        interactiveMode: true,
+      };
+
+      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
+      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
+      const emitSpy = vi.spyOn(todoEvents, 'emitTodoUpdated');
+
+      await interactiveTool.execute({ todos: validTodos }, abortSignal);
+
+      expect(emitSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'test-session-123',
+          agentId: DEFAULT_AGENT_ID,
+        }),
+      );
     });
   });
 });

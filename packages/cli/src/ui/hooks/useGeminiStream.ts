@@ -31,6 +31,7 @@ import {
   ServerGeminiCitationEvent,
   EmojiFilter,
   type EmojiFilterMode,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -263,10 +264,12 @@ export const useGeminiStream = (
 
   const [toolCalls, scheduleToolCalls, markToolsAsSubmitted] =
     useReactToolScheduler(
-      async (completedToolCallsFromScheduler) => {
-        // This onComplete is called when ALL scheduled tools for a given batch are done.
-        if (completedToolCallsFromScheduler.length > 0) {
-          // Add the final state of these tools to the history for display.
+      async (schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
+        if (completedToolCallsFromScheduler.length === 0) {
+          return;
+        }
+
+        if (isPrimary) {
           addItem(
             mapTrackedToolCallsToDisplay(
               completedToolCallsFromScheduler as TrackedToolCall[],
@@ -274,11 +277,25 @@ export const useGeminiStream = (
             Date.now(),
           );
 
-          // Handle tool response submission immediately when tools complete
           await handleCompletedTools(
             completedToolCallsFromScheduler as TrackedToolCall[],
           );
+          return;
         }
+
+        const callIdsToMark = completedToolCallsFromScheduler.map(
+          (toolCall) => toolCall.request.callId,
+        );
+        if (callIdsToMark.length > 0) {
+          markToolsAsSubmitted(callIdsToMark);
+        }
+
+        addItem(
+          mapTrackedToolCallsToDisplay(
+            completedToolCallsFromScheduler as TrackedToolCall[],
+          ),
+          Date.now(),
+        );
       },
       config,
       setPendingHistoryItem,
@@ -433,6 +450,7 @@ export const useGeminiStream = (
                 args: toolArgs,
                 isClientInitiated: true,
                 prompt_id,
+                agentId: DEFAULT_AGENT_ID,
               };
               scheduleToolCalls([toolCallRequest], abortSignal);
               return { queryToSend: null, shouldProceed: false };
@@ -816,7 +834,10 @@ export const useGeminiStream = (
             );
             break;
           case ServerGeminiEventType.ToolCallRequest:
-            toolCallRequests.push(event.value);
+            toolCallRequests.push({
+              ...event.value,
+              agentId: event.value.agentId ?? DEFAULT_AGENT_ID,
+            });
             break;
           case ServerGeminiEventType.UserCancelled:
             handleUserCancelledEvent(userMessageTimestamp);
@@ -1034,7 +1055,36 @@ export const useGeminiStream = (
           },
         );
 
-      const todoPauseTriggered = completedAndReadyToSubmitTools.some(
+      const [primaryTools, externalTools] =
+        completedAndReadyToSubmitTools.reduce<
+          [
+            Array<TrackedCompletedToolCall | TrackedCancelledToolCall>,
+            Array<TrackedCompletedToolCall | TrackedCancelledToolCall>,
+          ]
+        >(
+          (acc, toolCall) => {
+            const agentId = toolCall.request.agentId ?? DEFAULT_AGENT_ID;
+            if (agentId === DEFAULT_AGENT_ID) {
+              acc[0].push(toolCall);
+            } else {
+              acc[1].push(toolCall);
+            }
+            return acc;
+          },
+          [[], []],
+        );
+
+      if (externalTools.length > 0) {
+        markToolsAsSubmitted(
+          externalTools.map((toolCall) => toolCall.request.callId),
+        );
+      }
+
+      if (primaryTools.length === 0) {
+        return;
+      }
+
+      const todoPauseTriggered = primaryTools.some(
         (tc) => tc.request.name === 'todo_pause' && tc.status === 'success',
       );
 
@@ -1043,7 +1093,7 @@ export const useGeminiStream = (
       }
 
       // Finalize any client-initiated tools as soon as they are done.
-      const clientTools = completedAndReadyToSubmitTools.filter(
+      const clientTools = primaryTools.filter(
         (t) => t.request.isClientInitiated,
       );
       if (clientTools.length > 0) {
@@ -1051,7 +1101,7 @@ export const useGeminiStream = (
       }
 
       // Identify new, successful save_memory calls that we haven't processed yet.
-      const newSuccessfulMemorySaves = completedAndReadyToSubmitTools.filter(
+      const newSuccessfulMemorySaves = primaryTools.filter(
         (t) =>
           t.request.name === 'save_memory' &&
           t.status === 'success' &&
@@ -1067,7 +1117,7 @@ export const useGeminiStream = (
         );
       }
 
-      const geminiTools = completedAndReadyToSubmitTools.filter(
+      const geminiTools = primaryTools.filter(
         (t) => !t.request.isClientInitiated,
       );
 

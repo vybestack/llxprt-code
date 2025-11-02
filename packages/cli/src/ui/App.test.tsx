@@ -20,6 +20,7 @@ import {
   LLxprtClient,
   ideContext,
   type AuthType,
+  DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core';
 import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
 import process from 'node:process';
@@ -1791,6 +1792,7 @@ describe('App UI', () => {
             pendingHistoryItems: [
               {
                 type: 'tool_group',
+                agentId: DEFAULT_AGENT_ID,
                 tools: [
                   {
                     name: 'test_tool',

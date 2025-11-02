@@ -9,11 +9,20 @@ import {
   AuthPrecedenceResolver,
   AuthPrecedenceConfig,
   OAuthManager,
+  type OAuthTokenRequestMetadata,
 } from './precedence.js';
 import {
   getSettingsService,
+  registerSettingsService,
   resetSettingsService,
 } from '../settings/settingsServiceInstance.js';
+import { SettingsService } from '../settings/SettingsService.js';
+import {
+  clearActiveProviderRuntimeContext,
+  createProviderRuntimeContext,
+  getActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../runtime/providerRuntimeContext.js';
 
 // Mock fs module
 vi.mock('node:fs/promises', () => ({
@@ -23,8 +32,13 @@ vi.mock('node:fs/promises', () => ({
 const mockFs = await import('node:fs/promises');
 
 // Mock OAuth manager for testing
+const mockOAuthManagerGetToken = vi.fn<
+  [string, OAuthTokenRequestMetadata | undefined],
+  Promise<string | null>
+>();
+
 const mockOAuthManager: OAuthManager = {
-  getToken: vi.fn(),
+  getToken: mockOAuthManagerGetToken,
   isAuthenticated: vi.fn(),
 };
 
@@ -39,11 +53,13 @@ describe('AuthPrecedenceResolver', () => {
     delete process.env.ANOTHER_API_KEY;
     // Reset settings service to ensure clean state
     resetSettingsService();
+    registerSettingsService(new SettingsService());
   });
 
   afterEach(() => {
     process.env = originalEnv;
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   describe('Authentication Precedence Chain', () => {
@@ -168,7 +184,10 @@ describe('AuthPrecedenceResolver', () => {
 
       // Then: Should use OAuth (lowest priority)
       expect(result).toBe('oauth-token-abc');
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.any(Object),
+      );
     });
 
     it('should return null when no authentication methods available', async () => {
@@ -217,7 +236,13 @@ describe('AuthPrecedenceResolver', () => {
 
       // Then: Should ignore keys/env and use OAuth
       expect(result).toBe('oauth-token-abc');
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('anthropic');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'anthropic',
+        expect.objectContaining({
+          providerId: 'anthropic',
+          profileId: 'default',
+        }),
+      );
     });
 
     it('should return null when authOnly is enabled but OAuth is unavailable', async () => {
@@ -506,7 +531,77 @@ describe('AuthPrecedenceResolver', () => {
       // Then: Should use updated OAuth manager
       const result = await resolver.resolveAuthentication();
       expect(result).toBe('new-oauth-token');
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'qwen',
+        expect.any(Object),
+      );
+    });
+  });
+
+  describe('Injected SettingsService', () => {
+    let originalContext: ReturnType<
+      typeof getActiveProviderRuntimeContext
+    > | null;
+
+    const createStubSettingsService = (
+      values: Record<string, unknown>,
+    ): SettingsService => {
+      const service = new SettingsService();
+      for (const [key, value] of Object.entries(values)) {
+        service.set(key, value);
+      }
+      vi.spyOn(service, 'get').mockImplementation((key: string) =>
+        SettingsService.prototype.get.call(service, key),
+      );
+      vi.spyOn(service, 'set').mockImplementation((key: string, value) =>
+        SettingsService.prototype.set.call(service, key, value),
+      );
+      return service;
+    };
+
+    beforeEach(() => {
+      try {
+        originalContext = getActiveProviderRuntimeContext();
+      } catch {
+        originalContext = null;
+      }
+    });
+
+    afterEach(() => {
+      if (originalContext) {
+        setActiveProviderRuntimeContext(originalContext);
+      }
+    });
+
+    it('uses the SettingsService injected via constructor', async () => {
+      const injected = createStubSettingsService({
+        'auth-key': 'injected-key',
+      });
+      const resolver = new AuthPrecedenceResolver(
+        {},
+        mockOAuthManager,
+        injected,
+      );
+
+      const result = await resolver.resolveAuthentication();
+      expect(result).toBe('injected-key');
+      expect(injected.get).toHaveBeenCalledWith('auth-key');
+    });
+
+    it('falls back to the active runtime context when no service is injected', async () => {
+      const runtimeService = createStubSettingsService({
+        'auth-key': 'runtime-key',
+      });
+      const runtimeContext = createProviderRuntimeContext({
+        settingsService: runtimeService,
+      });
+      setActiveProviderRuntimeContext(runtimeContext);
+
+      const resolver = new AuthPrecedenceResolver({}, mockOAuthManager);
+      const result = await resolver.resolveAuthentication();
+
+      expect(result).toBe('runtime-key');
+      expect(runtimeService.get).toHaveBeenCalledWith('auth-key');
     });
   });
 });

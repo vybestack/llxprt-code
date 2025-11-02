@@ -1,8 +1,23 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import { ITool } from '../ITool.js';
 import { IContent } from '../../services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import {
+  createProviderWithRuntime,
+  createRuntimeConfigStub,
+} from '../../test-utils/runtime.js';
+import {
+  createProviderCallOptions,
+  type ProviderCallOptionsInit,
+} from '../../test-utils/providerCallOptions.js';
+import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
+import type { SettingsService } from '../../settings/SettingsService.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
+import {
+  clearActiveProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../../runtime/providerRuntimeContext.js';
 
 type AnthropicContentBlock =
   | { type: 'text'; text: string }
@@ -217,17 +232,39 @@ describe('AnthropicProvider', () => {
   let provider: AnthropicProvider;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockAnthropicInstance: any;
+  let runtimeContext: ProviderRuntimeContext;
+  let settingsService: SettingsService;
 
   beforeEach(() => {
     // Clear all mocks before each test
     vi.clearAllMocks();
 
-    // Create provider with test API key
-    provider = new AnthropicProvider(
-      'test-api-key',
-      undefined,
-      TEST_PROVIDER_CONFIG,
+    // Create provider with test API key and runtime context
+    const result = createProviderWithRuntime<AnthropicProvider>(
+      ({ settingsService: svc }) => {
+        svc.set('auth-key', 'test-api-key');
+        svc.set('activeProvider', 'anthropic');
+        svc.setProviderSetting('anthropic', 'streaming', 'disabled');
+        return new AnthropicProvider(
+          'test-api-key',
+          undefined,
+          TEST_PROVIDER_CONFIG,
+        );
+      },
+      {
+        runtimeId: 'anthropic.provider.test',
+        metadata: { source: 'AnthropicProvider.test.ts' },
+      },
     );
+    provider = result.provider;
+    runtimeContext = result.runtime;
+    settingsService = result.settingsService;
+    if (!runtimeContext.config) {
+      runtimeContext.config = createRuntimeConfigStub(settingsService);
+    }
+
+    // Re-activate the runtime context for test execution
+    setActiveProviderRuntimeContext(runtimeContext);
 
     // Use the shared mock instance
     mockAnthropicInstance = {
@@ -236,6 +273,23 @@ describe('AnthropicProvider', () => {
       },
     };
   });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+  });
+
+  const buildCallOptions = (
+    contents: IContent[],
+    overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> = {},
+  ) =>
+    createProviderCallOptions({
+      providerName: provider.name,
+      contents,
+      settings: settingsService,
+      runtime: runtimeContext,
+      config: runtimeContext.config,
+      ...overrides,
+    });
 
   describe('getModels', () => {
     it('should return a list of Anthropic models including latest aliases', async () => {
@@ -312,12 +366,32 @@ describe('AnthropicProvider', () => {
         },
       });
 
-      const generator = providerWithHeaders.generateChatCompletion([
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello there' }],
+      const callOptions = createProviderCallOptions({
+        providerName: providerWithHeaders.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello there' }],
+          },
+        ],
+        settingsOverrides: {
+          global: {
+            'auth-key': 'test-api-key',
+            'custom-headers': customHeaders,
+            activeProvider: 'anthropic',
+          },
+          provider: {
+            'custom-headers': customHeaders,
+            streaming: 'disabled',
+          },
         },
-      ]);
+        runtimeMetadata: { testCase: 'custom-headers' },
+        runtimeId: 'anthropic.customHeaders',
+      });
+
+      setActiveProviderRuntimeContext(callOptions.runtime);
+
+      const generator = providerWithHeaders.generateChatCompletion(callOptions);
 
       await generator.next();
 
@@ -355,7 +429,9 @@ describe('AnthropicProvider', () => {
           blocks: [{ type: 'text', text: 'Say hello' }],
         },
       ];
-      const generator = provider.generateChatCompletion(messages);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
 
       const chunks = [];
       for await (const chunk of generator) {
@@ -434,7 +510,9 @@ describe('AnthropicProvider', () => {
         },
       ];
 
-      const generator = provider.generateChatCompletion(messages);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
       const collected: IContent[] = [];
       for await (const chunk of generator) {
         collected.push(chunk);
@@ -529,7 +607,9 @@ describe('AnthropicProvider', () => {
         },
       ];
 
-      const generator = provider.generateChatCompletion(messages, tools);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, { tools }),
+      );
 
       const chunks = [];
       for await (const chunk of generator) {
@@ -583,7 +663,9 @@ describe('AnthropicProvider', () => {
           blocks: [{ type: 'text', text: 'test' }],
         },
       ];
-      const generator = provider.generateChatCompletion(messages);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
 
       await expect(generator.next()).rejects.toThrow('API Error');
     });
@@ -623,7 +705,9 @@ describe('AnthropicProvider', () => {
           blocks: [{ type: 'text', text: 'Say hello' }],
         },
       ];
-      const generator = provider.generateChatCompletion(messages);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
 
       const chunks = [];
       for await (const chunk of generator) {
@@ -666,7 +750,9 @@ describe('AnthropicProvider', () => {
           blocks: [{ type: 'text', text: 'Say hello' }],
         },
       ];
-      const generator = provider.generateChatCompletion(messages);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
 
       const chunks = [];
       for await (const chunk of generator) {
@@ -721,7 +807,9 @@ describe('AnthropicProvider', () => {
           blocks: [{ type: 'text', text: 'test' }],
         },
       ];
-      const generator = provider.generateChatCompletion(messages, tools);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, { tools }),
+      );
 
       const chunks = [];
       for await (const chunk of generator) {
@@ -770,7 +858,9 @@ describe('AnthropicProvider', () => {
           blocks: [{ type: 'text', text: 'Test retry' }],
         },
       ];
-      const generator = provider.generateChatCompletion(messages);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
 
       const chunks = [];
       for await (const chunk of generator) {
@@ -805,7 +895,9 @@ describe('AnthropicProvider', () => {
           blocks: [{ type: 'text', text: 'Test' }],
         },
       ];
-      const generator = provider.generateChatCompletion(messages);
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages),
+      );
 
       const chunks = [];
       for await (const chunk of generator) {
@@ -860,7 +952,9 @@ describe('AnthropicProvider', () => {
           }, // This would normally cause an error
         ];
 
-        const generator = provider.generateChatCompletion(messages);
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
 
         const chunks = [];
         for await (const chunk of generator) {

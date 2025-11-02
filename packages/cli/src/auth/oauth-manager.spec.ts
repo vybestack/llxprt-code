@@ -10,8 +10,9 @@ import { OAuthToken, TokenStore } from './types.js';
 import { LoadedSettings } from '../config/settings.js';
 import type { Settings } from '../config/settings.js';
 import {
-  getSettingsService,
   resetSettingsService,
+  registerSettingsService,
+  SettingsService,
 } from '@vybestack/llxprt-code-core';
 
 // Skip OAuth tests in CI as they require browser interaction
@@ -713,6 +714,11 @@ describe('Higher priority auth detection', () => {
   it('reports environment variable precedence when authOnly is disabled', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
     const loadedSettings = createLoadedSettings();
+
+    // Register SettingsService in runtime context before creating manager
+    const settingsService = new SettingsService();
+    registerSettingsService(settingsService);
+
     const manager = new OAuthManager(tokenStore, loadedSettings);
 
     const result = await manager.getHigherPriorityAuth('anthropic');
@@ -723,9 +729,13 @@ describe('Higher priority auth detection', () => {
   it('ignores environment variables when authOnly is enabled', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-key';
     const loadedSettings = createLoadedSettings();
+
+    // Register SettingsService in runtime context before creating manager
+    const settingsService = new SettingsService();
+    registerSettingsService(settingsService);
+
     const manager = new OAuthManager(tokenStore, loadedSettings);
 
-    const settingsService = getSettingsService();
     settingsService.set('authOnly', true);
 
     const result = await manager.getHigherPriorityAuth('anthropic');

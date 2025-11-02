@@ -19,6 +19,9 @@
  * This provider exclusively uses the OpenAI /responses endpoint
  * for models that support it (o1, o3, etc.)
  */
+// @plan:PLAN-20251023-STATELESS-HARDENING.P08
+// @requirement:REQ-SP4-002/REQ-SP4-003
+// Removed ConversationCache and peekActiveProviderRuntime dependencies to enforce stateless operation
 import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
 import {
@@ -27,24 +30,26 @@ import {
   ToolCallBlock,
   ToolResponseBlock,
 } from '../../services/history/IContent.js';
-import { ToolFormat } from '../../tools/IToolFormatter.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
-import { ConversationCache } from '../openai/ConversationCache.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
 } from '../openai/parseResponsesStream.js';
-import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
-import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import {
-  retryWithBackoff,
-  getErrorStatus,
-  isNetworkTransientError,
-} from '../../utils/retry.js';
+  BaseProvider,
+  BaseProviderConfig,
+  NormalizedGenerateChatOptions,
+} from '../BaseProvider.js';
+import type { ToolFormat } from '../../tools/IToolFormatter.js';
+import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { resolveUserMemory } from '../utils/userMemory.js';
+import { resolveRuntimeAuthToken } from '../utils/authToken.js';
+import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
+  // TODO(P08) @plan:PLAN-20251018-STATELESSPROVIDER2.P07 @requirement:REQ-SP2-001
+  // Align per-call stateless flow with openai-responses-stateless.md steps.
   /**
    * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
    */
@@ -109,9 +114,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   private logger: DebugLogger;
-  private currentModel: string = 'o3-mini';
-  private conversationCache: ConversationCache;
-  private modelParams?: Record<string, unknown>;
+  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+  // @requirement:REQ-SP4-002/REQ-SP4-003
+  // Removed static cache scope and conversation cache dependencies to achieve stateless operation
 
   constructor(
     apiKey: string | undefined,
@@ -135,29 +140,16 @@ export class OpenAIResponsesProvider extends BaseProvider {
       () =>
         `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, apiKey: ${apiKey?.substring(0, 10) || 'none'}`,
     );
-    this.conversationCache = new ConversationCache();
-
-    // Initialize from SettingsService
-    this.initializeFromSettings().catch((error) => {
-      this.logger.debug(
-        () => `Failed to initialize from SettingsService: ${error}`,
-      );
-    });
-
-    // Set default model for responses API
-    if (
-      process.env.LLXPRT_DEFAULT_MODEL &&
-      RESPONSES_API_MODELS.some((m) =>
-        process.env.LLXPRT_DEFAULT_MODEL!.startsWith(m),
-      )
-    ) {
-      this.currentModel = process.env.LLXPRT_DEFAULT_MODEL;
-    }
   }
 
   /**
    * This provider does not support OAuth
    */
+
+  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+  // @requirement:REQ-SP4-002/REQ-SP4-003
+  // Removed stateful conversation cache methods to ensure stateless operation
+
   protected supportsOAuth(): boolean {
     return false;
   }
@@ -233,63 +225,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
     }));
   }
 
-  override setModel(modelId: string): void {
-    // Update SettingsService as the source of truth
-    this.setModelInSettings(modelId).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist model to SettingsService: ${error}`,
-      );
-    });
-    // Keep local cache for performance
-    this.currentModel = modelId;
-  }
-
   override getCurrentModel(): string {
-    // Try to get from SettingsService first (source of truth)
-    try {
-      const settingsService = getSettingsService();
-      const providerSettings = settingsService.getProviderSettings(this.name);
-      if (providerSettings.model) {
-        return providerSettings.model as string;
-      }
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to get model from SettingsService: ${error}`,
-      );
-    }
-    // Fall back to cached value or default
-    return this.currentModel || this.getDefaultModel();
+    return this.getModel();
   }
 
   override getDefaultModel(): string {
     // Return the default model for responses API
     return 'o3-mini';
-  }
-
-  override setApiKey(apiKey: string): void {
-    // Call base provider implementation
-    super.setApiKey?.(apiKey);
-
-    // Persist to SettingsService if available
-    this.setApiKeyInSettings(apiKey).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist API key to SettingsService: ${error}`,
-      );
-    });
-  }
-
-  override setBaseUrl(baseUrl?: string): void {
-    // Call base provider implementation which stores in ephemeral settings
-    super.setBaseUrl?.(baseUrl);
-
-    // Also persist to SettingsService if available
-    const urlToStore =
-      baseUrl && baseUrl.trim() !== '' ? baseUrl : 'https://api.openai.com/v1';
-    this.setBaseUrlInSettings(urlToStore).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist base URL to SettingsService: ${error}`,
-      );
-    });
   }
 
   override setConfig(config: IProviderConfig): void {
@@ -298,22 +240,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
     super.setConfig?.(config);
   }
 
-  override setToolFormatOverride(format: ToolFormat | null): void {
-    // Responses API only supports OpenAI format
-    if (format && format !== 'openai') {
-      this.logger.debug(
-        () =>
-          `Warning: Responses API only supports OpenAI tool format, ignoring override to ${format}`,
-      );
-    }
-  }
-
-  /**
-   * Get the conversation cache instance
-   */
-  getConversationCache(): ConversationCache {
-    return this.conversationCache;
-  }
+  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+  // @requirement:REQ-SP4-002/REQ-SP4-003
+  // Removed getConversationCache method to eliminate stateful conversation handling
 
   /**
    * OpenAI Responses API always requires payment (API key)
@@ -323,8 +252,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   override clearState(): void {
-    // Clear the conversation cache to prevent tool call ID mismatches
-    this.conversationCache.clear();
+    super.clearState?.();
   }
 
   /**
@@ -347,66 +275,45 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   /**
-   * Set model parameters to be included in API calls
-   */
-  override setModelParams(params: Record<string, unknown> | undefined): void {
-    if (params === undefined) {
-      this.modelParams = undefined;
-    } else {
-      this.modelParams = { ...this.modelParams, ...params };
-    }
-
-    // Persist to SettingsService if available
-    this.setModelParamsInSettings(this.modelParams).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist model params to SettingsService: ${error}`,
-      );
-    });
-  }
-
-  /**
    * Get current model parameters
    */
+
   override getModelParams(): Record<string, unknown> | undefined {
-    return this.modelParams;
-  }
-
-  /**
-   * Initialize provider configuration from SettingsService
-   */
-  private async initializeFromSettings(): Promise<void> {
     try {
-      // Load saved model if available
-      const savedModel = await this.getModelFromSettings();
-      if (
-        savedModel &&
-        RESPONSES_API_MODELS.some((m) => savedModel.startsWith(m))
-      ) {
-        this.currentModel = savedModel;
+      const providerSettings =
+        this.resolveSettingsService().getProviderSettings(this.name) as Record<
+          string,
+          unknown
+        >;
+
+      const {
+        temperature,
+        maxTokens,
+        max_tokens: maxTokensSnake,
+        enabled: _enabled,
+        apiKey: _apiKey,
+        baseUrl: _baseUrl,
+        model: _model,
+        ...custom
+      } = providerSettings;
+
+      const params: Record<string, unknown> = { ...custom };
+      if (temperature !== undefined) {
+        params.temperature = temperature;
       }
 
-      // Load saved base URL if available
-      const savedBaseUrl = await this.getBaseUrlFromSettings();
-      if (savedBaseUrl !== undefined) {
-        this.baseProviderConfig.baseURL =
-          savedBaseUrl || 'https://api.openai.com/v1';
+      const resolvedMaxTokens =
+        maxTokens !== undefined ? maxTokens : maxTokensSnake;
+      if (resolvedMaxTokens !== undefined) {
+        params.max_tokens = resolvedMaxTokens;
       }
 
-      // Load saved model parameters if available
-      const savedParams = await this.getModelParamsFromSettings();
-      if (savedParams) {
-        this.modelParams = savedParams;
-      }
-
-      this.logger.debug(
-        () =>
-          `Initialized from SettingsService - model: ${this.currentModel}, baseURL: ${this.baseProviderConfig.baseURL}, params: ${JSON.stringify(this.modelParams)}`,
-      );
+      return Object.keys(params).length > 0 ? params : undefined;
     } catch (error) {
       this.logger.debug(
-        () =>
-          `Failed to initialize OpenAI Responses provider from SettingsService: ${error}`,
+        () => `Failed to compute model params from SettingsService: ${error}`,
       );
+      return undefined;
     }
   }
 
@@ -418,54 +325,55 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   /**
-   * Generate chat completion with IContent interface
-   * Direct implementation for OpenAI Responses API with IContent interface
+   * @plan PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement REQ-SP4-002/REQ-SP4-003
+   * Refactored to remove constructor-captured config and global state, sourcing all per-call data from normalized options
    */
-  async *generateChatCompletion(
-    content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
-    _signal?: AbortSignal,
-    _toolFormat?: string,
+  protected override async *generateChatCompletionWithOptions(
+    options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    // Check if API key is available
-    const apiKey = await this.getAuthToken();
+    const { contents: content, tools } = options;
+
+    const apiKey =
+      (await this.getAuthToken()) ??
+      (await resolveRuntimeAuthToken(options.resolved.authToken)) ??
+      '';
     if (!apiKey) {
       throw new Error('OpenAI API key is required to generate completions');
     }
 
-    // Get the system prompt
-    const flattenedToolNames =
-      tools?.flatMap((group) =>
-        group.functionDeclarations
-          .map((decl) => decl.name)
-          .filter((name): name is string => !!name),
-      ) ?? [];
-    const toolNamesArg =
-      tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
-
-    const userMemory = this.globalConfig?.getUserMemory
-      ? this.globalConfig.getUserMemory()
-      : '';
-    const systemPrompt = await getCoreSystemPromptAsync(
-      userMemory,
-      this.currentModel,
-      toolNamesArg,
+    const resolvedModel = options.resolved.model || this.getDefaultModel();
+    const toolNamesForPrompt =
+      tools === undefined
+        ? undefined
+        : Array.from(
+            new Set(
+              tools.flatMap((group) =>
+                group.functionDeclarations
+                  .map((decl) => decl.name)
+                  .filter((name): name is string => Boolean(name)),
+              ),
+            ),
+          );
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-002/REQ-SP4-003
+    // Source user memory directly from normalized options if available, then fallback to runtime config
+    const userMemory = await resolveUserMemory(
+      options.userMemory,
+      () => options.invocation?.userMemory,
     );
 
-    // Build Responses API input array directly from IContent
-    // For the Responses API, we send system, user and assistant messages
+    const systemPrompt = await getCoreSystemPromptAsync(
+      userMemory,
+      resolvedModel,
+      toolNamesForPrompt,
+    );
+
     const input: Array<{
       role: 'user' | 'assistant' | 'system';
       content?: string;
     }> = [];
 
-    // Add system prompt as the first message if available
     if (systemPrompt) {
       input.push({
         role: 'system',
@@ -479,14 +387,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
           | TextBlock
           | undefined;
         if (textBlock?.text) {
-          input.push({
-            role: 'user',
-            content: textBlock.text,
-          });
+          input.push({ role: 'user', content: textBlock.text });
         }
       } else if (c.speaker === 'ai') {
-        // For AI messages, we only include the text content
-        // Tool calls are part of the history but not sent to the API
         const textBlocks = c.blocks.filter(
           (b) => b.type === 'text',
         ) as TextBlock[];
@@ -495,30 +398,24 @@ export class OpenAIResponsesProvider extends BaseProvider {
         ) as ToolCallBlock[];
 
         const contentText = textBlocks.map((b) => b.text).join('');
-
-        // If there's text content or it's a pure tool call response, include it
         if (contentText || toolCallBlocks.length > 0) {
           const assistantMsg: { role: 'assistant'; content?: string } = {
             role: 'assistant',
           };
 
-          // Include text content if present
           if (contentText) {
             assistantMsg.content = contentText;
-          } else if (toolCallBlocks.length > 0) {
-            // For tool-only responses, add a brief description
+          } else {
             assistantMsg.content = `[Called ${toolCallBlocks.length} tool${toolCallBlocks.length > 1 ? 's' : ''}: ${toolCallBlocks.map((tc) => tc.name).join(', ')}]`;
           }
 
           input.push(assistantMsg);
         }
       } else if (c.speaker === 'tool') {
-        // Tool responses are converted to assistant messages with the result
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock | undefined;
         if (toolResponseBlock) {
-          // Add tool result as an assistant message
           const result =
             typeof toolResponseBlock.result === 'string'
               ? toolResponseBlock.result
@@ -531,19 +428,14 @@ export class OpenAIResponsesProvider extends BaseProvider {
       }
     }
 
-    // Convert Gemini format tools to Responses API format directly
-    // Based on the ToolFormatter.toResponsesTool format
     const responsesTools = tools
       ? tools[0].functionDeclarations.map((decl) => {
-          // Support both old 'parameters' and new 'parametersJsonSchema' formats
-          // DeclarativeTool uses parametersJsonSchema, while legacy tools use parameters
           const toolParameters =
             'parametersJsonSchema' in decl
               ? (decl as { parametersJsonSchema?: unknown })
                   .parametersJsonSchema
               : decl.parameters;
 
-          // Convert parameters from Gemini format to standard format
           const convertedParams = toolParameters
             ? (this.convertGeminiSchemaToStandard(toolParameters) as Record<
                 string,
@@ -561,7 +453,36 @@ export class OpenAIResponsesProvider extends BaseProvider {
         })
       : undefined;
 
-    // Build the request directly for Responses API
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-002/REQ-SP4-003
+    // Source per-call request overrides from normalized options (ephemeral settings take precedence)
+    const runtimeConfigEphemeralSettings = options.invocation?.ephemerals;
+    const settingsServiceModelParams = options.settings?.getProviderSettings(
+      this.name,
+    );
+
+    const filteredSettingsParams = filterOpenAIRequestParams(
+      settingsServiceModelParams as Record<string, unknown> | undefined,
+    );
+    const filteredEphemeralParams = filterOpenAIRequestParams(
+      runtimeConfigEphemeralSettings as Record<string, unknown> | undefined,
+    );
+
+    // Include both ephemeral and persistent settings, with ephemeral settings taking precedence
+    const requestOverrides: Record<string, unknown> = {
+      ...(filteredSettingsParams ?? {}),
+      ...(filteredEphemeralParams ?? {}),
+    };
+
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-002/REQ-SP4-003
+    // Prefer resolved options, then runtime config, then defaults instead of stored provider state
+    const baseURLCandidate =
+      options.resolved.baseURL ??
+      this.getBaseURL() ??
+      'https://api.openai.com/v1';
+    const baseURL = baseURLCandidate.replace(/\/+$/u, '');
+
     const request: {
       model: string;
       input: typeof input;
@@ -569,24 +490,25 @@ export class OpenAIResponsesProvider extends BaseProvider {
       stream: boolean;
       [key: string]: unknown;
     } = {
-      model: this.currentModel,
+      model: resolvedModel,
       input,
       stream: true,
-      ...(this.modelParams || {}),
+      ...(requestOverrides || {}),
     };
 
     if (responsesTools && responsesTools.length > 0) {
       request.tools = responsesTools;
     }
 
-    // Make the API call
-    const baseURL = this.getBaseURL() || 'https://api.openai.com/v1';
     const responsesURL = `${baseURL}/responses`;
     const requestBody = JSON.stringify(request);
     const bodyBlob = new Blob([requestBody], {
       type: 'application/json; charset=utf-8',
     });
 
+    // @plan:PLAN-20251023-STATELESS-HARDENING.P08
+    // @requirement:REQ-SP4-002/REQ-SP4-003
+    // Source custom headers from normalized provider configuration each call
     const customHeaders = this.getCustomHeaders();
     const headers = {
       Authorization: `Bearer ${apiKey}`,
@@ -594,66 +516,21 @@ export class OpenAIResponsesProvider extends BaseProvider {
       ...(customHeaders ?? {}),
     };
 
-    const { maxAttempts, initialDelayMs } = this.getRetryConfig();
-    const response = await retryWithBackoff(
-      async () => {
-        const res = await fetch(responsesURL, {
-          method: 'POST',
-          headers,
-          body: bodyBlob,
-        });
+    const response = await fetch(responsesURL, {
+      method: 'POST',
+      headers,
+      body: bodyBlob,
+    });
 
-        if (!res.ok) {
-          const errorBody = await res.text();
-          throw parseErrorResponse(res.status, errorBody, this.name);
-        }
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw parseErrorResponse(response.status, errorBody, this.name);
+    }
 
-        return res;
-      },
-      {
-        maxAttempts,
-        initialDelayMs,
-        shouldRetry: this.shouldRetryResponse.bind(this),
-        trackThrottleWaitTime: this.throttleTracker,
-      },
-    );
-
-    // Stream the response directly as IContent
     if (response.body) {
       for await (const message of parseResponsesStream(response.body)) {
-        // The parseResponsesStream now returns IContent directly
         yield message;
       }
     }
-  }
-
-  private getRetryConfig(): { maxAttempts: number; initialDelayMs: number } {
-    const ephemeralSettings =
-      this.providerConfig?.getEphemeralSettings?.() || {};
-    const maxAttempts =
-      (ephemeralSettings['retries'] as number | undefined) ?? 6;
-    const initialDelayMs =
-      (ephemeralSettings['retrywait'] as number | undefined) ?? 4000;
-    return { maxAttempts, initialDelayMs };
-  }
-
-  private shouldRetryResponse(error: unknown): boolean {
-    const status = getErrorStatus(error);
-    if (status === 429 || (status && status >= 500 && status < 600)) {
-      this.logger.debug(
-        () => `Will retry OpenAI Responses API request due to status ${status}`,
-      );
-      return true;
-    }
-
-    if (isNetworkTransientError(error)) {
-      this.logger.debug(
-        () =>
-          'Will retry OpenAI Responses API request due to transient network error signature.',
-      );
-      return true;
-    }
-
-    return false;
   }
 }

@@ -10,7 +10,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import { getOAuthManager } from '../../providers/providerManagerInstance.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const statusCommand: SlashCommand = {
   name: 'status',
@@ -21,7 +21,7 @@ export const statusCommand: SlashCommand = {
     _args: string,
   ): Promise<MessageActionReturn> => {
     try {
-      const oauthManager = getOAuthManager();
+      const oauthManager = getRuntimeApi().getCliOAuthManager();
       if (!oauthManager) {
         return {
           type: 'message',

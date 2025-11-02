@@ -1,0 +1,5 @@
+@plan:PLAN-20251020-STATELESSPROVIDER3.P10a
+Command:
+`node -e "import('./packages/cli/src/auth/oauth-manager.js').then((m) => m.unwrapLoggingProvider?.({})).catch((err) => console.log(err.message)).finally(() => process.exit(0))"`
+Output:
+PLAN-20251020-STATELESSPROVIDER3.P10

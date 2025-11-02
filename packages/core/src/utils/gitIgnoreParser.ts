@@ -30,10 +30,26 @@ export class GitIgnoreParser implements GitIgnoreFilter {
     this.addPatterns(['.git']);
 
     this.loadPatterns(path.join('.git', 'info', 'exclude'));
-    this.findAndLoadGitignoreFiles(this.projectRoot);
+    const visitedPaths = new Set<string>();
+    this.findAndLoadGitignoreFiles(this.projectRoot, visitedPaths);
   }
 
-  private findAndLoadGitignoreFiles(dir: string): void {
+  private findAndLoadGitignoreFiles(
+    dir: string,
+    visitedPaths: Set<string>,
+  ): void {
+    let resolvedDir: string;
+    try {
+      resolvedDir = fs.realpathSync(dir);
+    } catch (_error) {
+      return;
+    }
+
+    if (visitedPaths.has(resolvedDir)) {
+      return;
+    }
+    visitedPaths.add(resolvedDir);
+
     const relativeDir = path.relative(this.projectRoot, dir);
 
     // For sub-directories, check if they are ignored before proceeding.
@@ -56,7 +72,10 @@ export class GitIgnoreParser implements GitIgnoreFilter {
           continue;
         }
         if (entry.isDirectory()) {
-          this.findAndLoadGitignoreFiles(path.join(dir, entry.name));
+          this.findAndLoadGitignoreFiles(
+            path.join(dir, entry.name),
+            visitedPaths,
+          );
         }
       }
     } catch (_error) {

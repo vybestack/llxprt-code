@@ -15,6 +15,7 @@ import {
   ToolConfirmationOutcome,
   ToolErrorType,
   ToolRegistry,
+  createRuntimeStateFromConfig,
 } from '../index.js';
 import { logs } from '@opentelemetry/api-logs';
 import { SemanticAttributes } from '@opentelemetry/semantic-conventions';
@@ -390,7 +391,10 @@ describe('loggers', () => {
       }),
     } as unknown as Config;
 
-    const mockGeminiClient = new GeminiClient(cfg2);
+    const runtimeState = createRuntimeStateFromConfig(cfg2, {
+      runtimeId: 'telemetry-runtime',
+    });
+    const mockGeminiClient = new GeminiClient(cfg2, runtimeState);
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getTargetDir: () => 'target-dir',
@@ -424,6 +428,7 @@ describe('loggers', () => {
           callId: 'test-call-id',
           isClientInitiated: true,
           prompt_id: 'prompt-id-1',
+          agentId: 'agent-42',
         },
         response: {
           callId: 'test-call-id',
@@ -431,6 +436,7 @@ describe('loggers', () => {
           resultDisplay: undefined,
           error: undefined,
           errorType: undefined,
+          agentId: 'agent-42',
         },
         tool,
         invocation: {} as AnyToolInvocation,
@@ -461,6 +467,7 @@ describe('loggers', () => {
           decision: ToolCallDecision.ACCEPT,
           prompt_id: 'prompt-id-1',
           tool_type: 'native',
+          agent_id: 'agent-42',
         },
       });
 
@@ -477,6 +484,7 @@ describe('loggers', () => {
         ...event,
         'event.name': EVENT_TOOL_CALL,
         'event.timestamp': '2025-01-01T00:00:00.000Z',
+        agent_id: 'agent-42',
       });
     });
     it('should log a tool call with a reject decision', () => {
@@ -491,6 +499,7 @@ describe('loggers', () => {
           callId: 'test-call-id',
           isClientInitiated: true,
           prompt_id: 'prompt-id-2',
+          agentId: 'agent-99',
         },
         response: {
           callId: 'test-call-id',
@@ -498,6 +507,7 @@ describe('loggers', () => {
           resultDisplay: undefined,
           error: undefined,
           errorType: undefined,
+          agentId: 'agent-99',
         },
         durationMs: 100,
         outcome: ToolConfirmationOutcome.Cancel,
@@ -526,6 +536,7 @@ describe('loggers', () => {
           decision: ToolCallDecision.REJECT,
           prompt_id: 'prompt-id-2',
           tool_type: 'native',
+          agent_id: 'agent-99',
         },
       });
 
@@ -542,6 +553,7 @@ describe('loggers', () => {
         ...event,
         'event.name': EVENT_TOOL_CALL,
         'event.timestamp': '2025-01-01T00:00:00.000Z',
+        agent_id: 'agent-99',
       });
     });
 
@@ -557,6 +569,7 @@ describe('loggers', () => {
           callId: 'test-call-id',
           isClientInitiated: true,
           prompt_id: 'prompt-id-3',
+          agentId: 'agent-modify',
         },
         response: {
           callId: 'test-call-id',
@@ -564,6 +577,7 @@ describe('loggers', () => {
           resultDisplay: undefined,
           error: undefined,
           errorType: undefined,
+          agentId: 'agent-modify',
         },
         outcome: ToolConfirmationOutcome.ModifyWithEditor,
         tool: new EditTool(mockConfig),
@@ -594,6 +608,7 @@ describe('loggers', () => {
           decision: ToolCallDecision.MODIFY,
           prompt_id: 'prompt-id-3',
           tool_type: 'native',
+          agent_id: 'agent-modify',
         },
       });
 
@@ -610,6 +625,7 @@ describe('loggers', () => {
         ...event,
         'event.name': EVENT_TOOL_CALL,
         'event.timestamp': '2025-01-01T00:00:00.000Z',
+        agent_id: 'agent-modify',
       });
     });
 
@@ -625,6 +641,7 @@ describe('loggers', () => {
           callId: 'test-call-id',
           isClientInitiated: true,
           prompt_id: 'prompt-id-4',
+          agentId: 'agent-nodecision',
         },
         response: {
           callId: 'test-call-id',
@@ -632,6 +649,7 @@ describe('loggers', () => {
           resultDisplay: undefined,
           error: undefined,
           errorType: undefined,
+          agentId: 'agent-nodecision',
         },
         tool: new EditTool(mockConfig),
         invocation: {} as AnyToolInvocation,
@@ -660,6 +678,7 @@ describe('loggers', () => {
           success: true,
           prompt_id: 'prompt-id-4',
           tool_type: 'native',
+          agent_id: 'agent-nodecision',
         },
       });
 
@@ -676,6 +695,7 @@ describe('loggers', () => {
         ...event,
         'event.name': EVENT_TOOL_CALL,
         'event.timestamp': '2025-01-01T00:00:00.000Z',
+        agent_id: 'agent-nodecision',
       });
     });
 
@@ -691,6 +711,7 @@ describe('loggers', () => {
           callId: 'test-call-id',
           isClientInitiated: true,
           prompt_id: 'prompt-id-5',
+          agentId: 'agent-failure',
         },
         response: {
           callId: 'test-call-id',
@@ -701,6 +722,7 @@ describe('loggers', () => {
             message: 'test-error',
           },
           errorType: ToolErrorType.UNKNOWN,
+          agentId: 'agent-failure',
         },
         durationMs: 100,
       };
@@ -731,6 +753,7 @@ describe('loggers', () => {
           'error.type': ToolErrorType.UNKNOWN,
           prompt_id: 'prompt-id-5',
           tool_type: 'native',
+          agent_id: 'agent-failure',
         },
       });
 
@@ -747,6 +770,7 @@ describe('loggers', () => {
         ...event,
         'event.name': EVENT_TOOL_CALL,
         'event.timestamp': '2025-01-01T00:00:00.000Z',
+        agent_id: 'agent-failure',
       });
     });
   });

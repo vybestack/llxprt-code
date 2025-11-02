@@ -22,6 +22,10 @@ interface EphemeralSettings {
   providers: Record<string, Record<string, unknown>>;
   global: Record<string, unknown>;
   activeProvider: string | null;
+  tools?: {
+    allowed?: string[];
+    disabled?: string[];
+  };
   // Required properties for correct TypeScript handling in tests
   n?: unknown;
 }
@@ -37,6 +41,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       providers: {},
       global: {},
       activeProvider: null,
+      tools: {},
     };
     this.eventEmitter = new EventEmitter();
   }
@@ -54,11 +59,24 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     const oldValue = this.get(key);
 
     if (key.includes('.')) {
-      this.setNestedValue(
-        this.settings as unknown as Record<string, unknown>,
-        key,
-        value,
-      );
+      const settingsRecord = this.settings as unknown as Record<
+        string,
+        unknown
+      >;
+
+      this.setNestedValue(settingsRecord, key, value);
+
+      const [root, ...rest] = key.split('.');
+      if (root && root !== 'providers') {
+        const rootValue = settingsRecord[root];
+        if (rootValue !== undefined) {
+          this.settings.global[root] = rootValue;
+        }
+
+        if (rest.length === 0) {
+          this.settings.global[root] = rootValue;
+        }
+      }
     } else {
       this.settings.global[key] = value;
     }
@@ -103,7 +121,23 @@ export class SettingsService extends EventEmitter implements ISettingsService {
 
   // Public method to get all global settings
   getAllGlobalSettings(): Record<string, unknown> {
-    return { ...this.settings.global };
+    const snapshot: Record<string, unknown> = {
+      ...this.settings.global,
+    };
+
+    if (this.settings.tools) {
+      const tools = this.settings.tools;
+      snapshot.tools = { ...tools };
+
+      if (Array.isArray(tools.allowed)) {
+        snapshot['tools.allowed'] = [...tools.allowed];
+      }
+      if (Array.isArray(tools.disabled)) {
+        snapshot['tools.disabled'] = [...tools.disabled];
+      }
+    }
+
+    return snapshot;
   }
 
   // Helper methods for nested key support
@@ -217,9 +251,26 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       this.settings.activeProvider ||
       'openai';
 
+    const allowedValue = this.get('tools.allowed');
+    const disabledValue = this.get('tools.disabled');
+    const legacyDisabled = this.get('disabled-tools');
+
+    const allowedTools = Array.isArray(allowedValue)
+      ? (allowedValue as string[]).slice()
+      : [];
+    const disabledTools = Array.isArray(disabledValue)
+      ? (disabledValue as string[]).slice()
+      : Array.isArray(legacyDisabled)
+        ? (legacyDisabled as string[]).slice()
+        : [];
+
     return Promise.resolve({
       defaultProvider: activeProvider,
       providers: this.settings.providers as Record<string, ProviderSettings>,
+      tools: {
+        allowed: allowedTools,
+        disabled: disabledTools,
+      },
     });
   }
 
@@ -233,6 +284,10 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       const data = profileData as {
         defaultProvider?: string;
         providers?: Record<string, Record<string, unknown>>;
+        tools?: {
+          allowed?: unknown;
+          disabled?: unknown;
+        };
       };
 
       // Set the active provider
@@ -251,6 +306,24 @@ export class SettingsService extends EventEmitter implements ISettingsService {
           }
         }
       }
+
+      const toolsAllowed = Array.isArray(data.tools?.allowed)
+        ? (data.tools?.allowed as unknown[]).map((name) => String(name))
+        : [];
+      const toolsDisabled = Array.isArray(data.tools?.disabled)
+        ? (data.tools?.disabled as unknown[]).map((name) => String(name))
+        : [];
+
+      this.settings.tools = this.settings.tools ?? {};
+      (this.settings.tools as Record<string, unknown>)['allowed'] =
+        toolsAllowed;
+      (this.settings.tools as Record<string, unknown>)['disabled'] =
+        toolsDisabled;
+      this.settings.global['tools'] = {
+        allowed: toolsAllowed,
+        disabled: toolsDisabled,
+      };
+      this.settings.global['disabled-tools'] = toolsDisabled;
     }
 
     return Promise.resolve();

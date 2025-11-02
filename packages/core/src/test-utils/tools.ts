@@ -18,6 +18,8 @@ import {
   ModifyContext,
 } from '../tools/modifiable-tool.js';
 
+type ToolSpy = ReturnType<(typeof vi)['fn']>;
+
 class MockToolInvocation extends BaseToolInvocation<
   { [key: string]: unknown },
   ToolResult
@@ -30,13 +32,19 @@ class MockToolInvocation extends BaseToolInvocation<
   }
 
   async execute(_abortSignal: AbortSignal): Promise<ToolResult> {
-    const result = this.tool.executeFn(this.params);
-    return (
-      result ?? {
-        llmContent: `Tool ${this.tool.name} executed successfully.`,
-        returnDisplay: `Tool ${this.tool.name} executed successfully.`,
-      }
-    );
+    const result = await this.tool.executeFn(this.params);
+    if (
+      result &&
+      typeof result === 'object' &&
+      'llmContent' in result &&
+      'returnDisplay' in result
+    ) {
+      return result as ToolResult;
+    }
+    return {
+      llmContent: `Tool ${this.tool.name} executed successfully.`,
+      returnDisplay: `Tool ${this.tool.name} executed successfully.`,
+    };
   }
 
   override async shouldConfirmExecute(
@@ -59,14 +67,11 @@ class MockToolInvocation extends BaseToolInvocation<
   }
 }
 
-/**
- * A highly configurable mock tool for testing purposes.
- */
 export class MockTool extends BaseDeclarativeTool<
   { [key: string]: unknown },
   ToolResult
 > {
-  executeFn = vi.fn();
+  executeFn: ToolSpy;
   shouldConfirm = false;
 
   constructor(
@@ -79,6 +84,7 @@ export class MockTool extends BaseDeclarativeTool<
     },
   ) {
     super(name, displayName ?? name, description, Kind.Other, params);
+    this.executeFn = vi.fn();
   }
 
   protected createInvocation(params: {
@@ -100,13 +106,19 @@ export class MockModifiableToolInvocation extends BaseToolInvocation<
   }
 
   async execute(_abortSignal: AbortSignal): Promise<ToolResult> {
-    const result = this.tool.executeFn(this.params);
-    return (
-      result ?? {
-        llmContent: `Tool ${this.tool.name} executed successfully.`,
-        returnDisplay: `Tool ${this.tool.name} executed successfully.`,
-      }
-    );
+    const result = await this.tool.executeFn(this.params);
+    if (
+      result &&
+      typeof result === 'object' &&
+      'llmContent' in result &&
+      'returnDisplay' in result
+    ) {
+      return result as ToolResult;
+    }
+    return {
+      llmContent: `Tool ${this.tool.name} executed successfully.`,
+      returnDisplay: `Tool ${this.tool.name} executed successfully.`,
+    };
   }
 
   override async shouldConfirmExecute(

@@ -13,34 +13,10 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+import process from 'node:process';
 
-/**
- * Get SettingsService instance for diagnostics
- */
-async function getSettingsServiceForDiagnostics(): Promise<{
-  getDiagnosticsData?: () => Promise<unknown>;
-  on?: (event: string, listener: () => void) => void;
-} | null> {
-  try {
-    const { getSettingsService } = await import(
-      '@vybestack/llxprt-code-core/src/settings/settingsServiceInstance.js'
-    );
-
-    return getSettingsService() as {
-      getDiagnosticsData?: () => Promise<unknown>;
-      on?: (event: string, listener: () => void) => void;
-    };
-  } catch (error) {
-    if (process.env.DEBUG) {
-      console.warn('Failed to get SettingsService for diagnostics:', error);
-    }
-    return null;
-  }
-}
-
-/**
- * Masks sensitive information like API keys
- */
 function maskSensitive(value: string): string {
   if (value.length < 8) {
     return '*'.repeat(value.length);
@@ -52,9 +28,6 @@ function maskSensitive(value: string): string {
   );
 }
 
-/**
- * Implementation for the /diagnostics command that shows current configuration and state
- */
 export const diagnosticsCommand: SlashCommand = {
   name: 'diagnostics',
   description: 'show current configuration and diagnostic information',
@@ -63,6 +36,7 @@ export const diagnosticsCommand: SlashCommand = {
     try {
       const config = context.services.config;
       const settings = context.services.settings;
+      const logger = new DebugLogger('llxprt:ui:diagnostics');
 
       if (!config) {
         return {
@@ -72,113 +46,38 @@ export const diagnosticsCommand: SlashCommand = {
         };
       }
 
+      const snapshot = getRuntimeApi().getRuntimeDiagnosticsSnapshot();
+      logger.debug(
+        () =>
+          `[diagnostics] snapshot provider=${snapshot.providerName ?? 'unknown'}`,
+      );
       const diagnostics: string[] = ['# LLxprt Diagnostics\n'];
 
-      // Use SettingsService for more accurate data
-      let settingsService;
-      try {
-        settingsService = await getSettingsServiceForDiagnostics();
-      } catch (error) {
-        if (process.env.DEBUG) {
-          console.warn(
-            'Failed to get SettingsService, using legacy data:',
-            error,
-          );
-        }
-        settingsService = null;
-      }
-      let diagnosticsData: {
-        provider: string;
-        model: string;
-        profile: string | null;
-        modelParams: Record<string, unknown>;
-      } | null = null;
-
-      if (
-        settingsService &&
-        'getDiagnosticsData' in settingsService &&
-        typeof settingsService.getDiagnosticsData === 'function'
-      ) {
-        try {
-          // Wait for initialization if needed using the on method
-          if (
-            'on' in settingsService &&
-            typeof settingsService.on === 'function'
-          ) {
-            await new Promise<void>((resolve) => {
-              settingsService.on!('initialized', () => resolve());
-              // Fallback timeout
-              setTimeout(resolve, 100);
-            });
-          }
-
-          const data = await settingsService.getDiagnosticsData();
-          if (
-            data &&
-            typeof data === 'object' &&
-            'provider' in data &&
-            'model' in data &&
-            'profile' in data &&
-            'modelParams' in data
-          ) {
-            diagnosticsData = data as {
-              provider: string;
-              model: string;
-              profile: string | null;
-              modelParams: Record<string, unknown>;
-            };
-          }
-        } catch (error) {
-          if (process.env.DEBUG) {
-            console.warn(
-              'Failed to get diagnostics from SettingsService:',
-              error,
-            );
-          }
-        }
-      }
-
-      // Provider information
       diagnostics.push('## Provider Information');
+      diagnostics.push(`- Active Provider: ${snapshot.providerName ?? 'none'}`);
+      diagnostics.push(`- Current Model: ${snapshot.modelName ?? 'unknown'}`);
+      diagnostics.push(`- Current Profile: ${snapshot.profileName ?? 'none'}`);
+      diagnostics.push(`- API Key: unavailable via runtime helpers`);
 
-      if (diagnosticsData) {
-        // Use SettingsService data (more accurate after profile operations)
-        diagnostics.push(`- Active Provider: ${diagnosticsData.provider}`);
-        diagnostics.push(`- Current Model: ${diagnosticsData.model}`);
-        diagnostics.push(
-          `- Current Profile: ${diagnosticsData.profile || 'none'}`,
-        );
+      diagnostics.push('\n## Model Parameters');
+      const modelParams = snapshot.modelParams;
+      if (Object.keys(modelParams).length === 0) {
+        diagnostics.push('- No custom model parameters set');
       } else {
-        // Fallback to legacy scattered sources
-        const providerManager = config.getProviderManager();
-        const activeProvider = providerManager?.getActiveProvider();
-        diagnostics.push(
-          `- Active Provider: ${activeProvider?.name || 'none'}`,
-        );
-        diagnostics.push(`- Current Model: ${config.getModel()}`);
+        for (const [key, value] of Object.entries(modelParams)) {
+          diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
+        }
       }
 
-      // Check for API key (still from provider for now)
-      const providerManager = config.getProviderManager();
-      const activeProvider = providerManager?.getActiveProvider();
-      if (
-        activeProvider &&
-        'hasApiKey' in activeProvider &&
-        typeof activeProvider.hasApiKey === 'function'
-      ) {
-        diagnostics.push(
-          `- API Key: ${activeProvider.hasApiKey() ? 'Set' : 'Not set'}`,
-        );
-      }
-
-      // Ephemeral settings
-      const ephemeralSettings = config.getEphemeralSettings();
       diagnostics.push('\n## Ephemeral Settings');
-
+      const ephemeralSettings = snapshot.ephemeralSettings;
+      logger.debug(
+        () =>
+          `[diagnostics] ephemeral settings ${JSON.stringify(ephemeralSettings)}`,
+      );
       if (Object.keys(ephemeralSettings).length === 0) {
         diagnostics.push('- No ephemeral settings configured');
       } else {
-        // Group settings by category for better readability
         const authSettings: Array<[string, unknown]> = [];
         const toolSettings: Array<[string, unknown]> = [];
         const compressionSettings: Array<[string, unknown]> = [];
@@ -192,130 +91,49 @@ export const diagnosticsCommand: SlashCommand = {
             key === 'max-prompt-tokens'
           ) {
             toolSettings.push([key, value]);
-          } else if (key.startsWith('compression-')) {
+          } else if (
+            key.startsWith('compression-') ||
+            key === 'context-limit'
+          ) {
             compressionSettings.push([key, value]);
           } else {
             otherSettings.push([key, value]);
           }
         }
 
-        // Display auth settings
         if (authSettings.length > 0) {
-          diagnostics.push('### Authentication');
+          diagnostics.push('- Authentication:');
           for (const [key, value] of authSettings) {
-            if (key === 'auth-key' && typeof value === 'string') {
-              diagnostics.push(`- ${key}: ${maskSensitive(value)}`);
-            } else if (key === 'auth-keyfile' && typeof value === 'string') {
-              diagnostics.push(`- ${key}: ${value}`);
-            } else {
-              diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
-            }
+            diagnostics.push(
+              `  - ${key}: ${
+                typeof value === 'string' ? maskSensitive(value) : value
+              }`,
+            );
           }
         }
 
-        // Display tool/output settings
         if (toolSettings.length > 0) {
-          diagnostics.push('### Tool & Output Limits');
+          diagnostics.push('- Tool Output & Limits:');
           for (const [key, value] of toolSettings) {
-            diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
+            diagnostics.push(`  - ${key}: ${JSON.stringify(value)}`);
           }
         }
 
-        // Display compression settings
         if (compressionSettings.length > 0) {
-          diagnostics.push('### Compression');
+          diagnostics.push('- Compression & Context:');
           for (const [key, value] of compressionSettings) {
-            diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
+            diagnostics.push(`  - ${key}: ${value}`);
           }
         }
 
-        // Display other settings
         if (otherSettings.length > 0) {
-          diagnostics.push('### Other');
+          diagnostics.push('- Other Settings:');
           for (const [key, value] of otherSettings) {
-            if (key === 'stream-options') {
-              // Special handling for stream-options to show default
-              diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
-            } else {
-              diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
-            }
+            diagnostics.push(`  - ${key}: ${JSON.stringify(value)}`);
           }
         }
       }
 
-      // Model parameters
-      diagnostics.push('\n## Model Parameters');
-
-      if (diagnosticsData) {
-        // Use SettingsService data (more accurate)
-        const modelParams = diagnosticsData.modelParams;
-        if (modelParams && Object.keys(modelParams).length > 0) {
-          for (const [key, value] of Object.entries(modelParams)) {
-            if (value !== undefined) {
-              diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
-            }
-          }
-        } else {
-          diagnostics.push('- No model parameters configured');
-        }
-      } else {
-        // Fallback to legacy provider method
-        if (
-          activeProvider &&
-          'getModelParams' in activeProvider &&
-          typeof activeProvider.getModelParams === 'function'
-        ) {
-          const modelParams = activeProvider.getModelParams();
-          if (modelParams && Object.keys(modelParams).length > 0) {
-            for (const [key, value] of Object.entries(modelParams)) {
-              diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
-            }
-          } else {
-            diagnostics.push('- No model parameters configured');
-          }
-        } else {
-          diagnostics.push(
-            '- Model parameters not available for this provider',
-          );
-        }
-      }
-
-      // Add important defaults if not explicitly set
-      diagnostics.push('\n## Important Defaults');
-      const maxPromptTokens = ephemeralSettings['max-prompt-tokens'] as
-        | number
-        | undefined;
-      diagnostics.push(
-        `- max-prompt-tokens: ${maxPromptTokens ?? 200000} ${!maxPromptTokens ? '(default)' : ''}`,
-      );
-
-      const toolMaxTokens = ephemeralSettings['tool-output-max-tokens'] as
-        | number
-        | undefined;
-      diagnostics.push(
-        `- tool-output-max-tokens: ${toolMaxTokens ?? 50000} ${!toolMaxTokens ? '(default)' : ''}`,
-      );
-
-      const toolMaxItems = ephemeralSettings['tool-output-max-items'] as
-        | number
-        | undefined;
-      diagnostics.push(
-        `- tool-output-max-items: ${toolMaxItems ?? 50} ${!toolMaxItems ? '(default)' : ''}`,
-      );
-
-      const truncateMode = ephemeralSettings['tool-output-truncate-mode'] as
-        | string
-        | undefined;
-      diagnostics.push(
-        `- tool-output-truncate-mode: ${truncateMode ?? 'warn'} ${!truncateMode ? '(default)' : ''}`,
-      );
-
-      const streamOptions = ephemeralSettings['stream-options'];
-      diagnostics.push(
-        `- stream-options: ${streamOptions !== undefined ? JSON.stringify(streamOptions) : '{ include_usage: true } (default)'}`,
-      );
-
-      // System information
       diagnostics.push('\n## System Information');
       diagnostics.push(`- Platform: ${process.platform}`);
       diagnostics.push(`- Node Version: ${process.version}`);
@@ -325,25 +143,17 @@ export const diagnosticsCommand: SlashCommand = {
       );
       diagnostics.push(`- Approval Mode: ${config.getApprovalMode() || 'off'}`);
 
-      // Compression
-      const compressionEnabled = ephemeralSettings['compression-enabled'];
-      const compressionThreshold = ephemeralSettings['compression-threshold'];
-      if (
-        compressionEnabled !== undefined ||
-        compressionThreshold !== undefined
-      ) {
-        diagnostics.push('\n## Compression');
-        if (compressionEnabled !== undefined) {
-          diagnostics.push(`- Compression Enabled: ${compressionEnabled}`);
-        }
-        if (compressionThreshold !== undefined) {
-          diagnostics.push(`- Compression Threshold: ${compressionThreshold}`);
-        }
-      }
+      diagnostics.push('\n## Compression');
+      const compressionThreshold =
+        ephemeralSettings['compression-threshold'] ?? 'default';
+      diagnostics.push(`- Threshold: ${compressionThreshold}`);
+      const contextLimit = ephemeralSettings['context-limit'];
+      diagnostics.push(
+        `- Context Limit: ${contextLimit !== undefined ? contextLimit : 'provider default'}`,
+      );
 
-      // Settings
       diagnostics.push('\n## Settings');
-      const merged = settings.merged || {};
+      const merged = settings?.merged || {};
       diagnostics.push(`- Theme: ${merged.theme || 'default'}`);
       diagnostics.push(
         `- Selected Auth Type: ${merged.selectedAuthType || 'none'}`,
@@ -351,19 +161,13 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push(`- Default Profile: ${merged.defaultProfile || 'none'}`);
       diagnostics.push(`- Sandbox: ${merged.sandbox || 'disabled'}`);
 
-      // IDE Integration
       diagnostics.push('\n## IDE Integration');
       diagnostics.push(
         `- IDE Mode: ${config.getIdeMode() ? 'Enabled' : 'Disabled'}`,
       );
       const ideClient = config.getIdeClient();
-      if (ideClient) {
-        diagnostics.push(`- IDE Client: Connected`);
-      } else {
-        diagnostics.push(`- IDE Client: Not connected`);
-      }
+      diagnostics.push(`- IDE Client: ${ideClient ? 'Connected' : 'Offline'}`);
 
-      // MCP (Model Context Protocol)
       diagnostics.push('\n## MCP (Model Context Protocol)');
       const mcpServers = config.getMcpServers();
       if (mcpServers && Object.keys(mcpServers).length > 0) {
@@ -371,14 +175,13 @@ export const diagnosticsCommand: SlashCommand = {
           `- MCP Servers: ${Object.keys(mcpServers).join(', ')}`,
         );
       } else {
-        diagnostics.push(`- MCP Servers: None configured`);
+        diagnostics.push('- MCP Servers: None configured');
       }
       const mcpServerCommand = config.getMcpServerCommand();
-      if (mcpServerCommand) {
-        diagnostics.push(`- MCP Server Command: ${mcpServerCommand}`);
-      }
+      diagnostics.push(
+        `- MCP Server Command: ${mcpServerCommand ?? 'not set'}`,
+      );
 
-      // Memory/Context
       diagnostics.push('\n## Memory/Context');
       const userMemory = config.getUserMemory();
       diagnostics.push(
@@ -388,7 +191,6 @@ export const diagnosticsCommand: SlashCommand = {
         `- Context Files: ${config.getLlxprtMdFileCount() || 0} files`,
       );
 
-      // Tool Registry
       diagnostics.push('\n## Tools');
       try {
         const toolRegistry = await config.getToolRegistry();
@@ -402,13 +204,12 @@ export const diagnosticsCommand: SlashCommand = {
             diagnostics.push(`- First 10 Tools: ${toolNames.join(', ')}`);
           }
         } else {
-          diagnostics.push(`- Tool Registry: Not initialized`);
+          diagnostics.push('- Tool Registry: Not initialized');
         }
       } catch {
-        diagnostics.push(`- Tool Registry: Not initialized`);
+        diagnostics.push('- Tool Registry: Not initialized');
       }
 
-      // Telemetry
       diagnostics.push('\n## Telemetry');
       diagnostics.push(
         `- Usage Statistics: ${merged.usageStatisticsEnabled ? 'Enabled' : 'Disabled'}`,

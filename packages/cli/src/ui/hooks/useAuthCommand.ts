@@ -9,7 +9,7 @@ import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { AuthType, Config, getErrorMessage } from '@vybestack/llxprt-code-core';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const useAuthCommand = (
   settings: LoadedSettings,
@@ -17,6 +17,7 @@ export const useAuthCommand = (
   config: Config,
 ) => {
   const appDispatch = useAppDispatch();
+  const runtime = useRuntimeApi();
   const isAuthDialogOpen = appState.openDialogs.auth;
 
   // Commented out to implement lazy authentication
@@ -64,7 +65,7 @@ export const useAuthCommand = (
         }
 
         // Update serverToolsProvider after authentication
-        const providerManager = getProviderManager();
+        const providerManager = runtime.getCliProviderManager();
         if (providerManager) {
           const serverToolsProvider = providerManager.getServerToolsProvider();
           if (
@@ -94,7 +95,14 @@ export const useAuthCommand = (
     };
 
     void authFlow();
-  }, [isAuthDialogOpen, settings, config, appDispatch, openAuthDialog]);
+  }, [
+    isAuthDialogOpen,
+    settings,
+    config,
+    appDispatch,
+    openAuthDialog,
+    runtime,
+  ]);
 
   const handleAuthSelect = useCallback(
     async (authType: AuthType | undefined, scope: SettingScope) => {

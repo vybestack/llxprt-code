@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { IContent } from '../../services/history/IContent.js';
+import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
@@ -25,7 +26,13 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     provider = new OpenAIProvider(OPENAI_API_KEY, OPENAI_BASE_URL);
     // Set model from environment if available
     if (process.env.LLXPRT_DEFAULT_MODEL) {
-      provider.setModel(process.env.LLXPRT_DEFAULT_MODEL);
+      const settingsService = getSettingsService();
+      settingsService.set('model', process.env.LLXPRT_DEFAULT_MODEL);
+      settingsService.setProviderSetting(
+        provider.name,
+        'model',
+        process.env.LLXPRT_DEFAULT_MODEL,
+      );
     }
   });
 

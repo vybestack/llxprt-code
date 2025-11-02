@@ -6,6 +6,7 @@
 
 import { Config } from '../config/config.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
+import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
 /**
  * Hook to determine if tool call rendering should be suppressed
@@ -22,9 +23,15 @@ export class ToolRenderSuppressionHook {
         ? config.getSessionId()
         : 'default';
 
+    const agentAwareConfig = config as { getAgentId?: () => string };
+    const agentId =
+      typeof agentAwareConfig.getAgentId === 'function'
+        ? agentAwareConfig.getAgentId()
+        : DEFAULT_AGENT_ID;
+
     // Check if there's an active todo - if yes, suppress tool rendering
     // as it will be shown in the todo display instead
-    const contextTracker = TodoContextTracker.forSession(sessionId);
+    const contextTracker = TodoContextTracker.forAgent(sessionId, agentId);
     return contextTracker.getActiveTodoId() !== null;
   }
 }

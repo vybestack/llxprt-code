@@ -4,269 +4,214 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import {
   Config,
-  ProviderManager,
   IProvider,
+  ProviderManager,
+  SettingsService,
+  createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { createTempDirectory, cleanupTempDirectory } from './test-utils.js';
+import { createProviderManager } from '../providers/providerManagerInstance.js';
+import {
+  setCliRuntimeContext,
+  switchActiveProvider,
+  setActiveModelParam,
+  getActiveModelParams,
+  registerCliProviderInfrastructure,
+  resetCliProviderInfrastructure,
+} from '../runtime/runtimeSettings.js';
+import { setProviderApiKey } from '../providers/providerConfigUtils.js';
 
-describe('Provider Switching Authentication Isolation', () => {
+/**
+ * @plan:PLAN-20250218-STATELESSPROVIDER.P07
+ * @requirement:REQ-SP-005
+ * Ensures provider switching flows rely on runtime helpers instead of
+ * mutating providers directly.
+ * @pseudocode:cli-runtime.md lines 9-15
+ */
+describe('Runtime Provider Switching Integration', () => {
   let tempDir: string;
   let config: Config;
   let providerManager: ProviderManager;
+  let settingsService: SettingsService;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
 
-    // Create a real Config instance
     config = new Config({
-      sessionId: 'test-session',
+      sessionId: 'switch-session',
       targetDir: tempDir,
       debugMode: false,
       cwd: tempDir,
       model: 'test-model',
     });
-
-    // Create a real ProviderManager instance
-    providerManager = new ProviderManager();
-    config.setProviderManager(providerManager);
-
     await config.initialize();
+
+    settingsService = config.getSettingsService();
+    const runtime = createProviderRuntimeContext({
+      settingsService,
+      config,
+      metadata: { source: 'provider-switch-test' },
+    });
+    const { manager, oauthManager } = createProviderManager(runtime, {
+      allowBrowserEnvironment: true,
+    });
+    providerManager = manager;
+    registerCliProviderInfrastructure(providerManager, oauthManager);
+    setCliRuntimeContext(settingsService, config, {
+      metadata: { source: 'provider-switch-test' },
+    });
   });
 
   afterEach(async () => {
+    resetCliProviderInfrastructure();
     await cleanupTempDirectory(tempDir);
   });
 
-  it('should isolate API keys between providers', async () => {
-    // Create mock providers with API key tracking
+  it('clears previous provider API key and auth state', async () => {
     const providerA = createMockProvider('providerA');
     const providerB = createMockProvider('providerB');
-
-    // Register providers
     providerManager.registerProvider(providerA);
     providerManager.registerProvider(providerB);
 
-    // Set API key for provider A
     providerManager.setActiveProvider('providerA');
-    config.setEphemeralSetting('apiKey', 'key-for-provider-a');
-    providerA.setApiKey?.('key-for-provider-a');
+    const setResult = await setProviderApiKey('key-for-provider-a');
+    expect(setResult.success).toBe(true);
+    expect(
+      config.getSettingsService().getProviderSettings('providerA').apiKey,
+    ).toBe('key-for-provider-a');
+    expect(config.getEphemeralSetting('auth-key')).toBe('key-for-provider-a');
 
-    // Note: Provider apiKey is internal, we verify through config instead
-    expect(config.getEphemeralSetting('apiKey')).toBe('key-for-provider-a');
+    await switchActiveProvider('providerB');
+    expect(
+      config.getSettingsService().getProviderSettings('providerA').apiKey,
+    ).toBeUndefined();
+    expect(config.getEphemeralSetting('auth-key')).toBeUndefined();
 
-    // Switch to provider B with different key
-    providerManager.setActiveProvider('providerB');
-    config.setEphemeralSetting('apiKey', 'key-for-provider-b');
-    providerB.setApiKey?.('key-for-provider-b');
+    const resultB = await setProviderApiKey('key-for-provider-b');
+    expect(resultB.success).toBe(true);
+    expect(
+      config.getSettingsService().getProviderSettings('providerB').apiKey,
+    ).toBe('key-for-provider-b');
 
-    // Note: Provider apiKey is internal, we verify through config instead
-    expect(config.getEphemeralSetting('apiKey')).toBe('key-for-provider-b');
-
-    // Switch back to provider A
-    providerManager.setActiveProvider('providerA');
-
-    // Note: Provider A's state was cleared
-    // The ephemeral setting remains from provider B (no automatic clearing in Config)
-    expect(config.getEphemeralSetting('apiKey')).toBe('key-for-provider-b');
+    await switchActiveProvider('providerA');
+    expect(
+      config.getSettingsService().getProviderSettings('providerB').apiKey,
+    ).toBeUndefined();
   });
 
-  it('should clear ephemeral settings on provider switch', async () => {
-    // Create mock providers
+  it('resets provider model parameters when switching', async () => {
     const providerA = createMockProvider('providerA');
     const providerB = createMockProvider('providerB');
-
-    // Register providers
     providerManager.registerProvider(providerA);
     providerManager.registerProvider(providerB);
 
-    // Set ephemeral settings for provider A
     providerManager.setActiveProvider('providerA');
-    config.setEphemeralSetting('apiKey', 'test-key-a');
-    config.setEphemeralSetting('baseUrl', 'https://api.provider-a.com');
-    config.setEphemeralSetting('customSetting', 'value-a');
-
-    // Verify settings are set
-    expect(config.getEphemeralSetting('apiKey')).toBe('test-key-a');
-    expect(config.getEphemeralSetting('baseUrl')).toBe(
-      'https://api.provider-a.com',
-    );
-    expect(config.getEphemeralSetting('customSetting')).toBe('value-a');
-
-    // Switch to provider B
-    providerManager.setActiveProvider('providerB');
-
-    // Manual clearing of ephemeral settings (since Config doesn't auto-clear)
-    // In real usage, the CLI would handle this
-    const ephemeralSettings = config.getEphemeralSettings();
-    Object.keys(ephemeralSettings).forEach((key) => {
-      config.setEphemeralSetting(key, undefined);
-    });
-
-    // Verify all ephemeral settings are cleared
-    expect(config.getEphemeralSetting('apiKey')).toBeUndefined();
-    expect(config.getEphemeralSetting('baseUrl')).toBeUndefined();
-    expect(config.getEphemeralSetting('customSetting')).toBeUndefined();
-  });
-
-  it('should clear model parameters on provider switch', async () => {
-    // Create mock providers with model parameter support
-    const providerA = createMockProvider('providerA');
-    const providerB = createMockProvider('providerB');
-
-    // Register providers
-    providerManager.registerProvider(providerA);
-    providerManager.registerProvider(providerB);
-
-    // Set model params for provider A
-    providerManager.setActiveProvider('providerA');
-    const paramsA = {
+    setActiveModelParam('temperature', 0.7);
+    setActiveModelParam('top_p', 0.9);
+    expect(getActiveModelParams()).toEqual({
       temperature: 0.7,
-      maxTokens: 1000,
-      topP: 0.9,
-    };
-    providerA.setModelParams?.(paramsA);
-
-    // Verify provider A has params
-    expect(providerA.getModelParams?.()).toEqual(paramsA);
-
-    // Switch to provider B
-    providerManager.setActiveProvider('providerB');
-
-    // Verify provider A's state is cleared (including model params)
-    expect(providerA.getModelParams?.()).toBeUndefined();
-
-    // Set different params for provider B
-    const paramsB = {
-      temperature: 0.5,
-      maxTokens: 2000,
-      frequencyPenalty: 0.1,
-    };
-    providerB.setModelParams?.(paramsB);
-
-    // Verify provider B has its own params
-    expect(providerB.getModelParams?.()).toEqual(paramsB);
-
-    // Switch back to provider A
-    providerManager.setActiveProvider('providerA');
-
-    // Verify provider B's state is cleared
-    expect(providerB.getModelParams?.()).toBeUndefined();
-  });
-
-  it('should verify API keys are ephemeral and not persisted', async () => {
-    // Create a mock provider
-    const provider = createMockProvider('testProvider');
-    providerManager.registerProvider(provider);
-
-    // Set as active and add API key
-    providerManager.setActiveProvider('testProvider');
-    config.setEphemeralSetting('apiKey', 'ephemeral-test-key');
-    provider.setApiKey?.('ephemeral-test-key');
-
-    // Verify key is in ephemeral settings
-    expect(config.getEphemeralSetting('apiKey')).toBe('ephemeral-test-key');
-
-    // Verify key is NOT in any persistent storage
-    // The config object doesn't expose persistent settings directly,
-    // but we can verify that ephemeral settings are separate
-    const allEphemeralSettings = config.getEphemeralSettings();
-    expect(allEphemeralSettings['apiKey']).toBe('ephemeral-test-key');
-
-    // Create a new Config instance to simulate restart
-    const newConfig = new Config({
-      sessionId: 'new-session',
-      targetDir: tempDir,
-      debugMode: false,
-      cwd: tempDir,
-      model: 'test-model',
+      top_p: 0.9,
     });
-    await newConfig.initialize();
 
-    // Verify API key is not persisted
-    expect(newConfig.getEphemeralSetting('apiKey')).toBeUndefined();
+    await switchActiveProvider('providerB');
+    expect(
+      config.getSettingsService().getProviderSettings('providerA').temperature,
+    ).toBeUndefined();
+    expect(getActiveModelParams()).toEqual({});
+
+    setActiveModelParam('temperature', 0.3);
+    expect(getActiveModelParams()).toEqual({ temperature: 0.3 });
+
+    await switchActiveProvider('providerA');
+    expect(
+      config.getSettingsService().getProviderSettings('providerB').temperature,
+    ).toBeUndefined();
+    expect(getActiveModelParams()).toEqual({});
   });
 
-  it('should handle server tools provider separately from active provider', async () => {
-    // Create mock providers
+  it('does not clear server tools provider state when switching active provider', async () => {
     const geminiProvider = createMockProvider('gemini');
     geminiProvider.getServerTools = () => ['web-search'];
-
     const otherProvider = createMockProvider('other');
 
-    // Register providers
     providerManager.registerProvider(geminiProvider);
     providerManager.registerProvider(otherProvider);
 
-    // Set Gemini as server tools provider
     providerManager.setServerToolsProvider(geminiProvider);
-
-    // Set other provider as active
-    providerManager.setActiveProvider('other');
-    config.setEphemeralSetting('apiKey', 'other-provider-key');
-    otherProvider.setApiKey?.('other-provider-key');
-
-    // Set API key for Gemini (server tools)
-    geminiProvider.setApiKey?.('gemini-server-tools-key');
-
-    // Note: Provider apiKeys are internal, authentication is handled internally
-
-    // Switch active provider to Gemini
     providerManager.setActiveProvider('gemini');
+    // Align server tools provider with wrapped instance used internally
+    providerManager.setServerToolsProvider(providerManager.getActiveProvider());
+    config
+      .getSettingsService()
+      .setProviderSetting('gemini', 'baseUrl', 'https://gemini.server-tools');
 
-    // Note: Provider state management is handled internally
+    await switchActiveProvider('other');
+    expect(
+      config.getSettingsService().getProviderSettings('gemini').baseUrl,
+    ).toBe('https://gemini.server-tools');
+
+    await switchActiveProvider('gemini');
+    expect(
+      config.getSettingsService().getProviderSettings('gemini').baseUrl,
+    ).toBeUndefined();
+  });
+
+  it('is idempotent when switching to the same provider', async () => {
+    const providerA = createMockProvider('providerA');
+    providerManager.registerProvider(providerA);
+
+    providerManager.setActiveProvider('providerA');
+    providerA.clearState = vi.fn(providerA.clearState);
+
+    const result = await switchActiveProvider('providerA');
+    expect(result.changed).toBe(false);
+    expect(providerA.clearState).not.toHaveBeenCalled();
   });
 });
 
-// Helper function to create a mock provider
-function createMockProvider(name: string): IProvider {
-  const provider = {
+function createMockProvider(name: string): IProvider & {
+  apiKey?: string;
+  baseUrl?: string;
+  clearState?: () => void;
+} {
+  const provider: IProvider & {
+    apiKey?: string;
+    baseUrl?: string;
+    clearState?: () => void;
+  } = {
     name,
-    apiKey: undefined as string | undefined,
-    modelParams: undefined as Record<string, unknown> | undefined,
-    state: {} as Record<string, unknown>,
-
-    setApiKey(key: string): void {
-      provider.apiKey = key;
+    async getModels() {
+      return [
+        {
+          id: 'test-model',
+          name: 'Test Model',
+          provider: name,
+          supportedToolFormats: [],
+        },
+      ];
     },
-
-    setModelParams(params: Record<string, unknown> | undefined): void {
-      provider.modelParams = params;
-    },
-
-    getModelParams(): Record<string, unknown> | undefined {
-      return provider.modelParams;
-    },
-
-    clearState(): void {
-      provider.apiKey = undefined;
-      provider.modelParams = undefined;
-      provider.state = {};
-    },
-
-    getModels: async () => [
-      {
-        id: 'test-model',
-        name: 'Test Model',
-        provider: name,
-        supportedToolFormats: [],
-      },
-    ],
-
-    getDefaultModel: () => 'test-model',
-
     async *generateChatCompletion() {
       yield {
         speaker: 'ai' as const,
         blocks: [{ type: 'text' as const, text: 'test response' }],
       };
     },
-
-    getServerTools: () => [],
-
-    invokeServerTool: async () => ({ result: 'test' }),
+    getServerTools() {
+      return [];
+    },
+    async invokeServerTool() {
+      return {};
+    },
+    clearState() {
+      provider.apiKey = undefined;
+      provider.baseUrl = undefined;
+    },
+    getDefaultModel() {
+      return 'test-model';
+    },
   };
 
   return provider;

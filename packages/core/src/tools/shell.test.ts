@@ -370,8 +370,7 @@ describe('ShellTool', () => {
         });
 
         // It should have been called once now with the combined output.
-        expect(updateOutputMock).toHaveBeenCalledOnce();
-        expect(updateOutputMock).toHaveBeenCalledWith('hello world');
+        expect(updateOutputMock).toHaveBeenCalledExactlyOnceWith('hello world');
 
         resolveExecutionPromise({
           rawOutput: Buffer.from(''),

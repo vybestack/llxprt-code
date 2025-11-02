@@ -24,11 +24,12 @@ describe('executeToolCall', () => {
   let mockConfig: Config;
 
   beforeEach(() => {
-    mockTool = new MockTool();
+    mockTool = new MockTool('testTool');
 
     mockToolRegistry = {
       getTool: vi.fn(),
       getAllToolNames: vi.fn().mockReturnValue(['testTool', 'anotherTool']),
+      getAllTools: vi.fn().mockReturnValue([]),
     } as unknown as ToolRegistry;
 
     mockConfig = {
@@ -43,6 +44,8 @@ describe('executeToolCall', () => {
         authType: 'oauth-personal',
       }),
       getEphemeralSetting: vi.fn(),
+      getEphemeralSettings: vi.fn().mockReturnValue({}),
+      getExcludeTools: () => [],
     } as unknown as Config;
 
     abortController = new AbortController();
@@ -73,6 +76,7 @@ describe('executeToolCall', () => {
     // The executeFn is called via the MockToolInvocation, not directly
     expect(response).toStrictEqual({
       callId: 'call1',
+      agentId: 'primary',
       error: undefined,
       errorType: undefined,
       resultDisplay: 'Success!',
@@ -119,6 +123,7 @@ describe('executeToolCall', () => {
       'Tool "nonexistentTool" not found in registry.';
     expect(response).toStrictEqual({
       callId: 'call2',
+      agentId: 'primary',
       error: new Error(expectedErrorMessage),
       errorType: ToolErrorType.TOOL_NOT_REGISTERED,
       resultDisplay: expectedErrorMessage,
@@ -164,6 +169,7 @@ describe('executeToolCall', () => {
 
     expect(response).toStrictEqual({
       callId: 'call3',
+      agentId: 'primary',
       error: new Error('Invalid parameters'),
       errorType: ToolErrorType.UNHANDLED_EXCEPTION,
       responseParts: [
@@ -216,6 +222,7 @@ describe('executeToolCall', () => {
     );
     expect(response).toStrictEqual({
       callId: 'call4',
+      agentId: 'primary',
       error: new Error('Execution failed'),
       errorType: ToolErrorType.EXECUTION_FAILED,
       responseParts: [
@@ -263,6 +270,7 @@ describe('executeToolCall', () => {
 
     expect(response).toStrictEqual({
       callId: 'call5',
+      agentId: 'primary',
       error: new Error('Something went very wrong'),
       errorType: ToolErrorType.UNHANDLED_EXCEPTION,
       resultDisplay: 'Something went very wrong',
@@ -285,6 +293,76 @@ describe('executeToolCall', () => {
         },
       ],
     });
+  });
+
+  it('should block execution when tool is disabled in settings', async () => {
+    const request: ToolCallRequestInfo = {
+      callId: 'call-disabled',
+      name: 'testTool',
+      args: {},
+      isClientInitiated: false,
+      prompt_id: 'prompt-id-disabled',
+    };
+    vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
+    vi.mocked(mockToolRegistry.getAllTools).mockReturnValue([
+      mockTool,
+    ] as never[]);
+    vi.mocked(mockConfig.getEphemeralSetting).mockImplementation((key) => {
+      if (key === 'tools.disabled') {
+        return ['testTool'];
+      }
+      return undefined;
+    });
+    vi.mocked(mockConfig.getEphemeralSettings).mockReturnValue({
+      'tools.disabled': ['testTool'],
+    });
+
+    const response = await executeToolCall(
+      mockConfig,
+      request,
+      abortController.signal,
+    );
+
+    expect(mockTool.executeFn).not.toHaveBeenCalled();
+    expect(response.error).toBeInstanceOf(Error);
+    expect(response.error?.message).toContain('disabled');
+    expect(response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
+  });
+
+  it('should report tool as disabled when excluded by approval policy even if not registered', async () => {
+    const request: ToolCallRequestInfo = {
+      callId: 'call-policy-disabled',
+      name: 'write_file',
+      args: { content: 'example', file_path: 'reports/output.md' },
+      isClientInitiated: false,
+      prompt_id: 'prompt-id-policy',
+    };
+
+    vi.mocked(mockToolRegistry.getTool).mockReturnValue(undefined);
+    vi.mocked(mockToolRegistry.getAllTools).mockReturnValue([]);
+    vi.mocked(mockToolRegistry.getAllToolNames).mockReturnValue([
+      'read_file',
+      'glob',
+    ]);
+    vi.mocked(mockConfig.getEphemeralSettings).mockReturnValue({
+      'tools.allowed': ['read_file', 'glob'],
+    });
+
+    const response = await executeToolCall(
+      mockConfig,
+      request,
+      abortController.signal,
+    );
+
+    expect(mockTool.executeFn).not.toHaveBeenCalled();
+    expect(response.error).toBeInstanceOf(Error);
+    expect(response.error?.message).toBe(
+      'Tool "write_file" is disabled in the current profile.',
+    );
+    expect(response.errorType).toBe(ToolErrorType.TOOL_DISABLED);
+    expect(response.resultDisplay).toBe(
+      'Tool "write_file" is disabled in the current profile.',
+    );
   });
 
   it('should correctly format llmContent with inlineData', async () => {
@@ -313,6 +391,7 @@ describe('executeToolCall', () => {
 
     expect(response).toStrictEqual({
       callId: 'call6',
+      agentId: 'primary',
       error: undefined,
       errorType: undefined,
       resultDisplay: 'Image processed',

@@ -1,0 +1,10 @@
+
+> @vybestack/llxprt-code@0.5.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+
+
+/Users/acoliver/projects/llxprt-code/packages/cli/src/gemini.tsx
+  751:3  error  'settings' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 1 problem (1 error, 0 warnings)
+

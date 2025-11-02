@@ -4,9 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Config } from './config.js';
-import { resetSettingsService } from '../settings/settingsServiceInstance.js';
+import {
+  registerSettingsService,
+  resetSettingsService,
+} from '../settings/settingsServiceInstance.js';
+import { SettingsService } from '../settings/SettingsService.js';
+import { clearActiveProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 
 describe('Config - Ephemeral Settings', () => {
   let config: Config;
@@ -14,6 +19,7 @@ describe('Config - Ephemeral Settings', () => {
   beforeEach(() => {
     // Reset SettingsService singleton to ensure clean state between tests
     resetSettingsService();
+    registerSettingsService(new SettingsService());
 
     config = new Config({
       model: 'test-model',
@@ -25,6 +31,10 @@ describe('Config - Ephemeral Settings', () => {
       debugMode: false,
       cwd: '.',
     });
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   describe('todo-continuation setting', () => {
@@ -169,6 +179,7 @@ describe('Config - Ephemeral Settings', () => {
       expect(allSettings).toEqual({
         'todo-continuation': true,
         'custom-setting': 'test-value',
+        tools: {},
       });
 
       // And modifying the returned object doesn't affect the config

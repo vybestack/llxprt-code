@@ -23,6 +23,7 @@ import {
   AnyToolInvocation,
   ContextAwareTool,
 } from '../index.js';
+import { DEFAULT_AGENT_ID } from './turn.js';
 import { Part, PartListUnion } from '@google/genai';
 import { getResponseTextFromParts } from '../utils/generateContentResponseUtilities.js';
 import {
@@ -221,6 +222,19 @@ export function convertToFunctionResponse(
   ];
 }
 
+function extractAgentIdFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+  const candidate = metadata['agentId'];
+  if (typeof candidate === 'string' && candidate.trim().length > 0) {
+    return candidate;
+  }
+  return undefined;
+}
+
 function toParts(input: PartListUnion): Part[] {
   const parts: Part[] = [];
   for (const part of Array.isArray(input) ? input : [input]) {
@@ -260,6 +274,7 @@ const createErrorResponse = (
   ],
   resultDisplay: error.message,
   errorType,
+  agentId: request.agentId ?? DEFAULT_AGENT_ID,
 });
 
 interface CoreToolSchedulerOptions {
@@ -350,12 +365,18 @@ export class CoreToolScheduler {
           const durationMs = existingStartTime
             ? Date.now() - existingStartTime
             : undefined;
+          const response = {
+            ...(auxiliaryData as ToolCallResponseInfo),
+          };
+          if (!response.agentId) {
+            response.agentId = currentCall.request.agentId ?? DEFAULT_AGENT_ID;
+          }
           return {
             request: currentCall.request,
             tool: toolInstance,
             invocation,
             status: 'success',
-            response: auxiliaryData as ToolCallResponseInfo,
+            response,
             durationMs,
             outcome,
           } as SuccessfulToolCall;
@@ -364,11 +385,17 @@ export class CoreToolScheduler {
           const durationMs = existingStartTime
             ? Date.now() - existingStartTime
             : undefined;
+          const response = {
+            ...(auxiliaryData as ToolCallResponseInfo),
+          };
+          if (!response.agentId) {
+            response.agentId = currentCall.request.agentId ?? DEFAULT_AGENT_ID;
+          }
           return {
             request: currentCall.request,
             status: 'error',
             tool: toolInstance,
-            response: auxiliaryData as ToolCallResponseInfo,
+            response,
             durationMs,
             outcome,
           } as ErroredToolCall;
@@ -442,6 +469,7 @@ export class CoreToolScheduler {
               resultDisplay,
               error: undefined,
               errorType: undefined,
+              agentId: currentCall.request.agentId ?? DEFAULT_AGENT_ID,
             },
             durationMs,
             outcome,
@@ -488,6 +516,7 @@ export class CoreToolScheduler {
         const contextAwareTool = call.tool as ContextAwareTool;
         contextAwareTool.context = {
           sessionId: this.config.getSessionId(),
+          agentId: call.request.agentId ?? DEFAULT_AGENT_ID,
           interactiveMode: true, // We're in interactive mode when using CoreToolScheduler
         };
       }
@@ -543,37 +572,30 @@ export class CoreToolScheduler {
   }
 
   /**
-   * Generates a suggestion string for a tool name that was not found in the registry.
-   * It finds the closest matches based on Levenshtein distance.
-   * @param unknownToolName The tool name that was not found.
-   * @param topN The number of suggestions to return. Defaults to 3.
-   * @returns A suggestion string like " Did you mean 'tool'?" or " Did you mean one of: 'tool1', 'tool2'?", or an empty string if no suggestions are found.
+   * Build a friendly suggestion message when a tool can't be found.
    */
   private getToolSuggestion(unknownToolName: string, topN = 3): string {
     const allToolNames = this.toolRegistry.getAllToolNames();
-
-    const matches = allToolNames.map((toolName) => ({
-      name: toolName,
-      distance: levenshtein.get(unknownToolName, toolName),
-    }));
-
-    matches.sort((a, b) => a.distance - b.distance);
-
-    const topNResults = matches.slice(0, topN);
-
-    if (topNResults.length === 0) {
+    if (!allToolNames.length) {
       return '';
     }
 
-    const suggestedNames = topNResults
-      .map((match) => `"${match.name}"`)
-      .join(', ');
+    const matches = allToolNames
+      .map((toolName) => ({
+        name: toolName,
+        distance: levenshtein.get(unknownToolName, toolName),
+      }))
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, topN);
 
-    if (topNResults.length > 1) {
-      return ` Did you mean one of: ${suggestedNames}?`;
-    } else {
-      return ` Did you mean ${suggestedNames}?`;
+    if (!matches.length || matches[0].distance === Infinity) {
+      return '';
     }
+
+    const suggestedNames = matches.map((match) => `"${match.name}"`).join(', ');
+    return matches.length > 1
+      ? ` Did you mean one of: ${suggestedNames}?`
+      : ` Did you mean ${suggestedNames}?`;
   }
 
   schedule(
@@ -623,14 +645,36 @@ export class CoreToolScheduler {
           'Cannot schedule new tool calls while other tool calls are actively running (executing or awaiting approval).',
         );
       }
-      const requestsToProcess = Array.isArray(request) ? request : [request];
+      const requestsToProcess = (
+        Array.isArray(request) ? request : [request]
+      ).map((req) => {
+        if (!req.agentId) {
+          req.agentId = DEFAULT_AGENT_ID;
+        }
+        return req;
+      });
+      const governance = buildToolGovernance(this.config);
 
       const newToolCalls: ToolCall[] = requestsToProcess.map(
         (reqInfo): ToolCall => {
+          if (isToolBlocked(reqInfo.name, governance)) {
+            const errorMessage = `Tool "${reqInfo.name}" is disabled in the current profile.`;
+            return {
+              status: 'error',
+              request: reqInfo,
+              response: createErrorResponse(
+                reqInfo,
+                new Error(errorMessage),
+                ToolErrorType.TOOL_DISABLED,
+              ),
+              durationMs: 0,
+            };
+          }
+
           const toolInstance = this.toolRegistry.getTool(reqInfo.name);
           if (!toolInstance) {
             const suggestion = this.getToolSuggestion(reqInfo.name);
-            const errorMessage = `Tool "${reqInfo.name}" not found in registry. Tools must use the exact names that are registered.${suggestion}`;
+            const errorMessage = `Tool "${reqInfo.name}" could not be loaded.${suggestion}`;
             return {
               status: 'error',
               request: reqInfo,
@@ -648,6 +692,7 @@ export class CoreToolScheduler {
             const contextAwareTool = toolInstance as ContextAwareTool;
             contextAwareTool.context = {
               sessionId: this.config.getSessionId(),
+              agentId: reqInfo.agentId ?? DEFAULT_AGENT_ID,
               interactiveMode: true, // We're in interactive mode when using CoreToolScheduler
             };
           }
@@ -956,6 +1001,9 @@ export class CoreToolScheduler {
                 callId,
                 toolResult.llmContent,
               );
+              const metadataAgentId = extractAgentIdFromMetadata(
+                toolResult.metadata as Record<string, unknown> | undefined,
+              );
               // Return BOTH the tool call and response as an array
               // This ensures they're always paired and added to history atomically
               const responseParts = [
@@ -976,6 +1024,10 @@ export class CoreToolScheduler {
                 resultDisplay: toolResult.returnDisplay,
                 error: undefined,
                 errorType: undefined,
+                agentId:
+                  metadataAgentId ??
+                  scheduledCall.request.agentId ??
+                  DEFAULT_AGENT_ID,
               };
               this.setStatusInternal(callId, 'success', successResponse);
             } else {
@@ -1092,4 +1144,46 @@ export class CoreToolScheduler {
       }
     }
   }
+}
+
+const normalizeToolName = (name: string): string => name.trim().toLowerCase();
+
+function buildToolGovernance(config: Config): {
+  allowed: Set<string>;
+  disabled: Set<string>;
+  excluded: Set<string>;
+} {
+  const ephemerals = config.getEphemeralSettings?.() ?? {};
+  const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
+    ? (ephemerals['tools.allowed'] as string[])
+    : [];
+  const disabledRaw = Array.isArray(ephemerals['tools.disabled'])
+    ? (ephemerals['tools.disabled'] as string[])
+    : Array.isArray(ephemerals['disabled-tools'])
+      ? (ephemerals['disabled-tools'] as string[])
+      : [];
+  const excludedRaw = config.getExcludeTools?.() ?? [];
+
+  return {
+    allowed: new Set(allowedRaw.map(normalizeToolName)),
+    disabled: new Set(disabledRaw.map(normalizeToolName)),
+    excluded: new Set(excludedRaw.map(normalizeToolName)),
+  };
+}
+
+function isToolBlocked(
+  toolName: string,
+  governance: ReturnType<typeof buildToolGovernance>,
+): boolean {
+  const canonical = normalizeToolName(toolName);
+  if (governance.excluded.has(canonical)) {
+    return true;
+  }
+  if (governance.disabled.has(canonical)) {
+    return true;
+  }
+  if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
+    return true;
+  }
+  return false;
 }

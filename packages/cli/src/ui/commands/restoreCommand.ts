@@ -13,6 +13,49 @@ import {
   CommandKind,
 } from './types.js';
 import { Config } from '@vybestack/llxprt-code-core';
+import { type CommandArgumentSchema } from './schema/types.js';
+
+const checkpointSuggestionDescription = 'Restorable tool call checkpoint';
+
+const restoreSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'checkpoint',
+    description: 'Select checkpoint to restore',
+    /**
+     * @plan:PLAN-20251013-AUTOCOMPLETE.P11
+     * @requirement:REQ-004
+     * @requirement:REQ-006
+     * Deprecation: Legacy completion removed in favour of schema completer.
+     */
+    completer: async (ctx, partialArg) => {
+      const checkpointDir =
+        ctx.services.config?.storage.getProjectTempCheckpointsDir();
+      if (!checkpointDir) {
+        return [];
+      }
+
+      try {
+        const files = await fs.readdir(checkpointDir);
+        const normalizedPartial = partialArg.toLowerCase();
+        return files
+          .filter((file) => file.endsWith('.json'))
+          .map((file) => file.replace(/\.json$/, ''))
+          .filter((name) =>
+            normalizedPartial.length === 0
+              ? true
+              : name.toLowerCase().startsWith(normalizedPartial),
+          )
+          .map((name) => ({
+            value: name,
+            description: checkpointSuggestionDescription,
+          }));
+      } catch (_err) {
+        return [];
+      }
+    },
+  },
+];
 
 async function restoreAction(
   context: CommandContext,
@@ -117,26 +160,6 @@ async function restoreAction(
   }
 }
 
-async function completion(
-  context: CommandContext,
-  _partialArg: string,
-): Promise<string[]> {
-  const { services } = context;
-  const { config } = services;
-  const checkpointDir = config?.storage.getProjectTempCheckpointsDir();
-  if (!checkpointDir) {
-    return [];
-  }
-  try {
-    const files = await fs.readdir(checkpointDir);
-    return files
-      .filter((file) => file.endsWith('.json'))
-      .map((file) => file.replace('.json', ''));
-  } catch (_err) {
-    return [];
-  }
-}
-
 export const restoreCommand = (config: Config | null): SlashCommand | null => {
   if (!config?.getCheckpointingEnabled()) {
     return null;
@@ -148,6 +171,6 @@ export const restoreCommand = (config: Config | null): SlashCommand | null => {
       'Restore a tool call. This will reset the conversation and file history to the state it was in when the tool call was suggested',
     kind: CommandKind.BUILT_IN,
     action: restoreAction,
-    completion,
+    schema: restoreSchema,
   };
 };
