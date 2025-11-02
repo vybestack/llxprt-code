@@ -291,6 +291,15 @@ jobs:
           node-version: '${{ matrix.node-version }}'
           cache: 'npm'
 
+      - name: 'Install dependencies for build tools (Windows only)'
+        if: runner.os == 'Windows'
+        run: |-
+          choco install python visualstudio2022-workload-vctools -y
+
+      - name: 'Install dependencies for testing'
+        run: |-
+          npm ci
+
       - name: 'Build project'
         run: |-
           npm run build
@@ -298,10 +307,6 @@ jobs:
       - name: 'Create bundle'
         run: |-
           npm run bundle
-
-      - name: 'Install dependencies for testing'
-        run: |-
-          npm ci
 
       - name: 'Fix rollup platform dependency'
         run: |-
