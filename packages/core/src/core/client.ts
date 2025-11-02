@@ -703,19 +703,34 @@ export class GeminiClient {
       // @plan PLAN-20251028-STATELESS6.P10
       // @requirement REQ-STAT6-001.2
       // Create runtime context from config (foreground agent)
+      const rawCompressionThreshold = this.config.getEphemeralSetting(
+        'compression-threshold',
+      );
+      const compressionThreshold =
+        typeof rawCompressionThreshold === 'number'
+          ? rawCompressionThreshold
+          : undefined;
+
+      const rawContextLimit = this.config.getEphemeralSetting('context-limit');
+      const contextLimit =
+        typeof rawContextLimit === 'number' &&
+        Number.isFinite(rawContextLimit) &&
+        rawContextLimit > 0
+          ? rawContextLimit
+          : undefined;
+
+      const rawPreserveThreshold = this.config.getEphemeralSetting(
+        'compression-preserve-threshold',
+      );
+      const preserveThreshold =
+        typeof rawPreserveThreshold === 'number'
+          ? rawPreserveThreshold
+          : undefined;
+
       const settings: ReadonlySettingsSnapshot = {
-        compressionThreshold:
-          (this.config.getEphemeralSetting('compression-threshold') as
-            | number
-            | undefined) ?? 0.8,
-        contextLimit:
-          (this.config.getEphemeralSetting('context-limit') as
-            | number
-            | undefined) ?? 60000,
-        preserveThreshold:
-          (this.config.getEphemeralSetting('compression-preserve-threshold') as
-            | number
-            | undefined) ?? 0.2,
+        compressionThreshold: compressionThreshold ?? 0.8,
+        contextLimit,
+        preserveThreshold: preserveThreshold ?? 0.2,
         telemetry: {
           enabled: true,
           target: null,

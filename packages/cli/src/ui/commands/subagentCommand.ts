@@ -21,6 +21,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
 
 /**
  * Parse save command arguments
@@ -325,20 +326,41 @@ const saveCommand: SlashCommand = {
         const autoModePrompt = `Generate a detailed system prompt for a subagent with the following purpose:\n\n${input}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
 
         // Call LLM with a direct request that bypasses tool declarations and history
-        const response = await client.generateDirectMessage(
-          {
-            message: autoModePrompt,
-            config: {
-              tools: [],
-              toolConfig: {
-                functionCallingConfig: {
-                  mode: FunctionCallingConfigMode.NONE,
+        let response;
+        try {
+          const runtimeBridge = getRuntimeBridge();
+          response = await runtimeBridge.runWithScope(() =>
+            client.generateDirectMessage(
+              {
+                message: autoModePrompt,
+                config: {
+                  tools: [],
+                  toolConfig: {
+                    functionCallingConfig: {
+                      mode: FunctionCallingConfigMode.NONE,
+                    },
+                  },
+                },
+              },
+              'subagent-auto-prompt',
+            ),
+          );
+        } catch (_runtimeError) {
+          response = await client.generateDirectMessage(
+            {
+              message: autoModePrompt,
+              config: {
+                tools: [],
+                toolConfig: {
+                  functionCallingConfig: {
+                    mode: FunctionCallingConfigMode.NONE,
+                  },
                 },
               },
             },
-          },
-          'subagent-auto-prompt',
-        );
+            'subagent-auto-prompt',
+          );
+        }
         finalSystemPrompt = response.text || '';
 
         if (finalSystemPrompt.trim() === '') {

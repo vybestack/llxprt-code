@@ -18,6 +18,7 @@ import type {
   AgentRuntimeContextFactoryOptions,
 } from './AgentRuntimeContext.js';
 import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
+import { tokenLimit } from '../core/tokenLimits.js';
 
 const EPHEMERAL_DEFAULTS = {
   compressionThreshold: 0.8,
@@ -51,12 +52,23 @@ export function createAgentRuntimeContext(
 
   const history = options.history ?? new HistoryService();
 
+  const contextLimitOverride =
+    typeof options.settings.contextLimit === 'number' &&
+    Number.isFinite(options.settings.contextLimit) &&
+    options.settings.contextLimit > 0
+      ? options.settings.contextLimit
+      : undefined;
+
+  const resolvedContextLimit = tokenLimit(
+    options.state.model,
+    contextLimitOverride,
+  );
+
   const ephemerals = {
     compressionThreshold: (): number =>
       options.settings.compressionThreshold ??
       EPHEMERAL_DEFAULTS.compressionThreshold,
-    contextLimit: (): number =>
-      options.settings.contextLimit ?? EPHEMERAL_DEFAULTS.contextLimit,
+    contextLimit: (): number => resolvedContextLimit,
     preserveThreshold: (): number =>
       options.settings.preserveThreshold ??
       EPHEMERAL_DEFAULTS.preserveThreshold,

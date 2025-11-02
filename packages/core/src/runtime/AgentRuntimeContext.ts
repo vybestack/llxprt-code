@@ -15,7 +15,7 @@
 export interface ReadonlySettingsSnapshot {
   /** Compression threshold for history (0.0-1.0), default 0.8 */
   compressionThreshold?: number;
-  /** Context window limit in tokens, default 60000 */
+  /** Context window limit in tokens (provider default when unspecified) */
   contextLimit?: number;
   /** Preserve threshold for compression (0.0-1.0), default 0.2 */
   preserveThreshold?: number;
