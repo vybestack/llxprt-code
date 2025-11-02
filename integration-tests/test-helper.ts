@@ -177,6 +177,56 @@ export class TestRig {
       join(llxprtDir, 'settings.json'),
       JSON.stringify(settings, null, 2),
     );
+
+    const profileName = env.LLXPRT_TEST_PROFILE?.trim();
+    if (profileName) {
+      const profilesDir = join(llxprtDir, 'profiles');
+      mkdirSync(profilesDir, { recursive: true });
+
+      const profileProvider =
+        env.LLXPRT_DEFAULT_PROVIDER && env.LLXPRT_DEFAULT_PROVIDER.trim().length
+          ? env.LLXPRT_DEFAULT_PROVIDER
+          : 'openai';
+      const profileModel =
+        env.LLXPRT_DEFAULT_MODEL && env.LLXPRT_DEFAULT_MODEL.trim().length
+          ? env.LLXPRT_DEFAULT_MODEL
+          : 'gpt-4o-mini';
+
+      const ephemeralEntries: Array<[string, unknown]> = [];
+      if (env.OPENAI_BASE_URL && env.OPENAI_BASE_URL.trim().length > 0) {
+        ephemeralEntries.push(['base-url', env.OPENAI_BASE_URL]);
+      }
+      if (env.OPENAI_API_KEY && env.OPENAI_API_KEY.trim().length > 0) {
+        ephemeralEntries.push(['auth-key', env.OPENAI_API_KEY]);
+      }
+      if (env.LLXPRT_TEST_PROFILE_KEYFILE) {
+        ephemeralEntries.push([
+          'auth-keyfile',
+          env.LLXPRT_TEST_PROFILE_KEYFILE,
+        ]);
+      }
+      if (env.LLXPRT_CONTEXT_LIMIT) {
+        const parsedLimit = Number(env.LLXPRT_CONTEXT_LIMIT);
+        if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
+          ephemeralEntries.push(['context-limit', parsedLimit]);
+        }
+      }
+
+      const profile = {
+        version: 1,
+        provider: profileProvider,
+        model: profileModel,
+        modelParams: {},
+        ephemeralSettings: Object.fromEntries(
+          ephemeralEntries.filter(([, value]) => value !== undefined),
+        ),
+      };
+
+      writeFileSync(
+        join(profilesDir, `${profileName}.json`),
+        JSON.stringify(profile, null, 2),
+      );
+    }
   }
 
   createFile(fileName: string, content: string) {
@@ -295,6 +345,10 @@ export class TestRig {
 
     // Add any additional args
     commandArgs.push(...args);
+
+    if (env.LLXPRT_TEST_PROFILE?.trim()) {
+      commandArgs.push('--profile-load', env.LLXPRT_TEST_PROFILE.trim());
+    }
 
     const node = commandArgs.shift() as string;
 

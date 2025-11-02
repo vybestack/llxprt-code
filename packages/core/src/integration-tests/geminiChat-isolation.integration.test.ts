@@ -22,6 +22,7 @@ import { Config } from '../config/config.js';
 import { createAgentRuntimeContext } from '../runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { AuthType } from '../core/contentGenerator.js';
+import { DEFAULT_TOKEN_LIMIT } from '../core/tokenLimits.js';
 import type {
   ReadonlySettingsSnapshot,
   ApiRequestEvent,
@@ -735,7 +736,7 @@ describe('GeminiChat Isolation Integration Tests', () => {
 
       // THEN: Default values used (from createAgentRuntimeContext EPHEMERAL_DEFAULTS)
       expect(threshold).toBe(0.8);
-      expect(limit).toBe(60000);
+      expect(limit).toBe(DEFAULT_TOKEN_LIMIT);
       expect(preserve).toBe(0.2);
     });
 
@@ -762,7 +763,7 @@ describe('GeminiChat Isolation Integration Tests', () => {
 
       // THEN: Specified value used, rest default
       expect(threshold).toBe(0.75); // Specified
-      expect(limit).toBe(60000); // Default
+      expect(limit).toBe(DEFAULT_TOKEN_LIMIT); // Default
       expect(preserve).toBe(0.2); // Default
     });
   });

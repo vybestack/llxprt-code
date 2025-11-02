@@ -84,6 +84,10 @@ export const diagnosticsCommand: SlashCommand = {
         const otherSettings: Array<[string, unknown]> = [];
 
         for (const [key, value] of Object.entries(ephemeralSettings)) {
+          if (value === undefined || value === null) {
+            continue;
+          }
+
           if (key.startsWith('auth-')) {
             authSettings.push([key, value]);
           } else if (
@@ -102,13 +106,15 @@ export const diagnosticsCommand: SlashCommand = {
         }
 
         if (authSettings.length > 0) {
-          diagnostics.push('- Authentication:');
-          for (const [key, value] of authSettings) {
-            diagnostics.push(
-              `  - ${key}: ${
-                typeof value === 'string' ? maskSensitive(value) : value
-              }`,
-            );
+          if (authSettings.length > 0) {
+            diagnostics.push('- Authentication:');
+            for (const [key, value] of authSettings) {
+              diagnostics.push(
+                `  - ${key}: ${
+                  typeof value === 'string' ? maskSensitive(value) : value
+                }`,
+              );
+            }
           }
         }
 

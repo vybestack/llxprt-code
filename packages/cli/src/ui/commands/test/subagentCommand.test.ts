@@ -10,6 +10,15 @@ import {
 
 vi.mock('child_process');
 
+const runWithScopeMock = vi.fn((callback: () => unknown) => callback());
+const getRuntimeBridgeMock = vi.fn(() => ({
+  runWithScope: runWithScopeMock,
+}));
+
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  getRuntimeBridge: getRuntimeBridgeMock,
+}));
+
 /**
  * COMPLETION SYSTEM REQUIREMENTS
  *
@@ -230,6 +239,8 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
+    runWithScopeMock.mockClear();
+    getRuntimeBridgeMock.mockClear();
   });
 
   describe('saveCommand - manual mode @requirement:REQ-004', () => {

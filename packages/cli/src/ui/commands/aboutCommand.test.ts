@@ -19,31 +19,41 @@ import { USER_SETTINGS_PATH } from '../../config/settings.js';
 
 import { IdeClient } from '../../../../core/src/ide/ide-client.js';
 
+const runtimeMocks = vi.hoisted(() => ({
+  getRuntimeApiMock: vi.fn(),
+}));
+
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: runtimeMocks.getRuntimeApiMock,
+}));
+
 vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
 }));
 
-vi.mock('../../providers/providerManagerInstance.js', async () => {
-  const actual = await vi.importActual(
-    '../../providers/providerManagerInstance.js',
-  );
-  return {
-    ...actual,
-    getProviderManager: vi.fn(() => {
-      throw new Error('Provider manager not available in test');
-    }),
-  };
-});
-
 describe('aboutCommand', () => {
+  const getRuntimeApiMock = runtimeMocks.getRuntimeApiMock;
   let mockContext: CommandContext;
   let mockFileSystem: MockFileSystem;
   const originalPlatform = process.platform;
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    // Reset provider manager and set up mock file system
-    resetProviderManager();
+    getRuntimeApiMock.mockReturnValue({
+      getRuntimeDiagnosticsSnapshot: () => ({
+        providerName: null,
+        modelName: null,
+        profileName: null,
+        modelParams: {},
+        ephemeralSettings: {},
+      }),
+      getActiveProviderName: () => '',
+      getCliProviderManager: () => ({
+        getActiveProvider: () => undefined,
+      }),
+      getEphemeralSetting: () => undefined,
+    });
+
     mockFileSystem = new MockFileSystem();
     setFileSystem(mockFileSystem);
 
@@ -92,6 +102,7 @@ describe('aboutCommand', () => {
     });
     process.env = originalEnv;
     vi.clearAllMocks();
+    getRuntimeApiMock.mockReset();
     resetProviderManager();
   });
 

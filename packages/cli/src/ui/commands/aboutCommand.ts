@@ -8,6 +8,7 @@ import { getCliVersion } from '../../utils/version.js';
 import { CommandKind, SlashCommand } from './types.js';
 import process from 'node:process';
 import { MessageType, type HistoryItemAbout } from '../types.js';
+import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 export const aboutCommand: SlashCommand = {
   name: 'about',
@@ -23,64 +24,93 @@ export const aboutCommand: SlashCommand = {
         process.env.SEATBELT_PROFILE || 'unknown'
       })`;
     }
-    // Determine the currently selected model. Prefer the active provider's
-    // model as the source of truth because it is guaranteed to be up-to-date
-    // when users switch models via the /model or /provider commands.
+    // Determine the currently selected model/provider using runtime diagnostics
     let modelVersion = 'Unknown';
     let provider = 'Unknown';
     let baseURL = '';
+    let runtimeApi: ReturnType<typeof getRuntimeApi> | null = null;
     try {
-      // Dynamically import to avoid a hard dependency for tests that mock the
-      // provider manager.
-      const { getProviderManager } = await import(
-        '../../providers/providerManagerInstance.js'
-      );
-      const providerManager = getProviderManager();
-      const activeProvider = providerManager.getActiveProvider();
-      if (activeProvider) {
-        const providerName = providerManager.getActiveProviderName();
-        const providerImplementation = providerManager.getProviderByName(
-          providerName!,
-        );
-        if (providerImplementation) {
-          provider = providerImplementation.name;
-          // Try to get baseURL from provider fallback to empty string
-          try {
-            // Unwrap the provider if it's wrapped
-            let finalProvider: unknown = providerImplementation;
+      runtimeApi = getRuntimeApi();
+    } catch {
+      runtimeApi = null;
+    }
+
+    if (runtimeApi) {
+      try {
+        const snapshot = runtimeApi.getRuntimeDiagnosticsSnapshot();
+        if (snapshot.modelName) {
+          modelVersion = snapshot.modelName;
+        }
+
+        if (snapshot.providerName) {
+          provider = snapshot.providerName;
+        }
+
+        const activeProviderName = runtimeApi.getActiveProviderName?.();
+        if (
+          activeProviderName &&
+          snapshot.modelName &&
+          provider !== 'Unknown'
+        ) {
+          modelVersion = `${activeProviderName}:${snapshot.modelName}`;
+        }
+
+        const providerManager = runtimeApi.getCliProviderManager?.();
+        if (
+          providerManager &&
+          typeof providerManager.getActiveProvider === 'function'
+        ) {
+          const activeProvider = providerManager.getActiveProvider();
+          if (activeProvider) {
+            provider = activeProvider.name ?? provider;
+            let finalProvider: unknown = activeProvider;
             if (
-              'wrappedProvider' in providerImplementation &&
-              providerImplementation.wrappedProvider
+              'wrappedProvider' in activeProvider &&
+              activeProvider.wrappedProvider
             ) {
-              finalProvider = providerImplementation.wrappedProvider;
+              finalProvider = activeProvider.wrappedProvider;
             }
-            // Try to call getBaseURL if available, using proper type checking
             const providerWithGetBaseURL = finalProvider as {
               getBaseURL?: () => string | undefined;
             };
-            if (
-              providerWithGetBaseURL &&
-              typeof providerWithGetBaseURL.getBaseURL === 'function'
-            ) {
+            if (typeof providerWithGetBaseURL.getBaseURL === 'function') {
               baseURL = providerWithGetBaseURL.getBaseURL?.() ?? '';
-            } else {
-              baseURL = '';
             }
-          } catch {
-            baseURL = '';
           }
         }
-        const currentModel = activeProvider.getCurrentModel
-          ? activeProvider.getCurrentModel()
-          : context.services.config?.getModel() || 'Unknown';
-        modelVersion = providerName
-          ? `${providerName}:${currentModel}`
-          : currentModel;
+
+        if (!baseURL) {
+          const runtimeBaseUrl = runtimeApi.getEphemeralSetting?.('base-url');
+          if (typeof runtimeBaseUrl === 'string') {
+            baseURL = runtimeBaseUrl;
+          }
+        }
+      } catch {
+        modelVersion = context.services.config?.getModel() || modelVersion;
       }
-    } catch {
-      // Fallback to config if the provider manager cannot be resolved (e.g. in
-      // unit tests).
-      modelVersion = context.services.config?.getModel() || 'Unknown';
+
+      if (modelVersion === 'Unknown') {
+        modelVersion = context.services.config?.getModel() || modelVersion;
+      }
+    } else {
+      modelVersion = context.services.config?.getModel() || modelVersion;
+    }
+
+    if (!baseURL) {
+      const fallbackBaseUrl = context.services.config?.getEphemeralSetting?.(
+        'base-url',
+      ) as string | undefined;
+      if (fallbackBaseUrl) {
+        baseURL = fallbackBaseUrl;
+      }
+    }
+
+    if (provider === 'Unknown') {
+      const fallbackProvider =
+        context.services.config?.getProvider?.() ?? undefined;
+      if (fallbackProvider) {
+        provider = fallbackProvider;
+      }
     }
 
     const cliVersion = await getCliVersion();

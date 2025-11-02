@@ -286,11 +286,16 @@ describe('GeminiChat Context Limit Enforcement', () => {
       chat['enforceContextWindow'](pendingTokens, 'test-prompt-id'),
     ).resolves.not.toThrow();
 
-    // Verify tokenLimit was called with default context limit (60000)
-    // When no explicit user context limit is configured, the system passes 60000
-    expect(tokenLimitsModule.tokenLimit).toHaveBeenCalledWith(
+    // Verify tokenLimit was called with a fallback (undefined) followed by provider default
+    expect(tokenLimitsModule.tokenLimit).toHaveBeenNthCalledWith(
+      1,
       configWithoutLimit.getModel(),
-      60000,
+      undefined,
+    );
+    expect(tokenLimitsModule.tokenLimit).toHaveBeenNthCalledWith(
+      2,
+      configWithoutLimit.getModel(),
+      DEFAULT_TOKEN_LIMIT,
     );
   });
 });
