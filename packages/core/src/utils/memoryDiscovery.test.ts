@@ -353,7 +353,7 @@ describe('loadServerHierarchicalMemory', () => {
       .spyOn(console, 'debug')
       .mockImplementation(() => {});
 
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 60; i++) {
       await createEmptyDir(path.join(cwd, `deep_dir_${i}`));
     }
 

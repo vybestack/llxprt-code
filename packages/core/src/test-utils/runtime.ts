@@ -152,6 +152,8 @@ export function createRuntimeConfigStub(
     getEphemeralSettings: () => ({ model: 'test-model' }),
     getEphemeralSetting: () => undefined,
     setEphemeralSetting: noop,
+    getUserMemory: () => '',
+    setUserMemory: noop,
     getModel: () => 'test-model',
     setModel: noop,
     getQuotaErrorOccurred: () => false,
