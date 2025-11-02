@@ -19,6 +19,8 @@ import {
   type OutputConfig,
 } from './subagent.js';
 import fs from 'node:fs';
+import path from 'node:path';
+import { homedir } from 'node:os';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -343,12 +345,14 @@ export class SubagentOrchestrator {
       'auth-keyfile',
     ]);
     if (authKeyfile) {
-      service.set('auth-keyfile', authKeyfile);
-      service.set(`providers.${provider}.apiKeyfile`, authKeyfile);
+      const expandedKeyfile = authKeyfile.replace(/^~(?=$|[\\/])/, homedir());
+      service.set('auth-keyfile', expandedKeyfile);
+      service.set(`providers.${provider}.apiKeyfile`, expandedKeyfile);
       if (!service.get(`providers.${provider}.apiKey`)) {
         try {
-          if (fs.existsSync(authKeyfile)) {
-            const content = fs.readFileSync(authKeyfile, 'utf8').trim();
+          const resolvedPath = path.resolve(expandedKeyfile);
+          if (fs.existsSync(resolvedPath)) {
+            const content = fs.readFileSync(resolvedPath, 'utf8').trim();
             if (content) {
               service.set(`providers.${provider}.apiKey`, content);
             }
