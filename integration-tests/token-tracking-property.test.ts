@@ -4,7 +4,7 @@
  * Integration TDD Phase - Property-based tests for token tracking
  */
 
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { it as itProp, fc } from '@fast-check/vitest';
 import { ProviderManager } from '../packages/core/src/providers/ProviderManager';
 import { ProviderPerformanceTracker } from '../packages/core/src/providers/logging/ProviderPerformanceTracker';
@@ -21,6 +21,9 @@ import {
   formatThrottleTime,
 } from '../packages/cli/src/ui/utils/tokenFormatters';
 import type { RedactionConfig } from '../packages/core/src/config/types';
+import { initializeTestProviderRuntime } from '../packages/core/src/test-utils/runtime';
+import { clearActiveProviderRuntimeContext } from '../packages/core/src/runtime/providerRuntimeContext';
+import { resetSettingsService } from '../packages/core/src/settings/settingsServiceInstance';
 
 // Mock Config class
 class MockConfig {
@@ -55,6 +58,14 @@ describe('Token Tracking Property-Based Tests', () => {
   };
 
   beforeEach(() => {
+    resetSettingsService();
+    const runtimeId = `token-tracking.property.${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+    initializeTestProviderRuntime({
+      runtimeId,
+      metadata: { suite: 'token-tracking-property', runtimeId },
+    });
     // Create mock provider instances
     mockProvider = {
       id: 'test-provider',
@@ -66,6 +77,10 @@ describe('Token Tracking Property-Based Tests', () => {
     tracker = new ProviderPerformanceTracker(mockProvider.id);
     const mockConfig = new MockConfig();
     loggingWrapper = new LoggingProviderWrapper(mockProvider, mockConfig);
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   // Test 1: Property-based Tests for TPM Calculation

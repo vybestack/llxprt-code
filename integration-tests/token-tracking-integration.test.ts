@@ -13,6 +13,9 @@ import { Config } from '../packages/core/src/config/config.js';
 import { LoggingProviderWrapper } from '../packages/core/src/providers/LoggingProviderWrapper.js';
 import { ProviderPerformanceTracker } from '../packages/core/src/providers/logging/ProviderPerformanceTracker.js';
 import { retryWithBackoff } from '../packages/core/src/utils/retry.js';
+import { initializeTestProviderRuntime } from '../packages/core/src/test-utils/runtime.js';
+import { clearActiveProviderRuntimeContext } from '../packages/core/src/runtime/providerRuntimeContext.js';
+import { resetSettingsService } from '../packages/core/src/settings/settingsServiceInstance.js';
 
 describe('Token Tracking Integration Tests', () => {
   let providerManager: ProviderManager;
@@ -21,6 +24,14 @@ describe('Token Tracking Integration Tests', () => {
   beforeEach(() => {
     // Clear all mocks
     vi.clearAllMocks();
+    resetSettingsService();
+    const runtimeId = `token-tracking.integration.${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+    initializeTestProviderRuntime({
+      runtimeId,
+      metadata: { suite: 'token-tracking-integration', runtimeId },
+    });
 
     // Create fresh instances with proper parameters
     config = new Config({
@@ -44,6 +55,7 @@ describe('Token Tracking Integration Tests', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   describe('Provider-to-Tracker Integration', () => {

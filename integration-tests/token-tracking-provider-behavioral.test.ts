@@ -15,6 +15,9 @@ import { GeminiProvider } from '../packages/core/src/providers/gemini/GeminiProv
 import { LoggingProviderWrapper } from '../packages/core/src/providers/LoggingProviderWrapper.js';
 import { Config } from '../packages/core/src/config/config.js';
 import type { RedactionConfig } from '../packages/core/src/config/types.js';
+import { initializeTestProviderRuntime } from '../packages/core/src/test-utils/runtime.js';
+import { clearActiveProviderRuntimeContext } from '../packages/core/src/runtime/providerRuntimeContext.js';
+import { resetSettingsService } from '../packages/core/src/settings/settingsServiceInstance.js';
 
 /**
  * Provider-Specific Token Tracking Behavioral Tests
@@ -32,6 +35,14 @@ describe('Provider-Specific Token Tracking Behavioral Tests', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetSettingsService();
+    const runtimeId = `token-tracking.provider.${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+    initializeTestProviderRuntime({
+      runtimeId,
+      metadata: { suite: 'token-tracking-provider', runtimeId },
+    });
 
     config = new Config({
       sessionId: 'provider-behavioral-test-' + Date.now(),
@@ -67,6 +78,7 @@ describe('Provider-Specific Token Tracking Behavioral Tests', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   /**

@@ -4,13 +4,16 @@
  * Integration TDD Phase - Behavioral tests for token tracking
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ProviderManager } from '../packages/core/src/providers/ProviderManager';
 import { ProviderPerformanceTracker } from '../packages/core/src/providers/logging/ProviderPerformanceTracker';
 import { LoggingProviderWrapper } from '../packages/core/src/providers/LoggingProviderWrapper';
 import { retryWithBackoff } from '../packages/core/src/utils/retry';
 // import { TelemetryService } from '../packages/core/src/telemetry/TelemetryService'; // Not used in tests
 import type { RedactionConfig } from '../packages/core/src/config/types';
+import { initializeTestProviderRuntime } from '../packages/core/src/test-utils/runtime.js';
+import { clearActiveProviderRuntimeContext } from '../packages/core/src/runtime/providerRuntimeContext.js';
+import { resetSettingsService } from '../packages/core/src/settings/settingsServiceInstance.js';
 
 // Mock the telemetry service to capture logs
 vi.mock('../packages/core/src/telemetry/TelemetryService', () => {
@@ -48,6 +51,14 @@ describe('Token Tracking Integration Tests', () => {
   let mockConfig: MockConfig;
 
   beforeEach(() => {
+    resetSettingsService();
+    const runtimeId = `token-tracking.integration.${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+    initializeTestProviderRuntime({
+      runtimeId,
+      metadata: { suite: 'token-tracking-integration', runtimeId },
+    });
     // Create mock provider instances
     mockProvider = {
       id: 'test-provider',
@@ -59,6 +70,10 @@ describe('Token Tracking Integration Tests', () => {
     tracker = new ProviderPerformanceTracker(mockProvider.id);
     mockConfig = new MockConfig();
     new LoggingProviderWrapper(mockProvider, mockConfig);
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   // Test 1: ProviderPerformanceTracker TPM Calculation

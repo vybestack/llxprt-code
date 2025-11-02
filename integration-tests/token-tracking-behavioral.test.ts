@@ -20,6 +20,9 @@ import {
   formatThrottleTime,
   formatSessionTokenUsage,
 } from '../packages/cli/src/ui/utils/tokenFormatters.js';
+import { initializeTestProviderRuntime } from '../packages/core/src/test-utils/runtime.js';
+import { clearActiveProviderRuntimeContext } from '../packages/core/src/runtime/providerRuntimeContext.js';
+import { resetSettingsService } from '../packages/core/src/settings/settingsServiceInstance.js';
 
 /**
  * Behavioral Test Suite for Token Tracking
@@ -37,6 +40,14 @@ describe('Token Tracking Behavioral Tests', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetSettingsService();
+    const runtimeId = `token-tracking.behavioral.${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+    initializeTestProviderRuntime({
+      runtimeId,
+      metadata: { suite: 'token-tracking-behavioral', runtimeId },
+    });
 
     config = new Config({
       sessionId: 'behavioral-test-' + Date.now(),
@@ -60,6 +71,7 @@ describe('Token Tracking Behavioral Tests', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   /**
