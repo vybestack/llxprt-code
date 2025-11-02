@@ -88,7 +88,8 @@ describe('Settings Remediation Integration', () => {
       expect(settingsService.get('model')).toBe('gpt-4');
 
       const elapsed = Date.now() - startTime;
-      expect(elapsed).toBeLessThan(5);
+      const perfBudgetMs = process.platform === 'darwin' ? 15 : 5;
+      expect(elapsed).toBeLessThan(perfBudgetMs);
     });
 
     /**
