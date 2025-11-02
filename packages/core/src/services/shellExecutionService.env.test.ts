@@ -73,10 +73,16 @@ describe('ShellExecutionService with LLXPRT_CODE environment variables', () => {
   });
 
   it('should not set GEMINI_CLI environment variable', async () => {
-    const command =
-      process.platform === 'win32'
-        ? 'if defined GEMINI_CLI (echo GEMINI_CLI_SET) else (echo GEMINI_CLI_NOT_SET)'
-        : '[ -z "$GEMINI_CLI" ] && echo "GEMINI_CLI_NOT_SET" || echo "GEMINI_CLI_SET"';
+    const scriptPath = path.join(testDir, 'check-gemini-cli.js');
+    await fs.writeFile(
+      scriptPath,
+      'if (process.env.GEMINI_CLI) {\n  console.log("GEMINI_CLI_SET");\n} else {\n  console.log("GEMINI_CLI_NOT_SET");\n}\n',
+      'utf-8',
+    );
+
+    const execQuoted = JSON.stringify(process.execPath);
+    const scriptQuoted = JSON.stringify(scriptPath);
+    const command = `${execQuoted} ${scriptQuoted}`;
     const onOutputEvent = vi.fn();
     const abortController = new AbortController();
 
