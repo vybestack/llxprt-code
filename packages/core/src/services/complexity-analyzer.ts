@@ -45,9 +45,9 @@ export class ComplexityAnalyzer {
 
   // Patterns for detecting list items
   private readonly listPatterns = [
-    /^\s*\d+\.\s+(\S[^\r\n]*)$/gm, // Numbered lists: "1. Task"
-    /^\s*[-•*]\s+(\S[^\r\n]*)$/gm, // Bullet points: "- Task", "• Task", "* Task"
-    /^\s*\[[ xX]\]\s+(\S[^\r\n]*)$/gm, // Checkboxes: "[ ] Task" or "[x] Task"
+    /^\s*\d+\.\s+([^\r\n]+)$/gm, // Numbered lists: "1. Task"
+    /^\s*[-•*]\s+([^\r\n]+)$/gm, // Bullet points: "- Task", "• Task", "* Task"
+    /^\s*\[[ xX]\]\s+([^\r\n]+)$/gm, // Checkboxes: "[ ] Task" or "[x] Task"
   ];
 
   // Sequential keywords that indicate multi-step processes
