@@ -649,7 +649,7 @@ describe('GeminiChat Isolation Integration Tests', () => {
       expect(subagentThreshold).toBe(0.6);
       expect(foregroundThreshold).not.toBe(subagentThreshold);
 
-      expect(foregroundLimit).toBe(DEFAULT_TOKEN_LIMIT);
+      expect(foregroundLimit).toBe(60000);
       expect(subagentLimit).toBe(80000);
       expect(foregroundLimit).not.toBe(subagentLimit);
 

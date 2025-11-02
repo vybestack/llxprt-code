@@ -88,6 +88,10 @@ export const aboutCommand: SlashCommand = {
       } catch {
         modelVersion = context.services.config?.getModel() || modelVersion;
       }
+
+      if (modelVersion === 'Unknown') {
+        modelVersion = context.services.config?.getModel() || modelVersion;
+      }
     } else {
       modelVersion = context.services.config?.getModel() || modelVersion;
     }

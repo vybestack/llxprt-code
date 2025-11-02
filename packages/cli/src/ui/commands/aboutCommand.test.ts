@@ -19,10 +19,12 @@ import { USER_SETTINGS_PATH } from '../../config/settings.js';
 
 import { IdeClient } from '../../../../core/src/ide/ide-client.js';
 
-const getRuntimeApiMock = vi.fn();
+const runtimeMocks = vi.hoisted(() => ({
+  getRuntimeApiMock: vi.fn(),
+}));
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: getRuntimeApiMock,
+  getRuntimeApi: runtimeMocks.getRuntimeApiMock,
 }));
 
 vi.mock('../../utils/version.js', () => ({
@@ -30,6 +32,7 @@ vi.mock('../../utils/version.js', () => ({
 }));
 
 describe('aboutCommand', () => {
+  const getRuntimeApiMock = runtimeMocks.getRuntimeApiMock;
   let mockContext: CommandContext;
   let mockFileSystem: MockFileSystem;
   const originalPlatform = process.platform;
