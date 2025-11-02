@@ -137,6 +137,8 @@ export class ShellExecutionService {
       };
       delete envVars.GEMINI_CLI;
       delete (envVars as Record<string, unknown>)['gemini_cli'];
+      delete envVars.BASH_ENV;
+      delete (envVars as Record<string, unknown>)['bash_env'];
 
       const child = cpSpawn(commandToExecute, [], {
         cwd,
@@ -325,17 +327,23 @@ export class ShellExecutionService {
         ? `/c ${commandToExecute}`
         : ['-c', commandToExecute];
 
+      const envVars: NodeJS.ProcessEnv = {
+        ...process.env,
+        LLXPRT_CODE: '1',
+        TERM: 'xterm-256color',
+        PAGER: 'cat',
+      };
+      delete envVars.GEMINI_CLI;
+      delete (envVars as Record<string, unknown>)['gemini_cli'];
+      delete envVars.BASH_ENV;
+      delete (envVars as Record<string, unknown>)['bash_env'];
+
       const ptyProcess = ptyInfo?.module.spawn(shell, args, {
         cwd,
         name: 'xterm-color',
         cols,
         rows,
-        env: {
-          ...process.env,
-          LLXPRT_CODE: '1',
-          TERM: 'xterm-256color',
-          PAGER: 'cat',
-        },
+        env: envVars,
         handleFlowControl: true,
       });
 

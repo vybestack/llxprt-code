@@ -12,6 +12,15 @@ import * as path from 'path';
 describe('ShellExecutionService with LLXPRT_CODE environment variables', () => {
   let testDir: string;
 
+  const createNodeCommand = async (
+    fileName: string,
+    contents: string,
+  ): Promise<string> => {
+    const scriptPath = path.join(testDir, fileName);
+    await fs.writeFile(scriptPath, contents, 'utf-8');
+    return `${JSON.stringify(process.execPath)} ${JSON.stringify(scriptPath)}`;
+  };
+
   beforeEach(async () => {
     // Create a dedicated directory for this test suite
     testDir = path.join(
@@ -31,7 +40,10 @@ describe('ShellExecutionService with LLXPRT_CODE environment variables', () => {
   });
 
   it('should use LLXPRT_CODE environment variable instead of GEMINI_CLI when executed in child_process mode', async () => {
-    const command = process.platform === 'win32' ? 'set LLXPRT_CODE' : 'env';
+    const command = await createNodeCommand(
+      'print-llxprt-child.js',
+      "console.log(`LLXPRT_CODE=${process.env.LLXPRT_CODE ?? ''}`);",
+    );
     const onOutputEvent = vi.fn();
     const abortController = new AbortController();
 
@@ -47,11 +59,14 @@ describe('ShellExecutionService with LLXPRT_CODE environment variables', () => {
 
     expect(result.error).toBeNull();
     expect(result.exitCode).toBe(0);
-    expect(result.output).toMatch(/LLXPRT_CODE=1/);
+    expect(result.output).toBe('LLXPRT_CODE=1');
   });
 
   it('should use LLXPRT_CODE environment variable instead of GEMINI_CLI when executed with pty', async () => {
-    const command = process.platform === 'win32' ? 'set LLXPRT_CODE' : 'env';
+    const command = await createNodeCommand(
+      'print-llxprt-pty.js',
+      "console.log(`LLXPRT_CODE=${process.env.LLXPRT_CODE ?? ''}`);",
+    );
     const onOutputEvent = vi.fn();
     const abortController = new AbortController();
 
@@ -67,11 +82,14 @@ describe('ShellExecutionService with LLXPRT_CODE environment variables', () => {
 
     expect(result.error).toBeNull();
     expect(result.exitCode).toBe(0);
-    expect(result.output).toMatch(/LLXPRT_CODE=1/);
+    expect(result.output).toBe('LLXPRT_CODE=1');
   });
 
   it('should not set GEMINI_CLI environment variable', async () => {
-    const command = process.platform === 'win32' ? 'set GEMINI_CLI' : 'env';
+    const command = await createNodeCommand(
+      'print-gemini-cli.js',
+      "console.log(`GEMINI_CLI=${process.env.GEMINI_CLI ?? 'NOT_DEFINED'}`);",
+    );
     const onOutputEvent = vi.fn();
     const abortController = new AbortController();
 
@@ -87,11 +105,6 @@ describe('ShellExecutionService with LLXPRT_CODE environment variables', () => {
 
     expect(result.error).toBeNull();
     expect(result.exitCode).toBe(0);
-    if (process.platform === 'win32') {
-      expect(result.output.toLowerCase()).not.toContain('gemini_cli=');
-      expect(result.output.trim().length).toBe(0);
-    } else {
-      expect(result.output).not.toContain('GEMINI_CLI=');
-    }
+    expect(result.output).toBe('GEMINI_CLI=NOT_DEFINED');
   });
 });
