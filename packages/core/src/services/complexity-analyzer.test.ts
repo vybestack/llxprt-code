@@ -91,4 +91,34 @@ describe('ComplexityAnalyzer', () => {
     // With new threshold of 0.6, 0.5 is below threshold so not complex
     expect(result.isComplex).toBe(false);
   });
+
+  it('normalizes excessive whitespace in bullet list tasks', () => {
+    const analyzer = new ComplexityAnalyzer();
+
+    const message = `
+-   deploy    the    pipeline
+*   verify     the     QA     checklist
+`;
+
+    const result = analyzer.analyzeComplexity(message);
+
+    expect(result.detectedTasks).toEqual([
+      'deploy the pipeline',
+      'verify the QA checklist',
+    ]);
+  });
+
+  it('normalizes excessive whitespace in natural language tasks', () => {
+    const analyzer = new ComplexityAnalyzer();
+
+    const message =
+      'I must   coordinate     the   release, and   document    the   decisions.';
+
+    const result = analyzer.analyzeComplexity(message);
+
+    expect(result.detectedTasks).toEqual([
+      'coordinate the release',
+      'document the decisions',
+    ]);
+  });
 });
