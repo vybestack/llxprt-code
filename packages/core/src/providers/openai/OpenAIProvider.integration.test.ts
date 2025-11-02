@@ -4,36 +4,58 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { IContent } from '../../services/history/IContent.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';
+import { resetSettingsService } from '../../settings/settingsServiceInstance.js';
+import type { SettingsService } from '../../settings/SettingsService.js';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
 const skipTests = !OPENAI_API_KEY;
 
-describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
-  let provider: OpenAIProvider;
+const resolveDefaultModel = (): string =>
+  process.env.LLXPRT_DEFAULT_MODEL ?? 'gpt-4o';
 
-  beforeAll(() => {
+describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
+  let provider: OpenAIProvider | null = null;
+  let settingsService: SettingsService;
+
+  beforeEach(() => {
     if (!OPENAI_API_KEY) {
-      console.log(
-        'Skipping OpenAI integration tests: OPENAI_API_KEY not found',
-      );
+      provider = null;
       return;
     }
+
+    resetSettingsService();
+    const { settingsService: runtimeSettings, config } =
+      initializeTestProviderRuntime({
+        runtimeId: `openai-provider.integration.${Math.random()
+          .toString(36)
+          .slice(2, 10)}`,
+        metadata: {
+          suite: 'OpenAIProvider.integration.test',
+        },
+        configOverrides: {
+          getProvider: () => 'openai',
+          getModel: resolveDefaultModel,
+          getEphemeralSettings: () => ({
+            model: resolveDefaultModel(),
+            baseUrl: OPENAI_BASE_URL,
+          }),
+        },
+      });
+    settingsService = runtimeSettings;
+
     provider = new OpenAIProvider(OPENAI_API_KEY, OPENAI_BASE_URL);
-    // Set model from environment if available
-    if (process.env.LLXPRT_DEFAULT_MODEL) {
-      const settingsService = getSettingsService();
-      settingsService.set('model', process.env.LLXPRT_DEFAULT_MODEL);
-      settingsService.setProviderSetting(
-        provider.name,
-        'model',
-        process.env.LLXPRT_DEFAULT_MODEL,
-      );
-    }
+    provider.setRuntimeSettingsService?.(settingsService);
+    provider.setConfig?.(config);
+
+    settingsService.set('activeProvider', provider.name);
+    const defaultModel = resolveDefaultModel();
+    settingsService.set('model', defaultModel);
+    settingsService.setProviderSetting(provider.name, 'model', defaultModel);
   });
 
   it('should fetch real models from OpenAI API', async () => {

@@ -7,16 +7,21 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { OpenAIProvider, ProviderManager } from '../../index.js';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
-import {
-  getSettingsService,
-  resetSettingsService,
-} from '../../settings/settingsServiceInstance.js';
+import { resetSettingsService } from '../../settings/settingsServiceInstance.js';
+import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';
+import type { SettingsService } from '../../settings/SettingsService.js';
+import type { Config } from '../../config/config.js';
+
+const resolveDefaultModel = (): string =>
+  process.env.LLXPRT_DEFAULT_MODEL ?? 'gpt-4o';
 
 describe('Multi-Provider Integration Tests', () => {
   let apiKey: string | null = null;
   let baseURL: string | undefined = undefined;
   let skipTests = false;
   let manager: ProviderManager;
+  let settingsService: SettingsService;
+  let runtimeConfig: Config;
 
   beforeAll(() => {
     // Only load OpenAI API key from environment variable
@@ -46,18 +51,42 @@ describe('Multi-Provider Integration Tests', () => {
   });
 
   beforeEach(() => {
-    if (!skipTests) {
-      // Clear SettingsService state before each test
-      const settingsService = getSettingsService();
-      settingsService.set('activeProvider', '');
-
-      manager = new ProviderManager();
+    if (skipTests) {
+      return;
     }
+
+    resetSettingsService();
+    const runtime = initializeTestProviderRuntime({
+      runtimeId: `multi-provider.integration.${Math.random()
+        .toString(36)
+        .slice(2, 10)}`,
+      metadata: { suite: 'multi-provider.integration.test' },
+      configOverrides: {
+        getProvider: () => '',
+        getModel: resolveDefaultModel,
+        getEphemeralSettings: () => ({
+          model: resolveDefaultModel(),
+          baseUrl: baseURL,
+        }),
+      },
+    });
+
+    settingsService = runtime.settingsService;
+    runtimeConfig = runtime.config;
+    settingsService.set('activeProvider', '');
+    manager = new ProviderManager();
   });
 
   afterEach(() => {
     // Clean up any state if needed
   });
+
+  const createOpenAIProvider = (): OpenAIProvider => {
+    const provider = new OpenAIProvider(apiKey!, baseURL);
+    provider.setRuntimeSettingsService?.(settingsService);
+    provider.setConfig?.(runtimeConfig);
+    return provider;
+  };
 
   describe('Provider Management', () => {
     it.skipIf(skipTests)(
@@ -70,7 +99,7 @@ describe('Multi-Provider Integration Tests', () => {
         expect(manager.hasActiveProvider()).toBe(false);
 
         // Register OpenAI provider
-        const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+        const openaiProvider = createOpenAIProvider();
         manager.registerProvider(openaiProvider);
 
         // Verify registration
@@ -88,7 +117,7 @@ describe('Multi-Provider Integration Tests', () => {
       if (!manager) return; // Guard for when test is skipped
 
       // Register OpenAI
-      const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+      const openaiProvider = createOpenAIProvider();
       manager.registerProvider(openaiProvider);
 
       // Start with Gemini (no active provider)
@@ -121,7 +150,7 @@ describe('Multi-Provider Integration Tests', () => {
       async () => {
         if (!manager) return; // Guard for when test is skipped
 
-        const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+        const openaiProvider = createOpenAIProvider();
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
 
@@ -145,9 +174,30 @@ describe('Multi-Provider Integration Tests', () => {
       async () => {
         if (!apiKey || skipTests) return; // Guard for when test is skipped
         resetSettingsService();
+        const runtime = initializeTestProviderRuntime({
+          runtimeId: `multi-provider.integration.model-switch.${Math.random()
+            .toString(36)
+            .slice(2, 10)}`,
+          metadata: {
+            suite: 'multi-provider.integration.test',
+            test: 'model-switch',
+          },
+          configOverrides: {
+            getProvider: () => 'openai',
+            getModel: resolveDefaultModel,
+            getEphemeralSettings: () => ({
+              model: resolveDefaultModel(),
+              baseUrl: baseURL,
+            }),
+          },
+        });
+
         const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
-        const settingsService = getSettingsService();
-        settingsService.set('activeProvider', openaiProvider.name);
+        openaiProvider.setRuntimeSettingsService?.(runtime.settingsService);
+        openaiProvider.setConfig?.(runtime.config);
+
+        const localSettings = runtime.settingsService;
+        localSettings.set('activeProvider', openaiProvider.name);
 
         // Get initial model and available models
         const initialModel = openaiProvider.getCurrentModel();
@@ -159,8 +209,8 @@ describe('Multi-Provider Integration Tests', () => {
         // Test switching to a different model (pick first different model from list)
         const differentModel = models.find((m) => m.id !== initialModel);
         if (differentModel) {
-          settingsService.set('model', differentModel.id);
-          settingsService.setProviderSetting(
+          localSettings.set('model', differentModel.id);
+          localSettings.setProviderSetting(
             openaiProvider.name,
             'model',
             differentModel.id,
@@ -170,8 +220,8 @@ describe('Multi-Provider Integration Tests', () => {
           expect(currentModel).toBeTruthy();
 
           // Switch back to initial model
-          settingsService.set('model', initialModel);
-          settingsService.setProviderSetting(
+          localSettings.set('model', initialModel);
+          localSettings.setProviderSetting(
             openaiProvider.name,
             'model',
             initialModel,
@@ -191,7 +241,7 @@ describe('Multi-Provider Integration Tests', () => {
       async () => {
         if (!manager || skipTests) return; // Guard for when test is skipped
 
-        const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+        const openaiProvider = createOpenAIProvider();
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
 
@@ -235,7 +285,7 @@ describe('Multi-Provider Integration Tests', () => {
       async () => {
         if (!manager || skipTests) return;
 
-        const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+        const openaiProvider = createOpenAIProvider();
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
 
@@ -251,7 +301,6 @@ describe('Multi-Provider Integration Tests', () => {
           },
         ];
 
-        const settingsService = getSettingsService();
         settingsService.set('call-id', 'integration-call');
         settingsService.setProviderSetting(
           'openai',
@@ -285,7 +334,27 @@ describe('Multi-Provider Integration Tests', () => {
 
     it.skipIf(skipTests)('should handle streaming correctly', async () => {
       if (!apiKey || skipTests) return; // Guard for when test is skipped
+      const runtime = initializeTestProviderRuntime({
+        runtimeId: `multi-provider.integration.streaming.${Math.random()
+          .toString(36)
+          .slice(2, 10)}`,
+        metadata: {
+          suite: 'multi-provider.integration.test',
+          test: 'streaming',
+        },
+        configOverrides: {
+          getProvider: () => 'openai',
+          getModel: resolveDefaultModel,
+          getEphemeralSettings: () => ({
+            model: resolveDefaultModel(),
+            baseUrl: baseURL,
+          }),
+        },
+      });
+
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+      openaiProvider.setRuntimeSettingsService?.(runtime.settingsService);
+      openaiProvider.setConfig?.(runtime.config);
 
       const messages = [
         {
@@ -329,20 +398,37 @@ describe('Multi-Provider Integration Tests', () => {
     it.skip('should work with a specific model', async () => {
       if (!apiKey || skipTests) return; // Guard for when test is skipped
       resetSettingsService();
+      const runtime = initializeTestProviderRuntime({
+        runtimeId: `multi-provider.integration.model-specific.${Math.random()
+          .toString(36)
+          .slice(2, 10)}`,
+        metadata: {
+          suite: 'multi-provider.integration.test',
+          test: 'model-specific',
+        },
+        configOverrides: {
+          getProvider: () => 'openai',
+          getModel: resolveDefaultModel,
+          getEphemeralSettings: () => ({
+            model: resolveDefaultModel(),
+            baseUrl: baseURL,
+          }),
+        },
+      });
+
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
-      const settingsService = getSettingsService();
-      settingsService.set('activeProvider', openaiProvider.name);
+      openaiProvider.setRuntimeSettingsService?.(runtime.settingsService);
+      openaiProvider.setConfig?.(runtime.config);
+
+      const localSettings = runtime.settingsService;
+      localSettings.set('activeProvider', openaiProvider.name);
 
       // Get available models and pick the first one (or use default)
       const models = await openaiProvider.getModels();
       const testModel =
         models.length > 0 ? models[0].id : openaiProvider.getCurrentModel();
-      settingsService.set('model', testModel);
-      settingsService.setProviderSetting(
-        openaiProvider.name,
-        'model',
-        testModel,
-      );
+      localSettings.set('model', testModel);
+      localSettings.setProviderSetting(openaiProvider.name, 'model', testModel);
 
       const messages = [
         {
@@ -376,7 +462,27 @@ describe('Multi-Provider Integration Tests', () => {
       'should handle tool calls',
       async () => {
         if (!apiKey || skipTests) return; // Guard for when test is skipped
+        const runtime = initializeTestProviderRuntime({
+          runtimeId: `multi-provider.integration.tool-calls.${Math.random()
+            .toString(36)
+            .slice(2, 10)}`,
+          metadata: {
+            suite: 'multi-provider.integration.test',
+            test: 'tool-calls',
+          },
+          configOverrides: {
+            getProvider: () => 'openai',
+            getModel: resolveDefaultModel,
+            getEphemeralSettings: () => ({
+              model: resolveDefaultModel(),
+              baseUrl: baseURL,
+            }),
+          },
+        });
+
         const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+        openaiProvider.setRuntimeSettingsService?.(runtime.settingsService);
+        openaiProvider.setConfig?.(runtime.config);
 
         const messages = [
           {
@@ -399,7 +505,10 @@ describe('Multi-Provider Integration Tests', () => {
                 parameters: {
                   type: 'object',
                   properties: {
-                    location: { type: 'string', description: 'The city name' },
+                    location: {
+                      type: 'string',
+                      description: 'The city name',
+                    },
                   },
                   required: ['location'],
                 },
@@ -466,11 +575,32 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)('should handle invalid model gracefully', async () => {
       if (!apiKey || skipTests) return; // Guard for when test is skipped
       resetSettingsService();
+      const runtime = initializeTestProviderRuntime({
+        runtimeId: `multi-provider.integration.invalid-model.${Math.random()
+          .toString(36)
+          .slice(2, 10)}`,
+        metadata: {
+          suite: 'multi-provider.integration.test',
+          test: 'invalid-model',
+        },
+        configOverrides: {
+          getProvider: () => 'openai',
+          getModel: () => 'invalid-model-xyz',
+          getEphemeralSettings: () => ({
+            model: 'invalid-model-xyz',
+            baseUrl: baseURL,
+          }),
+        },
+      });
+
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
-      const settingsService = getSettingsService();
-      settingsService.set('activeProvider', openaiProvider.name);
-      settingsService.set('model', 'invalid-model-xyz');
-      settingsService.setProviderSetting(
+      openaiProvider.setRuntimeSettingsService?.(runtime.settingsService);
+      openaiProvider.setConfig?.(runtime.config);
+
+      const localSettings = runtime.settingsService;
+      localSettings.set('activeProvider', openaiProvider.name);
+      localSettings.set('model', 'invalid-model-xyz');
+      localSettings.setProviderSetting(
         openaiProvider.name,
         'model',
         'invalid-model-xyz',

@@ -3,22 +3,37 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { IMessage } from '../IMessage.js';
 import { ITool } from '../ITool.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
-import {
-  getSettingsService,
-  resetSettingsService,
-} from '../../settings/settingsServiceInstance.js';
+import { resetSettingsService } from '../../settings/settingsServiceInstance.js';
+import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';
+import type { SettingsService } from '../../settings/SettingsService.js';
 
 // Mock fetch globally
 global.fetch = vi.fn();
 
 describe.skip('OpenAIProvider.callResponsesEndpoint (stateless)', () => {
   let provider: OpenAIProvider;
+  let settingsService: SettingsService;
 
   beforeEach(() => {
     vi.clearAllMocks();
     resetSettingsService();
+    const runtime = initializeTestProviderRuntime({
+      runtimeId: `openai-provider.callResponses.stateless.${Math.random()
+        .toString(36)
+        .slice(2, 10)}`,
+      metadata: {
+        suite: 'OpenAIProvider.callResponses.stateless.test',
+      },
+      configOverrides: {
+        getProvider: () => 'openai',
+        getModel: () => 'gpt-4o',
+        getEphemeralSettings: () => ({ model: 'gpt-4o' }),
+      },
+    });
+    settingsService = runtime.settingsService;
     provider = new OpenAIProvider('test-key');
-    const settingsService = getSettingsService();
+    provider.setRuntimeSettingsService?.(settingsService);
+    provider.setConfig?.(runtime.config);
     settingsService.set('model', 'gpt-4o'); // Use a model that supports responses API
     settingsService.setProviderSetting(provider.name, 'model', 'gpt-4o');
   });

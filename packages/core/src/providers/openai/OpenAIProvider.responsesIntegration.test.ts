@@ -3,10 +3,9 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { IMessage } from '../IMessage.js';
 import { ITool } from '../ITool.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
-import {
-  getSettingsService,
-  resetSettingsService,
-} from '../../settings/settingsServiceInstance.js';
+import { resetSettingsService } from '../../settings/settingsServiceInstance.js';
+import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';
+import type { SettingsService } from '../../settings/SettingsService.js';
 
 interface OpenAIProviderPrivate {
   callResponsesEndpoint: (
@@ -22,13 +21,29 @@ global.fetch = vi.fn();
 describe.skip('OpenAIProvider Responses Integration', () => {
   // SKIPPING: Integration tests that depend on responses API implementation which is not complete
   let provider: OpenAIProvider;
+  let settingsService: SettingsService;
 
   beforeEach(() => {
     vi.clearAllMocks();
     resetSettingsService();
+    const runtime = initializeTestProviderRuntime({
+      runtimeId: `openai-provider.responsesIntegration.${Math.random()
+        .toString(36)
+        .slice(2, 10)}`,
+      metadata: {
+        suite: 'OpenAIProvider.responsesIntegration.test',
+      },
+      configOverrides: {
+        getProvider: () => 'openai',
+        getModel: () => 'gpt-4o-realtime',
+        getEphemeralSettings: () => ({ model: 'gpt-4o-realtime' }),
+      },
+    });
+    settingsService = runtime.settingsService;
     provider = new OpenAIProvider('test-api-key');
+    provider.setRuntimeSettingsService?.(settingsService);
+    provider.setConfig?.(runtime.config);
     // Set a model that uses responses API
-    const settingsService = getSettingsService();
     settingsService.set('model', 'gpt-4o-realtime');
     settingsService.setProviderSetting(
       provider.name,
