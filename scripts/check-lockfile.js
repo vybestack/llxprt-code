@@ -38,10 +38,16 @@ for (const [location, details] of Object.entries(packages)) {
   }
 
   // 2. Skip local workspace packages.
-  // They are identifiable in two ways:
+  // They are identifiable in three ways:
   // a) As a symlink within node_modules.
   // b) As the source package definition, whose path is not in node_modules.
-  if (details.link === true || !location.includes('node_modules')) {
+  // c) As workspace-specific overrides in packages/*/node_modules/* which may
+  //    not have resolved/integrity if they're workspace-managed versions.
+  if (
+    details.link === true ||
+    !location.includes('node_modules') ||
+    (location.startsWith('packages/') && location.match(/\/node_modules\//))
+  ) {
     continue;
   }
 
