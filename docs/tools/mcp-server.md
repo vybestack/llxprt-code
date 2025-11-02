@@ -795,9 +795,6 @@ llxprt mcp add -e API_KEY=123 -e DEBUG=true my-stdio-server /path/to/server arg1
 
 # Example: Adding a local python server with server arguments
 llxprt mcp add python-server python server.py -- --server-arg my-value
-# Example: Adding a local python server
-gemini mcp add python-server python server.py -- --server-arg my-value
->>>>>>> f8ff921c4 (Update mcp-server.md (#12310))
 ```
 
 #### Adding an HTTP server
@@ -832,7 +829,7 @@ llxprt mcp add --transport sse secure-sse https://api.example.com/sse/ --header 
 
 ### Listing Servers (`llxprt mcp list`)
 
-To view all MCP servers currently configured, use the `list` command. It displays each server's name, configuration details, and connection status.
+To view all MCP servers currently configured, use the `list` command. It displays each server's name, configuration details, and connection status. This command has no flags.
 
 **Command:**
 
@@ -857,6 +854,10 @@ To delete a server from your configuration, use the `remove` command with the se
 ```bash
 llxprt mcp remove <name>
 ```
+
+**Options (Flags):**
+
+- `-s, --scope`: Configuration scope (user or project). [default: "project"]
 
 **Example:**
 
