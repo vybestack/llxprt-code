@@ -43,12 +43,6 @@ interface MatchCandidate {
 export class GemmaToolCallParser implements ITextToolCallParser {
   private readonly keyValuePattern =
     /✦\s*tool_call:\s*([A-Za-z0-9_.-]+)\s+for\s+([^\n✦]*)/g;
-  private readonly useTagPattern =
-    /<use\s+([A-Za-z0-9_.-]+)([^>]*)>(?:<\/use>)?/g;
-  private readonly useUnderscorePattern =
-    /<use_([A-Za-z0-9_.-]+)([^>]*)>(?:<\/use_[A-Za-z0-9_.-]+>)?/g;
-  private readonly attributePattern =
-    /([A-Za-z0-9_.-]+)\s*=\s*"((?:[^"\\]|\\.)*)"/g;
 
   parse(content: string): {
     cleanedContent: string;
@@ -172,52 +166,66 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
   private findJsonToolRequests(content: string): MatchCandidate[] {
     const matches: MatchCandidate[] = [];
-    const pattern =
-      /(\d+\s+)?\{"name":\s*"([A-Za-z0-9_.-]+)",\s*"arguments":\s*\{/g;
+    const marker = '{"name":';
     const endMarker = '[END_TOOL_REQUEST]';
-    let match: RegExpExecArray | null;
+    let searchIndex = 0;
 
-    while ((match = pattern.exec(content)) !== null) {
-      const prefixLength = match[1] ? match[1].length : 0;
-      const jsonStart = match.index + prefixLength;
+    while (searchIndex < content.length) {
+      const candidateIndex = content.indexOf(marker, searchIndex);
+      if (candidateIndex === -1) {
+        break;
+      }
+
+      let startIndex = candidateIndex;
+      let backPointer = candidateIndex;
+      while (backPointer > 0 && /\s/.test(content.charAt(backPointer - 1))) {
+        backPointer--;
+      }
+      let digitPointer = backPointer;
+      while (digitPointer > 0 && /\d/.test(content.charAt(digitPointer - 1))) {
+        digitPointer--;
+      }
+      if (digitPointer < backPointer) {
+        startIndex = digitPointer;
+      }
+
       const jsonSegment = this.extractBalancedSegment(
         content,
-        jsonStart,
+        candidateIndex,
         '{',
         '}',
       );
       if (!jsonSegment) {
+        searchIndex = candidateIndex + marker.length;
         continue;
       }
 
-      const endMarkerIndex = content.indexOf(endMarker, jsonSegment.endIndex);
-      if (endMarkerIndex === -1) {
-        continue;
-      }
-
-      let argsText = '{}';
       try {
         const parsed = JSON.parse(jsonSegment.segment);
-        argsText = JSON.stringify(parsed.arguments ?? {});
+        const toolName = String(parsed.name ?? '');
+        const argsText = JSON.stringify(parsed.arguments ?? {});
+        const endMarkerIndex = content.indexOf(endMarker, jsonSegment.endIndex);
+        if (toolName && endMarkerIndex !== -1) {
+          const fullEnd = endMarkerIndex + endMarker.length;
+          matches.push({
+            start: startIndex,
+            end: fullEnd,
+            toolName,
+            rawArgs: argsText,
+            fullMatch: content.slice(startIndex, fullEnd),
+          });
+          searchIndex = fullEnd;
+          continue;
+        }
       } catch (error) {
         console.error(
           `[GemmaToolCallParser] Failed to parse structured tool call JSON: ${error}`,
         );
       }
 
-      const fullEnd = endMarkerIndex + endMarker.length;
-      matches.push({
-        start: match.index,
-        end: fullEnd,
-        toolName: match[2],
-        rawArgs: argsText,
-        fullMatch: content.slice(match.index, fullEnd),
-      });
-
-      pattern.lastIndex = fullEnd;
+      searchIndex = candidateIndex + marker.length;
     }
 
-    pattern.lastIndex = 0;
     return matches;
   }
 
@@ -265,32 +273,46 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
   private findInvokeToolRequests(content: string): MatchCandidate[] {
     const matches: MatchCandidate[] = [];
-    const pattern = /<invoke\s+name="([A-Za-z0-9_.-]+)"[^>]*>/g;
-    let match: RegExpExecArray | null;
+    const tagPrefix = '<invoke';
+    const closing = '</invoke>';
+    let searchIndex = 0;
 
-    while ((match = pattern.exec(content)) !== null) {
-      const start = match.index;
-      const toolName = match[1];
-      const closingIndex = content.indexOf('</invoke>', pattern.lastIndex);
-      if (closingIndex === -1) {
+    while (searchIndex < content.length) {
+      const start = content.indexOf(tagPrefix, searchIndex);
+      if (start === -1) {
+        break;
+      }
+
+      const tagEnd = this.findTagClose(content, start + tagPrefix.length);
+      if (tagEnd === -1) {
+        break;
+      }
+
+      const header = content.slice(start + tagPrefix.length, tagEnd);
+      const attributes = this.parseAttributeArguments(header);
+      const toolNameValue = attributes.name;
+      const toolName =
+        typeof toolNameValue === 'string' ? toolNameValue.trim() : '';
+
+      const bodyStart = tagEnd + 1;
+      const closingIndex = content.indexOf(closing, bodyStart);
+      if (!toolName || closingIndex === -1) {
+        searchIndex = bodyStart;
         continue;
       }
 
-      const args = content.slice(pattern.lastIndex, closingIndex);
-      const fullEnd = closingIndex + '</invoke>'.length;
-
+      const fullEnd = closingIndex + closing.length;
       matches.push({
         start,
         end: fullEnd,
         toolName,
-        rawArgs: args,
+        rawArgs: content.slice(bodyStart, closingIndex),
         fullMatch: content.slice(start, fullEnd),
       });
 
-      pattern.lastIndex = fullEnd;
+      searchIndex = fullEnd;
     }
 
-    pattern.lastIndex = 0;
     return matches;
   }
 
@@ -333,39 +355,88 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
   private findUseToolRequests(content: string): MatchCandidate[] {
     const matches: MatchCandidate[] = [];
-    let match: RegExpExecArray | null;
+    const prefix = '<use';
+    const closing = '</use>';
+    let searchIndex = 0;
 
-    while ((match = this.useTagPattern.exec(content)) !== null) {
-      const fullMatch = match[0];
+    while (searchIndex < content.length) {
+      const start = content.indexOf(prefix, searchIndex);
+      if (start === -1) break;
+
+      const tagEnd = this.findTagClose(content, start + prefix.length);
+      if (tagEnd === -1) break;
+
+      const header = content.slice(start + prefix.length, tagEnd);
+      const { toolName, attributeText } =
+        this.extractToolNameAndAttributes(header);
+
+      const closingIndex = content.startsWith(closing, tagEnd + 1)
+        ? tagEnd + 1 + closing.length
+        : tagEnd + 1;
+
+      if (!toolName) {
+        searchIndex = tagEnd + 1;
+        continue;
+      }
+
       matches.push({
-        start: match.index,
-        end: match.index + fullMatch.length,
-        toolName: match[1]?.trim() ?? '',
-        rawArgs: this.parseAttributeArguments(match[2] ?? ''),
-        fullMatch,
+        start,
+        end: closingIndex,
+        toolName,
+        rawArgs: this.parseAttributeArguments(attributeText),
+        fullMatch: content.slice(start, closingIndex),
       });
+
+      searchIndex = closingIndex;
     }
 
-    this.useTagPattern.lastIndex = 0;
     return matches;
   }
 
   private findUseUnderscoreToolRequests(content: string): MatchCandidate[] {
     const matches: MatchCandidate[] = [];
-    let match: RegExpExecArray | null;
+    const prefix = '<use_';
+    let searchIndex = 0;
 
-    while ((match = this.useUnderscorePattern.exec(content)) !== null) {
-      const fullMatch = match[0];
+    while (searchIndex < content.length) {
+      const start = content.indexOf(prefix, searchIndex);
+      if (start === -1) break;
+
+      let nameEnd = start + prefix.length;
+      while (
+        nameEnd < content.length &&
+        /[A-Za-z0-9_.-]/.test(content[nameEnd])
+      ) {
+        nameEnd++;
+      }
+
+      const toolName = content.slice(start + prefix.length, nameEnd);
+      const tagEnd = this.findTagClose(content, nameEnd);
+      if (tagEnd === -1) break;
+
+      const attributeText = content.slice(nameEnd, tagEnd);
+      const closingTag = `</use_${toolName}>`;
+      const bodyEnd = tagEnd + 1;
+      const closingIndex = content.startsWith(closingTag, bodyEnd)
+        ? bodyEnd + closingTag.length
+        : bodyEnd;
+
+      if (!toolName) {
+        searchIndex = bodyEnd;
+        continue;
+      }
+
       matches.push({
-        start: match.index,
-        end: match.index + fullMatch.length,
-        toolName: match[1]?.trim() ?? '',
-        rawArgs: this.parseAttributeArguments(match[2] ?? ''),
-        fullMatch,
+        start,
+        end: closingIndex,
+        toolName,
+        rawArgs: this.parseAttributeArguments(attributeText),
+        fullMatch: content.slice(start, closingIndex),
       });
+
+      searchIndex = closingIndex;
     }
 
-    this.useUnderscorePattern.lastIndex = 0;
     return matches;
   }
 
@@ -616,12 +687,68 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     attributeText: string,
   ): Record<string, unknown> {
     const args: Record<string, unknown> = {};
-    let match: RegExpExecArray | null;
+    const text = attributeText ?? '';
+    const length = text.length;
+    let index = 0;
 
-    while ((match = this.attributePattern.exec(attributeText)) !== null) {
-      const key = match[1];
-      const rawValue = match[2];
-      const unescaped = rawValue.replace(/\\"/g, '"').trim();
+    const readIdentifier = () => {
+      const start = index;
+      while (index < length && /[A-Za-z0-9_.-]/.test(text.charAt(index))) {
+        index++;
+      }
+      return text.slice(start, index);
+    };
+
+    const skipWhitespace = () => {
+      while (index < length && /\s/.test(text.charAt(index))) {
+        index++;
+      }
+    };
+
+    while (index < length) {
+      skipWhitespace();
+      const key = readIdentifier();
+      if (!key) {
+        index++;
+        continue;
+      }
+
+      skipWhitespace();
+      if (text.charAt(index) !== '=') {
+        index++;
+        continue;
+      }
+      index++;
+      skipWhitespace();
+
+      const quote = text.charAt(index);
+      if (quote !== '"' && quote !== "'") {
+        index++;
+        continue;
+      }
+      index++;
+
+      let value = '';
+      let escaped = false;
+      while (index < length) {
+        const char = text.charAt(index);
+        index++;
+        if (escaped) {
+          value += char;
+          escaped = false;
+          continue;
+        }
+        if (char === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (char === quote) {
+          break;
+        }
+        value += char;
+      }
+
+      const unescaped = value.trim();
       if (!key) {
         continue;
       }
@@ -647,7 +774,6 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       }
     }
 
-    this.attributePattern.lastIndex = 0;
     return args;
   }
 
@@ -692,5 +818,48 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       .replace(/&amp;/g, '&')
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'");
+  }
+
+  private findTagClose(content: string, fromIndex: number): number {
+    let inQuote: '"' | "'" | null = null;
+    for (let i = fromIndex; i < content.length; i++) {
+      const char = content[i];
+      if (inQuote) {
+        if (char === inQuote && content[i - 1] !== '\\') {
+          inQuote = null;
+        }
+        continue;
+      }
+
+      if (char === '"' || char === "'") {
+        inQuote = char as '"' | "'";
+        continue;
+      }
+
+      if (char === '>') {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private extractToolNameAndAttributes(header: string): {
+    toolName: string;
+    attributeText: string;
+  } {
+    let index = 0;
+    const length = header.length;
+
+    while (index < length && /\s/.test(header.charAt(index))) {
+      index++;
+    }
+    const nameStart = index;
+    while (index < length && /[A-Za-z0-9_.-]/.test(header.charAt(index))) {
+      index++;
+    }
+    const toolName = header.slice(nameStart, index).trim();
+    const attributeText = header.slice(index);
+
+    return { toolName, attributeText };
   }
 }
