@@ -129,18 +129,22 @@ export class ShellExecutionService {
     try {
       const isWindows = os.platform() === 'win32';
 
+      const envVars: NodeJS.ProcessEnv = {
+        ...process.env,
+        LLXPRT_CODE: '1',
+        TERM: 'xterm-256color',
+        PAGER: 'cat',
+      };
+      delete envVars.GEMINI_CLI;
+      delete (envVars as Record<string, unknown>)['gemini_cli'];
+
       const child = cpSpawn(commandToExecute, [], {
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsVerbatimArguments: true,
         shell: isWindows ? true : 'bash',
         detached: !isWindows,
-        env: {
-          ...process.env,
-          LLXPRT_CODE: '1',
-          TERM: 'xterm-256color',
-          PAGER: 'cat',
-        },
+        env: envVars,
       });
 
       const result = new Promise<ShellExecutionResult>((resolve) => {
