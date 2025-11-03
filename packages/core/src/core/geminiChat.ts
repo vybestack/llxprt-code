@@ -265,11 +265,29 @@ function isValidContent(content: Content): boolean {
   if (content.parts === undefined || content.parts.length === 0) {
     return false;
   }
+
+  const hasStructuredPart = content.parts.some((part) => {
+    if (!part || typeof part !== 'object') {
+      return false;
+    }
+    return (
+      'functionCall' in part ||
+      'functionResponse' in part ||
+      'inlineData' in part ||
+      'fileData' in part
+    );
+  });
+
   for (const part of content.parts) {
     if (part === undefined || Object.keys(part).length === 0) {
       return false;
     }
-    if (!part.thought && part.text !== undefined && part.text === '') {
+    if (
+      !part.thought &&
+      part.text !== undefined &&
+      part.text === '' &&
+      !hasStructuredPart
+    ) {
       return false;
     }
   }
