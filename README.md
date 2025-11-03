@@ -8,12 +8,12 @@
 
 ![LLxprt Code Screenshot](./docs/assets/llxprt-screenshot.png)
 
-LLxprt Code is a CLI-based LLM assisted coding tool. It is highly configurable and can support nearly any provider or model as well as local/self-hosted models. 
+LLxprt Code is a CLI-based LLM assisted coding tool. It is highly configurable and can support nearly any provider or model as well as local/self-hosted models.
 
 ## Key Features
 
 - **Multi-Provider Support**: Direct access to OpenAI (gpt-5), Anthropic (Claude Opus/Sonnet), Google Gemini, plus OpenRouter, Fireworks, Synthetic, Cerebras, Chutes, Z.ai and local models
-- **Authenticate** to use free: Gemini and Qwen models as well as using your Claude Pro/Max account. Use `/auth` to enable/disable/logout of Google/Anthropic/Qwen. 
+- **Authenticate** to use free: Gemini and Qwen models as well as using your Claude Pro/Max account. Use `/auth` to enable/disable/logout of Google/Anthropic/Qwen.
 - **Installable Provider Aliases**: Save `/provider` setups as reusable configs and load OpenAI-compatible endpoints instantly
 - **Multi-model/Provider Subagents**: Use `/subagent` to define specialized subagents with isolated contexts
 - **Configuration Profiles**: define and save specific model/provider settings using `/profile` for instance temperature or custom headers
