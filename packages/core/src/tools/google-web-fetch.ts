@@ -490,10 +490,7 @@ export class GoogleWebFetchTool extends BaseDeclarativeTool<
       false, // output cannot be updated
       messageBus,
     );
-    const proxy = config.getProxy();
-    if (proxy) {
-      setGlobalDispatcher(new ProxyAgent(proxy as string));
-    }
+    // Proxy is now set globally in Config constructor with error handling
   }
 
   protected override validateToolParamValues(

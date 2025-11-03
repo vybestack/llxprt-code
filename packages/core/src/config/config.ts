@@ -98,6 +98,8 @@ import type { EventEmitter } from 'node:events';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import type { PolicyEngineConfig } from '../policy/types.js';
+import { setGlobalProxy } from '../utils/fetch.js';
+import { coreEvents } from '../utils/events.js';
 
 // Import privacy-related types
 export interface RedactionConfig {
@@ -728,6 +730,20 @@ export class Config {
       initializeTelemetry(this);
     } else if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
       console.log(`[CONFIG] Telemetry disabled`);
+    }
+
+    // Set up proxy with error handling
+    const proxy = this.getProxy();
+    if (proxy) {
+      try {
+        setGlobalProxy(proxy);
+      } catch (error) {
+        coreEvents.emitFeedback(
+          'error',
+          'Invalid proxy configuration detected. Check debug drawer for more details (F12)',
+          error,
+        );
+      }
     }
 
     logCliConfiguration(this, new StartSessionEvent(this));
