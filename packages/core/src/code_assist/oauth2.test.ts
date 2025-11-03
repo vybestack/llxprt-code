@@ -58,6 +58,9 @@ vi.mock('node:fs', () => ({
 vi.mock('../config/storage.js', () => ({
   Storage: {
     getOAuthCredsPath: vi.fn().mockReturnValue('/test/oauth/creds.json'),
+    getMcpOAuthTokensPath: vi
+      .fn()
+      .mockReturnValue('/test/oauth/mcp-tokens.json'),
   },
 }));
 
