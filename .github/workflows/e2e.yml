@@ -31,8 +31,14 @@ jobs:
     if: |
       github.event_name == 'push' ||
       github.event_name == 'merge_group' ||
-      (github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event.label.name == 'maintainer:e2e:ok')
+      github.event_name == 'workflow_dispatch' ||
+      (
+        (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') &&
+        (
+          github.event.pull_request.head.repo.full_name == github.repository ||
+          contains(github.event.pull_request.labels.*.name, 'maintainer:e2e:ok')
+        )
+      )
     runs-on: '${{ matrix.os }}'
     strategy:
       fail-fast: false
@@ -76,11 +82,25 @@ jobs:
         run: |-
           npm ci
 
+      - name: 'Ensure npx is available (Windows fix)'
+        if: runner.os == 'Windows'
+        run: |-
+          echo "Checking npx availability..."
+          npx --version || npm install -g npm@latest
+          npx --version
+        shell: 'bash'
+
       - name: 'Fix rollup platform dependency'
         run: |-
           # Explicitly install the platform-specific rollup package
           # This is a workaround for https://github.com/npm/cli/issues/4828
-          npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          if [ "$RUNNER_OS" = 'Linux' ]; then
+            npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          elif [ "$RUNNER_OS" = 'macOS' ]; then
+            npm install @rollup/rollup-darwin-x64 @rollup/rollup-darwin-arm64 --no-save || true
+          elif [ "$RUNNER_OS" = 'Windows' ]; then
+            npm install @rollup/rollup-win32-x64-msvc --no-save || true
+          fi
         shell: 'bash'
 
       - name: 'Build project'
@@ -155,6 +175,8 @@ jobs:
           LLXPRT_SANDBOX: '${{ matrix.sandbox }}'
           VERBOSE: 'true'
           KEEP_OUTPUT: 'true'
+          # Allow OpenAI integration tests to exceed Vitest's default timeout
+          VITEST_TEST_TIMEOUT: 15000
         run: |-
           # Use different commands based on sandbox type to avoid PowerShell variable expansion issues
           if [ "${{ matrix.sandbox }}" = "sandbox:none" ]; then
@@ -168,117 +190,3 @@ jobs:
             exit 1
           fi
         shell: bash
-
-  e2e-test-macos:
-    name: 'E2E Test - macOS'
-    runs-on: 'macos-latest'
-    steps:
-      - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
-
-      - name: 'Set up Node.js'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      - name: 'Install dependencies'
-        run: |-
-          npm ci
-
-      - name: 'Fix rollup platform dependency'
-        run: |-
-          # Explicitly install the platform-specific rollup packages
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          npm install @rollup/rollup-darwin-x64 @rollup/rollup-darwin-arm64 --no-save || true
-        shell: 'bash'
-
-      - name: 'Build project'
-        run: |-
-          npm run build
-
-      - name: 'Create bundle'
-        run: |-
-          npm run bundle
-
-      - name: 'Run E2E tests'
-        env:
-          # Provider configuration from repository secrets/variables
-          # Works for both push and workflow_dispatch triggers
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-          # Allow override from workflow_dispatch, otherwise use repository variables
-          LLXPRT_DEFAULT_MODEL: ${{ inputs.override_model || vars.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.override_provider || vars.LLXPRT_DEFAULT_PROVIDER }}
-          # Set auth type to none since we're not using Google services in these tests
-          LLXPRT_AUTH_TYPE: 'none'
-          # Suppress browser launch for OAuth (important for CI)
-          NO_BROWSER: 'true'
-          LLXPRT_NO_BROWSER_AUTH: 'true'
-          CI: 'true'
-          VERBOSE: 'true'
-          KEEP_OUTPUT: 'true'
-          # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
-          VITEST_TEST_TIMEOUT: 15000
-        run: |-
-          npm run test:e2e
-
-  e2e-test-windows:
-    name: 'E2E Test - Windows'
-    runs-on: 'windows-latest'
-    steps:
-      - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
-
-      - name: 'Set up Node.js'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
-        with:
-          node-version-file: '.nvmrc'
-          cache: 'npm'
-
-      - name: 'Ensure npx is available (Windows fix)'
-        run: |-
-          echo "Checking npx availability..."
-          npx --version || npm install -g npm@latest
-          npx --version
-
-      - name: 'Install dependencies'
-        run: |-
-          npm ci
-
-      - name: 'Fix rollup platform dependency'
-        run: |-
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          npm install @rollup/rollup-win32-x64-msvc --no-save
-        shell: 'bash'
-
-      - name: 'Build project'
-        run: |-
-          npm run build
-
-      - name: 'Create bundle'
-        run: |-
-          npm run bundle
-
-      - name: 'Run E2E tests'
-        env:
-          # Provider configuration from repository secrets/variables
-          # Works for both push and workflow_dispatch triggers
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-          # Allow override from workflow_dispatch, otherwise use repository variables
-          LLXPRT_DEFAULT_MODEL: ${{ inputs.override_model || vars.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.override_provider || vars.LLXPRT_DEFAULT_PROVIDER }}
-          # Set auth type to none since we're not using Google services in these tests
-          LLXPRT_AUTH_TYPE: 'none'
-          # Suppress browser launch for OAuth (important for CI)
-          NO_BROWSER: 'true'
-          LLXPRT_NO_BROWSER_AUTH: 'true'
-          CI: 'true'
-          VERBOSE: 'true'
-          KEEP_OUTPUT: 'true'
-          # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
-          VITEST_TEST_TIMEOUT: 15000
-        run: |-
-          npm run test:e2e
