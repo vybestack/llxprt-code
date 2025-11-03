@@ -25,6 +25,38 @@ const noColorColorsTheme: ColorsTheme = {
   DarkGray: '',
 };
 
+const noColorSemanticColors: SemanticColors = {
+  text: {
+    primary: '',
+    secondary: '',
+    link: '',
+    accent: '',
+    response: '',
+  },
+  background: {
+    primary: '',
+    diff: {
+      added: '',
+      removed: '',
+    },
+  },
+  border: {
+    default: '',
+    focused: '',
+  },
+  ui: {
+    comment: '',
+    symbol: '',
+    dark: '',
+    gradient: [],
+  },
+  status: {
+    error: '',
+    success: '',
+    warning: '',
+  },
+};
+
 export const NoColorTheme: Theme = new Theme(
   'NoColor',
   'dark',

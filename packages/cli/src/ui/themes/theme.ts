@@ -56,6 +56,52 @@ export interface ColorsTheme {
 export interface CustomTheme extends ColorsTheme {
   type: 'custom';
   name: string;
+
+  text?: {
+    primary?: string;
+    secondary?: string;
+    link?: string;
+    accent?: string;
+    response?: string;
+  };
+  background?: {
+    primary?: string;
+    diff?: {
+      added?: string;
+      removed?: string;
+    };
+  };
+  border?: {
+    default?: string;
+    focused?: string;
+  };
+  ui?: {
+    comment?: string;
+    symbol?: string;
+    gradient?: string[];
+  };
+  status?: {
+    error?: string;
+    success?: string;
+    warning?: string;
+  };
+
+  // Legacy properties (all optional)
+  Background?: string;
+  Foreground?: string;
+  LightBlue?: string;
+  AccentBlue?: string;
+  AccentPurple?: string;
+  AccentCyan?: string;
+  AccentGreen?: string;
+  AccentYellow?: string;
+  AccentRed?: string;
+  DiffAdded?: string;
+  DiffRemoved?: string;
+  Comment?: string;
+  Gray?: string;
+  DarkGray?: string;
+  GradientColors?: string[];
 }
 
 export const lightTheme: ColorsTheme = {
@@ -148,6 +194,7 @@ export class Theme {
         secondary: this.colors.Gray,
         link: this.colors.AccentBlue,
         accent: this.colors.AccentPurple,
+        response: this.colors.Foreground,
       },
       background: {
         primary: this.colors.Background,
@@ -376,7 +423,48 @@ export function createCustomTheme(customTheme: CustomTheme): Theme {
     },
   };
 
-  return new Theme(customTheme.name, 'custom', rawMappings, customTheme);
+  const semanticColors: SemanticColors = {
+    text: {
+      primary: customTheme.text?.primary ?? colors.Foreground,
+      secondary: customTheme.text?.secondary ?? colors.Gray,
+      link: customTheme.text?.link ?? colors.AccentBlue,
+      accent: customTheme.text?.accent ?? colors.AccentPurple,
+      response:
+        customTheme.text?.response ??
+        customTheme.text?.primary ??
+        colors.Foreground,
+    },
+    background: {
+      primary: customTheme.background?.primary ?? colors.Background,
+      diff: {
+        added: customTheme.background?.diff?.added ?? colors.DiffAdded,
+        removed: customTheme.background?.diff?.removed ?? colors.DiffRemoved,
+      },
+    },
+    border: {
+      default: customTheme.border?.default ?? colors.Gray,
+      focused: customTheme.border?.focused ?? colors.AccentBlue,
+    },
+    ui: {
+      comment: customTheme.ui?.comment ?? colors.Comment,
+      symbol: customTheme.ui?.symbol ?? colors.Gray,
+      dark: colors.DarkGray,
+      gradient: customTheme.ui?.gradient ?? colors.GradientColors,
+    },
+    status: {
+      error: customTheme.status?.error ?? colors.AccentRed,
+      success: customTheme.status?.success ?? colors.AccentGreen,
+      warning: customTheme.status?.warning ?? colors.AccentYellow,
+    },
+  };
+
+  return new Theme(
+    customTheme.name,
+    'custom',
+    rawMappings,
+    colors,
+    semanticColors,
+  );
 }
 
 /**
