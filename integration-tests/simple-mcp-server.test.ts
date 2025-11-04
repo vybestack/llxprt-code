@@ -205,7 +205,9 @@ rpc.send({
       'You MUST use the "add" tool to add 5 and 10. Do NOT calculate it yourself - use the add tool.',
     );
 
-    const foundToolCall = await rig.waitForToolCall('add');
+    const foundToolCall = await rig.waitForToolCall(
+      'mcp__addition-server__add',
+    );
 
     expect(foundToolCall, 'Expected to find an add tool call').toBeTruthy();
 

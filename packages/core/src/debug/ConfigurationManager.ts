@@ -87,6 +87,13 @@ export class ConfigurationManager {
     if (process.env.DEBUG_LEVEL) {
       this.envConfig = { ...this.envConfig, level: process.env.DEBUG_LEVEL };
     }
+
+    if (process.env.DEBUG_OUTPUT) {
+      this.envConfig = {
+        ...this.envConfig,
+        output: { target: process.env.DEBUG_OUTPUT },
+      };
+    }
   }
 
   // Line 66-79: Load user config from ~/.llxprt/settings.json

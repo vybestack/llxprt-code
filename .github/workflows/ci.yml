@@ -291,11 +291,6 @@ jobs:
           node-version: '${{ matrix.node-version }}'
           cache: 'npm'
 
-      - name: 'Install dependencies for build tools (Windows only)'
-        if: runner.os == 'Windows'
-        run: |-
-          choco install python visualstudio2022-workload-vctools -y
-
       - name: 'Install dependencies for testing'
         run: |-
           npm ci
@@ -326,8 +321,8 @@ jobs:
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
-          # Set auth type to none since we're not using Google services in these tests
-          LLXPRT_AUTH_TYPE: none
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: provider
           NO_COLOR: true
           # Ensure OAuth tests are skipped in CI (they require browser interaction)
           CI: true

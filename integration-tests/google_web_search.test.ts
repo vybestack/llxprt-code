@@ -7,8 +7,9 @@
 import { describe, it, expect } from 'vitest';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 
-// Skip web search tests in CI when auth type is none
-const skipInCI = process.env.LLXPRT_AUTH_TYPE === 'none';
+// Skip web search tests in CI or when auth type is none (requires OAuth)
+const skipInCI =
+  process.env.CI === 'true' || process.env.LLXPRT_AUTH_TYPE === 'none';
 
 describe('google_web_search', () => {
   it.skipIf(skipInCI)('should be able to search the web', async () => {

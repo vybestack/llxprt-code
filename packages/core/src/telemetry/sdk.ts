@@ -96,8 +96,8 @@ export function initializeTelemetry(config: Config): void {
   });
 
   const logProcessor = new BatchLogRecordProcessor(logExporter, {
-    scheduledDelayMillis: 100, // Export every 100ms instead of default 1000ms
-    maxExportBatchSize: 10, // Export after 10 logs instead of default 512
+    scheduledDelayMillis: 0, // Export immediately for tests - was 100ms
+    maxExportBatchSize: 1, // Export after every single log - was 10
     exportTimeoutMillis: 5000,
   });
 

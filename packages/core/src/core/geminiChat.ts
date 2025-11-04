@@ -30,7 +30,11 @@ import type {
   ToolResponseBlock,
   UsageStats,
 } from '../services/history/IContent.js';
-import type { IProvider, ProviderToolset } from '../providers/IProvider.js';
+import type {
+  GenerateChatOptions,
+  IProvider,
+  ProviderToolset,
+} from '../providers/IProvider.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { hasCycleInSchema } from '../tools/tools.js';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
@@ -222,9 +226,26 @@ interface ContentRetryOptions {
 }
 
 const INVALID_CONTENT_RETRY_OPTIONS: ContentRetryOptions = {
-  maxAttempts: 3, // 1 initial call + 2 retries
+  maxAttempts: 2, // 1 initial call + 1 retry
   initialDelayMs: 500,
 };
+
+/**
+ * Checks if a part contains valid non-thought text content.
+ * This helps in consolidating text parts properly during stream processing.
+ */
+export function isValidNonThoughtTextPart(part: Part): boolean {
+  return (
+    typeof part.text === 'string' &&
+    !part.thought &&
+    // Technically, the model should never generate parts that have text and
+    // any of these but we don't trust them so check anyways.
+    !part.functionCall &&
+    !part.functionResponse &&
+    !part.inlineData &&
+    !part.fileData
+  );
+}
 
 /**
  * Returns true if the response is valid, false otherwise.
@@ -307,8 +328,27 @@ function extractCuratedHistory(comprehensiveHistory: Content[]): Content[] {
 }
 
 /**
- * Custom error to signal that a stream completed without valid content,
+ * Custom error to signal that a stream completed with invalid content,
  * which should trigger a retry.
+ */
+export class InvalidStreamError extends Error {
+  readonly type:
+    | 'NO_FINISH_REASON'
+    | 'NO_RESPONSE_TEXT'
+    | 'NO_FINISH_REASON_NO_TEXT';
+
+  constructor(
+    message: string,
+    type: 'NO_FINISH_REASON' | 'NO_RESPONSE_TEXT' | 'NO_FINISH_REASON_NO_TEXT',
+  ) {
+    super(message);
+    this.name = 'InvalidStreamError';
+    this.type = type;
+  }
+}
+
+/**
+ * Legacy error class for backward compatibility.
  */
 export class EmptyStreamError extends Error {
   constructor(message: string) {
@@ -335,6 +375,7 @@ export class GeminiChat {
   private logger = new DebugLogger('llxprt:gemini:chat');
   // Cache the compression threshold to avoid recalculating
   private cachedCompressionThreshold: number | null = null;
+  private lastPromptTokenCount = 0;
   private readonly generationConfig: GenerateContentConfig;
 
   /**
@@ -346,6 +387,13 @@ export class GeminiChat {
   private readonly runtimeState: AgentRuntimeState;
   private readonly historyService: HistoryService;
   private readonly runtimeContext: AgentRuntimeContext;
+
+  /**
+   * Gets the last prompt token count.
+   */
+  getLastPromptTokenCount(): number {
+    return this.lastPromptTokenCount;
+  }
 
   /**
    * @plan PLAN-20251028-STATELESS6.P10
@@ -965,8 +1013,31 @@ export class GeminiChat {
               yield { type: StreamEventType.RETRY };
             }
 
+            // If this is a retry, adjust temperature to encourage different output.
+            // Use temperature 1 as baseline (or the original temperature if it's higher than 1) and add increasing variation to avoid repetition.
+            const currentParams = { ...params };
+            if (attempt > 0) {
+              // Use 1 as the baseline temperature for retries, or the original if it's higher
+              const baselineTemperature = Math.max(
+                params.config?.temperature ?? 1,
+                1,
+              );
+              // Add increasing variation for each retry attempt to encourage different output
+              const variation = attempt * 0.1;
+              let newTemperature = baselineTemperature + variation;
+              // Ensure temperature stays within valid range [0, 2] for Gemini models
+              newTemperature = Math.min(Math.max(newTemperature, 0), 2);
+
+              // Ensure config exists
+              currentParams.config = currentParams.config || {};
+              currentParams.config = {
+                ...currentParams.config,
+                temperature: newTemperature,
+              };
+            }
+
             const stream = await instance.makeApiCallAndProcessStream(
-              params,
+              currentParams, // Use the modified params with temperature
               prompt_id,
               pendingTokens,
               userContent,
@@ -980,7 +1051,9 @@ export class GeminiChat {
             break;
           } catch (error) {
             lastError = error;
-            const isContentError = error instanceof EmptyStreamError;
+            const isContentError =
+              error instanceof InvalidStreamError ||
+              error instanceof EmptyStreamError;
 
             if (isContentError) {
               // Check if we have more attempts left.
@@ -1161,7 +1234,7 @@ export class GeminiChat {
   }
 
   private async makeApiCallAndProcessStream(
-    _params: SendMessageParameters,
+    params: SendMessageParameters,
     promptId: string,
     pendingTokens: number,
     userContent: Content | Content[],
@@ -1267,10 +1340,22 @@ export class GeminiChat {
           authType: activeAuthType,
         },
       );
-      const runtimeContext = this.buildProviderRuntime(
+      // Create a runtime context that incorporates the config from params
+      const baseRuntimeContext = this.buildProviderRuntime(
         'GeminiChat.generateRequest',
         { historyLength: requestContents.length },
       );
+
+      // If params has config, merge it with the runtime context config
+      const runtimeContext = params.config
+        ? {
+            ...baseRuntimeContext,
+            config: {
+              ...baseRuntimeContext.config,
+              ...params.config,
+            },
+          }
+        : baseRuntimeContext;
 
       const streamResponse = provider.generateChatCompletion!({
         contents: requestContents,
@@ -1279,7 +1364,7 @@ export class GeminiChat {
         runtime: runtimeContext,
         settings: runtimeContext.settingsService,
         metadata: runtimeContext.metadata,
-      });
+      } as GenerateChatOptions);
 
       // Convert the IContent stream to GenerateContentResponse stream
       return (async function* (instance) {
@@ -1901,75 +1986,120 @@ export class GeminiChat {
     userInput: Content | Content[],
   ): AsyncGenerator<GenerateContentResponse> {
     const modelResponseParts: Part[] = [];
-    let hasReceivedValidContent = false;
-    let hasReceivedAnyChunk = false;
-    let invalidChunkCount = 0;
-    let totalChunkCount = 0;
-    let streamingUsageMetadata: UsageStats | null = null;
+    let hasToolCall = false;
+    let hasFinishReason = false;
+    let hasTextResponse = false;
+    const allChunks: GenerateContentResponse[] = [];
 
     for await (const chunk of streamResponse) {
-      hasReceivedAnyChunk = true;
-      totalChunkCount++;
-
-      // Capture usage metadata from IContent chunks (from providers that yield IContent)
-      const chunkWithMetadata = chunk as { metadata?: { usage?: UsageStats } };
-      if (chunkWithMetadata?.metadata?.usage) {
-        streamingUsageMetadata = chunkWithMetadata.metadata.usage;
-      }
-
+      hasFinishReason =
+        chunk?.candidates?.some((candidate) => candidate.finishReason) ?? false;
       if (isValidResponse(chunk)) {
         const content = chunk.candidates?.[0]?.content;
-        if (content) {
-          // Check if this chunk has meaningful content (text or function calls)
-          if (content.parts && content.parts.length > 0) {
-            const hasMeaningfulContent = content.parts.some(
+        if (content?.parts) {
+          if (content.parts.some((part) => part.functionCall)) {
+            hasToolCall = true;
+          }
+
+          // Check if any part has text content (not just thoughts)
+          if (
+            content.parts.some(
               (part) =>
-                part.text ||
-                'functionCall' in part ||
-                'functionResponse' in part,
-            );
-            if (hasMeaningfulContent) {
-              hasReceivedValidContent = true;
-            }
+                part.text &&
+                typeof part.text === 'string' &&
+                part.text.trim() !== '',
+            )
+          ) {
+            hasTextResponse = true;
           }
 
           // Filter out thought parts from being added to history.
-          if (!this.isThoughtContent(content) && content.parts) {
-            modelResponseParts.push(...content.parts);
+          if (!this.isThoughtContent(content)) {
+            modelResponseParts.push(
+              ...content.parts.filter((part) => !part.thought),
+            );
           }
         }
-      } else {
-        invalidChunkCount++;
       }
+
+      // Record token usage if this chunk has usageMetadata
+      if (chunk.usageMetadata) {
+        if (chunk.usageMetadata.promptTokenCount !== undefined) {
+          this.lastPromptTokenCount = chunk.usageMetadata.promptTokenCount;
+        }
+      }
+
+      allChunks.push(chunk);
       yield chunk; // Yield every chunk to the UI immediately.
     }
 
-    // Now that the stream is finished, make a decision.
-    // Only throw an error if:
-    // 1. We received no chunks at all, OR
-    // 2. We received chunks but NONE had valid content (all were invalid or empty)
-    // This allows models like Qwen to send empty chunks at the end of a stream
-    // as long as they sent valid content earlier.
-    if (
-      !hasReceivedAnyChunk ||
-      (!hasReceivedValidContent && totalChunkCount > 0)
-    ) {
-      // Only throw if this looks like a genuinely empty/invalid stream
-      // Not just a stream that ended with some invalid chunks
+    // String thoughts and consolidate text parts.
+    const consolidatedParts: Part[] = [];
+    for (const part of modelResponseParts) {
+      const lastPart = consolidatedParts[consolidatedParts.length - 1];
       if (
-        invalidChunkCount === totalChunkCount ||
-        modelResponseParts.length === 0
+        lastPart?.text &&
+        isValidNonThoughtTextPart(lastPart) &&
+        isValidNonThoughtTextPart(part)
       ) {
-        throw new EmptyStreamError(
-          'Model stream was invalid or completed without valid content.',
+        lastPart.text += part.text;
+      } else {
+        consolidatedParts.push(part);
+      }
+    }
+
+    const responseText = consolidatedParts
+      .filter((part) => part.text)
+      .map((part) => part.text)
+      .join('')
+      .trim();
+
+    // Enhanced stream validation logic: A stream is considered successful if:
+    // 1. There's a tool call (tool calls can end without explicit finish reasons), OR
+    // 2. There's a finish reason AND we have non-empty response text, OR
+    // 3. We detected text content during streaming (hasTextResponse = true)
+    //
+    // We throw an error only when there's no tool call AND:
+    // - No finish reason AND no text response during streaming, OR
+    // - Empty response text after consolidation (e.g., only thoughts with no actual content)
+    if (
+      !hasToolCall &&
+      ((!hasFinishReason && !hasTextResponse) || !responseText)
+    ) {
+      if (!hasFinishReason && !hasTextResponse) {
+        throw new InvalidStreamError(
+          'Model stream ended without a finish reason and no text response.',
+          'NO_FINISH_REASON_NO_TEXT',
+        );
+      } else {
+        throw new InvalidStreamError(
+          'Model stream ended with empty response text.',
+          'NO_RESPONSE_TEXT',
         );
       }
     }
 
     // Use recordHistory to correctly save the conversation turn.
     const modelOutput: Content[] = [
-      { role: 'model', parts: modelResponseParts },
+      { role: 'model', parts: consolidatedParts },
     ];
+
+    // Capture usage metadata from the stream
+    let streamingUsageMetadata: UsageStats | null = null;
+    // Find the last chunk that has usage metadata (similar to getLastChunkWithMetadata logic)
+    const lastChunkWithMetadata = allChunks
+      .slice()
+      .reverse()
+      .find((chunk) => chunk.usageMetadata);
+    if (lastChunkWithMetadata && lastChunkWithMetadata.usageMetadata) {
+      streamingUsageMetadata = {
+        promptTokens: lastChunkWithMetadata.usageMetadata.promptTokenCount || 0,
+        completionTokens:
+          lastChunkWithMetadata.usageMetadata.candidatesTokenCount || 0,
+        totalTokens: lastChunkWithMetadata.usageMetadata.totalTokenCount || 0,
+      };
+    }
+
     this.recordHistory(
       userInput,
       modelOutput,
@@ -2356,21 +2486,15 @@ export class GeminiChat {
     );
   }
 
-  private resolveProviderBaseUrl(provider: IProvider): string | undefined {
-    const candidate = provider as {
-      getBaseURL?: () => string;
-      baseURL?: string;
-    };
-
-    try {
-      if (typeof candidate.getBaseURL === 'function') {
-        return candidate.getBaseURL();
-      }
-    } catch {
-      // Ignore failures from provider-specific base URL accessors
-    }
-
-    return candidate.baseURL;
+  private resolveProviderBaseUrl(_provider: IProvider): string | undefined {
+    // REQ-SP4-004: ONLY read baseURL from runtime state, NEVER from provider instance.
+    // This ensures each agent/subagent can have its own baseURL even when using
+    // the same provider (e.g., main uses OpenRouter, subagent uses Cerebras, both via openai).
+    //
+    // If runtime state has baseURL → use it
+    // If runtime state has no baseURL → return undefined (provider uses default endpoint)
+    // NEVER read from provider instance - that violates stateless pattern and causes bugs
+    return this.runtimeState.baseUrl;
   }
 }
 

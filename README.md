@@ -8,23 +8,15 @@
 
 ![LLxprt Code Screenshot](./docs/assets/llxprt-screenshot.png)
 
-LLxprt Code is a powerful fork of [Google's Gemini CLI](https://github.com/google-gemini/gemini-cli), enhanced with multi-provider support and improved theming. We thank Google for their excellent foundation and will continue to track and merge upstream changes as long as practical.
-
-## What's new in 0.4.5
-
-- **Startup configuration:** supply ephemeral settings via `--set key=value` (same keys as `/set`), ideal for CI and automation.
-- **Resilient streaming:** unified retry defaults (6 attempts / 4 s) and better handling of transient SSE disconnects.
-- **Smarter todos:** complex request detection now nudges you to create todo lists and escalates reminders when none exist.
-- **Configurable todo UI:** control the Todo panel via `/settings → UI → Show Todo Panel`; when hidden, todo tool output appears inline in scrollback.
-- **Simplified Gemini UX:** the "Paid Mode" badge and flash fallback were removed; monitor usage with `/stats` or provider dashboards instead.
-- **Token budgeting clarity:** `context-limit` now clearly counts system prompts + `LLXPRT.md`, with improved error messaging and docs.
+LLxprt Code is a CLI-based LLM assisted coding tool. It is highly configurable and can support nearly any provider or model as well as local/self-hosted models.
 
 ## Key Features
 
-- **Multi-Provider Support**: Direct access to OpenAI (o3), Anthropic (Claude), Google Gemini, plus OpenRouter, Fireworks, and local models
+- **Multi-Provider Support**: Direct access to OpenAI (gpt-5), Anthropic (Claude Opus/Sonnet), Google Gemini, plus OpenRouter, Fireworks, Synthetic, Cerebras, Chutes, Z.ai and local models
+- **Authenticate** to use free: Gemini and Qwen models as well as using your Claude Pro/Max account. Use `/auth` to enable/disable/logout of Google/Anthropic/Qwen.
 - **Installable Provider Aliases**: Save `/provider` setups as reusable configs and load OpenAI-compatible endpoints instantly
-- **Enhanced Theme Support**: Beautiful themes applied consistently across the entire tool
-- **Full Gemini CLI Compatibility**: All original features work seamlessly, including Google authentication via `/auth`
+- **Multi-model/Provider Subagents**: Use `/subagent` to define specialized subagents with isolated contexts
+- **Configuration Profiles**: define and save specific model/provider settings using `/profile` for instance temperature or custom headers
 - **Local Model Support**: Run models locally with LM Studio, llama.cpp, or any OpenAI-compatible server
 - **Flexible Configuration**: Switch providers, models, and API keys on the fly
 - **Advanced Settings & Profiles**: Fine-tune model parameters, manage ephemeral settings, and save configurations for reuse. [Learn more →](./docs/settings-and-profiles.md)
@@ -75,7 +67,7 @@ You have two options to install LLxprt Code.
 
 ### Using OpenAI
 
-Direct access to o3, o1, GPT-4.1, and other OpenAI models:
+Direct access to GPT-5, and other OpenAI models:
 
 1. Get your API key from [OpenAI](https://platform.openai.com/api-keys)
 2. Configure LLxprt Code:

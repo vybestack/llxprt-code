@@ -18,14 +18,17 @@ import {
   logConversationRequest,
   logConversationResponse,
   logTokenUsage,
+  logApiRequest,
 } from '../telemetry/loggers.js';
 import {
   ConversationRequestEvent,
   ConversationResponseEvent,
   TokenUsageEvent,
+  ApiRequestEvent,
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { MissingProviderRuntimeError } from './errors.js';
@@ -205,6 +208,7 @@ export class LoggingProviderWrapper implements IProvider {
   private performanceTracker: ProviderPerformanceTracker;
   private runtimeContextResolver?: () => ProviderRuntimeContext;
   private statelessRuntimeMetadata: Record<string, unknown> | null = null;
+  private debug: DebugLogger;
   private optionsNormalizer:
     | ((
         options: GenerateChatOptions,
@@ -242,6 +246,7 @@ export class LoggingProviderWrapper implements IProvider {
     }
 
     this.performanceTracker = new ProviderPerformanceTracker(wrapped.name);
+    this.debug = new DebugLogger(`llxprt:provider:${wrapped.name}:logging`);
 
     // Set throttle tracker callback on the wrapped provider if it supports it
     if (
@@ -389,7 +394,20 @@ export class LoggingProviderWrapper implements IProvider {
 
     // REQ-SP4-004: Guard - ensure runtime context is present for stateless hardening
     const runtimeId = normalizedOptions.runtime?.runtimeId ?? 'unknown';
+    this.debug.log(
+      () =>
+        `Checking runtime context: runtimeId=${runtimeId}, hasRuntime=${!!normalizedOptions.runtime}, hasSettings=${!!normalizedOptions.runtime?.settingsService}, hasConfig=${!!normalizedOptions.runtime?.config}`,
+    );
+    this.debug.log(
+      () =>
+        `Contents length at entry: ${normalizedOptions.contents?.length ?? 'undefined'}`,
+    );
+
     if (!normalizedOptions.runtime?.settingsService) {
+      this.debug.error(
+        () =>
+          `Missing settingsService in runtime context for runtimeId=${runtimeId}`,
+      );
       throw new MissingProviderRuntimeError({
         providerKey: `LoggingProviderWrapper[${this.wrapped.name}]`,
         missingFields: ['settings'],
@@ -403,6 +421,9 @@ export class LoggingProviderWrapper implements IProvider {
     }
 
     if (!normalizedOptions.runtime?.config) {
+      this.debug.error(
+        () => `Missing config in runtime context for runtimeId=${runtimeId}`,
+      );
       throw new MissingProviderRuntimeError({
         providerKey: `LoggingProviderWrapper[${this.wrapped.name}]`,
         missingFields: ['config'],
@@ -419,6 +440,62 @@ export class LoggingProviderWrapper implements IProvider {
     normalizedOptions.config =
       normalizedOptions.config ?? normalizedOptions.runtime?.config;
     const activeConfig = normalizedOptions.config;
+    this.debug.log(
+      () =>
+        `After config resolution: hasConfig=${!!activeConfig}, configType=${activeConfig?.constructor?.name}, hasMethod=${typeof activeConfig?.getConversationLoggingEnabled}`,
+    );
+
+    // REQ-SP4-004: Validate that config is a proper Config instance with required methods
+    // FAST FAIL: Throw immediately if config is a plain object instead of a Config instance
+    if (activeConfig) {
+      let configHasLoggingMethod =
+        typeof activeConfig.getConversationLoggingEnabled === 'function';
+
+      if (!configHasLoggingMethod) {
+        // Gather diagnostic info about the config object
+        const configKeys = Object.keys(activeConfig);
+        const prototypeChain: string[] = [];
+        let proto = Object.getPrototypeOf(activeConfig);
+        while (proto && proto !== Object.prototype) {
+          prototypeChain.push(proto.constructor?.name || 'unknown');
+          proto = Object.getPrototypeOf(proto);
+        }
+
+        this.debug.warn(
+          () =>
+            `Config instance missing getConversationLoggingEnabled() (type=${activeConfig?.constructor?.name ?? 'unknown'}, frozen=${Object.isFrozen(activeConfig)}, proto=${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object'}). Attempting to restore prototype.`,
+        );
+
+        try {
+          Object.setPrototypeOf(activeConfig, Config.prototype);
+        } catch (error) {
+          this.debug.error(
+            () =>
+              `Failed to restore Config prototype: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+
+        configHasLoggingMethod =
+          typeof activeConfig.getConversationLoggingEnabled === 'function';
+
+        if (!configHasLoggingMethod) {
+          throw new Error(
+            `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method.\n` +
+              `Config appears to be a plain object instead of a Config class instance.\n` +
+              `This typically happens when the Config is serialized (e.g., Object.freeze with spread, JSON.stringify/parse) and loses its prototype chain.\n` +
+              `Diagnostics:\n` +
+              `- Type: ${activeConfig?.constructor?.name ?? 'unknown'}\n` +
+              `- Has method: ${typeof activeConfig?.getConversationLoggingEnabled}\n` +
+              `- Is frozen: ${Object.isFrozen(activeConfig)}\n` +
+              `- Property count: ${configKeys.length}\n` +
+              `- Prototype chain: ${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object (direct)'}\n` +
+              `- From runtime: ${!!normalizedOptions.runtime}\n` +
+              `- Runtime ID: ${normalizedOptions.runtime?.runtimeId ?? 'unknown'}\n` +
+              `Fix: Ensure Config instances are passed by reference, not serialized/deserialized.`,
+          );
+        }
+      }
+    }
 
     const invocation = normalizedOptions.invocation;
 
@@ -433,22 +510,102 @@ export class LoggingProviderWrapper implements IProvider {
         activeConfig.getRedactionConfig(),
       );
     }
+    this.debug.log(
+      () => `After redactor setup: hasRedactor=${!!this.redactor}`,
+    );
 
     const promptId = this.generatePromptId();
     this.turnNumber++;
+    this.debug.log(
+      () =>
+        `After promptId generation: promptId=${promptId}, turnNumber=${this.turnNumber}`,
+    );
 
     // Log request if logging is enabled
-    if (activeConfig?.getConversationLoggingEnabled()) {
-      await this.logRequest(
-        activeConfig,
-        normalizedOptions.contents,
-        normalizedOptions.tools,
-        promptId,
+    let conversationLoggingEnabled = false;
+    try {
+      this.debug.log(() => `About to call getConversationLoggingEnabled()`);
+      conversationLoggingEnabled =
+        activeConfig?.getConversationLoggingEnabled() ?? false;
+      this.debug.log(
+        () =>
+          `getConversationLoggingEnabled() returned: ${conversationLoggingEnabled}`,
       );
+    } catch (error) {
+      this.debug.error(
+        () =>
+          `getConversationLoggingEnabled() threw exception: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
     }
+    this.debug.log(
+      () =>
+        `Conversation logging check: enabled=${conversationLoggingEnabled}, contents length=${normalizedOptions.contents?.length}`,
+    );
+
+    if (conversationLoggingEnabled) {
+      try {
+        this.debug.log(
+          () =>
+            `Before logRequest: contents length = ${normalizedOptions.contents?.length}`,
+        );
+        await this.logRequest(
+          activeConfig!,
+          normalizedOptions.contents,
+          normalizedOptions.tools,
+          promptId,
+        );
+        this.debug.log(
+          () =>
+            `After logRequest: contents length = ${normalizedOptions.contents?.length}`,
+        );
+      } catch (error) {
+        this.debug.error(
+          () =>
+            `logRequest failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        throw error;
+      }
+    }
+
+    this.debug.log(() => `Before API request telemetry section`);
+
+    // Log API request telemetry event
+    if (activeConfig) {
+      this.debug.log(
+        () =>
+          `Before JSON.stringify: contents length=${normalizedOptions.contents?.length}`,
+      );
+      const requestText = JSON.stringify(normalizedOptions.contents);
+      this.debug.log(
+        () => `After JSON.stringify: requestText length=${requestText.length}`,
+      );
+      const modelName =
+        normalizedOptions.resolved?.model || this.wrapped.getDefaultModel();
+      this.debug.log(
+        () => `Logging API request: model=${modelName}, promptId=${promptId}`,
+      );
+      logApiRequest(
+        activeConfig,
+        new ApiRequestEvent(modelName, promptId, requestText),
+      );
+      this.debug.log(
+        () =>
+          `After API request logged: contents length=${normalizedOptions.contents?.length}`,
+      );
+    } else {
+      this.debug.error(() => `Cannot log API request: activeConfig is null`);
+    }
+
+    this.debug.log(
+      () =>
+        `About to call wrapped provider: ${this.wrapped.name}, contentsLength=${normalizedOptions.contents?.length}`,
+    );
 
     // Get stream from wrapped provider using normalized options object
     const stream = this.wrapped.generateChatCompletion(normalizedOptions);
+
+    this.debug.log(() => `Wrapped provider call completed, processing stream`);
 
     // Always process stream to extract token metrics
     // If logging not enabled, process for metrics only
