@@ -175,6 +175,8 @@ jobs:
           LLXPRT_SANDBOX: '${{ matrix.sandbox }}'
           VERBOSE: 'true'
           KEEP_OUTPUT: 'true'
+          # Enable debug logging using repository variable for flexibility
+          DEBUG: ${{ vars.DEBUG_NAMESPACES || '' }}
           # Allow OpenAI integration tests to exceed Vitest's default timeout
           VITEST_TEST_TIMEOUT: 15000
         run: |-

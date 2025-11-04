@@ -28,6 +28,7 @@ import {
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
 import { MissingProviderRuntimeError } from './errors.js';
@@ -207,6 +208,7 @@ export class LoggingProviderWrapper implements IProvider {
   private performanceTracker: ProviderPerformanceTracker;
   private runtimeContextResolver?: () => ProviderRuntimeContext;
   private statelessRuntimeMetadata: Record<string, unknown> | null = null;
+  private debug: DebugLogger;
   private optionsNormalizer:
     | ((
         options: GenerateChatOptions,
@@ -244,6 +246,7 @@ export class LoggingProviderWrapper implements IProvider {
     }
 
     this.performanceTracker = new ProviderPerformanceTracker(wrapped.name);
+    this.debug = new DebugLogger(`llxprt:provider:${wrapped.name}:logging`);
 
     // Set throttle tracker callback on the wrapped provider if it supports it
     if (
@@ -391,7 +394,16 @@ export class LoggingProviderWrapper implements IProvider {
 
     // REQ-SP4-004: Guard - ensure runtime context is present for stateless hardening
     const runtimeId = normalizedOptions.runtime?.runtimeId ?? 'unknown';
+    this.debug.log(
+      () =>
+        `Checking runtime context: runtimeId=${runtimeId}, hasRuntime=${!!normalizedOptions.runtime}, hasSettings=${!!normalizedOptions.runtime?.settingsService}, hasConfig=${!!normalizedOptions.runtime?.config}`,
+    );
+
     if (!normalizedOptions.runtime?.settingsService) {
+      this.debug.error(
+        () =>
+          `Missing settingsService in runtime context for runtimeId=${runtimeId}`,
+      );
       throw new MissingProviderRuntimeError({
         providerKey: `LoggingProviderWrapper[${this.wrapped.name}]`,
         missingFields: ['settings'],
@@ -405,6 +417,9 @@ export class LoggingProviderWrapper implements IProvider {
     }
 
     if (!normalizedOptions.runtime?.config) {
+      this.debug.error(
+        () => `Missing config in runtime context for runtimeId=${runtimeId}`,
+      );
       throw new MissingProviderRuntimeError({
         providerKey: `LoggingProviderWrapper[${this.wrapped.name}]`,
         missingFields: ['config'],
@@ -454,10 +469,16 @@ export class LoggingProviderWrapper implements IProvider {
       const requestText = JSON.stringify(normalizedOptions.contents);
       const modelName =
         normalizedOptions.resolved?.model || this.wrapped.getDefaultModel();
+      this.debug.log(
+        () => `Logging API request: model=${modelName}, promptId=${promptId}`,
+      );
       logApiRequest(
         activeConfig,
         new ApiRequestEvent(modelName, promptId, requestText),
       );
+      this.debug.log(() => `API request logged successfully`);
+    } else {
+      this.debug.error(() => `Cannot log API request: activeConfig is null`);
     }
 
     // Get stream from wrapped provider using normalized options object
