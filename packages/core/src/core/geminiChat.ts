@@ -2357,20 +2357,61 @@ export class GeminiChat {
   }
 
   private resolveProviderBaseUrl(provider: IProvider): string | undefined {
+    // IMPORTANT: Read baseURL from runtime state, NOT from provider instance.
+    // This ensures each agent/subagent can have its own baseURL even when
+    // using the same provider (e.g., main uses OpenRouter, subagent uses Cerebras,
+    // both via openai provider).
+    // See: REQ-SP4-004 - stateless provider pattern
+
+    // Primary source: runtime state (correct stateless approach)
+    if (this.runtimeState.baseUrl) {
+      return this.runtimeState.baseUrl;
+    }
+
+    // DEPRECATED: Reading from provider instance violates stateless pattern
+    // If provider has baseURL set but runtime state doesn't, this is a bug
     const candidate = provider as {
       getBaseURL?: () => string;
       baseURL?: string;
     };
 
+    let providerInstanceUrl: string | undefined;
     try {
       if (typeof candidate.getBaseURL === 'function') {
-        return candidate.getBaseURL();
+        providerInstanceUrl = candidate.getBaseURL();
+      } else {
+        providerInstanceUrl = candidate.baseURL;
       }
     } catch {
-      // Ignore failures from provider-specific base URL accessors
+      // Ignore provider accessor errors
     }
 
-    return candidate.baseURL;
+    if (providerInstanceUrl) {
+      // Provider has baseURL but runtime state doesn't - this violates stateless pattern!
+      const error = new Error(
+        `STATELESS PROVIDER VIOLATION (REQ-SP4-004): Provider '${provider.name}' has baseURL ` +
+          `set on instance ('${providerInstanceUrl}') but runtime state has no baseURL. ` +
+          `BaseURL must be in AgentRuntimeState, not on provider instance. ` +
+          `This causes subagents to use wrong endpoints. ` +
+          `Runtime state: ${JSON.stringify(
+            {
+              runtimeId: this.runtimeState.runtimeId,
+              provider: this.runtimeState.provider,
+              model: this.runtimeState.model,
+              baseUrl: this.runtimeState.baseUrl,
+            },
+            null,
+            2,
+          )}`,
+      );
+      console.error(error.message);
+      console.error('Stack trace:', error.stack);
+      throw error;
+    }
+
+    // Both runtime state and provider instance have no baseURL - this is OK
+    // Provider will use its default endpoint
+    return undefined;
   }
 }
 
