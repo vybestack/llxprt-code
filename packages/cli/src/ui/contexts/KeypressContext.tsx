@@ -116,7 +116,6 @@ const TILDE_KEYCODE_TO_NAME: Record<number, string> = {
   23: 'f11', // skipping 22 is intentional
   24: 'f12',
 };
-
 export interface Key {
   name: string;
   ctrl: boolean;
