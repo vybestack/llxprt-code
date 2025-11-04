@@ -616,6 +616,7 @@ const RESERVED_PROVIDER_SETTING_KEYS = new Set([
   'apiKeyfile',
   'api-keyfile',
   'baseUrl',
+  'baseURL',
   'base-url',
   'toolFormat',
   'tool-format',
@@ -1118,19 +1119,6 @@ registerIsolatedRuntimeBindings({
   disposeRuntime: disposeCliRuntime,
 }); // Step 5 (multi-runtime-baseline.md line 6) wires CLI activation hooks for isolated runtimes.
 
-const PROVIDER_SWITCH_EPHEMERAL_KEYS: readonly string[] = [
-  'auth-key',
-  'auth-keyfile',
-  'base-url',
-  'context-limit',
-  'compression-threshold',
-  'tool-format',
-  'api-version',
-  'custom-headers',
-  'model',
-  'stream-options',
-];
-
 export interface ProviderSwitchResult {
   changed: boolean;
   previousProvider: string | null;
@@ -1219,7 +1207,22 @@ export async function switchActiveProvider(
       `[cli-runtime] Switching provider from ${currentProvider ?? 'none'} to ${name}`,
   );
 
-  for (const key of PROVIDER_SWITCH_EPHEMERAL_KEYS) {
+  if (currentProvider) {
+    const previousSettings =
+      getProviderSettingsSnapshot(settingsService, currentProvider) || {};
+    for (const key of Object.keys(previousSettings)) {
+      settingsService.setProviderSetting(currentProvider, key, undefined);
+    }
+  }
+
+  const existingEphemerals =
+    typeof config.getEphemeralSettings === 'function'
+      ? config.getEphemeralSettings()
+      : {};
+  for (const key of Object.keys(existingEphemerals)) {
+    if (key === 'activeProvider') {
+      continue;
+    }
     config.setEphemeralSetting(key, undefined);
   }
 
@@ -1243,24 +1246,11 @@ export async function switchActiveProvider(
     settingsService.setProviderSetting(name, key, undefined);
   }
 
-  let resolvedDefaultModel =
-    (providerSettings.model as string | undefined) ??
-    activeProvider.getDefaultModel?.() ??
-    '';
-
-  if (resolvedDefaultModel) {
-    settingsService.setProviderSetting(name, 'model', resolvedDefaultModel);
-  } else {
-    resolvedDefaultModel = '';
-    settingsService.setProviderSetting(name, 'model', undefined);
-  }
-
   await settingsService.switchProvider(name);
   logger.debug(
     () =>
       `[cli-runtime] settingsService activeProvider now=${settingsService.get('activeProvider')}`,
   );
-  config.setModel(resolvedDefaultModel);
 
   const unwrapProvider = (provider: unknown) => {
     const visited = new Set<unknown>();
@@ -1290,6 +1280,16 @@ export async function switchActiveProvider(
 
   const baseProvider = unwrapProvider(activeProvider);
 
+  const providerSettingsBefore = providerSettings ?? {};
+  const hadCustomBaseUrl =
+    typeof providerSettingsBefore.baseUrl === 'string' &&
+    providerSettingsBefore.baseUrl.trim() !== '' &&
+    providerSettingsBefore.baseUrl.trim().toLowerCase() !== 'none';
+
+  for (const key of Object.keys(providerSettingsBefore)) {
+    settingsService.setProviderSetting(name, key, undefined);
+  }
+
   let providerBaseUrl: string | undefined;
   if (name === 'qwen') {
     providerBaseUrl = 'https://portal.qwen.ai/v1';
@@ -1297,9 +1297,21 @@ export async function switchActiveProvider(
   if (providerBaseUrl) {
     config.setEphemeralSetting('base-url', providerBaseUrl);
     settingsService.setProviderSetting(name, 'baseUrl', providerBaseUrl);
+    settingsService.setProviderSetting(name, 'baseURL', providerBaseUrl);
   } else {
     settingsService.setProviderSetting(name, 'baseUrl', undefined);
+    settingsService.setProviderSetting(name, 'baseURL', undefined);
   }
+
+  const resolvedDefaultModel = activeProvider.getDefaultModel?.() ?? '';
+
+  if (resolvedDefaultModel) {
+    settingsService.setProviderSetting(name, 'model', resolvedDefaultModel);
+  } else {
+    settingsService.setProviderSetting(name, 'model', undefined);
+  }
+
+  config.setModel(resolvedDefaultModel);
 
   let authType: AuthType;
   if (name === 'gemini') {
@@ -1363,6 +1375,18 @@ export async function switchActiveProvider(
           );
         }
       }
+    }
+  }
+
+  if (hadCustomBaseUrl) {
+    if (providerBaseUrl) {
+      infoMessages.push(
+        `Replaced custom base URL with '${providerBaseUrl}' for provider '${name}'.`,
+      );
+    } else {
+      infoMessages.push(
+        `Cleared custom base URL for provider '${name}'; default endpoint restored.`,
+      );
     }
   }
 
@@ -1466,6 +1490,7 @@ export async function updateActiveProviderBaseUrl(
 
   if (!trimmed || trimmed === '' || trimmed === 'none') {
     settingsService.setProviderSetting(providerName, 'baseUrl', undefined);
+    settingsService.setProviderSetting(providerName, 'baseURL', undefined);
     config.setEphemeralSetting('base-url', trimmed ?? undefined);
     return {
       changed: true,
@@ -1475,6 +1500,7 @@ export async function updateActiveProviderBaseUrl(
   }
 
   settingsService.setProviderSetting(providerName, 'baseUrl', trimmed);
+  settingsService.setProviderSetting(providerName, 'baseURL', trimmed);
   config.setEphemeralSetting('base-url', trimmed);
   return {
     changed: true,

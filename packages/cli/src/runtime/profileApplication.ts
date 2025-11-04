@@ -258,18 +258,9 @@ export async function applyProfileWithGuards(
     setEphemeralSetting(key, value);
   }
 
-  const profileEphemeralKeys = new Set(
-    appliedEphemeralEntries.map(([key]) => key),
-  );
-
-  for (const [key, value] of previousEphemeralEntries.entries()) {
-    if (key === 'activeProvider') {
-      continue;
-    }
-    if (!profileEphemeralKeys.has(key)) {
-      setEphemeralSetting(key, value);
-    }
-  }
+  // Issue #453: Do NOT restore old ephemeral settings that were not in the profile
+  // Ephemeral settings should only contain what's explicitly set in the loaded profile
+  // This prevents credentials and settings from leaking between profiles/providers
 
   modelResult = await setActiveModel(requestedModel || fallbackModel);
 
