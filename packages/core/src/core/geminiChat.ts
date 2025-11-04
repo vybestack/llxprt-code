@@ -2486,21 +2486,15 @@ export class GeminiChat {
     );
   }
 
-  private resolveProviderBaseUrl(provider: IProvider): string | undefined {
-    const candidate = provider as {
-      getBaseURL?: () => string;
-      baseURL?: string;
-    };
-
-    try {
-      if (typeof candidate.getBaseURL === 'function') {
-        return candidate.getBaseURL();
-      }
-    } catch {
-      // Ignore failures from provider-specific base URL accessors
-    }
-
-    return candidate.baseURL;
+  private resolveProviderBaseUrl(_provider: IProvider): string | undefined {
+    // REQ-SP4-004: ONLY read baseURL from runtime state, NEVER from provider instance.
+    // This ensures each agent/subagent can have its own baseURL even when using
+    // the same provider (e.g., main uses OpenRouter, subagent uses Cerebras, both via openai).
+    //
+    // If runtime state has baseURL → use it
+    // If runtime state has no baseURL → return undefined (provider uses default endpoint)
+    // NEVER read from provider instance - that violates stateless pattern and causes bugs
+    return this.runtimeState.baseUrl;
   }
 }
 

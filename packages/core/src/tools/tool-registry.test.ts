@@ -16,7 +16,7 @@ import {
 } from 'vitest';
 import { Config, ConfigParameters, ApprovalMode } from '../config/config.js';
 import { ToolRegistry, DiscoveredTool } from './tool-registry.js';
-import { DiscoveredMCPTool } from './mcp-tool.js';
+import { DiscoveredMCPTool, generateMcpToolName } from './mcp-tool.js';
 import { FunctionDeclaration, CallableTool, mcpToTool } from '@google/genai';
 import { spawn } from 'node:child_process';
 import { IdeClient } from '../ide/ide-client.js';
@@ -280,9 +280,9 @@ describe('ToolRegistry', () => {
 
       // Expected names with the mcp__ prefix
       const expectedNames = [
-        `mcp__${server1Name}__apple-tool`,
-        `mcp__${server1Name}__banana-tool`,
-        `mcp__${server1Name}__zebra-tool`,
+        generateMcpToolName(server1Name, 'apple-tool'),
+        generateMcpToolName(server1Name, 'banana-tool'),
+        generateMcpToolName(server1Name, 'zebra-tool'),
       ];
 
       // Assert that the array has the correct tools and is sorted by name
@@ -298,7 +298,7 @@ describe('ToolRegistry', () => {
       const toolsFromServer2 = toolRegistry.getToolsByServer(server2Name);
       expect(toolsFromServer2).toHaveLength(1);
       expect(toolsFromServer2[0].name).toBe(
-        `mcp__${server2Name}__tool-on-server2`,
+        generateMcpToolName(server2Name, 'tool-on-server2'),
       );
     });
   });

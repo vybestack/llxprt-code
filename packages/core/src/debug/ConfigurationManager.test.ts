@@ -20,6 +20,7 @@ describe('ConfigurationManager', () => {
     delete process.env.LLXPRT_DEBUG;
     delete process.env.DEBUG_ENABLED;
     delete process.env.DEBUG_LEVEL;
+    delete process.env.DEBUG_OUTPUT;
 
     // Clean up test config files that might have been created
     const userConfigPath = path.join(os.homedir(), '.llxprt', 'settings.json');

@@ -15,7 +15,11 @@ import {
   Mocked,
 } from 'vitest';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
-import { DiscoveredMCPTool, generateValidName } from './mcp-tool.js'; // Added getStringifiedResultForDisplay
+import {
+  DiscoveredMCPTool,
+  generateValidName,
+  generateMcpToolName,
+} from './mcp-tool.js'; // Added getStringifiedResultForDisplay
 import { ToolResult, ToolConfirmationOutcome } from './tools.js'; // Added ToolConfirmationOutcome
 import { CallableTool, Part } from '@google/genai';
 import { ToolErrorType } from './tool-error.js';
@@ -98,7 +102,7 @@ describe('DiscoveredMCPTool', () => {
 
   describe('constructor', () => {
     it('should set properties correctly', () => {
-      const expectedName = `mcp__${serverName}__${serverToolName}`;
+      const expectedName = generateMcpToolName(serverName, serverToolName);
       expect(tool.name).toBe(expectedName);
       expect(tool.schema.name).toBe(expectedName);
       expect(tool.schema.description).toBe(baseDescription);

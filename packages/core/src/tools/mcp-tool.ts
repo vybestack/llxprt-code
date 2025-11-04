@@ -225,7 +225,7 @@ export class DiscoveredMCPTool extends BaseDeclarativeTool<
 
   /**
    * @deprecated This method is no longer used as MCP tools now receive unique names during creation.
-   * The unique name is formed as `mcp__${serverName}__${serverToolName}` in the discovery process.
+   * The unique name is formed as generateMcpToolName(serverName, serverToolName) in the discovery process.
    */
   asFullyQualifiedTool(): DiscoveredMCPTool {
     return new DiscoveredMCPTool(

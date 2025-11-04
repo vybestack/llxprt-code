@@ -622,7 +622,7 @@ export class ToolRegistry {
             `Tool with name "${tool.name}" is already registered. Overwriting.`,
         );
       }
-      // For MCP tools, we assume they already have unique names from mcp__${serverName}__${toolName}
+      // For MCP tools, we assume they already have unique names from generateMcpToolName(serverName, toolName)
       // so we simply overwrite (this should not happen in normal operation)
     }
     targetMap.set(tool.name, tool);
