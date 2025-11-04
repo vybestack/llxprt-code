@@ -129,3 +129,64 @@ describe('providerCommand /provider save', () => {
     expect(mocks.refreshAliasProvidersMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('providerCommand /provider switch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does not call setModelParams on stateless providers like qwen', async () => {
+    const qwenProvider = {
+      name: 'qwen',
+      clearState: vi.fn(),
+      getDefaultModel: vi.fn(() => 'qwen/qwen-plus'),
+      setModelParams: vi.fn(() => {
+        throw new Error(
+          'setModelParams should not be called for stateless providers',
+        );
+      }),
+      setModel: vi.fn(),
+      setBaseUrl: vi.fn(),
+    };
+
+    const providerManager = {
+      getActiveProviderName: vi.fn(() => 'openai'),
+      setActiveProvider: vi.fn(),
+      getActiveProvider: vi.fn(() => qwenProvider),
+      getActiveProviderNameOrDefault: vi.fn(() => 'openai'),
+      providers: new Map<string, unknown>([['qwen', qwenProvider]]),
+    };
+
+    mocks.getProviderManagerMock.mockReturnValue(providerManager);
+
+    const configMock = {
+      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+      setEphemeralSetting: vi.fn(),
+      setProviderManager: vi.fn(),
+      setProvider: vi.fn(),
+      setModel: vi.fn(),
+      refreshAuth: vi.fn().mockResolvedValue(undefined),
+      getContentGeneratorConfig: vi.fn(() => ({ authType: 'mock-auth-type' })),
+    };
+
+    const context = createMockCommandContext({
+      services: {
+        config: configMock,
+      },
+    });
+
+    if (!providerCommand.action) {
+      throw new Error('providerCommand must have an action');
+    }
+
+    const result = await providerCommand.action(context, 'qwen');
+
+    expect(result).toEqual({
+      type: 'message',
+      messageType: 'info',
+      content: expect.stringContaining('qwen'),
+    });
+
+    expect(qwenProvider.setModelParams).not.toHaveBeenCalled();
+  });
+});
