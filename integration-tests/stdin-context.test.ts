@@ -18,21 +18,18 @@ describe('stdin context', () => {
 
     const result = await rig.run({ prompt, stdin: stdinContent });
 
-    // Wait for API request with a shorter timeout in CI
+    // Wait for API request - must be present for test to pass
     const hasApiRequest = await rig.waitForTelemetryEvent('api_request');
-
-    // If no API request was made, skip the test with a warning
-    if (!hasApiRequest) {
-      console.warn(
-        'Warning: No API request detected - API may be unavailable or misconfigured',
-      );
-      // Check if we at least got some output
-      expect(result).toBeTruthy();
-      return;
-    }
+    expect(
+      hasApiRequest,
+      'API request event must be logged to telemetry',
+    ).toBeTruthy();
 
     const lastRequest = rig.readLastApiRequest();
-    expect(lastRequest).not.toBeNull();
+    expect(
+      lastRequest,
+      'API request must be logged to telemetry',
+    ).not.toBeNull();
 
     const historyString = lastRequest.attributes.request_text;
 

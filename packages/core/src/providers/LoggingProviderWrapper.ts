@@ -18,11 +18,13 @@ import {
   logConversationRequest,
   logConversationResponse,
   logTokenUsage,
+  logApiRequest,
 } from '../telemetry/loggers.js';
 import {
   ConversationRequestEvent,
   ConversationResponseEvent,
   TokenUsageEvent,
+  ApiRequestEvent,
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
@@ -444,6 +446,17 @@ export class LoggingProviderWrapper implements IProvider {
         normalizedOptions.contents,
         normalizedOptions.tools,
         promptId,
+      );
+    }
+
+    // Log API request telemetry event
+    if (activeConfig) {
+      const requestText = JSON.stringify(normalizedOptions.contents);
+      const modelName =
+        normalizedOptions.resolved?.model || this.wrapped.getDefaultModel();
+      logApiRequest(
+        activeConfig,
+        new ApiRequestEvent(modelName, promptId, requestText),
       );
     }
 
