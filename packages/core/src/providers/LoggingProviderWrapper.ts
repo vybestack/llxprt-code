@@ -441,8 +441,24 @@ export class LoggingProviderWrapper implements IProvider {
       normalizedOptions.config ?? normalizedOptions.runtime?.config;
     const activeConfig = normalizedOptions.config;
     this.debug.log(
-      () => `After config resolution: hasConfig=${!!activeConfig}`,
+      () =>
+        `After config resolution: hasConfig=${!!activeConfig}, configType=${activeConfig?.constructor?.name}, hasMethod=${typeof activeConfig?.getConversationLoggingEnabled}`,
     );
+
+    // REQ-SP4-004: Validate that config is a proper Config instance with required methods
+    // FAST FAIL: Throw immediately if config is a plain object instead of a Config instance
+    if (
+      activeConfig &&
+      typeof activeConfig.getConversationLoggingEnabled !== 'function'
+    ) {
+      throw new Error(
+        `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method. ` +
+          `Config appears to be a plain object instead of a Config class instance. ` +
+          `This typically happens when the Config is serialized (e.g., during bundling) and loses its prototype chain. ` +
+          `Type: ${activeConfig?.constructor?.name ?? 'unknown'}, ` +
+          `Has method: ${typeof activeConfig?.getConversationLoggingEnabled}`,
+      );
+    }
 
     const invocation = normalizedOptions.invocation;
 
