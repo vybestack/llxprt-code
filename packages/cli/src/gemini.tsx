@@ -517,11 +517,7 @@ export async function main() {
         Object.assign(mergedModelParams, configWithParams._cliModelParams);
       }
 
-      if (
-        activeProvider &&
-        'setModelParams' in activeProvider &&
-        typeof activeProvider.setModelParams === 'function'
-      ) {
+      if (activeProvider) {
         const existingParams = getActiveModelParams();
 
         for (const [key, value] of Object.entries(mergedModelParams)) {
@@ -532,12 +528,6 @@ export async function main() {
           if (!(key in mergedModelParams)) {
             clearActiveModelParam(key);
           }
-        }
-
-        if (Object.keys(mergedModelParams).length > 0) {
-          activeProvider.setModelParams(mergedModelParams);
-        } else if (Object.keys(existingParams).length > 0) {
-          activeProvider.setModelParams({});
         }
       }
 

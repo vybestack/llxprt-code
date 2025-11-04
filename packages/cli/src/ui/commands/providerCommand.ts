@@ -319,18 +319,6 @@ export const providerCommand: SlashCommand = {
           context.services.config.setEphemeralSetting(key, undefined);
         }
 
-        // Clear model parameters on the new provider
-        const newProvider = providerManager.getActiveProvider();
-        if (
-          'setModelParams' in newProvider &&
-          typeof (newProvider as { setModelParams?: (params: object) => void })
-            .setModelParams === 'function'
-        ) {
-          (
-            newProvider as { setModelParams: (params: object) => void }
-          ).setModelParams({});
-        }
-
         // Ensure provider manager is set on config
         context.services.config.setProviderManager(providerManager);
 
