@@ -47,6 +47,10 @@ describe('keyMatchers', () => {
       key.ctrl && !key.shift && key.name === 'n',
     [Command.NAVIGATION_UP]: (key: Key) => !key.shift && key.name === 'up',
     [Command.NAVIGATION_DOWN]: (key: Key) => !key.shift && key.name === 'down',
+    [Command.DIALOG_NAVIGATION_UP]: (key: Key) =>
+      !key.shift && (key.name === 'up' || key.name === 'k'),
+    [Command.DIALOG_NAVIGATION_DOWN]: (key: Key) =>
+      !key.shift && (key.name === 'down' || key.name === 'j'),
     [Command.ACCEPT_SUGGESTION]: (key: Key) =>
       key.name === 'tab' || (key.name === 'return' && !key.ctrl),
     [Command.COMPLETION_UP]: (key: Key) =>
@@ -213,6 +217,26 @@ describe('keyMatchers', () => {
         createKey('n'),
         createKey('d'),
         createKey('down', { shift: true }),
+      ],
+    },
+
+    // Dialog navigation
+    {
+      command: Command.DIALOG_NAVIGATION_UP,
+      positive: [createKey('up'), createKey('k')],
+      negative: [
+        createKey('up', { shift: true }),
+        createKey('k', { shift: true }),
+        createKey('p'),
+      ],
+    },
+    {
+      command: Command.DIALOG_NAVIGATION_DOWN,
+      positive: [createKey('down'), createKey('j')],
+      negative: [
+        createKey('down', { shift: true }),
+        createKey('j', { shift: true }),
+        createKey('n'),
       ],
     },
 
