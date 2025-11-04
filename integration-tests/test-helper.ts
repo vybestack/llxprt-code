@@ -169,8 +169,9 @@ export class TestRig {
             ),
       },
       sandbox: env.GEMINI_SANDBOX !== 'false' ? env.GEMINI_SANDBOX : false,
-      selectedAuthType: 'none', // Explicitly set auth type to none for tests
+      selectedAuthType: 'provider', // Use provider-based auth (API keys)
       provider: env.LLXPRT_DEFAULT_PROVIDER, // No default - must be set explicitly
+      debug: true, // Enable debug logging
       ...options.settings, // Allow tests to override/add settings
     };
     writeFileSync(
@@ -258,6 +259,16 @@ export class TestRig {
     const model = env.LLXPRT_DEFAULT_MODEL;
     const baseUrl = env.OPENAI_BASE_URL;
     const apiKey = env.OPENAI_API_KEY;
+
+    // Debug: Log environment variables in CI
+    if (env.CI === 'true' || env.VERBOSE === 'true') {
+      console.log('[TestRig] Environment variables:', {
+        provider,
+        model,
+        baseUrl: baseUrl ? `${baseUrl.substring(0, 30)}...` : 'UNDEFINED',
+        hasApiKey: !!apiKey,
+      });
+    }
 
     // Fail fast if required configuration is missing
     if (!provider) {
@@ -351,6 +362,16 @@ export class TestRig {
     }
 
     const node = commandArgs.shift() as string;
+
+    // Debug: Log command being executed in CI
+    if (env.CI === 'true' || env.VERBOSE === 'true') {
+      console.log('[TestRig] Spawning command:', {
+        node,
+        args: commandArgs,
+        hasBaseUrl: commandArgs.includes('--baseurl'),
+        baseUrlIndex: commandArgs.indexOf('--baseurl'),
+      });
+    }
 
     const child = spawn(node, commandArgs as string[], {
       cwd: this.testDir!,
@@ -558,7 +579,7 @@ export class TestRig {
             const logData = JSON.parse(jsonStr);
             if (
               logData.attributes &&
-              logData.attributes['event.name'] === `gemini_cli.${eventName}`
+              logData.attributes['event.name'] === `llxprt_code.${eventName}`
             ) {
               return true;
             }
@@ -739,7 +760,7 @@ export class TestRig {
                 }
               } else if (
                 obj.attributes &&
-                obj.attributes['event.name'] === 'llxprt_cli.tool_call'
+                obj.attributes['event.name'] === 'llxprt_code.tool_call'
               ) {
                 logs.push({
                   timestamp: obj.attributes['event.timestamp'],
@@ -885,7 +906,7 @@ export class TestRig {
         const logData = JSON.parse(jsonStr);
         if (
           logData.attributes &&
-          logData.attributes['event.name'] === 'gemini_cli.api_request'
+          logData.attributes['event.name'] === 'llxprt_code.api_request'
         ) {
           lastApiRequest = logData;
         }
