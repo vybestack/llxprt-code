@@ -95,6 +95,9 @@ jobs:
             core.setOutput('ref', pr.data.head.sha);
             core.setOutput('repository', pr.data.head.repo.full_name);
             core.setOutput('from_pr', 'true');
+            core.info(
+              `Resolved PR #${prNumber} to ${pr.data.head.sha} from ${pr.data.head.repo.full_name}.`
+            );
 
       - name: 'Checkout (fork)'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
