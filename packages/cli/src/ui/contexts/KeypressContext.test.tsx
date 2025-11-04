@@ -869,10 +869,9 @@ describe('Kitty Sequence Parsing', () => {
     act(() => stdin.write('\x1b[m'));
 
     // Should broadcast immediately as it's not a valid kitty pattern
-    // LLxprt's implementation sets name to 'undefined' for unknown sequences
     expect(keyHandler).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'undefined',
+        sequence: '\x1b[m',
         paste: false,
       }),
     );
@@ -973,7 +972,6 @@ describe('Kitty Sequence Parsing', () => {
     expect(keyHandler).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        name: 'undefined',
         sequence: '\x1b[!',
       }),
     );

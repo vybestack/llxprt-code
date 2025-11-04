@@ -51,6 +51,7 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
     stdin = new MockStdin();
     (useStdin as Mock).mockReturnValue({
       stdin: stdin as unknown as NodeJS.ReadStream,
