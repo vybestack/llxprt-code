@@ -67,14 +67,20 @@ jobs:
       - name: 'Resolve workflow_dispatch PR'
         if: |
           github.event_name == 'workflow_dispatch' &&
-          github.event.inputs.pr_number != ''
+          github.event.inputs.pr_number
         id: 'resolve_pr'
         uses: 'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b' # ratchet:actions/github-script@v7
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           script: |-
             const rawInput = core.getInput('pr_number');
-            const prNumber = Number.parseInt(rawInput, 10);
+            const prNumberInput = rawInput.trim();
+            if (!prNumberInput) {
+              throw new Error(
+                'pr_number input is required when triggering via workflow_dispatch. Provide a pull request number, for example "123".'
+              );
+            }
+            const prNumber = Number.parseInt(prNumberInput, 10);
             if (Number.isNaN(prNumber)) {
               throw new Error(`pr_number must be a number, received "${rawInput}"`);
             }
@@ -97,7 +103,7 @@ jobs:
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
         if: |
           github.event_name == 'workflow_dispatch' &&
-          github.event.inputs.pr_number != ''
+          github.event.inputs.pr_number
         with:
           ref: '${{ steps.resolve_pr.outputs.ref }}'
           repository: '${{ steps.resolve_pr.outputs.repository }}'
@@ -109,7 +115,7 @@ jobs:
           github.event_name != 'pull_request_target' &&
           !(
             github.event_name == 'workflow_dispatch' &&
-            github.event.inputs.pr_number != ''
+            github.event.inputs.pr_number
           )
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
