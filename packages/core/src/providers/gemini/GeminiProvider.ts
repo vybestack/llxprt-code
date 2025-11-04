@@ -32,6 +32,7 @@ import {
   NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
+import { resolveUserMemory } from '../utils/userMemory.js';
 
 /**
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -1305,9 +1306,11 @@ export class GeminiProvider extends BaseProvider {
         baseURL,
       );
 
-      const userMemory = this.globalConfig?.getUserMemory
-        ? this.globalConfig.getUserMemory()
-        : '';
+      // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
+      const userMemory = await resolveUserMemory(
+        options.userMemory,
+        () => options.invocation?.userMemory,
+      );
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
         currentModel,
@@ -1401,9 +1404,11 @@ export class GeminiProvider extends BaseProvider {
       });
 
       const contentGenerator = genAI.models;
-      const userMemory = this.globalConfig?.getUserMemory
-        ? this.globalConfig.getUserMemory()
-        : '';
+      // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
+      const userMemory = await resolveUserMemory(
+        options.userMemory,
+        () => options.invocation?.userMemory,
+      );
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
         currentModel,

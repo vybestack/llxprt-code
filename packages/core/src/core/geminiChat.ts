@@ -784,6 +784,7 @@ export class GeminiChat {
           runtime: runtimeContext,
           settings: runtimeContext.settingsService,
           metadata: runtimeContext.metadata,
+          userMemory: runtimeContext.config?.getUserMemory?.(),
         });
 
         // Collect all chunks from the stream
@@ -1159,6 +1160,7 @@ export class GeminiChat {
             runtime: runtimeContext,
             settings: runtimeContext.settingsService,
             metadata: runtimeContext.metadata,
+            userMemory: runtimeContext.config?.getUserMemory?.(),
           });
 
           let lastResponse: IContent | undefined;
@@ -1364,6 +1366,7 @@ export class GeminiChat {
         runtime: runtimeContext,
         settings: runtimeContext.settingsService,
         metadata: runtimeContext.metadata,
+        userMemory: baseRuntimeContext.config?.getUserMemory?.(),
       } as GenerateChatOptions);
 
       // Convert the IContent stream to GenerateContentResponse stream
@@ -1915,6 +1918,7 @@ export class GeminiChat {
       runtime: runtimeContext,
       settings: runtimeContext.settingsService,
       metadata: runtimeContext.metadata,
+      userMemory: runtimeContext.config?.getUserMemory?.(),
     });
 
     // Collect response
