@@ -398,6 +398,10 @@ export class LoggingProviderWrapper implements IProvider {
       () =>
         `Checking runtime context: runtimeId=${runtimeId}, hasRuntime=${!!normalizedOptions.runtime}, hasSettings=${!!normalizedOptions.runtime?.settingsService}, hasConfig=${!!normalizedOptions.runtime?.config}`,
     );
+    this.debug.log(
+      () =>
+        `Contents length at entry: ${normalizedOptions.contents?.length ?? 'undefined'}`,
+    );
 
     if (!normalizedOptions.runtime?.settingsService) {
       this.debug.error(
@@ -454,21 +458,23 @@ export class LoggingProviderWrapper implements IProvider {
     const promptId = this.generatePromptId();
     this.turnNumber++;
 
-    this.debug.log(
-      () =>
-        `Before logRequest: conversationLoggingEnabled=${activeConfig?.getConversationLoggingEnabled()}, contentsLength=${normalizedOptions.contents?.length}`,
-    );
-
     // Log request if logging is enabled
     if (activeConfig?.getConversationLoggingEnabled()) {
       try {
+        this.debug.log(
+          () =>
+            `Before logRequest: contents length = ${normalizedOptions.contents?.length}`,
+        );
         await this.logRequest(
           activeConfig,
           normalizedOptions.contents,
           normalizedOptions.tools,
           promptId,
         );
-        this.debug.log(() => `logRequest completed successfully`);
+        this.debug.log(
+          () =>
+            `After logRequest: contents length = ${normalizedOptions.contents?.length}`,
+        );
       } catch (error) {
         this.debug.error(
           () =>
