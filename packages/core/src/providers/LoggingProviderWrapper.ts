@@ -469,8 +469,22 @@ export class LoggingProviderWrapper implements IProvider {
     );
 
     // Log request if logging is enabled
-    const conversationLoggingEnabled =
-      activeConfig?.getConversationLoggingEnabled() ?? false;
+    let conversationLoggingEnabled = false;
+    try {
+      this.debug.log(() => `About to call getConversationLoggingEnabled()`);
+      conversationLoggingEnabled =
+        activeConfig?.getConversationLoggingEnabled() ?? false;
+      this.debug.log(
+        () =>
+          `getConversationLoggingEnabled() returned: ${conversationLoggingEnabled}`,
+      );
+    } catch (error) {
+      this.debug.error(
+        () =>
+          `getConversationLoggingEnabled() threw exception: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
     this.debug.log(
       () =>
         `Conversation logging check: enabled=${conversationLoggingEnabled}, contents length=${normalizedOptions.contents?.length}`,
