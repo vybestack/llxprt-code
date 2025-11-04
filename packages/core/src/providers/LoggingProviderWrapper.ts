@@ -454,14 +454,28 @@ export class LoggingProviderWrapper implements IProvider {
     const promptId = this.generatePromptId();
     this.turnNumber++;
 
+    this.debug.log(
+      () =>
+        `Before logRequest: conversationLoggingEnabled=${activeConfig?.getConversationLoggingEnabled()}, contentsLength=${normalizedOptions.contents?.length}`,
+    );
+
     // Log request if logging is enabled
     if (activeConfig?.getConversationLoggingEnabled()) {
-      await this.logRequest(
-        activeConfig,
-        normalizedOptions.contents,
-        normalizedOptions.tools,
-        promptId,
-      );
+      try {
+        await this.logRequest(
+          activeConfig,
+          normalizedOptions.contents,
+          normalizedOptions.tools,
+          promptId,
+        );
+        this.debug.log(() => `logRequest completed successfully`);
+      } catch (error) {
+        this.debug.error(
+          () =>
+            `logRequest failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        throw error;
+      }
     }
 
     // Log API request telemetry event
@@ -481,8 +495,15 @@ export class LoggingProviderWrapper implements IProvider {
       this.debug.error(() => `Cannot log API request: activeConfig is null`);
     }
 
+    this.debug.log(
+      () =>
+        `About to call wrapped provider: ${this.wrapped.name}, contentsLength=${normalizedOptions.contents?.length}`,
+    );
+
     // Get stream from wrapped provider using normalized options object
     const stream = this.wrapped.generateChatCompletion(normalizedOptions);
+
+    this.debug.log(() => `Wrapped provider call completed, processing stream`);
 
     // Always process stream to extract token metrics
     // If logging not enabled, process for metrics only
