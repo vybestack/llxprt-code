@@ -16,6 +16,9 @@ on:
   workflow_dispatch:
     # Manual trigger with optional overrides
     inputs:
+      pr_number:
+        description: 'Run against pull request number (optional)'
+        required: false
       override_model:
         description: 'Override default model (optional)'
         required: false
@@ -61,6 +64,28 @@ jobs:
         # - os: 'windows-latest'
         #   sandbox: 'sandbox:docker'
     steps:
+      - name: 'Resolve workflow_dispatch PR'
+        if: |
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.pr_number != ''
+        id: 'resolve_pr'
+        uses: 'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b' # ratchet:actions/github-script@v7
+        with:
+          github-token: '${{ secrets.GITHUB_TOKEN }}'
+          script: |-
+            const rawInput = core.getInput('pr_number');
+            const prNumber = Number.parseInt(rawInput, 10);
+            if (Number.isNaN(prNumber)) {
+              throw new Error(`pr_number must be a number, received "${rawInput}"`);
+            }
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            core.setOutput('ref', pr.data.head.sha);
+            core.setOutput('repository', pr.data.head.repo.full_name);
+
       - name: 'Checkout (fork)'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
         if: "github.event_name == 'pull_request_target'"
@@ -68,9 +93,24 @@ jobs:
           ref: '${{ github.event.pull_request.head.sha }}'
           repository: '${{ github.event.pull_request.head.repo.full_name }}'
 
+      - name: 'Checkout (workflow_dispatch PR)'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        if: |
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.pr_number != ''
+        with:
+          ref: '${{ steps.resolve_pr.outputs.ref }}'
+          repository: '${{ steps.resolve_pr.outputs.repository }}'
+          fetch-depth: 0
+
       - name: 'Checkout (internal)'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
-        if: "github.event_name != 'pull_request_target'"
+        if: |-
+          github.event_name != 'pull_request_target' &&
+          !(
+            github.event_name == 'workflow_dispatch' &&
+            github.event.inputs.pr_number != ''
+          )
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
         uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions-node@v4
