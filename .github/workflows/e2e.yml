@@ -64,21 +64,24 @@ jobs:
         # - os: 'windows-latest'
         #   sandbox: 'sandbox:docker'
     steps:
-      - name: 'Resolve workflow_dispatch PR'
-        if: |
-          github.event_name == 'workflow_dispatch' &&
-          github.event.inputs.pr_number
+      - name: 'Resolve workflow_dispatch target'
+        if: github.event_name == 'workflow_dispatch'
         id: 'resolve_pr'
         uses: 'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b' # ratchet:actions/github-script@v7
         with:
           github-token: '${{ secrets.GITHUB_TOKEN }}'
           script: |-
-            const rawInput = core.getInput('pr_number');
-            const prNumberInput = rawInput.trim();
+            const eventInputs = context.payload?.inputs ?? {};
+            const rawInput = core.getInput('pr_number', { trimWhitespace: false });
+            const prNumberInput = (rawInput ?? '').trim() || (eventInputs.pr_number ?? '').trim();
             if (!prNumberInput) {
-              throw new Error(
-                'pr_number input is required when triggering via workflow_dispatch. Provide a pull request number, for example "123".'
+              core.setOutput('from_pr', 'false');
+              core.setOutput('ref', context.ref);
+              core.setOutput('repository', `${context.repo.owner}/${context.repo.repo}`);
+              core.info(
+                'No pr_number provided. Falling back to the branch/tag selected in the dispatch request.'
               );
+              return;
             }
             const prNumber = Number.parseInt(prNumberInput, 10);
             if (Number.isNaN(prNumber)) {
@@ -91,6 +94,7 @@ jobs:
             });
             core.setOutput('ref', pr.data.head.sha);
             core.setOutput('repository', pr.data.head.repo.full_name);
+            core.setOutput('from_pr', 'true');
 
       - name: 'Checkout (fork)'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
@@ -103,7 +107,7 @@ jobs:
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
         if: |
           github.event_name == 'workflow_dispatch' &&
-          github.event.inputs.pr_number
+          steps.resolve_pr.outputs.from_pr == 'true'
         with:
           ref: '${{ steps.resolve_pr.outputs.ref }}'
           repository: '${{ steps.resolve_pr.outputs.repository }}'
@@ -115,7 +119,7 @@ jobs:
           github.event_name != 'pull_request_target' &&
           !(
             github.event_name == 'workflow_dispatch' &&
-            github.event.inputs.pr_number
+            steps.resolve_pr.outputs.from_pr == 'true'
           )
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
