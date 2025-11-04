@@ -402,6 +402,30 @@ describe('runtimeSettings helpers', () => {
     expect(updatedSettings.baseURL).toBe(customBaseUrl);
   });
 
+  it('switchActiveProvider preserves auth settings and global ephemerals when staying on the same provider', async () => {
+    const { config, settingsService } = getCliRuntimeServices() as unknown as {
+      config: StubConfigInstance;
+      settingsService: StubSettingsServiceInstance;
+    };
+
+    config.setEphemeralSetting('auth-key', 'syn_profile_key');
+    config.setEphemeralSetting('auth-keyfile', '/Users/example/.synthetic_key');
+    config.setEphemeralSetting('context-limit', 200000);
+    settingsService.setProviderSetting('openai', 'apiKey', 'syn_profile_key');
+
+    const result = await switchActiveProvider('openai');
+
+    expect(result.nextProvider).toBe('openai');
+    expect(config.getEphemeralSetting('auth-key')).toBe('syn_profile_key');
+    expect(config.getEphemeralSetting('auth-keyfile')).toBe(
+      '/Users/example/.synthetic_key',
+    );
+    expect(config.getEphemeralSetting('context-limit')).toBe(200000);
+    expect(settingsService.getProviderSettings('openai').apiKey).toBe(
+      'syn_profile_key',
+    );
+  });
+
   it('setActiveModel updates provider and config', async () => {
     const { config, settingsService } = getCliRuntimeServices() as unknown as {
       config: StubConfigInstance;
