@@ -60,7 +60,7 @@ export const Notifications = ({
   }, []);
 
   const showScreenReaderNudge =
-    isScreenReaderEnabled && !hasSeenScreenReaderNudge;
+    isScreenReaderEnabled && hasSeenScreenReaderNudge === false;
 
   useEffect(() => {
     const writeScreenReaderNudgeFile = async () => {
