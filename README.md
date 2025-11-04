@@ -1,464 +1,247 @@
 # LLxprt Code
 
 [![LLxprt Code CI](https://github.com/vybestack/llxprt-code/actions/workflows/ci.yml/badge.svg)](https://github.com/vybestack/llxprt-code/actions/workflows/ci.yml)
-&nbsp;
+
 [![Mentioned in Awesome Gemini CLI](https://awesome.re/mentioned-badge.svg)](https://github.com/Piebald-AI/awesome-gemini-cli)
-&nbsp;
+
 [![Discord Server](https://dcbadge.limes.pink/api/server/https://discord.gg/Wc6dZqWWYv?style=flat)](https://discord.gg/Wc6dZqWWYv)
 
 ![LLxprt Code Screenshot](./docs/assets/llxprt-screenshot.png)
 
-LLxprt Code is a CLI-based LLM assisted coding tool. It is highly configurable and can support nearly any provider or model as well as local/self-hosted models.
+**AI-powered coding assistant that works with any LLM provider.** Command-line interface for querying and editing codebases, generating applications, and automating development workflows.
 
-## Key Features
+## Free & Subscription Options
 
-- **Multi-Provider Support**: Direct access to OpenAI (gpt-5), Anthropic (Claude Opus/Sonnet), Google Gemini, plus OpenRouter, Fireworks, Synthetic, Cerebras, Chutes, Z.ai and local models
-- **Authenticate** to use free: Gemini and Qwen models as well as using your Claude Pro/Max account. Use `/auth` to enable/disable/logout of Google/Anthropic/Qwen.
-- **Installable Provider Aliases**: Save `/provider` setups as reusable configs and load OpenAI-compatible endpoints instantly
-- **Multi-model/Provider Subagents**: Use `/subagent` to define specialized subagents with isolated contexts
-- **Configuration Profiles**: define and save specific model/provider settings using `/profile` for instance temperature or custom headers
-- **Local Model Support**: Run models locally with LM Studio, llama.cpp, or any OpenAI-compatible server
-- **Flexible Configuration**: Switch providers, models, and API keys on the fly
-- **Advanced Settings & Profiles**: Fine-tune model parameters, manage ephemeral settings, and save configurations for reuse. [Learn more →](./docs/settings-and-profiles.md)
-
-With LLxprt Code you can:
-
-- Query and edit large codebases with any LLM provider
-- Generate new apps from PDFs or sketches, using multimodal capabilities
-- Use local models for privacy-sensitive work
-- Switch between providers seamlessly within a session
-- Leverage all the powerful tools and MCP servers from Gemini CLI
-- Use tools and MCP servers to connect new capabilities, including [media generation with Imagen, Veo or Lyria](https://github.com/GoogleCloudPlatform/vertex-ai-creative-studio/tree/main/experiments/mcp-genmedia)
-- Ground your queries with the [Google Search](https://ai.google.dev/gemini-api/docs/grounding) tool when using Gemini
-- Enjoy a beautifully themed interface across all commands
-
-## Quickstart
-
-You have two options to install LLxprt Code.
-
-### With Node
-
-1. **Prerequisites:** Ensure you have [Node.js version 20](https://nodejs.org/en/download) or higher installed.
-2. **Install LLxprt Code:**
-
-   ```bash
-   npm install -g @vybestack/llxprt-code
-   ```
-
-   Or run directly with npx:
-
-   ```bash
-   npx https://github.com/vybestack/llxprt-code
-   ```
-
-### Common Configuration Steps
-
-3. **Run and configure:**
-
-   ```bash
-   llxprt
-   ```
-
-   - Pick a beautiful theme
-   - Choose your provider with `/provider` (defaults to Gemini)
-   - Set up authentication as needed
-
-## Provider Configuration
-
-### Using OpenAI
-
-Direct access to GPT-5, and other OpenAI models:
-
-1. Get your API key from [OpenAI](https://platform.openai.com/api-keys)
-2. Configure LLxprt Code:
-   ```
-   /provider openai
-   /key sk-your-openai-key-here
-   /model o3-mini
-   ```
-
-### Using Anthropic
-
-Access Claude Sonnet 4, Claude Opus 4.1, and other Anthropic models:
-
-#### Option 1: Log in with Anthropic to use your Claude Pro or Max account
-
-Use OAuth authentication to access Claude with your existing Claude Pro or Max subscription:
-
-1. Select the Anthropic provider:
-   ```
-   /provider anthropic
-   ```
-2. Authenticate with your Claude account:
-   ```
-   /auth
-   ```
-3. Your browser will open to the Claude authentication page
-4. Log in and authorize LLxprt Code
-5. Copy the authorization code shown and paste it back in the terminal
-6. You're now using your Claude Pro/Max account!
-
-#### Option 2: Use an API Key
-
-1. Get your API key from [Anthropic](https://console.anthropic.com/account/keys)
-2. Configure:
-   ```
-   /provider anthropic
-   /key sk-ant-your-key-here
-   /model claude-sonnet-4-20250115
-   ```
-
-### Using Qwen
-
-Access Qwen3-Coder-Pro and other Qwen models for free:
-
-#### Option 1: Log in with Qwen (FREE)
-
-Use OAuth authentication to access Qwen with your free account:
-
-```
-/auth qwen enable
-```
-
-This enables OAuth for Qwen. When you send your first message, your browser will automatically open to the Qwen authentication page. Log in and authorize LLxprt Code - the authentication will complete automatically and your request will be processed. You're now using Qwen3-Coder-Pro for free!
-
-#### Option 2: Use an API Key
-
-For advanced users who need API access:
-
-1. Get your API key from [Qwen](https://platform.qwen.ai/)
-2. Configure:
-   ```
-   /provider qwen
-   /key your-qwen-api-key
-   /model qwen3-coder-pro
-   ```
-
-### Using Cerebras Code Max/Pro
-
-Access Cerebras Code Max/Pro plan with the powerful qwen-3-coder-480b model:
-
-1. Get your API key from [Cerebras](https://cloud.cerebras.ai/)
-2. Configure LLxprt Code:
-   ```
-   /provider openai
-   /baseurl https://api.cerebras.ai/v1
-   /key your-cerebras-api-key
-   /model qwen-3-coder-480b
-   ```
-
-For optimal performance with this model, consider setting a high context limit:
-
-```
-/set context-limit 100000
-```
-
-### Using Local Models
-
-Run models locally for complete privacy and control. LLxprt Code works with any OpenAI-compatible server.
-
-**Example with LM Studio:**
-
-1. Start LM Studio and load a model (e.g., Gemma 3B)
-2. In LLxprt Code:
-   ```
-   /provider openai
-   /baseurl http://127.0.0.1:1234/v1/
-   /model gemma-3b-it
-   ```
-
-**Example with llama.cpp:**
-
-1. Start llama.cpp server: `./server -m model.gguf -c 2048`
-2. In LLxprt Code:
-   ```
-   /provider openai
-   /baseurl http://localhost:8080/v1/
-   /model local-model
-   ```
-
-**List available models:**
-
-```
-/model
-```
-
-This shows all models available from your current provider.
-
-### Using OpenRouter
-
-Access 100+ models through OpenRouter:
-
-1. Get your API key from [OpenRouter](https://openrouter.ai/keys)
-2. Configure LLxprt Code:
-   ```
-   /provider openai
-   /baseurl https://openrouter.ai/api/v1/
-   /keyfile ~/.openrouter_key
-   /model qwen/qwen3-coder
-   /profile save qwen3-coder
-   ```
-
-### Using Fireworks
-
-For fast inference with popular open models:
-
-1. Get your API key from [Fireworks](https://app.fireworks.ai/api-keys)
-2. Configure:
-   ```
-   /provider openai
-   /baseurl https://api.fireworks.ai/inference/v1/
-   /key fw_your-key-here
-   /model accounts/fireworks/models/llama-v3p3-70b-instruct
-   ```
-
-### Using xAI (Grok)
-
-Access Grok models through xAI's API:
-
-1. Get your API key from [xAI](https://x.ai/)
-2. Configure using command line:
-
-   ```bash
-   llxprt --provider openai --baseurl https://api.x.ai/v1/ --model grok-3 --keyfile ~/.mh_key
-   ```
-
-   Or configure interactively:
-
-   ```
-   /provider openai
-   /baseurl https://api.x.ai/v1/
-   /model grok-3
-   /keyfile ~/.mh_key
-   ```
-
-3. List available Grok models:
-   ```
-   /model
-   ```
-
-### Using Google Gemini
-
-You can still use Google's services:
-
-1. **With Google Account:** Use `/auth` to sign in
-2. **With API Key:**
-   ```bash
-   export GEMINI_API_KEY="YOUR_API_KEY"
-   ```
-   Or use `/key YOUR_API_KEY` after selecting the gemini provider
-
-### Managing API Keys
-
-- **Set key for current session:** `/key your-api-key`
-- **Load key from file:** `/keyfile ~/.keys/openai.txt`
-- **Environment variables:** Still supported for all providers
-
-## Examples
-
-Start a new project:
-
-```sh
-cd new-project/
-llxprt
-> Create a Discord bot that answers questions using a FAQ.md file I will provide
-```
-
-Work with existing code:
-
-```sh
-git clone https://github.com/acoliver/llxprt-code
-cd llxprt-code
-llxprt
-> Give me a summary of all the changes that went in yesterday
-```
-
-Use a local model for sensitive code:
-
-```sh
-llxprt
-/provider openai
-/baseurl http://localhost:1234/v1/
-/model codellama-7b
-> Review this code for security vulnerabilities
-```
-
-## Control and Shortcuts: Settings and Profiles
-
-LLxprt Code provides powerful configuration options through model parameters and profiles:
+Get started immediately with powerful LLM options:
 
 ```bash
-# Fine-tune model behavior
-/set modelparam temperature 0.8
-/set modelparam max_tokens 4096
+# Free Gemini models
+/auth gemini enable
+/provider gemini
+/model gemini-2.5-flash
 
-# Configure context handling
-/set context-limit 100000
-/set compression-threshold 0.7
+# Free Qwen models
+/auth qwen enable
+/provider qwen
+/model qwen-3-coder
 
-# Save your configuration
-/profile save my-assistant
-
-# Load it later
-llxprt --profile-load my-assistant
+# Your Claude Pro / Max subscription
+/auth anthropic enable
+/provider anthropic
+/model claude-sonnet-4-5
 ```
 
-See the [complete settings documentation](./docs/settings-and-profiles.md) for all configuration options.
+## Why Choose LLxprt Code?
+
+- **Free Tier Support**: Start coding immediately with Gemini, Qwen, or your existing Claude account
+- **Provider Flexibility**: Switch between any Anthropic, Gemini, or OpenAI-compatible provider
+- **Top Open Models**: Works seamlessly with GLM 4.6, MiniMax-2, and Qwen 3 Coder
+- **Local Models**: Run models locally with LM Studio, llama.cpp for complete privacy
+- **Privacy First**: No telemetry by default, local processing available
+- **Subagent Flexibility**: Create agents with different models, providers, or settings
+- **[ACTION] Real-time**: Interactive REPL with beautiful themes
+- **Zed Integration**: Native Zed editor integration for seamless workflow
+
+```bash
+# Install and get started
+npm install -g @vybestack/llxprt-code
+llxprt
+
+# Try without installing
+npx @vybestack/llxprt-code --provider synthetic --model hf:zai-org/GLM-4.6 --keyfile ~/.synthetic_key "simplify the README.md"
+```
+
+## What is LLxprt Code?
+
+LLxprt Code is a command-line AI assistant designed for developers who want powerful LLM capabilities without leaving their terminal. Unlike GitHub Copilot or ChatGPT, LLxprt Code works with **any provider** and can run **locally** for complete privacy.
+
+**Key differences:**
+
+- **Open source & community driven**: Not locked into proprietary ecosystems
+- **Provider agnostic**: Not locked into one AI service
+- **Local-first**: Run entirely offline if needed
+- **Developer-centric**: Built specifically for coding workflows
+- **Terminal native**: Designed for CLI workflows, not web interfaces
+
+## Quick Start
+
+1. **Prerequisites:** Node.js 20+ installed
+2. **Install:**
+   ```bash
+   npm install -g @vybestack/llxprt-code
+   # Or try without installing:
+   npx @vybestack/llxprt-code
+   ```
+3. **Run:** `llxprt`
+4. **Choose provider:** Use `/provider` to select your preferred LLM service
+5. **Start coding:** Ask questions, generate code, or analyze projects
+
+**First session example:**
+
+```bash
+cd your-project/
+llxprt
+> Explain the architecture of this codebase and suggest improvements
+> Create a test file for the user authentication module
+> Help me debug this error: [paste error message]
+```
 
 ## Key Features
 
-### Code Understanding & Generation
+- **Free & Subscription Options** - Gemini, Qwen (free), Claude Pro/Max (subscription)
+- **Extensive Provider Support** - Any Anthropic, Gemini, or OpenAI-compatible provider [**Provider Guide →**](./docs/providers/quick-reference.md)
+- **Top Open Models** - GLM 4.6, MiniMax-2, Qwen 3 Coder
+- **Local Model Support** - LM Studio, llama.cpp, Ollama for complete privacy
+- **Profile System** - Save provider configurations and model settings
+- **Advanced Subagents** - Isolated AI assistants with different models/providers
+- **MCP Integration** - Connect to external tools and services
+- **Beautiful Terminal UI** - Multiple themes with syntax highlighting
 
-- Query and edit large codebases
-- Generate new apps from PDFs, images, or sketches using multimodal capabilities
-- Debug issues and troubleshoot with natural language
+## Interactive vs Non-Interactive Workflows
 
-### Automation & Integration
+**Interactive Mode (REPL):**
+Perfect for exploration, rapid prototyping, and iterative development:
 
-- Automate operational tasks like querying pull requests or handling complex rebases
-- Use MCP servers to connect new capabilities
-- Run non-interactively in scripts for workflow automation
+```bash
+# Start interactive session
+llxprt
 
-### Advanced Capabilities
-
-- Ground your queries with built-in search capabilities for real-time information
-- Conversation checkpointing to save and resume complex sessions
-- Custom context files (LLXPRT.md) to tailor behavior for your projects
-
-### GitHub Integration (Experimental)
-
-> **Note:** GitHub Actions integration is currently experimental and disabled by default in LLxprt Code. This feature is under development and may not be fully functional.
-
-For potential future GitHub workflow integration:
-
-- **Pull Request Reviews**: Automated code review with contextual feedback and suggestions
-- **Issue Triage**: Automated labeling and prioritization of GitHub issues based on content analysis
-- **On-demand Assistance**: Mention capabilities in issues and pull requests for help with debugging, explanations, or task delegation
-- **Custom Workflows**: Build automated, scheduled and on-demand workflows tailored to your team's needs
-
-## Customizing AI Behavior with Prompts
-
-LLxprt Code features a sophisticated prompt configuration system that allows you to customize the AI's behavior for different providers, models, and use cases. You can:
-
-- Create custom system prompts for specific tasks
-- Override provider-specific behaviors
-- Add environment-aware instructions
-- Customize tool usage guidelines
-
-Learn more in the [Prompt Configuration Guide](./docs/prompt-configuration.md).
-
-### Next steps
-
-- Learn how to [contribute to or build from the source](./CONTRIBUTING.md).
-- Explore the available **[CLI Commands](./docs/cli/commands.md)**.
-- If you encounter any issues, review the **[troubleshooting guide](./docs/troubleshooting.md)**.
-- For more comprehensive documentation, see the [full documentation](./docs/index.md).
-- **Migrating from Gemini CLI?** Check out our [tips for Gemini CLI users](./docs/gemini-cli-tips.md).
-- Take a look at some [popular tasks](#popular-tasks) for more inspiration.
-- Check out our **[Official Roadmap](./ROADMAP.md)**
-
-### Provider Commands Reference
-
-- `/provider` - List available providers or switch provider
-- `/model` - List available models or switch model
-- `/baseurl` - Set custom API endpoint
-- `/key` - Set API key for current session
-- `/keyfile` - Load API key from file
-- `/auth` - Authenticate with Google (for Gemini), Anthropic (for Claude), or Qwen
-
-### Documentation
-
-- [**Architecture Overview**](./docs/architecture.md) - How llxprt works
-- [**IDE Integration**](./docs/ide-integration.md) - VS Code companion
-- [**Sandboxing & Security**](./docs/sandbox.md) - Safe execution environments
-- [**Enterprise Deployment**](./docs/deployment.md) - Docker, system-wide config
-- [**Telemetry & Monitoring**](./docs/telemetry.md) - Usage tracking
-- [**Tools API Development**](./docs/core/tools-api.md) - Create custom tools
-
-### Troubleshooting
-
-See the [troubleshooting guide](docs/troubleshooting.md) if you encounter issues.
-
-## Popular tasks
-
-### Explore a new codebase
-
-Start by `cd`ing into an existing or newly-cloned repository and running `llxprt`.
-
-```text
-> Describe the main pieces of this system's architecture.
+> Explore this codebase and suggest improvements
+> Create a REST API endpoint with tests
+> Debug this authentication issue
+> Optimize this database query
 ```
 
-```text
-> What security mechanisms are in place?
+**Non-Interactive Mode:**
+Ideal for automation, CI/CD, and scripted workflows:
+
+```bash
+# Single command with immediate response
+llxprt --profile-load zai-glm46 "Refactor this function for better readability"
+llxprt "Generate unit tests for payment module" > tests/payment.test.js
 ```
 
-```text
-> Provide a step-by-step dev onboarding doc for developers new to the codebase.
+## Top Open Weight Models
+
+LLxprt Code works seamlessly with the best open-weight models:
+
+### GLM 4.6
+
+- **Context Window**: 200,000 tokens
+- **Architecture**: Mixture-of-Experts with 355B total parameters (32B active)
+- **Strengths**: Coding, multi-step planning, tool integration
+- **15% fewer tokens** for equivalent tasks vs previous generation
+
+### MiniMax-2
+
+- **Context Window**: ~204,800 tokens
+- **Architecture**: MoE with 230B total parameters (10B active)
+- **Strengths**: Coding workflows, multi-step agents, tool calling
+- **Cost**: Only 8% of Claude Sonnet, ~2x faster
+
+### Qwen 3 Coder
+
+- **Context Window**: 256,000 tokens (extendable to 1M)
+- **Architecture**: MoE with 480B total parameters (35B active)
+- **Strengths**: Agentic coding, browser automation, tool usage
+- **Performance**: State-of-the-art on SWE-bench Verified (69.6%)
+
+## Local Models
+
+Run models completely offline for maximum privacy:
+
+```bash
+# With LM Studio
+/provider openai
+/baseurl http://localhost:1234/v1/
+/model your-local-model
+
+# With Ollama
+/provider ollama
+/model codellama:13b
 ```
 
-```text
-> Summarize this codebase and highlight the most interesting patterns or techniques I could learn from.
+Supported local providers:
+
+- **LM Studio**: Easy Windows/Mac/Linux setup
+- **llama.cpp**: Maximum performance and control
+- **Ollama**: Simple model management
+- **Any OpenAI-compatible API**: Full flexibility
+
+## Advanced Subagents
+
+Create specialized AI assistants with isolated contexts and different configurations:
+
+```bash
+# Subagents run with custom profiles and tool access
+# Access via the commands interface
+/subagent list
+/subagent create <name>
 ```
 
-```text
-> Identify potential areas for improvement or refactoring in this codebase, highlighting parts that appear fragile, complex, or hard to maintain.
+Each subagent can be configured with:
+
+- **Different providers** (Gemini vs Anthropic vs Qwen vs Local)
+- **Different models** (Flash vs Sonnet vs GLM 4.6 vs Custom)
+- **Different tool access** (Restrict or allow specific tools)
+- **Different settings** (Temperature, timeouts, max turns)
+- **Isolated runtime context** (No memory or state crossover)
+
+Subagents are designed for:
+
+- **Specialized tasks** (Code review, debugging, documentation)
+- **Different expertise areas** (Frontend vs Backend vs DevOps)
+- **Tool-limited environments** (Read-only analysis vs Full development)
+- **Experimental configurations** (Testing new models or settings)
+
+**[Full Subagent Documentation →](./docs/subagents.md)**
+
+## Zed Integration
+
+Native Zed editor support for seamless development workflow:
+
+```bash
+# Install Zed extension
+zed:install llxprt-code
+
+# Use within Zed
+# (See docs for Zed integration setup)
 ```
 
-```text
-> Which parts of this codebase might be challenging to scale or debug?
-```
+Features:
 
-```text
-> Generate a README section for the [module name] module explaining what it does and how to use it.
-```
+- **In-editor chat**: Direct AI interaction without leaving Zed
+- **Code selection**: Ask about specific code selections
+- **Inline suggestions**: Get AI help while typing
+- **Project awareness**: Full context of your open workspace
 
-```text
-> What kind of error handling and logging strategies does the project use?
-```
+** [Zed Integration Guide →](./docs/zed-integration.md)**
 
-```text
-> Which tools, libraries, and dependencies are used in this project?
-```
+** [Complete Provider Guide →](./docs/cli/providers.md)**
 
-### Work with your existing code
+## Advanced Features
 
-```text
-> Implement a first draft for GitHub issue #123.
-```
+- **Settings & Profiles**: Fine-tune model parameters and save configurations
+- **Subagents**: Create specialized assistants for different tasks
+- **MCP Servers**: Connect external tools and data sources
+- **Checkpointing**: Save and resume complex conversations
+- **IDE Integration**: Connect to VS Code and other editors
 
-```text
-> Help me migrate this codebase to the latest version of Java. Start with a plan.
-```
+** [Full Documentation →](./docs/index.md)**
 
-### Automate your workflows
+## Migration & Resources
 
-Use MCP servers to integrate your local system tools with your enterprise collaboration suite.
+- **From Gemini CLI**: [Migration Guide](./docs/gemini-cli-tips.md)
+- **Local Models Setup**: [Local Models Guide](./docs/local-models.md)
+- **Command Reference**: [CLI Commands](./docs/cli/commands.md)
+- **Troubleshooting**: [Common Issues](./docs/troubleshooting.md)
 
-```text
-> Make me a slide deck showing the git history from the last 7 days, grouped by feature and team member.
-```
+## Privacy & Terms
 
-```text
-> Make a full-screen web app for a wall display to show our most interacted-with GitHub issues.
-```
+LLxprt Code does not collect telemetry by default. Your data stays with you unless you choose to send it to external AI providers.
 
-### Interact with your system
+When using external services, their respective terms of service apply:
 
-```text
-> Convert all the images in this directory to png, and rename them to use dates from the exif data.
-```
-
-```text
-> Organize my PDF invoices by month of expenditure.
-```
-
-### Uninstall
-
-Head over to the [Uninstall](docs/Uninstall.md) guide for uninstallation instructions.
-
-## Privacy and Terms
-
-**LLxprt Code does not collect telemetry by default.** Your privacy is important to us.
-
-When using Google's services through LLxprt Code, you are bound by [Google's Terms of Service and Privacy Notice](./docs/tos-privacy.md). Other providers have their own terms that apply when using their services.
+- [OpenAI Terms](https://openai.com/policies/terms-of-use)
+- [Anthropic Terms](https://www.anthropic.com/legal/terms)
+- [Google Terms](https://policies.google.com/terms)
