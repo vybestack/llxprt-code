@@ -260,6 +260,16 @@ export class TestRig {
     const baseUrl = env.OPENAI_BASE_URL;
     const apiKey = env.OPENAI_API_KEY;
 
+    // Debug: Log environment variables in CI
+    if (env.CI === 'true' || env.VERBOSE === 'true') {
+      console.log('[TestRig] Environment variables:', {
+        provider,
+        model,
+        baseUrl: baseUrl ? `${baseUrl.substring(0, 30)}...` : 'UNDEFINED',
+        hasApiKey: !!apiKey,
+      });
+    }
+
     // Fail fast if required configuration is missing
     if (!provider) {
       throw new Error(
@@ -352,6 +362,16 @@ export class TestRig {
     }
 
     const node = commandArgs.shift() as string;
+
+    // Debug: Log command being executed in CI
+    if (env.CI === 'true' || env.VERBOSE === 'true') {
+      console.log('[TestRig] Spawning command:', {
+        node,
+        args: commandArgs,
+        hasBaseUrl: commandArgs.includes('--baseurl'),
+        baseUrlIndex: commandArgs.indexOf('--baseurl'),
+      });
+    }
 
     const child = spawn(node, commandArgs as string[], {
       cwd: this.testDir!,
