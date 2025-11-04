@@ -440,6 +440,9 @@ export class LoggingProviderWrapper implements IProvider {
     normalizedOptions.config =
       normalizedOptions.config ?? normalizedOptions.runtime?.config;
     const activeConfig = normalizedOptions.config;
+    this.debug.log(
+      () => `After config resolution: hasConfig=${!!activeConfig}`,
+    );
 
     const invocation = normalizedOptions.invocation;
 
@@ -454,19 +457,33 @@ export class LoggingProviderWrapper implements IProvider {
         activeConfig.getRedactionConfig(),
       );
     }
+    this.debug.log(
+      () => `After redactor setup: hasRedactor=${!!this.redactor}`,
+    );
 
     const promptId = this.generatePromptId();
     this.turnNumber++;
+    this.debug.log(
+      () =>
+        `After promptId generation: promptId=${promptId}, turnNumber=${this.turnNumber}`,
+    );
 
     // Log request if logging is enabled
-    if (activeConfig?.getConversationLoggingEnabled()) {
+    const conversationLoggingEnabled =
+      activeConfig?.getConversationLoggingEnabled() ?? false;
+    this.debug.log(
+      () =>
+        `Conversation logging check: enabled=${conversationLoggingEnabled}, contents length=${normalizedOptions.contents?.length}`,
+    );
+
+    if (conversationLoggingEnabled) {
       try {
         this.debug.log(
           () =>
             `Before logRequest: contents length = ${normalizedOptions.contents?.length}`,
         );
         await this.logRequest(
-          activeConfig,
+          activeConfig!,
           normalizedOptions.contents,
           normalizedOptions.tools,
           promptId,
@@ -484,9 +501,18 @@ export class LoggingProviderWrapper implements IProvider {
       }
     }
 
+    this.debug.log(() => `Before API request telemetry section`);
+
     // Log API request telemetry event
     if (activeConfig) {
+      this.debug.log(
+        () =>
+          `Before JSON.stringify: contents length=${normalizedOptions.contents?.length}`,
+      );
       const requestText = JSON.stringify(normalizedOptions.contents);
+      this.debug.log(
+        () => `After JSON.stringify: requestText length=${requestText.length}`,
+      );
       const modelName =
         normalizedOptions.resolved?.model || this.wrapped.getDefaultModel();
       this.debug.log(
@@ -496,7 +522,10 @@ export class LoggingProviderWrapper implements IProvider {
         activeConfig,
         new ApiRequestEvent(modelName, promptId, requestText),
       );
-      this.debug.log(() => `API request logged successfully`);
+      this.debug.log(
+        () =>
+          `After API request logged: contents length=${normalizedOptions.contents?.length}`,
+      );
     } else {
       this.debug.error(() => `Cannot log API request: activeConfig is null`);
     }
