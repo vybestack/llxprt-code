@@ -1,10 +1,41 @@
 # Provider Quick Reference
 
-This guide provides concise setup instructions for common LLM providers. For complete documentation, see the [full provider guide](./providers.md).
+This guide provides concise setup instructions for common LLM providers. For complete documentation, see the [full provider guide](../cli/providers.md).
 
-## OpenAI
+## Provider Configuration Methods
 
-Set up OpenAI models including o3, o1, GPT-4.1, and GPT-4o:
+LLxprt Code supports two main ways to configure providers:
+
+### 1. Using Built-in Aliases
+
+Many popular providers have built-in aliases for quick setup:
+
+```bash
+# Use the alias (recommended for supported providers)
+/provider anthropic
+/provider gemini
+/provider qwen
+/provider synthetic
+
+# Then set your key and model
+/key sk-your-api-key
+/model your-model-name
+```
+
+### 2. Using OpenAI-Compatible Endpoint
+
+For providers without aliases, use the OpenAI protocol:
+
+```bash
+/provider openai
+/baseurl https://provider-api-url/v1/
+/key your-api-key
+/model model-name
+```
+
+## Common Providers
+
+### OpenAI
 
 ```bash
 /provider openai
@@ -16,11 +47,9 @@ Set up OpenAI models including o3, o1, GPT-4.1, and GPT-4o:
 
 **Environment variable:** `export OPENAI_API_KEY=sk-...`
 
-## Anthropic (Claude)
+### Anthropic (Claude)
 
-Access Claude models through API key or OAuth:
-
-### API Key Setup
+#### Using Alias (Recommended)
 
 ```bash
 /provider anthropic
@@ -28,22 +57,21 @@ Access Claude models through API key or OAuth:
 /model claude-sonnet-4-20250115
 ```
 
-### OAuth (Claude Pro/Max)
+#### Or OAuth (Claude Pro/Max)
 
 ```bash
-/provider anthropic
-/auth
+/auth anthropic enable
 ```
+
+Note: OAuth is lazy - authentication happens when you first use the provider.
 
 **Common models:** `claude-sonnet-4-20250115`, `claude-opus-4`, `claude-sonnet-3.5`
 
 **Environment variable:** `export ANTHROPIC_API_KEY=sk-ant-...`
 
-## Google Gemini
+### Google Gemini
 
-Use Google's Gemini models:
-
-### API Key
+#### Using Alias
 
 ```bash
 /provider gemini
@@ -51,20 +79,49 @@ Use Google's Gemini models:
 /model gemini-2.0-flash
 ```
 
-### OAuth
+#### Or OAuth
 
 ```bash
-/provider gemini
-/auth
+/auth gemini enable
 ```
+
+Note: OAuth is lazy - authentication happens when you first use the provider.
 
 **Common models:** `gemini-2.0-flash`, `gemini-pro`
 
 **Environment variable:** `export GEMINI_API_KEY=...`
 
-## xAI (Grok)
+### Synthetic (Hugging Face Models)
 
-Access Grok models:
+```bash
+/provider synthetic
+/key your-synthetic-key
+/model hf:zai-org/GLM-4.6
+```
+
+**Popular models:** `hf:zai-org/GLM-4.6`, `hf:mistralai/Mixtral-8x7B`
+
+### Qwen (Free)
+
+#### OAuth (Free)
+
+```bash
+/auth qwen enable
+```
+
+#### Using Alias with API Key
+
+```bash
+/provider qwen
+/key your-qwen-key
+/model qwen3-coder-pro
+```
+
+### Models Requiring Custom BaseURL
+
+These providers use the OpenAI-compatible endpoint approach:
+
+#### xAI (Grok)
 
 ```bash
 /provider openai
@@ -73,9 +130,7 @@ Access Grok models:
 /model grok-3
 ```
 
-## OpenRouter
-
-Access 100+ models through OpenRouter:
+#### OpenRouter
 
 ```bash
 /provider openai
@@ -84,9 +139,7 @@ Access 100+ models through OpenRouter:
 /model qwen/qwen3-coder
 ```
 
-## Fireworks
-
-Fast inference with open models:
+#### Fireworks
 
 ```bash
 /provider openai
@@ -95,27 +148,7 @@ Fast inference with open models:
 /model accounts/fireworks/models/llama-v3p3-70b-instruct
 ```
 
-## Qwen
-
-Access Qwen models for free:
-
-### OAuth (Free)
-
-```bash
-/auth qwen enable
-```
-
-### API Key
-
-```bash
-/provider qwen
-/key your-qwen-key
-/model qwen3-coder-pro
-```
-
-## Cerebras
-
-Powerful qwen-3-coder-480b model:
+#### Cerebras
 
 ```bash
 /provider openai
@@ -124,13 +157,24 @@ Powerful qwen-3-coder-480b model:
 /model qwen-3-coder-480b
 ```
 
-## Local Models
+#### Chutes AI
 
-Run models locally for privacy:
+```bash
+/provider chutes    # Has built-in alias
+# OR
+/provider openai
+/baseurl https://api.chutes.ai/v1/
+/key your-chutes-key
+/model your-model
+```
+
+## Local Models
 
 ### LM Studio
 
 ```bash
+/provider lm-studio    # Has built-in alias
+# OR
 /provider openai
 /baseurl http://127.0.0.1:1234/v1/
 /model your-local-model
@@ -139,19 +183,97 @@ Run models locally for privacy:
 ### llama.cpp
 
 ```bash
+/provider llama-cpp    # Has built-in alias
+# OR
 /provider openai
 /baseurl http://localhost:8080/v1/
 /model your-model
 ```
 
-## Provider Management Commands
+### Ollama
 
-- `/provider` - List or switch providers
-- `/model` - List or switch models
-- `/baseurl` - Set custom API endpoint
+```bash
+/provider ollama      # Has built-in alias
+# OR
+/provider openai
+/baseurl http://localhost:11434/v1/
+/key dummy-key        # Ollama may require a dummy key
+/model codellama:13b
+```
+
+## Authentication Methods
+
+### API Keys
+
+Set directly with `/key` or load from file:
+
+```bash
+# Set key directly
+/key sk-your-api-key
+
+# Load from file (more secure)
+/keyfile ~/.keys/your-provider.key
+```
+
+### OAuth
+
+Three providers support OAuth for authentication:
+
+```bash
+# Enable OAuth provider (lazy authentication - happens on first use)
+/auth anthropic enable
+/auth gemini enable
+/auth qwen enable
+
+# Check OAuth status
+/auth
+
+# Logout from provider
+/auth provider-name logout
+```
+
+### Environment Variables
+
+Set keys in your shell environment (auto-detected):
+
+```bash
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GEMINI_API_KEY="..."
+```
+
+## Saving Configuration as Profiles
+
+Save your provider setup for reuse:
+
+```bash
+# After configuring your provider
+/profile save my-setup
+
+# Load later
+/profile load my-setup
+
+# Use at startup
+llxprt --profile-load my-setup
+```
+
+**See [Settings and Profiles](../settings-and-profiles.md) for complete profile management**
+
+## Provider Commands Reference
+
+- `/provider` - List all providers or switch to one
+- `/model` - List available models or switch models
+- `/baseurl` - Set custom API endpoint (for OpenAI-compatible providers)
 - `/key` - Set API key for current session
 - `/keyfile` - Load key from file
 - `/auth` - OAuth authentication
-- `/profile save` - Save provider configuration
+- `/profile save` - Save current provider configuration
 
-** See [providers.md](./providers.md) for complete documentation**
+## Next Steps
+
+1. **Configure your provider** using the examples above
+2. **Save as profile** for easy reuse: `/profile save my-config`
+3. **Adjust model parameters** like temperature: `/set modelparam temperature 0.7`
+4. **Learn about profiles**: [Settings and Profiles Guide](../settings-and-profiles.md)
+
+**See [complete CLI provider documentation](../cli/providers.md) for advanced configuration**
