@@ -185,6 +185,11 @@ describe('Runtime Provider Switching Integration', () => {
       'baseUrl',
       'https://legacy.example/v1',
     );
+    settingsService.setProviderSetting(
+      'providerA',
+      'baseURL',
+      'https://legacy.example/v1',
+    );
     settingsService.setProviderSetting('providerA', 'model', 'legacy-model');
     config.setEphemeralSetting('base-url', 'https://legacy.example/v1');
     config.setModel('legacy-model');
@@ -194,8 +199,10 @@ describe('Runtime Provider Switching Integration', () => {
 
     const refreshedSettings = settingsService.getProviderSettings('providerA');
     expect(refreshedSettings.baseUrl).toBeUndefined();
+    expect(refreshedSettings.baseURL).toBeUndefined();
     expect(refreshedSettings.model).toBe('providerA-default');
     expect(config.getModel()).toBe('providerA-default');
+    expect(config.getEphemeralSetting('base-url')).toBeUndefined();
   });
 });
 

@@ -359,6 +359,49 @@ describe('runtimeSettings helpers', () => {
     expect(config.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 
+  it('switchActiveProvider preserves explicit model overrides for target provider', async () => {
+    providers.gemini = new StubProvider('gemini');
+    activeProviderName = 'gemini';
+    const { config, settingsService } = getCliRuntimeServices() as unknown as {
+      config: StubConfigInstance;
+      settingsService: StubSettingsServiceInstance;
+    };
+
+    const explicitModel = 'hf:zai-org/GLM-4.6';
+    config.setModel(explicitModel);
+    settingsService.setProviderSetting('openai', 'model', explicitModel);
+
+    const result = await switchActiveProvider('openai');
+
+    expect(result.nextProvider).toBe('openai');
+    expect(config.getModel()).toBe(explicitModel);
+    expect(settingsService.getProviderSettings('openai').model).toBe(
+      explicitModel,
+    );
+  });
+
+  it('switchActiveProvider preserves explicit base URL overrides for target provider', async () => {
+    providers.gemini = new StubProvider('gemini');
+    activeProviderName = 'gemini';
+    const { config, settingsService } = getCliRuntimeServices() as unknown as {
+      config: StubConfigInstance;
+      settingsService: StubSettingsServiceInstance;
+    };
+
+    const customBaseUrl = 'https://api.synthetic.new/openai/v1';
+    config.setEphemeralSetting('base-url', customBaseUrl);
+    settingsService.setProviderSetting('openai', 'baseUrl', customBaseUrl);
+    settingsService.setProviderSetting('openai', 'baseURL', customBaseUrl);
+
+    const result = await switchActiveProvider('openai');
+
+    expect(result.nextProvider).toBe('openai');
+    expect(config.getEphemeralSetting('base-url')).toBe(customBaseUrl);
+    const updatedSettings = settingsService.getProviderSettings('openai');
+    expect(updatedSettings.baseUrl).toBe(customBaseUrl);
+    expect(updatedSettings.baseURL).toBe(customBaseUrl);
+  });
+
   it('setActiveModel updates provider and config', async () => {
     const { config, settingsService } = getCliRuntimeServices() as unknown as {
       config: StubConfigInstance;

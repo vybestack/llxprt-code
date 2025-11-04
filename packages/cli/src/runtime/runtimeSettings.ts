@@ -1239,6 +1239,8 @@ export async function switchActiveProvider(
 
   const activeProvider = providerManager.getActiveProvider();
   const providerSettings = getProviderSettingsSnapshot(settingsService, name);
+  const configProviderBeforeSwitch =
+    typeof config.getProvider === 'function' ? config.getProvider() : undefined;
 
   // Clear any cached model parameters for the new provider
   const existingParams = extractModelParams(providerSettings);
@@ -1281,10 +1283,37 @@ export async function switchActiveProvider(
   const baseProvider = unwrapProvider(activeProvider);
 
   const providerSettingsBefore = providerSettings ?? {};
-  const hadCustomBaseUrl =
-    typeof providerSettingsBefore.baseUrl === 'string' &&
-    providerSettingsBefore.baseUrl.trim() !== '' &&
-    providerSettingsBefore.baseUrl.trim().toLowerCase() !== 'none';
+  const normalizeSetting = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    if (trimmed === '' || trimmed.toLowerCase() === 'none') {
+      return undefined;
+    }
+    return trimmed;
+  };
+  const storedModelSetting = normalizeSetting(providerSettingsBefore.model);
+  const storedBaseUrlSetting =
+    normalizeSetting(providerSettingsBefore.baseUrl) ??
+    normalizeSetting(
+      (providerSettingsBefore as Record<string, unknown>).baseURL,
+    );
+  const hadCustomBaseUrl = Boolean(storedBaseUrlSetting);
+  const explicitConfigModel =
+    configProviderBeforeSwitch === name
+      ? normalizeSetting(
+          typeof config.getModel === 'function' ? config.getModel() : undefined,
+        )
+      : undefined;
+  const explicitConfigBaseUrl =
+    configProviderBeforeSwitch === name
+      ? normalizeSetting(
+          typeof config.getEphemeralSetting === 'function'
+            ? (config.getEphemeralSetting('base-url') as string | undefined)
+            : undefined,
+        )
+      : undefined;
 
   for (const key of Object.keys(providerSettingsBefore)) {
     settingsService.setProviderSetting(name, key, undefined);
@@ -1294,24 +1323,29 @@ export async function switchActiveProvider(
   if (name === 'qwen') {
     providerBaseUrl = 'https://portal.qwen.ai/v1';
   }
-  if (providerBaseUrl) {
-    config.setEphemeralSetting('base-url', providerBaseUrl);
-    settingsService.setProviderSetting(name, 'baseUrl', providerBaseUrl);
-    settingsService.setProviderSetting(name, 'baseURL', providerBaseUrl);
+  const explicitBaseUrl = explicitConfigBaseUrl ?? storedBaseUrlSetting;
+  const finalBaseUrl = explicitBaseUrl ?? providerBaseUrl ?? undefined;
+
+  if (finalBaseUrl) {
+    config.setEphemeralSetting('base-url', finalBaseUrl);
+    settingsService.setProviderSetting(name, 'baseUrl', finalBaseUrl);
+    settingsService.setProviderSetting(name, 'baseURL', finalBaseUrl);
   } else {
+    config.setEphemeralSetting('base-url', undefined);
     settingsService.setProviderSetting(name, 'baseUrl', undefined);
     settingsService.setProviderSetting(name, 'baseURL', undefined);
   }
 
-  const resolvedDefaultModel = activeProvider.getDefaultModel?.() ?? '';
+  const defaultModel = activeProvider.getDefaultModel?.() ?? '';
+  const explicitModel =
+    explicitConfigModel ??
+    (storedModelSetting && storedModelSetting !== defaultModel
+      ? storedModelSetting
+      : undefined);
+  const modelToApply = explicitModel ?? defaultModel;
 
-  if (resolvedDefaultModel) {
-    settingsService.setProviderSetting(name, 'model', resolvedDefaultModel);
-  } else {
-    settingsService.setProviderSetting(name, 'model', undefined);
-  }
-
-  config.setModel(resolvedDefaultModel);
+  settingsService.setProviderSetting(name, 'model', modelToApply || undefined);
+  config.setModel(modelToApply);
 
   let authType: AuthType;
   if (name === 'gemini') {
@@ -1379,15 +1413,21 @@ export async function switchActiveProvider(
   }
 
   if (hadCustomBaseUrl) {
-    if (providerBaseUrl) {
-      infoMessages.push(
-        `Replaced custom base URL with '${providerBaseUrl}' for provider '${name}'.`,
-      );
-    } else {
+    const baseUrlChanged =
+      !finalBaseUrl || finalBaseUrl === providerBaseUrl || !explicitBaseUrl;
+    if (baseUrlChanged) {
       infoMessages.push(
         `Cleared custom base URL for provider '${name}'; default endpoint restored.`,
       );
+    } else if (finalBaseUrl && finalBaseUrl !== providerBaseUrl) {
+      infoMessages.push(
+        `Preserved custom base URL '${finalBaseUrl}' for provider '${name}'.`,
+      );
     }
+  } else if (providerBaseUrl && finalBaseUrl === providerBaseUrl) {
+    infoMessages.push(
+      `Base URL set to '${providerBaseUrl}' for provider '${name}'.`,
+    );
   }
 
   if (name !== 'gemini') {
@@ -1398,7 +1438,7 @@ export async function switchActiveProvider(
     changed: true,
     previousProvider: currentProvider,
     nextProvider: name,
-    defaultModel: resolvedDefaultModel || undefined,
+    defaultModel: modelToApply || undefined,
     authType,
     infoMessages,
   };
