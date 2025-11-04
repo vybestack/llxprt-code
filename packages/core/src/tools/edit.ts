@@ -27,6 +27,7 @@ import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
+import { fuzzyReplace } from './fuzzy-replacer.js';
 
 /**
  * Gets emoji filter instance based on configuration
@@ -80,6 +81,24 @@ export function applyReplacement(
     );
   }
 
+  // Try fuzzy matching first
+  const fuzzyResult = fuzzyReplace(
+    currentContent,
+    oldString,
+    newString,
+    expectedReplacements > 1,
+  );
+
+  if (fuzzyResult) {
+    // Verify the number of replacements matches expectations
+    if (fuzzyResult.occurrences === expectedReplacements) {
+      return fuzzyResult.result;
+    }
+    // If fuzzy matching found a different number of occurrences,
+    // fall through to the strict matching below which will properly report the error
+  }
+
+  // Fall back to strict matching (original behavior)
   // Use a more precise replacement that only replaces the expected number of occurrences
   if (expectedReplacements === 1) {
     // For single replacement, use replace() instead of replaceAll()
@@ -240,23 +259,36 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
         type: ToolErrorType.FILE_NOT_FOUND,
       };
     } else if (currentContent !== null) {
-      // Editing an existing file - count occurrences directly
+      // Editing an existing file - count occurrences
       finalOldString = filteredParams.old_string;
       finalNewString = filteredParams.new_string;
 
       if (finalOldString === '') {
         occurrences = 0;
       } else {
-        let count = 0;
-        let pos = currentContent.indexOf(finalOldString);
-        while (pos !== -1) {
-          count++;
-          pos = currentContent.indexOf(
-            finalOldString,
-            pos + finalOldString.length,
-          );
+        // Try fuzzy matching first to count occurrences
+        const fuzzyResult = fuzzyReplace(
+          currentContent,
+          finalOldString,
+          finalNewString,
+          expectedReplacements > 1,
+        );
+
+        if (fuzzyResult) {
+          occurrences = fuzzyResult.occurrences;
+        } else {
+          // Fall back to strict counting
+          let count = 0;
+          let pos = currentContent.indexOf(finalOldString);
+          while (pos !== -1) {
+            count++;
+            pos = currentContent.indexOf(
+              finalOldString,
+              pos + finalOldString.length,
+            );
+          }
+          occurrences = count;
         }
-        occurrences = count;
       }
 
       if (filteredParams.old_string === '' && expectedReplacements > 1) {

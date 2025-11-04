@@ -557,25 +557,26 @@ describe('EditTool', () => {
       expect(result.returnDisplay).toMatch(/No changes to apply/);
     });
 
-    it('should return EDIT_NO_OCCURRENCE_FOUND error if old_string is not found', async () => {
+    it('should match with fuzzy matching even when old_string has whitespace differences', async () => {
       const initialContent = 'line 1\nline  2\nline 3'; // Note the double space
       fs.writeFileSync(filePath, initialContent, 'utf8');
       const params: EditToolParams = {
         file_path: filePath,
-        // old_string has a single space, so it won't be found
+        // old_string has a single space, but fuzzy matching should find it
         old_string: 'line 1\nline 2\nline 3',
         new_string: 'line 1\nnew line 2\nline 3',
       };
 
+      (mockConfig.getApprovalMode as any).mockReturnValueOnce(
+        ApprovalMode.AUTO_EDIT,
+      );
       const invocation = tool.build(params);
       const result = await invocation.execute(new AbortController().signal);
 
-      expect(result.error?.type).toBe(ToolErrorType.EDIT_NO_OCCURRENCE_FOUND);
-      expect(result.returnDisplay).toMatch(
-        /Failed to edit, could not find the string to replace./,
-      );
-      // Ensure the file was not actually changed
-      expect(fs.readFileSync(filePath, 'utf8')).toBe(initialContent);
+      // With fuzzy matching, this should now succeed
+      expect(result.llmContent).toMatch(/Successfully modified file/);
+      const newContent = fs.readFileSync(filePath, 'utf8');
+      expect(newContent).toContain('new line 2');
     });
   });
 
