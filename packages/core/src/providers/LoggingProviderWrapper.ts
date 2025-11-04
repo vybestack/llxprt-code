@@ -447,33 +447,54 @@ export class LoggingProviderWrapper implements IProvider {
 
     // REQ-SP4-004: Validate that config is a proper Config instance with required methods
     // FAST FAIL: Throw immediately if config is a plain object instead of a Config instance
-    if (
-      activeConfig &&
-      typeof activeConfig.getConversationLoggingEnabled !== 'function'
-    ) {
-      // Gather diagnostic info about the config object
-      const configKeys = activeConfig ? Object.keys(activeConfig) : [];
-      const prototypeChain: string[] = [];
-      let proto = activeConfig ? Object.getPrototypeOf(activeConfig) : null;
-      while (proto && proto !== Object.prototype) {
-        prototypeChain.push(proto.constructor?.name || 'unknown');
-        proto = Object.getPrototypeOf(proto);
-      }
+    if (activeConfig) {
+      let configHasLoggingMethod =
+        typeof activeConfig.getConversationLoggingEnabled === 'function';
 
-      throw new Error(
-        `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method.\n` +
-          `Config appears to be a plain object instead of a Config class instance.\n` +
-          `This typically happens when the Config is serialized (e.g., Object.freeze with spread, JSON.stringify/parse) and loses its prototype chain.\n` +
-          `Diagnostics:\n` +
-          `- Type: ${activeConfig?.constructor?.name ?? 'unknown'}\n` +
-          `- Has method: ${typeof activeConfig?.getConversationLoggingEnabled}\n` +
-          `- Is frozen: ${Object.isFrozen(activeConfig)}\n` +
-          `- Property count: ${configKeys.length}\n` +
-          `- Prototype chain: ${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object (direct)'}\n` +
-          `- From runtime: ${!!normalizedOptions.runtime}\n` +
-          `- Runtime ID: ${normalizedOptions.runtime?.runtimeId ?? 'unknown'}\n` +
-          `Fix: Ensure Config instances are passed by reference, not serialized/deserialized.`,
-      );
+      if (!configHasLoggingMethod) {
+        // Gather diagnostic info about the config object
+        const configKeys = Object.keys(activeConfig);
+        const prototypeChain: string[] = [];
+        let proto = Object.getPrototypeOf(activeConfig);
+        while (proto && proto !== Object.prototype) {
+          prototypeChain.push(proto.constructor?.name || 'unknown');
+          proto = Object.getPrototypeOf(proto);
+        }
+
+        this.debug.warn(
+          () =>
+            `Config instance missing getConversationLoggingEnabled() (type=${activeConfig?.constructor?.name ?? 'unknown'}, frozen=${Object.isFrozen(activeConfig)}, proto=${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object'}). Attempting to restore prototype.`,
+        );
+
+        try {
+          Object.setPrototypeOf(activeConfig, Config.prototype);
+        } catch (error) {
+          this.debug.error(
+            () =>
+              `Failed to restore Config prototype: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+
+        configHasLoggingMethod =
+          typeof activeConfig.getConversationLoggingEnabled === 'function';
+
+        if (!configHasLoggingMethod) {
+          throw new Error(
+            `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method.\n` +
+              `Config appears to be a plain object instead of a Config class instance.\n` +
+              `This typically happens when the Config is serialized (e.g., Object.freeze with spread, JSON.stringify/parse) and loses its prototype chain.\n` +
+              `Diagnostics:\n` +
+              `- Type: ${activeConfig?.constructor?.name ?? 'unknown'}\n` +
+              `- Has method: ${typeof activeConfig?.getConversationLoggingEnabled}\n` +
+              `- Is frozen: ${Object.isFrozen(activeConfig)}\n` +
+              `- Property count: ${configKeys.length}\n` +
+              `- Prototype chain: ${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object (direct)'}\n` +
+              `- From runtime: ${!!normalizedOptions.runtime}\n` +
+              `- Runtime ID: ${normalizedOptions.runtime?.runtimeId ?? 'unknown'}\n` +
+              `Fix: Ensure Config instances are passed by reference, not serialized/deserialized.`,
+          );
+        }
+      }
     }
 
     const invocation = normalizedOptions.invocation;
