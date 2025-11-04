@@ -26,6 +26,9 @@ import { ShellTool } from '../tools/shell.js';
 import { WriteFileTool } from '../tools/write-file.js';
 import { WebFetchTool } from '../tools/web-fetch.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
+import { ReadLineRangeTool } from '../tools/read_line_range.js';
+import { DeleteLineRangeTool } from '../tools/delete_line_range.js';
+import { InsertAtLineTool } from '../tools/insert_at_line.js';
 import {
   MemoryTool,
   setLlxprtMdFilename,
@@ -1516,6 +1519,9 @@ export class Config {
     registerCoreTool(WriteFileTool, this);
     registerCoreTool(WebFetchTool, this);
     registerCoreTool(ReadManyFilesTool, this);
+    registerCoreTool(ReadLineRangeTool, this);
+    registerCoreTool(DeleteLineRangeTool, this);
+    registerCoreTool(InsertAtLineTool, this);
     registerCoreTool(ShellTool, this);
     registerCoreTool(MemoryTool);
     registerCoreTool(WebSearchTool, this);
