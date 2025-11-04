@@ -451,12 +451,28 @@ export class LoggingProviderWrapper implements IProvider {
       activeConfig &&
       typeof activeConfig.getConversationLoggingEnabled !== 'function'
     ) {
+      // Gather diagnostic info about the config object
+      const configKeys = activeConfig ? Object.keys(activeConfig) : [];
+      const prototypeChain: string[] = [];
+      let proto = activeConfig ? Object.getPrototypeOf(activeConfig) : null;
+      while (proto && proto !== Object.prototype) {
+        prototypeChain.push(proto.constructor?.name || 'unknown');
+        proto = Object.getPrototypeOf(proto);
+      }
+
       throw new Error(
-        `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method. ` +
-          `Config appears to be a plain object instead of a Config class instance. ` +
-          `This typically happens when the Config is serialized (e.g., during bundling) and loses its prototype chain. ` +
-          `Type: ${activeConfig?.constructor?.name ?? 'unknown'}, ` +
-          `Has method: ${typeof activeConfig?.getConversationLoggingEnabled}`,
+        `[REQ-SP4-004] FAST FAIL: Invalid config instance - missing getConversationLoggingEnabled() method.\n` +
+          `Config appears to be a plain object instead of a Config class instance.\n` +
+          `This typically happens when the Config is serialized (e.g., Object.freeze with spread, JSON.stringify/parse) and loses its prototype chain.\n` +
+          `Diagnostics:\n` +
+          `- Type: ${activeConfig?.constructor?.name ?? 'unknown'}\n` +
+          `- Has method: ${typeof activeConfig?.getConversationLoggingEnabled}\n` +
+          `- Is frozen: ${Object.isFrozen(activeConfig)}\n` +
+          `- Property count: ${configKeys.length}\n` +
+          `- Prototype chain: ${prototypeChain.length > 0 ? prototypeChain.join(' -> ') : 'Object (direct)'}\n` +
+          `- From runtime: ${!!normalizedOptions.runtime}\n` +
+          `- Runtime ID: ${normalizedOptions.runtime?.runtimeId ?? 'unknown'}\n` +
+          `Fix: Ensure Config instances are passed by reference, not serialized/deserialized.`,
       );
     }
 
