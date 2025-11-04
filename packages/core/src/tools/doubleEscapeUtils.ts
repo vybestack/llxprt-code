@@ -188,11 +188,15 @@ export function processToolParameters(
   // Only apply double-escape handling for formats that need it
   if (!shouldUseDoubleEscapeHandling(format)) {
     // For formats that don't need double-escape handling, parse the JSON string
+    const trimmed = parametersString.trim();
+    if (!trimmed) {
+      return {};
+    }
     try {
-      return JSON.parse(parametersString);
+      return JSON.parse(trimmed);
     } catch (e) {
       logger.debug(() => `Failed to parse tool parameters as JSON: ${e}`);
-      return parametersString; // Return as-is if not valid JSON
+      return { raw: trimmed };
     }
   }
 

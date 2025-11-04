@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  vi,
+} from 'vitest';
 import { OpenAIProvider, ProviderManager } from '../../index.js';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import { resetSettingsService } from '../../settings/settingsServiceInstance.js';
@@ -16,6 +24,7 @@ const resolveDefaultModel = (): string =>
   process.env.LLXPRT_DEFAULT_MODEL ?? 'gpt-4o';
 
 describe('Multi-Provider Integration Tests', () => {
+  vi.setTimeout(20000);
   let apiKey: string | null = null;
   let baseURL: string | undefined = undefined;
   let skipTests = false;

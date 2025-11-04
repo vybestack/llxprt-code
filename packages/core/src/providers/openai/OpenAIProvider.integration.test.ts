@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { IContent } from '../../services/history/IContent.js';
 import { initializeTestProviderRuntime } from '../../test-utils/runtime.js';
@@ -19,6 +19,7 @@ const resolveDefaultModel = (): string =>
   process.env.LLXPRT_DEFAULT_MODEL ?? 'gpt-4o';
 
 describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
+  vi.setTimeout(20000);
   let provider: OpenAIProvider | null = null;
   let settingsService: SettingsService;
 
