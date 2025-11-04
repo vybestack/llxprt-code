@@ -50,32 +50,26 @@ export interface ShellConfiguration {
  */
 export function getShellConfiguration(): ShellConfiguration {
   if (isWindows()) {
-    const comSpec = process.env.ComSpec || 'cmd.exe';
-    const executable = comSpec.toLowerCase();
-
-    if (
-      executable.endsWith('powershell.exe') ||
-      executable.endsWith('pwsh.exe')
-    ) {
-      // For PowerShell, the arguments are different.
-      // -NoProfile: Speeds up startup.
-      // -Command: Executes the following command.
-      return {
-        executable: comSpec,
-        argsPrefix: ['-NoProfile', '-Command'],
-        shell: 'powershell',
-      };
+    const comSpec = process.env['ComSpec'];
+    if (comSpec) {
+      const executable = comSpec.toLowerCase();
+      if (
+        executable.endsWith('powershell.exe') ||
+        executable.endsWith('pwsh.exe')
+      ) {
+        return {
+          executable: comSpec,
+          argsPrefix: ['-NoProfile', '-Command'],
+          shell: 'powershell',
+        };
+      }
     }
 
-    // Default to cmd.exe for anything else on Windows.
-    // Flags for CMD:
-    // /d: Skip execution of AutoRun commands.
-    // /s: Modifies the treatment of the command string (important for quoting).
-    // /c: Carries out the command specified by the string and then terminates.
+    // Default to PowerShell for all other Windows configurations.
     return {
-      executable: comSpec,
-      argsPrefix: ['/d', '/s', '/c'],
-      shell: 'cmd',
+      executable: 'powershell.exe',
+      argsPrefix: ['-NoProfile', '-Command'],
+      shell: 'powershell',
     };
   }
 

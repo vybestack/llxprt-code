@@ -9,6 +9,7 @@ import { spawn as cpSpawn } from 'child_process';
 import { TextDecoder } from 'util';
 import os from 'os';
 import { getCachedEncodingForBuffer } from '../utils/systemEncoding.js';
+import { getShellConfiguration, type ShellType } from '../utils/shell-utils.js';
 import { isBinary } from '../utils/textUtils.js';
 import pkg from '@xterm/headless';
 import stripAnsi from 'strip-ansi';
@@ -27,6 +28,22 @@ function stripAnsiIfPresent(value: string): string {
 
 // Note: getFullText was removed as the PTY path now uses truncatedOutput
 // for bounded memory instead of extracting the full xterm terminal buffer.
+
+const BASH_SHOPT_OPTIONS = 'promptvars nullglob extglob nocaseglob dotglob';
+const BASH_SHOPT_GUARD = `shopt -u ${BASH_SHOPT_OPTIONS};`;
+
+function ensurePromptvarsDisabled(command: string, shell: ShellType): string {
+  if (shell !== 'bash') {
+    return command;
+  }
+
+  const trimmed = command.trimStart();
+  if (trimmed.startsWith(BASH_SHOPT_GUARD)) {
+    return command;
+  }
+
+  return `${BASH_SHOPT_GUARD} ${command}`;
+}
 
 /** A structured result from a shell command execution. */
 export interface ShellExecutionResult {
@@ -159,6 +176,9 @@ export class ShellExecutionService {
   ): ShellExecutionHandle {
     try {
       const isWindows = os.platform() === 'win32';
+      const { executable, argsPrefix, shell } = getShellConfiguration();
+      const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
+      const spawnArgs = [...argsPrefix, guardedCommand];
 
       const envVars: NodeJS.ProcessEnv = {
         ...process.env,
@@ -168,11 +188,11 @@ export class ShellExecutionService {
       };
       delete envVars.BASH_ENV;
 
-      const child = cpSpawn(commandToExecute, [], {
+      const child = cpSpawn(executable, spawnArgs, {
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
-        windowsVerbatimArguments: true,
-        shell: isWindows ? true : 'bash',
+        windowsVerbatimArguments: isWindows ? false : undefined,
+        shell: false,
         detached: !isWindows,
         env: envVars,
       });
@@ -398,11 +418,9 @@ export class ShellExecutionService {
     try {
       const cols = terminalColumns ?? 80;
       const rows = terminalRows ?? 30;
-      const isWindows = os.platform() === 'win32';
-      const shell = isWindows ? 'cmd.exe' : 'bash';
-      const args = isWindows
-        ? `/c ${commandToExecute}`
-        : ['-c', commandToExecute];
+      const { executable, argsPrefix, shell } = getShellConfiguration();
+      const guardedCommand = ensurePromptvarsDisabled(commandToExecute, shell);
+      const args = [...argsPrefix, guardedCommand];
 
       const envVars: NodeJS.ProcessEnv = {
         ...process.env,
@@ -412,7 +430,7 @@ export class ShellExecutionService {
       };
       delete envVars.BASH_ENV;
 
-      const ptyProcess = ptyInfo?.module.spawn(shell, args, {
+      const ptyProcess = ptyInfo?.module.spawn(executable, args, {
         cwd,
         name: 'xterm-color',
         cols,
