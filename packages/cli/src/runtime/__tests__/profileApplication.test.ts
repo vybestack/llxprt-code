@@ -325,4 +325,45 @@ describe('profileApplication helpers', () => {
     isCliStatelessProviderModeEnabledMock.mockReturnValue(false);
     isCliRuntimeStatelessReadyMock.mockReturnValue(true);
   });
+
+  it('clears all ephemeral settings when loading profile without them - fixes issue #453', async () => {
+    // Set up initial ephemeral settings as if they were set by a previous profile/provider
+    configStub.setEphemeralSetting('auth-key', 'old-secret-key');
+    configStub.setEphemeralSetting('auth-keyfile', '/old/path/keyfile');
+    configStub.setEphemeralSetting('base-url', 'https://old-api.example.com');
+    configStub.setEphemeralSetting('context-limit', 100000);
+    configStub.setEphemeralSetting('custom-headers', 'X-Old-Header: value');
+
+    providerManagerStub.available = ['anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+
+    // Load a new profile that does NOT include these ephemeral settings
+    const profile: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4',
+      modelParams: {
+        temperature: 0.7,
+      },
+      ephemeralSettings: {
+        // Only set context-limit, nothing else
+        'context-limit': 200000,
+      },
+    };
+
+    await applyProfileWithGuards(profile, {
+      profileName: 'clean-profile',
+    });
+
+    // Verify that old ephemeral settings that were NOT in the profile are cleared
+    expect(configStub.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(configStub.getEphemeralSetting('auth-keyfile')).toBeUndefined();
+    expect(configStub.getEphemeralSetting('base-url')).toBeUndefined();
+    expect(configStub.getEphemeralSetting('custom-headers')).toBeUndefined();
+
+    // Verify that the one setting that WAS in the profile is set correctly
+    expect(configStub.getEphemeralSetting('context-limit')).toBe(200000);
+  });
 });
