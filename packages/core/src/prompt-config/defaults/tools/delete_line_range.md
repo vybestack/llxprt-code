@@ -1,0 +1,3 @@
+- Use 'delete_line_range' to surgically remove blocks of code, such as an entire function or class.
+- This is the preferred way to delete large blocks, as it avoids using a massive, brittle 'old_string' in the 'replace' tool.
+- Always read the file or use 'get_file_outline' first to get the exact line numbers before deleting.

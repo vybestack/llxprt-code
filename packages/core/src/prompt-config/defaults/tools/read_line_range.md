@@ -1,0 +1,2 @@
+- Use 'read_line_range' to read a specific range of lines from a file. This is very useful for "copying" a function or class after finding its definition.
+- The 'start_line' and 'end_line' parameters are 1-based and inclusive.

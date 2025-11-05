@@ -239,7 +239,10 @@ function loadMarkdownFile(filename: string): string {
 export const TOOL_DEFAULTS: Record<string, string> = {
   'tools/shell.md': loadMarkdownFile('tools/shell.md'),
   'tools/read-file.md': loadMarkdownFile('tools/read-file.md'),
+  'tools/delete_line_range.md': loadMarkdownFile('tools/delete_line_range.md'),
   'tools/edit.md': loadMarkdownFile('tools/edit.md'),
+  'tools/insert_at_line.md': loadMarkdownFile('tools/insert_at_line.md'),
+  'tools/read_line_range.md': loadMarkdownFile('tools/read_line_range.md'),
   'tools/write-file.md': loadMarkdownFile('tools/write-file.md'),
   'tools/grep.md': loadMarkdownFile('tools/grep.md'),
   'tools/glob.md': loadMarkdownFile('tools/glob.md'),
