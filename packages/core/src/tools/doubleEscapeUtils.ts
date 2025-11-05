@@ -225,7 +225,15 @@ export function processToolParameters(
   }
 
   // Convert string numbers to actual numbers for qwen format
-  return convertStringNumbersToNumbers(detection.correctedValue);
+  const normalized = detection.correctedValue;
+  if (typeof normalized === 'string') {
+    const trimmed = normalized.trim();
+    if (trimmed.length === 0) {
+      return {};
+    }
+  }
+
+  return convertStringNumbersToNumbers(normalized);
 }
 
 /**

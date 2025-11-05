@@ -1239,9 +1239,6 @@ export async function switchActiveProvider(
 
   const activeProvider = providerManager.getActiveProvider();
   const providerSettings = getProviderSettingsSnapshot(settingsService, name);
-  const configProviderBeforeSwitch =
-    typeof config.getProvider === 'function' ? config.getProvider() : undefined;
-
   // Clear any cached model parameters for the new provider
   const existingParams = extractModelParams(providerSettings);
   for (const key of Object.keys(existingParams)) {
@@ -1301,13 +1298,13 @@ export async function switchActiveProvider(
     );
   const hadCustomBaseUrl = Boolean(storedBaseUrlSetting);
   const explicitConfigModel =
-    configProviderBeforeSwitch === name
+    currentProvider === name
       ? normalizeSetting(
           typeof config.getModel === 'function' ? config.getModel() : undefined,
         )
       : undefined;
   const explicitConfigBaseUrl =
-    configProviderBeforeSwitch === name
+    currentProvider === name
       ? normalizeSetting(
           typeof config.getEphemeralSetting === 'function'
             ? (config.getEphemeralSetting('base-url') as string | undefined)
@@ -1323,7 +1320,9 @@ export async function switchActiveProvider(
   if (name === 'qwen') {
     providerBaseUrl = 'https://portal.qwen.ai/v1';
   }
-  const explicitBaseUrl = explicitConfigBaseUrl ?? storedBaseUrlSetting;
+  const explicitBaseUrl =
+    explicitConfigBaseUrl ??
+    (currentProvider === name ? storedBaseUrlSetting : undefined);
   const finalBaseUrl = explicitBaseUrl ?? providerBaseUrl ?? undefined;
 
   if (finalBaseUrl) {
@@ -1336,13 +1335,53 @@ export async function switchActiveProvider(
     settingsService.setProviderSetting(name, 'baseURL', undefined);
   }
 
-  const defaultModel = activeProvider.getDefaultModel?.() ?? '';
-  const explicitModel =
+  const defaultModel = normalizeSetting(activeProvider.getDefaultModel?.());
+  let modelToApply =
     explicitConfigModel ??
-    (storedModelSetting && storedModelSetting !== defaultModel
+    (currentProvider === name &&
+    storedModelSetting &&
+    storedModelSetting !== defaultModel
       ? storedModelSetting
-      : undefined);
-  const modelToApply = explicitModel ?? defaultModel;
+      : undefined) ??
+    defaultModel ??
+    '';
+
+  let availableModels: IModel[] = [];
+  if (typeof providerManager.getAvailableModels === 'function') {
+    try {
+      availableModels = (await providerManager.getAvailableModels(name)) ?? [];
+    } catch (error) {
+      logger.debug(
+        () =>
+          `[cli-runtime] Failed to list models for provider '${name}': ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
+  }
+
+  const firstAvailableModelId = (() => {
+    for (const model of availableModels) {
+      if (typeof model?.id === 'string' && model.id.trim() !== '') {
+        return model.id.trim();
+      }
+      if (typeof model?.name === 'string' && model.name.trim() !== '') {
+        return model.name.trim();
+      }
+    }
+    return undefined;
+  })();
+
+  let autoSelectedModel: string | undefined;
+
+  if (!modelToApply || modelToApply.trim() === '') {
+    if (firstAvailableModelId) {
+      modelToApply = firstAvailableModelId;
+      autoSelectedModel = firstAvailableModelId;
+    }
+  }
+
+  modelToApply = modelToApply?.trim() ?? '';
 
   settingsService.setProviderSetting(name, 'model', modelToApply || undefined);
   config.setModel(modelToApply);
@@ -1427,6 +1466,16 @@ export async function switchActiveProvider(
   } else if (providerBaseUrl && finalBaseUrl === providerBaseUrl) {
     infoMessages.push(
       `Base URL set to '${providerBaseUrl}' for provider '${name}'.`,
+    );
+  }
+
+  if (autoSelectedModel) {
+    infoMessages.push(
+      `Model set to '${autoSelectedModel}' for provider '${name}'.`,
+    );
+  } else if (modelToApply) {
+    infoMessages.push(
+      `Active model is '${modelToApply}' for provider '${name}'.`,
     );
   }
 

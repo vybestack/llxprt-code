@@ -1037,6 +1037,42 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             break;
           }
 
+          const chunkRecord = chunk as unknown as Record<string, unknown>;
+          let parsedData: Record<string, unknown> | undefined;
+          const rawData = chunkRecord?.data;
+          if (typeof rawData === 'string') {
+            try {
+              parsedData = JSON.parse(rawData) as Record<string, unknown>;
+            } catch {
+              parsedData = undefined;
+            }
+          } else if (rawData && typeof rawData === 'object') {
+            parsedData = rawData as Record<string, unknown>;
+          }
+
+          const streamingError =
+            chunkRecord?.error ??
+            parsedData?.error ??
+            (parsedData?.data as { error?: unknown } | undefined)?.error;
+          const streamingEvent = (chunkRecord?.event ?? parsedData?.event) as
+            | string
+            | undefined;
+          const streamingErrorMessage =
+            (streamingError as { message?: string } | undefined)?.message ??
+            (streamingError as { error?: string } | undefined)?.error ??
+            (parsedData as { message?: string } | undefined)?.message;
+          if (
+            streamingEvent === 'error' ||
+            (streamingError && typeof streamingError === 'object')
+          ) {
+            const errorMessage =
+              streamingErrorMessage ??
+              (typeof streamingError === 'string'
+                ? streamingError
+                : 'Streaming response reported an error.');
+            throw new Error(errorMessage);
+          }
+
           // Extract usage information if present (typically in final chunk)
           if (chunk.usage) {
             streamingUsage = chunk.usage;
@@ -1165,6 +1201,65 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 }
               }
             }
+          }
+
+          const choiceMessage = (
+            choice as {
+              message?: {
+                tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
+              };
+            }
+          ).message;
+          const messageToolCalls = choiceMessage?.tool_calls;
+          if (messageToolCalls && messageToolCalls.length > 0) {
+            messageToolCalls.forEach(
+              (
+                toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
+                index: number,
+              ) => {
+                if (!toolCall || toolCall.type !== 'function') {
+                  return;
+                }
+
+                let targetIndex = index;
+                const annotated =
+                  toolCall as OpenAI.Chat.Completions.ChatCompletionMessageToolCall & {
+                    index?: number;
+                  };
+                if (typeof annotated.index === 'number') {
+                  targetIndex = annotated.index;
+                } else if (toolCall.id) {
+                  const matchIndex = accumulatedToolCalls.findIndex(
+                    (existing) => existing && existing.id === toolCall.id,
+                  );
+                  if (matchIndex >= 0) {
+                    targetIndex = matchIndex;
+                  }
+                }
+
+                if (!accumulatedToolCalls[targetIndex]) {
+                  accumulatedToolCalls[targetIndex] = {
+                    id: toolCall.id || '',
+                    type: 'function',
+                    function: {
+                      name: toolCall.function?.name || '',
+                      arguments: '',
+                    },
+                  };
+                }
+
+                const target = accumulatedToolCalls[targetIndex];
+                if (toolCall.id) {
+                  target.id = toolCall.id;
+                }
+                if (toolCall.function?.name) {
+                  target.function.name = toolCall.function.name;
+                }
+                if (toolCall.function?.arguments !== undefined) {
+                  target.function.arguments = toolCall.function.arguments ?? '';
+                }
+              },
+            );
           }
         }
       } catch (error) {
@@ -1559,7 +1654,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Retry on 429 rate limit errors or 5xx server errors
     const shouldRetry = Boolean(
-      status === 429 || (status && status >= 500 && status < 600),
+      status === 429 || status === 503 || status === 504,
     );
 
     if (shouldRetry) {
