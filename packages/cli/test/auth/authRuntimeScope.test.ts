@@ -86,11 +86,13 @@ describe('CLI auth runtime scope gaps', () => {
         }),
       );
 
-      const firstToken = await resolver.resolveAuthentication();
+      const firstToken = await resolver.resolveAuthentication({
+        includeOAuth: true,
+      });
 
-      await expect(resolver.resolveAuthentication()).resolves.toBe(
-        'cli-runtime-token',
-      );
+      await expect(
+        resolver.resolveAuthentication({ includeOAuth: true }),
+      ).resolves.toBe('cli-runtime-token');
 
       expect(firstToken).toBe('cli-runtime-token');
       expect(oauthManager.getToken).toHaveBeenCalledTimes(1);
@@ -125,7 +127,7 @@ describe('CLI auth runtime scope gaps', () => {
         }),
       );
 
-      await resolver.resolveAuthentication();
+      await resolver.resolveAuthentication({ includeOAuth: true });
     });
 
     expect(oauthManager.getToken).toHaveBeenCalledWith(

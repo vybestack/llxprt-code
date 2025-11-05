@@ -359,6 +359,135 @@ describe('runtimeSettings helpers', () => {
     expect(config.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 
+  it('switchActiveProvider resets stored model overrides when switching providers', async () => {
+    providers.gemini = new StubProvider('gemini');
+    activeProviderName = 'gemini';
+    const { config, settingsService } = getCliRuntimeServices() as unknown as {
+      config: StubConfigInstance;
+      settingsService: StubSettingsServiceInstance;
+    };
+
+    const explicitModel = 'hf:zai-org/GLM-4.6';
+    config.setModel(explicitModel);
+    settingsService.setProviderSetting('openai', 'model', explicitModel);
+
+    const result = await switchActiveProvider('openai');
+
+    expect(result.nextProvider).toBe('openai');
+    expect(config.getModel()).toBe('default-model');
+    expect(settingsService.getProviderSettings('openai').model).toBe(
+      'default-model',
+    );
+  });
+
+  it('switchActiveProvider clears custom base URL overrides when switching providers', async () => {
+    providers.gemini = new StubProvider('gemini');
+    activeProviderName = 'gemini';
+    const { config, settingsService } = getCliRuntimeServices() as unknown as {
+      config: StubConfigInstance;
+      settingsService: StubSettingsServiceInstance;
+    };
+
+    const customBaseUrl = 'https://api.synthetic.new/openai/v1';
+    config.setEphemeralSetting('base-url', customBaseUrl);
+    settingsService.setProviderSetting('openai', 'baseUrl', customBaseUrl);
+    settingsService.setProviderSetting('openai', 'baseURL', customBaseUrl);
+
+    const result = await switchActiveProvider('openai');
+
+    expect(result.nextProvider).toBe('openai');
+    expect(config.getEphemeralSetting('base-url')).toBeUndefined();
+    const updatedSettings = settingsService.getProviderSettings('openai');
+    expect(updatedSettings.baseUrl).toBeUndefined();
+    expect(updatedSettings.baseURL).toBeUndefined();
+  });
+
+  it('switchActiveProvider preserves auth settings and global ephemerals when staying on the same provider', async () => {
+    const { config, settingsService } = getCliRuntimeServices() as unknown as {
+      config: StubConfigInstance;
+      settingsService: StubSettingsServiceInstance;
+    };
+
+    config.setEphemeralSetting('auth-key', 'syn_profile_key');
+    config.setEphemeralSetting('auth-keyfile', '/Users/example/.synthetic_key');
+    config.setEphemeralSetting('context-limit', 200000);
+    settingsService.setProviderSetting('openai', 'apiKey', 'syn_profile_key');
+
+    const result = await switchActiveProvider('openai');
+
+    expect(result.nextProvider).toBe('openai');
+    expect(config.getEphemeralSetting('auth-key')).toBe('syn_profile_key');
+    expect(config.getEphemeralSetting('auth-keyfile')).toBe(
+      '/Users/example/.synthetic_key',
+    );
+    expect(config.getEphemeralSetting('context-limit')).toBe(200000);
+    expect(settingsService.getProviderSettings('openai').apiKey).toBe(
+      'syn_profile_key',
+    );
+  });
+
+  it('switchActiveProvider clears previous provider ephemerals before activating a new provider', async () => {
+    const { config, settingsService } = getCliRuntimeServices() as unknown as {
+      config: StubConfigInstance;
+      settingsService: StubSettingsServiceInstance;
+    };
+
+    config.setEphemeralSetting('auth-key', 'openai-secret');
+    config.setEphemeralSetting('auth-keyfile', '/tmp/openai.key');
+    config.setEphemeralSetting(
+      'base-url',
+      'https://api.synthetic.new/openai/v1',
+    );
+    config.setEphemeralSetting('context-limit', 160000);
+    config.setModel('openai-custom-model');
+
+    settingsService.setProviderSetting('openai', 'apiKey', 'openai-secret');
+    settingsService.setProviderSetting(
+      'openai',
+      'baseUrl',
+      'https://api.synthetic.new/openai/v1',
+    );
+    settingsService.setProviderSetting(
+      'openai',
+      'model',
+      'openai-custom-model',
+    );
+
+    // Simulate stale persisted state for the target provider that should be ignored
+    settingsService.setProviderSetting('anthropic', 'apiKey', 'stale-key');
+    settingsService.setProviderSetting('anthropic', 'model', 'anthropic-stale');
+    settingsService.setProviderSetting(
+      'anthropic',
+      'baseUrl',
+      'https://stale.anthropic.example/v1',
+    );
+
+    providers.anthropic.defaultModel = 'anthropic-default-model';
+
+    const result = await switchActiveProvider('anthropic');
+
+    expect(result.nextProvider).toBe('anthropic');
+    expect(config.getProvider()).toBe('anthropic');
+
+    expect(config.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(config.getEphemeralSetting('auth-keyfile')).toBeUndefined();
+    expect(config.getEphemeralSetting('base-url')).toBeUndefined();
+    expect(config.getEphemeralSetting('context-limit')).toBeUndefined();
+
+    const previousProviderSettings =
+      settingsService.getProviderSettings('openai');
+    expect(previousProviderSettings.apiKey).toBeUndefined();
+    expect(previousProviderSettings.baseUrl).toBeUndefined();
+    expect(previousProviderSettings.model).toBeUndefined();
+
+    const activeProviderSettings =
+      settingsService.getProviderSettings('anthropic');
+    expect(activeProviderSettings.apiKey).toBeUndefined();
+    expect(activeProviderSettings.baseUrl).toBeUndefined();
+    expect(activeProviderSettings.model).toBe('anthropic-default-model');
+    expect(config.getModel()).toBe('anthropic-default-model');
+  });
+
   it('setActiveModel updates provider and config', async () => {
     const { config, settingsService } = getCliRuntimeServices() as unknown as {
       config: StubConfigInstance;
@@ -403,6 +532,41 @@ describe('runtimeSettings helpers', () => {
     expect(config.getEphemeralSetting('base-url')).toBe(
       'https://api.example.com',
     );
+  });
+
+  it('switchActiveProvider selects first available model when provider default is missing', async () => {
+    providers.qwen = new StubProvider('qwen');
+    providers.qwen.defaultModel = '';
+    providers.qwen.model = '';
+    providers.qwen.params = undefined;
+
+    mockProviderManager.getAvailableModels.mockImplementation(
+      async (provider?: string) => {
+        if (provider === 'qwen') {
+          return [{ id: 'qwen-plus' }];
+        }
+        return [{ id: 'model-a' }, { id: 'model-b' }];
+      },
+    );
+
+    const { config, settingsService } = getCliRuntimeServices() as unknown as {
+      config: StubConfigInstance;
+      settingsService: StubSettingsServiceInstance;
+    };
+
+    const result = await switchActiveProvider('qwen');
+
+    expect(result.nextProvider).toBe('qwen');
+    expect(result.defaultModel).toBe('qwen-plus');
+    expect(config.getModel()).toBe('qwen-plus');
+    expect(settingsService.getProviderSettings('qwen').model).toBe('qwen-plus');
+
+    // Restore default mock implementation for other tests
+    mockProviderManager.getAvailableModels.mockImplementation(async () => [
+      { id: 'model-a' },
+      { id: 'model-b' },
+    ]);
+    providers.qwen.defaultModel = 'default-model';
   });
 
   it('buildRuntimeProfileSnapshot captures model and ephemeral settings', async () => {

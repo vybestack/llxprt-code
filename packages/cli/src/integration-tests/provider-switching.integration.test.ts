@@ -170,6 +170,40 @@ describe('Runtime Provider Switching Integration', () => {
     expect(result.changed).toBe(false);
     expect(providerA.clearState).not.toHaveBeenCalled();
   });
+
+  it('clears legacy base URL and resets model when switching back to provider', async () => {
+    const providerA = createMockProvider('providerA');
+    providerA.getDefaultModel = vi.fn(() => 'providerA-default');
+    const providerB = createMockProvider('providerB');
+
+    providerManager.registerProvider(providerA);
+    providerManager.registerProvider(providerB);
+
+    providerManager.setActiveProvider('providerA');
+    settingsService.setProviderSetting(
+      'providerA',
+      'baseUrl',
+      'https://legacy.example/v1',
+    );
+    settingsService.setProviderSetting(
+      'providerA',
+      'baseURL',
+      'https://legacy.example/v1',
+    );
+    settingsService.setProviderSetting('providerA', 'model', 'legacy-model');
+    config.setEphemeralSetting('base-url', 'https://legacy.example/v1');
+    config.setModel('legacy-model');
+
+    await switchActiveProvider('providerB');
+    await switchActiveProvider('providerA');
+
+    const refreshedSettings = settingsService.getProviderSettings('providerA');
+    expect(refreshedSettings.baseUrl).toBeUndefined();
+    expect(refreshedSettings.baseURL).toBeUndefined();
+    expect(refreshedSettings.model).toBe('providerA-default');
+    expect(config.getModel()).toBe('providerA-default');
+    expect(config.getEphemeralSetting('base-url')).toBeUndefined();
+  });
 });
 
 function createMockProvider(name: string): IProvider & {

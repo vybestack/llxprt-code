@@ -321,19 +321,6 @@ class GeminiAgent {
               Object.keys(configWithProfile._profileModelParams).length > 0
             ) {
               this.logger.debug(() => 'Setting model params from profile');
-              const profileParams = configWithProfile._profileModelParams;
-              const existingParams = getActiveModelParams();
-
-              for (const [key, value] of Object.entries(profileParams)) {
-                setActiveModelParam(key, value);
-              }
-
-              for (const key of Object.keys(existingParams)) {
-                if (!(key in profileParams)) {
-                  clearActiveModelParam(key);
-                }
-              }
-
               // Apply base URL from ephemeral settings if available
               const ephemeralBaseUrl = this.config.getEphemeralSetting(
                 'base-url',
@@ -358,27 +345,16 @@ class GeminiAgent {
                 ...(configWithProfile._profileModelParams || {}),
                 ...(configWithProfile._cliModelParams || {}),
               };
-              if (
-                Object.keys(mergedModelParams).length > 0 &&
-                'setModelParams' in activeProvider &&
-                typeof (
-                  activeProvider as {
-                    setModelParams?: (
-                      params: Record<string, unknown> | undefined,
-                    ) => void;
-                  }
-                ).setModelParams === 'function'
-              ) {
-                this.logger.debug(
-                  () => 'Setting model params from profile/CLI overrides',
-                );
-                (
-                  activeProvider as {
-                    setModelParams: (
-                      params: Record<string, unknown> | undefined,
-                    ) => void;
-                  }
-                ).setModelParams(mergedModelParams);
+              const existingParams = getActiveModelParams();
+
+              for (const [key, value] of Object.entries(mergedModelParams)) {
+                setActiveModelParam(key, value);
+              }
+
+              for (const key of Object.keys(existingParams)) {
+                if (!(key in mergedModelParams)) {
+                  clearActiveModelParam(key);
+                }
               }
             }
           }

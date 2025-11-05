@@ -18,14 +18,26 @@ import * as os from 'os';
 import * as path from 'path';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
-const mocks = vi.hoisted(() => ({
-  getProviderManagerMock: vi.fn(),
-  refreshAliasProvidersMock: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  const runtimeApi = {
+    getActiveProviderName: vi.fn(),
+    switchActiveProvider: vi.fn(),
+  };
+  return {
+    getProviderManagerMock: vi.fn(),
+    refreshAliasProvidersMock: vi.fn(),
+    runtimeApi,
+    getRuntimeApiMock: vi.fn(() => runtimeApi),
+  };
+});
 
 vi.mock('../../providers/providerManagerInstance.js', () => ({
   getProviderManager: mocks.getProviderManagerMock,
   refreshAliasProviders: mocks.refreshAliasProvidersMock,
+}));
+
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: mocks.getRuntimeApiMock,
 }));
 
 // Import after mocks are set up
@@ -127,5 +139,74 @@ describe('providerCommand /provider save', () => {
     });
 
     expect(mocks.refreshAliasProvidersMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('providerCommand /provider switch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getRuntimeApiMock.mockReturnValue(mocks.runtimeApi);
+    mocks.runtimeApi.getActiveProviderName.mockReturnValue('openai');
+    mocks.runtimeApi.switchActiveProvider.mockResolvedValue({
+      changed: true,
+      previousProvider: 'openai',
+      nextProvider: 'qwen',
+      defaultModel: 'qwen/qwen-plus',
+      infoMessages: ['Use /key to set API key if needed.'],
+    });
+  });
+
+  it('delegates provider switching to runtime API and surfaces info messages', async () => {
+    const providerManager = {
+      getActiveProviderName: vi.fn(() => 'openai'),
+    };
+    mocks.getProviderManagerMock.mockReturnValue(providerManager);
+
+    const context = createMockCommandContext();
+
+    if (!providerCommand.action) {
+      throw new Error('providerCommand must have an action');
+    }
+
+    const result = await providerCommand.action(context, 'qwen');
+
+    expect(mocks.runtimeApi.getActiveProviderName).toHaveBeenCalledTimes(1);
+    expect(mocks.runtimeApi.switchActiveProvider).toHaveBeenCalledWith('qwen');
+    expect(context.ui.addItem).toHaveBeenCalledWith(
+      {
+        type: 'info',
+        text: 'Use /key to set API key if needed.',
+      },
+      expect.any(Number),
+    );
+    expect(result).toEqual({
+      type: 'message',
+      messageType: 'info',
+      content: 'Switched from openai to qwen',
+    });
+  });
+
+  it('returns an error message when runtime switching fails', async () => {
+    const providerManager = {
+      getActiveProviderName: vi.fn(() => 'openai'),
+    };
+    mocks.getProviderManagerMock.mockReturnValue(providerManager);
+
+    const error = new Error('provider not found');
+    mocks.runtimeApi.switchActiveProvider.mockRejectedValueOnce(error);
+
+    const context = createMockCommandContext();
+
+    if (!providerCommand.action) {
+      throw new Error('providerCommand must have an action');
+    }
+
+    const result = await providerCommand.action(context, 'unknown');
+
+    expect(result).toEqual({
+      type: 'message',
+      messageType: 'error',
+      content: 'Failed to switch provider: provider not found',
+    });
   });
 });

@@ -366,7 +366,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   private getFallbackModels(): IModel[] {
-    return [];
+    // Return commonly available OpenAI models as fallback
+    return [
+      {
+        id: 'gpt-5',
+        name: 'GPT-5',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-4.2-turbo-preview',
+        name: 'GPT-4.2 Turbo Preview',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-4.2-turbo',
+        name: 'GPT-4.2 Turbo',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+    ];
   }
 
   override getDefaultModel(): string {
@@ -449,43 +469,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // For non-qwen providers, use the normal check
     return super.isAuthenticated();
-  }
-
-  /**
-   * Override getAuthToken for qwen provider to skip SettingsService auth checks
-   * This ensures qwen always uses OAuth even when other profiles set auth-key/auth-keyfile
-   */
-  protected override async getAuthToken(): Promise<string> {
-    // If this is the qwen provider and we have forceQwenOAuth, skip SettingsService checks
-    const config = this.providerConfig as IProviderConfig & {
-      forceQwenOAuth?: boolean;
-    };
-    if (this.name === 'qwen' && config?.forceQwenOAuth) {
-      // For qwen, skip directly to OAuth without checking SettingsService
-      // Use 'qwen' as the provider name even if baseProviderConfig.oauthProvider is not set
-      const oauthProviderName = this.baseProviderConfig.oauthProvider || 'qwen';
-      if (this.baseProviderConfig.oauthManager) {
-        try {
-          const token =
-            await this.baseProviderConfig.oauthManager.getToken(
-              oauthProviderName,
-            );
-          if (token) {
-            return token;
-          }
-        } catch (error) {
-          if (process.env.DEBUG) {
-            console.warn(`[qwen] OAuth authentication failed:`, error);
-          }
-        }
-      }
-
-      // No OAuth available, return empty string
-      return '';
-    }
-
-    // For non-qwen providers, use the normal auth precedence chain
-    return super.getAuthToken();
   }
 
   /**
@@ -1037,6 +1020,42 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             break;
           }
 
+          const chunkRecord = chunk as unknown as Record<string, unknown>;
+          let parsedData: Record<string, unknown> | undefined;
+          const rawData = chunkRecord?.data;
+          if (typeof rawData === 'string') {
+            try {
+              parsedData = JSON.parse(rawData) as Record<string, unknown>;
+            } catch {
+              parsedData = undefined;
+            }
+          } else if (rawData && typeof rawData === 'object') {
+            parsedData = rawData as Record<string, unknown>;
+          }
+
+          const streamingError =
+            chunkRecord?.error ??
+            parsedData?.error ??
+            (parsedData?.data as { error?: unknown } | undefined)?.error;
+          const streamingEvent = (chunkRecord?.event ?? parsedData?.event) as
+            | string
+            | undefined;
+          const streamingErrorMessage =
+            (streamingError as { message?: string } | undefined)?.message ??
+            (streamingError as { error?: string } | undefined)?.error ??
+            (parsedData as { message?: string } | undefined)?.message;
+          if (
+            streamingEvent === 'error' ||
+            (streamingError && typeof streamingError === 'object')
+          ) {
+            const errorMessage =
+              streamingErrorMessage ??
+              (typeof streamingError === 'string'
+                ? streamingError
+                : 'Streaming response reported an error.');
+            throw new Error(errorMessage);
+          }
+
           // Extract usage information if present (typically in final chunk)
           if (chunk.usage) {
             streamingUsage = chunk.usage;
@@ -1165,6 +1184,65 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 }
               }
             }
+          }
+
+          const choiceMessage = (
+            choice as {
+              message?: {
+                tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
+              };
+            }
+          ).message;
+          const messageToolCalls = choiceMessage?.tool_calls;
+          if (messageToolCalls && messageToolCalls.length > 0) {
+            messageToolCalls.forEach(
+              (
+                toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
+                index: number,
+              ) => {
+                if (!toolCall || toolCall.type !== 'function') {
+                  return;
+                }
+
+                let targetIndex = index;
+                const annotated =
+                  toolCall as OpenAI.Chat.Completions.ChatCompletionMessageToolCall & {
+                    index?: number;
+                  };
+                if (typeof annotated.index === 'number') {
+                  targetIndex = annotated.index;
+                } else if (toolCall.id) {
+                  const matchIndex = accumulatedToolCalls.findIndex(
+                    (existing) => existing && existing.id === toolCall.id,
+                  );
+                  if (matchIndex >= 0) {
+                    targetIndex = matchIndex;
+                  }
+                }
+
+                if (!accumulatedToolCalls[targetIndex]) {
+                  accumulatedToolCalls[targetIndex] = {
+                    id: toolCall.id || '',
+                    type: 'function',
+                    function: {
+                      name: toolCall.function?.name || '',
+                      arguments: '',
+                    },
+                  };
+                }
+
+                const target = accumulatedToolCalls[targetIndex];
+                if (toolCall.id) {
+                  target.id = toolCall.id;
+                }
+                if (toolCall.function?.name) {
+                  target.function.name = toolCall.function.name;
+                }
+                if (toolCall.function?.arguments !== undefined) {
+                  target.function.arguments = toolCall.function.arguments ?? '';
+                }
+              },
+            );
           }
         }
       } catch (error) {
@@ -1559,7 +1637,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Retry on 429 rate limit errors or 5xx server errors
     const shouldRetry = Boolean(
-      status === 429 || (status && status >= 500 && status < 600),
+      status === 429 || status === 503 || status === 504,
     );
 
     if (shouldRetry) {

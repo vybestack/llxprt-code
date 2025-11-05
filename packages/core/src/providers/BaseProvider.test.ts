@@ -744,4 +744,36 @@ describe('BaseProvider', () => {
       );
     });
   });
+
+  describe('isAuthenticated OAuth timing', () => {
+    it('should not trigger OAuth when checking authentication status', async () => {
+      const mockResolveAuth = vi.fn().mockResolvedValue('test-token');
+
+      const config: BaseProviderConfig = {
+        name: 'test',
+        isOAuthEnabled: true,
+        oauthProvider: 'test',
+        oauthManager: mockOAuthManager,
+      };
+
+      const provider = new TestProvider(config);
+
+      // Replace authResolver with a mock to verify the call
+      (
+        provider as unknown as {
+          authResolver: { resolveAuthentication: typeof mockResolveAuth };
+        }
+      ).authResolver = {
+        resolveAuthentication: mockResolveAuth,
+      };
+
+      await provider.isAuthenticated();
+
+      expect(mockResolveAuth).toHaveBeenCalledWith(
+        expect.objectContaining({
+          includeOAuth: false,
+        }),
+      );
+    });
+  });
 });

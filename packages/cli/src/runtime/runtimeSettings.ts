@@ -616,6 +616,7 @@ const RESERVED_PROVIDER_SETTING_KEYS = new Set([
   'apiKeyfile',
   'api-keyfile',
   'baseUrl',
+  'baseURL',
   'base-url',
   'toolFormat',
   'tool-format',
@@ -1118,19 +1119,6 @@ registerIsolatedRuntimeBindings({
   disposeRuntime: disposeCliRuntime,
 }); // Step 5 (multi-runtime-baseline.md line 6) wires CLI activation hooks for isolated runtimes.
 
-const PROVIDER_SWITCH_EPHEMERAL_KEYS: readonly string[] = [
-  'auth-key',
-  'auth-keyfile',
-  'base-url',
-  'context-limit',
-  'compression-threshold',
-  'tool-format',
-  'api-version',
-  'custom-headers',
-  'model',
-  'stream-options',
-];
-
 export interface ProviderSwitchResult {
   changed: boolean;
   previousProvider: string | null;
@@ -1192,9 +1180,10 @@ export interface ProviderRuntimeStatus {
  */
 export async function switchActiveProvider(
   providerName: string,
-  options: { autoOAuth?: boolean } = {},
+  options: { autoOAuth?: boolean; preserveEphemerals?: string[] } = {},
 ): Promise<ProviderSwitchResult> {
   const autoOAuth = options.autoOAuth ?? false;
+  const preserveEphemerals = options.preserveEphemerals ?? [];
   const name = providerName.trim();
   if (!name) {
     throw new Error('Provider name is required.');
@@ -1219,7 +1208,25 @@ export async function switchActiveProvider(
       `[cli-runtime] Switching provider from ${currentProvider ?? 'none'} to ${name}`,
   );
 
-  for (const key of PROVIDER_SWITCH_EPHEMERAL_KEYS) {
+  if (currentProvider) {
+    const previousSettings =
+      getProviderSettingsSnapshot(settingsService, currentProvider) || {};
+    for (const key of Object.keys(previousSettings)) {
+      settingsService.setProviderSetting(currentProvider, key, undefined);
+    }
+  }
+
+  const existingEphemerals =
+    typeof config.getEphemeralSettings === 'function'
+      ? config.getEphemeralSettings()
+      : {};
+  const keysBeforeClearing = Object.keys(existingEphemerals);
+  for (const key of keysBeforeClearing) {
+    const shouldPreserve =
+      key === 'activeProvider' || preserveEphemerals.includes(key);
+    if (shouldPreserve) {
+      continue;
+    }
     config.setEphemeralSetting(key, undefined);
   }
 
@@ -1236,23 +1243,10 @@ export async function switchActiveProvider(
 
   const activeProvider = providerManager.getActiveProvider();
   const providerSettings = getProviderSettingsSnapshot(settingsService, name);
-
   // Clear any cached model parameters for the new provider
   const existingParams = extractModelParams(providerSettings);
   for (const key of Object.keys(existingParams)) {
     settingsService.setProviderSetting(name, key, undefined);
-  }
-
-  let resolvedDefaultModel =
-    (providerSettings.model as string | undefined) ??
-    activeProvider.getDefaultModel?.() ??
-    '';
-
-  if (resolvedDefaultModel) {
-    settingsService.setProviderSetting(name, 'model', resolvedDefaultModel);
-  } else {
-    resolvedDefaultModel = '';
-    settingsService.setProviderSetting(name, 'model', undefined);
   }
 
   await settingsService.switchProvider(name);
@@ -1260,7 +1254,6 @@ export async function switchActiveProvider(
     () =>
       `[cli-runtime] settingsService activeProvider now=${settingsService.get('activeProvider')}`,
   );
-  config.setModel(resolvedDefaultModel);
 
   const unwrapProvider = (provider: unknown) => {
     const visited = new Set<unknown>();
@@ -1290,16 +1283,112 @@ export async function switchActiveProvider(
 
   const baseProvider = unwrapProvider(activeProvider);
 
+  const providerSettingsBefore = providerSettings ?? {};
+  const normalizeSetting = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    if (trimmed === '' || trimmed.toLowerCase() === 'none') {
+      return undefined;
+    }
+    return trimmed;
+  };
+  const storedModelSetting = normalizeSetting(providerSettingsBefore.model);
+  const storedBaseUrlSetting =
+    normalizeSetting(providerSettingsBefore.baseUrl) ??
+    normalizeSetting(
+      (providerSettingsBefore as Record<string, unknown>).baseURL,
+    );
+  const hadCustomBaseUrl = Boolean(storedBaseUrlSetting);
+  const explicitConfigModel =
+    currentProvider === name
+      ? normalizeSetting(
+          typeof config.getModel === 'function' ? config.getModel() : undefined,
+        )
+      : undefined;
+  const explicitConfigBaseUrl =
+    currentProvider === name || preserveEphemerals.includes('base-url')
+      ? normalizeSetting(
+          typeof config.getEphemeralSetting === 'function'
+            ? (config.getEphemeralSetting('base-url') as string | undefined)
+            : undefined,
+        )
+      : undefined;
+
+  for (const key of Object.keys(providerSettingsBefore)) {
+    settingsService.setProviderSetting(name, key, undefined);
+  }
+
   let providerBaseUrl: string | undefined;
   if (name === 'qwen') {
     providerBaseUrl = 'https://portal.qwen.ai/v1';
   }
-  if (providerBaseUrl) {
-    config.setEphemeralSetting('base-url', providerBaseUrl);
-    settingsService.setProviderSetting(name, 'baseUrl', providerBaseUrl);
+  const explicitBaseUrl =
+    explicitConfigBaseUrl ??
+    (currentProvider === name ? storedBaseUrlSetting : undefined);
+  const finalBaseUrl = explicitBaseUrl ?? providerBaseUrl ?? undefined;
+
+  if (finalBaseUrl) {
+    config.setEphemeralSetting('base-url', finalBaseUrl);
+    settingsService.setProviderSetting(name, 'baseUrl', finalBaseUrl);
+    settingsService.setProviderSetting(name, 'baseURL', finalBaseUrl);
   } else {
+    config.setEphemeralSetting('base-url', undefined);
     settingsService.setProviderSetting(name, 'baseUrl', undefined);
+    settingsService.setProviderSetting(name, 'baseURL', undefined);
   }
+
+  const defaultModel = normalizeSetting(activeProvider.getDefaultModel?.());
+  let modelToApply =
+    explicitConfigModel ??
+    (currentProvider === name &&
+    storedModelSetting &&
+    storedModelSetting !== defaultModel
+      ? storedModelSetting
+      : undefined) ??
+    defaultModel ??
+    '';
+
+  let availableModels: IModel[] = [];
+  if (typeof providerManager.getAvailableModels === 'function') {
+    try {
+      availableModels = (await providerManager.getAvailableModels(name)) ?? [];
+    } catch (error) {
+      logger.debug(
+        () =>
+          `[cli-runtime] Failed to list models for provider '${name}': ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+      );
+    }
+  }
+
+  const firstAvailableModelId = (() => {
+    for (const model of availableModels) {
+      if (typeof model?.id === 'string' && model.id.trim() !== '') {
+        return model.id.trim();
+      }
+      if (typeof model?.name === 'string' && model.name.trim() !== '') {
+        return model.name.trim();
+      }
+    }
+    return undefined;
+  })();
+
+  let autoSelectedModel: string | undefined;
+
+  if (!modelToApply || modelToApply.trim() === '') {
+    if (firstAvailableModelId) {
+      modelToApply = firstAvailableModelId;
+      autoSelectedModel = firstAvailableModelId;
+    }
+  }
+
+  modelToApply = modelToApply?.trim() ?? '';
+
+  settingsService.setProviderSetting(name, 'model', modelToApply || undefined);
+  config.setModel(modelToApply);
 
   let authType: AuthType;
   if (name === 'gemini') {
@@ -1366,6 +1455,34 @@ export async function switchActiveProvider(
     }
   }
 
+  if (hadCustomBaseUrl) {
+    const baseUrlChanged =
+      !finalBaseUrl || finalBaseUrl === providerBaseUrl || !explicitBaseUrl;
+    if (baseUrlChanged) {
+      infoMessages.push(
+        `Cleared custom base URL for provider '${name}'; default endpoint restored.`,
+      );
+    } else if (finalBaseUrl && finalBaseUrl !== providerBaseUrl) {
+      infoMessages.push(
+        `Preserved custom base URL '${finalBaseUrl}' for provider '${name}'.`,
+      );
+    }
+  } else if (providerBaseUrl && finalBaseUrl === providerBaseUrl) {
+    infoMessages.push(
+      `Base URL set to '${providerBaseUrl}' for provider '${name}'.`,
+    );
+  }
+
+  if (autoSelectedModel) {
+    infoMessages.push(
+      `Model set to '${autoSelectedModel}' for provider '${name}'.`,
+    );
+  } else if (modelToApply) {
+    infoMessages.push(
+      `Active model is '${modelToApply}' for provider '${name}'.`,
+    );
+  }
+
   if (name !== 'gemini') {
     infoMessages.push('Use /key to set API key if needed.');
   }
@@ -1374,7 +1491,7 @@ export async function switchActiveProvider(
     changed: true,
     previousProvider: currentProvider,
     nextProvider: name,
-    defaultModel: resolvedDefaultModel || undefined,
+    defaultModel: modelToApply || undefined,
     authType,
     infoMessages,
   };
@@ -1466,6 +1583,7 @@ export async function updateActiveProviderBaseUrl(
 
   if (!trimmed || trimmed === '' || trimmed === 'none') {
     settingsService.setProviderSetting(providerName, 'baseUrl', undefined);
+    settingsService.setProviderSetting(providerName, 'baseURL', undefined);
     config.setEphemeralSetting('base-url', trimmed ?? undefined);
     return {
       changed: true,
@@ -1475,6 +1593,7 @@ export async function updateActiveProviderBaseUrl(
   }
 
   settingsService.setProviderSetting(providerName, 'baseUrl', trimmed);
+  settingsService.setProviderSetting(providerName, 'baseURL', trimmed);
   config.setEphemeralSetting('base-url', trimmed);
   return {
     changed: true,
@@ -1584,4 +1703,56 @@ export async function setActiveModel(
     nextModel: modelName,
     authRefreshed,
   };
+}
+
+/**
+ * Apply CLI argument overrides to configuration.
+ * Must be called AFTER provider manager creation (so getCliRuntimeServices() works)
+ * but BEFORE provider switching (so auth is ready).
+ *
+ * This function applies CLI arguments in the correct order to ensure they override
+ * profile settings:
+ * 1. Apply --key (overrides profile auth-key)
+ * 2. Apply --keyfile (overrides profile auth-keyfile)
+ * 3. Apply --set arguments (overrides profile ephemerals)
+ * 4. Apply --baseurl (overrides profile base-url)
+ *
+ * @param argv - CLI arguments
+ */
+export async function applyCliArgumentOverrides(argv: {
+  key?: string;
+  keyfile?: string;
+  set?: string[];
+  baseurl?: string;
+}): Promise<void> {
+  const { readFile } = await import('node:fs/promises');
+  const { homedir } = await import('node:os');
+  const { applyCliSetArguments } = await import(
+    '../config/cliEphemeralSettings.js'
+  );
+
+  const { config } = getCliRuntimeServices();
+
+  // 1. Apply --key (overrides profile auth-key)
+  if (argv.key) {
+    await updateActiveProviderApiKey(argv.key);
+  }
+
+  // 2. Apply --keyfile (overrides profile auth-keyfile)
+  if (argv.keyfile) {
+    const resolvedPath = argv.keyfile.replace(/^~/, homedir());
+    const keyContent = await readFile(resolvedPath, 'utf-8');
+    await updateActiveProviderApiKey(keyContent.trim());
+    config.setEphemeralSetting('auth-keyfile', resolvedPath);
+  }
+
+  // 3. Apply --set arguments (overrides profile ephemerals)
+  if (argv.set && Array.isArray(argv.set) && argv.set.length > 0) {
+    applyCliSetArguments(config, argv.set);
+  }
+
+  // 4. Apply --baseurl (overrides profile base-url)
+  if (argv.baseurl) {
+    await updateActiveProviderBaseUrl(argv.baseurl);
+  }
 }

@@ -16,7 +16,6 @@ import {
 } from '../../services/history/IContent.js';
 import { Config } from '../../config/config.js';
 import { AuthType } from '../../core/contentGenerator.js';
-import { AuthenticationRequiredError } from '../errors.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import {
   Type,
@@ -32,6 +31,7 @@ import {
   NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
+import { resolveUserMemory } from '../utils/userMemory.js';
 
 /**
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -282,97 +282,48 @@ export class GeminiProvider extends BaseProvider {
     authMode: GeminiAuthMode;
     token: string;
   }> {
-    // Re-check OAuth enablement state before determining auth
     this.updateOAuthState();
 
-    // First check if we have Gemini-specific credentials
+    // 1. CHECK STANDARD AUTH FIRST (via AuthResolver)
+    //    This checks in order:
+    //    - SettingsService auth-key
+    //    - SettingsService auth-keyfile
+    //    - Constructor apiKey
+    //    - Environment variables (GEMINI_API_KEY, GOOGLE_API_KEY)
+    const standardAuth = await this.authResolver.resolveAuthentication({
+      settingsService: this.resolveSettingsService(),
+      includeOAuth: false, // Just checking, not triggering OAuth
+    });
+
+    if (standardAuth) {
+      return { authMode: 'gemini-api-key', token: standardAuth };
+    }
+
+    // 2. CHECK PROVIDER-SPECIFIC AUTH (Vertex AI)
     if (this.hasVertexAICredentials()) {
       this.setupVertexAIAuth();
       return { authMode: 'vertex-ai', token: 'USE_VERTEX_AI' };
     }
 
-    if (this.hasGeminiAPIKey()) {
-      return { authMode: 'gemini-api-key', token: process.env.GEMINI_API_KEY! };
+    // 3. CHECK IF OAUTH IS ENABLED (for compatibility with downstream code)
+    //    Use the EXACT pattern from current GeminiProvider.ts lines 305-320:
+    const manager = this.geminiOAuthManager as OAuthManager & {
+      isOAuthEnabled?(provider: string): boolean;
+    };
+    const isOAuthEnabled =
+      manager?.isOAuthEnabled &&
+      typeof manager.isOAuthEnabled === 'function' &&
+      manager.isOAuthEnabled('gemini');
+
+    if (isOAuthEnabled) {
+      return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
     }
 
-    // No Gemini-specific credentials, check OAuth availability
-    try {
-      const token = await this.getAuthToken();
-      const authMethodName = await this.getAuthMethodName();
-
-      // Check if OAuth is configured for Gemini
-      const manager = this.geminiOAuthManager as OAuthManager & {
-        isOAuthEnabled?(provider: string): boolean;
-      };
-      const isOAuthEnabled =
-        manager?.isOAuthEnabled &&
-        typeof manager.isOAuthEnabled === 'function' &&
-        manager.isOAuthEnabled('gemini');
-
-      if (
-        isOAuthEnabled &&
-        (authMethodName?.startsWith('oauth-') ||
-          (this.geminiOAuthManager && !token))
-      ) {
-        return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
-      }
-
-      // If we have a token but it's not for Gemini (e.g., from another provider),
-      // we should still fall back to OAuth for Gemini web search - BUT ONLY IF OAUTH IS ENABLED
-      if (!this.hasGeminiAPIKey() && !this.hasVertexAICredentials()) {
-        if (isOAuthEnabled) {
-          return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
-        } else {
-          // OAuth is disabled and no other auth method available
-          throw new AuthenticationRequiredError(
-            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled. Hint: call /auth gemini enable',
-            'none',
-            ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-          );
-        }
-      }
-
-      return { authMode: 'none', token: token || '' };
-    } catch (error) {
-      // CRITICAL FIX: Only fall back to LOGIN_WITH_GOOGLE if OAuth is actually enabled
-      const manager = this.geminiOAuthManager as OAuthManager & {
-        isOAuthEnabled?(provider: string): boolean;
-      };
-      const isOAuthEnabled =
-        this.geminiOAuthManager &&
-        manager.isOAuthEnabled &&
-        typeof manager.isOAuthEnabled === 'function' &&
-        manager.isOAuthEnabled('gemini');
-
-      if (isOAuthEnabled) {
-        return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
-      }
-
-      // Handle case where no auth is available
-      const authType = this.globalConfig?.getContentGeneratorConfig()?.authType;
-      if (authType === AuthType.USE_NONE) {
-        throw new AuthenticationRequiredError(
-          'Authentication is set to USE_NONE but no credentials are available',
-          'none',
-          ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-        );
-      }
-
-      // When used as serverToolsProvider without API key, fall back to OAuth ONLY if enabled
-      if (!this.hasGeminiAPIKey() && !this.hasVertexAICredentials()) {
-        if (isOAuthEnabled) {
-          return { authMode: 'oauth', token: 'USE_LOGIN_WITH_GOOGLE' };
-        } else {
-          throw new AuthenticationRequiredError(
-            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled. Hint: call /auth gemini enable',
-            'none',
-            ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-          );
-        }
-      }
-
-      throw error;
-    }
+    // 4. NO AUTH AVAILABLE - throw error (don't return 'none')
+    throw new Error(
+      'No Gemini authentication configured. ' +
+        'Set GEMINI_API_KEY environment variable, use --keyfile, or configure Vertex AI credentials.',
+    );
   }
 
   /**
@@ -403,15 +354,14 @@ export class GeminiProvider extends BaseProvider {
   private hasVertexAICredentials(): boolean {
     const hasProjectAndLocation =
       !!process.env.GOOGLE_CLOUD_PROJECT && !!process.env.GOOGLE_CLOUD_LOCATION;
+    // eslint-disable-next-line no-restricted-syntax -- Legacy existence check, to be refactored to use authResolver
     const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
-    return hasProjectAndLocation || hasGoogleApiKey;
-  }
-
-  /**
-   * Checks if Gemini API key is available
-   */
-  private hasGeminiAPIKey(): boolean {
-    return !!process.env.GEMINI_API_KEY;
+    const hasApplicationCredentials =
+      // eslint-disable-next-line no-restricted-syntax -- Legacy existence check, to be refactored to use authResolver
+      !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    return (
+      hasProjectAndLocation || hasGoogleApiKey || hasApplicationCredentials
+    );
   }
 
   /**
@@ -490,6 +440,7 @@ export class GeminiProvider extends BaseProvider {
 
     // For API key modes (gemini-api-key or vertex-ai), try to fetch real models
     if (authMode === 'gemini-api-key' || authMode === 'vertex-ai') {
+      // eslint-disable-next-line no-restricted-syntax -- Legacy fallback, to be refactored to use authResolver
       const apiKey = (await this.getAuthToken()) || process.env.GEMINI_API_KEY;
       if (apiKey) {
         try {
@@ -672,7 +623,9 @@ export class GeminiProvider extends BaseProvider {
    */
   override isPaidMode(): boolean {
     // Synchronous check based on environment variables only
-    return this.hasGeminiAPIKey() || this.hasVertexAICredentials();
+    // Note: This doesn't check SettingsService to maintain synchronous behavior
+    // eslint-disable-next-line no-restricted-syntax -- Legacy existence check, to be refactored to use authResolver
+    return !!process.env.GEMINI_API_KEY || this.hasVertexAICredentials();
   }
 
   /**
@@ -692,6 +645,7 @@ export class GeminiProvider extends BaseProvider {
     // Call base implementation to clear SettingsService
     super.clearAuth?.();
     // CRITICAL: Also clear the environment variable that setApiKey sets
+    // eslint-disable-next-line no-restricted-syntax -- Legacy cleanup, required for setApiKey compatibility
     delete process.env.GEMINI_API_KEY;
   }
 
@@ -1305,9 +1259,11 @@ export class GeminiProvider extends BaseProvider {
         baseURL,
       );
 
-      const userMemory = this.globalConfig?.getUserMemory
-        ? this.globalConfig.getUserMemory()
-        : '';
+      // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
+      const userMemory = await resolveUserMemory(
+        options.userMemory,
+        () => options.invocation?.userMemory,
+      );
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
         currentModel,
@@ -1401,9 +1357,11 @@ export class GeminiProvider extends BaseProvider {
       });
 
       const contentGenerator = genAI.models;
-      const userMemory = this.globalConfig?.getUserMemory
-        ? this.globalConfig.getUserMemory()
-        : '';
+      // @plan PLAN-20251023-STATELESS-HARDENING.P08: Get userMemory from normalized runtime context
+      const userMemory = await resolveUserMemory(
+        options.userMemory,
+        () => options.invocation?.userMemory,
+      );
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
         currentModel,

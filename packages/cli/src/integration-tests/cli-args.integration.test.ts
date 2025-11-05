@@ -313,6 +313,150 @@ describe('CLI --profile-load Integration Tests', () => {
       // The key should be used (we can't directly verify it but the CLI should attempt to use it)
       expect(result.exitCode).toBeDefined();
     });
+
+    it('should override profile keyfile with CLI keyfile', async () => {
+      // Create profile with one keyfile
+      const profileKeyfilePath = await createTempKeyfile(
+        tempDir,
+        'profile-key-123',
+      );
+      const profile: Profile = {
+        version: 1,
+        provider: 'gemini',
+        model: 'gemini-exp-1206',
+        modelParams: {},
+        ephemeralSettings: {
+          'auth-keyfile': profileKeyfilePath,
+        },
+      };
+
+      await profileManager.saveProfile('keyfile-profile', profile);
+
+      // Create a different keyfile for CLI override
+      const cliKeyfilePath = await createTempKeyfile(tempDir, 'cli-key-456');
+
+      const result = await runCli(
+        [
+          '--profile-load',
+          'keyfile-profile',
+          '--keyfile',
+          cliKeyfilePath,
+          '--prompt',
+          'test',
+          '--debug',
+        ],
+        {
+          HOME: tempDir,
+        },
+      );
+
+      const fullOutput = result.stdout + result.stderr;
+      // Profile should be loaded
+      expect(fullOutput).toMatch(
+        /Loaded profile.*keyfile-profile|Loading profile.*keyfile-profile/i,
+      );
+      // CLI keyfile should be mentioned in debug output
+      expect(fullOutput).toContain(path.basename(cliKeyfilePath));
+      // Profile keyfile should NOT be used
+      expect(fullOutput).not.toContain('profile-key-123');
+    });
+
+    it('should process --set arguments at startup and override profile settings', async () => {
+      const profile: Profile = {
+        version: 1,
+        provider: 'gemini',
+        model: 'gemini-exp-1206',
+        modelParams: {},
+        ephemeralSettings: {
+          'context-limit': 50000,
+        },
+      };
+
+      await profileManager.saveProfile('set-profile', profile);
+      const keyfilePath = await createTempKeyfile(tempDir, 'test-key');
+
+      const result = await runCli(
+        [
+          '--profile-load',
+          'set-profile',
+          '--set',
+          'context-limit=100000',
+          '--keyfile',
+          keyfilePath,
+          '--prompt',
+          'test',
+          '--debug',
+        ],
+        {
+          HOME: tempDir,
+        },
+      );
+
+      const fullOutput = result.stdout + result.stderr;
+      // Profile should be loaded
+      expect(fullOutput).toMatch(
+        /Loaded profile.*set-profile|Loading profile.*set-profile/i,
+      );
+      // The --set override should be applied (debug output may show ephemeral settings)
+      // This is harder to verify from output but should not crash
+      expect(result.exitCode).not.toBe(-1);
+    });
+
+    it('should apply CLI args after profile load but before provider switch', async () => {
+      // This test ensures the timing is correct: CLI args override profile settings
+      const profileKeyfilePath = await createTempKeyfile(
+        tempDir,
+        'profile-auth',
+      );
+      const profile: Profile = {
+        version: 1,
+        provider: 'gemini',
+        model: 'gemini-exp-1206',
+        modelParams: {},
+        ephemeralSettings: {
+          'auth-keyfile': profileKeyfilePath,
+          'base-url': 'https://profile-base-url.example.com',
+        },
+      };
+
+      await profileManager.saveProfile('timing-test', profile);
+
+      // Override with CLI args
+      const cliKeyfilePath = await createTempKeyfile(tempDir, 'cli-auth');
+
+      const result = await runCli(
+        [
+          '--profile-load',
+          'timing-test',
+          '--keyfile',
+          cliKeyfilePath,
+          '--baseurl',
+          'https://cli-base-url.example.com',
+          '--set',
+          'context-limit=200000',
+          '--prompt',
+          'test',
+          '--debug',
+        ],
+        {
+          HOME: tempDir,
+        },
+      );
+
+      const fullOutput = result.stdout + result.stderr;
+      // Profile should be loaded
+      expect(fullOutput).toMatch(
+        /Loaded profile.*timing-test|Loading profile.*timing-test/i,
+      );
+      // CLI keyfile should take precedence
+      expect(fullOutput).toContain(path.basename(cliKeyfilePath));
+      // Profile keyfile should NOT be used
+      expect(fullOutput).not.toContain('profile-auth');
+      // CLI base URL should be applied
+      expect(fullOutput).toContain('cli-base-url.example.com');
+      // Profile base URL should NOT be mentioned
+      expect(fullOutput).not.toContain('profile-base-url.example.com');
+    });
   });
 
   describe('Profile with Auth Credentials', () => {

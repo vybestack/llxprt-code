@@ -131,9 +131,6 @@ describe('CLI runtime isolation', () => {
       runWithRuntime(runtimeA, barrier, async () => {
         await switchActiveProvider(runtimeA.secondaryProvider);
         await setActiveModel('alpha-secondary-tuned');
-        setEphemeralSetting('custom-headers', {
-          'x-runtime': runtimeA.id,
-        });
         setActiveModelParam('temperature', 0.2);
         const profile: Profile = {
           version: 1,
@@ -154,6 +151,10 @@ describe('CLI runtime isolation', () => {
           'auth-keyfile',
           `${runtimeA.tempDir}/alpha-keyfile`,
         );
+        // Set custom-headers AFTER profile load to ensure it persists
+        setEphemeralSetting('custom-headers', {
+          'x-runtime': runtimeA.id,
+        });
       }),
       runWithRuntime(
         runtimeB,
@@ -161,9 +162,6 @@ describe('CLI runtime isolation', () => {
         async () => {
           await switchActiveProvider(runtimeB.secondaryProvider);
           await setActiveModel('beta-secondary-tuned');
-          setEphemeralSetting('custom-headers', {
-            'x-runtime': runtimeB.id,
-          });
           setActiveModelParam('temperature', 0.9);
           const profile: Profile = {
             version: 1,
@@ -186,6 +184,10 @@ describe('CLI runtime isolation', () => {
             'auth-keyfile',
             `${runtimeB.tempDir}/beta-keyfile`,
           );
+          // Set custom-headers AFTER profile load to ensure it persists
+          setEphemeralSetting('custom-headers', {
+            'x-runtime': runtimeB.id,
+          });
         },
         { delayBeforeActivationMs: 5 },
       ),

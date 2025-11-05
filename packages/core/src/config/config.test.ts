@@ -435,6 +435,132 @@ describe('Server Config (config.ts)', () => {
         mockExistingHistory,
       );
     });
+
+    it('should not trigger OAuth when refreshing authentication', async () => {
+      const config = new Config(baseParams);
+
+      // Mock OAuth manager that tracks if authenticate was called
+      const mockOAuthManager = {
+        authenticate: vi.fn().mockResolvedValue(undefined),
+        isAuthenticated: vi.fn().mockResolvedValue(false),
+        isOAuthEnabled: vi.fn().mockReturnValue(true),
+        toggleOAuthEnabled: vi.fn(),
+      };
+
+      // Mock provider manager with OAuth-enabled provider
+      const mockProviderManager = {
+        getProvider: vi.fn().mockReturnValue({
+          name: 'anthropic',
+          getAuthToken: vi.fn(),
+          hasNonOAuthAuthentication: vi.fn().mockResolvedValue(false),
+        }),
+        switchProvider: vi.fn(),
+      };
+
+      // Set up config with provider manager
+      (
+        config as unknown as { providerManager: typeof mockProviderManager }
+      ).providerManager = mockProviderManager;
+
+      const mockContentConfig = {
+        model: 'claude-3-5-sonnet-20241022',
+        authType: AuthType.USE_PROVIDER,
+        oauthManager: mockOAuthManager,
+      };
+
+      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+
+      const mockNewClient = {
+        isInitialized: vi.fn().mockReturnValue(true),
+        getHistory: vi.fn().mockReturnValue([]),
+        getHistoryService: vi.fn().mockReturnValue(null),
+        initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
+        storeHistoryServiceForReuse: vi.fn(),
+      };
+
+      (GeminiClient as Mock).mockImplementation(() => mockNewClient);
+
+      // Call refreshAuth - this should NOT trigger OAuth
+      await config.refreshAuth(AuthType.USE_PROVIDER);
+
+      // Verify OAuth authenticate was NOT called
+      expect(mockOAuthManager.authenticate).not.toHaveBeenCalled();
+
+      // Verify the client was initialized but OAuth was not triggered
+      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
+    });
+
+    it('should preserve all state after refresh without triggering OAuth', async () => {
+      const config = new Config(baseParams);
+      await config.initialize();
+
+      // Create a client with history
+      const mockExistingHistory = [
+        { role: 'user', parts: [{ text: 'Previous conversation' }] },
+        { role: 'model', parts: [{ text: 'Previous response' }] },
+      ];
+
+      const mockHistoryService = {
+        addMessage: vi.fn(),
+        getMessages: vi.fn().mockReturnValue(mockExistingHistory),
+      };
+
+      const mockExistingClient = {
+        isInitialized: vi.fn().mockReturnValue(true),
+        getHistory: vi.fn().mockReturnValue(mockExistingHistory),
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
+      };
+
+      // Mock OAuth manager - should not be called
+      const mockOAuthManager = {
+        authenticate: vi.fn().mockResolvedValue(undefined),
+        isAuthenticated: vi.fn().mockResolvedValue(false),
+      };
+
+      (
+        config as unknown as { geminiClient: typeof mockExistingClient }
+      ).geminiClient = mockExistingClient;
+
+      const mockContentConfig = {
+        model: 'gemini-pro',
+        apiKey: 'test-key',
+        authType: AuthType.USE_GEMINI,
+        oauthManager: mockOAuthManager,
+      };
+
+      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+
+      const mockNewClient = {
+        isInitialized: vi.fn().mockReturnValue(true),
+        getHistory: vi.fn().mockReturnValue(mockExistingHistory),
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
+        initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
+        storeHistoryServiceForReuse: vi.fn(),
+      };
+
+      (GeminiClient as Mock).mockImplementation(() => mockNewClient);
+
+      // Refresh auth
+      await config.refreshAuth(AuthType.USE_GEMINI);
+
+      // Verify history was preserved
+      expect(mockExistingClient.getHistory).toHaveBeenCalled();
+      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
+        mockExistingHistory,
+      );
+      expect(mockNewClient.storeHistoryServiceForReuse).toHaveBeenCalledWith(
+        mockHistoryService,
+      );
+
+      // CRITICAL: Verify OAuth was NOT triggered during refresh
+      expect(mockOAuthManager.authenticate).not.toHaveBeenCalled();
+      expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
+
+      // Verify client was initialized
+      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
+    });
   });
 
   it('Config constructor should store userMemory correctly', () => {

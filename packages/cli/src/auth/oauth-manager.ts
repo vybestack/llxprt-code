@@ -6,7 +6,10 @@
 
 import { OAuthToken, AuthStatus, TokenStore } from './types.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
-import { getSettingsService } from '@vybestack/llxprt-code-core';
+import {
+  getSettingsService,
+  flushRuntimeAuthScope,
+} from '@vybestack/llxprt-code-core';
 
 function isAuthOnlyEnabled(value: unknown): boolean {
   if (typeof value === 'boolean') {
@@ -369,9 +372,13 @@ export class OAuthManager {
    * Get OAuth token for a specific provider
    * Compatible with precedence resolver - returns access token string
    * @param providerName - Name of the provider
+   * @param _metadata - Optional metadata for token request (unused in CLI implementation)
    * @returns Access token string if available, null otherwise
    */
-  async getToken(providerName: string): Promise<string | null> {
+  async getToken(
+    providerName: string,
+    _metadata?: unknown,
+  ): Promise<string | null> {
     // Check if OAuth is enabled for this provider
     if (!this.isOAuthEnabled(providerName)) {
       return null;
@@ -441,9 +448,13 @@ export class OAuthManager {
   /**
    * Get OAuth token object for a specific provider
    * @param providerName - Name of the provider
+   * @param _metadata - Optional metadata for token request (unused in CLI implementation)
    * @returns OAuth token if available, null otherwise
    */
-  async getOAuthToken(providerName: string): Promise<OAuthToken | null> {
+  async getOAuthToken(
+    providerName: string,
+    _metadata?: unknown,
+  ): Promise<OAuthToken | null> {
     if (!providerName || typeof providerName !== 'string') {
       throw new Error('Provider name must be a non-empty string');
     }
@@ -644,7 +655,7 @@ export class OAuthManager {
     try {
       // Import ProviderManager to access active providers
       // Use dynamic import to avoid circular dependencies
-      const { getCliProviderManager } = await import(
+      const { getCliProviderManager, getCliRuntimeContext } = await import(
         '../runtime/runtimeSettings.js'
       );
       const providerManager = getCliProviderManager();
@@ -696,6 +707,20 @@ export class OAuthManager {
         typeof provider.clearState === 'function'
       ) {
         provider.clearState();
+      }
+
+      try {
+        const runtimeContext = getCliRuntimeContext();
+        if (runtimeContext && typeof runtimeContext.runtimeId === 'string') {
+          flushRuntimeAuthScope(runtimeContext.runtimeId);
+        }
+      } catch (runtimeError) {
+        if (process.env.DEBUG) {
+          console.debug(
+            `Skipped runtime auth scope flush for ${providerName}:`,
+            runtimeError,
+          );
+        }
       }
 
       console.debug(`Cleared auth caches for provider: ${providerName}`);

@@ -13,7 +13,6 @@ import { loadCliConfig, parseArguments } from './config/config.js';
 import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import v8 from 'node:v8';
-import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import dns from 'node:dns';
 import { spawn } from 'node:child_process';
@@ -51,11 +50,6 @@ import { getCliVersion } from './utils/version.js';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { createProviderManager } from './providers/providerManagerInstance.js';
-import {
-  setProviderApiKey,
-  setProviderBaseUrl,
-} from './providers/providerConfigUtils.js';
-import { resolveCredentialPrecedence } from './providers/credentialPrecedence.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
@@ -72,6 +66,7 @@ import {
   clearActiveModelParam,
   getActiveModelParams,
   loadProfileByName,
+  applyCliArgumentOverrides,
 } from './runtime/runtimeSettings.js';
 import { writeFileSync } from 'node:fs';
 
@@ -485,6 +480,11 @@ export async function main() {
   const configProvider = config.getProvider();
   if (configProvider) {
     try {
+      // Apply CLI argument overrides BEFORE provider switch
+      // This ensures --key, --keyfile, --baseurl, and --set are applied
+      // at the correct time and override profile settings
+      await applyCliArgumentOverrides(argv);
+
       await switchActiveProvider(configProvider);
 
       const activeProvider = providerManager.getActiveProvider();
@@ -517,11 +517,7 @@ export async function main() {
         Object.assign(mergedModelParams, configWithParams._cliModelParams);
       }
 
-      if (
-        activeProvider &&
-        'setModelParams' in activeProvider &&
-        typeof activeProvider.setModelParams === 'function'
-      ) {
+      if (activeProvider) {
         const existingParams = getActiveModelParams();
 
         for (const [key, value] of Object.entries(mergedModelParams)) {
@@ -533,38 +529,10 @@ export async function main() {
             clearActiveModelParam(key);
           }
         }
-
-        if (Object.keys(mergedModelParams).length > 0) {
-          activeProvider.setModelParams(mergedModelParams);
-        } else if (Object.keys(existingParams).length > 0) {
-          activeProvider.setModelParams({});
-        }
       }
 
-      const includeProfileEphemeral = argv.provider === undefined;
-      const profileKey = includeProfileEphemeral
-        ? (config.getEphemeralSetting('auth-key') as string | undefined)
-        : undefined;
-      const profileKeyfile = includeProfileEphemeral
-        ? (config.getEphemeralSetting('auth-keyfile') as string | undefined)
-        : undefined;
-      const profileBaseUrl = includeProfileEphemeral
-        ? (config.getEphemeralSetting('base-url') as string | undefined)
-        : undefined;
-
-      await applyProviderCredentials({
-        providerManager,
-        settings,
-        config,
-        cliKey: argv.key,
-        cliKeyfile: argv.keyfile,
-        cliBaseUrl: argv.baseurl,
-        profileKey,
-        profileKeyfile,
-        profileBaseUrl,
-      });
-
       // No need to set auth type when using a provider
+      // CLI arguments have already been applied by applyCliArgumentOverrides() above
     } catch (e) {
       console.error(chalk.red((e as Error).message));
       process.exit(1);
@@ -730,142 +698,6 @@ export async function main() {
   // Call cleanup before process.exit, which causes cleanup to not run
   await runExitCleanup();
   process.exit(0);
-}
-
-type ActiveProviderManager = ReturnType<
-  typeof createProviderManager
->['manager'];
-
-interface ProviderCredentialOptions {
-  providerManager: ActiveProviderManager;
-  settings: LoadedSettings;
-  config: Config;
-  cliKey?: string;
-  cliKeyfile?: string;
-  cliBaseUrl?: string;
-  profileKey?: string;
-  profileKeyfile?: string;
-  profileBaseUrl?: string;
-}
-
-async function applyProviderCredentials({
-  providerManager,
-  settings: _settings,
-  config,
-  cliKey,
-  cliKeyfile,
-  cliBaseUrl,
-  profileKey,
-  profileKeyfile,
-  profileBaseUrl,
-}: ProviderCredentialOptions) {
-  const resolved = resolveCredentialPrecedence({
-    cliKey,
-    cliKeyfile,
-    cliBaseUrl,
-    profileKey,
-    profileKeyfile,
-    profileBaseUrl,
-  });
-
-  const debugMode = config.getDebugMode();
-  const authOnlySetting = config.getEphemeralSetting('authOnly');
-  const authOnly =
-    authOnlySetting === true ||
-    (typeof authOnlySetting === 'string' &&
-      authOnlySetting.toLowerCase() === 'true');
-
-  if (!authOnly && resolved.inlineKey) {
-    const result = await setProviderApiKey(resolved.inlineKey);
-    if (!result.success) {
-      console.error(chalk.red(result.message));
-      if (resolved.inlineSource === 'cli') {
-        process.exit(1);
-      }
-    } else if (debugMode) {
-      console.debug(result.message);
-    }
-
-    if (resolved.inlineSource === 'cli') {
-      config.setEphemeralSetting('auth-keyfile', undefined);
-    }
-  } else if (!authOnly && resolved.keyfilePath) {
-    const resolvedPath = resolved.keyfilePath.replace(/^~/, os.homedir());
-    try {
-      const apiKey = await fs.readFile(resolvedPath, 'utf-8');
-      const trimmedKey = apiKey.trim();
-
-      if (!trimmedKey) {
-        const message = 'The specified file is empty';
-        if (resolved.keyfileSource === 'cli') {
-          console.error(chalk.red(message));
-          process.exit(1);
-        }
-        return;
-      }
-
-      const result = await setProviderApiKey(trimmedKey);
-
-      if (!result.success) {
-        console.error(chalk.red(result.message));
-        if (resolved.keyfileSource === 'cli') {
-          process.exit(1);
-        }
-      } else if (debugMode) {
-        console.debug(result.message);
-      }
-
-      if (resolved.keyfileSource === 'cli') {
-        config.setEphemeralSetting('auth-keyfile', resolvedPath);
-        const message = `API key loaded from ${resolvedPath} for provider '${providerManager.getActiveProviderName()}'`;
-        if (debugMode) {
-          console.debug(message);
-        }
-      }
-    } catch (error) {
-      const message = `Failed to load keyfile ${resolvedPath}: ${error instanceof Error ? error.message : String(error)}`;
-      console.error(chalk.red(message));
-      if (resolved.keyfileSource === 'cli') {
-        process.exit(1);
-      }
-    }
-  } else if (
-    authOnly &&
-    debugMode &&
-    (resolved.inlineKey || resolved.keyfilePath)
-  ) {
-    console.debug(
-      'authOnly enabled, skipping CLI/profile API key application in favor of OAuth',
-    );
-  }
-
-  if (resolved.baseUrl && resolved.baseUrlSource === 'cli') {
-    const result = await setProviderBaseUrl(resolved.baseUrl);
-    if (!result.success) {
-      console.error(chalk.red(result.message));
-      process.exit(1);
-    }
-    if (debugMode) {
-      console.debug(result.message);
-    }
-    config.setEphemeralSetting('base-url', resolved.baseUrl);
-  } else if (
-    resolved.baseUrl &&
-    resolved.baseUrlSource === 'profile' &&
-    resolved.baseUrl !== 'none'
-  ) {
-    const activeProvider = providerManager.getActiveProvider();
-    if (
-      activeProvider &&
-      'setBaseUrl' in activeProvider &&
-      typeof (activeProvider as { setBaseUrl?: (url: string) => void })
-        .setBaseUrl === 'function'
-    ) {
-      (activeProvider as { setBaseUrl: (url: string) => void }).setBaseUrl(
-        resolved.baseUrl,
-      );
-    }
-  }
 }
 
 function setWindowTitle(title: string, settings: LoadedSettings) {

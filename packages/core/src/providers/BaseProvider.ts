@@ -302,9 +302,39 @@ export abstract class BaseProvider implements IProvider {
 
     const settingsService = this.resolveSettingsService();
 
+    // IMPORTANT: includeOAuth: false for config-time checks
+    // OAuth should ONLY trigger during actual prompt sends
     const token =
       (await this.authResolver.resolveAuthentication({
         settingsService,
+        includeOAuth: false,
+      })) ?? '';
+
+    return token;
+  }
+
+  /**
+   * Get auth token for prompt send - CAN trigger OAuth if needed
+   * Use this method ONLY when actually sending a prompt to the API
+   */
+  protected async getAuthTokenForPrompt(): Promise<string> {
+    const activeOptions = this.activeCallContext.getStore();
+    if (activeOptions) {
+      const runtimeToken = await resolveRuntimeAuthToken(
+        activeOptions.resolved.authToken,
+      );
+      if (runtimeToken) {
+        return runtimeToken;
+      }
+    }
+
+    const settingsService = this.resolveSettingsService();
+
+    // includeOAuth: true - OAuth is allowed during prompt send
+    const token =
+      (await this.authResolver.resolveAuthentication({
+        settingsService,
+        includeOAuth: true,
       })) ?? '';
 
     return token;
@@ -423,12 +453,29 @@ export abstract class BaseProvider implements IProvider {
    */
   async isAuthenticated(): Promise<boolean> {
     try {
-      const token =
+      // Check non-OAuth authentication first (API keys, environment variables, etc.)
+      const nonOAuthToken =
         (await this.authResolver.resolveAuthentication({
           settingsService: this.resolveSettingsService(),
+          includeOAuth: false,
         })) ?? '';
 
-      return token !== '';
+      if (nonOAuthToken !== '') {
+        return true;
+      }
+
+      // If no non-OAuth auth found, check if OAuth token exists without triggering flow
+      if (
+        this.baseProviderConfig.isOAuthEnabled &&
+        this.baseProviderConfig.oauthManager &&
+        this.baseProviderConfig.oauthProvider
+      ) {
+        return await this.baseProviderConfig.oauthManager.isAuthenticated(
+          this.baseProviderConfig.oauthProvider,
+        );
+      }
+
+      return false;
     } catch {
       return false;
     }
@@ -646,9 +693,11 @@ export abstract class BaseProvider implements IProvider {
 
     const resolvedModel = this.computeModel(settings);
     const resolvedBaseURL = this.computeBaseURL(settings);
+    // CRITICAL: includeOAuth: true for prompt sends - OAuth is allowed here
     const resolvedAuth =
       (await this.authResolver.resolveAuthentication({
         settingsService: settings,
+        includeOAuth: true,
       })) ?? '';
 
     const resolved = {
