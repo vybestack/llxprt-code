@@ -1038,16 +1038,38 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           }
 
           const chunkRecord = chunk as unknown as Record<string, unknown>;
-          const streamingError = chunkRecord?.error;
+          let parsedData: Record<string, unknown> | undefined;
+          const rawData = chunkRecord?.data;
+          if (typeof rawData === 'string') {
+            try {
+              parsedData = JSON.parse(rawData) as Record<string, unknown>;
+            } catch {
+              parsedData = undefined;
+            }
+          } else if (rawData && typeof rawData === 'object') {
+            parsedData = rawData as Record<string, unknown>;
+          }
+
+          const streamingError =
+            chunkRecord?.error ??
+            parsedData?.error ??
+            (parsedData?.data as { error?: unknown } | undefined)?.error;
+          const streamingEvent = (chunkRecord?.event ?? parsedData?.event) as
+            | string
+            | undefined;
+          const streamingErrorMessage =
+            (streamingError as { message?: string } | undefined)?.message ??
+            (streamingError as { error?: string } | undefined)?.error ??
+            (parsedData as { message?: string } | undefined)?.message;
           if (
-            streamingError &&
-            typeof streamingError === 'object' &&
-            streamingError !== null
+            streamingEvent === 'error' ||
+            (streamingError && typeof streamingError === 'object')
           ) {
             const errorMessage =
-              (streamingError as { message?: string }).message ??
-              (streamingError as { error?: string }).error ??
-              'Streaming response reported an error.';
+              streamingErrorMessage ??
+              (typeof streamingError === 'string'
+                ? streamingError
+                : 'Streaming response reported an error.');
             throw new Error(errorMessage);
           }
 
@@ -1632,7 +1654,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Retry on 429 rate limit errors or 5xx server errors
     const shouldRetry = Boolean(
-      status === 429 || (status && status >= 500 && status < 600),
+      status === 429 || status === 503 || status === 504,
     );
 
     if (shouldRetry) {
