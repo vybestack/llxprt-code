@@ -233,11 +233,11 @@ export class AnthropicProvider extends BaseProvider {
     const authToken = await this.getAuthToken();
     if (!authToken) {
       this.getAuthLogger().debug(
-        () => 'No authentication available for model listing',
+        () =>
+          'No authentication available for model listing, returning defaults',
       );
-      throw new Error(
-        'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
-      );
+      // Return default models instead of throwing
+      return this.getDefaultModels();
     }
 
     // Check if using OAuth - the models.list endpoint doesn't work with OAuth tokens
@@ -377,6 +377,38 @@ export class AnthropicProvider extends BaseProvider {
   override getDefaultModel(): string {
     // Return hardcoded default - do NOT call getModel() to avoid circular dependency
     return 'claude-sonnet-4-5-20250929';
+  }
+
+  /**
+   * Returns default model list when no authentication is available
+   */
+  private getDefaultModels(): IModel[] {
+    return [
+      {
+        id: 'claude-opus-4-1-20250805',
+        name: 'Claude Opus 4.1',
+        provider: 'anthropic',
+        supportedToolFormats: ['anthropic'],
+        contextWindow: 500000,
+        maxOutputTokens: 32000,
+      },
+      {
+        id: 'claude-sonnet-4-5-20250929',
+        name: 'Claude Sonnet 4.5',
+        provider: 'anthropic',
+        supportedToolFormats: ['anthropic'],
+        contextWindow: 400000,
+        maxOutputTokens: 64000,
+      },
+      {
+        id: 'claude-haiku-4-5-20251001',
+        name: 'Claude Haiku 4.5',
+        provider: 'anthropic',
+        supportedToolFormats: ['anthropic'],
+        contextWindow: 500000,
+        maxOutputTokens: 16000,
+      },
+    ];
   }
 
   /**

@@ -592,7 +592,7 @@ export class AuthPrecedenceResolver {
   async resolveAuthentication(
     options?: ResolveAuthOptions,
   ): Promise<string | null> {
-    const includeOAuth = options?.includeOAuth ?? true;
+    const includeOAuth = options?.includeOAuth ?? false;
     const settingsService = this.resolveSettingsService(
       options?.settingsService ?? undefined,
     );

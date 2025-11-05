@@ -180,7 +180,9 @@ describe('AuthPrecedenceResolver', () => {
       const resolver = new AuthPrecedenceResolver(config, mockOAuthManager);
 
       // When: Resolve authentication
-      const result = await resolver.resolveAuthentication();
+      const result = await resolver.resolveAuthentication({
+        includeOAuth: true,
+      });
 
       // Then: Should use OAuth (lowest priority)
       expect(result).toBe('oauth-token-abc');
@@ -232,7 +234,9 @@ describe('AuthPrecedenceResolver', () => {
       const resolver = new AuthPrecedenceResolver(config, mockOAuthManager);
 
       // When: Resolve authentication
-      const result = await resolver.resolveAuthentication();
+      const result = await resolver.resolveAuthentication({
+        includeOAuth: true,
+      });
 
       // Then: Should ignore keys/env and use OAuth
       expect(result).toBe('oauth-token-abc');
@@ -529,7 +533,9 @@ describe('AuthPrecedenceResolver', () => {
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue('new-oauth-token');
 
       // Then: Should use updated OAuth manager
-      const result = await resolver.resolveAuthentication();
+      const result = await resolver.resolveAuthentication({
+        includeOAuth: true,
+      });
       expect(result).toBe('new-oauth-token');
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
         'qwen',
