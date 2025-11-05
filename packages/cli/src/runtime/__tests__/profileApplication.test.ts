@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Profile } from '@vybestack/llxprt-code-core';
+import path from 'node:path';
 
 // Mock fs module for keyfile tests
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -561,8 +562,10 @@ describe('profileApplication helpers', () => {
     });
 
     // Verify keyfile was loaded
+    // Use path.resolve to handle Windows paths (D:\home\user\.anthropic_key) vs Unix (/home/user/.anthropic_key)
+    const expectedPath = path.resolve('/home/user/.anthropic_key');
     expect(vi.mocked(mockFs.readFile)).toHaveBeenCalledWith(
-      '/home/user/.anthropic_key',
+      expectedPath,
       'utf-8',
     );
 
@@ -575,10 +578,8 @@ describe('profileApplication helpers', () => {
     expect(switchWasCalledWithAutoOAuth).toBe(false);
     expect(authenticateSpy).not.toHaveBeenCalled();
 
-    // Verify auth-keyfile ephemeral was set
-    expect(configStub.getEphemeralSetting('auth-keyfile')).toBe(
-      '/home/user/.anthropic_key',
-    );
+    // Verify auth-keyfile ephemeral was set (use expectedPath for cross-platform compatibility)
+    expect(configStub.getEphemeralSetting('auth-keyfile')).toBe(expectedPath);
   });
 });
 
