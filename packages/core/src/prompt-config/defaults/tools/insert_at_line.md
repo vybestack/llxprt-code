@@ -1,0 +1,3 @@
+- Use 'insert_at_line' to add code at specific line numbers. This is very useful for inserting new functions, classes, or imports.
+- When inserting at the end of the file, set 'line_number' to the total number of lines + 1.
+- The new content will be inserted above the line number specified, so to insert after line N, set 'line_number' to N+1.
