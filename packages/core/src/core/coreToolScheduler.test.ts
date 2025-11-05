@@ -1804,8 +1804,116 @@ describe.skip('CoreToolScheduler request queueing', () => {
     expect(completedCalls).toHaveLength(1);
     const completedCall = completedCalls[0];
     expect(completedCall.status).toBe('success');
-    expect(completedCall.response.resultDisplay).toBe('Tool executed');
+    expect(
+      completedCall.status === 'success'
+        ? completedCall.response.resultDisplay
+        : '',
+    ).toBe('Tool executed');
   });
+
+  it('should require approval for a chained shell command even when prefix is allowlisted', async () => {
+    expect(
+      isShellInvocationAllowlisted(
+        {
+          params: { command: 'git status && rm -rf /tmp/should-not-run' },
+        } as unknown as AnyToolInvocation,
+        ['run_shell_command(git)'],
+      ),
+    ).toBe(false);
+
+    const executeFn = vi.fn().mockResolvedValue({
+      llmContent: 'Shell command executed',
+      returnDisplay: 'Shell command executed',
+    });
+
+    const mockShellTool = new MockTool({
+      name: 'run_shell_command',
+      shouldConfirmExecute: (params) =>
+        Promise.resolve({
+          type: 'exec',
+          title: 'Confirm Shell Command',
+          command: String(params['command'] ?? ''),
+          rootCommand: 'git',
+          onConfirm: async () => {},
+        }),
+      execute: () => executeFn({}),
+    });
+
+    const toolRegistry = {
+      getTool: () => mockShellTool,
+      getToolByName: () => mockShellTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {},
+      registerTool: () => {},
+      getToolByDisplayName: () => mockShellTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+    };
+
+    const onAllToolCallsComplete = vi.fn();
+    const onToolCallsUpdate = vi.fn();
+
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getAllowedTools: () => ['run_shell_command(git)'],
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+      getShellExecutionConfig: () => ({
+        terminalWidth: 80,
+        terminalHeight: 24,
+      }),
+      getTerminalWidth: vi.fn(() => 80),
+      getTerminalHeight: vi.fn(() => 24),
+      storage: {
+        getProjectTempDir: () => '/tmp',
+      },
+      getTruncateToolOutputThreshold: () =>
+        DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+      getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+      getToolRegistry: () => toolRegistry,
+      getUseSmartEdit: () => false,
+      getUseModelRouter: () => false,
+      getGeminiClient: () => null,
+      getEnableMessageBusIntegration: () => false,
+      getMessageBus: () => null,
+      getPolicyEngine: () => null,
+    } as unknown as Config;
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    const abortController = new AbortController();
+    const request = {
+      callId: 'shell-1',
+      name: 'run_shell_command',
+      args: { command: 'git status && rm -rf /tmp/should-not-run' },
+      isClientInitiated: false,
+      prompt_id: 'prompt-shell-auto-approved',
+    };
+
+    await scheduler.schedule([request], abortController.signal);
+
+    const statusUpdates = onToolCallsUpdate.mock.calls
+      .map((call) => (call[0][0] as ToolCall)?.status)
+      .filter(Boolean);
+
+    expect(statusUpdates).toContain('awaiting_approval');
+    expect(executeFn).not.toHaveBeenCalled();
+    expect(onAllToolCallsComplete).not.toHaveBeenCalled();
+  }, 20000);
 
   it('should handle two synchronous calls to schedule', async () => {
     const mockTool = new MockTool();

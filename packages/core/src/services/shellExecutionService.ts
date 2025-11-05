@@ -4,15 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { getPty, type PtyImplementation } from '../utils/getPty.js';
-import { spawn as cpSpawn } from 'child_process';
-import { TextDecoder } from 'util';
-import os from 'os';
+import stripAnsi from 'strip-ansi';
+import type { PtyImplementation } from '../utils/getPty.js';
+import { getPty } from '../utils/getPty.js';
+import { spawn as cpSpawn } from 'node:child_process';
+import { TextDecoder } from 'node:util';
+import os from 'node:os';
+import type { IPty } from '@lydell/node-pty';
 import { getCachedEncodingForBuffer } from '../utils/systemEncoding.js';
 import { getShellConfiguration, type ShellType } from '../utils/shell-utils.js';
 import { isBinary } from '../utils/textUtils.js';
 import pkg from '@xterm/headless';
-import stripAnsi from 'strip-ansi';
 const { Terminal } = pkg;
 
 const SIGKILL_TIMEOUT_MS = 200;
@@ -89,7 +91,13 @@ export type ShellOutputEvent =
       bytesReceived: number;
     };
 
+interface ActivePty {
+  ptyProcess: IPty;
+  headlessTerminal: pkg.Terminal;
+}
+
 export class ShellExecutionService {
+  private static activePtys = new Map<number, ActivePty>();
   /**
    * Executes a shell command using `node-pty`, capturing all output and lifecycle events.
    *
@@ -655,6 +663,98 @@ export class ShellExecutionService {
           executionMethod: 'none',
         }),
       };
+    }
+  }
+
+  /**
+   * Writes a string to the pseudo-terminal (PTY) of a running process.
+   *
+   * @param pid The process ID of the target PTY.
+   * @param input The string to write to the terminal.
+   */
+  static writeToPty(pid: number, input: string): void {
+    if (!this.isPtyActive(pid)) {
+      return;
+    }
+
+    const activePty = this.activePtys.get(pid);
+    if (activePty) {
+      activePty.ptyProcess.write(input);
+    }
+  }
+
+  static isPtyActive(pid: number): boolean {
+    try {
+      // process.kill with signal 0 is a way to check for the existence of a process.
+      // It doesn't actually send a signal.
+      return process.kill(pid, 0);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Resizes the pseudo-terminal (PTY) of a running process.
+   *
+   * @param pid The process ID of the target PTY.
+   * @param cols The new number of columns.
+   * @param rows The new number of rows.
+   */
+  static resizePty(pid: number, cols: number, rows: number): void {
+    if (!this.isPtyActive(pid)) {
+      return;
+    }
+
+    const activePty = this.activePtys.get(pid);
+    if (activePty) {
+      try {
+        activePty.ptyProcess.resize(cols, rows);
+        activePty.headlessTerminal.resize(cols, rows);
+      } catch (e) {
+        // Ignore errors if the pty has already exited, which can happen
+        // due to a race condition between the exit event and this call.
+        if (
+          e instanceof Error &&
+          (('code' in e && e.code === 'ESRCH') ||
+            e.message.includes('Cannot resize a pty that has already exited'))
+        ) {
+          // On Unix, we get an ESRCH error.
+          // On Windows, we get a message-based error.
+          // In both cases, it's safe to ignore.
+        } else {
+          throw e;
+        }
+      }
+    }
+  }
+
+  /**
+   * Scrolls the pseudo-terminal (PTY) of a running process.
+   *
+   * @param pid The process ID of the target PTY.
+   * @param lines The number of lines to scroll.
+   */
+  static scrollPty(pid: number, lines: number): void {
+    if (!this.isPtyActive(pid)) {
+      return;
+    }
+
+    const activePty = this.activePtys.get(pid);
+    if (activePty) {
+      try {
+        activePty.headlessTerminal.scrollLines(lines);
+        if (activePty.headlessTerminal.buffer.active.viewportY < 0) {
+          activePty.headlessTerminal.scrollToTop();
+        }
+      } catch (e) {
+        // Ignore errors if the pty has already exited, which can happen
+        // due to a race condition between the exit event and this call.
+        if (e instanceof Error && 'code' in e && e.code === 'ESRCH') {
+          // ignore
+        } else {
+          throw e;
+        }
+      }
     }
   }
 }
