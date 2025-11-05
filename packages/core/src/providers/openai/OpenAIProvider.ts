@@ -1037,6 +1037,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             break;
           }
 
+          const chunkRecord = chunk as unknown as Record<string, unknown>;
+          const streamingError = chunkRecord?.error;
+          if (
+            streamingError &&
+            typeof streamingError === 'object' &&
+            streamingError !== null
+          ) {
+            const errorMessage =
+              (streamingError as { message?: string }).message ??
+              (streamingError as { error?: string }).error ??
+              'Streaming response reported an error.';
+            throw new Error(errorMessage);
+          }
+
           // Extract usage information if present (typically in final chunk)
           if (chunk.usage) {
             streamingUsage = chunk.usage;
@@ -1165,6 +1179,65 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 }
               }
             }
+          }
+
+          const choiceMessage = (
+            choice as {
+              message?: {
+                tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
+              };
+            }
+          ).message;
+          const messageToolCalls = choiceMessage?.tool_calls;
+          if (messageToolCalls && messageToolCalls.length > 0) {
+            messageToolCalls.forEach(
+              (
+                toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
+                index: number,
+              ) => {
+                if (!toolCall || toolCall.type !== 'function') {
+                  return;
+                }
+
+                let targetIndex = index;
+                const annotated =
+                  toolCall as OpenAI.Chat.Completions.ChatCompletionMessageToolCall & {
+                    index?: number;
+                  };
+                if (typeof annotated.index === 'number') {
+                  targetIndex = annotated.index;
+                } else if (toolCall.id) {
+                  const matchIndex = accumulatedToolCalls.findIndex(
+                    (existing) => existing && existing.id === toolCall.id,
+                  );
+                  if (matchIndex >= 0) {
+                    targetIndex = matchIndex;
+                  }
+                }
+
+                if (!accumulatedToolCalls[targetIndex]) {
+                  accumulatedToolCalls[targetIndex] = {
+                    id: toolCall.id || '',
+                    type: 'function',
+                    function: {
+                      name: toolCall.function?.name || '',
+                      arguments: '',
+                    },
+                  };
+                }
+
+                const target = accumulatedToolCalls[targetIndex];
+                if (toolCall.id) {
+                  target.id = toolCall.id;
+                }
+                if (toolCall.function?.name) {
+                  target.function.name = toolCall.function.name;
+                }
+                if (toolCall.function?.arguments !== undefined) {
+                  target.function.arguments = toolCall.function.arguments ?? '';
+                }
+              },
+            );
           }
         }
       } catch (error) {
