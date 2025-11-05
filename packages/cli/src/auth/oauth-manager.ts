@@ -372,9 +372,13 @@ export class OAuthManager {
    * Get OAuth token for a specific provider
    * Compatible with precedence resolver - returns access token string
    * @param providerName - Name of the provider
+   * @param _metadata - Optional metadata for token request (unused in CLI implementation)
    * @returns Access token string if available, null otherwise
    */
-  async getToken(providerName: string): Promise<string | null> {
+  async getToken(
+    providerName: string,
+    _metadata?: unknown,
+  ): Promise<string | null> {
     // Check if OAuth is enabled for this provider
     if (!this.isOAuthEnabled(providerName)) {
       return null;
@@ -444,9 +448,13 @@ export class OAuthManager {
   /**
    * Get OAuth token object for a specific provider
    * @param providerName - Name of the provider
+   * @param _metadata - Optional metadata for token request (unused in CLI implementation)
    * @returns OAuth token if available, null otherwise
    */
-  async getOAuthToken(providerName: string): Promise<OAuthToken | null> {
+  async getOAuthToken(
+    providerName: string,
+    _metadata?: unknown,
+  ): Promise<OAuthToken | null> {
     if (!providerName || typeof providerName !== 'string') {
       throw new Error('Provider name must be a non-empty string');
     }

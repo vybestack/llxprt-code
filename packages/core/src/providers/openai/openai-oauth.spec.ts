@@ -244,7 +244,12 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const oauthToken = 'lazy-oauth-token-123';
 
       // Mock OAuth manager to indicate OAuth is enabled
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(oauthToken);
+      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
+        oauthToken,
+      );
+      (
+        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(true);
       const mockIsOAuthEnabled = vi.fn().mockResolvedValue(true);
       (
         mockOAuthManager as unknown as {
@@ -259,11 +264,8 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
 
-      // OAuth manager should have been called to get token
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
-        expect.anything(),
-      );
+      // OAuth manager should have been called to check auth status (not trigger)
+      expect(mockOAuthManager.isAuthenticated).toHaveBeenCalledWith('qwen');
     });
 
     /**
@@ -303,7 +305,12 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
     it('should pass lazily-obtained OAuth token as API key to OpenAI SDK', async () => {
       // Given: Valid OAuth token obtained through lazy triggering
       const oauthToken = 'lazy-oauth-token-456';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(oauthToken);
+      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
+        oauthToken,
+      );
+      (
+        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(true);
 
       // When: Using OAuth token for Qwen endpoint
       const provider = createProviderWithRuntime({
@@ -314,11 +321,8 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
 
-      // This token would be passed to OpenAI SDK constructor as apiKey
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
-        expect.anything(),
-      );
+      // isAuthenticated check should not trigger OAuth flow
+      expect(mockOAuthManager.isAuthenticated).toHaveBeenCalledWith('qwen');
     });
 
     /**
@@ -330,7 +334,12 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
      */
     it('should not trigger OAuth when OAuth is disabled', async () => {
       // Given: OAuth disabled, no other auth methods
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
+      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
+        null,
+      );
+      (
+        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(false);
       const mockIsOAuthEnabled = vi.fn().mockResolvedValue(false);
       (
         mockOAuthManager as unknown as {
@@ -426,7 +435,12 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       // Given: Qwen base URL and OAuth token
       const qwenBaseUrl = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
       const oauthToken = 'qwen-oauth-token-123';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(oauthToken);
+      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
+        oauthToken,
+      );
+      (
+        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(true);
 
       // When: Creating provider with Qwen URL and OAuth
       const provider = new OpenAIProvider(
@@ -439,10 +453,7 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       // Then: Should validate as Qwen-compatible endpoint and be authenticated via OAuth
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
-        expect.anything(),
-      );
+      expect(mockOAuthManager.isAuthenticated).toHaveBeenCalledWith('qwen');
     });
 
     /**
@@ -515,7 +526,12 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       ];
 
       const oauthToken = 'qwen-oauth-token-123';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(oauthToken);
+      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
+        oauthToken,
+      );
+      (
+        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(true);
 
       for (const endpoint of qwenEndpoints) {
         // When: Creating provider with each Qwen endpoint variant
@@ -607,7 +623,12 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
     it('should return true when OAuth token is available', async () => {
       // Given: Valid OAuth token, no other auth
       delete process.env.OPENAI_API_KEY;
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('valid-token');
+      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
+        'valid-token',
+      );
+      (
+        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(true);
 
       // When: Checking authentication status with Qwen endpoint
       const provider = new OpenAIProvider(
@@ -621,11 +642,8 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
 
-      // Verify OAuth manager was called
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
-        expect.anything(),
-      );
+      // Verify OAuth manager was called for status check (not triggering)
+      expect(mockOAuthManager.isAuthenticated).toHaveBeenCalledWith('qwen');
     });
 
     /**
@@ -664,7 +682,12 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
     it('should return false when no authentication available', async () => {
       // Given: No authentication methods
       delete process.env.OPENAI_API_KEY;
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
+      (mockOAuthManager.getToken as ReturnType<typeof vi.fn>).mockResolvedValue(
+        null,
+      );
+      (
+        mockOAuthManager.isAuthenticated as ReturnType<typeof vi.fn>
+      ).mockResolvedValue(false);
 
       // When: Checking auth status with no auth but using Qwen endpoint
       const provider = new OpenAIProvider(
@@ -678,11 +701,8 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(false);
 
-      // Verify OAuth manager was called but returned null
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
-        'qwen',
-        expect.anything(),
-      );
+      // Verify isAuthenticated was called instead of getToken (non-triggering check)
+      expect(mockOAuthManager.isAuthenticated).toHaveBeenCalledWith('qwen');
     });
   });
 

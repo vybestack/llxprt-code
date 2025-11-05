@@ -62,11 +62,13 @@ describe('auth runtime scope gaps', () => {
 
     const resolver = new AuthPrecedenceResolver(baseConfig, oauthManager);
 
-    const firstToken = await resolver.resolveAuthentication();
+    const firstToken = await resolver.resolveAuthentication({
+      includeOAuth: true,
+    });
 
-    await expect(resolver.resolveAuthentication()).resolves.toBe(
-      'scoped-token-runtime-a',
-    );
+    await expect(
+      resolver.resolveAuthentication({ includeOAuth: true }),
+    ).resolves.toBe('scoped-token-runtime-a');
 
     expect(firstToken).toBe('scoped-token-runtime-a');
     expect(oauthManager.getToken).toHaveBeenCalledTimes(1);
@@ -93,7 +95,7 @@ describe('auth runtime scope gaps', () => {
 
     const resolver = new AuthPrecedenceResolver(baseConfig, oauthManager);
 
-    await resolver.resolveAuthentication();
+    await resolver.resolveAuthentication({ includeOAuth: true });
 
     expect(oauthManager.getToken).toHaveBeenCalledWith(
       'mock-oauth-provider',
@@ -128,7 +130,7 @@ describe('auth runtime scope gaps', () => {
 
     const resolver = new AuthPrecedenceResolver(baseConfig, oauthManager);
 
-    await resolver.resolveAuthentication();
+    await resolver.resolveAuthentication({ includeOAuth: true });
 
     const scopedMetadata = runtimeContext.metadata as Record<string, unknown>;
 

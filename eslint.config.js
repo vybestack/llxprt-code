@@ -342,4 +342,45 @@ export default tseslint.config(
       'license-header/header': 'off',
     },
   },
+  // Provider authentication anti-patterns
+  {
+    files: ['packages/core/src/providers/**/*.ts'],
+    ignores: [
+      '**/*.test.ts',
+      '**/*.spec.ts',
+      '**/__tests__/**',
+      '**/integration/**',
+    ],
+    rules: {
+      // Prevent direct process.env reads for API keys and key storage in provider files
+      // Extends base no-restricted-syntax rules (require/throw) with provider-specific rules
+      'no-restricted-syntax': [
+        'error',
+        // Base rules from main config
+        {
+          selector: 'CallExpression[callee.name="require"]',
+          message: 'Avoid using require(). Use ES6 imports instead.',
+        },
+        {
+          selector: 'ThrowStatement > Literal:not([value=/^\\w+Error:/])',
+          message:
+            'Do not throw string literals or non-Error objects. Throw new Error("...") instead.',
+        },
+        // Provider-specific rules
+        {
+          // Only flag auth-related env var reads (API_KEY, API_TOKEN, etc.)
+          // Allows legitimate reads of NODE_ENV, user-agent, etc.
+          selector:
+            'MemberExpression[object.object.name="process"][object.property.name="env"][property.name=/.*((API|AUTH).*KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS).*/i]',
+          message:
+            'Do not read API keys from process.env directly in providers. Use authResolver.resolveAuthentication() instead.',
+        },
+        {
+          selector: 'PropertyDefinition[key.name=/.*[Kk]ey.*/][value]',
+          message:
+            'Providers should not store API keys directly. Use authResolver for stateless auth.',
+        },
+      ],
+    },
+  },
 );

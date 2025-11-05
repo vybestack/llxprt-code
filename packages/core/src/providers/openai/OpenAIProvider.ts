@@ -366,7 +366,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   private getFallbackModels(): IModel[] {
-    return [];
+    // Return commonly available OpenAI models as fallback
+    return [
+      {
+        id: 'gpt-5',
+        name: 'GPT-5',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-4.2-turbo-preview',
+        name: 'GPT-4.2 Turbo Preview',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-4.2-turbo',
+        name: 'GPT-4.2 Turbo',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+    ];
   }
 
   override getDefaultModel(): string {
@@ -449,43 +469,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // For non-qwen providers, use the normal check
     return super.isAuthenticated();
-  }
-
-  /**
-   * Override getAuthToken for qwen provider to skip SettingsService auth checks
-   * This ensures qwen always uses OAuth even when other profiles set auth-key/auth-keyfile
-   */
-  protected override async getAuthToken(): Promise<string> {
-    // If this is the qwen provider and we have forceQwenOAuth, skip SettingsService checks
-    const config = this.providerConfig as IProviderConfig & {
-      forceQwenOAuth?: boolean;
-    };
-    if (this.name === 'qwen' && config?.forceQwenOAuth) {
-      // For qwen, skip directly to OAuth without checking SettingsService
-      // Use 'qwen' as the provider name even if baseProviderConfig.oauthProvider is not set
-      const oauthProviderName = this.baseProviderConfig.oauthProvider || 'qwen';
-      if (this.baseProviderConfig.oauthManager) {
-        try {
-          const token =
-            await this.baseProviderConfig.oauthManager.getToken(
-              oauthProviderName,
-            );
-          if (token) {
-            return token;
-          }
-        } catch (error) {
-          if (process.env.DEBUG) {
-            console.warn(`[qwen] OAuth authentication failed:`, error);
-          }
-        }
-      }
-
-      // No OAuth available, return empty string
-      return '';
-    }
-
-    // For non-qwen providers, use the normal auth precedence chain
-    return super.getAuthToken();
   }
 
   /**

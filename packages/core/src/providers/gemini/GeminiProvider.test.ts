@@ -210,4 +210,102 @@ describe('GeminiProvider', () => {
       'User-Agent': expect.any(String),
     });
   });
+
+  describe('GeminiProvider Authentication', () => {
+    it('should check AuthResolver before falling back to Vertex AI', async () => {
+      // Mock authResolver to return a test key
+      const mockAuthResolver = {
+        resolveAuthentication: vi.fn().mockResolvedValue('test-key'),
+      };
+
+      const provider = new GeminiProvider();
+      // Inject the mock authResolver
+      (provider as unknown as { authResolver: unknown }).authResolver =
+        mockAuthResolver;
+
+      // Access the private determineBestAuth method
+      const auth = await (
+        provider as unknown as {
+          determineBestAuth: () => Promise<{
+            authMode: string;
+            token: string;
+          }>;
+        }
+      ).determineBestAuth();
+
+      // Assert authResolver.resolveAuthentication was called with correct options
+      expect(mockAuthResolver.resolveAuthentication).toHaveBeenCalledWith({
+        settingsService: expect.anything(),
+        includeOAuth: false,
+      });
+
+      // Assert auth.authMode is 'gemini-api-key'
+      expect(auth.authMode).toBe('gemini-api-key');
+
+      // Assert auth.token is 'test-key'
+      expect(auth.token).toBe('test-key');
+    });
+
+    it('should fallback to Vertex AI if no standard auth', async () => {
+      // Mock authResolver to return null (no auth found)
+      const mockAuthResolver = {
+        resolveAuthentication: vi.fn().mockResolvedValue(null),
+      };
+
+      // Set GOOGLE_APPLICATION_CREDENTIALS env var
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = '/path/to/credentials.json';
+
+      const provider = new GeminiProvider();
+      // Inject the mock authResolver
+      (provider as unknown as { authResolver: unknown }).authResolver =
+        mockAuthResolver;
+
+      // Access the private determineBestAuth method
+      const auth = await (
+        provider as unknown as {
+          determineBestAuth: () => Promise<{
+            authMode: string;
+            token: string;
+          }>;
+        }
+      ).determineBestAuth();
+
+      // Assert auth.authMode is 'vertex-ai'
+      expect(auth.authMode).toBe('vertex-ai');
+
+      // Clean up
+      delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    });
+
+    it('should respect auth precedence (SettingsService over env var)', async () => {
+      // Set process.env.GEMINI_API_KEY
+      process.env.GEMINI_API_KEY = 'env-key';
+
+      // Mock authResolver to return 'settings-key' (from SettingsService/keyfile)
+      const mockAuthResolver = {
+        resolveAuthentication: vi.fn().mockResolvedValue('settings-key'),
+      };
+
+      const provider = new GeminiProvider();
+      // Inject the mock authResolver
+      (provider as unknown as { authResolver: unknown }).authResolver =
+        mockAuthResolver;
+
+      // Access the private determineBestAuth method
+      const auth = await (
+        provider as unknown as {
+          determineBestAuth: () => Promise<{
+            authMode: string;
+            token: string;
+          }>;
+        }
+      ).determineBestAuth();
+
+      // Assert auth.token is 'settings-key' (NOT 'env-key')
+      expect(auth.token).toBe('settings-key');
+
+      // Also verify authResolver was called
+      expect(mockAuthResolver.resolveAuthentication).toHaveBeenCalled();
+    });
+  });
 });

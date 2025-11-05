@@ -1180,9 +1180,10 @@ export interface ProviderRuntimeStatus {
  */
 export async function switchActiveProvider(
   providerName: string,
-  options: { autoOAuth?: boolean } = {},
+  options: { autoOAuth?: boolean; preserveEphemerals?: string[] } = {},
 ): Promise<ProviderSwitchResult> {
   const autoOAuth = options.autoOAuth ?? false;
+  const preserveEphemerals = options.preserveEphemerals ?? [];
   const name = providerName.trim();
   if (!name) {
     throw new Error('Provider name is required.');
@@ -1219,8 +1220,11 @@ export async function switchActiveProvider(
     typeof config.getEphemeralSettings === 'function'
       ? config.getEphemeralSettings()
       : {};
-  for (const key of Object.keys(existingEphemerals)) {
-    if (key === 'activeProvider') {
+  const keysBeforeClearing = Object.keys(existingEphemerals);
+  for (const key of keysBeforeClearing) {
+    const shouldPreserve =
+      key === 'activeProvider' || preserveEphemerals.includes(key);
+    if (shouldPreserve) {
       continue;
     }
     config.setEphemeralSetting(key, undefined);
@@ -1304,7 +1308,7 @@ export async function switchActiveProvider(
         )
       : undefined;
   const explicitConfigBaseUrl =
-    currentProvider === name
+    currentProvider === name || preserveEphemerals.includes('base-url')
       ? normalizeSetting(
           typeof config.getEphemeralSetting === 'function'
             ? (config.getEphemeralSetting('base-url') as string | undefined)
@@ -1699,4 +1703,56 @@ export async function setActiveModel(
     nextModel: modelName,
     authRefreshed,
   };
+}
+
+/**
+ * Apply CLI argument overrides to configuration.
+ * Must be called AFTER provider manager creation (so getCliRuntimeServices() works)
+ * but BEFORE provider switching (so auth is ready).
+ *
+ * This function applies CLI arguments in the correct order to ensure they override
+ * profile settings:
+ * 1. Apply --key (overrides profile auth-key)
+ * 2. Apply --keyfile (overrides profile auth-keyfile)
+ * 3. Apply --set arguments (overrides profile ephemerals)
+ * 4. Apply --baseurl (overrides profile base-url)
+ *
+ * @param argv - CLI arguments
+ */
+export async function applyCliArgumentOverrides(argv: {
+  key?: string;
+  keyfile?: string;
+  set?: string[];
+  baseurl?: string;
+}): Promise<void> {
+  const { readFile } = await import('node:fs/promises');
+  const { homedir } = await import('node:os');
+  const { applyCliSetArguments } = await import(
+    '../config/cliEphemeralSettings.js'
+  );
+
+  const { config } = getCliRuntimeServices();
+
+  // 1. Apply --key (overrides profile auth-key)
+  if (argv.key) {
+    await updateActiveProviderApiKey(argv.key);
+  }
+
+  // 2. Apply --keyfile (overrides profile auth-keyfile)
+  if (argv.keyfile) {
+    const resolvedPath = argv.keyfile.replace(/^~/, homedir());
+    const keyContent = await readFile(resolvedPath, 'utf-8');
+    await updateActiveProviderApiKey(keyContent.trim());
+    config.setEphemeralSetting('auth-keyfile', resolvedPath);
+  }
+
+  // 3. Apply --set arguments (overrides profile ephemerals)
+  if (argv.set && Array.isArray(argv.set) && argv.set.length > 0) {
+    applyCliSetArguments(config, argv.set);
+  }
+
+  // 4. Apply --baseurl (overrides profile base-url)
+  if (argv.baseurl) {
+    await updateActiveProviderBaseUrl(argv.baseurl);
+  }
 }
