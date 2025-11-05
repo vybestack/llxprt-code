@@ -147,6 +147,7 @@ export class McpClient {
     for (const tool of tools) {
       this.toolRegistry.registerTool(tool);
     }
+    this.toolRegistry.sortTools();
   }
 
   /**
@@ -560,6 +561,7 @@ export async function connectAndDiscover(
     for (const tool of tools) {
       toolRegistry.registerTool(tool);
     }
+    toolRegistry.sortTools();
   } catch (error) {
     if (mcpClient) {
       mcpClient.close();
