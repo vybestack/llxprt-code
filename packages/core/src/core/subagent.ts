@@ -913,6 +913,16 @@ export class SubAgentScope {
           promptId,
         );
 
+        durationMin = (Date.now() - startTime) / (1000 * 60);
+        if (durationMin >= this.runConfig.max_time_minutes) {
+          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached time limit (${this.runConfig.max_time_minutes} minutes) while waiting for model response`,
+          );
+          break;
+        }
+
         let functionCalls: FunctionCall[] = [];
         let textResponse = '';
         for await (const resp of responseStream) {
