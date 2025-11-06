@@ -31,6 +31,7 @@ interface ContinuationConditions {
   hasActiveTodos: boolean;
   continuationEnabled: boolean;
   notAlreadyContinuing: boolean;
+  todoPaused: boolean;
 }
 
 export interface TodoContinuationHook {
@@ -63,6 +64,7 @@ export const useTodoContinuation = (
 
   // Track if a continuation is currently in progress to prevent rapid firing
   const continuationInProgressRef = useRef<boolean>(false);
+  const todoPausedRef = useRef<boolean>(false);
 
   const todoContext = useTodoContext();
   const abortControllerRef = useRef<AbortController | undefined>(undefined);
@@ -70,19 +72,22 @@ export const useTodoContinuation = (
 
   // Private helper methods
   const _evaluateContinuationConditions = useCallback(
-    (hadToolCalls: boolean): ContinuationConditions => {
+    (hadToolCalls: boolean, todoPaused: boolean): ContinuationConditions => {
       const ephemeralSettings = config.getEphemeralSettings();
       const isEnabled = ephemeralSettings['todo-continuation'] === true;
       const hasActiveTodos = todoContext.todos.some(
         (todo) => todo.status === 'pending' || todo.status === 'in_progress',
       );
+      const hadBlockingToolCalls =
+        hadToolCalls && (todoPaused || !hasActiveTodos);
 
       return {
         streamCompleted: true,
-        noToolCallsMade: !hadToolCalls,
+        noToolCallsMade: !hadBlockingToolCalls,
         hasActiveTodos,
         continuationEnabled: isEnabled,
         notAlreadyContinuing: !continuationState.isActive,
+        todoPaused,
       };
     },
     [config, todoContext.todos, continuationState.isActive],
@@ -100,7 +105,8 @@ export const useTodoContinuation = (
         conditions.noToolCallsMade &&
         conditions.hasActiveTodos &&
         conditions.continuationEnabled &&
-        conditions.notAlreadyContinuing
+        conditions.notAlreadyContinuing &&
+        !conditions.todoPaused
       );
     },
     [isResponding],
@@ -193,17 +199,20 @@ export const useTodoContinuation = (
   // Public interface methods
   const handleStreamCompleted = useCallback(
     (hadToolCalls: boolean): void => {
-      // Reset continuation state if tool calls were made
       if (hadToolCalls) {
         setContinuationState((prev) => ({
           ...prev,
           isActive: false,
         }));
-        return;
       }
 
-      // Check all continuation conditions
-      const conditions = _evaluateContinuationConditions(hadToolCalls);
+      const todoPaused = todoPausedRef.current;
+      todoPausedRef.current = false;
+
+      const conditions = _evaluateContinuationConditions(
+        hadToolCalls,
+        todoPaused,
+      );
 
       if (!_shouldTriggerContinuation(conditions)) {
         return;
@@ -239,11 +248,14 @@ export const useTodoContinuation = (
   );
 
   const handleTodoPause = useCallback(
-    (reason: string): { type: 'pause'; reason: string; message: string } => ({
-      type: 'pause' as const,
-      reason,
-      message: `Task paused: ${reason}`,
-    }),
+    (reason: string): { type: 'pause'; reason: string; message: string } => {
+      todoPausedRef.current = true;
+      return {
+        type: 'pause' as const,
+        reason,
+        message: `Task paused: ${reason}`,
+      };
+    },
     [],
   );
   useEffect(
