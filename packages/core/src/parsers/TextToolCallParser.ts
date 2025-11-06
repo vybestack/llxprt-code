@@ -713,6 +713,15 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         continue;
       }
 
+      const normalizedKey = key.toLowerCase();
+      if (
+        normalizedKey === 'with' ||
+        normalizedKey === 'and' ||
+        normalizedKey === 'then'
+      ) {
+        continue;
+      }
+
       skipWhitespace();
       if (text.charAt(index) !== '=') {
         index++;

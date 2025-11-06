@@ -119,14 +119,17 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     _signal: AbortSignal,
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
+    const normalizedTodos = this.normalizeTodos(params.todos);
+
     // Validate todos with Zod schema
-    const result = TodoArraySchema.safeParse(params.todos);
+    const result = TodoArraySchema.safeParse(normalizedTodos);
     if (!result.success) {
       const error = result.error.errors[0];
       throw new Error(
         `Validation error: ${error.path.join('.')} - ${error.message}`,
       );
     }
+    const todos = result.data;
 
     // Get session and agent IDs from context
     const sessionId = this.context?.sessionId || 'default';
@@ -138,12 +141,12 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     const oldTodos = await store.readTodos();
 
     // Write new todos
-    await store.writeTodos(params.todos);
+    await store.writeTodos(todos);
 
     // Calculate state change
     const stateChange = this.reminderService.calculateStateChange(
       oldTodos,
-      params.todos,
+      todos,
     );
 
     // Generate reminder if needed
@@ -158,7 +161,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     // Set active todo ID if there's an in_progress todo
     if (isInteractive) {
       const scopedAgentId = agentId ?? DEFAULT_AGENT_ID;
-      const inProgressTodo = params.todos.find(
+      const inProgressTodo = todos.find(
         (todo) => todo.status === 'in_progress',
       );
       const contextTracker = TodoContextTracker.forAgent(
@@ -176,13 +179,13 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
       todoEvents.emitTodoUpdated(event);
     }
 
-    const formattedOutput = formatTodoListForDisplay(params.todos);
+    const formattedOutput = formatTodoListForDisplay(todos);
 
-    const statistics = this.calculateStatistics(params.todos);
-    const nextAction = this.determineNextAction(params.todos);
+    const statistics = this.calculateStatistics(todos);
+    const nextAction = this.determineNextAction(todos);
 
     return {
-      llmContent: formattedOutput + (reminder || ''),
+      llmContent: formattedOutput,
       returnDisplay: formattedOutput,
       metadata: {
         stateChanged: this.reminderService.shouldGenerateReminder(stateChange),
@@ -191,8 +194,41 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
         statusChanged: stateChange.statusChanged.length,
         statistics,
         nextAction,
+        reminder: reminder ?? undefined,
       },
     };
+  }
+
+  private normalizeTodos(rawTodos: TodoWriteParams['todos']): Todo[] {
+    return rawTodos.map((todo, index) => {
+      const normalizedId =
+        todo?.id !== undefined &&
+        todo?.id !== null &&
+        `${todo.id}`.trim() !== ''
+          ? String(todo.id)
+          : String(index + 1);
+
+      const normalizedSubtasks = Array.isArray(todo?.subtasks)
+        ? todo.subtasks.map((subtask, subIndex) => {
+            const subtaskId =
+              subtask?.id !== undefined &&
+              subtask?.id !== null &&
+              `${subtask.id}`.trim() !== ''
+                ? String(subtask.id)
+                : `${normalizedId}-${subIndex + 1}`;
+            return {
+              ...subtask,
+              id: subtaskId,
+            };
+          })
+        : todo?.subtasks;
+
+      return {
+        ...todo,
+        id: normalizedId,
+        subtasks: normalizedSubtasks,
+      } as Todo;
+    });
   }
 
   private calculateStatistics(todos: Todo[]): {

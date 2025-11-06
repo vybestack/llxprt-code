@@ -443,28 +443,6 @@ export class GeminiClient {
     );
   }
 
-  private areTodoContentsEqual(
-    a: readonly Todo[],
-    b: readonly Todo[],
-  ): boolean {
-    if (a.length !== b.length) {
-      return false;
-    }
-    const normalize = (todos: readonly Todo[]) =>
-      todos
-        .map((todo) => (todo.content ?? '').trim())
-        .filter((content) => content.length > 0)
-        .sort((left, right) => left.localeCompare(right));
-    const normalizedA = normalize(a);
-    const normalizedB = normalize(b);
-    if (normalizedA.length !== normalizedB.length) {
-      return false;
-    }
-    return normalizedA.every(
-      (content, index) => content === normalizedB[index],
-    );
-  }
-
   private async getTodoReminderForCurrentState(options?: {
     todoSnapshot?: Todo[];
     activeTodos?: Todo[];
@@ -1101,7 +1079,6 @@ export class GeminiClient {
     signal: AbortSignal,
     prompt_id: string,
     turns: number = this.MAX_TURNS,
-    originalModel?: string,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
     const logger = new DebugLogger('llxprt:client:stream');
     logger.debug(() => 'DEBUG: GeminiClient.sendMessageStream called');
@@ -1177,8 +1154,6 @@ export class GeminiClient {
       );
     }
 
-    const initialModel = originalModel || this.runtimeState.model;
-
     const compressed = await this.tryCompressChat(prompt_id);
     if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
       yield { type: GeminiEventType.ChatCompressed, value: compressed };
@@ -1206,29 +1181,21 @@ export class GeminiClient {
       this.forceFullIdeContext = false;
     }
 
-    let baseRequestForRetry: PartListUnion = Array.isArray(initialRequest)
+    let baseRequest: PartListUnion = Array.isArray(initialRequest)
       ? [...(initialRequest as Part[])]
       : initialRequest;
-    let pendingRequestOverride: PartListUnion | null = null;
-    let iteration = 0;
+    let retryCount = 0;
+    const MAX_RETRIES = 2;
     let lastTurn: Turn | undefined;
+    let hadToolCallsThisTurn = false; // Track if model executed tools - preserve across retries
 
-    while (iteration < boundedTurns) {
-      iteration += 1;
+    while (retryCount < MAX_RETRIES) {
+      let request: PartListUnion = Array.isArray(baseRequest)
+        ? [...(baseRequest as Part[])]
+        : baseRequest;
 
-      let request: PartListUnion;
-      if (pendingRequestOverride) {
-        request = Array.isArray(pendingRequestOverride)
-          ? [...(pendingRequestOverride as Part[])]
-          : pendingRequestOverride;
-        pendingRequestOverride = null;
-      } else {
-        request = Array.isArray(baseRequestForRetry)
-          ? [...(baseRequestForRetry as Part[])]
-          : baseRequestForRetry;
-      }
-
-      if (iteration === 1) {
+      // Complexity analysis only on first iteration
+      if (retryCount === 0) {
         let shouldAppendTodoSuffix = false;
 
         if (Array.isArray(request) && request.length > 0) {
@@ -1255,13 +1222,14 @@ export class GeminiClient {
         if (shouldAppendTodoSuffix) {
           request = this.appendTodoSuffixToRequest(request);
         }
-        baseRequestForRetry = Array.isArray(request)
+        baseRequest = Array.isArray(request)
           ? [...(request as Part[])]
           : request;
       } else {
         this.consecutiveComplexTurns = 0;
       }
 
+      // Apply todo reminder if one is pending from previous iteration
       if (this.todoToolsAvailable && this.toolCallReminderLevel !== 'none') {
         const reminderResult = await this.getTodoReminderForCurrentState({
           todoSnapshot: this.lastTodoSnapshot,
@@ -1274,12 +1242,8 @@ export class GeminiClient {
           );
           this.lastTodoSnapshot = reminderResult.todos;
         }
-        const currentTime = Date.now();
-        this.lastComplexitySuggestionTime = currentTime;
-        this.lastComplexitySuggestionTurn = this.sessionTurnCount;
-        this.consecutiveComplexTurns = 0;
-        this.toolActivityCount = 0;
         this.toolCallReminderLevel = 'none';
+        this.toolActivityCount = 0;
       }
 
       const contentGenConfig = this.config.getContentGeneratorConfig();
@@ -1301,10 +1265,12 @@ export class GeminiClient {
         return turn;
       }
 
-      const deferredEvents: ServerGeminiStreamEvent[] = [];
+      // Reset flags for this iteration (hadToolCallsThisTurn persists across duplicate todo retries)
       let todoPauseSeen = false;
-
+      const deferredEvents: ServerGeminiStreamEvent[] = [];
       const resultStream = turn.run(request, signal);
+
+      // Stream events, deferring Content/Finished/Citation until we decide on a retry
       for await (const event of resultStream) {
         if (this.loopDetector.addAndCheck(event)) {
           yield { type: GeminiEventType.LoopDetected };
@@ -1313,12 +1279,18 @@ export class GeminiClient {
 
         this.recordModelActivity(event);
 
+        // Track tool execution during this turn
+        if (event.type === GeminiEventType.ToolCallRequest) {
+          hadToolCallsThisTurn = true;
+        }
+
         if (event.type === GeminiEventType.ToolCallResponse) {
           if (this.isTodoPauseResponse(event.value)) {
             todoPauseSeen = true;
           }
         }
 
+        // Handle duplicate todo writes
         if (
           event.type === GeminiEventType.ToolCallRequest &&
           this.isTodoToolCall(event.value?.name)
@@ -1329,25 +1301,6 @@ export class GeminiClient {
           const requestedTodos = Array.isArray(event.value?.args?.todos)
             ? (event.value.args.todos as Todo[])
             : [];
-          const currentTodos =
-            this.lastTodoSnapshot ?? (await this.readTodoSnapshot());
-          const activeTodos = this.getActiveTodos(currentTodos);
-          const isDuplicateTodoWrite =
-            requestedTodos.length > 0 &&
-            this.areTodoContentsEqual(currentTodos, requestedTodos);
-
-          if (isDuplicateTodoWrite && activeTodos.length > 0) {
-            const reminder =
-              this.todoReminderService.getUpdateActiveTodoReminder(
-                activeTodos[0],
-              );
-            yield {
-              type: GeminiEventType.SystemNotice,
-              value: reminder,
-            };
-            continue;
-          }
-
           if (requestedTodos.length > 0) {
             this.lastTodoSnapshot = requestedTodos.map((todo) => ({
               id: `${(todo as Todo).id ?? ''}`,
@@ -1372,92 +1325,112 @@ export class GeminiClient {
         }
       }
 
+      // Turn stream is now complete. Decide if we should retry.
+
+      // Check if model made progress by executing tools FIRST
+      if (hadToolCallsThisTurn) {
+        // Model executed tools - that's progress, flush deferred events and exit
+        const reminderState = await this.getTodoReminderForCurrentState();
+        for (const deferred of deferredEvents) {
+          yield deferred;
+        }
+        this.lastTodoSnapshot = reminderState.todos;
+        this.toolCallReminderLevel = 'none';
+        this.toolActivityCount = 0;
+        return turn;
+      }
+
+      // No tool work detected - check todo/pause state
       const reminderState = await this.getTodoReminderForCurrentState();
       const latestSnapshot = reminderState.todos;
       const activeTodos = reminderState.activeTodos;
-      const pendingTodosDetected = activeTodos.length > 0;
-      const hasPendingReminder =
-        this.todoToolsAvailable && this.toolCallReminderLevel !== 'none';
-      const shouldContinue =
-        (!todoPauseSeen && pendingTodosDetected) ||
-        (hasPendingReminder && !todoPauseSeen);
 
-      if (!shouldContinue) {
+      if (todoPauseSeen) {
+        // Model explicitly paused - respect that
         for (const deferred of deferredEvents) {
           yield deferred;
         }
-
         this.lastTodoSnapshot = latestSnapshot;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
-
-        if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
-          const currentModel = this.runtimeState.model;
-          if (currentModel !== initialModel) {
-            return turn;
-          }
-        }
-
         return turn;
       }
 
-      const previousSnapshot = this.lastTodoSnapshot ?? [];
-      const snapshotUnchanged = this.areTodoSnapshotsEqual(
-        previousSnapshot,
-        latestSnapshot,
-      );
+      // Check if todos are still pending
+      const todosStillPending = activeTodos.length > 0;
+      const hasPendingReminder =
+        this.todoToolsAvailable && this.toolCallReminderLevel !== 'none';
 
-      const followUpReminder = (
-        await this.getTodoReminderForCurrentState({
-          todoSnapshot: latestSnapshot,
-          activeTodos,
-          escalate: snapshotUnchanged,
-        })
-      ).reminder;
-
-      this.lastTodoSnapshot = latestSnapshot;
-
-      if (!followUpReminder) {
+      if (!todosStillPending && !hasPendingReminder) {
+        // All todos complete or list is empty, and no reminder pending - return normally
         for (const deferred of deferredEvents) {
           yield deferred;
         }
-
+        this.lastTodoSnapshot = latestSnapshot;
         this.toolCallReminderLevel = 'none';
         this.toolActivityCount = 0;
-
-        if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
-          const currentModel = this.runtimeState.model;
-          if (currentModel !== initialModel) {
-            return turn;
-          }
-        }
-
         return turn;
       }
 
-      pendingRequestOverride = this.appendSystemReminderToRequest(
-        baseRequestForRetry,
-        followUpReminder,
-      );
-      const currentTime = Date.now();
-      this.lastComplexitySuggestionTime = currentTime;
-      this.lastComplexitySuggestionTurn = this.sessionTurnCount;
-      this.toolActivityCount = 0;
-      this.toolCallReminderLevel = 'none';
-      this.consecutiveComplexTurns = 0;
+      // Model tried to return with incomplete todos or has pending reminder - check if we should retry
+      retryCount++;
+
+      if (retryCount >= MAX_RETRIES) {
+        // Hit retry limit - return anyway, let continuation service handle it
+        for (const deferred of deferredEvents) {
+          yield deferred;
+        }
+        this.lastTodoSnapshot = latestSnapshot;
+        this.toolCallReminderLevel = 'none';
+        this.toolActivityCount = 0;
+        return turn;
+      }
+
+      // If we have a pending reminder (from toolActivityCount), it will be injected
+      // at the start of the next iteration. Otherwise, prepare a followUp reminder.
+      if (!hasPendingReminder) {
+        // Prepare retry with escalated reminder
+        const previousSnapshot = this.lastTodoSnapshot ?? [];
+        const snapshotUnchanged = this.areTodoSnapshotsEqual(
+          previousSnapshot,
+          latestSnapshot,
+        );
+
+        const followUpReminder = (
+          await this.getTodoReminderForCurrentState({
+            todoSnapshot: latestSnapshot,
+            activeTodos,
+            escalate: snapshotUnchanged,
+          })
+        ).reminder;
+
+        this.lastTodoSnapshot = latestSnapshot;
+
+        if (!followUpReminder) {
+          // No reminder to add - flush and return
+          for (const deferred of deferredEvents) {
+            yield deferred;
+          }
+          this.toolCallReminderLevel = 'none';
+          this.toolActivityCount = 0;
+          return turn;
+        }
+
+        // Set up retry request with reminder
+        baseRequest = this.appendSystemReminderToRequest(
+          baseRequest,
+          followUpReminder,
+        );
+      } else {
+        // hasPendingReminder is true - reminder will be injected at loop start
+        this.lastTodoSnapshot = latestSnapshot;
+      }
+
+      // Loop back for one more try
     }
 
-    return (
-      lastTurn ??
-      new Turn(
-        this.getChat(),
-        prompt_id,
-        DEFAULT_AGENT_ID,
-        this.config
-          .getContentGeneratorConfig()
-          ?.providerManager?.getActiveProviderName() ?? 'backend',
-      )
-    );
+    // Shouldn't reach here, but return last turn if we do
+    return lastTurn!;
   }
 
   async generateJson(
