@@ -161,7 +161,7 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
     });
 
-    it('@requirement REQ-001.2 should NOT trigger when tool calls were present', () => {
+    it('@requirement REQ-001.2 continues when tool calls were present and todos remain active', () => {
       // Given: Active todos exist and continuation is enabled
       mockTodoContext.todos = [createTodo('1', 'Active task', 'in_progress')];
       mockConfig.getEphemeralSettings.mockReturnValue({
@@ -182,8 +182,8 @@ describe('useTodoContinuation - Behavioral Tests', () => {
         result.current.handleStreamCompleted(true);
       });
 
-      // Then: No continuation should be triggered
-      expect(mockGeminiClient.sendMessageStream).not.toHaveBeenCalled();
+      // Then: Continuation should still trigger
+      expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(1);
     });
 
     it('@requirement REQ-001.4 should NOT trigger when todo-continuation setting is disabled', () => {

@@ -98,7 +98,7 @@ export class TodoReminderService {
    */
   private formatSystemReminder(message: string): string {
     // Return plain text instead of XML tags to avoid breaking OpenAI API
-    return `\n\n---\nSystem Note: ${message}\n---`;
+    return `---\nSystem Note: ${message}\n---`;
   }
 
   /**
@@ -119,6 +119,22 @@ export class TodoReminderService {
     const taskList = this.buildNumberedTaskList(detectedTasks);
     const message = `You have handled several complex instructions without creating a todo list. Pause and use the TodoWrite tool now:\n${taskList}\n\nTodoWrite is required so we can track progress and avoid losing steps. Create the list before continuing.`;
     return this.formatSystemReminder(message);
+  }
+
+  getCreateListReminder(_detectedTasks: string[]): string {
+    return this.formatSystemReminder(
+      'Please create a todo list before continuing.',
+    );
+  }
+
+  getUpdateActiveTodoReminder(_todo: Todo): string {
+    return this.formatSystemReminder('Update the active todo before replying.');
+  }
+
+  getEscalatedActiveTodoReminder(_todo: Todo): string {
+    return this.formatSystemReminder(
+      'Update the active todo or call todo_pause() before replying.',
+    );
   }
 
   private buildNumberedTaskList(detectedTasks: string[]): string {

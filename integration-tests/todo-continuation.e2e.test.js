@@ -143,6 +143,56 @@ test(
 );
 
 /**
+ * @requirement REQ-004
+ * @scenario Auto-resume blocks response until todos progress or pause
+ * @given CLI with active todos
+ * @when AI runs tooling but leaves todos pending
+ * @then Response instructs updating todos or using todo_pause before replying
+ */
+test(
+  'auto-resume blocks response until todo progress',
+  { skip: skipTodoTests },
+  async () => {
+    const rig = new TestRig();
+    await rig.setup('auto-resume blocks response until todo progress', {
+      settings: {
+        'todo-continuation': true,
+      },
+    });
+
+    const _createResult = await rig.run(
+      'Create a todo list with one item: Build login form (in_progress, high)',
+    );
+    const writeToolCall = await rig.waitForToolCall('todo_write');
+    assert.ok(writeToolCall, 'Expected to find a todo_write tool call');
+
+    const result = await rig.run(
+      'List the files in the project root and then reply immediately with a summary.',
+    );
+
+    const normalized = result.toLowerCase();
+    const reminderDetected =
+      normalized.includes('todo_pause') ||
+      normalized.includes('update the todo') ||
+      normalized.includes('complete the todo');
+
+    if (!reminderDetected) {
+      printDebugInfo(rig, result, {
+        expectation:
+          'Output should instruct updating todos or using todo_pause before replying',
+      });
+    }
+
+    assert.ok(
+      reminderDetected,
+      'Expected reminder to block response until todo progress or pause',
+    );
+
+    await rig.cleanup();
+  },
+);
+
+/**
  * @requirement REQ-003
  * @scenario Todo pause tool usage
  * @given CLI with active todos in continuation

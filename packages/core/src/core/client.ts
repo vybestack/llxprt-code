@@ -25,7 +25,7 @@ import {
   GeminiEventType,
   DEFAULT_AGENT_ID,
 } from './turn.js';
-import type { ChatCompressionInfo } from './turn.js';
+import type { ChatCompressionInfo, ToolCallResponseInfo } from './turn.js';
 import { CompressionStatus } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
@@ -64,6 +64,8 @@ import {
   type ComplexityAnalysisResult,
 } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
+import { TodoStore } from '../tools/todo-store.js';
+import type { Todo } from '../tools/todo-schemas.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
@@ -71,11 +73,6 @@ import { subscribeToAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
-const TOOL_BASE_TODO_MESSAGE =
-  'After this next tool call I need to call todo_write and create a todo list to organize this effort.';
-const TOOL_ESCALATED_TODO_MESSAGE =
-  'I have already made several tool calls without a todo list. Immediately call todo_write after this next tool call to organize the work.';
-
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
   return false;
@@ -159,6 +156,7 @@ export class GeminiClient {
   private lastComplexitySuggestionTurn?: number;
   private toolActivityCount = 0;
   private toolCallReminderLevel: 'none' | 'base' | 'escalated' = 'none';
+  private lastTodoSnapshot?: Todo[];
 
   /**
    * At any point in this conversation, was compression triggered without
@@ -389,10 +387,7 @@ export class GeminiClient {
     if (!this.todoToolsAvailable) {
       return;
     }
-    if (
-      event.type !== GeminiEventType.Content &&
-      event.type !== GeminiEventType.ToolCallRequest
-    ) {
+    if (event.type !== GeminiEventType.ToolCallResponse) {
       return;
     }
 
@@ -406,6 +401,124 @@ export class GeminiClient {
     ) {
       this.toolCallReminderLevel = 'base';
     }
+  }
+
+  private async readTodoSnapshot(): Promise<Todo[]> {
+    try {
+      const sessionId = this.config.getSessionId();
+      const store = new TodoStore(sessionId, DEFAULT_AGENT_ID);
+      return await store.readTodos();
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  private getActiveTodos(todos: Todo[]): Todo[] {
+    const inProgress = todos.filter((todo) => todo.status === 'in_progress');
+    const pending = todos.filter((todo) => todo.status === 'pending');
+    return [...inProgress, ...pending];
+  }
+
+  private areTodoSnapshotsEqual(
+    a: readonly Todo[],
+    b: readonly Todo[],
+  ): boolean {
+    if (a.length !== b.length) {
+      return false;
+    }
+    const normalize = (todos: readonly Todo[]) =>
+      todos
+        .map((todo) => ({
+          id: todo.id,
+          status: todo.status,
+          content: todo.content,
+          priority: todo.priority,
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id));
+    const normalizedA = normalize(a);
+    const normalizedB = normalize(b);
+    return normalizedA.every(
+      (todo, index) =>
+        JSON.stringify(todo) === JSON.stringify(normalizedB[index]),
+    );
+  }
+
+  private async getTodoReminderForCurrentState(options?: {
+    todoSnapshot?: Todo[];
+    activeTodos?: Todo[];
+    escalate?: boolean;
+  }): Promise<{
+    reminder: string | null;
+    todos: Todo[];
+    activeTodos: Todo[];
+  }> {
+    const todos = options?.todoSnapshot ?? (await this.readTodoSnapshot());
+    const activeTodos = options?.activeTodos ?? this.getActiveTodos(todos);
+
+    let reminder: string | null = null;
+    if (todos.length === 0) {
+      reminder = this.todoReminderService.getCreateListReminder([]);
+    } else if (activeTodos.length > 0) {
+      reminder = options?.escalate
+        ? this.todoReminderService.getEscalatedActiveTodoReminder(
+            activeTodos[0],
+          )
+        : this.todoReminderService.getUpdateActiveTodoReminder(activeTodos[0]);
+    }
+
+    return { reminder, todos, activeTodos };
+  }
+
+  private appendSystemReminderToRequest(
+    request: PartListUnion,
+    reminderText: string,
+  ): PartListUnion {
+    if (Array.isArray(request)) {
+      const cloned = [...request];
+      const alreadyPresent = cloned.some(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          typeof part.text === 'string' &&
+          part.text === reminderText,
+      );
+      if (!alreadyPresent) {
+        cloned.push({ text: reminderText } as Part);
+      }
+      return cloned;
+    }
+
+    return [{ text: reminderText } as Part];
+  }
+
+  private shouldDeferStreamEvent(event: ServerGeminiStreamEvent): boolean {
+    return (
+      event.type === GeminiEventType.Content ||
+      event.type === GeminiEventType.Finished ||
+      event.type === GeminiEventType.Citation
+    );
+  }
+
+  private isTodoPauseResponse(
+    response: ToolCallResponseInfo | undefined,
+  ): boolean {
+    if (!response?.responseParts) {
+      return false;
+    }
+    return response.responseParts.some((part) => {
+      if (
+        part &&
+        typeof part === 'object' &&
+        'functionResponse' in part &&
+        part.functionResponse &&
+        typeof part.functionResponse === 'object'
+      ) {
+        const name = (part.functionResponse as { name?: unknown }).name;
+        return typeof name === 'string' && name.toLowerCase() === 'todo_pause';
+      }
+      return false;
+    });
   }
 
   async addHistory(content: Content) {
@@ -962,7 +1075,7 @@ export class GeminiClient {
   }
 
   async *sendMessageStream(
-    request: PartListUnion,
+    initialRequest: PartListUnion,
     signal: AbortSignal,
     prompt_id: string,
     turns: number = this.MAX_TURNS,
@@ -972,21 +1085,19 @@ export class GeminiClient {
     logger.debug(() => 'DEBUG: GeminiClient.sendMessageStream called');
     logger.debug(
       () =>
-        `DEBUG: GeminiClient.sendMessageStream request: ${JSON.stringify(request, null, 2)}`,
+        `DEBUG: GeminiClient.sendMessageStream request: ${JSON.stringify(initialRequest, null, 2)}`,
     );
     logger.debug(
       () =>
-        `DEBUG: GeminiClient.sendMessageStream typeof request: ${typeof request}`,
+        `DEBUG: GeminiClient.sendMessageStream typeof request: ${typeof initialRequest}`,
     );
     logger.debug(
       () =>
-        `DEBUG: GeminiClient.sendMessageStream Array.isArray(request): ${Array.isArray(request)}`,
+        `DEBUG: GeminiClient.sendMessageStream Array.isArray(request): ${Array.isArray(initialRequest)}`,
     );
     await this.lazyInitialize();
 
-    // Ensure chat is initialized after lazyInitialize
     if (!this.chat) {
-      // If we have previous history, restore it when creating the chat
       if (this._previousHistory && this._previousHistory.length > 0) {
         this.logger.debug(
           'Restoring previous history during prompt generation',
@@ -994,7 +1105,6 @@ export class GeminiClient {
             historyLength: this._previousHistory.length,
           },
         );
-        // Extract the conversation history after the initial environment setup
         const conversationHistory = this._previousHistory.slice(2);
         this.chat = await this.startChat(conversationHistory);
         this.logger.debug('Chat started with restored history', {
@@ -1009,9 +1119,11 @@ export class GeminiClient {
       this.loopDetector.reset(prompt_id);
       this.lastPromptId = prompt_id;
     }
+
     this.sessionTurnCount++;
     this.toolActivityCount = 0;
     this.toolCallReminderLevel = 'none';
+
     if (
       this.config.getMaxSessionTurns() > 0 &&
       this.sessionTurnCount > this.config.getMaxSessionTurns()
@@ -1028,7 +1140,7 @@ export class GeminiClient {
         providerName,
       );
     }
-    // Ensure turns never exceeds MAX_TURNS to prevent infinite loops
+
     const boundedTurns = Math.min(turns, this.MAX_TURNS);
     if (!boundedTurns) {
       const contentGenConfig = this.config.getContentGeneratorConfig();
@@ -1043,22 +1155,13 @@ export class GeminiClient {
       );
     }
 
-    // Track the original model from the first call to detect model switching
-    // @plan PLAN-20251027-STATELESS5.P10
-    // @requirement REQ-STAT5-003.1
     const initialModel = originalModel || this.runtimeState.model;
 
     const compressed = await this.tryCompressChat(prompt_id);
-
     if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
       yield { type: GeminiEventType.ChatCompressed, value: compressed };
     }
 
-    // Prevent context updates from being sent while a tool call is
-    // waiting for a response. The Gemini API requires that a functionResponse
-    // part from the user immediately follows a functionCall part from the model
-    // in the conversation history . The IDE context is not discarded; it will
-    // be included in the next regular message sent to the model.
     const history = await this.getHistory();
     const lastMessage =
       history.length > 0 ? history[history.length - 1] : undefined;
@@ -1081,100 +1184,213 @@ export class GeminiClient {
       this.forceFullIdeContext = false;
     }
 
-    let shouldAppendTodoSuffix = false;
+    let currentRequest: PartListUnion = Array.isArray(initialRequest)
+      ? [...(initialRequest as Part[])]
+      : initialRequest;
 
-    if (Array.isArray(request) && request.length > 0) {
-      const userMessage = request
-        .filter((part) => typeof part === 'object' && 'text' in part)
-        .map((part) => (part as { text: string }).text)
-        .join(' ')
-        .trim();
+    let iteration = 0;
+    let lastTurn: Turn | undefined;
 
-      if (userMessage.length > 0) {
-        const analysis = this.complexityAnalyzer.analyzeComplexity(userMessage);
-        const complexityReminder = this.processComplexityAnalysis(analysis);
-        if (complexityReminder) {
-          shouldAppendTodoSuffix = true;
+    while (iteration < boundedTurns) {
+      iteration += 1;
+
+      let request: PartListUnion = Array.isArray(currentRequest)
+        ? [...(currentRequest as Part[])]
+        : currentRequest;
+
+      if (iteration === 1) {
+        let shouldAppendTodoSuffix = false;
+
+        if (Array.isArray(request) && request.length > 0) {
+          const userMessage = request
+            .filter((part) => typeof part === 'object' && 'text' in part)
+            .map((part) => (part as { text: string }).text)
+            .join(' ')
+            .trim();
+
+          if (userMessage.length > 0) {
+            const analysis =
+              this.complexityAnalyzer.analyzeComplexity(userMessage);
+            const complexityReminder = this.processComplexityAnalysis(analysis);
+            if (complexityReminder) {
+              shouldAppendTodoSuffix = true;
+            }
+          } else {
+            this.consecutiveComplexTurns = 0;
+          }
+        } else {
+          this.consecutiveComplexTurns = 0;
+        }
+
+        if (shouldAppendTodoSuffix) {
+          request = this.appendTodoSuffixToRequest(request);
         }
       } else {
         this.consecutiveComplexTurns = 0;
       }
-    } else {
-      this.consecutiveComplexTurns = 0;
-    }
 
-    if (shouldAppendTodoSuffix) {
-      request = this.appendTodoSuffixToRequest(request);
-    }
+      if (this.todoToolsAvailable && this.toolCallReminderLevel !== 'none') {
+        const reminderResult = await this.getTodoReminderForCurrentState({
+          todoSnapshot: this.lastTodoSnapshot,
+          escalate: this.toolCallReminderLevel === 'escalated',
+        });
+        if (reminderResult.reminder) {
+          request = this.appendSystemReminderToRequest(
+            request,
+            reminderResult.reminder,
+          );
+          this.lastTodoSnapshot = reminderResult.todos;
+        }
+        const currentTime = Date.now();
+        this.lastComplexitySuggestionTime = currentTime;
+        this.lastComplexitySuggestionTurn = this.sessionTurnCount;
+        this.consecutiveComplexTurns = 0;
+        this.toolActivityCount = 0;
+        this.toolCallReminderLevel = 'none';
+      }
 
-    // Get provider name for error messages
-    const contentGenConfig = this.config.getContentGeneratorConfig();
-    const providerManager = contentGenConfig?.providerManager;
-    const providerName = providerManager?.getActiveProviderName() || 'backend';
+      const contentGenConfig = this.config.getContentGeneratorConfig();
+      const providerManager = contentGenConfig?.providerManager;
+      const providerName =
+        providerManager?.getActiveProviderName() || 'backend';
 
-    const turn = new Turn(
-      this.getChat(),
-      prompt_id,
-      DEFAULT_AGENT_ID,
-      providerName,
-    );
+      const turn = new Turn(
+        this.getChat(),
+        prompt_id,
+        DEFAULT_AGENT_ID,
+        providerName,
+      );
+      lastTurn = turn;
 
-    const loopDetected = await this.loopDetector.turnStarted(signal);
-    if (loopDetected) {
-      yield { type: GeminiEventType.LoopDetected };
-      return turn;
-    }
-
-    const resultStream = turn.run(request, signal);
-    for await (const event of resultStream) {
-      if (this.loopDetector.addAndCheck(event)) {
+      const loopDetected = await this.loopDetector.turnStarted(signal);
+      if (loopDetected) {
         yield { type: GeminiEventType.LoopDetected };
         return turn;
       }
-      this.recordModelActivity(event);
-      yield event;
-      if (
-        event.type === GeminiEventType.ToolCallRequest &&
-        this.isTodoToolCall(event.value?.name)
-      ) {
-        this.lastTodoToolTurn = this.sessionTurnCount;
-        this.consecutiveComplexTurns = 0;
+
+      const deferredEvents: ServerGeminiStreamEvent[] = [];
+      let todoPauseSeen = false;
+
+      const resultStream = turn.run(request, signal);
+      for await (const event of resultStream) {
+        if (this.loopDetector.addAndCheck(event)) {
+          yield { type: GeminiEventType.LoopDetected };
+          return turn;
+        }
+
+        this.recordModelActivity(event);
+
+        if (event.type === GeminiEventType.ToolCallResponse) {
+          if (this.isTodoPauseResponse(event.value)) {
+            todoPauseSeen = true;
+          }
+        }
+
+        if (
+          event.type === GeminiEventType.ToolCallRequest &&
+          this.isTodoToolCall(event.value?.name)
+        ) {
+          this.lastTodoToolTurn = this.sessionTurnCount;
+          this.consecutiveComplexTurns = 0;
+        }
+
+        if (this.shouldDeferStreamEvent(event)) {
+          deferredEvents.push(event);
+        } else {
+          yield event;
+        }
+
+        if (event.type === GeminiEventType.Error) {
+          for (const deferred of deferredEvents) {
+            yield deferred;
+          }
+          return turn;
+        }
       }
-      if (event.type === GeminiEventType.Error) {
+
+      const reminderState = await this.getTodoReminderForCurrentState();
+      const latestSnapshot = reminderState.todos;
+      const activeTodos = reminderState.activeTodos;
+      const pendingTodosDetected = activeTodos.length > 0;
+      const hasPendingReminder =
+        this.todoToolsAvailable && this.toolCallReminderLevel !== 'none';
+      const shouldContinue =
+        (!todoPauseSeen && pendingTodosDetected) ||
+        (hasPendingReminder && !todoPauseSeen);
+
+      if (!shouldContinue) {
+        for (const deferred of deferredEvents) {
+          yield deferred;
+        }
+
+        this.lastTodoSnapshot = latestSnapshot;
+        this.toolCallReminderLevel = 'none';
+        this.toolActivityCount = 0;
+
+        if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
+          const currentModel = this.runtimeState.model;
+          if (currentModel !== initialModel) {
+            return turn;
+          }
+        }
+
         return turn;
       }
-    }
-    if (this.todoToolsAvailable && this.toolCallReminderLevel !== 'none') {
-      const reminderText =
-        this.toolCallReminderLevel === 'escalated'
-          ? TOOL_ESCALATED_TODO_MESSAGE
-          : TOOL_BASE_TODO_MESSAGE;
 
-      this.getChat().addHistory({
-        role: 'model',
-        parts: [{ text: reminderText }],
-      });
+      const previousSnapshot = this.lastTodoSnapshot ?? [];
+      const snapshotUnchanged = this.areTodoSnapshotsEqual(
+        previousSnapshot,
+        latestSnapshot,
+      );
+
+      const followUpReminder = (
+        await this.getTodoReminderForCurrentState({
+          todoSnapshot: latestSnapshot,
+          activeTodos,
+          escalate: snapshotUnchanged,
+        })
+      ).reminder;
+
+      this.lastTodoSnapshot = latestSnapshot;
+
+      if (!followUpReminder) {
+        for (const deferred of deferredEvents) {
+          yield deferred;
+        }
+
+        this.toolCallReminderLevel = 'none';
+        this.toolActivityCount = 0;
+
+        if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
+          const currentModel = this.runtimeState.model;
+          if (currentModel !== initialModel) {
+            return turn;
+          }
+        }
+
+        return turn;
+      }
+
+      currentRequest = [{ text: followUpReminder } as Part];
       const currentTime = Date.now();
       this.lastComplexitySuggestionTime = currentTime;
       this.lastComplexitySuggestionTurn = this.sessionTurnCount;
-      this.consecutiveComplexTurns = 0;
-      this.toolCallReminderLevel = 'none';
       this.toolActivityCount = 0;
+      this.toolCallReminderLevel = 'none';
+      this.consecutiveComplexTurns = 0;
     }
-    if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
-      // Check if model was switched during the call (likely due to quota error)
-      // @plan PLAN-20251027-STATELESS5.P10
-      // @requirement REQ-STAT5-003.1
-      const currentModel = this.runtimeState.model;
-      if (currentModel !== initialModel) {
-        // Model was switched (likely due to quota error fallback)
-        // Don't continue with recursive call to prevent unwanted Flash execution
-        return turn;
-      }
 
-      // nextSpeakerChecker disabled
-    }
-    return turn;
+    return (
+      lastTurn ??
+      new Turn(
+        this.getChat(),
+        prompt_id,
+        DEFAULT_AGENT_ID,
+        this.config
+          .getContentGeneratorConfig()
+          ?.providerManager?.getActiveProviderName() ?? 'backend',
+      )
+    );
   }
 
   async generateJson(
