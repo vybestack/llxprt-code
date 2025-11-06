@@ -1371,7 +1371,11 @@ export class GeminiClient {
         return turn;
       }
 
-      currentRequest = [{ text: followUpReminder } as Part];
+      const requestWithReminder = this.appendSystemReminderToRequest(
+        request,
+        followUpReminder,
+      );
+      currentRequest = requestWithReminder;
       const currentTime = Date.now();
       this.lastComplexitySuggestionTime = currentTime;
       this.lastComplexitySuggestionTurn = this.sessionTurnCount;
