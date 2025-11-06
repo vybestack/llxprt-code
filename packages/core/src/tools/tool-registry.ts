@@ -23,6 +23,9 @@ import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { DebugLogger } from '../debug/index.js';
 import { normalizeToolName } from './toolNameUtils.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
+
+export const DISCOVERED_TOOL_PREFIX = 'discovered_tool_';
+
 type ToolParams = Record<string, unknown>;
 
 export class DiscoveredTool extends BaseTool<ToolParams, ToolResult> {
