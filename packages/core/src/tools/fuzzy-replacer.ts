@@ -49,6 +49,33 @@ export function levenshtein(a: string, b: string): number {
 const escapeRegExp = (str: string): string =>
   str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const ESCAPE_SEQUENCE_PATTERN = /\\(n|t|r|'|"|`|\\|\$)/g;
+const ESCAPE_SEQUENCE_TEST_PATTERN = /\\(n|t|r|'|"|`|\\|\$)/;
+
+const unescapeEscapedSequences = (str: string): string =>
+  str.replace(ESCAPE_SEQUENCE_PATTERN, (_match, capturedChar: string) => {
+    switch (capturedChar) {
+      case 'n':
+        return '\n';
+      case 't':
+        return '\t';
+      case 'r':
+        return '\r';
+      case "'":
+        return "'";
+      case '"':
+        return '"';
+      case '`':
+        return '`';
+      case '\\':
+        return '\\';
+      case '$':
+        return '$';
+      default:
+        return capturedChar;
+    }
+  });
+
 /**
  * Simple exact match replacer
  */
@@ -280,9 +307,9 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (
   const findLines = find.split('\n');
   if (findLines.length > 1) {
     for (let i = 0; i <= lines.length - findLines.length; i++) {
-      const block = lines.slice(i, i + findLines.length);
-      if (normalizeWhitespace(block.join('\n')) === normalizedFind) {
-        yield block.join('\n');
+      const block = lines.slice(i, i + findLines.length).join('\n');
+      if (normalizeWhitespace(block) === normalizedFind) {
+        yield block;
       }
     }
   }
@@ -325,33 +352,14 @@ export const IndentationFlexibleReplacer: Replacer = function* (content, find) {
  * Replacer that handles escape sequences
  */
 export const EscapeNormalizedReplacer: Replacer = function* (content, find) {
-  const unescapeString = (str: string): string =>
-    str.replace(/\\(n|t|r|'|"|`|\\|\n|\$)/g, (match, capturedChar) => {
-      switch (capturedChar) {
-        case 'n':
-          return '\n';
-        case 't':
-          return '\t';
-        case 'r':
-          return '\r';
-        case "'":
-          return "'";
-        case '"':
-          return '"';
-        case '`':
-          return '`';
-        case '\\':
-          return '\\';
-        case '\n':
-          return '\n';
-        case '$':
-          return '$';
-        default:
-          return match;
-      }
-    });
+  // Only apply escape sequence processing if the find string actually contains escaped sequences
+  // This prevents corrupting content with actual tab characters, newlines, etc.
+  if (!ESCAPE_SEQUENCE_TEST_PATTERN.test(find)) {
+    // No escape sequences to process, don't use this replacer
+    return;
+  }
 
-  const unescapedFind = unescapeString(find);
+  const unescapedFind = unescapeEscapedSequences(find);
 
   // Try direct match with unescaped find string
   if (content.includes(unescapedFind)) {
@@ -364,7 +372,7 @@ export const EscapeNormalizedReplacer: Replacer = function* (content, find) {
 
   for (let i = 0; i <= lines.length - findLines.length; i++) {
     const block = lines.slice(i, i + findLines.length).join('\n');
-    const unescapedBlock = unescapeString(block);
+    const unescapedBlock = unescapeEscapedSequences(block);
 
     if (unescapedBlock === unescapedFind) {
       yield block;
@@ -397,6 +405,12 @@ export const TrimmedBoundaryReplacer: Replacer = function* (content, find) {
 
   if (trimmedFind === find) {
     // Already trimmed, no point in trying
+    return;
+  }
+
+  // Check if the original find contains actual tab characters
+  // If it does, we should NOT use this replacer as it might preserve them incorrectly
+  if (find.includes('\t')) {
     return;
   }
 
@@ -500,6 +514,9 @@ export function fuzzyReplace(
     return null;
   }
 
+  const oldStringHasEscapes = ESCAPE_SEQUENCE_TEST_PATTERN.test(oldString);
+  const newStringHasEscapes = ESCAPE_SEQUENCE_TEST_PATTERN.test(newString);
+
   let notFound = true;
 
   for (const replacer of [
@@ -517,8 +534,18 @@ export function fuzzyReplace(
       const index = content.indexOf(search);
       if (index === -1) continue;
       notFound = false;
+
+      const shouldUnescapeReplacement =
+        (oldStringHasEscapes || newStringHasEscapes) && !search.includes('\\');
+
+      // Prepare the replacement string - convert escape sequences when the match
+      // represents real characters (no backslashes in the matched content)
+      const finalReplacement = shouldUnescapeReplacement
+        ? unescapeEscapedSequences(newString)
+        : newString;
+
       if (replaceAll) {
-        const result = content.replaceAll(search, newString);
+        const result = content.replaceAll(search, finalReplacement);
         const occurrences = content.split(search).length - 1;
         return { result, occurrences };
       }
@@ -526,7 +553,7 @@ export function fuzzyReplace(
       if (index !== lastIndex) continue;
       const result =
         content.substring(0, index) +
-        newString +
+        finalReplacement +
         content.substring(index + search.length);
       return { result, occurrences: 1 };
     }
