@@ -128,12 +128,14 @@ export class TodoReminderService {
   }
 
   getUpdateActiveTodoReminder(_todo: Todo): string {
-    return this.formatSystemReminder('Update the active todo before replying.');
+    return this.formatSystemReminder(
+      'Update the active todo with concrete progress, continue executing the outstanding work, and only respond once you have advanced the task. If you are blocked, call todo_pause("reason") instead of rewriting the todo list.',
+    );
   }
 
   getEscalatedActiveTodoReminder(_todo: Todo): string {
     return this.formatSystemReminder(
-      'Update the active todo or call todo_pause() before replying.',
+      'You still have unfinished todos. Continue the required work (e.g., copy files, run tools, produce the requested output) and update the active todo with new progress, or call todo_pause("reason") to explain the blocker. Do not call todo_write again without new progress.',
     );
   }
 

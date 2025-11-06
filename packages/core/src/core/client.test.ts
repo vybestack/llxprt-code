@@ -1751,7 +1751,7 @@ describe('Gemini Client (client.ts)', () => {
 
       const reminderService = new TodoReminderService();
       const activeReminderText =
-        '---\nSystem Note: Update the active todo before replying.\n---';
+        '---\nSystem Note: Update the active todo with concrete progress, continue executing the outstanding work, and only respond once you have advanced the task. If you are blocked, call todo_pause("reason") instead of rewriting the todo list.\n---';
       vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
         activeReminderText,
       );
@@ -1847,7 +1847,7 @@ describe('Gemini Client (client.ts)', () => {
     it('retries sendMessageStream until todos are resolved when todo_pause is not signaled', async () => {
       const reminderService = new TodoReminderService();
       const followUpReminderText =
-        '---\nSystem Note: Update the active todo or call todo_pause() before replying.\n---';
+        '---\nSystem Note: You still have unfinished todos. Continue the required work (e.g., copy files, run tools, produce the requested output) and update the active todo with new progress, or call todo_pause("reason") to explain the blocker. Do not call todo_write again without new progress.\n---';
       vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
         followUpReminderText,
       );
@@ -1942,7 +1942,7 @@ describe('Gemini Client (client.ts)', () => {
     it('allows a user-facing response once a todo_pause tool response is observed', async () => {
       const reminderService = new TodoReminderService();
       const followUpReminderText =
-        '---\nSystem Note: Update the active todo before replying.\n---';
+        '---\nSystem Note: Update the active todo with concrete progress, continue executing the outstanding work, and only respond once you have advanced the task. If you are blocked, call todo_pause("reason") instead of rewriting the todo list.\n---';
       vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
         followUpReminderText,
       );

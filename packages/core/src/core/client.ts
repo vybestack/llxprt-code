@@ -429,10 +429,10 @@ export class GeminiClient {
     const normalize = (todos: readonly Todo[]) =>
       todos
         .map((todo) => ({
-          id: todo.id,
-          status: todo.status,
-          content: todo.content,
-          priority: todo.priority,
+          id: `${todo.id ?? ''}`,
+          status: (todo.status ?? 'pending').toLowerCase(),
+          content: todo.content ?? '',
+          priority: todo.priority ?? 'medium',
         }))
         .sort((left, right) => left.id.localeCompare(right.id));
     const normalizedA = normalize(a);
@@ -440,6 +440,28 @@ export class GeminiClient {
     return normalizedA.every(
       (todo, index) =>
         JSON.stringify(todo) === JSON.stringify(normalizedB[index]),
+    );
+  }
+
+  private areTodoContentsEqual(
+    a: readonly Todo[],
+    b: readonly Todo[],
+  ): boolean {
+    if (a.length !== b.length) {
+      return false;
+    }
+    const normalize = (todos: readonly Todo[]) =>
+      todos
+        .map((todo) => (todo.content ?? '').trim())
+        .filter((content) => content.length > 0)
+        .sort((left, right) => left.localeCompare(right));
+    const normalizedA = normalize(a);
+    const normalizedB = normalize(b);
+    if (normalizedA.length !== normalizedB.length) {
+      return false;
+    }
+    return normalizedA.every(
+      (content, index) => content === normalizedB[index],
     );
   }
 
@@ -1184,19 +1206,27 @@ export class GeminiClient {
       this.forceFullIdeContext = false;
     }
 
-    let currentRequest: PartListUnion = Array.isArray(initialRequest)
+    let baseRequestForRetry: PartListUnion = Array.isArray(initialRequest)
       ? [...(initialRequest as Part[])]
       : initialRequest;
-
+    let pendingRequestOverride: PartListUnion | null = null;
     let iteration = 0;
     let lastTurn: Turn | undefined;
 
     while (iteration < boundedTurns) {
       iteration += 1;
 
-      let request: PartListUnion = Array.isArray(currentRequest)
-        ? [...(currentRequest as Part[])]
-        : currentRequest;
+      let request: PartListUnion;
+      if (pendingRequestOverride) {
+        request = Array.isArray(pendingRequestOverride)
+          ? [...(pendingRequestOverride as Part[])]
+          : pendingRequestOverride;
+        pendingRequestOverride = null;
+      } else {
+        request = Array.isArray(baseRequestForRetry)
+          ? [...(baseRequestForRetry as Part[])]
+          : baseRequestForRetry;
+      }
 
       if (iteration === 1) {
         let shouldAppendTodoSuffix = false;
@@ -1225,6 +1255,9 @@ export class GeminiClient {
         if (shouldAppendTodoSuffix) {
           request = this.appendTodoSuffixToRequest(request);
         }
+        baseRequestForRetry = Array.isArray(request)
+          ? [...(request as Part[])]
+          : request;
       } else {
         this.consecutiveComplexTurns = 0;
       }
@@ -1292,6 +1325,37 @@ export class GeminiClient {
         ) {
           this.lastTodoToolTurn = this.sessionTurnCount;
           this.consecutiveComplexTurns = 0;
+
+          const requestedTodos = Array.isArray(event.value?.args?.todos)
+            ? (event.value.args.todos as Todo[])
+            : [];
+          const currentTodos =
+            this.lastTodoSnapshot ?? (await this.readTodoSnapshot());
+          const activeTodos = this.getActiveTodos(currentTodos);
+          const isDuplicateTodoWrite =
+            requestedTodos.length > 0 &&
+            this.areTodoContentsEqual(currentTodos, requestedTodos);
+
+          if (isDuplicateTodoWrite && activeTodos.length > 0) {
+            const reminder =
+              this.todoReminderService.getUpdateActiveTodoReminder(
+                activeTodos[0],
+              );
+            yield {
+              type: GeminiEventType.SystemNotice,
+              value: reminder,
+            };
+            continue;
+          }
+
+          if (requestedTodos.length > 0) {
+            this.lastTodoSnapshot = requestedTodos.map((todo) => ({
+              id: `${(todo as Todo).id ?? ''}`,
+              content: (todo as Todo).content ?? '',
+              status: (todo as Todo).status ?? 'pending',
+              priority: (todo as Todo).priority ?? 'medium',
+            }));
+          }
         }
 
         if (this.shouldDeferStreamEvent(event)) {
@@ -1371,11 +1435,10 @@ export class GeminiClient {
         return turn;
       }
 
-      const requestWithReminder = this.appendSystemReminderToRequest(
-        request,
+      pendingRequestOverride = this.appendSystemReminderToRequest(
+        baseRequestForRetry,
         followUpReminder,
       );
-      currentRequest = requestWithReminder;
       const currentTime = Date.now();
       this.lastComplexitySuggestionTime = currentTime;
       this.lastComplexitySuggestionTurn = this.sessionTurnCount;
