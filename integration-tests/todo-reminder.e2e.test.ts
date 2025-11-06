@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { test } from 'node:test';
-import { strict as assert } from 'assert';
+import { test, expect } from 'vitest';
 import { TestRig, printDebugInfo } from './test-helper.js';
 
 const skipTodoTests =
@@ -19,44 +18,36 @@ const skipTodoTests =
  * @when Agent makes repeated tool calls without creating todos
  * @then Transcript should not display todo reminder copy
  */
-test(
-  'hidden todo reminders stay out of transcript',
-  { skip: skipTodoTests },
-  async () => {
-    const rig = new TestRig();
-    await rig.setup('hidden todo reminders stay out of transcript', {
-      settings: {
-        'todo-continuation': true,
-      },
+const conditionalTest = skipTodoTests ? test.skip : test;
+
+conditionalTest('hidden todo reminders stay out of transcript', async () => {
+  const rig = new TestRig();
+  await rig.setup('hidden todo reminders stay out of transcript', {
+    settings: {
+      'todo-continuation': true,
+    },
+  });
+
+  const result = await rig.run(
+    'Without creating a todo list, run list_directory on "." followed by read_file on package.json, then respond with your findings.',
+  );
+
+  const visibleReminder =
+    result.includes(
+      'After this next tool call I need to call todo_write and create a todo list to organize this effort.',
+    ) ||
+    result.includes(
+      'Immediately call todo_write after this next tool call to organize the work.',
+    );
+
+  if (visibleReminder) {
+    printDebugInfo(rig, result, {
+      message: 'Todo reminder copy leaked into user-visible transcript',
     });
+  }
 
-    const result = await rig.run(
-      'Without creating a todo list, run list_directory on "." followed by read_file on package.json, then respond with your findings.',
-    );
+  expect(visibleReminder).toBe(false);
+  expect(result.includes('System Note')).toBe(false);
 
-    const visibleReminder =
-      result.includes(
-        'After this next tool call I need to call todo_write and create a todo list to organize this effort.',
-      ) ||
-      result.includes(
-        'Immediately call todo_write after this next tool call to organize the work.',
-      );
-
-    if (visibleReminder) {
-      printDebugInfo(rig, result, {
-        message: 'Todo reminder copy leaked into user-visible transcript',
-      });
-    }
-
-    assert.ok(
-      !visibleReminder,
-      'Todo reminder text should not appear in user transcript',
-    );
-    assert.ok(
-      !result.includes('System Note'),
-      'System-only reminder tags should not leak to the user',
-    );
-
-    await rig.cleanup();
-  },
-);
+  await rig.cleanup();
+});
