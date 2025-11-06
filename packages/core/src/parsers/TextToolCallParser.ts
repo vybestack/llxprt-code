@@ -519,7 +519,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     fullMatch: string,
   ): Record<string, unknown> | null {
     if (typeof args !== 'string') {
-      return args;
+      return this.applyToolSpecificNormalizations(args, toolName);
     }
 
     try {
@@ -529,12 +529,15 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       ) {
         return this.parseXMLParameters(args);
       }
-      return JSON.parse(args);
+      return this.applyToolSpecificNormalizations(JSON.parse(args), toolName);
     } catch (error) {
       const repaired = this.tryRepairJson(args);
       if (repaired) {
         try {
-          return JSON.parse(repaired);
+          return this.applyToolSpecificNormalizations(
+            JSON.parse(repaired),
+            toolName,
+          );
         } catch {
           // ignore and fall through
         }
@@ -558,6 +561,102 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       );
       return null;
     }
+  }
+
+  private applyToolSpecificNormalizations(
+    args: Record<string, unknown>,
+    toolName: string,
+  ): Record<string, unknown> {
+    if (!args) {
+      return args;
+    }
+    const normalizedTool = toolName?.trim().toLowerCase();
+    if (normalizedTool === 'todo_write') {
+      const todos = args['todos'];
+      if (Array.isArray(todos)) {
+        args['todos'] = todos.map((todo, index) =>
+          this.normalizeTodoEntry(todo, index),
+        );
+      }
+    }
+    return args;
+  }
+
+  private normalizeTodoEntry(
+    todo: unknown,
+    index: number,
+  ): Record<string, unknown> {
+    const normalized =
+      todo && typeof todo === 'object'
+        ? { ...(todo as Record<string, unknown>) }
+        : {};
+
+    if (
+      normalized.content === undefined ||
+      normalized.content === null ||
+      normalized.content === ''
+    ) {
+      normalized.content =
+        typeof todo === 'string' && todo.trim().length > 0
+          ? todo
+          : `Task ${index + 1}`;
+    } else {
+      normalized.content = String(normalized.content);
+    }
+
+    normalized.status = this.normalizeTodoStatus(normalized.status);
+    normalized.priority = this.normalizeTodoPriority(normalized.priority);
+
+    return normalized;
+  }
+
+  private normalizeTodoStatus(
+    value: unknown,
+  ): 'pending' | 'in_progress' | 'completed' {
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'in_progress' || normalized === 'completed') {
+        return normalized;
+      }
+      if (normalized === 'pending') {
+        return 'pending';
+      }
+    }
+    return 'pending';
+  }
+
+  private normalizeTodoPriority(value: unknown): 'high' | 'medium' | 'low' {
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (
+        normalized === 'high' ||
+        normalized === 'medium' ||
+        normalized === 'low'
+      ) {
+        return normalized;
+      }
+      if (normalized === '1') {
+        return 'high';
+      }
+      if (normalized === '2') {
+        return 'medium';
+      }
+      if (normalized === '3') {
+        return 'low';
+      }
+    }
+
+    if (typeof value === 'number') {
+      if (value <= 1) {
+        return 'high';
+      }
+      if (value >= 3) {
+        return 'low';
+      }
+      return 'medium';
+    }
+
+    return 'high';
   }
 
   private extractBalancedSegment(

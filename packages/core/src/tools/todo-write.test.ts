@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TodoWrite } from './todo-write.js';
 import type { Todo } from './todo-schemas.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
@@ -49,10 +49,6 @@ describe('TodoWrite tool', () => {
     writeTodosMock.mockReset();
     emitTodoUpdatedMock.mockReset();
     setActiveTodoMock.mockReset();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   it('omits reminder text from llmContent while exposing it via metadata', async () => {
