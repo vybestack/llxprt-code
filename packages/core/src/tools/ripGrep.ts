@@ -8,7 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import { EOL } from 'os';
 import { spawn } from 'child_process';
-import { rgPath } from '@lvce-editor/ripgrep';
+// import { rgPath } from '@lvce-editor/ripgrep'; // Now using getRipgrepPath() instead
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -20,6 +20,7 @@ import { SchemaValidator } from '../utils/schemaValidator.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import { Config } from '../config/config.js';
+import { getRipgrepPath } from '../utils/ripgrepPathResolver.js';
 
 const DEFAULT_TOTAL_MAX_MATCHES = 20000;
 
@@ -297,8 +298,11 @@ class GrepToolInvocation extends BaseToolInvocation<
     rgArgs.push(absolutePath);
 
     try {
+      // Use robust cross-platform ripgrep path resolution
+      const resolvedRgPath = await getRipgrepPath();
+
       const output = await new Promise<string>((resolve, reject) => {
-        const child = spawn(rgPath, rgArgs, {
+        const child = spawn(resolvedRgPath, rgArgs, {
           windowsHide: true,
         });
 
