@@ -44,6 +44,7 @@ export interface ContinuationContext {
   readonly isResponding: boolean;
   readonly config: Config;
   readonly currentState: ContinuationState;
+  readonly todoPaused?: boolean;
 }
 
 /**
@@ -76,6 +77,7 @@ export interface ConditionSet {
   readonly notCurrentlyContinuing: boolean;
   readonly withinAttemptLimits: boolean;
   readonly withinTimeConstraints: boolean;
+  readonly todoPaused: boolean;
 }
 
 /**
@@ -159,6 +161,14 @@ export class TodoContinuationService {
       return {
         shouldContinue: false,
         reason: 'No active todos found (pending or in_progress)',
+        conditions,
+      };
+    }
+
+    if (context.todoPaused) {
+      return {
+        shouldContinue: false,
+        reason: 'Todo continuation paused by todo_pause tool',
         conditions,
       };
     }
@@ -487,9 +497,14 @@ export class TodoContinuationService {
       continuationSetting = context.config.continuationEnabled;
     }
 
+    const hasActiveTodos = this.hasAnyActiveTodos(context.todos);
+    const todoPaused = context.todoPaused === true;
+    const hadBlockingToolCalls =
+      context.hadToolCalls && (todoPaused || !hasActiveTodos);
+
     return {
-      hasActiveTodos: this.hasAnyActiveTodos(context.todos),
-      noToolCallsMade: !context.hadToolCalls,
+      hasActiveTodos,
+      noToolCallsMade: !hadBlockingToolCalls,
       continuationEnabled: continuationSetting !== false,
       notCurrentlyContinuing: !context.currentState.isActive,
       withinAttemptLimits:
@@ -498,6 +513,7 @@ export class TodoContinuationService {
       withinTimeConstraints: this.checkTimeConstraints(
         context.currentState.lastPromptTime,
       ),
+      todoPaused,
     };
   }
 

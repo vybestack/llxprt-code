@@ -82,11 +82,27 @@ vi.mock('../services/complexity-analyzer.js', () => ({
     }),
   })),
 }));
+const { todoStoreReadMock, mockTodoStoreConstructor } = vi.hoisted(() => {
+  const readMock = vi.fn();
+  const constructorMock = vi.fn().mockImplementation(() => ({
+    readTodos: readMock,
+  }));
+  return {
+    todoStoreReadMock: readMock,
+    mockTodoStoreConstructor: constructorMock,
+  };
+});
+
 vi.mock('../services/todo-reminder-service.js', () => ({
   TodoReminderService: vi.fn().mockImplementation(() => ({
     getComplexTaskSuggestion: vi.fn(),
     getEscalatedComplexTaskSuggestion: vi.fn(),
+    getCreateListReminder: vi.fn(),
+    getUpdateActiveTodoReminder: vi.fn(),
   })),
+}));
+vi.mock('../tools/todo-store.js', () => ({
+  TodoStore: mockTodoStoreConstructor,
 }));
 vi.mock('./turn', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./turn.js')>();
@@ -202,6 +218,12 @@ describe('Gemini Client (client.ts)', () => {
   let client: GeminiClient;
   beforeEach(async () => {
     vi.resetAllMocks();
+    mockTodoStoreConstructor.mockReset();
+    todoStoreReadMock.mockReset();
+    mockTodoStoreConstructor.mockImplementation(() => ({
+      readTodos: todoStoreReadMock,
+    }));
+    todoStoreReadMock.mockResolvedValue([]);
 
     // Re-setup prompts mocks after reset
     vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
@@ -228,6 +250,9 @@ describe('Gemini Client (client.ts)', () => {
         ({
           getComplexTaskSuggestion: vi.fn(),
           getEscalatedComplexTaskSuggestion: vi.fn(),
+          getCreateListReminder: vi.fn(),
+          getUpdateActiveTodoReminder: vi.fn(),
+          getEscalatedActiveTodoReminder: vi.fn(),
         }) as unknown as TodoReminderService,
     );
 
@@ -934,6 +959,49 @@ describe('Gemini Client (client.ts)', () => {
     // rather than actual behavior (violates RULES.md)
   });
 
+  describe('recordModelActivity', () => {
+    it('only counts completed tool call responses toward reminders', () => {
+      (
+        client as unknown as { todoToolsAvailable: boolean }
+      ).todoToolsAvailable = true;
+
+      const recordActivity = client['recordModelActivity'].bind(client);
+
+      for (let i = 0; i < 5; i++) {
+        recordActivity({
+          type: GeminiEventType.Content,
+          value: 'intermediate',
+        } as unknown as Parameters<typeof recordActivity>[0]);
+      }
+
+      expect(
+        (client as unknown as { toolActivityCount: number }).toolActivityCount,
+      ).toBe(0);
+      expect(
+        (client as unknown as { toolCallReminderLevel: string })
+          .toolCallReminderLevel,
+      ).toBe('none');
+
+      for (let i = 0; i < 4; i++) {
+        recordActivity({
+          type: GeminiEventType.ToolCallResponse,
+          value: {
+            callId: `call-${i}`,
+            responseParts: [] as Part[],
+            resultDisplay: undefined,
+            error: undefined,
+            errorType: undefined,
+          },
+        } as unknown as Parameters<typeof recordActivity>[0]);
+      }
+
+      expect(
+        (client as unknown as { toolCallReminderLevel: string })
+          .toolCallReminderLevel,
+      ).toBe('base');
+    });
+  });
+
   describe('sendMessageStream', () => {
     beforeEach(() => {
       (
@@ -1400,6 +1468,9 @@ describe('Gemini Client (client.ts)', () => {
       ).todoReminderService = {
         getComplexTaskSuggestion,
         getEscalatedComplexTaskSuggestion,
+        getCreateListReminder: vi.fn(),
+        getUpdateActiveTodoReminder: vi.fn(),
+        getEscalatedActiveTodoReminder: vi.fn(),
       } as unknown as TodoReminderService;
 
       (
@@ -1487,6 +1558,9 @@ describe('Gemini Client (client.ts)', () => {
       ).todoReminderService = {
         getComplexTaskSuggestion,
         getEscalatedComplexTaskSuggestion,
+        getCreateListReminder: vi.fn(),
+        getUpdateActiveTodoReminder: vi.fn(),
+        getEscalatedActiveTodoReminder: vi.fn(),
       } as unknown as TodoReminderService;
 
       mockTurnRunFn.mockReset();
@@ -1558,8 +1632,7 @@ describe('Gemini Client (client.ts)', () => {
       expect(suffixPart?.text).toBe('Use TODO List to organize this effort.');
     });
 
-    it('injects a model reminder after four tool calls even without complexity trigger', async () => {
-      // Arrange
+    it('injects a hidden todo reminder note when no todos exist after four tool call responses', async () => {
       (
         client as unknown as { complexityAnalyzer: ComplexityAnalyzer }
       ).complexityAnalyzer = {
@@ -1573,21 +1646,50 @@ describe('Gemini Client (client.ts)', () => {
         }),
       } as unknown as ComplexityAnalyzer;
 
+      const reminderService = new TodoReminderService();
+      const createReminderText =
+        '---\nSystem Note: Please create a todo list before continuing.\n---';
+      vi.mocked(reminderService.getCreateListReminder).mockReturnValue(
+        createReminderText,
+      );
       (
         client as unknown as { todoReminderService: TodoReminderService }
-      ).todoReminderService = new TodoReminderService();
+      ).todoReminderService = reminderService as unknown as TodoReminderService;
+      (
+        client as unknown as { todoToolsAvailable: boolean }
+      ).todoToolsAvailable = true;
 
+      const forwardedRequests: Part[][] = [];
       mockTurnRunFn.mockReset();
-      mockTurnRunFn.mockImplementation(() =>
-        (async function* () {
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        forwardedRequests.push(req as Part[]);
+        return (async function* () {
           for (let i = 0; i < 4; i++) {
             yield {
-              type: GeminiEventType.ToolCallRequest,
-              value: { name: 'shell_execute' },
+              type: GeminiEventType.ToolCallResponse,
+              value: {
+                callId: `call-${i}`,
+                responseParts: [
+                  {
+                    functionResponse: {
+                      name: 'shell_execute',
+                      id: `call-${i}`,
+                      response: {},
+                    },
+                  } as unknown as Part,
+                ],
+                resultDisplay: undefined,
+                error: undefined,
+                errorType: undefined,
+              },
             };
           }
-        })(),
-      );
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })();
+      });
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
@@ -1607,25 +1709,33 @@ describe('Gemini Client (client.ts)', () => {
         new AbortController().signal,
         'prompt-id-tool-reminder',
       );
-      for await (const _event of stream) {
-        // consume
+      const emitted: unknown[] = [];
+      for await (const event of stream) {
+        emitted.push(event);
       }
 
-      const reminderEntry = vi
-        .mocked(mockChat.addHistory)
-        .mock.calls.find(
-          ([call]) =>
-            call.role === 'model' &&
-            JSON.stringify(call).includes(
-              'After this next tool call I need to call todo_write and create a todo list to organize this effort.',
-            ),
-        )?.[0];
+      expect(mockTodoStoreConstructor).toHaveBeenCalled();
+      expect(todoStoreReadMock).toHaveBeenCalled();
 
-      expect(reminderEntry).toBeDefined();
+      const forwardedRequest = forwardedRequests.at(-1);
+      expect(forwardedRequest).toBeDefined();
+      const reminderPart = forwardedRequest?.find(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          (part as Part).text === createReminderText,
+      );
+      expect(reminderPart).toBeDefined();
+
+      const historyCalls = vi.mocked(mockChat.addHistory).mock.calls;
+      const reminderInHistory = historyCalls.some(([entry]) =>
+        JSON.stringify(entry).includes('Please create a todo list'),
+      );
+      expect(reminderInHistory).toBe(false);
     });
 
-    it('escalates to a strong model reminder after more than four tool calls', async () => {
-      // Arrange
+    it('uses the active todo reminder variant when a todo list exists', async () => {
       (
         client as unknown as { complexityAnalyzer: ComplexityAnalyzer }
       ).complexityAnalyzer = {
@@ -1639,19 +1749,342 @@ describe('Gemini Client (client.ts)', () => {
         }),
       } as unknown as ComplexityAnalyzer;
 
+      const reminderService = new TodoReminderService();
+      const activeReminderText =
+        '---\nSystem Note: Update the active todo with concrete progress, continue executing the outstanding work, and only respond once you have advanced the task. If you are blocked, call todo_pause("reason") instead of rewriting the todo list.\n---';
+      vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
+        activeReminderText,
+      );
       (
         client as unknown as { todoReminderService: TodoReminderService }
-      ).todoReminderService = new TodoReminderService();
+      ).todoReminderService = reminderService as unknown as TodoReminderService;
+      (
+        client as unknown as { todoToolsAvailable: boolean }
+      ).todoToolsAvailable = true;
+
+      todoStoreReadMock.mockResolvedValue([
+        {
+          id: 'todo-1',
+          content: 'Refactor payment flow',
+          status: 'in_progress',
+          priority: 'high',
+        },
+      ]);
+
+      const forwardedRequests: Part[][] = [];
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        forwardedRequests.push(req as Part[]);
+        return (async function* () {
+          for (let i = 0; i < 4; i++) {
+            yield {
+              type: GeminiEventType.ToolCallResponse,
+              value: {
+                callId: `call-${i}`,
+                responseParts: [
+                  {
+                    functionResponse: {
+                      name: 'list_directory',
+                      id: `call-${i}`,
+                      response: {},
+                    },
+                  } as unknown as Part,
+                ],
+                resultDisplay: undefined,
+                error: undefined,
+                errorType: undefined,
+              },
+            };
+          }
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })();
+      });
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Keep me posted.' }],
+        new AbortController().signal,
+        'prompt-id-tool-escalate',
+      );
+      const emitted: unknown[] = [];
+      for await (const event of stream) {
+        emitted.push(event);
+      }
+
+      expect(mockTodoStoreConstructor).toHaveBeenCalled();
+      expect(todoStoreReadMock).toHaveBeenCalled();
+      expect(
+        vi.mocked(reminderService.getCreateListReminder).mock.calls.length,
+      ).toBe(0);
+
+      const forwardedRequest = forwardedRequests.at(-1);
+      expect(forwardedRequest).toBeDefined();
+      const reminderPart = forwardedRequest?.find(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          (part as Part).text === activeReminderText,
+      );
+      expect(reminderPart).toBeDefined();
+    });
+
+    it('retries sendMessageStream until todos are resolved when todo_pause is not signaled', async () => {
+      const reminderService = new TodoReminderService();
+      const followUpReminderText =
+        '---\nSystem Note: You still have unfinished todos. Continue the required work (e.g., copy files, run tools, produce the requested output) and update the active todo with new progress, or call todo_pause("reason") to explain the blocker. Do not call todo_write again without new progress.\n---';
+      vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
+        followUpReminderText,
+      );
+      vi.mocked(reminderService.getEscalatedActiveTodoReminder).mockReturnValue(
+        followUpReminderText,
+      );
+      (
+        client as unknown as { todoReminderService: TodoReminderService }
+      ).todoReminderService = reminderService as unknown as TodoReminderService;
+      (
+        client as unknown as { todoToolsAvailable: boolean }
+      ).todoToolsAvailable = true;
+
+      const todoSnapshots = [
+        [
+          {
+            id: 'todo-1',
+            content: 'Document API responses',
+            status: 'pending',
+            priority: 'high',
+          },
+        ],
+        [
+          {
+            id: 'todo-1',
+            content: 'Document API responses',
+            status: 'pending',
+            priority: 'high',
+          },
+        ],
+        [],
+      ];
+      todoStoreReadMock.mockImplementation(
+        async () => todoSnapshots.shift() ?? [],
+      );
+
+      const forwardedRequests: Part[][] = [];
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        forwardedRequests.push(req as Part[]);
+        return (async function* () {
+          yield {
+            type: GeminiEventType.Content,
+            value: 'Working...',
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })();
+      });
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Any update yet?' }],
+        new AbortController().signal,
+        'prompt-id-blocking',
+      );
+      const emitted: unknown[] = [];
+      for await (const event of stream) {
+        emitted.push(event);
+      }
+
+      expect(mockTodoStoreConstructor).toHaveBeenCalled();
+      expect(todoStoreReadMock).toHaveBeenCalled();
+      expect(mockTurnRunFn.mock.calls.length).toBeGreaterThan(1);
+
+      const secondRequest = forwardedRequests.at(1);
+      expect(secondRequest).toBeDefined();
+      const reminderPart = secondRequest?.find(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          (part as Part).text === followUpReminderText,
+      );
+      expect(reminderPart).toBeDefined();
+    });
+
+    it('allows a user-facing response once a todo_pause tool response is observed', async () => {
+      const reminderService = new TodoReminderService();
+      const followUpReminderText =
+        '---\nSystem Note: Update the active todo with concrete progress, continue executing the outstanding work, and only respond once you have advanced the task. If you are blocked, call todo_pause("reason") instead of rewriting the todo list.\n---';
+      vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
+        followUpReminderText,
+      );
+      vi.mocked(reminderService.getEscalatedActiveTodoReminder).mockReturnValue(
+        followUpReminderText,
+      );
+      (
+        client as unknown as { todoReminderService: TodoReminderService }
+      ).todoReminderService = reminderService as unknown as TodoReminderService;
+      (
+        client as unknown as { todoToolsAvailable: boolean }
+      ).todoToolsAvailable = true;
+
+      todoStoreReadMock
+        .mockImplementationOnce(async () => [
+          {
+            id: 'todo-1',
+            content: 'Refactor tests',
+            status: 'pending',
+            priority: 'medium',
+          },
+        ])
+        .mockResolvedValue([]);
+
+      const forwardedRequests: Part[][] = [];
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        forwardedRequests.push(req as Part[]);
+        return (async function* () {
+          yield {
+            type: GeminiEventType.ToolCallResponse,
+            value: {
+              callId: 'pause-1',
+              responseParts: [
+                {
+                  functionResponse: {
+                    name: 'todo_pause',
+                    id: 'pause-1',
+                    response: {},
+                  },
+                } as unknown as Part,
+              ],
+              resultDisplay: undefined,
+              error: undefined,
+              errorType: undefined,
+            },
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })();
+      });
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const stream = client.sendMessageStream(
+        [{ text: 'We should respond now.' }],
+        new AbortController().signal,
+        'prompt-id-todo-pause',
+      );
+      const emitted: unknown[] = [];
+      for await (const event of stream) {
+        emitted.push(event);
+      }
+
+      expect(mockTodoStoreConstructor).toHaveBeenCalled();
+      expect(todoStoreReadMock).toHaveBeenCalled();
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+
+      const firstRequest = forwardedRequests[0];
+      const reminderPart = firstRequest?.find(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          typeof (part as Part).text === 'string' &&
+          (part as Part).text.includes('System Note'),
+      );
+      expect(reminderPart).toBeUndefined();
+    });
+
+    it('allows tool-driven progress without looping', async () => {
+      const reminderService = new TodoReminderService();
+      vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
+        '---\nSystem Note: Update the active todo before replying.\n---',
+      );
+      (
+        client as unknown as { todoReminderService: TodoReminderService }
+      ).todoReminderService = reminderService as unknown as TodoReminderService;
+      (
+        client as unknown as { todoToolsAvailable: boolean }
+      ).todoToolsAvailable = true;
+
+      todoStoreReadMock.mockResolvedValue([
+        {
+          id: 'todo-1',
+          content: 'Run shell commands',
+          status: 'pending',
+          priority: 'high',
+        },
+      ]);
 
       mockTurnRunFn.mockReset();
       mockTurnRunFn.mockImplementation(() =>
         (async function* () {
-          for (let i = 0; i < 5; i++) {
-            yield {
-              type: GeminiEventType.ToolCallRequest,
-              value: { name: 'shell_execute' },
-            };
-          }
+          yield {
+            type: GeminiEventType.ToolCallRequest,
+            value: {
+              name: 'Bash',
+              args: { command: 'ls -la' },
+            },
+          };
+          yield {
+            type: GeminiEventType.ToolCallResponse,
+            value: {
+              callId: 'bash-1',
+              responseParts: [],
+              resultDisplay: 'file1.txt\nfile2.txt',
+              error: undefined,
+              errorType: undefined,
+            },
+          };
+          yield {
+            type: GeminiEventType.Content,
+            value: 'I executed the command',
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
         })(),
       );
 
@@ -1669,26 +2102,184 @@ describe('Gemini Client (client.ts)', () => {
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
       const stream = client.sendMessageStream(
-        [{ text: 'Keep invoking tools until resolved.' }],
+        [{ text: 'Execute the command' }],
         new AbortController().signal,
-        'prompt-id-tool-escalate',
+        'prompt-tool-progress',
       );
-      for await (const _event of stream) {
-        // consume
-      }
+      const events = await fromAsync(stream);
 
-      const historyCalls = vi.mocked(mockChat.addHistory).mock.calls;
-      const strongEntry = historyCalls
-        .reverse()
-        .find(
-          ([call]) =>
-            call.role === 'model' &&
-            JSON.stringify(call).includes(
-              'Immediately call todo_write after this next tool call to organize the work.',
-            ),
-        )?.[0];
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+      expect(
+        events.some((e) => e.type === GeminiEventType.ToolCallRequest),
+      ).toBe(true);
+      expect(events.some((e) => e.type === GeminiEventType.Content)).toBe(true);
+      expect(events.some((e) => e.type === GeminiEventType.Finished)).toBe(
+        true,
+      );
+    });
 
-      expect(strongEntry).toBeDefined();
+    it('retries once when no tool work and todos unchanged', async () => {
+      const reminderService = new TodoReminderService();
+      const followUpReminderText =
+        '---\nSystem Note: You still have unfinished todos. Continue the required work.\n---';
+      vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
+        followUpReminderText,
+      );
+      vi.mocked(reminderService.getEscalatedActiveTodoReminder).mockReturnValue(
+        followUpReminderText,
+      );
+      (
+        client as unknown as { todoReminderService: TodoReminderService }
+      ).todoReminderService = reminderService as unknown as TodoReminderService;
+      (
+        client as unknown as { todoToolsAvailable: boolean }
+      ).todoToolsAvailable = true;
+
+      todoStoreReadMock.mockResolvedValue([
+        {
+          id: 'todo-1',
+          content: 'Complete the task',
+          status: 'pending',
+          priority: 'high',
+        },
+      ]);
+
+      const forwardedRequests: Part[][] = [];
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation((req: PartListUnion) => {
+        forwardedRequests.push(req as Part[]);
+        return (async function* () {
+          yield {
+            type: GeminiEventType.Content,
+            value: 'Just thinking about it',
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })();
+      });
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Get started' }],
+        new AbortController().signal,
+        'prompt-no-tools',
+      );
+      await fromAsync(stream);
+
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
+      expect(forwardedRequests.length).toBe(2);
+
+      const secondRequest = forwardedRequests[1];
+      const reminderPart = secondRequest?.find(
+        (part) =>
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          typeof (part as Part).text === 'string' &&
+          (part as Part).text.includes('System Note'),
+      );
+      expect(reminderPart).toBeDefined();
+    });
+
+    it('does not retry after todo_pause', async () => {
+      const reminderService = new TodoReminderService();
+      vi.mocked(reminderService.getUpdateActiveTodoReminder).mockReturnValue(
+        '---\nSystem Note: Update the active todo before replying.\n---',
+      );
+      (
+        client as unknown as { todoReminderService: TodoReminderService }
+      ).todoReminderService = reminderService as unknown as TodoReminderService;
+      (
+        client as unknown as { todoToolsAvailable: boolean }
+      ).todoToolsAvailable = true;
+
+      todoStoreReadMock.mockResolvedValue([
+        {
+          id: 'todo-1',
+          content: 'Blocked task',
+          status: 'pending',
+          priority: 'high',
+        },
+      ]);
+
+      mockTurnRunFn.mockReset();
+      mockTurnRunFn.mockImplementation(() =>
+        (async function* () {
+          yield {
+            type: GeminiEventType.ToolCallRequest,
+            value: {
+              name: 'todo_pause',
+              args: { reason: 'Need more information' },
+            },
+          };
+          yield {
+            type: GeminiEventType.ToolCallResponse,
+            value: {
+              callId: 'pause-1',
+              responseParts: [
+                {
+                  functionResponse: {
+                    name: 'todo_pause',
+                    id: 'pause-1',
+                    response: {},
+                  },
+                } as unknown as Part,
+              ],
+              resultDisplay: undefined,
+              error: undefined,
+              errorType: undefined,
+            },
+          };
+          yield {
+            type: GeminiEventType.Content,
+            value: 'I need more info',
+          };
+          yield {
+            type: GeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
+        })(),
+      );
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const stream = client.sendMessageStream(
+        [{ text: 'Work on the task' }],
+        new AbortController().signal,
+        'prompt-pause',
+      );
+      const events = await fromAsync(stream);
+
+      expect(mockTurnRunFn).toHaveBeenCalledTimes(1);
+      expect(events.some((e) => e.type === GeminiEventType.Content)).toBe(true);
+      expect(events.some((e) => e.type === GeminiEventType.Finished)).toBe(
+        true,
+      );
     });
 
     it('should add context if ideMode is enabled and there are open files but no active file', async () => {

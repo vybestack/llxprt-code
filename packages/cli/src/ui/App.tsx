@@ -244,8 +244,27 @@ const App = (props: AppInternalProps) => {
 
   useEffect(() => {
     const cleanup = setUpdateHandler(addItem, setUpdateInfo);
+
+    // Attach addItem to OAuth providers for displaying auth URLs
+    if (addItem) {
+      const oauthManager = runtime.getCliOAuthManager();
+      if (oauthManager) {
+        const providersMap = (
+          oauthManager as unknown as { providers?: Map<string, unknown> }
+        ).providers;
+        if (providersMap instanceof Map) {
+          for (const provider of providersMap.values()) {
+            const candidate = provider as {
+              setAddItem?: (callback: typeof addItem) => void;
+            };
+            candidate.setAddItem?.(addItem);
+          }
+        }
+      }
+    }
+
     return cleanup;
-  }, [addItem]);
+  }, [addItem, runtime]);
 
   // Set global OAuth addItem callback for all OAuth flows
   useEffect(() => {

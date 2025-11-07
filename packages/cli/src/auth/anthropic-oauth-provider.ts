@@ -209,9 +209,6 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }
         }
 
-        console.log('\nAnthropic Claude OAuth Authentication');
-        console.log('─'.repeat(40));
-
         let authUrl =
           deviceCodeResponse.verification_uri_complete ||
           `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
@@ -252,12 +249,9 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           try {
             await openBrowserSecurely(authUrl);
           } catch (error) {
-            console.log('Failed to open browser automatically.');
             this.logger.debug(() => `Browser launch error: ${error}`);
           }
         }
-
-        console.log('─'.repeat(40));
 
         if (localCallback) {
           try {
@@ -272,9 +266,6 @@ export class AnthropicOAuthProvider implements OAuthProvider {
                 `Local OAuth callback failed: ${
                   error instanceof Error ? error.message : String(error)
                 }`,
-            );
-            console.log(
-              'Falling back to manual authorization code entry. Please paste the code when prompted.',
             );
           }
         }
@@ -345,7 +336,9 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }
         }
 
-        console.log('Successfully authenticated with Anthropic Claude!');
+        this.logger.debug(
+          () => 'Successfully authenticated with Anthropic Claude!',
+        );
       },
       this.name,
       'completeAuth',
@@ -542,7 +535,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     }
 
     // @pseudocode line 112: Log successful logout
-    console.log('Logged out of Anthropic Claude');
+    this.logger.debug(() => 'Logged out of Anthropic Claude');
   }
 
   /**

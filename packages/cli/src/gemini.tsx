@@ -369,9 +369,10 @@ export async function main() {
   registerCliProviderInfrastructure(providerManager, oauthManager);
 
   const bootstrapProfileName =
-    typeof process.env.LLXPRT_BOOTSTRAP_PROFILE === 'string'
+    argv.profileLoad?.trim() ||
+    (typeof process.env.LLXPRT_BOOTSTRAP_PROFILE === 'string'
       ? process.env.LLXPRT_BOOTSTRAP_PROFILE.trim()
-      : '';
+      : '');
   if (
     !argv.provider &&
     bootstrapProfileName !== '' &&

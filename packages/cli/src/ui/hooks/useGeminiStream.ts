@@ -813,13 +813,8 @@ export const useGeminiStream = (
       const toolCallRequests: ToolCallRequestInfo[] = [];
       for await (const event of stream) {
         if ((event as { type?: unknown }).type === SYSTEM_NOTICE_EVENT) {
-          const value =
-            typeof (event as { value?: unknown }).value === 'string'
-              ? ((event as { value: string }).value as string)
-              : null;
-          if (value) {
-            addItem({ type: MessageType.INFO, text: value }, Date.now());
-          }
+          // SystemNotice events are internal model reminders, not for user display
+          // They are consumed here but not added to visible history
           continue;
         }
         switch (event.type) {
@@ -896,7 +891,6 @@ export const useGeminiStream = (
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
       handleCitationEvent,
-      addItem,
     ],
   );
 

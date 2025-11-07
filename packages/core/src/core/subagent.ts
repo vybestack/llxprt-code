@@ -24,7 +24,6 @@ import {
   GenerateContentConfig,
   FunctionDeclaration,
   Type,
-  Tool,
 } from '@google/genai';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
 import type {
@@ -45,6 +44,7 @@ import {
 } from './coreToolScheduler.js';
 import type { SubagentSchedulerFactory } from './subagentScheduler.js';
 import { ToolErrorType } from '../tools/tool-error.js';
+import { getCoreSystemPromptAsync } from './prompts.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -589,23 +589,6 @@ export class SubAgentScope {
       functionDeclarations.push(...this.getScopeLocalFuncDefs());
     }
 
-    if (
-      functionDeclarations.length > 0 &&
-      typeof (chat as { setTools?: (tools: Tool[]) => void }).setTools ===
-        'function'
-    ) {
-      try {
-        (chat as { setTools?: (tools: Tool[]) => void }).setTools?.([
-          { functionDeclarations },
-        ]);
-      } catch (error) {
-        this.logger.warn(
-          () =>
-            `Subagent ${this.subagentId} failed to register tools: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
     const schedulerConfig = this.createSchedulerConfig({ interactive: true });
     let pendingCompletedCalls: CompletedToolCall[] | null = null;
     let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
@@ -929,6 +912,16 @@ export class SubAgentScope {
           messageParams,
           promptId,
         );
+
+        durationMin = (Date.now() - startTime) / (1000 * 60);
+        if (durationMin >= this.runConfig.max_time_minutes) {
+          this.output.terminate_reason = SubagentTerminateMode.TIMEOUT;
+          this.logger.warn(
+            () =>
+              `Subagent ${this.subagentId} reached time limit (${this.runConfig.max_time_minutes} minutes) while waiting for model response`,
+          );
+          break;
+        }
 
         let functionCalls: FunctionCall[] = [];
         let textResponse = '';
@@ -1525,13 +1518,6 @@ export class SubAgentScope {
       );
     }
 
-    const envParts = await this.environmentContextLoader(this.runtimeContext);
-
-    // Extract environment context text
-    const envContextText = envParts
-      .map((part) => ('text' in part ? part.text : ''))
-      .join('\n');
-
     const start_history = [...(this.promptConfig.initialMessages ?? [])];
 
     // Build system instruction with environment context
@@ -1539,13 +1525,46 @@ export class SubAgentScope {
       ? this.buildChatSystemPrompt(context)
       : '';
 
-    let systemInstruction = personaPrompt;
+    const runtimeFunctionDeclarations = this.buildRuntimeFunctionDeclarations();
+    const scopeLocalDeclarations =
+      this.outputConfig && this.outputConfig.outputs
+        ? this.getScopeLocalFuncDefs()
+        : [];
+    const combinedDeclarations = [
+      ...runtimeFunctionDeclarations,
+      ...scopeLocalDeclarations,
+    ];
 
-    if (envContextText && envContextText.trim().length > 0) {
-      systemInstruction = personaPrompt
-        ? `${personaPrompt}\n\n${envContextText.trim()}`
-        : envContextText.trim();
-    }
+    const envParts = await this.environmentContextLoader(this.runtimeContext);
+
+    // Extract environment context text
+    const envContextText = envParts
+      .map((part) => ('text' in part ? part.text : ''))
+      .join('\n')
+      .trim();
+
+    const toolNames = Array.from(
+      new Set(
+        combinedDeclarations
+          .map((declaration) => declaration?.name?.trim())
+          .filter((name): name is string => Boolean(name && name.length > 0)),
+      ),
+    );
+
+    const coreSystemPrompt = await getCoreSystemPromptAsync(
+      undefined,
+      this.modelConfig.model,
+      toolNames,
+    );
+
+    const instructionSections = [
+      envContextText,
+      coreSystemPrompt?.trim() ?? '',
+      personaPrompt?.trim() ?? '',
+    ].filter((section) => section.length > 0);
+
+    const systemInstruction =
+      instructionSections.length > 0 ? instructionSections.join('\n\n') : '';
 
     this.logger.debug(() => {
       const preview =
@@ -1565,6 +1584,10 @@ export class SubAgentScope {
         temperature: this.modelConfig.temp,
         topP: this.modelConfig.top_p,
         systemInstruction: systemInstruction || undefined,
+        tools:
+          combinedDeclarations.length > 0
+            ? [{ functionDeclarations: combinedDeclarations }]
+            : undefined,
       };
 
       // Step 007.7: Instantiate GeminiChat with runtime view

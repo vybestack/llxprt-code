@@ -75,6 +75,9 @@ vi.mock('./contentGenerator.js', async (importOriginal) => {
 vi.mock('../utils/environmentContext.js');
 vi.mock('./nonInteractiveToolExecutor.js');
 vi.mock('../ide/ide-client.js');
+vi.mock('./prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
+}));
 
 async function createMockConfig(
   toolRegistryMocks = {},
@@ -999,8 +1002,9 @@ describe('subagent.ts', () => {
         const generationConfig = getGenerationConfigFromMock();
         const history = callArgs[3];
 
-        // Environment context should now be in system instruction, not undefined
-        expect(generationConfig.systemInstruction).toBe('Env Context');
+        const systemInstruction = generationConfig.systemInstruction as string;
+        // Environment context should now be in system instruction
+        expect(systemInstruction).toContain('Env Context');
         // History should only contain initialMessages, not environment context
         expect(history).toEqual([...initialMessages]);
       });

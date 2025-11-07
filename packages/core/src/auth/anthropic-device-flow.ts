@@ -116,15 +116,6 @@ export class AnthropicDeviceFlow {
     const authCode = splits[0];
     const stateFromResponse = splits[1] || this.state; // Use state from response if available
 
-    // Debug logging
-    console.log('Exchanging authorization code:', {
-      codeLength: authCode.length,
-      codePreview: authCode.substring(0, 10) + '...',
-      hasVerifier: !!this.codeVerifier,
-      verifierLength: this.codeVerifier.length,
-      hasState: !!stateFromResponse,
-    });
-
     // OpenCode sends JSON, not form-encoded!
     const requestBody = {
       grant_type: 'authorization_code',
@@ -134,8 +125,6 @@ export class AnthropicDeviceFlow {
       redirect_uri: this.redirectUri,
       code_verifier: this.codeVerifier,
     };
-
-    console.log('Token request body:', JSON.stringify(requestBody));
 
     const response = await fetch(this.config.tokenEndpoint, {
       method: 'POST',
@@ -151,15 +140,6 @@ export class AnthropicDeviceFlow {
     }
 
     const data = await response.json();
-    console.log('Token response:', {
-      hasAccessToken: !!data.access_token,
-      hasRefreshToken: !!data.refresh_token,
-      tokenPreview: data.access_token
-        ? data.access_token.substring(0, 20) + '...'
-        : 'none',
-      expiresIn: data.expires_in,
-      scope: data.scope, // Log the actual scopes returned
-    });
     return this.mapTokenResponse(data);
   }
 

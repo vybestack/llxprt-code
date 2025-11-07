@@ -214,7 +214,7 @@ describe('TodoContinuationService', () => {
         expect(result.reason).toMatch(/disabled/i);
       });
 
-      it('should not continue when tool calls were made in current turn', () => {
+      it('continues when tool calls were made in current turn and todos remain active', () => {
         const todos = [createTodo('1', 'Task 1', 'in_progress')];
 
         const context = createContext({
@@ -224,8 +224,8 @@ describe('TodoContinuationService', () => {
 
         const result = service.checkContinuationConditions(context);
 
-        expect(result.shouldContinue).toBe(false);
-        expect(result.reason).toMatch(/tool.*call/i);
+        expect(result.shouldContinue).toBe(true);
+        expect(result.reason).toMatch(/active.*todo/i);
       });
 
       it('should not continue when no active todos exist', () => {
@@ -243,6 +243,21 @@ describe('TodoContinuationService', () => {
 
         expect(result.shouldContinue).toBe(false);
         expect(result.reason).toMatch(/no.*active.*todo/i);
+      });
+
+      it('stops continuation when todo_pause was triggered', () => {
+        const todos = [createTodo('1', 'Task 1', 'pending')];
+
+        const context = createContext({
+          todos,
+          hadToolCalls: false,
+          todoPaused: true,
+        });
+
+        const result = service.checkContinuationConditions(context);
+
+        expect(result.shouldContinue).toBe(false);
+        expect(result.reason.toLowerCase()).toContain('pause');
       });
 
       it('should not continue when maximum attempts exceeded', () => {

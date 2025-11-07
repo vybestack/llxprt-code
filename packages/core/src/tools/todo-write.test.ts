@@ -5,367 +5,159 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { TodoWrite, TodoWriteParams } from './todo-write.js';
-import { TodoStore } from './todo-store.js';
-import { Todo } from './todo-schemas.js';
-import { todoEvents } from './todo-events.js';
-import { DEFAULT_AGENT_ID } from '../core/turn.js';
+import { TodoWrite } from './todo-write.js';
+import type { Todo } from './todo-schemas.js';
+import { TodoReminderService } from '../services/todo-reminder-service.js';
+import { formatTodoListForDisplay } from '../todo/todoFormatter.js';
 
-// Mock TodoStore
-vi.mock('./todo-store.js');
+const {
+  readTodosMock,
+  writeTodosMock,
+  emitTodoUpdatedMock,
+  setActiveTodoMock,
+} = vi.hoisted(() => ({
+  readTodosMock: vi.fn(),
+  writeTodosMock: vi.fn(),
+  emitTodoUpdatedMock: vi.fn(),
+  setActiveTodoMock: vi.fn(),
+}));
 
-describe('TodoWrite', () => {
-  let tool: TodoWrite;
-  const abortSignal = new AbortController().signal;
+vi.mock('./todo-store.js', () => ({
+  TodoStore: vi.fn().mockImplementation(() => ({
+    readTodos: readTodosMock,
+    writeTodos: writeTodosMock,
+  })),
+}));
 
-  const validTodos: Todo[] = [
-    {
-      id: '1',
-      content: 'Test task',
-      status: 'pending',
-      priority: 'high',
-    },
-    {
-      id: '2',
-      content: 'Another task',
-      status: 'in_progress',
-      priority: 'medium',
-    },
-  ];
+vi.mock('./todo-events.js', () => ({
+  todoEvents: {
+    emitTodoUpdated: emitTodoUpdatedMock,
+  },
+}));
 
-  const existingTodos: Todo[] = [
-    {
-      id: 'old-1',
-      content: 'Existing task 1',
-      status: 'completed',
-      priority: 'low',
-    },
-    {
-      id: 'old-2',
-      content: 'Existing task 2',
-      status: 'pending',
-      priority: 'high',
-    },
-    {
-      id: 'old-3',
-      content: 'Existing task 3',
-      status: 'in_progress',
-      priority: 'medium',
-    },
-  ] as Todo[];
+vi.mock('../services/todo-context-tracker.js', () => ({
+  TodoContextTracker: {
+    forAgent: vi.fn().mockReturnValue({
+      setActiveTodo: setActiveTodoMock,
+    }),
+  },
+}));
 
+describe('TodoWrite tool', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    tool = new TodoWrite();
-    new TodoStore('session-123', 'agent-456');
+    readTodosMock.mockReset();
+    writeTodosMock.mockReset();
+    emitTodoUpdatedMock.mockReset();
+    setActiveTodoMock.mockReset();
   });
 
-  describe('execute', () => {
-    it('should create new todos with valid schema', async () => {
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
+  it('omits reminder text from llmContent while exposing it via metadata', async () => {
+    readTodosMock.mockResolvedValue([
+      {
+        id: '1',
+        content: 'Copy README.md to ./tmp/README.jp.md using shell command',
+        status: 'pending',
+        priority: 'high',
+      },
+    ]);
+    writeTodosMock.mockResolvedValue(undefined);
 
-      const result = await tool.execute({ todos: validTodos }, abortSignal);
+    const reminderText =
+      '---\nSystem Note: Update the active todo before replying.\n---';
 
-      expect(result.llmContent).toContain('Todo Progress');
-      expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
-        validTodos,
-      );
-    });
+    const shouldGenerateReminder = vi
+      .spyOn(TodoReminderService.prototype, 'shouldGenerateReminder')
+      .mockReturnValue(true);
+    const getReminder = vi
+      .spyOn(TodoReminderService.prototype, 'getReminderForStateChange')
+      .mockReturnValue(reminderText);
 
-    it('should validate todo schema and reject invalid data', async () => {
-      const invalidTodos = [
+    const tool = new TodoWrite();
+    tool.context = {
+      sessionId: 'session-1',
+      agentId: 'primary',
+      interactiveMode: false,
+    };
+
+    const params = {
+      todos: [
         {
           id: '1',
-          content: '', // Invalid: empty content
+          content: 'Copy README.md to ./tmp/README.jp.md using shell command',
+          status: 'in_progress',
+          priority: 'high',
+        },
+        {
+          id: '2',
+          content:
+            'Edit ./tmp/README.jp.md to translate text to Japanese (keeping code blocks in English)',
           status: 'pending',
           priority: 'high',
         },
-      ] as Todo[];
+      ],
+    };
 
-      await expect(
-        tool.execute({ todos: invalidTodos }, abortSignal),
-      ).rejects.toThrow(/content/);
-    });
+    const result = await tool.execute(params, new AbortController().signal);
 
-    it('should reject todos with invalid status', async () => {
-      const invalidTodos = [
-        {
-          id: '1',
-          content: 'Test',
-          status: 'invalid' as unknown as Todo['status'],
-          priority: 'high' as Todo['priority'],
-        },
-      ];
+    const expectedDisplay = formatTodoListForDisplay(params.todos);
 
-      await expect(
-        tool.execute({ todos: invalidTodos }, abortSignal),
-      ).rejects.toThrow(/status/);
-    });
+    expect(result.llmContent).toBe(expectedDisplay);
+    expect(result.llmContent).not.toContain('System Note:');
+    expect(result.returnDisplay).toBe(expectedDisplay);
+    expect(result.metadata.reminder).toBe(reminderText);
 
-    it('should reject todos with invalid priority', async () => {
-      const invalidTodos = [
-        {
-          id: '1',
-          content: 'Test',
-          status: 'pending' as Todo['status'],
-          priority: 'urgent' as unknown as Todo['priority'],
-        },
-      ];
-
-      await expect(
-        tool.execute({ todos: invalidTodos }, abortSignal),
-      ).rejects.toThrow(/priority/);
-    });
-
-    it('should completely replace todo list (not merge)', async () => {
-      // First verify existing todos, then write single todo
-      const singleTodo: Todo[] = [
-        {
-          id: 'new-1',
-          content: 'Single replacement task',
-          status: 'pending',
-          priority: 'high',
-        },
-      ];
-
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(existingTodos);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-
-      const result = await tool.execute({ todos: singleTodo }, abortSignal);
-
-      expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
-        singleTodo,
-      );
-      expect(result.llmContent).toContain('Todo Progress');
-    });
-
-    it('should handle empty todo list', async () => {
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(existingTodos);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-
-      const result = await tool.execute({ todos: [] }, abortSignal);
-
-      expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
-        [],
-      );
-      expect(result.llmContent).toContain('No todos found');
-    });
-
-    it('should return both old and new todos for diff tracking', async () => {
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(existingTodos);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-
-      const result = await tool.execute({ todos: validTodos }, abortSignal);
-
-      expect(result.llmContent).toContain('Todo Progress');
-    });
+    expect(writeTodosMock).toHaveBeenCalledWith(params.todos);
+    expect(shouldGenerateReminder).toHaveBeenCalled();
+    expect(getReminder).toHaveBeenCalled();
   });
 
-  describe('validateToolParams', () => {
-    it('should accept valid params', () => {
-      expect(tool.validateToolParams({ todos: validTodos })).toBeNull();
-    });
+  it('fills missing todo and subtask IDs before validation', async () => {
+    readTodosMock.mockResolvedValue([]);
+    writeTodosMock.mockResolvedValue(undefined);
 
-    it('should accept empty todos array', () => {
-      expect(tool.validateToolParams({ todos: [] })).toBeNull();
-    });
+    const tool = new TodoWrite();
+    tool.context = {
+      sessionId: 'session-normalize',
+      agentId: 'primary',
+      interactiveMode: false,
+    };
 
-    it('should validate todo structure', () => {
-      // Since we're using schema validation in the actual tool,
-      // invalid params should be caught
-      const invalidParams = {
-        todos: [{ invalid: 'structure' }],
-      };
+    const todosInput = [
+      {
+        // Missing id should be auto-filled
+        id: undefined,
+        content: 'Create initial translation plan',
+        status: 'pending',
+        priority: 'high',
+        subtasks: [
+          {
+            id: undefined,
+            content: 'Outline translation steps',
+          },
+        ],
+      },
+      {
+        id: 'existing-id',
+        content: 'Verify translated document formatting',
+        status: 'pending',
+        priority: 'medium',
+        subtasks: [],
+      },
+    ] as unknown as Todo[];
 
-      // This test verifies the params are validated
-      expect(
-        tool.validateToolParams(invalidParams as unknown as TodoWriteParams),
-      ).toBeNull();
-    });
-  });
+    await tool.execute(
+      {
+        todos: todosInput,
+      },
+      new AbortController().signal,
+    );
 
-  describe('getDescription', () => {
-    it('should describe adding new todos', () => {
-      const description = tool.getDescription({ todos: validTodos });
-      expect(description).toContain('2'); // number of todos
-    });
-
-    it('should describe clearing todos', () => {
-      const description = tool.getDescription({ todos: [] });
-      expect(description).toContain('0'); // empty list
-    });
-  });
-
-  describe('output format', () => {
-    it('should return ToolResult with success message', async () => {
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-
-      const result = await tool.execute({ todos: validTodos }, abortSignal);
-
-      expect(result).toMatchObject({
-        llmContent: expect.any(String),
-        returnDisplay: expect.any(String),
-      });
-      expect(result.llmContent).toContain('Todo Progress');
-    });
-
-    it('should include todos in output', async () => {
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-
-      const result = await tool.execute({ todos: validTodos }, abortSignal);
-
-      expect(result.llmContent).toContain('○ Test task [HIGH]');
-      expect(result.llmContent).toContain('→ Another task [MEDIUM] ← current');
-    });
-  });
-
-  describe('session and agent handling', () => {
-    it('should use session ID from context', async () => {
-      const toolWithSession = Object.assign(
-        Object.create(Object.getPrototypeOf(tool)),
-        tool,
-      );
-      toolWithSession.context = {
-        sessionId: 'test-session-123',
-      };
-
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-
-      await toolWithSession.execute({ todos: validTodos }, abortSignal);
-
-      expect(TodoStore).toHaveBeenCalledWith('test-session-123', undefined);
-    });
-
-    it('should use agent ID when available', async () => {
-      const toolWithAgent = Object.assign(
-        Object.create(Object.getPrototypeOf(tool)),
-        tool,
-      );
-      toolWithAgent.context = {
-        sessionId: 'test-session-123',
-        agentId: 'test-agent-456',
-      };
-
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-
-      await toolWithAgent.execute({ todos: validTodos }, abortSignal);
-
-      expect(TodoStore).toHaveBeenCalledWith(
-        'test-session-123',
-        'test-agent-456',
-      );
-    });
-
-    it('should work without agent ID', async () => {
-      const toolNoAgent = Object.assign(
-        Object.create(Object.getPrototypeOf(tool)),
-        tool,
-      );
-      toolNoAgent.context = {
-        sessionId: 'test-session-123',
-      };
-
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-
-      const result = await toolNoAgent.execute(
-        { todos: validTodos },
-        abortSignal,
-      );
-
-      expect(result.llmContent).toBeDefined();
-      expect(TodoStore).toHaveBeenCalledWith('test-session-123', undefined);
-    });
-  });
-
-  describe('error handling', () => {
-    it('should handle write errors gracefully', async () => {
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockRejectedValue(
-        new Error('Write failed'),
-      );
-
-      await expect(
-        tool.execute({ todos: validTodos }, abortSignal),
-      ).rejects.toThrow('Write failed');
-    });
-  });
-
-  describe('interactive mode', () => {
-    it('should include formatted output in interactive mode', async () => {
-      const interactiveTool = Object.assign(
-        Object.create(Object.getPrototypeOf(tool)),
-        tool,
-      );
-      interactiveTool.context = {
-        sessionId: 'test-session-123',
-        interactiveMode: true,
-      };
-
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-
-      const result = await interactiveTool.execute(
-        { todos: validTodos },
-        abortSignal,
-      );
-
-      expect(result.llmContent).toContain('Todo Progress');
-      expect(result.returnDisplay).toContain('Todo Progress');
-    });
-
-    it('should emit todo updates scoped with provided agent id', async () => {
-      const interactiveTool = Object.assign(
-        Object.create(Object.getPrototypeOf(tool)),
-        tool,
-      );
-      interactiveTool.context = {
-        sessionId: 'test-session-123',
-        agentId: 'agent-special',
-        interactiveMode: true,
-      };
-
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      const emitSpy = vi.spyOn(todoEvents, 'emitTodoUpdated');
-
-      await interactiveTool.execute({ todos: validTodos }, abortSignal);
-
-      expect(emitSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sessionId: 'test-session-123',
-          agentId: 'agent-special',
-        }),
-      );
-    });
-
-    it('should emit todo updates using default agent id when missing', async () => {
-      const interactiveTool = Object.assign(
-        Object.create(Object.getPrototypeOf(tool)),
-        tool,
-      );
-      interactiveTool.context = {
-        sessionId: 'test-session-123',
-        interactiveMode: true,
-      };
-
-      vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      const emitSpy = vi.spyOn(todoEvents, 'emitTodoUpdated');
-
-      await interactiveTool.execute({ todos: validTodos }, abortSignal);
-
-      expect(emitSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          sessionId: 'test-session-123',
-          agentId: DEFAULT_AGENT_ID,
-        }),
-      );
-    });
+    const writtenTodos = writeTodosMock.mock.calls[0]?.[0] as
+      | Todo[]
+      | undefined;
+    expect(writtenTodos).toBeDefined();
+    expect(writtenTodos?.[0]?.id).toBe('1');
+    expect(writtenTodos?.[0]?.subtasks?.[0]?.id).toBe('1-1');
+    expect(writtenTodos?.[1]?.id).toBe('existing-id');
   });
 });

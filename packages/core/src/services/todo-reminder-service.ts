@@ -98,7 +98,7 @@ export class TodoReminderService {
    */
   private formatSystemReminder(message: string): string {
     // Return plain text instead of XML tags to avoid breaking OpenAI API
-    return `\n\n---\nSystem Note: ${message}\n---`;
+    return `---\nSystem Note: ${message}\n---`;
   }
 
   /**
@@ -119,6 +119,24 @@ export class TodoReminderService {
     const taskList = this.buildNumberedTaskList(detectedTasks);
     const message = `You have handled several complex instructions without creating a todo list. Pause and use the TodoWrite tool now:\n${taskList}\n\nTodoWrite is required so we can track progress and avoid losing steps. Create the list before continuing.`;
     return this.formatSystemReminder(message);
+  }
+
+  getCreateListReminder(_detectedTasks: string[]): string {
+    return this.formatSystemReminder(
+      'Please create a todo list before continuing.',
+    );
+  }
+
+  getUpdateActiveTodoReminder(_todo: Todo): string {
+    return this.formatSystemReminder(
+      'Update the active todo with concrete progress, continue executing the outstanding work, and only respond once you have advanced the task. If you are blocked, call todo_pause("reason") instead of rewriting the todo list.',
+    );
+  }
+
+  getEscalatedActiveTodoReminder(_todo: Todo): string {
+    return this.formatSystemReminder(
+      'You still have unfinished todos. Continue the required work (e.g., copy files, run tools, produce the requested output) and update the active todo with new progress, or call todo_pause("reason") to explain the blocker. Do not call todo_write again without new progress.',
+    );
   }
 
   private buildNumberedTaskList(detectedTasks: string[]): string {
