@@ -58,18 +58,19 @@ export function ensureOAuthProviderRegistered(
 
   switch (providerName) {
     case 'gemini':
-      oauthProvider = new GeminiOAuthProvider(effectiveTokenStore);
+      oauthProvider = new GeminiOAuthProvider(effectiveTokenStore, addItem);
       break;
     case 'qwen':
-      oauthProvider = new QwenOAuthProvider(effectiveTokenStore);
+      oauthProvider = new QwenOAuthProvider(effectiveTokenStore, addItem);
       break;
     case 'anthropic':
-      oauthProvider = new AnthropicOAuthProvider(effectiveTokenStore);
+      oauthProvider = new AnthropicOAuthProvider(effectiveTokenStore, addItem);
       break;
     default:
       return; // No OAuth provider needed for this provider name
   }
 
+  // Note: setAddItem is still called as a fallback for providers that don't accept it in constructor
   if (oauthProvider && addItem) {
     oauthProvider.setAddItem?.(addItem);
   }

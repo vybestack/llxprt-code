@@ -27,6 +27,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { Credentials } from 'google-auth-library';
 import { HistoryItemWithoutId } from '../ui/types.js';
+import { globalOAuthUI } from './global-oauth-ui.js';
 
 enum InitializationState {
   NotStarted = 'not-started',
@@ -177,8 +178,9 @@ export class GeminiOAuthProvider implements OAuthProvider {
           // Handle browser auth cancellation or other auth failures
           if (error instanceof Error) {
             // Show error message to user if addItem is available
-            if (this.addItem) {
-              this.addItem(
+            const addItem = this.addItem || globalOAuthUI.getAddItem();
+            if (addItem) {
+              addItem(
                 {
                   type: 'error',
                   text: `Browser authentication failed: ${error.message}
@@ -202,14 +204,11 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
               );
 
               // Show fallback instructions to user
-              const fallbackMessage = `Browser authentication was cancelled or failed.
-Fallback options:
-1. Use API key: /keyfile <path-to-your-gemini-key>
-2. Set environment: export GEMINI_API_KEY=<your-key>
-3. Try OAuth again: /auth gemini enable`;
+              const fallbackMessage = `Browser authentication was cancelled or failed.\nFallback options:\n1. Use API key: /keyfile <path-to-your-gemini-key>\n2. Set environment: export GEMINI_API_KEY=<your-key>\n3. Try OAuth again: /auth gemini enable`;
 
-              if (this.addItem) {
-                this.addItem(
+              const addItem = this.addItem || globalOAuthUI.getAddItem();
+              if (addItem) {
+                addItem(
                   {
                     type: 'info',
                     text: fallbackMessage,
@@ -217,7 +216,7 @@ Fallback options:
                   Date.now(),
                 );
               } else {
-                console.log('\n' + '─'.repeat(60));
+                console.log('\\n' + '─'.repeat(60));
                 console.log('Browser authentication was cancelled or failed.');
                 console.log('Fallback options:');
                 console.log(
@@ -252,8 +251,9 @@ Fallback options:
               this.currentToken = token;
 
               // Display success message
-              if (this.addItem) {
-                this.addItem(
+              const addItem = this.addItem || globalOAuthUI.getAddItem();
+              if (addItem) {
+                addItem(
                   {
                     type: 'info',
                     text: 'Successfully authenticated with Google Gemini!',

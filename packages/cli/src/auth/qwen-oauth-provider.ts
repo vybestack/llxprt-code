@@ -22,7 +22,9 @@ import {
   GracefulErrorHandler,
   RetryHandler,
 } from '@vybestack/llxprt-code-core';
-import { HistoryItemWithoutId } from '../ui/types.js';
+import { ClipboardService } from '../services/ClipboardService.js';
+import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
+import { globalOAuthUI } from './global-oauth-ui.js';
 
 enum InitializationState {
   NotStarted = 'not-started',
@@ -195,26 +197,33 @@ export class QwenOAuthProvider implements OAuthProvider {
         console.log('\nQwen OAuth Authentication');
         console.log('─'.repeat(40));
 
+        // Always show OAuth URL in the TUI first, before attempting browser (like Gemini does)
+        const historyItem: HistoryItemOAuthURL = {
+          type: 'oauth_url',
+          text: `Please visit the following URL to authorize with Qwen:\\n${authUrl}`,
+          url: authUrl,
+        };
+        // Try instance addItem first, fallback to global
+        const addItem = this.addItem || globalOAuthUI.getAddItem();
+        if (addItem) {
+          addItem(historyItem, Date.now());
+        }
+
+        console.log('Please visit the following URL to authorize:');
+        console.log(authUrl);
+
+        // Copy URL to clipboard with error handling
+        try {
+          await ClipboardService.copyToClipboard(authUrl);
+        } catch (error) {
+          // Clipboard copy is non-critical, continue without it
+          console.debug('Failed to copy URL to clipboard:', error);
+        }
+
         // Line 40: IF shouldLaunchBrowser()
         if (shouldLaunchBrowser()) {
           // Line 41: PRINT
           console.log('Opening browser for authentication...');
-
-          // Add OAuth URL to history so user can copy it from the UI
-          if (this.addItem) {
-            this.addItem(
-              {
-                type: 'info',
-                text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
-              },
-              Date.now(),
-            );
-          } else {
-            console.log(
-              'If the browser does not open, please visit the following URL to authorize:',
-            );
-            console.log(authUrl);
-          }
 
           // Lines 42-46: TRY
           try {
@@ -223,20 +232,6 @@ export class QwenOAuthProvider implements OAuthProvider {
             // Line 45: PRINT - browser failure is not critical
             console.log('Failed to open browser automatically.');
             console.debug('Browser launch error:', error);
-          }
-        } else {
-          // Lines 48-49: PRINT
-          if (this.addItem) {
-            this.addItem(
-              {
-                type: 'info',
-                text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
-              },
-              Date.now(),
-            );
-          } else {
-            console.log('Visit the following URL to authorize:');
-            console.log(authUrl);
           }
         }
 

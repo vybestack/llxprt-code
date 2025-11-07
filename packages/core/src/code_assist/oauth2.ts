@@ -164,6 +164,22 @@ async function initOauthClient(
   } else {
     const webLogin = await authWithWeb(client);
 
+    // Always show the OAuth URL in the TUI first, before attempting browser
+    const addItem = (global as Record<string, unknown>).__oauth_add_item as
+      | ((itemData: OAuthUrlItem, baseTimestamp: number) => number)
+      | undefined;
+
+    if (addItem) {
+      addItem(
+        {
+          type: 'oauth_url',
+          text: `Please visit the following URL to authorize with Google Gemini:\n${webLogin.authUrl}`,
+          url: webLogin.authUrl,
+        },
+        Date.now(),
+      );
+    }
+
     console.log(
       `\n\nCode Assist login required.\n` +
         `Attempting to open authentication page in your browser.\n` +
