@@ -92,7 +92,7 @@ export async function getRipgrepPath(): Promise<string> {
   // Check if running from bundled environment
   const projectRoot = process.cwd();
   const isBundled =
-    (process as any).pkg?.entrypoint ||
+    (process as unknown as { pkg?: { entrypoint?: string } }).pkg?.entrypoint ||
     !fs.existsSync(path.join(projectRoot, 'node_modules'));
 
   if (isBundled) {
