@@ -627,11 +627,10 @@ export async function loadCliConfig(
         bootstrapParsed.runtimeMetadata.settingsService,
     },
   };
-  
-  const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
-  
-  const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
 
+  const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
+
+  const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
 
   // Handle --load flag early to apply profile settings
   let effectiveSettings = settings;
@@ -1099,12 +1098,19 @@ export async function loadCliConfig(
     () =>
       `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
   );
-  
+
   // CRITICAL FIX for #492: When --provider is specified with CLI auth (--key/--keyfile/--baseurl),
   // create a synthetic profile to apply the auth credentials using the same flow as profile loading.
   // This ensures auth is applied BEFORE provider switch, just like profile loading does.
-  if (argv.provider && (bootstrapArgs.keyOverride || bootstrapArgs.keyfileOverride || bootstrapArgs.baseurlOverride)) {
-    logger.debug(() => '[bootstrap] Creating synthetic profile for CLI auth args');
+  if (
+    argv.provider &&
+    (bootstrapArgs.keyOverride ||
+      bootstrapArgs.keyfileOverride ||
+      bootstrapArgs.baseurlOverride)
+  ) {
+    logger.debug(
+      () => '[bootstrap] Creating synthetic profile for CLI auth args',
+    );
     const syntheticProfile: Profile = {
       version: 1,
       provider: argv.provider,
@@ -1112,17 +1118,20 @@ export async function loadCliConfig(
       modelParams: {},
       ephemeralSettings: {},
     };
-    
+
     if (bootstrapArgs.keyOverride) {
-      syntheticProfile.ephemeralSettings['auth-key'] = bootstrapArgs.keyOverride;
+      syntheticProfile.ephemeralSettings['auth-key'] =
+        bootstrapArgs.keyOverride;
     }
     if (bootstrapArgs.keyfileOverride) {
-      syntheticProfile.ephemeralSettings['auth-keyfile'] = bootstrapArgs.keyfileOverride;
+      syntheticProfile.ephemeralSettings['auth-keyfile'] =
+        bootstrapArgs.keyfileOverride;
     }
     if (bootstrapArgs.baseurlOverride) {
-      syntheticProfile.ephemeralSettings['base-url'] = bootstrapArgs.baseurlOverride;
+      syntheticProfile.ephemeralSettings['base-url'] =
+        bootstrapArgs.baseurlOverride;
     }
-    
+
     const applyMetadata = {
       ...baseBootstrapMetadata,
       stage: 'cli-auth-apply',
@@ -1155,8 +1164,7 @@ export async function loadCliConfig(
       () =>
         `[bootstrap] Applied CLI auth -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
     );
-  }
-  else if (loadedProfile && profileToLoad && argv.provider === undefined) {
+  } else if (loadedProfile && profileToLoad && argv.provider === undefined) {
     const applyMetadata = {
       ...baseBootstrapMetadata,
       stage: 'profile-apply',
@@ -1234,12 +1242,19 @@ export async function loadCliConfig(
     );
   }
 
-
   // Apply CLI argument overrides AFTER provider switch (switchActiveProvider clears ephemerals)
   // Note: We already applied key/keyfile/baseurl earlier, but we need to reapply after provider switch
   // Also apply --set arguments which weren't handled earlier
-  if (bootstrapArgs && (bootstrapArgs.keyOverride || bootstrapArgs.keyfileOverride || bootstrapArgs.baseurlOverride || (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))) {
-    const { applyCliArgumentOverrides } = await import('../runtime/runtimeSettings.js');
+  if (
+    bootstrapArgs &&
+    (bootstrapArgs.keyOverride ||
+      bootstrapArgs.keyfileOverride ||
+      bootstrapArgs.baseurlOverride ||
+      (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
+  ) {
+    const { applyCliArgumentOverrides } = await import(
+      '../runtime/runtimeSettings.js'
+    );
     await applyCliArgumentOverrides(
       {
         key: argv.key,

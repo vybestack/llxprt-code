@@ -95,7 +95,9 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
 
   // Debug: log what we're parsing
   const logger = new DebugLogger('llxprt:bootstrap');
-  logger.debug(() => `parseBootstrapArgs called with argv: ${JSON.stringify(argv)}`);
+  logger.debug(
+    () => `parseBootstrapArgs called with argv: ${JSON.stringify(argv)}`,
+  );
 
   const consumeValue = (
     tokens: string[],
@@ -186,15 +188,18 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
   }
 
   // Debug: log what we parsed
-  logger.debug(() => `parseBootstrapArgs result: ${JSON.stringify({
-    profileName: bootstrapArgs.profileName,
-    providerOverride: bootstrapArgs.providerOverride,
-    modelOverride: bootstrapArgs.modelOverride,
-    keyOverride: bootstrapArgs.keyOverride ? '***' : null,
-    keyfileOverride: bootstrapArgs.keyfileOverride,
-    baseurlOverride: bootstrapArgs.baseurlOverride,
-    setOverrides: bootstrapArgs.setOverrides,
-  })}`);
+  logger.debug(
+    () =>
+      `parseBootstrapArgs result: ${JSON.stringify({
+        profileName: bootstrapArgs.profileName,
+        providerOverride: bootstrapArgs.providerOverride,
+        modelOverride: bootstrapArgs.modelOverride,
+        keyOverride: bootstrapArgs.keyOverride ? '***' : null,
+        keyfileOverride: bootstrapArgs.keyfileOverride,
+        baseurlOverride: bootstrapArgs.baseurlOverride,
+        setOverrides: bootstrapArgs.setOverrides,
+      })}`,
+  );
 
   return { bootstrapArgs, runtimeMetadata };
 }

@@ -265,22 +265,32 @@ export function createProviderManager(
   // by calling applyCliArgumentOverrides() BEFORE creating the provider manager.
   // We check ephemeralSettings['auth-key'] which should already contain the resolved value.
   const ephemeralAuthKey = ephemeralSettings['auth-key'];
-  
+
   // Also check provider-specific settings if no ephemeral auth-key
   const settingsProviders = settingsData as Record<string, unknown>;
-  const openaiProviderSettings = settingsProviders.providers as Record<string, unknown> | undefined;
-  const openaiSettings = openaiProviderSettings?.openai as Record<string, unknown> | undefined;
-  const openaiProviderApiKey = openaiSettings?.apiKey as string | undefined || openaiSettings?.['auth-key'] as string | undefined;
+  const openaiProviderSettings = settingsProviders.providers as
+    | Record<string, unknown>
+    | undefined;
+  const openaiSettings = openaiProviderSettings?.openai as
+    | Record<string, unknown>
+    | undefined;
+  const openaiProviderApiKey =
+    (openaiSettings?.apiKey as string | undefined) ||
+    (openaiSettings?.['auth-key'] as string | undefined);
 
   let openaiApiKey: string | undefined;
-  
+
   if (
     ephemeralAuthKey &&
     typeof ephemeralAuthKey === 'string' &&
     ephemeralAuthKey.trim() !== ''
   ) {
     openaiApiKey = sanitizeApiKey(ephemeralAuthKey);
-  } else if (openaiProviderApiKey && typeof openaiProviderApiKey === 'string' && openaiProviderApiKey.trim() !== '') {
+  } else if (
+    openaiProviderApiKey &&
+    typeof openaiProviderApiKey === 'string' &&
+    openaiProviderApiKey.trim() !== ''
+  ) {
     openaiApiKey = sanitizeApiKey(openaiProviderApiKey);
   } else if (process.env.OPENAI_API_KEY && !authOnlyEnabled) {
     openaiApiKey = sanitizeApiKey(process.env.OPENAI_API_KEY);
@@ -290,13 +300,16 @@ export function createProviderManager(
   // NOTE: Bootstrap args (--baseurl) should be applied to ephemeral settings
   // by calling applyCliArgumentOverrides() BEFORE creating the provider manager.
   const ephemeralBaseUrl = ephemeralSettings['base-url'];
-  const providerBaseUrl = openaiSettings?.baseUrl as string | undefined || openaiSettings?.baseURL as string | undefined;
-  const openaiBaseUrl = (ephemeralBaseUrl && typeof ephemeralBaseUrl === 'string') 
-    ? ephemeralBaseUrl 
-    : (providerBaseUrl && typeof providerBaseUrl === 'string')
-      ? providerBaseUrl
-      : process.env.OPENAI_BASE_URL;
-      
+  const providerBaseUrl =
+    (openaiSettings?.baseUrl as string | undefined) ||
+    (openaiSettings?.baseURL as string | undefined);
+  const openaiBaseUrl =
+    ephemeralBaseUrl && typeof ephemeralBaseUrl === 'string'
+      ? ephemeralBaseUrl
+      : providerBaseUrl && typeof providerBaseUrl === 'string'
+        ? providerBaseUrl
+        : process.env.OPENAI_BASE_URL;
+
   if (process.env.DEBUG || process.env.VERBOSE) {
     console.log('[ProviderManager] Initializing OpenAI provider with:', {
       hasApiKey: !!openaiApiKey,

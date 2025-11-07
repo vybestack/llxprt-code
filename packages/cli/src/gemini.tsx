@@ -360,7 +360,9 @@ export async function main() {
   // We just need to retrieve it from the config, not recreate it (which would lose CLI arg auth)
   const providerManager = config.getProviderManager();
   if (!providerManager) {
-    throw new Error('[cli] Provider manager should have been initialized by loadCliConfig');
+    throw new Error(
+      '[cli] Provider manager should have been initialized by loadCliConfig',
+    );
   }
 
   const bootstrapProfileName =

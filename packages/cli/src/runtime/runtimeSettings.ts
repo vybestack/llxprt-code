@@ -1748,7 +1748,10 @@ export async function applyCliArgumentOverrides(
 
   // 1. Apply --key (bootstrap override takes precedence, then argv)
   const keyToUse = bootstrapArgs?.keyOverride ?? argv.key;
-  logger.debug(() => `[runtime] applyCliArgumentOverrides keyToUse=${keyToUse ? '***' : 'null'}`);
+  logger.debug(
+    () =>
+      `[runtime] applyCliArgumentOverrides keyToUse=${keyToUse ? '***' : 'null'}`,
+  );
   if (keyToUse) {
     logger.debug(() => '[runtime] Calling updateActiveProviderApiKey');
     await updateActiveProviderApiKey(keyToUse);
