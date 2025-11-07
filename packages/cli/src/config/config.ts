@@ -75,7 +75,7 @@ export const READ_ONLY_TOOL_NAMES = [
   'web_fetch',
   'todo_read',
   'task',
-  'self.emitvalue',
+  'self_emitvalue',
 ] as const;
 
 const EDIT_TOOL_NAME = 'replace';
