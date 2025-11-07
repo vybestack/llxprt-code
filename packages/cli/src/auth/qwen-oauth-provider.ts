@@ -22,7 +22,8 @@ import {
   GracefulErrorHandler,
   RetryHandler,
 } from '@vybestack/llxprt-code-core';
-import { HistoryItemWithoutId } from '../ui/types.js';
+import { ClipboardService } from '../services/ClipboardService.js';
+import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
 
 enum InitializationState {
   NotStarted = 'not-started',
@@ -202,13 +203,20 @@ export class QwenOAuthProvider implements OAuthProvider {
 
           // Add OAuth URL to history so user can copy it from the UI
           if (this.addItem) {
-            this.addItem(
-              {
-                type: 'info',
-                text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
-              },
-              Date.now(),
-            );
+            const historyItem: HistoryItemOAuthURL = {
+              type: 'oauth_url',
+              text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
+              url: authUrl,
+            };
+            this.addItem(historyItem, Date.now());
+
+            // Copy URL to clipboard with error handling
+            try {
+              await ClipboardService.copyToClipboard(authUrl);
+            } catch (error) {
+              // Clipboard copy is non-critical, continue without it
+              console.debug('Failed to copy URL to clipboard:', error);
+            }
           } else {
             console.log(
               'If the browser does not open, please visit the following URL to authorize:',
@@ -227,13 +235,20 @@ export class QwenOAuthProvider implements OAuthProvider {
         } else {
           // Lines 48-49: PRINT
           if (this.addItem) {
-            this.addItem(
-              {
-                type: 'info',
-                text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
-              },
-              Date.now(),
-            );
+            const historyItem: HistoryItemOAuthURL = {
+              type: 'oauth_url',
+              text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
+              url: authUrl,
+            };
+            this.addItem(historyItem, Date.now());
+
+            // Copy URL to clipboard with error handling
+            try {
+              await ClipboardService.copyToClipboard(authUrl);
+            } catch (error) {
+              // Clipboard copy is non-critical, continue without it
+              console.debug('Failed to copy URL to clipboard:', error);
+            }
           } else {
             console.log('Visit the following URL to authorize:');
             console.log(authUrl);

@@ -21,7 +21,8 @@ import {
   RetryHandler,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import { HistoryItemWithoutId } from '../ui/types.js';
+import { ClipboardService } from '../services/ClipboardService.js';
+import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
 import {
   LocalOAuthCallbackServer,
   startLocalOAuthCallback,
@@ -223,17 +224,17 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         if (interactive) {
           console.log('Opening browser for authentication...');
 
-          this.showAuthMessage(authUrl);
+          await this.showAuthMessage(authUrl);
 
           try {
             await openBrowserSecurely(authUrl);
           } catch (error) {
             console.log('Failed to open browser automatically.');
             this.logger.debug(() => `Browser launch error: ${error}`);
-            this.showAuthMessage(authUrl);
+            await this.showAuthMessage(authUrl);
           }
         } else {
-          this.showAuthMessage(authUrl);
+          await this.showAuthMessage(authUrl);
         }
 
         console.log('─'.repeat(40));
@@ -331,16 +332,23 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     )();
   }
 
-  private showAuthMessage(authUrl: string): void {
+  private async showAuthMessage(authUrl: string): Promise<void> {
     const message = `Please visit the following URL to authorize with Anthropic Claude:\n${authUrl}`;
     if (this.addItem) {
-      this.addItem(
-        {
-          type: 'info',
-          text: message,
-        },
-        Date.now(),
-      );
+      const historyItem: HistoryItemOAuthURL = {
+        type: 'oauth_url',
+        text: message,
+        url: authUrl,
+      };
+      this.addItem(historyItem, Date.now());
+
+      // Copy URL to clipboard with error handling
+      try {
+        await ClipboardService.copyToClipboard(authUrl);
+      } catch (error) {
+        // Clipboard copy is non-critical, continue without it
+        console.debug('Failed to copy URL to clipboard:', error);
+      }
     } else {
       console.log('Visit the following URL to authorize:');
       console.log(authUrl);
