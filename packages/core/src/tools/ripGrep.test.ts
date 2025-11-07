@@ -13,7 +13,12 @@ import { Config } from '../config/config.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { spawn, ChildProcess } from 'child_process';
 
-// Mock @lvce-editor/ripgrep for testing
+// Mock ripgrepPathResolver for testing
+vi.mock('../utils/ripgrepPathResolver.js', () => ({
+  getRipgrepPath: vi.fn(() => Promise.resolve('/mock/rg/path')),
+}));
+
+// Mock @lvce-editor/ripgrep for ripgrepPathResolver tests
 vi.mock('@lvce-editor/ripgrep', () => ({
   rgPath: '/mock/rg/path',
 }));
