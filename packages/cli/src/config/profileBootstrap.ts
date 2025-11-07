@@ -5,8 +5,6 @@
  */
 
 import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
   SettingsService,
   type ProviderRuntimeContext,
   type ProviderManager,
@@ -14,6 +12,7 @@ import {
 import { createProviderManager } from '../providers/providerManagerInstance.js';
 import { registerCliProviderInfrastructure } from '../runtime/runtimeSettings.js';
 import type { OAuthManager } from '../auth/oauth-manager.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
 
@@ -93,6 +92,10 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
       timestamp: Date.now(),
     },
   };
+
+  // Debug: log what we're parsing
+  const logger = new DebugLogger('llxprt:bootstrap');
+  logger.debug(() => `parseBootstrapArgs called with argv: ${JSON.stringify(argv)}`);
 
   const consumeValue = (
     tokens: string[],
@@ -182,6 +185,17 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
     }
   }
 
+  // Debug: log what we parsed
+  logger.debug(() => `parseBootstrapArgs result: ${JSON.stringify({
+    profileName: bootstrapArgs.profileName,
+    providerOverride: bootstrapArgs.providerOverride,
+    modelOverride: bootstrapArgs.modelOverride,
+    keyOverride: bootstrapArgs.keyOverride ? '***' : null,
+    keyfileOverride: bootstrapArgs.keyfileOverride,
+    baseurlOverride: bootstrapArgs.baseurlOverride,
+    setOverrides: bootstrapArgs.setOverrides,
+  })}`);
+
   return { bootstrapArgs, runtimeMetadata };
 }
 
@@ -200,17 +214,18 @@ export async function prepareRuntimeForProfile(
       ? providedService
       : new SettingsService();
 
-  const runtime = createProviderRuntimeContext({
+  const runtimeId = runtimeInit.runtimeId ?? DEFAULT_RUNTIME_ID;
+  const metadata = {
+    ...(runtimeInit.metadata ?? {}),
+    stage: 'prepareRuntimeForProfile',
+  };
+
+  const runtime = {
     settingsService,
     config: runtimeInit.config,
-    runtimeId: runtimeInit.runtimeId ?? DEFAULT_RUNTIME_ID,
-    metadata: {
-      ...(runtimeInit.metadata ?? {}),
-      stage: 'prepareRuntimeForProfile',
-    },
-  });
-
-  setActiveProviderRuntimeContext(runtime);
+    runtimeId,
+    metadata,
+  } as ProviderRuntimeContext;
 
   const { manager: providerManager, oauthManager } = createProviderManager(
     {
@@ -224,6 +239,7 @@ export async function prepareRuntimeForProfile(
     },
   );
 
+  // Register CLI infrastructure AFTER provider manager creation
   registerCliProviderInfrastructure(providerManager, oauthManager);
 
   return {

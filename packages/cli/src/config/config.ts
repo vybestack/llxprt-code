@@ -617,6 +617,7 @@ export async function loadCliConfig(
    * @pseudocode bootstrap-order.md lines 1-9
    */
   const bootstrapParsed = parseBootstrapArgs();
+
   const parsedWithOverrides = {
     bootstrapArgs: bootstrapParsed.bootstrapArgs,
     runtimeMetadata: {
@@ -626,8 +627,11 @@ export async function loadCliConfig(
         bootstrapParsed.runtimeMetadata.settingsService,
     },
   };
-  const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
+  
   const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
+  
+  const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
+
 
   // Handle --load flag early to apply profile settings
   let effectiveSettings = settings;
@@ -1095,7 +1099,64 @@ export async function loadCliConfig(
     () =>
       `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
   );
-  if (loadedProfile && profileToLoad && argv.provider === undefined) {
+  
+  // CRITICAL FIX for #492: When --provider is specified with CLI auth (--key/--keyfile/--baseurl),
+  // create a synthetic profile to apply the auth credentials using the same flow as profile loading.
+  // This ensures auth is applied BEFORE provider switch, just like profile loading does.
+  if (argv.provider && (bootstrapArgs.keyOverride || bootstrapArgs.keyfileOverride || bootstrapArgs.baseurlOverride)) {
+    logger.debug(() => '[bootstrap] Creating synthetic profile for CLI auth args');
+    const syntheticProfile: Profile = {
+      version: 1,
+      provider: argv.provider,
+      model: argv.model ?? finalModel,
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+    
+    if (bootstrapArgs.keyOverride) {
+      syntheticProfile.ephemeralSettings['auth-key'] = bootstrapArgs.keyOverride;
+    }
+    if (bootstrapArgs.keyfileOverride) {
+      syntheticProfile.ephemeralSettings['auth-keyfile'] = bootstrapArgs.keyfileOverride;
+    }
+    if (bootstrapArgs.baseurlOverride) {
+      syntheticProfile.ephemeralSettings['base-url'] = bootstrapArgs.baseurlOverride;
+    }
+    
+    const applyMetadata = {
+      ...baseBootstrapMetadata,
+      stage: 'cli-auth-apply',
+    };
+
+    setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
+      runtimeId: bootstrapRuntimeId,
+      metadata: applyMetadata,
+    });
+    if (runtimeState.oauthManager) {
+      registerCliProviderInfrastructure(
+        runtimeState.providerManager,
+        runtimeState.oauthManager,
+      );
+    }
+
+    appliedProfileResult = await applyProfileSnapshot(syntheticProfile, {
+      profileName: 'cli-args',
+    });
+
+    profileProvider = appliedProfileResult.providerName;
+    profileModel = appliedProfileResult.modelName;
+    if (appliedProfileResult.baseUrl) {
+      profileBaseUrl = appliedProfileResult.baseUrl;
+    }
+    if (appliedProfileResult.warnings.length > 0) {
+      profileWarnings.push(...appliedProfileResult.warnings);
+    }
+    logger.debug(
+      () =>
+        `[bootstrap] Applied CLI auth -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
+    );
+  }
+  else if (loadedProfile && profileToLoad && argv.provider === undefined) {
     const applyMetadata = {
       ...baseBootstrapMetadata,
       stage: 'profile-apply',
@@ -1170,6 +1231,23 @@ export async function loadCliConfig(
         `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
           error instanceof Error ? error.message : String(error)
         }`,
+    );
+  }
+
+
+  // Apply CLI argument overrides AFTER provider switch (switchActiveProvider clears ephemerals)
+  // Note: We already applied key/keyfile/baseurl earlier, but we need to reapply after provider switch
+  // Also apply --set arguments which weren't handled earlier
+  if (bootstrapArgs && (bootstrapArgs.keyOverride || bootstrapArgs.keyfileOverride || bootstrapArgs.baseurlOverride || (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))) {
+    const { applyCliArgumentOverrides } = await import('../runtime/runtimeSettings.js');
+    await applyCliArgumentOverrides(
+      {
+        key: argv.key,
+        keyfile: argv.keyfile,
+        baseurl: argv.baseurl,
+        set: argv.set as string[] | undefined,
+      },
+      bootstrapArgs,
     );
   }
 

@@ -1514,12 +1514,13 @@ export async function updateActiveProviderApiKey(
 
   logger.debug(() => {
     const masked = trimmed ? `***redacted*** (len=${trimmed.length})` : 'null';
-    return `[runtime] updateActiveProviderApiKey provider='${providerName}' value=${masked}`;
+    return `[runtime] updateActiveProviderApiKey provider='${providerName}' value=${masked} CALLED`;
   });
 
   let authType: AuthType | undefined;
   if (!trimmed) {
     settingsService.setProviderSetting(providerName, 'apiKey', undefined);
+    settingsService.setProviderSetting(providerName, 'auth-key', undefined);
     config.setEphemeralSetting('auth-key', undefined);
     config.setEphemeralSetting('auth-keyfile', undefined);
 
@@ -1549,6 +1550,9 @@ export async function updateActiveProviderApiKey(
   settingsService.setProviderSetting(providerName, 'apiKey', trimmed);
   config.setEphemeralSetting('auth-key', trimmed);
   config.setEphemeralSetting('auth-keyfile', undefined);
+
+  // Also store as 'auth-key' in provider settings for bundle compatibility
+  settingsService.setProviderSetting(providerName, 'auth-key', trimmed);
 
   if (providerName === 'gemini') {
     authType = AuthType.USE_GEMINI;
@@ -1744,8 +1748,11 @@ export async function applyCliArgumentOverrides(
 
   // 1. Apply --key (bootstrap override takes precedence, then argv)
   const keyToUse = bootstrapArgs?.keyOverride ?? argv.key;
+  logger.debug(() => `[runtime] applyCliArgumentOverrides keyToUse=${keyToUse ? '***' : 'null'}`);
   if (keyToUse) {
+    logger.debug(() => '[runtime] Calling updateActiveProviderApiKey');
     await updateActiveProviderApiKey(keyToUse);
+    logger.debug(() => '[runtime] updateActiveProviderApiKey completed');
   }
 
   // 2. Apply --keyfile (bootstrap override takes precedence, then argv)

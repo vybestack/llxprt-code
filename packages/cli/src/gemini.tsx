@@ -49,7 +49,7 @@ import {
 import { getCliVersion } from './utils/version.js';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
-import { createProviderManager } from './providers/providerManagerInstance.js';
+// createProviderManager removed - provider manager now created in loadCliConfig()
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
@@ -58,7 +58,6 @@ import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.
 import { appEvents, AppEvent } from './utils/events.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import {
-  registerCliProviderInfrastructure,
   setCliRuntimeContext,
   switchActiveProvider,
   setActiveModel,
@@ -357,16 +356,12 @@ export async function main() {
   consolePatcher.patch();
   registerCleanup(consolePatcher.cleanup);
 
-  const { manager: providerManager, oauthManager } = createProviderManager(
-    {
-      settingsService: runtimeSettingsService,
-      config,
-      runtimeId: 'cli.providerManager',
-      metadata: { source: 'cli.getProviderManager' },
-    },
-    { config, allowBrowserEnvironment: false, settings },
-  );
-  registerCliProviderInfrastructure(providerManager, oauthManager);
+  // Note: loadCliConfig() already creates and configures the provider manager with CLI args
+  // We just need to retrieve it from the config, not recreate it (which would lose CLI arg auth)
+  const providerManager = config.getProviderManager();
+  if (!providerManager) {
+    throw new Error('[cli] Provider manager should have been initialized by loadCliConfig');
+  }
 
   const bootstrapProfileName =
     argv.profileLoad?.trim() ||

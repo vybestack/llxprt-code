@@ -20,8 +20,8 @@ describe('Settings configuration with LLXPRT_CODE environment variables', () => 
     delete process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH;
   });
 
-  it('should prioritize LLXPRT_CODE_SYSTEM_SETTINGS_PATH over GEMINI_CLI_SYSTEM_SETTINGS_PATH', () => {
-    process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = '/old/path/settings.json';
+  it('should prioritize LLXPRT_CODE_SYSTEM_SETTINGS_PATH over LLXPRT_CLI_SYSTEM_SETTINGS_PATH', () => {
+    process.env.LLXPRT_CLI_SYSTEM_SETTINGS_PATH = '/old/path/settings.json';
     process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH = '/new/path/settings.json';
 
     const systemSettingsPath = getSystemSettingsPath();

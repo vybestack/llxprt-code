@@ -35,9 +35,9 @@ exporters:
   googlecloud:
     project: "${projectId}"
     metric:
-      prefix: "custom.googleapis.com/gemini_cli"
+      prefix: "custom.googleapis.com/llxprt_cli"
     log:
-      default_log_name: "gemini_cli"
+      default_log_name: "llxprt_cli"
   debug:
     verbosity: detailed
 service:
@@ -174,7 +174,7 @@ async function main() {
   );
   console.log(`\nView your telemetry data in Google Cloud Console:`);
   console.log(
-    `   - Logs: https://console.cloud.google.com/logs/query;query=logName%3D%22projects%2F${projectId}%2Flogs%2Fgemini_cli%22?project=${projectId}`,
+    `   - Logs: https://console.cloud.google.com/logs/query;query=logName%3D%22projects%2F${projectId}%2Flogs%2Fllxprt_cli%22?project=${projectId}`,
   );
   console.log(
     `   - Metrics: https://console.cloud.google.com/monitoring/metrics-explorer?project=${projectId}`,
