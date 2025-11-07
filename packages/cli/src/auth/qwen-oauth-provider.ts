@@ -24,6 +24,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { ClipboardService } from '../services/ClipboardService.js';
 import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
+import { globalOAuthUI } from './global-oauth-ui.js';
 
 enum InitializationState {
   NotStarted = 'not-started',
@@ -199,11 +200,13 @@ export class QwenOAuthProvider implements OAuthProvider {
         // Always show OAuth URL in the TUI first, before attempting browser (like Gemini does)
         const historyItem: HistoryItemOAuthURL = {
           type: 'oauth_url',
-          text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
+          text: `Please visit the following URL to authorize with Qwen:\\n${authUrl}`,
           url: authUrl,
         };
-        if (this.addItem) {
-          this.addItem(historyItem, Date.now());
+        // Try instance addItem first, fallback to global
+        const addItem = this.addItem || globalOAuthUI.getAddItem();
+        if (addItem) {
+          addItem(historyItem, Date.now());
         }
 
         console.log('Please visit the following URL to authorize:');

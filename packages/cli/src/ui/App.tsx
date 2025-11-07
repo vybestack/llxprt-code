@@ -144,6 +144,7 @@ import { useTodoContext } from './contexts/TodoContext.js';
 import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
 import { WorkspaceMigrationDialog } from './components/WorkspaceMigrationDialog.js';
 import { isWorkspaceTrusted } from '../config/trustedFolders.js';
+import { globalOAuthUI } from '../auth/global-oauth-ui.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -246,11 +247,13 @@ const App = (props: AppInternalProps) => {
     return cleanup;
   }, [addItem]);
 
-  // Set global OAuth addItem callback for Gemini OAuth flow
+  // Set global OAuth addItem callback for all OAuth flows
   useEffect(() => {
     (global as Record<string, unknown>).__oauth_add_item = addItem;
+    globalOAuthUI.setAddItem(addItem);
     return () => {
       delete (global as Record<string, unknown>).__oauth_add_item;
+      globalOAuthUI.clearAddItem();
     };
   }, [addItem]);
 

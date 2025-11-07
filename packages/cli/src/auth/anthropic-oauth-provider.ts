@@ -27,6 +27,7 @@ import {
   LocalOAuthCallbackServer,
   startLocalOAuthCallback,
 } from './local-oauth-callback.js';
+import { globalOAuthUI } from './global-oauth-ui.js';
 
 enum InitializationState {
   NotStarted = 'not-started',
@@ -222,14 +223,16 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         }
 
         // Always show the auth URL in the TUI first, before attempting browser (like Gemini does)
-        const message = `Please visit the following URL to authorize with Anthropic Claude:\n${authUrl}`;
+        const message = `Please visit the following URL to authorize with Anthropic Claude:\\n${authUrl}`;
         const historyItem: HistoryItemOAuthURL = {
           type: 'oauth_url',
           text: message,
           url: authUrl,
         };
-        if (this.addItem) {
-          this.addItem(historyItem, Date.now());
+        // Try instance addItem first, fallback to global
+        const addItem = this.addItem || globalOAuthUI.getAddItem();
+        if (addItem) {
+          addItem(historyItem, Date.now());
         }
 
         console.log('Visit the following URL to authorize:');
