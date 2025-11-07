@@ -245,6 +245,7 @@ export async function prepareRuntimeForProfile(
   );
 
   // Register CLI infrastructure AFTER provider manager creation
+  // This is needed for tests that don't call the full loadCliConfig flow
   registerCliProviderInfrastructure(providerManager, oauthManager);
 
   return {

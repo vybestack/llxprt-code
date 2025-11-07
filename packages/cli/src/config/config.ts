@@ -55,7 +55,6 @@ import {
 import {
   applyProfileSnapshot,
   getCliRuntimeContext,
-  registerCliProviderInfrastructure,
   setCliRuntimeContext,
   switchActiveProvider,
 } from '../runtime/runtimeSettings.js';
@@ -1083,6 +1082,12 @@ export async function loadCliConfig(
     runtimeId: bootstrapRuntimeId,
     metadata: baseBootstrapMetadata,
   });
+
+  // Register provider infrastructure AFTER runtime context but BEFORE any profile application
+  // This is critical for applyProfileSnapshot to access the provider manager
+  const { registerCliProviderInfrastructure } = await import(
+    '../runtime/runtimeSettings.js'
+  );
   if (runtimeState.oauthManager) {
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
@@ -1132,22 +1137,6 @@ export async function loadCliConfig(
         bootstrapArgs.baseurlOverride;
     }
 
-    const applyMetadata = {
-      ...baseBootstrapMetadata,
-      stage: 'cli-auth-apply',
-    };
-
-    setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
-      runtimeId: bootstrapRuntimeId,
-      metadata: applyMetadata,
-    });
-    if (runtimeState.oauthManager) {
-      registerCliProviderInfrastructure(
-        runtimeState.providerManager,
-        runtimeState.oauthManager,
-      );
-    }
-
     appliedProfileResult = await applyProfileSnapshot(syntheticProfile, {
       profileName: 'cli-args',
     });
@@ -1165,23 +1154,6 @@ export async function loadCliConfig(
         `[bootstrap] Applied CLI auth -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
     );
   } else if (loadedProfile && profileToLoad && argv.provider === undefined) {
-    const applyMetadata = {
-      ...baseBootstrapMetadata,
-      stage: 'profile-apply',
-      profileName: profileToLoad,
-    };
-
-    setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
-      runtimeId: bootstrapRuntimeId,
-      metadata: applyMetadata,
-    });
-    if (runtimeState.oauthManager) {
-      registerCliProviderInfrastructure(
-        runtimeState.providerManager,
-        runtimeState.oauthManager,
-      );
-    }
-
     appliedProfileResult = await applyProfileSnapshot(loadedProfile, {
       profileName: profileToLoad,
     });
