@@ -20,7 +20,6 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type { SettingsService } from '../settings/SettingsService.js';
-import { DebugLogger } from '../debug/DebugLogger.js';
 import {
   getActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
@@ -531,8 +530,6 @@ function isAuthOnlyEnabled(value: unknown): boolean {
   return false;
 }
 
-const logger = new DebugLogger('llxprt:auth:precedence');
-
 export class AuthPrecedenceResolver {
   private config: AuthPrecedenceConfig;
   private oauthManager?: OAuthManager;
@@ -605,39 +602,7 @@ export class AuthPrecedenceResolver {
     if (!authOnly) {
       const authKey = settingsService.get('auth-key');
       if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
-        logger.debug(() => `Found auth-key: "${authKey.substring(0, 8)}..."`);
         return authKey;
-      }
-
-      // Fallback to API key setting for CLI argument compatibility
-      const apiKey = settingsService.get('apiKey');
-      if (apiKey && typeof apiKey === 'string' && apiKey.trim() !== '') {
-        logger.debug(
-          () => `Found apiKey fallback: "${apiKey.substring(0, 8)}..."`,
-        );
-        return apiKey;
-      }
-
-      // Also try provider-specific auth-key for CLI argument compatibility
-      const activeProvider =
-        typeof settingsService.get === 'function'
-          ? settingsService.get('activeProvider')
-          : 'openai';
-      if (activeProvider && typeof activeProvider === 'string') {
-        const providerSettings =
-          settingsService.getProviderSettings?.(activeProvider);
-        const providerAuthKey = providerSettings?.['auth-key'];
-        if (
-          providerAuthKey &&
-          typeof providerAuthKey === 'string' &&
-          providerAuthKey.trim() !== ''
-        ) {
-          logger.debug(
-            () =>
-              `Found provider auth-key for ${activeProvider}: "${providerAuthKey.substring(0, 8)}..."`,
-          );
-          return providerAuthKey;
-        }
       }
 
       const authKeyfile = settingsService.get('auth-keyfile');

@@ -21,28 +21,15 @@ export function isRuntimeAuthTokenProvider(
   );
 }
 
-import { DebugLogger } from '../../debug/DebugLogger.js';
-
-const logger = new DebugLogger('llxprt:auth:token');
-
 export async function resolveRuntimeAuthToken(
   token: ResolvedAuthToken | undefined,
 ): Promise<string | undefined> {
   if (typeof token === 'string') {
-    logger.debug(() => `Returning string token: "${token.substring(0, 8)}..."`);
     return token;
   }
   if (isRuntimeAuthTokenProvider(token)) {
     const result = await token.provide?.();
-    logger.debug(
-      () =>
-        `Provider result: ${typeof result === 'string' ? `"${result.substring(0, 8)}..."` : 'null/undefined'}`,
-    );
     return typeof result === 'string' ? result : undefined;
   }
-  logger.debug(
-    () =>
-      `No token available, token type: ${typeof token}, value: ${JSON.stringify(token)}`,
-  );
   return undefined;
 }
