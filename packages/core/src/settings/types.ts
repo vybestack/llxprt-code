@@ -85,6 +85,15 @@ export interface AdvancedSettings {
 }
 
 /**
+ * Dump context settings
+ */
+export interface DumpContextSettings {
+  enabled: boolean;
+  includeErrors: boolean;
+  directory: string;
+}
+
+/**
  * Event emitted when settings change
  */
 export interface SettingsChangeEvent {
@@ -114,6 +123,7 @@ export interface DiagnosticsInfo {
   ephemeralSettings: Record<string, unknown>;
   modelParams: Record<string, unknown>;
   allSettings: GlobalSettings;
+  dumpContext?: DumpContextSettings;
 }
 
 /**

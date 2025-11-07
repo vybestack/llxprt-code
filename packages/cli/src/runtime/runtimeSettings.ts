@@ -954,6 +954,11 @@ export interface RuntimeDiagnosticsSnapshot {
   profileName: string | null;
   modelParams: Record<string, unknown>;
   ephemeralSettings: Record<string, unknown>;
+  dumpContext?: {
+    enabled: boolean;
+    includeErrors: boolean;
+    directory: string;
+  };
 }
 
 export async function applyProfileSnapshot(
@@ -1054,6 +1059,11 @@ export function getRuntimeDiagnosticsSnapshot(): RuntimeDiagnosticsSnapshot {
 
   const modelParams = getActiveModelParams();
   const ephemeralSettings = config.getEphemeralSettings();
+  const dumpContext = config.getEphemeralSettings().dumpContext as {
+    enabled: boolean;
+    includeErrors: boolean;
+    directory: string;
+  };
 
   return {
     providerName,
@@ -1061,6 +1071,7 @@ export function getRuntimeDiagnosticsSnapshot(): RuntimeDiagnosticsSnapshot {
     profileName,
     modelParams,
     ephemeralSettings,
+    dumpContext,
   };
 }
 

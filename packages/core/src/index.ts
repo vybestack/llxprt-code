@@ -221,6 +221,7 @@ export type {
   AdvancedSettings,
   EventListener,
   EventUnsubscribe,
+  DumpContextSettings,
 } from './settings/types.js';
 export type { TelemetrySettings as SettingsTelemetrySettings } from './settings/types.js';
 

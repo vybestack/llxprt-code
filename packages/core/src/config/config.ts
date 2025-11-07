@@ -39,6 +39,7 @@ import { TodoWrite } from '../tools/todo-write.js';
 import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
 import { TaskTool } from '../tools/task.js';
+import { DumpContextTool } from '../tools/dump-context.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import { ListSubagentsTool } from '../tools/list-subagents.js';
 import { GeminiClient } from '../core/client.js';
@@ -1528,6 +1529,7 @@ export class Config {
     registerCoreTool(TodoWrite);
     registerCoreTool(TodoRead);
     registerCoreTool(TodoPause);
+    registerCoreTool(DumpContextTool, this);
 
     let profileManager = this.getProfileManager();
     if (!profileManager) {

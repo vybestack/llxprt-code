@@ -67,4 +67,7 @@ export enum ToolErrorType {
 
   // WebSearch-specific Errors
   WEB_SEARCH_FAILED = 'web_search_failed',
+
+  // DumpContext-specific Errors
+  DUMP_CONTEXT_TOOL_EXECUTION_ERROR = 'dump_context_tool_execution_error',
 }

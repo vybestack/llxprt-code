@@ -47,11 +47,12 @@ export const diagnosticsCommand: SlashCommand = {
       }
 
       const snapshot = getRuntimeApi().getRuntimeDiagnosticsSnapshot();
+      const dumpContext = snapshot.dumpContext;
       logger.debug(
         () =>
           `[diagnostics] snapshot provider=${snapshot.providerName ?? 'unknown'}`,
       );
-      const diagnostics: string[] = ['# LLxprt Diagnostics\n'];
+      const diagnostics: string[] = ['# LLxprt Diagnostics\\n'];
 
       diagnostics.push('## Provider Information');
       diagnostics.push(`- Active Provider: ${snapshot.providerName ?? 'none'}`);
@@ -188,7 +189,7 @@ export const diagnosticsCommand: SlashCommand = {
         `- MCP Server Command: ${mcpServerCommand ?? 'not set'}`,
       );
 
-      diagnostics.push('\n## Memory/Context');
+      diagnostics.push('\\n## Memory/Context');
       const userMemory = config.getUserMemory();
       diagnostics.push(
         `- User Memory: ${userMemory ? `${userMemory.length} characters` : 'Not loaded'}`,
@@ -196,6 +197,16 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push(
         `- Context Files: ${config.getLlxprtMdFileCount() || 0} files`,
       );
+
+      // Add dump context settings
+      if (dumpContext) {
+        diagnostics.push('\\n## Dump Context');
+        diagnostics.push(`- Enabled: ${dumpContext.enabled || false}`);
+        diagnostics.push(
+          `- Include Errors: ${dumpContext.includeErrors || false}`,
+        );
+        diagnostics.push(`- Directory: ${dumpContext.directory || 'Not set'}`);
+      }
 
       diagnostics.push('\n## Tools');
       try {

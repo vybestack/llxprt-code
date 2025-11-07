@@ -13,6 +13,7 @@ import {
   EventListener,
   EventUnsubscribe,
   DiagnosticsInfo,
+  DumpContextSettings,
 } from './types.js';
 
 /**
@@ -367,6 +368,9 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       }
     }
 
+    // Get dump context settings from ephemeral settings
+    const dumpContext = this.settings.global.dumpContext as DumpContextSettings;
+
     return Promise.resolve({
       provider: activeProvider,
       model,
@@ -377,6 +381,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
       allSettings: {
         providers: this.settings.providers as Record<string, ProviderSettings>,
       },
+      dumpContext,
     });
   }
 
