@@ -221,8 +221,27 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           );
         }
 
-        // Always show the auth URL in the TUI first, before attempting browser
-        await this.showAuthMessage(authUrl);
+        // Always show the auth URL in the TUI first, before attempting browser (like Gemini does)
+        const message = `Please visit the following URL to authorize with Anthropic Claude:\n${authUrl}`;
+        const historyItem: HistoryItemOAuthURL = {
+          type: 'oauth_url',
+          text: message,
+          url: authUrl,
+        };
+        if (this.addItem) {
+          this.addItem(historyItem, Date.now());
+        }
+
+        console.log('Visit the following URL to authorize:');
+        console.log(authUrl);
+
+        // Copy URL to clipboard with error handling
+        try {
+          await ClipboardService.copyToClipboard(authUrl);
+        } catch (error) {
+          // Clipboard copy is non-critical, continue without it
+          console.debug('Failed to copy URL to clipboard:', error);
+        }
 
         if (interactive) {
           console.log('Opening browser for authentication...');
@@ -329,30 +348,6 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       'completeAuth',
     )();
   }
-
-  private async showAuthMessage(authUrl: string): Promise<void> {
-    const message = `Please visit the following URL to authorize with Anthropic Claude:\n${authUrl}`;
-    if (this.addItem) {
-      const historyItem: HistoryItemOAuthURL = {
-        type: 'oauth_url',
-        text: message,
-        url: authUrl,
-      };
-      this.addItem(historyItem, Date.now());
-
-      // Copy URL to clipboard with error handling
-      try {
-        await ClipboardService.copyToClipboard(authUrl);
-      } catch (error) {
-        // Clipboard copy is non-critical, continue without it
-        console.debug('Failed to copy URL to clipboard:', error);
-      }
-    } else {
-      console.log('Visit the following URL to authorize:');
-      console.log(authUrl);
-    }
-  }
-
   /**
    * @plan PLAN-20250823-AUTHFIXES.P08
    * @requirement REQ-001.1

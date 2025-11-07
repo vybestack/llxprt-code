@@ -171,7 +171,9 @@ describe('providerCommand /provider switch', () => {
     const result = await providerCommand.action(context, 'qwen');
 
     expect(mocks.runtimeApi.getActiveProviderName).toHaveBeenCalledTimes(1);
-    expect(mocks.runtimeApi.switchActiveProvider).toHaveBeenCalledWith('qwen');
+    expect(mocks.runtimeApi.switchActiveProvider).toHaveBeenCalledWith('qwen', {
+      addItem: context.ui.addItem,
+    });
     expect(context.ui.addItem).toHaveBeenCalledWith(
       {
         type: 'info',

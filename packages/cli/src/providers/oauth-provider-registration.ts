@@ -58,7 +58,7 @@ export function ensureOAuthProviderRegistered(
 
   switch (providerName) {
     case 'gemini':
-      oauthProvider = new GeminiOAuthProvider(effectiveTokenStore);
+      oauthProvider = new GeminiOAuthProvider(effectiveTokenStore, addItem);
       break;
     case 'qwen':
       oauthProvider = new QwenOAuthProvider(effectiveTokenStore, addItem);

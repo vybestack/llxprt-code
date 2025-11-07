@@ -24,8 +24,8 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
   const providerMatch = text.match(/authorize with ([^\n:]+)/i);
   const provider = providerMatch ? providerMatch[1] : 'the service';
 
-  // Create OSC 8 hyperlink for terminal emulators that support it (iTerm2, etc)
-  const osc8Link = `\u001b]8;;${url}\u001b\\${url}\u001b]8;;\u001b\\`;
+  // Create OSC 8 hyperlink with friendly short text that won't wrap
+  const osc8Link = `\u001b]8;;${url}\u001b\\Click here to authorize with ${provider}\u001b]8;;\u001b\\`;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -46,7 +46,7 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
         </Box>
         <Box>
           <Text color={Colors.Comment} dimColor wrap="wrap">
-            Copy URL: {url}
+            Or copy this URL: {url}
           </Text>
         </Box>
       </Box>

@@ -196,25 +196,25 @@ export class QwenOAuthProvider implements OAuthProvider {
         console.log('\nQwen OAuth Authentication');
         console.log('─'.repeat(40));
 
-        // Always show OAuth URL in the TUI first, before attempting browser
+        // Always show OAuth URL in the TUI first, before attempting browser (like Gemini does)
+        const historyItem: HistoryItemOAuthURL = {
+          type: 'oauth_url',
+          text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
+          url: authUrl,
+        };
         if (this.addItem) {
-          const historyItem: HistoryItemOAuthURL = {
-            type: 'oauth_url',
-            text: `Please visit the following URL to authorize with Qwen:\n${authUrl}`,
-            url: authUrl,
-          };
           this.addItem(historyItem, Date.now());
+        }
 
-          // Copy URL to clipboard with error handling
-          try {
-            await ClipboardService.copyToClipboard(authUrl);
-          } catch (error) {
-            // Clipboard copy is non-critical, continue without it
-            console.debug('Failed to copy URL to clipboard:', error);
-          }
-        } else {
-          console.log('Please visit the following URL to authorize:');
-          console.log(authUrl);
+        console.log('Please visit the following URL to authorize:');
+        console.log(authUrl);
+
+        // Copy URL to clipboard with error handling
+        try {
+          await ClipboardService.copyToClipboard(authUrl);
+        } catch (error) {
+          // Clipboard copy is non-critical, continue without it
+          console.debug('Failed to copy URL to clipboard:', error);
         }
 
         // Line 40: IF shouldLaunchBrowser()
