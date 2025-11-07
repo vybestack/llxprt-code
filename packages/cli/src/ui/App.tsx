@@ -246,6 +246,14 @@ const App = (props: AppInternalProps) => {
     return cleanup;
   }, [addItem]);
 
+  // Set global OAuth addItem callback for Gemini OAuth flow
+  useEffect(() => {
+    (global as Record<string, unknown>).__oauth_add_item = addItem;
+    return () => {
+      delete (global as Record<string, unknown>).__oauth_add_item;
+    };
+  }, [addItem]);
+
   const {
     consoleMessages,
     handleNewMessage,

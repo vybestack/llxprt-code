@@ -19,11 +19,13 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
 }) => {
   const prefix = '[OAUTH] ';
   const prefixWidth = prefix.length;
-  const linkText = 'Click here to authorize';
 
   // Extract provider name from text if available
-  const providerMatch = text.match(/authorize with (\w+)/i);
+  const providerMatch = text.match(/authorize with ([^\n:]+)/i);
   const provider = providerMatch ? providerMatch[1] : 'the service';
+
+  // Create OSC 8 hyperlink for terminal emulators that support it (iTerm2, etc)
+  const osc8Link = `\u001b]8;;${url}\u001b\\${url}\u001b]8;;\u001b\\`;
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -32,24 +34,19 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
           <Text color={Colors.AccentBlue}>{prefix}</Text>
         </Box>
         <Box flexGrow={1}>
-          <Text wrap="wrap" color={Colors.AccentBlue}>
-            <Text bold>{text}</Text>
+          <Text color={Colors.AccentBlue}>
+            <Text bold>OAuth Authentication Required for {provider}</Text>
           </Text>
         </Box>
       </Box>
 
       <Box flexDirection="column" paddingLeft={prefixWidth + 1}>
         <Box marginBottom={1}>
-          <Text color={Colors.AccentCyan}>
-            <Text underline>{`${linkText} with ${provider}: `}</Text>
-            <Text underline color={SemanticColors.text.link}>
-              {url}
-            </Text>
-          </Text>
+          <Text color={SemanticColors.text.link}>{osc8Link}</Text>
         </Box>
         <Box>
-          <Text color={Colors.Comment} wrap="wrap">
-            URL: {url}
+          <Text color={Colors.Comment} dimColor wrap="wrap">
+            Copy URL: {url}
           </Text>
         </Box>
       </Box>

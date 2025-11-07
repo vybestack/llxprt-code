@@ -221,20 +221,18 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           );
         }
 
+        // Always show the auth URL in the TUI first, before attempting browser
+        await this.showAuthMessage(authUrl);
+
         if (interactive) {
           console.log('Opening browser for authentication...');
-
-          await this.showAuthMessage(authUrl);
 
           try {
             await openBrowserSecurely(authUrl);
           } catch (error) {
             console.log('Failed to open browser automatically.');
             this.logger.debug(() => `Browser launch error: ${error}`);
-            await this.showAuthMessage(authUrl);
           }
-        } else {
-          await this.showAuthMessage(authUrl);
         }
 
         console.log('─'.repeat(40));
