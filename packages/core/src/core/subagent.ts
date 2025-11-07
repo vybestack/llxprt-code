@@ -701,7 +701,7 @@ export class SubAgentScope {
           const schedulerRequests: ToolCallRequestInfo[] = [];
 
           for (const request of toolRequests) {
-            if (request.name === 'self.emitvalue') {
+            if (request.name === 'self_emitvalue') {
               manualParts.push(...this.handleEmitValueCall(request));
             } else {
               schedulerRequests.push(request);
@@ -795,7 +795,7 @@ export class SubAgentScope {
 
         const nudgeMessage = `You have stopped calling tools but have not emitted the following required variables: ${remainingVars.join(
           ', ',
-        )}. Please use the 'self.emitvalue' tool to emit them now, or continue working if necessary.`;
+        )}. Please use the 'self_emitvalue' tool to emit them now, or continue working if necessary.`;
 
         this.logger.debug(
           () =>
@@ -1057,7 +1057,7 @@ export class SubAgentScope {
 
           const nudgeMessage = `You have stopped calling tools but have not emitted the following required variables: ${remainingVars.join(
             ', ',
-          )}. Please use the 'self.emitvalue' tool to emit them now, or continue working if necessary.`;
+          )}. Please use the 'self_emitvalue' tool to emit them now, or continue working if necessary.`;
 
           this.logger.debug(
             () =>
@@ -1107,7 +1107,7 @@ export class SubAgentScope {
   /**
    * Processes a list of function calls, executing each one and collecting their responses.
    * This method iterates through the provided function calls, executes them using the
-   * `executeToolCall` function (or handles `self.emitvalue` internally), and aggregates
+   * `executeToolCall` function (or handles `self_emitvalue` internally), and aggregates
    * their results. It also manages error reporting for failed tool executions.
    * @param {FunctionCall[]} functionCalls - An array of `FunctionCall` objects to process.
    * @param {ToolRegistry} toolRegistry - The tool registry to look up and execute tools.
@@ -1141,7 +1141,7 @@ export class SubAgentScope {
       let toolResponse;
 
       // Handle scope-local tools first.
-      if (functionCall.name === 'self.emitvalue') {
+      if (functionCall.name === 'self_emitvalue') {
         const valName = String(requestInfo.args['emit_variable_name']);
         const valVal = String(requestInfo.args['emit_variable_value']);
         this.output.emitted_vars[valName] = valVal;
@@ -1388,7 +1388,7 @@ export class SubAgentScope {
     }
 
     const errorMessage =
-      'self.emitvalue requires emit_variable_name and emit_variable_value arguments.';
+      'self_emitvalue requires emit_variable_name and emit_variable_value arguments.';
     this.logger.warn(
       () => `Subagent ${this.subagentId} failed to emit value: ${errorMessage}`,
     );
@@ -1658,12 +1658,12 @@ export class SubAgentScope {
 
   /**
    * Returns an array of FunctionDeclaration objects for tools that are local to the subagent's scope.
-   * Currently, this includes the `self.emitvalue` tool for emitting variables.
+   * Currently, this includes the `self_emitvalue` tool for emitting variables.
    * @returns An array of `FunctionDeclaration` objects.
    */
   private getScopeLocalFuncDefs() {
     const emitValueTool: FunctionDeclaration = {
-      name: 'self.emitvalue',
+      name: 'self_emitvalue',
       description: `* This tool emits A SINGLE return value from this execution, such that it can be collected and presented to the calling function.
         * You can only emit ONE VALUE each time you call this tool. You are expected to call this tool MULTIPLE TIMES if you have MULTIPLE OUTPUTS.`,
       parameters: {
@@ -1746,10 +1746,10 @@ export class SubAgentScope {
     // Add instructions for emitting variables if needed.
     if (this.outputConfig && this.outputConfig.outputs) {
       let outputInstructions =
-        '\n\nAfter you have achieved all other goals, you MUST emit the required output variables. For each expected output, make one final call to the `self.emitvalue` tool.';
+        '\n\nAfter you have achieved all other goals, you MUST emit the required output variables. For each expected output, make one final call to the `self_emitvalue` tool.';
 
       for (const [key, value] of Object.entries(this.outputConfig.outputs)) {
-        outputInstructions += `\n* Use 'self.emitvalue' to emit the '${key}' key, with a value described as: '${value}'`;
+        outputInstructions += `\n* Use 'self_emitvalue' to emit the '${key}' key, with a value described as: '${value}'`;
       }
       finalPrompt += outputInstructions;
     }
