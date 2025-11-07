@@ -97,5 +97,20 @@ describe('PromptResolver', () => {
       const result = resolver.convertToKebabCase('read_line_range');
       expect(result).toBe('read-line-range');
     });
+
+    it('should handle PascalCase tools correctly', () => {
+      const result = resolver.convertToKebabCase('DeleteLineRange');
+      expect(result).toBe('delete-line-range');
+    });
+
+    it('should handle other PascalCase tools correctly', () => {
+      const result = resolver.convertToKebabCase('InsertAtLine');
+      expect(result).toBe('insert-at-line');
+    });
+
+    it('should handle ReadLineRange PascalCase correctly', () => {
+      const result = resolver.convertToKebabCase('ReadLineRange');
+      expect(result).toBe('read-line-range');
+    });
   });
 });

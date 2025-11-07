@@ -144,9 +144,9 @@ async function buildPromptContext(
       'TodoWrite',
       'WebFetch',
       'WebSearch',
-      'DeleteLineRange',
-      'InsertAtLine',
-      'ReadLineRange',
+      'delete_line_range',
+      'insert_at_line',
+      'read_line_range',
     ];
   } else if (tools.length > 0) {
     const mappedTools = tools
