@@ -74,6 +74,9 @@ function getToolNameMapping(): Record<string, string> {
     todo_write: 'TodoWrite',
     web_fetch: 'WebFetch',
     google_web_search: 'WebSearch',
+    delete_line_range: 'DeleteLineRange',
+    insert_at_line: 'InsertAtLine',
+    read_line_range: 'ReadLineRange',
   };
 }
 
@@ -141,10 +144,25 @@ async function buildPromptContext(
       'TodoWrite',
       'WebFetch',
       'WebSearch',
+      'delete_line_range',
+      'insert_at_line',
+      'read_line_range',
     ];
   } else if (tools.length > 0) {
     const mappedTools = tools
-      .map((toolName) => toolMapping[toolName] || toolName)
+      .map((toolName) => {
+        // First try direct mapping (handles existing snake_case tools)
+        if (toolMapping[toolName]) {
+          return toolMapping[toolName];
+        }
+        // Try mapping kebab-case versions (for new tools)
+        const snakeName = toolName.replace(/-/g, '_');
+        if (toolMapping[snakeName]) {
+          return toolMapping[snakeName];
+        }
+        // If no mapping, it might already be in the right format
+        return toolName;
+      })
       .filter(Boolean);
     enabledTools = Array.from(new Set(mappedTools));
   } else {
