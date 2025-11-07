@@ -49,7 +49,9 @@ import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
   createBootstrapResult,
+  type BootstrapProfileArgs,
 } from './profileBootstrap.js';
+
 import {
   applyProfileSnapshot,
   getCliRuntimeContext,
@@ -1147,6 +1149,12 @@ export async function loadCliConfig(
       warnings: profileWarnings.slice(),
     },
   });
+
+  // Store bootstrap args in runtime context for later use
+  const configWithBootstrapArgs = enhancedConfig as Config & {
+    _bootstrapArgs?: BootstrapProfileArgs;
+  };
+  configWithBootstrapArgs._bootstrapArgs = bootstrapArgs;
 
   if (bootstrapResult.profile.warnings.length > 0) {
     for (const warning of bootstrapResult.profile.warnings) {

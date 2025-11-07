@@ -21,6 +21,10 @@ export interface BootstrapProfileArgs {
   profileName: string | null;
   providerOverride: string | null;
   modelOverride: string | null;
+  keyOverride: string | null;
+  keyfileOverride: string | null;
+  baseurlOverride: string | null;
+  setOverrides: string[] | null;
 }
 
 export interface RuntimeBootstrapMetadata {
@@ -75,6 +79,10 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
     profileName: null,
     providerOverride: null,
     modelOverride: null,
+    keyOverride: null,
+    keyfileOverride: null,
+    baseurlOverride: null,
+    setOverrides: null,
   };
 
   const runtimeMetadata: RuntimeBootstrapMetadata = {
@@ -130,6 +138,43 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
         const { value, nextIndex } = consumeValue(argv, index, inline);
         bootstrapArgs.modelOverride = value;
         index = nextIndex;
+        break;
+      }
+      case '--key': {
+        const { value, nextIndex } = consumeValue(argv, index, inline);
+        bootstrapArgs.keyOverride = value;
+        index = nextIndex;
+        break;
+      }
+      case '--keyfile': {
+        const { value, nextIndex } = consumeValue(argv, index, inline);
+        bootstrapArgs.keyfileOverride = value;
+        index = nextIndex;
+        break;
+      }
+      case '--baseurl': {
+        const { value, nextIndex } = consumeValue(argv, index, inline);
+        bootstrapArgs.baseurlOverride = value;
+        index = nextIndex;
+        break;
+      }
+      case '--set': {
+        // Handle --set arguments which can appear multiple times
+        const setValues: string[] = [];
+        let currentIndex = index;
+
+        while (currentIndex < argv.length) {
+          const nextToken = argv[currentIndex + 1];
+          if (nextToken && !nextToken.startsWith('-')) {
+            setValues.push(nextToken);
+            currentIndex++;
+          } else {
+            break;
+          }
+        }
+
+        bootstrapArgs.setOverrides = setValues.length > 0 ? setValues : null;
+        index = currentIndex;
         break;
       }
       default:

@@ -481,10 +481,23 @@ export async function main() {
   const configProvider = config.getProvider();
   if (configProvider) {
     try {
+      // Extract bootstrap args from config if available (for bundle compatibility)
+      const configWithBootstrapArgs = config as Config & {
+        _bootstrapArgs?: {
+          keyOverride?: string | null;
+          keyfileOverride?: string | null;
+          setOverrides?: string[] | null;
+          baseurlOverride?: string | null;
+        };
+      };
+
       // Apply CLI argument overrides BEFORE provider switch
       // This ensures --key, --keyfile, --baseurl, and --set are applied
       // at the correct time and override profile settings
-      await applyCliArgumentOverrides(argv);
+      await applyCliArgumentOverrides(
+        argv,
+        configWithBootstrapArgs._bootstrapArgs,
+      );
 
       await switchActiveProvider(configProvider);
 
