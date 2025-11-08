@@ -226,6 +226,55 @@ export class PromptResolver {
           toolName: tool,
         });
       } else {
+        // Try alternative approaches before warning
+        // First try PascalCase (the original format before change)
+        const pascalCaseFile = tool + '.md';
+        const pascalCaseResult = this.resolveFile(
+          baseDir,
+          'tools/' + pascalCaseFile,
+          context,
+        );
+
+        if (
+          pascalCaseResult.found &&
+          pascalCaseResult.path &&
+          pascalCaseResult.source
+        ) {
+          resolvedFiles.push({
+            type: 'tool',
+            path: pascalCaseResult.path,
+            source: pascalCaseResult.source,
+            toolName: tool,
+          });
+          continue;
+        }
+
+        // Try snake_case format
+        const snakeCaseFile =
+          tool
+            .replace(/([A-Z])/g, '_$1')
+            .toLowerCase()
+            .replace(/^_/, '') + '.md';
+        const snakeCaseResult = this.resolveFile(
+          baseDir,
+          'tools/' + snakeCaseFile,
+          context,
+        );
+
+        if (
+          snakeCaseResult.found &&
+          snakeCaseResult.path &&
+          snakeCaseResult.source
+        ) {
+          resolvedFiles.push({
+            type: 'tool',
+            path: snakeCaseResult.path,
+            source: snakeCaseResult.source,
+            toolName: tool,
+          });
+          continue;
+        }
+
         // Log warning "Tool prompt not found: " + tool
         console.warn(`Tool prompt not found: ${tool}`);
       }

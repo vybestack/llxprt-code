@@ -967,7 +967,7 @@ describe('subagent.ts', () => {
           'you MUST emit the required output variables',
         );
         expect(systemInstruction).toContain(
-          "Use 'self.emitvalue' to emit the 'result1' key",
+          "Use 'self_emitvalue' to emit the 'result1' key",
         );
       });
 
@@ -1151,7 +1151,7 @@ describe('subagent.ts', () => {
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.GOAL);
       });
 
-      it('should handle self.emitvalue and terminate with GOAL when outputs are met', async () => {
+      it('should handle self_emitvalue and terminate with GOAL when outputs are met', async () => {
         const { config } = await createMockConfig();
         const outputConfig: OutputConfig = {
           outputs: { result: 'The final result' },
@@ -1163,7 +1163,7 @@ describe('subagent.ts', () => {
           createMockStream([
             [
               {
-                name: 'self.emitvalue',
+                name: 'self_emitvalue',
                 args: {
                   emit_variable_name: 'result',
                   emit_variable_value: 'Success!',
@@ -1482,7 +1482,7 @@ describe('subagent.ts', () => {
             'stop',
             [
               {
-                name: 'self.emitvalue',
+                name: 'self_emitvalue',
                 args: {
                   emit_variable_name: 'required_var',
                   emit_variable_value: 'Here it is',
@@ -1536,20 +1536,20 @@ describe('subagent.ts', () => {
           createMockStream([
             [
               {
-                name: 'self.emitvalue',
+                name: 'self_emitvalue',
                 args: { emit_variable_name: 'loop', emit_variable_value: 'v1' },
               },
             ],
             [
               {
-                name: 'self.emitvalue',
+                name: 'self_emitvalue',
                 args: { emit_variable_name: 'loop', emit_variable_value: 'v2' },
               },
             ],
             // This turn should not happen
             [
               {
-                name: 'self.emitvalue',
+                name: 'self_emitvalue',
                 args: { emit_variable_name: 'loop', emit_variable_value: 'v3' },
               },
             ],

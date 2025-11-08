@@ -21,11 +21,13 @@ import {
   RetryHandler,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import { HistoryItemWithoutId } from '../ui/types.js';
+import { ClipboardService } from '../services/ClipboardService.js';
+import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
 import {
   LocalOAuthCallbackServer,
   startLocalOAuthCallback,
 } from './local-oauth-callback.js';
+import { globalOAuthUI } from './global-oauth-ui.js';
 
 enum InitializationState {
   NotStarted = 'not-started',
@@ -217,9 +219,33 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           );
         }
 
-        this.showAuthMessage(authUrl);
+        // Always show the auth URL in the TUI first, before attempting browser (like Gemini does)
+        const message = `Please visit the following URL to authorize with Anthropic Claude:\\n${authUrl}`;
+        const historyItem: HistoryItemOAuthURL = {
+          type: 'oauth_url',
+          text: message,
+          url: authUrl,
+        };
+        // Try instance addItem first, fallback to global
+        const addItem = this.addItem || globalOAuthUI.getAddItem();
+        if (addItem) {
+          addItem(historyItem, Date.now());
+        }
+
+        console.log('Visit the following URL to authorize:');
+        console.log(authUrl);
+
+        // Copy URL to clipboard with error handling
+        try {
+          await ClipboardService.copyToClipboard(authUrl);
+        } catch (error) {
+          // Clipboard copy is non-critical, continue without it
+          console.debug('Failed to copy URL to clipboard:', error);
+        }
 
         if (interactive) {
+          console.log('Opening browser for authentication...');
+
           try {
             await openBrowserSecurely(authUrl);
           } catch (error) {
@@ -318,25 +344,6 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       'completeAuth',
     )();
   }
-
-  private showAuthMessage(authUrl: string): void {
-    const message = `Please visit the following URL to authorize with Anthropic Claude:\n${authUrl}`;
-    if (this.addItem) {
-      this.addItem(
-        {
-          type: 'info',
-          text: message,
-        },
-        Date.now(),
-      );
-    } else {
-      this.logger.debug(
-        () =>
-          'showAuthMessage called without addItem callback - OAuth URL will not be displayed',
-      );
-    }
-  }
-
   /**
    * @plan PLAN-20250823-AUTHFIXES.P08
    * @requirement REQ-001.1

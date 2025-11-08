@@ -1184,7 +1184,14 @@ export interface ProviderRuntimeStatus {
  */
 export async function switchActiveProvider(
   providerName: string,
-  options: { autoOAuth?: boolean; preserveEphemerals?: string[] } = {},
+  options: {
+    autoOAuth?: boolean;
+    preserveEphemerals?: string[];
+    addItem?: (
+      itemData: Omit<HistoryItemWithoutId, 'id'>,
+      baseTimestamp: number,
+    ) => number;
+  } = {},
 ): Promise<ProviderSwitchResult> {
   const autoOAuth = options.autoOAuth ?? false;
   const preserveEphemerals = options.preserveEphemerals ?? [];
@@ -1422,7 +1429,12 @@ export async function switchActiveProvider(
   if (name === 'anthropic') {
     const oauthManager = getCliOAuthManager();
     if (oauthManager) {
-      ensureOAuthProviderRegistered('anthropic', oauthManager);
+      ensureOAuthProviderRegistered(
+        'anthropic',
+        oauthManager,
+        undefined,
+        options.addItem,
+      );
       if (autoOAuth) {
         try {
           const hasNonOAuth =

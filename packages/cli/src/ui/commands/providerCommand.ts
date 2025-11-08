@@ -225,7 +225,9 @@ export const providerCommand: SlashCommand = {
 
       let switchResult;
       try {
-        switchResult = await runtime.switchActiveProvider(providerName);
+        switchResult = await runtime.switchActiveProvider(providerName, {
+          addItem: context.ui.addItem,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {

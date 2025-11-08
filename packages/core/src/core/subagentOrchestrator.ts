@@ -162,6 +162,12 @@ export class SubagentOrchestrator {
       return await this.options.subagentManager.loadSubagent(name);
     } catch (error) {
       if (error instanceof Error) {
+        // Check if this is a "subagent not found" error
+        if (error.message.includes(`'${name}' not found`)) {
+          throw new Error(
+            `Unable to load subagent '${name}': Subagent not found. Use the list_subagents tool to discover available subagents before calling the task tool.`,
+          );
+        }
         throw new Error(`Unable to load subagent '${name}': ${error.message}`);
       }
       throw error;

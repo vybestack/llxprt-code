@@ -91,6 +91,40 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     return { factory, fakeScope };
   };
 
+  it('throws an enhanced error message suggesting list_subagents tool when subagent not found', async () => {
+    const subagentName = 'nonexistent-helper';
+    const loadSubagent = vi
+      .fn()
+      .mockRejectedValue(new Error("Subagent 'nonexistent-helper' not found."));
+    const subagentManager = {
+      loadSubagent,
+    } as unknown as SubagentManager;
+    const profileManager = {
+      loadProfile: vi.fn(),
+    } as unknown as ProfileManager;
+    const { factory } = createScopeFactory();
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager,
+      profileManager,
+      foregroundConfig,
+      scopeFactory: factory,
+      runtimeLoader,
+    });
+
+    await expect(
+      orchestrator.launch({
+        name: subagentName,
+        runConfig: defaultRunConfig,
+      }),
+    ).rejects.toThrow(
+      /Unable to load subagent 'nonexistent-helper': Subagent not found. Use the list_subagents tool to discover available subagents before calling the task tool./,
+    );
+    expect(loadSubagent).toHaveBeenCalledWith(subagentName);
+    expect(factory).not.toHaveBeenCalled();
+  });
+
   it('throws a descriptive error when the subagent config is missing', async () => {
     const subagentName = 'unknown-helper';
     const loadSubagent = vi
