@@ -572,6 +572,10 @@ export function registerCliProviderInfrastructure(
   if (config) {
     config.setProviderManager(manager);
     manager.setConfig(config);
+    logger.debug(
+      () =>
+        `[cli-runtime] ProviderManager#setConfig applied (loggingEnabled=${config.getConversationLoggingEnabled?.() ?? false})`,
+    );
     upsertRuntimeEntry(runtimeId, { config });
   }
 }
@@ -1526,12 +1530,13 @@ export async function updateActiveProviderApiKey(
 
   logger.debug(() => {
     const masked = trimmed ? `***redacted*** (len=${trimmed.length})` : 'null';
-    return `[runtime] updateActiveProviderApiKey provider='${providerName}' value=${masked}`;
+    return `[runtime] updateActiveProviderApiKey provider='${providerName}' value=${masked} CALLED`;
   });
 
   let authType: AuthType | undefined;
   if (!trimmed) {
     settingsService.setProviderSetting(providerName, 'apiKey', undefined);
+    settingsService.setProviderSetting(providerName, 'auth-key', undefined);
     config.setEphemeralSetting('auth-key', undefined);
     config.setEphemeralSetting('auth-keyfile', undefined);
 
@@ -1561,6 +1566,9 @@ export async function updateActiveProviderApiKey(
   settingsService.setProviderSetting(providerName, 'apiKey', trimmed);
   config.setEphemeralSetting('auth-key', trimmed);
   config.setEphemeralSetting('auth-keyfile', undefined);
+
+  // Also store as 'auth-key' in provider settings for bundle compatibility
+  settingsService.setProviderSetting(providerName, 'auth-key', trimmed);
 
   if (providerName === 'gemini') {
     authType = AuthType.USE_GEMINI;
@@ -1730,13 +1738,22 @@ export async function setActiveModel(
  * 4. Apply --baseurl (overrides profile base-url)
  *
  * @param argv - CLI arguments
+ * @param bootstrapArgs - Bootstrap parsed arguments (used for bundle compatibility)
  */
-export async function applyCliArgumentOverrides(argv: {
-  key?: string;
-  keyfile?: string;
-  set?: string[];
-  baseurl?: string;
-}): Promise<void> {
+export async function applyCliArgumentOverrides(
+  argv: {
+    key?: string;
+    keyfile?: string;
+    set?: string[];
+    baseurl?: string;
+  },
+  bootstrapArgs?: {
+    keyOverride?: string | null;
+    keyfileOverride?: string | null;
+    setOverrides?: string[] | null;
+    baseurlOverride?: string | null;
+  },
+): Promise<void> {
   const { readFile } = await import('node:fs/promises');
   const { homedir } = await import('node:os');
   const { applyCliSetArguments } = await import(
@@ -1745,26 +1762,36 @@ export async function applyCliArgumentOverrides(argv: {
 
   const { config } = getCliRuntimeServices();
 
-  // 1. Apply --key (overrides profile auth-key)
-  if (argv.key) {
-    await updateActiveProviderApiKey(argv.key);
+  // 1. Apply --key (bootstrap override takes precedence, then argv)
+  const keyToUse = bootstrapArgs?.keyOverride ?? argv.key;
+  logger.debug(
+    () =>
+      `[runtime] applyCliArgumentOverrides keyToUse=${keyToUse ? '***' : 'null'}`,
+  );
+  if (keyToUse) {
+    logger.debug(() => '[runtime] Calling updateActiveProviderApiKey');
+    await updateActiveProviderApiKey(keyToUse);
+    logger.debug(() => '[runtime] updateActiveProviderApiKey completed');
   }
 
-  // 2. Apply --keyfile (overrides profile auth-keyfile)
-  if (argv.keyfile) {
-    const resolvedPath = argv.keyfile.replace(/^~/, homedir());
+  // 2. Apply --keyfile (bootstrap override takes precedence, then argv)
+  const keyfileToUse = bootstrapArgs?.keyfileOverride ?? argv.keyfile;
+  if (keyfileToUse) {
+    const resolvedPath = keyfileToUse.replace(/^~/, homedir());
     const keyContent = await readFile(resolvedPath, 'utf-8');
     await updateActiveProviderApiKey(keyContent.trim());
     config.setEphemeralSetting('auth-keyfile', resolvedPath);
   }
 
-  // 3. Apply --set arguments (overrides profile ephemerals)
-  if (argv.set && Array.isArray(argv.set) && argv.set.length > 0) {
-    applyCliSetArguments(config, argv.set);
+  // 3. Apply --set arguments (bootstrap override takes precedence, then argv)
+  const setArgsToUse = bootstrapArgs?.setOverrides ?? argv.set;
+  if (setArgsToUse && Array.isArray(setArgsToUse) && setArgsToUse.length > 0) {
+    applyCliSetArguments(config, setArgsToUse);
   }
 
-  // 4. Apply --baseurl (overrides profile base-url)
-  if (argv.baseurl) {
-    await updateActiveProviderBaseUrl(argv.baseurl);
+  // 4. Apply --baseurl (bootstrap override takes precedence, then argv)
+  const baseurlToUse = bootstrapArgs?.baseurlOverride ?? argv.baseurl;
+  if (baseurlToUse) {
+    await updateActiveProviderBaseUrl(baseurlToUse);
   }
 }

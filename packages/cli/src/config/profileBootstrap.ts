@@ -5,8 +5,6 @@
  */
 
 import {
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
   SettingsService,
   type ProviderRuntimeContext,
   type ProviderManager,
@@ -14,6 +12,7 @@ import {
 import { createProviderManager } from '../providers/providerManagerInstance.js';
 import { registerCliProviderInfrastructure } from '../runtime/runtimeSettings.js';
 import type { OAuthManager } from '../auth/oauth-manager.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
 
@@ -21,6 +20,10 @@ export interface BootstrapProfileArgs {
   profileName: string | null;
   providerOverride: string | null;
   modelOverride: string | null;
+  keyOverride: string | null;
+  keyfileOverride: string | null;
+  baseurlOverride: string | null;
+  setOverrides: string[] | null;
 }
 
 export interface RuntimeBootstrapMetadata {
@@ -75,6 +78,10 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
     profileName: null,
     providerOverride: null,
     modelOverride: null,
+    keyOverride: null,
+    keyfileOverride: null,
+    baseurlOverride: null,
+    setOverrides: null,
   };
 
   const runtimeMetadata: RuntimeBootstrapMetadata = {
@@ -85,6 +92,12 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
       timestamp: Date.now(),
     },
   };
+
+  // Debug: log what we're parsing
+  const logger = new DebugLogger('llxprt:bootstrap');
+  logger.debug(
+    () => `parseBootstrapArgs called with argv: ${JSON.stringify(argv)}`,
+  );
 
   const consumeValue = (
     tokens: string[],
@@ -110,7 +123,13 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
       continue;
     }
 
-    const [flag, inline] = token.split('=', 2);
+    let flag = token;
+    let inline: string | undefined;
+    const equalsIndex = token.indexOf('=');
+    if (equalsIndex !== -1) {
+      flag = token.slice(0, equalsIndex);
+      inline = token.slice(equalsIndex + 1);
+    }
 
     switch (flag) {
       case '--profile-load': {
@@ -132,10 +151,80 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
         index = nextIndex;
         break;
       }
+      case '--key': {
+        const { value, nextIndex } = consumeValue(argv, index, inline);
+        bootstrapArgs.keyOverride = value;
+        index = nextIndex;
+        break;
+      }
+      case '--keyfile': {
+        const { value, nextIndex } = consumeValue(argv, index, inline);
+        bootstrapArgs.keyfileOverride = value;
+        index = nextIndex;
+        break;
+      }
+      case '--baseurl': {
+        const { value, nextIndex } = consumeValue(argv, index, inline);
+        bootstrapArgs.baseurlOverride = value;
+        index = nextIndex;
+        break;
+      }
+      case '--set': {
+        const setValues: string[] = [];
+        let currentIndex = index;
+
+        if (inline !== undefined) {
+          const value = normaliseArgValue(inline);
+          if (value) {
+            setValues.push(value);
+          }
+        }
+
+        if (inline === undefined) {
+          while (currentIndex < argv.length) {
+            const nextToken = argv[currentIndex + 1];
+            if (nextToken && !nextToken.startsWith('-')) {
+              const value = normaliseArgValue(nextToken);
+              if (value) {
+                setValues.push(value);
+              }
+              currentIndex++;
+            } else {
+              break;
+            }
+          }
+        }
+
+        if (setValues.length > 0) {
+          if (!bootstrapArgs.setOverrides) {
+            bootstrapArgs.setOverrides = [];
+          }
+          bootstrapArgs.setOverrides.push(...setValues);
+        }
+
+        if (inline === undefined) {
+          index = currentIndex;
+        }
+        break;
+      }
       default:
         break;
     }
   }
+
+  // Debug: log what we parsed
+  logger.debug(
+    () =>
+      `parseBootstrapArgs result: ${JSON.stringify({
+        profileName: bootstrapArgs.profileName,
+        providerOverride: bootstrapArgs.providerOverride,
+        modelOverride: bootstrapArgs.modelOverride,
+        keyOverride: bootstrapArgs.keyOverride ? '***' : null,
+        keyfileOverride: bootstrapArgs.keyfileOverride,
+        baseurlOverride: bootstrapArgs.baseurlOverride,
+        setOverrides: bootstrapArgs.setOverrides,
+      })}`,
+  );
 
   return { bootstrapArgs, runtimeMetadata };
 }
@@ -155,17 +244,18 @@ export async function prepareRuntimeForProfile(
       ? providedService
       : new SettingsService();
 
-  const runtime = createProviderRuntimeContext({
+  const runtimeId = runtimeInit.runtimeId ?? DEFAULT_RUNTIME_ID;
+  const metadata = {
+    ...(runtimeInit.metadata ?? {}),
+    stage: 'prepareRuntimeForProfile',
+  };
+
+  const runtime = {
     settingsService,
     config: runtimeInit.config,
-    runtimeId: runtimeInit.runtimeId ?? DEFAULT_RUNTIME_ID,
-    metadata: {
-      ...(runtimeInit.metadata ?? {}),
-      stage: 'prepareRuntimeForProfile',
-    },
-  });
-
-  setActiveProviderRuntimeContext(runtime);
+    runtimeId,
+    metadata,
+  } as ProviderRuntimeContext;
 
   const { manager: providerManager, oauthManager } = createProviderManager(
     {
@@ -179,6 +269,9 @@ export async function prepareRuntimeForProfile(
     },
   );
 
+  // Register CLI infrastructure AFTER provider manager creation
+  // This ensures tests that call prepareRuntimeForProfile directly still work.
+  // loadCliConfig will call this again but it's idempotent.
   registerCliProviderInfrastructure(providerManager, oauthManager);
 
   return {

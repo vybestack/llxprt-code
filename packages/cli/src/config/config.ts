@@ -49,11 +49,12 @@ import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
   createBootstrapResult,
+  type BootstrapProfileArgs,
 } from './profileBootstrap.js';
+
 import {
   applyProfileSnapshot,
   getCliRuntimeContext,
-  registerCliProviderInfrastructure,
   setCliRuntimeContext,
   switchActiveProvider,
 } from '../runtime/runtimeSettings.js';
@@ -615,6 +616,7 @@ export async function loadCliConfig(
    * @pseudocode bootstrap-order.md lines 1-9
    */
   const bootstrapParsed = parseBootstrapArgs();
+
   const parsedWithOverrides = {
     bootstrapArgs: bootstrapParsed.bootstrapArgs,
     runtimeMetadata: {
@@ -624,8 +626,10 @@ export async function loadCliConfig(
         bootstrapParsed.runtimeMetadata.settingsService,
     },
   };
-  const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
+
   const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
+
+  const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
 
   // Handle --load flag early to apply profile settings
   let effectiveSettings = settings;
@@ -1078,6 +1082,12 @@ export async function loadCliConfig(
     runtimeId: bootstrapRuntimeId,
     metadata: baseBootstrapMetadata,
   });
+
+  // Register provider infrastructure AFTER runtime context but BEFORE any profile application
+  // This is critical for applyProfileSnapshot to access the provider manager
+  const { registerCliProviderInfrastructure } = await import(
+    '../runtime/runtimeSettings.js'
+  );
   if (runtimeState.oauthManager) {
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
@@ -1093,24 +1103,57 @@ export async function loadCliConfig(
     () =>
       `[bootstrap] profileToLoad=${profileToLoad ?? 'none'} providerArg=${argv.provider ?? 'unset'} loadedProfile=${loadedProfile ? 'yes' : 'no'}`,
   );
-  if (loadedProfile && profileToLoad && argv.provider === undefined) {
-    const applyMetadata = {
-      ...baseBootstrapMetadata,
-      stage: 'profile-apply',
-      profileName: profileToLoad,
+
+  // CRITICAL FIX for #492: When --provider is specified with CLI auth (--key/--keyfile/--baseurl),
+  // create a synthetic profile to apply the auth credentials using the same flow as profile loading.
+  // This ensures auth is applied BEFORE provider switch, just like profile loading does.
+  if (
+    argv.provider &&
+    (bootstrapArgs.keyOverride ||
+      bootstrapArgs.keyfileOverride ||
+      bootstrapArgs.baseurlOverride)
+  ) {
+    logger.debug(
+      () => '[bootstrap] Creating synthetic profile for CLI auth args',
+    );
+    const syntheticProfile: Profile = {
+      version: 1,
+      provider: argv.provider,
+      model: argv.model ?? finalModel,
+      modelParams: {},
+      ephemeralSettings: {},
     };
 
-    setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
-      runtimeId: bootstrapRuntimeId,
-      metadata: applyMetadata,
-    });
-    if (runtimeState.oauthManager) {
-      registerCliProviderInfrastructure(
-        runtimeState.providerManager,
-        runtimeState.oauthManager,
-      );
+    if (bootstrapArgs.keyOverride) {
+      syntheticProfile.ephemeralSettings['auth-key'] =
+        bootstrapArgs.keyOverride;
+    }
+    if (bootstrapArgs.keyfileOverride) {
+      syntheticProfile.ephemeralSettings['auth-keyfile'] =
+        bootstrapArgs.keyfileOverride;
+    }
+    if (bootstrapArgs.baseurlOverride) {
+      syntheticProfile.ephemeralSettings['base-url'] =
+        bootstrapArgs.baseurlOverride;
     }
 
+    appliedProfileResult = await applyProfileSnapshot(syntheticProfile, {
+      profileName: 'cli-args',
+    });
+
+    profileProvider = appliedProfileResult.providerName;
+    profileModel = appliedProfileResult.modelName;
+    if (appliedProfileResult.baseUrl) {
+      profileBaseUrl = appliedProfileResult.baseUrl;
+    }
+    if (appliedProfileResult.warnings.length > 0) {
+      profileWarnings.push(...appliedProfileResult.warnings);
+    }
+    logger.debug(
+      () =>
+        `[bootstrap] Applied CLI auth -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
+    );
+  } else if (loadedProfile && profileToLoad && argv.provider === undefined) {
     appliedProfileResult = await applyProfileSnapshot(loadedProfile, {
       profileName: profileToLoad,
     });
@@ -1134,6 +1177,22 @@ export async function loadCliConfig(
     );
   }
 
+  const cliModelOverride = (() => {
+    if (typeof argv.model === 'string') {
+      const trimmed = argv.model.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+    if (typeof bootstrapArgs.modelOverride === 'string') {
+      const trimmed = bootstrapArgs.modelOverride.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+    return undefined;
+  })();
+
   const bootstrapRuntimeContext = getCliRuntimeContext();
   const bootstrapResult = createBootstrapResult({
     runtime: bootstrapRuntimeContext,
@@ -1147,6 +1206,12 @@ export async function loadCliConfig(
       warnings: profileWarnings.slice(),
     },
   });
+
+  // Store bootstrap args in runtime context for later use
+  const configWithBootstrapArgs = enhancedConfig as Config & {
+    _bootstrapArgs?: BootstrapProfileArgs;
+  };
+  configWithBootstrapArgs._bootstrapArgs = bootstrapArgs;
 
   if (bootstrapResult.profile.warnings.length > 0) {
     for (const warning of bootstrapResult.profile.warnings) {
@@ -1162,6 +1227,47 @@ export async function loadCliConfig(
         `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
           error instanceof Error ? error.message : String(error)
         }`,
+    );
+  }
+
+  if (cliModelOverride) {
+    runtimeState.runtime.settingsService.setProviderSetting(
+      finalProvider,
+      'model',
+      cliModelOverride,
+    );
+    enhancedConfig.setModel(cliModelOverride);
+    const configWithCliOverride = enhancedConfig as Config & {
+      _cliModelOverride?: string;
+    };
+    configWithCliOverride._cliModelOverride = cliModelOverride;
+    logger.debug(
+      () =>
+        `[bootstrap] Re-applied CLI model override '${cliModelOverride}' after provider activation`,
+    );
+  }
+
+  // Apply CLI argument overrides AFTER provider switch (switchActiveProvider clears ephemerals)
+  // Note: We already applied key/keyfile/baseurl earlier, but we need to reapply after provider switch
+  // Also apply --set arguments which weren't handled earlier
+  if (
+    bootstrapArgs &&
+    (bootstrapArgs.keyOverride ||
+      bootstrapArgs.keyfileOverride ||
+      bootstrapArgs.baseurlOverride ||
+      (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
+  ) {
+    const { applyCliArgumentOverrides } = await import(
+      '../runtime/runtimeSettings.js'
+    );
+    await applyCliArgumentOverrides(
+      {
+        key: argv.key,
+        keyfile: argv.keyfile,
+        baseurl: argv.baseurl,
+        set: argv.set as string[] | undefined,
+      },
+      bootstrapArgs,
     );
   }
 

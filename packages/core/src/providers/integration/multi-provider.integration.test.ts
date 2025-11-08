@@ -15,6 +15,9 @@ import type { Config } from '../../config/config.js';
 const resolveDefaultModel = (): string =>
   process.env.LLXPRT_DEFAULT_MODEL ?? 'gpt-4o';
 
+const runningInCI = process.env.CI === 'true';
+const realProviderOptIn = process.env.LLXPRT_RUN_REAL_PROVIDER_TESTS === 'true';
+
 describe('Multi-Provider Integration Tests', () => {
   let apiKey: string | null = null;
   let baseURL: string | undefined = undefined;
@@ -24,6 +27,14 @@ describe('Multi-Provider Integration Tests', () => {
   let runtimeConfig: Config;
 
   beforeAll(() => {
+    if (runningInCI && !realProviderOptIn) {
+      console.log(
+        '\nINFO: Skipping Multi-Provider Integration Tests in CI. Set LLXPRT_RUN_REAL_PROVIDER_TESTS=true to enable.',
+      );
+      skipTests = true;
+      return;
+    }
+
     // Only load OpenAI API key from environment variable
     apiKey = process.env.OPENAI_API_KEY || null;
     baseURL = process.env.OPENAI_BASE_URL || undefined;

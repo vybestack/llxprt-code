@@ -8,6 +8,96 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+function createMockSettingsService() {
+  const providerStore = new Map<string, Record<string, unknown>>();
+  const globalStore = new Map<string, unknown>();
+  return {
+    setProviderSetting(provider: string, key: string, value: unknown) {
+      const entry = providerStore.get(provider) ?? {};
+      if (value === undefined) {
+        delete entry[key];
+      } else {
+        entry[key] = value;
+      }
+      providerStore.set(provider, entry);
+    },
+    getProviderSetting(provider: string, key: string) {
+      return providerStore.get(provider)?.[key];
+    },
+    async updateSettings(
+      provider: string,
+      updates: Record<string, unknown>,
+    ): Promise<void> {
+      const entry = providerStore.get(provider) ?? {};
+      Object.assign(entry, updates);
+      providerStore.set(provider, entry);
+    },
+    async switchProvider(): Promise<void> {
+      // no-op for tests
+    },
+    set(key: string, value: unknown) {
+      if (value === undefined) {
+        globalStore.delete(key);
+      } else {
+        globalStore.set(key, value);
+      }
+    },
+    get(key: string) {
+      return globalStore.get(key);
+    },
+    setCurrentProfileName(name: string | null) {
+      if (name === null) {
+        globalStore.delete('currentProfile');
+      } else {
+        globalStore.set('currentProfile', name);
+      }
+    },
+    getCurrentProfileName() {
+      const value = globalStore.get('currentProfile');
+      return (typeof value === 'string' ? value : null) ?? null;
+    },
+  };
+}
+
+function createRuntimeState() {
+  const settingsService = createMockSettingsService();
+  return {
+    runtime: {
+      runtimeId: 'cli.runtime.test',
+      metadata: {},
+      settingsService,
+    },
+    providerManager: {
+      getActiveProviderName: vi.fn(() => 'openai'),
+      getActiveProvider: vi.fn(() => ({
+        name: 'openai',
+        getDefaultModel: () => 'hf:zai-org/GLM-4.6',
+      })),
+      setActiveProvider: vi.fn().mockResolvedValue(undefined),
+      listProviders: vi.fn(() => ['openai']),
+      prepareStatelessProviderInvocation: vi.fn(),
+      getAvailableModels: vi
+        .fn()
+        .mockResolvedValue([
+          { id: 'hf:zai-org/GLM-4.6', name: 'hf:zai-org/GLM-4.6' },
+        ]),
+    },
+    oauthManager: {
+      isOAuthEnabled: vi.fn(() => false),
+      toggleOAuthEnabled: vi.fn(),
+      authenticate: vi.fn(),
+    },
+  };
+}
+
+const runtimeStateRef = vi.hoisted(() => ({
+  value: createRuntimeState(),
+}));
+
+const resetRuntimeState = () => {
+  runtimeStateRef.value = createRuntimeState();
+};
+
 // Mock the '@vybestack/llxprt-code-core' module
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual = await importOriginal();
@@ -94,6 +184,11 @@ const parseBootstrapArgsMock = vi.hoisted(() =>
     bootstrapArgs: {
       profileName: undefined,
       providerOverride: undefined,
+      modelOverride: undefined,
+      keyOverride: undefined,
+      keyfileOverride: undefined,
+      baseurlOverride: undefined,
+      setOverrides: null,
     },
     runtimeMetadata: {},
   })),
@@ -101,9 +196,27 @@ const parseBootstrapArgsMock = vi.hoisted(() =>
 
 vi.mock('./profileBootstrap.js', async (importOriginal) => {
   const actual = await importOriginal();
+  const prepareRuntimeForProfile = vi.fn(async () => runtimeStateRef.value);
+  const createBootstrapResult = vi.fn(
+    ({
+      runtime,
+      providerManager,
+      oauthManager,
+      bootstrapArgs,
+      profileApplication,
+    }) => ({
+      runtime,
+      providerManager,
+      oauthManager,
+      bootstrapArgs,
+      profile: profileApplication,
+    }),
+  );
   return {
     ...actual,
     parseBootstrapArgs: parseBootstrapArgsMock,
+    prepareRuntimeForProfile,
+    createBootstrapResult,
   };
 });
 
@@ -130,6 +243,69 @@ vi.mock('../utils/events.js', () => ({
     emit: vi.fn(),
   },
 }));
+
+vi.mock('../runtime/runtimeSettings.js', () => {
+  const applyProfileSnapshot = vi.fn(
+    async (
+      profile: {
+        provider?: string | null;
+        model?: string | null;
+        ephemeralSettings?: Record<string, unknown>;
+      },
+      options: { profileName?: string } = {},
+    ) => ({
+      profileName: options.profileName,
+      providerName: profile.provider ?? 'openai',
+      modelName: profile.model ?? 'hf:zai-org/GLM-4.6',
+      infoMessages: [],
+      warnings: [],
+      providerChanged: true,
+      authType: undefined,
+      baseUrl:
+        (profile.ephemeralSettings?.['base-url'] as string | undefined) ??
+        undefined,
+      didFallback: false,
+      requestedProvider: profile.provider ?? null,
+    }),
+  );
+
+  const getCliRuntimeContext = vi.fn(() => runtimeStateRef.value.runtime);
+  const setCliRuntimeContext = vi.fn((_service, config) => {
+    runtimeStateRef.value.runtime.config = config;
+  });
+  const switchActiveProvider = vi.fn(async (providerName: string) => ({
+    changed: true,
+    previousProvider: null,
+    nextProvider: providerName,
+    infoMessages: [],
+    authType: undefined,
+  }));
+  const applyCliArgumentOverrides = vi.fn(async () => {});
+  const registerCliProviderInfrastructure = vi.fn();
+  const getCliRuntimeServices = vi.fn(() => ({
+    runtime: runtimeStateRef.value.runtime,
+    providerManager: runtimeStateRef.value.providerManager,
+    config: runtimeStateRef.value.runtime.config,
+    settingsService: runtimeStateRef.value.runtime.settingsService,
+  }));
+
+  return {
+    applyProfileSnapshot,
+    getCliRuntimeContext,
+    setCliRuntimeContext,
+    switchActiveProvider,
+    applyCliArgumentOverrides,
+    registerCliProviderInfrastructure,
+    getCliRuntimeServices,
+    getCliProviderManager: vi.fn(() => runtimeStateRef.value.providerManager),
+    getCliRuntimeConfig: vi.fn(() => runtimeStateRef.value.runtime.config),
+    getActiveProviderStatus: vi.fn(() => ({
+      name: 'openai',
+      isReady: true,
+    })),
+    listProviders: vi.fn(() => ['openai']),
+  };
+});
 
 const setProviderApiKeyMock = vi.fn(async (_apiKey?: string) => ({
   success: true,
@@ -235,7 +411,20 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setProviderApiKeyMock.mockClear();
+    resetRuntimeState();
     parseBootstrapArgsMock.mockReset();
+    parseBootstrapArgsMock.mockReturnValue({
+      bootstrapArgs: {
+        profileName: undefined,
+        providerOverride: undefined,
+        modelOverride: undefined,
+        keyOverride: undefined,
+        keyfileOverride: undefined,
+        baseurlOverride: undefined,
+        setOverrides: null,
+      },
+      runtimeMetadata: {},
+    });
 
     settings = {
       memoryImportFormat: 'tree',
@@ -657,6 +846,77 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
   });
 
   describe('Invalid provider handling', () => {
+    it('prefers CLI model overrides even when a profile provides a model', async () => {
+      const profile = {
+        version: 1,
+        provider: 'openai',
+        model: 'hf:zai-org/GLM-4.6',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+
+      const mockInstance = {
+        loadProfile: vi.fn().mockResolvedValue(profile),
+        profileExists: vi.fn().mockResolvedValue(true),
+      };
+
+      MockedProfileManager.mockImplementation(() => mockInstance);
+
+      parseBootstrapArgsMock.mockReturnValueOnce({
+        bootstrapArgs: {
+          profileName: 'synthetic',
+          providerOverride: undefined,
+        },
+        runtimeMetadata: {},
+      });
+
+      const cliArgs = {
+        profileLoad: 'synthetic',
+        provider: undefined,
+        model: 'hf:MiniMaxAI/MiniMax-M2',
+        sandbox: undefined,
+        sandboxImage: undefined,
+        debug: false,
+        prompt: undefined,
+        promptInteractive: undefined,
+        allFiles: false,
+        showMemoryUsage: false,
+        yolo: false,
+        approvalMode: undefined,
+        telemetry: false,
+        checkpointing: false,
+        telemetryTarget: undefined,
+        telemetryOtlpEndpoint: undefined,
+        telemetryLogPrompts: undefined,
+        telemetryOutfile: undefined,
+        allowedMcpServerNames: undefined,
+        experimentalAcp: false,
+        extensions: undefined,
+        listExtensions: false,
+        key: undefined,
+        keyfile: undefined,
+        baseurl: undefined,
+        proxy: undefined,
+        includeDirectories: undefined,
+        loadMemoryFromIncludeDirectories: undefined,
+        ideMode: undefined,
+        screenReader: false,
+        useSmartEdit: false,
+        sessionSummary: undefined,
+        set: undefined,
+        promptWords: undefined,
+      };
+
+      const configInstance = await loadCliConfig(
+        settings,
+        extensions,
+        sessionId,
+        cliArgs,
+      );
+
+      expect(configInstance.getModel()).toBe('hf:MiniMaxAI/MiniMax-M2');
+    });
+
     it('should accept explicitly set provider without profile', async () => {
       const cliArgs = {
         profileLoad: undefined,

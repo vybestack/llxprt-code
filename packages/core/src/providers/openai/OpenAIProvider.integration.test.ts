@@ -13,7 +13,16 @@ import type { SettingsService } from '../../settings/SettingsService.js';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
-const skipTests = !OPENAI_API_KEY;
+const runningInCI = process.env.CI === 'true';
+const realProviderOptIn = process.env.LLXPRT_RUN_REAL_PROVIDER_TESTS === 'true';
+const skipRealApiTests = runningInCI && !realProviderOptIn;
+const skipTests = skipRealApiTests || !OPENAI_API_KEY;
+
+if (skipRealApiTests) {
+  console.log(
+    '\nINFO: Skipping OpenAIProvider Integration Tests in CI. Set LLXPRT_RUN_REAL_PROVIDER_TESTS=true to enable.',
+  );
+}
 
 const resolveDefaultModel = (): string =>
   process.env.LLXPRT_DEFAULT_MODEL ?? 'gpt-4o';

@@ -100,9 +100,9 @@ describe('gemini.tsx main function', () => {
     loadSettingsMock = vi.mocked(loadSettings);
 
     // Store and clear sandbox-related env variables to ensure a consistent test environment
-    originalEnvGeminiSandbox = process.env.GEMINI_SANDBOX;
+    originalEnvGeminiSandbox = process.env.LLXPRT_SANDBOX;
     originalEnvSandbox = process.env.SANDBOX;
-    delete process.env.GEMINI_SANDBOX;
+    delete process.env.LLXPRT_SANDBOX;
     delete process.env.SANDBOX;
 
     initialUnhandledRejectionListeners =
@@ -112,9 +112,9 @@ describe('gemini.tsx main function', () => {
   afterEach(() => {
     // Restore original env variables
     if (originalEnvGeminiSandbox !== undefined) {
-      process.env.GEMINI_SANDBOX = originalEnvGeminiSandbox;
+      process.env.LLXPRT_SANDBOX = originalEnvGeminiSandbox;
     } else {
-      delete process.env.GEMINI_SANDBOX;
+      delete process.env.LLXPRT_SANDBOX;
     }
     if (originalEnvSandbox !== undefined) {
       process.env.SANDBOX = originalEnvSandbox;

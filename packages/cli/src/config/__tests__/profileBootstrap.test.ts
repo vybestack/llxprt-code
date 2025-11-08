@@ -4,17 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
   createBootstrapResult,
 } from '../profileBootstrap.js';
 
+vi.mock('../../runtime/runtimeSettings.js', () => ({
+  registerCliProviderInfrastructure: vi.fn(),
+}));
+
 type BootstrapProfileArgs = {
   profileName: string | null;
   providerOverride: string | null;
   modelOverride: string | null;
+  keyOverride: string | null;
+  keyfileOverride: string | null;
+  baseurlOverride: string | null;
+  setOverrides: string[] | null;
 };
 
 type RuntimeMetadata = {
@@ -92,6 +100,24 @@ describe('profileBootstrap helpers', () => {
     });
   });
 
+  it('merges repeated --set arguments while preserving their order', () => {
+    process.argv = [
+      'node',
+      'llxprt',
+      '--set',
+      'modelparam.temperature=1',
+      '--set',
+      'context-limit=190000',
+      '--set=shell-replacement=true',
+    ];
+    const parsed = parseArgs();
+    expect(parsed.bootstrapArgs.setOverrides).toEqual([
+      'modelparam.temperature=1',
+      'context-limit=190000',
+      'shell-replacement=true',
+    ]);
+  });
+
   it('prepares runtime before applying profile state @plan:PLAN-20251020-STATELESSPROVIDER3.P05 @requirement:REQ-SP3-001', async () => {
     process.argv = ['node', 'llxprt', '--profile-load', 'workspace'];
     const parsed = parseArgs();
@@ -119,6 +145,10 @@ describe('profileBootstrap helpers', () => {
         profileName: 'synthetic',
         providerOverride: null,
         modelOverride: null,
+        keyOverride: null,
+        keyfileOverride: null,
+        baseurlOverride: null,
+        setOverrides: null,
       },
       runtimeMetadata: {
         runtimeId: 'cli-runtime',

@@ -4,6 +4,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+const wantWarningSuppression =
+  process.env.LLXPRT_SUPPRESS_NODE_WARNINGS !== 'false';
+if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
+  process.env.NODE_NO_WARNINGS = '1';
+  const suppressedWarningCodes = new Set(['DEP0040', 'DEP0169']);
+  type WarningMessage =
+    | string
+    | {
+        code?: string;
+        stack?: string;
+        message?: string;
+        [key: string]: unknown;
+      };
+  process.removeAllListeners('warning');
+  process.on('warning', (warning: WarningMessage) => {
+    const warningCode =
+      typeof warning === 'string'
+        ? undefined
+        : typeof warning?.code === 'string'
+          ? warning.code
+          : undefined;
+    if (warningCode && suppressedWarningCodes.has(warningCode)) {
+      return;
+    }
+    const message =
+      typeof warning === 'string'
+        ? warning
+        : (warning?.stack ?? warning?.message ?? String(warning));
+    console.warn(message);
+  });
+}
+
 import React, { ErrorInfo, useState, useEffect } from 'react';
 import { render, Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
@@ -49,7 +81,7 @@ import {
 import { getCliVersion } from './utils/version.js';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
-import { createProviderManager } from './providers/providerManagerInstance.js';
+// createProviderManager removed - provider manager now created in loadCliConfig()
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
@@ -58,7 +90,6 @@ import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.
 import { appEvents, AppEvent } from './utils/events.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import {
-  registerCliProviderInfrastructure,
   setCliRuntimeContext,
   switchActiveProvider,
   setActiveModel,
@@ -357,16 +388,14 @@ export async function main() {
   consolePatcher.patch();
   registerCleanup(consolePatcher.cleanup);
 
-  const { manager: providerManager, oauthManager } = createProviderManager(
-    {
-      settingsService: runtimeSettingsService,
-      config,
-      runtimeId: 'cli.providerManager',
-      metadata: { source: 'cli.getProviderManager' },
-    },
-    { config, allowBrowserEnvironment: false, settings },
-  );
-  registerCliProviderInfrastructure(providerManager, oauthManager);
+  // Note: loadCliConfig() already creates and configures the provider manager with CLI args
+  // We just need to retrieve it from the config, not recreate it (which would lose CLI arg auth)
+  const providerManager = config.getProviderManager();
+  if (!providerManager) {
+    throw new Error(
+      '[cli] Provider manager should have been initialized by loadCliConfig',
+    );
+  }
 
   const bootstrapProfileName =
     argv.profileLoad?.trim() ||
@@ -481,15 +510,38 @@ export async function main() {
   const configProvider = config.getProvider();
   if (configProvider) {
     try {
+      // Extract bootstrap args from config if available (for bundle compatibility)
+      const configWithBootstrapArgs = config as Config & {
+        _bootstrapArgs?: {
+          keyOverride?: string | null;
+          keyfileOverride?: string | null;
+          setOverrides?: string[] | null;
+          baseurlOverride?: string | null;
+        };
+      };
+
       // Apply CLI argument overrides BEFORE provider switch
       // This ensures --key, --keyfile, --baseurl, and --set are applied
       // at the correct time and override profile settings
-      await applyCliArgumentOverrides(argv);
+      await applyCliArgumentOverrides(
+        argv,
+        configWithBootstrapArgs._bootstrapArgs,
+      );
 
       await switchActiveProvider(configProvider);
 
       const activeProvider = providerManager.getActiveProvider();
-      let configModel = config.getModel();
+      const configWithCliOverride = config as Config & {
+        _cliModelOverride?: string;
+      };
+      const cliModelFromBootstrap =
+        typeof configWithCliOverride._cliModelOverride === 'string'
+          ? configWithCliOverride._cliModelOverride.trim()
+          : undefined;
+      let configModel =
+        cliModelFromBootstrap && cliModelFromBootstrap.length > 0
+          ? cliModelFromBootstrap
+          : config.getModel();
 
       if (
         (!configModel || configModel === 'placeholder-model') &&
