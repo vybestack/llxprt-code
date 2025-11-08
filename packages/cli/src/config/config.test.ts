@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const createMockSettingsService = () => {
+function createMockSettingsService() {
   const providerStore = new Map<string, Record<string, unknown>>();
   const globalStore = new Map<string, unknown>();
   return {
@@ -57,9 +57,9 @@ const createMockSettingsService = () => {
       return (typeof value === 'string' ? value : null) ?? null;
     },
   };
-};
+}
 
-const createRuntimeState = () => {
+function createRuntimeState() {
   const settingsService = createMockSettingsService();
   return {
     runtime: {
@@ -88,7 +88,7 @@ const createRuntimeState = () => {
       authenticate: vi.fn(),
     },
   };
-};
+}
 
 const runtimeStateRef = vi.hoisted(() => ({
   value: createRuntimeState(),
