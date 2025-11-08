@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  vi,
+} from 'vitest';
 import {
   getCoreSystemPromptAsync,
   initializePromptSystem,
@@ -14,6 +22,7 @@ import process from 'node:process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import * as folderStructureModule from '../utils/getFolderStructure.js';
 
 describe('prompts async integration', () => {
   let originalEnv: NodeJS.ProcessEnv;
@@ -32,6 +41,19 @@ describe('prompts async integration', () => {
       options.model,
       options.tools,
     );
+  };
+
+  const buildLargeFolderStructure = (entryCount: number): string => {
+    const header = [
+      'Showing up to 100 items (files + folders).',
+      '',
+      '/tmp/workspace/',
+    ];
+    const entries = Array.from({ length: entryCount }, (_, index) => {
+      const connector = index === entryCount - 1 ? '└───' : '├───';
+      return `${connector}folder-${index}/`;
+    });
+    return [...header, ...entries].join('\n');
   };
 
   beforeAll(async () => {
@@ -172,6 +194,27 @@ describe('prompts async integration', () => {
 
       // Should have the separator before user memory
       expect(prompt).toMatch(/---\s*Custom user preferences here/);
+    });
+
+    it('truncates oversized folder structure payloads for provider safety', async () => {
+      const longStructure = buildLargeFolderStructure(80);
+      const folderSpy = vi
+        .spyOn(folderStructureModule, 'getFolderStructure')
+        .mockResolvedValue(longStructure);
+      try {
+        const prompt = await callPrompt({
+          tools: ['read_file', 'web_fetch'],
+        });
+        expect(folderSpy).toHaveBeenCalled();
+        expect(prompt).toContain(
+          'folder structure truncated for provider limits',
+        );
+        expect(prompt).toContain('├───folder-0/');
+        expect(prompt).toContain('├───folder-19/');
+        expect(prompt).not.toContain('├───folder-40/');
+      } finally {
+        folderSpy.mockRestore();
+      }
     });
   });
 });
