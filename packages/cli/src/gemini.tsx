@@ -499,7 +499,17 @@ export async function main() {
       await switchActiveProvider(configProvider);
 
       const activeProvider = providerManager.getActiveProvider();
-      let configModel = config.getModel();
+      const configWithCliOverride = config as Config & {
+        _cliModelOverride?: string;
+      };
+      const cliModelFromBootstrap =
+        typeof configWithCliOverride._cliModelOverride === 'string'
+          ? configWithCliOverride._cliModelOverride.trim()
+          : undefined;
+      let configModel =
+        cliModelFromBootstrap && cliModelFromBootstrap.length > 0
+          ? cliModelFromBootstrap
+          : config.getModel();
 
       if (
         (!configModel || configModel === 'placeholder-model') &&

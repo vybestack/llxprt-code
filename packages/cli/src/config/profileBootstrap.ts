@@ -123,7 +123,13 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
       continue;
     }
 
-    const [flag, inline] = token.split('=', 2);
+    let flag = token;
+    let inline: string | undefined;
+    const equalsIndex = token.indexOf('=');
+    if (equalsIndex !== -1) {
+      flag = token.slice(0, equalsIndex);
+      inline = token.slice(equalsIndex + 1);
+    }
 
     switch (flag) {
       case '--profile-load': {
@@ -164,22 +170,41 @@ export function parseBootstrapArgs(): ParsedBootstrapArgs {
         break;
       }
       case '--set': {
-        // Handle --set arguments which can appear multiple times
         const setValues: string[] = [];
         let currentIndex = index;
 
-        while (currentIndex < argv.length) {
-          const nextToken = argv[currentIndex + 1];
-          if (nextToken && !nextToken.startsWith('-')) {
-            setValues.push(nextToken);
-            currentIndex++;
-          } else {
-            break;
+        if (inline !== undefined) {
+          const value = normaliseArgValue(inline);
+          if (value) {
+            setValues.push(value);
           }
         }
 
-        bootstrapArgs.setOverrides = setValues.length > 0 ? setValues : null;
-        index = currentIndex;
+        if (inline === undefined) {
+          while (currentIndex < argv.length) {
+            const nextToken = argv[currentIndex + 1];
+            if (nextToken && !nextToken.startsWith('-')) {
+              const value = normaliseArgValue(nextToken);
+              if (value) {
+                setValues.push(value);
+              }
+              currentIndex++;
+            } else {
+              break;
+            }
+          }
+        }
+
+        if (setValues.length > 0) {
+          if (!bootstrapArgs.setOverrides) {
+            bootstrapArgs.setOverrides = [];
+          }
+          bootstrapArgs.setOverrides.push(...setValues);
+        }
+
+        if (inline === undefined) {
+          index = currentIndex;
+        }
         break;
       }
       default:

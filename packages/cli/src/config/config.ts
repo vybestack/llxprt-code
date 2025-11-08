@@ -1177,6 +1177,22 @@ export async function loadCliConfig(
     );
   }
 
+  const cliModelOverride = (() => {
+    if (typeof argv.model === 'string') {
+      const trimmed = argv.model.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+    if (typeof bootstrapArgs.modelOverride === 'string') {
+      const trimmed = bootstrapArgs.modelOverride.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+    return undefined;
+  })();
+
   const bootstrapRuntimeContext = getCliRuntimeContext();
   const bootstrapResult = createBootstrapResult({
     runtime: bootstrapRuntimeContext,
@@ -1211,6 +1227,23 @@ export async function loadCliConfig(
         `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
           error instanceof Error ? error.message : String(error)
         }`,
+    );
+  }
+
+  if (cliModelOverride) {
+    runtimeState.runtime.settingsService.setProviderSetting(
+      finalProvider,
+      'model',
+      cliModelOverride,
+    );
+    enhancedConfig.setModel(cliModelOverride);
+    const configWithCliOverride = enhancedConfig as Config & {
+      _cliModelOverride?: string;
+    };
+    configWithCliOverride._cliModelOverride = cliModelOverride;
+    logger.debug(
+      () =>
+        `[bootstrap] Re-applied CLI model override '${cliModelOverride}' after provider activation`,
     );
   }
 
