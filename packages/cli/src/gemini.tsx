@@ -4,6 +4,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+const wantWarningSuppression =
+  process.env.LLXPRT_SUPPRESS_NODE_WARNINGS !== 'false';
+if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
+  process.env.NODE_NO_WARNINGS = '1';
+  const suppressedWarningCodes = new Set(['DEP0040', 'DEP0169']);
+  type WarningMessage =
+    | string
+    | {
+        code?: string;
+        stack?: string;
+        message?: string;
+        [key: string]: unknown;
+      };
+  process.removeAllListeners('warning');
+  process.on('warning', (warning: WarningMessage) => {
+    const warningCode =
+      typeof warning === 'string'
+        ? undefined
+        : typeof warning?.code === 'string'
+          ? warning.code
+          : undefined;
+    if (warningCode && suppressedWarningCodes.has(warningCode)) {
+      return;
+    }
+    const message =
+      typeof warning === 'string'
+        ? warning
+        : (warning?.stack ?? warning?.message ?? String(warning));
+    console.warn(message);
+  });
+}
+
 import React, { ErrorInfo, useState, useEffect } from 'react';
 import { render, Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
