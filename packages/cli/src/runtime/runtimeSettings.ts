@@ -572,6 +572,10 @@ export function registerCliProviderInfrastructure(
   if (config) {
     config.setProviderManager(manager);
     manager.setConfig(config);
+    logger.debug(
+      () =>
+        `[cli-runtime] ProviderManager#setConfig applied (loggingEnabled=${config.getConversationLoggingEnabled?.() ?? false})`,
+    );
     upsertRuntimeEntry(runtimeId, { config });
   }
 }

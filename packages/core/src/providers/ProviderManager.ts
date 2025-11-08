@@ -33,6 +33,7 @@ import {
   ProviderRuntimeNormalizationError,
 } from './errors.js';
 import { createRuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
 const PROVIDER_CAPABILITY_HINTS: Record<
   string,
@@ -59,6 +60,8 @@ const PROVIDER_CAPABILITY_HINTS: Record<
     hasBaseUrlConfig: true,
   },
 };
+
+const logger = new DebugLogger('llxprt:provider:manager');
 
 interface ProviderManagerInit {
   runtime?: ProviderRuntimeContext;
@@ -173,6 +176,7 @@ export class ProviderManager implements IProviderManager {
   }
 
   setConfig(config: Config): void {
+    const hadConfig = Boolean(this.config);
     const oldLoggingEnabled =
       this.config?.getConversationLoggingEnabled() ?? false;
     const newLoggingEnabled = config.getConversationLoggingEnabled();
@@ -182,8 +186,12 @@ export class ProviderManager implements IProviderManager {
       ? { ...this.runtime, config }
       : { settingsService: this.settingsService, config };
 
-    // If logging state changed, update provider wrapping
-    if (oldLoggingEnabled !== newLoggingEnabled) {
+    // Always ensure providers are wrapped once config becomes available
+    if (!hadConfig || oldLoggingEnabled !== newLoggingEnabled) {
+      logger.debug(
+        () =>
+          `[provider-manager] Wrapping providers (hadConfig=${hadConfig}, loggingChanged=${oldLoggingEnabled !== newLoggingEnabled})`,
+      );
       this.updateProviderWrapping();
     }
   }
@@ -194,6 +202,10 @@ export class ProviderManager implements IProviderManager {
    * @pseudocode base-provider-call-contract.md lines 3-5
    */
   private updateProviderWrapping(): void {
+    logger.debug(
+      () =>
+        `[provider-manager] updateProviderWrapping invoked (providerCount=${this.providers.size}, hasConfig=${Boolean(this.config)})`,
+    );
     // Re-wrap all providers (ALWAYS wrap for token tracking)
     const providers = new Map(this.providers);
 
