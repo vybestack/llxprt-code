@@ -233,17 +233,13 @@ export class HistoryService
   ): Promise<void> {
     // Use a lock to prevent race conditions
     this.tokenizerLock = this.tokenizerLock.then(async () => {
-      let contentTokens = 0;
-
-      // First try to use usage data from the content metadata
-      if (content.metadata?.usage) {
-        contentTokens = content.metadata.usage.totalTokens;
-      } else {
-        // Fall back to tokenizer estimation
-        // Default to gpt-4.1 tokenizer if no model name provided (most universal)
-        const defaultModel = modelName || 'gpt-4.1';
-        contentTokens = await this.estimateContentTokens(content, defaultModel);
-      }
+      // Always derive token counts from the stored content to avoid double counting
+      // when providers attach aggregate usage metadata (which already includes prompt tokens).
+      const defaultModel = modelName || 'gpt-4.1';
+      const contentTokens = await this.estimateContentTokens(
+        content,
+        defaultModel,
+      );
 
       // Atomically update the total
       this.totalTokens += contentTokens;
@@ -647,13 +643,9 @@ export class HistoryService
       let newTotal = 0;
 
       for (const content of this.history) {
-        if (content.metadata?.usage) {
-          newTotal += content.metadata.usage.totalTokens;
-        } else {
-          // Use the model from content metadata, or fall back to provided default
-          const modelToUse = content.metadata?.model || defaultModel;
-          newTotal += await this.estimateContentTokens(content, modelToUse);
-        }
+        // Use the model from content metadata, or fall back to provided default
+        const modelToUse = content.metadata?.model || defaultModel;
+        newTotal += await this.estimateContentTokens(content, modelToUse);
       }
 
       const oldTotal = this.totalTokens;
