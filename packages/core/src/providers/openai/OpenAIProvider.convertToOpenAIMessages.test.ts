@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
+import type { Config } from '../../config/config.js';
 import type { IContent } from '../../services/history/IContent.js';
 
 function callConvert(
   provider: OpenAIProvider,
   contents: IContent[],
   mode: 'native' | 'textual' = 'native',
+  config?: Config,
 ) {
   return (
     (
@@ -13,9 +15,10 @@ function callConvert(
         convertToOpenAIMessages(
           c: IContent[],
           m?: 'native' | 'textual',
+          cfg?: Config,
         ): ReturnType<OpenAIProvider['convertToOpenAIMessages']>;
       }
-    ).convertToOpenAIMessages(contents, mode) ?? []
+    ).convertToOpenAIMessages(contents, mode, config) ?? []
   );
 }
 
@@ -120,6 +123,39 @@ describe('OpenAIProvider.convertToOpenAIMessages', () => {
     expect(errorPayload.status).toBe('error');
     expect(errorPayload.error).toBe('validation failed');
     expect(errorPayload.result).toBe('[no tool result]');
+  });
+
+  it('applies tool-output token caps when serializing tool responses', () => {
+    const oversizedResult = 'line\n'.repeat(2000);
+    const contents: IContent[] = [
+      {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'hist_tool_caps',
+            toolName: 'read_file',
+            result: oversizedResult,
+          },
+        ],
+      },
+    ];
+
+    const fakeConfig = {
+      getEphemeralSettings: () => ({
+        'tool-output-max-tokens': 50,
+        'tool-output-truncate-mode': 'truncate',
+      }),
+    } as unknown as Config;
+
+    const messages = callConvert(provider, contents, 'native', fakeConfig);
+    const payload = JSON.parse(
+      (messages[0]?.role === 'tool' ? messages[0].content : '{}') as string,
+    ) as { result?: string; truncated?: boolean };
+
+    expect(payload.truncated).toBe(true);
+    expect(payload.result).toContain('[Output truncated due to token limit]');
+    expect(payload.result?.length).toBeLessThan(oversizedResult.length);
   });
 
   it('replays tool transcripts as text when textual mode is requested', () => {

@@ -25,6 +25,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
 import { IContent } from '../../services/history/IContent.js';
+import type { Config } from '../../config/config.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
 import {
@@ -51,6 +52,7 @@ import {
   ensureJsonSafe,
   hasUnicodeReplacements,
 } from '../../utils/unicodeUtils.js';
+import { limitOutputTokens } from '../../utils/toolOutputLimiter.js';
 
 const MAX_TOOL_RESPONSE_CHARS = 1024;
 const MAX_TOOL_RESPONSE_RETRY_CHARS = 512;
@@ -678,18 +680,21 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     value?: string;
     truncated?: boolean;
     originalLength?: number;
+    raw?: string;
   } {
     if (result === undefined || result === null) {
       return {};
     }
     if (typeof result === 'string') {
       const limited = this.limitToolResponseText(result);
-      return limited;
+      return { ...limited, raw: result };
     }
     try {
-      return { value: JSON.stringify(result) };
+      const serialized = JSON.stringify(result);
+      return { value: serialized, raw: serialized };
     } catch {
-      return { value: this.coerceToString(result) };
+      const coerced = this.coerceToString(result);
+      return { value: coerced, raw: coerced };
     }
   }
 
@@ -755,14 +760,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return `[TOOL CALL${callId ? ` ${callId}` : ''}] ${block.name ?? 'unknown_tool'} args=${preview}`;
   }
 
-  private describeToolResponseForText(block: ToolResponseBlock): string {
-    const payloadString = this.buildToolResponseContent(block);
+  private describeToolResponseForText(
+    block: ToolResponseBlock,
+    config?: Config,
+  ): string {
+    const payloadString = this.buildToolResponseContent(block, config);
     try {
       const parsed = JSON.parse(payloadString) as {
         status?: string;
         result?: string;
         error?: string;
         toolName?: string;
+        limitMessage?: string;
       };
       const header = `[TOOL RESULT] ${parsed.toolName ?? block.toolName ?? 'unknown_tool'} (${parsed.status ?? 'unknown'})`;
       const bodyParts: string[] = [];
@@ -772,6 +781,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       if (parsed.result && parsed.result !== EMPTY_TOOL_RESULT_PLACEHOLDER) {
         bodyParts.push(parsed.result);
       }
+      if (parsed.limitMessage) {
+        bodyParts.push(parsed.limitMessage);
+      }
       return bodyParts.length > 0
         ? `${header}\n${bodyParts.join('\n')}`
         : header;
@@ -780,7 +792,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
   }
 
-  private buildToolResponseContent(block: ToolResponseBlock): string {
+  private buildToolResponseContent(
+    block: ToolResponseBlock,
+    config?: Config,
+  ): string {
     const payload: {
       status: 'success' | 'error';
       toolName?: string;
@@ -788,6 +803,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       error?: string;
       truncated?: boolean;
       originalLength?: number;
+      limitMessage?: string;
     } = {
       status: block.error ? 'error' : 'success',
       toolName: block.toolName,
@@ -795,13 +811,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
 
     const formatted = this.formatToolResult(block.result);
-    const serializedResult = formatted.value;
+    const serializedResult =
+      config && formatted.raw ? formatted.raw : formatted.value;
     if (serializedResult) {
-      const normalized = this.sanitizeResultString(serializedResult);
-      payload.result = normalized.text;
-      if (normalized.truncated) {
+      const limited = this.limitToolPayload(serializedResult, block, config);
+      payload.result = limited.text;
+      if (limited.truncated) {
         payload.truncated = true;
-        payload.originalLength = normalized.originalLength;
+        payload.originalLength = limited.originalLength;
+      }
+      if (limited.limitMessage) {
+        payload.limitMessage = limited.limitMessage;
       }
     }
     if (formatted.truncated) {
@@ -815,6 +835,48 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     return ensureJsonSafe(JSON.stringify(payload));
+  }
+
+  private limitToolPayload(
+    serializedResult: string,
+    block: ToolResponseBlock,
+    config?: Config,
+  ): {
+    text: string;
+    truncated: boolean;
+    originalLength?: number;
+    limitMessage?: string;
+  } {
+    if (!serializedResult) {
+      return {
+        text: EMPTY_TOOL_RESULT_PLACEHOLDER,
+        truncated: false,
+      };
+    }
+
+    if (!config) {
+      const normalized = this.sanitizeResultString(serializedResult);
+      return {
+        text: normalized.text,
+        truncated: normalized.truncated,
+        originalLength: normalized.originalLength,
+      };
+    }
+
+    const limited = limitOutputTokens(
+      serializedResult,
+      config,
+      block.toolName ?? 'tool_response',
+    );
+    const candidate =
+      limited.content || limited.message || EMPTY_TOOL_RESULT_PLACEHOLDER;
+    const normalized = this.sanitizeResultString(candidate);
+    return {
+      text: normalized.text,
+      truncated: limited.wasTruncated || normalized.truncated,
+      originalLength: normalized.originalLength,
+      limitMessage: limited.wasTruncated ? limited.message : undefined,
+    };
   }
 
   private shouldCompressToolMessages(
@@ -893,6 +955,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private convertToOpenAIMessages(
     contents: IContent[],
     mode: ToolReplayMode = 'native',
+    config?: Config,
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
@@ -964,7 +1027,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         ) as ToolResponseBlock[];
         if (mode === 'textual') {
           const segments = toolResponses
-            .map((tr) => this.describeToolResponseForText(tr))
+            .map((tr) => this.describeToolResponseForText(tr, config))
             .filter(Boolean);
           if (segments.length > 0) {
             messages.push({
@@ -976,7 +1039,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           for (const tr of toolResponses) {
             messages.push({
               role: 'tool',
-              content: this.buildToolResponseContent(tr),
+              content: this.buildToolResponseContent(tr, config),
               tool_call_id: this.normalizeToOpenAIToolId(tr.callId),
             });
           }
@@ -1063,7 +1126,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Convert IContent to OpenAI messages format
-    const messages = this.convertToOpenAIMessages(contents, toolReplayMode);
+    const configForMessages = options.config ?? this.globalConfig;
+    const messages = this.convertToOpenAIMessages(
+      contents,
+      toolReplayMode,
+      configForMessages,
+    );
     if (logger.enabled && toolReplayMode !== 'native') {
       logger.debug(
         () =>
