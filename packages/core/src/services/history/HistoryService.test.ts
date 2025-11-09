@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HistoryService } from './HistoryService.js';
 import { IContent, ContentFactory, ToolResponseBlock } from './IContent.js';
 import { ContentConverters } from './ContentConverters.js';
@@ -731,6 +731,49 @@ describe('HistoryService - Behavioral Tests', () => {
           (ContentConverters as unknown as { generateHistoryId?: () => string })
             .generateHistoryId,
         ).toBeUndefined();
+      });
+    });
+
+    describe('Token counting accuracy', () => {
+      it('avoids double counting when usage metadata is present', async () => {
+        const estimateSpy = vi
+          .spyOn(
+            service as unknown as {
+              estimateContentTokens: (
+                content: IContent,
+                modelName?: string,
+              ) => Promise<number>;
+            },
+            'estimateContentTokens',
+          )
+          .mockResolvedValueOnce(50) // User message tokens
+          .mockResolvedValueOnce(20); // AI completion tokens
+
+        service.add(
+          ContentFactory.createUserMessage('Summarize the requirements.'),
+          'claude-3',
+        );
+        await service.waitForTokenUpdates();
+        expect(service.getTotalTokens()).toBe(50);
+
+        const aiResponse: IContent = {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Here is the summary...' }],
+          metadata: {
+            usage: {
+              promptTokens: 120,
+              completionTokens: 20,
+              totalTokens: 140,
+            },
+          },
+        };
+
+        service.add(aiResponse, 'claude-3');
+        await service.waitForTokenUpdates();
+
+        expect(service.getTotalTokens()).toBe(70);
+        expect(estimateSpy).toHaveBeenCalledTimes(2);
+        estimateSpy.mockRestore();
       });
     });
 
