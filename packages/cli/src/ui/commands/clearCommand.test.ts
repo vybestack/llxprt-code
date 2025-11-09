@@ -8,6 +8,7 @@ import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
 import { clearCommand } from './clearCommand';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+import { getCliRuntimeServices } from '../../runtime/runtimeSettings.js';
 // Mock the telemetry service
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
@@ -19,7 +20,15 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-import { GeminiClient, uiTelemetryService } from '@vybestack/llxprt-code-core';
+vi.mock('../../runtime/runtimeSettings.js', () => ({
+  getCliRuntimeServices: vi.fn(),
+}));
+
+import {
+  Config,
+  GeminiClient,
+  uiTelemetryService,
+} from '@vybestack/llxprt-code-core';
 
 describe('clearCommand', () => {
   let mockContext: CommandContext;
@@ -28,6 +37,7 @@ describe('clearCommand', () => {
   beforeEach(() => {
     mockResetChat = vi.fn().mockResolvedValue(undefined);
     vi.clearAllMocks();
+    vi.mocked(getCliRuntimeServices).mockReset();
 
     mockContext = createMockCommandContext({
       services: {
@@ -80,10 +90,52 @@ describe('clearCommand', () => {
     expect(updateHistoryTokenCountOrder).toBeLessThan(clearOrder);
   });
 
-  it('should not attempt to reset chat if config service is not available', async () => {
+  it('should fallback to runtime services when command context lacks config', async () => {
     if (!clearCommand.action) {
       throw new Error('clearCommand must have an action.');
     }
+
+    const runtimeResetChat = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(getCliRuntimeServices).mockReturnValue({
+      config: {
+        getGeminiClient: () =>
+          ({
+            resetChat: runtimeResetChat,
+          }) as unknown as GeminiClient,
+      } as Config,
+      settingsService: {} as unknown,
+      providerManager: {} as unknown,
+    });
+
+    const nullConfigContext = createMockCommandContext({
+      services: {
+        config: null,
+      },
+    });
+
+    await clearCommand.action(nullConfigContext, '');
+
+    expect(nullConfigContext.ui.setDebugMessage).toHaveBeenCalledWith(
+      'Clearing terminal and resetting chat.',
+    );
+    expect(runtimeResetChat).toHaveBeenCalledTimes(1);
+    expect(uiTelemetryService.resetLastPromptTokenCount).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(nullConfigContext.ui.updateHistoryTokenCount).toHaveBeenCalledWith(
+      0,
+    );
+    expect(nullConfigContext.ui.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('should skip reset when no config is available anywhere', async () => {
+    if (!clearCommand.action) {
+      throw new Error('clearCommand must have an action.');
+    }
+
+    vi.mocked(getCliRuntimeServices).mockImplementation(() => {
+      throw new Error('runtime unavailable');
+    });
 
     const nullConfigContext = createMockCommandContext({
       services: {
@@ -98,12 +150,6 @@ describe('clearCommand', () => {
     );
     expect(mockResetChat).not.toHaveBeenCalled();
     expect(uiTelemetryService.resetLastPromptTokenCount).toHaveBeenCalledTimes(
-      1,
-    );
-    expect(nullConfigContext.ui.updateHistoryTokenCount).toHaveBeenCalledWith(
-      0,
-    );
-    expect(nullConfigContext.ui.updateHistoryTokenCount).toHaveBeenCalledTimes(
       1,
     );
     expect(nullConfigContext.ui.clear).toHaveBeenCalledTimes(1);
