@@ -36,6 +36,7 @@ import {
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import type { ProviderTelemetryContext } from '../types/providerRuntime.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
+import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import {
   retryWithBackoff,
   getErrorStatus,
@@ -739,24 +740,6 @@ export class AnthropicProvider extends BaseProvider {
       }
     };
 
-    const serializeToolResult = (result: unknown): string | undefined => {
-      if (result === undefined || result === null) {
-        return undefined;
-      }
-      if (typeof result === 'string') {
-        return result;
-      }
-      try {
-        return JSON.stringify(result);
-      } catch (error) {
-        this.getToolsLogger().debug(
-          () =>
-            `Failed to stringify tool result, falling back to string conversion: ${error}`,
-        );
-        return String(result);
-      }
-    };
-
     const blocksToText = (blocks: ContentBlock[]): string => {
       let combined = '';
       for (const block of blocks) {
@@ -769,6 +752,9 @@ export class AnthropicProvider extends BaseProvider {
       }
       return combined.trimStart();
     };
+
+    const configForMessages =
+      options.config ?? options.runtime?.config ?? this.globalConfig;
 
     for (const c of filteredContent) {
       const toolResponseBlocks = c.blocks.filter(
@@ -788,10 +774,19 @@ export class AnthropicProvider extends BaseProvider {
 
       if (toolResponseBlocks.length > 0) {
         for (const toolResponseBlock of toolResponseBlocks) {
-          const serializedResult = serializeToolResult(
-            toolResponseBlock.result,
+          const payload = buildToolResponsePayload(
+            toolResponseBlock,
+            configForMessages,
           );
-          let contentPayload = toolTextContent || serializedResult || '';
+          let contentPayload = toolTextContent
+            ? `${toolTextContent}\n${payload.result}`
+            : payload.result;
+
+          if (payload.limitMessage) {
+            contentPayload = contentPayload
+              ? `${contentPayload}\n${payload.limitMessage}`
+              : payload.limitMessage;
+          }
 
           if (!contentPayload) {
             contentPayload = '[empty tool result]';
@@ -810,7 +805,7 @@ export class AnthropicProvider extends BaseProvider {
             content: contentPayload,
           };
 
-          if (toolResponseBlock.error) {
+          if (payload.status === 'error') {
             toolResult.is_error = true;
           }
 

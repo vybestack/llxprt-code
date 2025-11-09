@@ -16,6 +16,10 @@ import type {
   PromptEnvironment,
 } from '../prompt-config/types.js';
 
+const MAX_FOLDER_STRUCTURE_LINES = 40;
+const MAX_FOLDER_STRUCTURE_CHARS = 6000;
+const MAX_FOLDER_STRUCTURE_TOP_LEVEL = 20;
+
 // Singleton instance of PromptService
 let promptService: PromptService | null = null;
 let promptServiceInitialized = false;
@@ -80,6 +84,81 @@ function getToolNameMapping(): Record<string, string> {
   };
 }
 
+function extractFolderStructureHeader(lines: string[]): {
+  header: string[];
+  body: string[];
+} {
+  if (lines.length === 0) {
+    return { header: [], body: [] };
+  }
+
+  const header: string[] = [];
+  let index = 0;
+
+  header.push(lines[index++] ?? '');
+
+  if (index < lines.length && lines[index].trim() === '') {
+    header.push(lines[index++]);
+  }
+
+  if (index < lines.length) {
+    header.push(lines[index++]);
+  }
+
+  return { header, body: lines.slice(index) };
+}
+
+function compactFolderStructureSnapshot(
+  structure?: string,
+): string | undefined {
+  if (!structure) {
+    return structure;
+  }
+
+  const normalized = structure.replace(/\r\n/g, '\n').trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const lines = normalized.split('\n');
+  if (
+    lines.length <= MAX_FOLDER_STRUCTURE_LINES &&
+    normalized.length <= MAX_FOLDER_STRUCTURE_CHARS
+  ) {
+    return normalized;
+  }
+
+  const { header, body } = extractFolderStructureHeader(lines);
+  if (body.length === 0) {
+    return normalized.slice(0, MAX_FOLDER_STRUCTURE_CHARS);
+  }
+
+  const topLevelEntries = body.filter(
+    (line) => line.startsWith('├───') || line.startsWith('└───'),
+  );
+  const candidateLines = topLevelEntries.length > 0 ? topLevelEntries : body;
+  const limitedLines = candidateLines.slice(0, MAX_FOLDER_STRUCTURE_TOP_LEVEL);
+  const omittedCount = Math.max(candidateLines.length - limitedLines.length, 0);
+
+  const truncatedLine = `└───... ${omittedCount} more entries omitted (folder structure truncated for provider limits)`;
+  const snapshotLines = [...header, ...limitedLines, truncatedLine];
+
+  let snapshot = snapshotLines.join('\n');
+  if (snapshot.length > MAX_FOLDER_STRUCTURE_CHARS) {
+    const allowance = Math.max(
+      MAX_FOLDER_STRUCTURE_CHARS - truncatedLine.length - 1,
+      0,
+    );
+    const preserved = snapshotLines
+      .slice(0, snapshotLines.length - 1)
+      .join('\n')
+      .slice(0, allowance);
+    snapshot = preserved ? `${preserved}\n${truncatedLine}` : truncatedLine;
+  }
+
+  return snapshot;
+}
+
 /**
  * Build PromptContext from current environment and parameters
  */
@@ -96,6 +175,7 @@ async function buildPromptContext(
     folderStructure = await getFolderStructure(cwd, {
       maxItems: 100, // Limit for startup performance
     });
+    folderStructure = compactFolderStructureSnapshot(folderStructure);
   } catch (error) {
     // If folder structure generation fails, continue without it
     console.warn('Failed to generate folder structure:', error);

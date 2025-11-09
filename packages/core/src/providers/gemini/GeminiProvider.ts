@@ -32,6 +32,7 @@ import {
 } from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
+import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 
 /**
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -1022,6 +1023,8 @@ export class GeminiProvider extends BaseProvider {
 
     // Convert IContent directly to Gemini format
     const contents: Array<{ role: string; parts: Part[] }> = [];
+    const configForMessages =
+      options.config ?? options.runtime?.config ?? this.globalConfig;
 
     for (const c of content) {
       if (c.speaker === 'human') {
@@ -1064,6 +1067,10 @@ export class GeminiProvider extends BaseProvider {
           throw new Error('Tool content must have a tool_response block');
         }
 
+        const payload = buildToolResponsePayload(
+          toolResponseBlock,
+          configForMessages,
+        );
         contents.push({
           role: 'user',
           parts: [
@@ -1072,7 +1079,12 @@ export class GeminiProvider extends BaseProvider {
                 id: toolResponseBlock.callId,
                 name: toolResponseBlock.toolName,
                 response: {
-                  output: JSON.stringify(toolResponseBlock.result),
+                  status: payload.status,
+                  result: payload.result,
+                  error: payload.error,
+                  truncated: payload.truncated,
+                  originalLength: payload.originalLength,
+                  limitMessage: payload.limitMessage,
                 },
               },
             },

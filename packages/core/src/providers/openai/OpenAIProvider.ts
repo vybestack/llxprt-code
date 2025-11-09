@@ -20,10 +20,12 @@
  */
 
 import OpenAI from 'openai';
+import crypto from 'node:crypto';
 import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
 import { IContent } from '../../services/history/IContent.js';
+import type { Config } from '../../config/config.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
 import {
@@ -47,7 +49,18 @@ import { retryWithBackoff } from '../../utils/retry.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from './openaiRequestParams.js';
+import { ensureJsonSafe } from '../../utils/unicodeUtils.js';
 import { ToolCallPipeline } from './ToolCallPipeline.js';
+import {
+  buildToolResponsePayload,
+  EMPTY_TOOL_RESULT_PLACEHOLDER,
+} from '../utils/toolResponsePayload.js';
+
+const MAX_TOOL_RESPONSE_CHARS = 1024;
+const MAX_TOOL_RESPONSE_RETRY_CHARS = 512;
+const TOOL_ARGS_PREVIEW_LENGTH = 500;
+type ToolReplayMode = 'native' | 'textual';
+const TEXTUAL_TOOL_REPLAY_MODELS = new Set(['openrouter/polaris-alpha']);
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
@@ -512,25 +525,28 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
    */
   private normalizeToOpenAIToolId(id: string): string {
+    const sanitize = (value: string) =>
+      value.replace(/[^a-zA-Z0-9_]/g, '') ||
+      'call_' + crypto.randomUUID().replace(/-/g, '');
     // If already in OpenAI format, return as-is
     if (id.startsWith('call_')) {
-      return id;
+      return sanitize(id);
     }
 
     // For history format, extract the UUID and add OpenAI prefix
     if (id.startsWith('hist_tool_')) {
       const uuid = id.substring('hist_tool_'.length);
-      return 'call_' + uuid;
+      return sanitize('call_' + uuid);
     }
 
     // For Anthropic format, extract the UUID and add OpenAI prefix
     if (id.startsWith('toolu_')) {
       const uuid = id.substring('toolu_'.length);
-      return 'call_' + uuid;
+      return sanitize('call_' + uuid);
     }
 
     // Unknown format - assume it's a raw UUID
-    return 'call_' + id;
+    return sanitize('call_' + id);
   }
 
   /**
@@ -607,11 +623,163 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
   }
 
+  private normalizeToolCallArguments(parameters: unknown): string {
+    if (parameters === undefined || parameters === null) {
+      return '{}';
+    }
+
+    if (typeof parameters === 'string') {
+      const trimmed = parameters.trim();
+      if (!trimmed) {
+        return '{}';
+      }
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return JSON.stringify(parsed);
+        }
+        return JSON.stringify({ value: parsed });
+      } catch {
+        return JSON.stringify({ raw: trimmed });
+      }
+    }
+
+    if (typeof parameters === 'object') {
+      try {
+        return JSON.stringify(parameters);
+      } catch {
+        return JSON.stringify({ raw: '[unserializable object]' });
+      }
+    }
+
+    return JSON.stringify({ value: parameters });
+  }
+
+  private determineToolReplayMode(model?: string): ToolReplayMode {
+    if (!model) {
+      return 'native';
+    }
+    const normalized = model.toLowerCase();
+    if (TEXTUAL_TOOL_REPLAY_MODELS.has(normalized)) {
+      return 'textual';
+    }
+    return 'native';
+  }
+
+  private describeToolCallForText(block: ToolCallBlock): string {
+    const normalizedArgs = this.normalizeToolCallArguments(block.parameters);
+    const preview =
+      normalizedArgs.length > MAX_TOOL_RESPONSE_CHARS
+        ? `${normalizedArgs.slice(0, MAX_TOOL_RESPONSE_CHARS)}… [truncated ${normalizedArgs.length - MAX_TOOL_RESPONSE_CHARS} chars]`
+        : normalizedArgs;
+    const callId = block.id ? ` ${this.normalizeToOpenAIToolId(block.id)}` : '';
+    return `[TOOL CALL${callId ? ` ${callId}` : ''}] ${block.name ?? 'unknown_tool'} args=${preview}`;
+  }
+
+  private describeToolResponseForText(
+    block: ToolResponseBlock,
+    config?: Config,
+  ): string {
+    const payload = buildToolResponsePayload(block, config);
+    const header = `[TOOL RESULT] ${payload.toolName ?? block.toolName ?? 'unknown_tool'} (${payload.status ?? 'unknown'})`;
+    const bodyParts: string[] = [];
+    if (payload.error) {
+      bodyParts.push(`error: ${payload.error}`);
+    }
+    if (payload.result && payload.result !== EMPTY_TOOL_RESULT_PLACEHOLDER) {
+      bodyParts.push(payload.result);
+    }
+    if (payload.limitMessage) {
+      bodyParts.push(payload.limitMessage);
+    }
+    return bodyParts.length > 0 ? `${header}\n${bodyParts.join('\n')}` : header;
+  }
+
+  private buildToolResponseContent(
+    block: ToolResponseBlock,
+    config?: Config,
+  ): string {
+    const payload = buildToolResponsePayload(block, config);
+    return ensureJsonSafe(JSON.stringify(payload));
+  }
+
+  private shouldCompressToolMessages(
+    error: unknown,
+    logger: DebugLogger,
+  ): boolean {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'status' in error &&
+      (error as { status?: number }).status === 400
+    ) {
+      const raw =
+        error &&
+        typeof error === 'object' &&
+        'error' in error &&
+        typeof (error as { error?: { metadata?: { raw?: string } } }).error ===
+          'object'
+          ? ((error as { error?: { metadata?: { raw?: string } } }).error ?? {})
+              .metadata?.raw
+          : undefined;
+      if (raw === 'ERROR') {
+        logger.debug(
+          () =>
+            `[OpenAIProvider] Detected OpenRouter 400 response with raw metadata. Will attempt tool-response compression.`,
+        );
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private compressToolMessages(
+    messages: OpenAI.Chat.ChatCompletionMessageParam[],
+    maxLength: number,
+    logger: DebugLogger,
+  ): boolean {
+    let modified = false;
+    messages.forEach((message, index) => {
+      if (message.role !== 'tool' || typeof message.content !== 'string') {
+        return;
+      }
+      const original = message.content;
+      if (original.length <= maxLength) {
+        return;
+      }
+
+      let nextContent = original;
+      try {
+        const parsed = JSON.parse(original) as {
+          result?: unknown;
+          truncated?: boolean;
+          originalLength?: number;
+        };
+        parsed.result = `[omitted ${original.length} chars due to provider limits]`;
+        parsed.truncated = true;
+        parsed.originalLength = original.length;
+        nextContent = JSON.stringify(parsed);
+      } catch {
+        nextContent = `${original.slice(0, maxLength)}… [truncated ${original.length - maxLength} chars]`;
+      }
+
+      message.content = ensureJsonSafe(nextContent);
+      modified = true;
+      logger.debug(
+        () =>
+          `[OpenAIProvider] Compressed tool message #${index} from ${original.length} chars to ${message.content.length} chars`,
+      );
+    });
+    return modified;
+  }
+
   /**
    * Convert IContent array to OpenAI ChatCompletionMessageParam array
    */
   private convertToOpenAIMessages(
     contents: IContent[],
+    mode: ToolReplayMode = 'native',
+    config?: Config,
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
@@ -633,31 +801,44 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         const textBlocks = content.blocks.filter(
           (b) => b.type === 'text',
         ) as TextBlock[];
+        const text = textBlocks.map((b) => b.text).join('\n');
         const toolCalls = content.blocks.filter(
           (b) => b.type === 'tool_call',
         ) as ToolCallBlock[];
 
         if (toolCalls.length > 0) {
-          // Assistant message with tool calls
-          const text = textBlocks.map((b) => b.text).join('\n');
-          messages.push({
-            role: 'assistant',
-            content: text || null,
-            tool_calls: toolCalls.map((tc) => ({
-              id: this.normalizeToOpenAIToolId(tc.id),
-              type: 'function' as const,
-              function: {
-                name: tc.name,
-                arguments:
-                  typeof tc.parameters === 'string'
-                    ? tc.parameters
-                    : JSON.stringify(tc.parameters),
-              },
-            })),
-          });
+          if (mode === 'textual') {
+            const segments: string[] = [];
+            if (text) {
+              segments.push(text);
+            }
+            for (const tc of toolCalls) {
+              segments.push(this.describeToolCallForText(tc));
+            }
+            const combined = segments.join('\n\n').trim();
+            if (combined) {
+              messages.push({
+                role: 'assistant',
+                content: combined,
+              });
+            }
+          } else {
+            // Assistant message with tool calls
+            messages.push({
+              role: 'assistant',
+              content: text || null,
+              tool_calls: toolCalls.map((tc) => ({
+                id: this.normalizeToOpenAIToolId(tc.id),
+                type: 'function' as const,
+                function: {
+                  name: tc.name,
+                  arguments: this.normalizeToolCallArguments(tc.parameters),
+                },
+              })),
+            });
+          }
         } else if (textBlocks.length > 0) {
           // Plain assistant message
-          const text = textBlocks.map((b) => b.text).join('\n');
           messages.push({
             role: 'assistant',
             content: text,
@@ -668,20 +849,73 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         const toolResponses = content.blocks.filter(
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock[];
-        for (const tr of toolResponses) {
-          messages.push({
-            role: 'tool',
-            content:
-              typeof tr.result === 'string'
-                ? tr.result
-                : JSON.stringify(tr.result),
-            tool_call_id: this.normalizeToOpenAIToolId(tr.callId),
-          });
+        if (mode === 'textual') {
+          const segments = toolResponses
+            .map((tr) => this.describeToolResponseForText(tr, config))
+            .filter(Boolean);
+          if (segments.length > 0) {
+            messages.push({
+              role: 'user',
+              content: segments.join('\n\n'),
+            });
+          }
+        } else {
+          for (const tr of toolResponses) {
+            messages.push({
+              role: 'tool',
+              content: this.buildToolResponseContent(tr, config),
+              tool_call_id: this.normalizeToOpenAIToolId(tr.callId),
+            });
+          }
         }
       }
     }
 
     return messages;
+  }
+
+  private getContentPreview(
+    content: OpenAI.Chat.ChatCompletionMessageParam['content'],
+    maxLength = 200,
+  ): string | undefined {
+    if (content === null || content === undefined) {
+      return undefined;
+    }
+
+    if (typeof content === 'string') {
+      if (content.length <= maxLength) {
+        return content;
+      }
+      return `${content.slice(0, maxLength)}…`;
+    }
+
+    if (Array.isArray(content)) {
+      const textParts = content
+        .filter(
+          (part): part is { type: 'text'; text: string } =>
+            typeof part === 'object' && part !== null && 'type' in part,
+        )
+        .map((part) =>
+          part.type === 'text' && typeof part.text === 'string'
+            ? part.text
+            : JSON.stringify(part),
+        );
+      const joined = textParts.join('\n');
+      if (joined.length <= maxLength) {
+        return joined;
+      }
+      return `${joined.slice(0, maxLength)}…`;
+    }
+
+    try {
+      const serialized = JSON.stringify(content);
+      if (serialized.length <= maxLength) {
+        return serialized;
+      }
+      return `${serialized.slice(0, maxLength)}…`;
+    } catch {
+      return '[unserializable content]';
+    }
   }
 
   /**
@@ -697,6 +931,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   ): AsyncGenerator<IContent, void, unknown> {
     const { contents, tools, metadata } = options;
     const model = options.resolved.model || this.getDefaultModel();
+    const toolReplayMode = this.determineToolReplayMode(model);
     const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
     const ephemeralSettings = options.invocation?.ephemerals ?? {};
 
@@ -715,7 +950,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Convert IContent to OpenAI messages format
-    const messages = this.convertToOpenAIMessages(contents);
+    const configForMessages =
+      options.config ?? options.runtime?.config ?? this.globalConfig;
+    const messages = this.convertToOpenAIMessages(
+      contents,
+      toolReplayMode,
+      configForMessages,
+    );
+    if (logger.enabled && toolReplayMode !== 'native') {
+      logger.debug(
+        () =>
+          `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
+      );
+    }
 
     // Detect the tool format to use (once at the start of the method)
     const detectedFormat = this.detectToolFormat();
@@ -776,6 +1023,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         outputToolsLength: formattedTools?.length,
         outputToolNames: formattedTools?.map((t) => t.function.name),
       });
+      logger.debug(() => `[OpenAIProvider] Tool conversion detail`, {
+        tools: formattedTools,
+      });
     }
 
     // Get streaming setting from ephemeral settings (default: enabled)
@@ -812,6 +1062,46 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       { role: 'system', content: systemPrompt },
       ...messages,
     ];
+
+    if (logger.enabled) {
+      logger.debug(() => `[OpenAIProvider] Chat payload snapshot`, {
+        messageCount: messagesWithSystem.length,
+        messages: messagesWithSystem.map((msg) => ({
+          role: msg.role,
+          contentPreview: this.getContentPreview(msg.content),
+          contentLength:
+            typeof msg.content === 'string' ? msg.content.length : undefined,
+          rawContent: typeof msg.content === 'string' ? msg.content : undefined,
+          toolCallCount:
+            'tool_calls' in msg && Array.isArray(msg.tool_calls)
+              ? msg.tool_calls.length
+              : undefined,
+          toolCalls:
+            'tool_calls' in msg && Array.isArray(msg.tool_calls)
+              ? msg.tool_calls.map((call) => {
+                  if (call.type === 'function') {
+                    const args = call.function.arguments ?? '';
+                    const preview =
+                      typeof args === 'string' &&
+                      args.length > TOOL_ARGS_PREVIEW_LENGTH
+                        ? `${args.slice(0, TOOL_ARGS_PREVIEW_LENGTH)}…`
+                        : args;
+                    return {
+                      id: call.id,
+                      name: call.function.name,
+                      argumentsPreview: preview,
+                    };
+                  }
+                  return { id: call.id, type: call.type };
+                })
+              : undefined,
+          toolCallId:
+            'tool_call_id' in msg
+              ? (msg as { tool_call_id?: string }).tool_call_id
+              : undefined,
+        })),
+      });
+    }
 
     const maxTokens =
       (metadata?.maxTokens as number | undefined) ??
@@ -906,9 +1196,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         requestHasSystemPrompt: Boolean(systemPrompt?.length),
         messageCount: messagesWithSystem.length,
       });
+      logger.debug(() => `[OpenAIProvider] Request body detail`, {
+        body: requestBody,
+      });
     }
-    let response;
-
     // Debug log throttle tracker status
     logger.debug(() => `Retry configuration:`, {
       hasThrottleTracker: !!this.throttleTracker,
@@ -918,6 +1209,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     });
 
     const customHeaders = this.getCustomHeaders();
+    if (logger.enabled && customHeaders) {
+      logger.debug(() => `[OpenAIProvider] Applying custom headers`, {
+        headerKeys: Object.keys(customHeaders),
+      });
+    }
 
     if (logger.enabled) {
       logger.debug(() => `[OpenAIProvider] Request body preview`, {
@@ -929,70 +1225,113 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
-    try {
-      response = await retryWithBackoff(
-        () =>
-          client.chat.completions.create(requestBody, {
-            ...(abortSignal ? { signal: abortSignal } : {}),
-            ...(customHeaders ? { headers: customHeaders } : {}),
-          }),
-        {
-          maxAttempts: maxRetries,
-          initialDelayMs,
-          shouldRetry: this.shouldRetryResponse.bind(this),
-          trackThrottleWaitTime: this.throttleTracker,
-        },
-      );
-    } catch (error) {
-      // Special handling for Cerebras/Qwen "Tool not present" errors
-      const errorMessage = String(error);
-      if (
-        errorMessage.includes('Tool is not present in the tools list') &&
-        (model.toLowerCase().includes('qwen') ||
-          this.getBaseURL()?.includes('cerebras'))
-      ) {
-        logger.error(
-          'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
-          {
-            error,
-            model,
-            toolsProvided: formattedTools?.length || 0,
-            toolNames: formattedTools?.map((t) => t.function.name),
-            streamingEnabled,
-          },
-        );
-        // Re-throw but with better context
-        const enhancedError = new Error(
-          `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
-        );
-        (enhancedError as Error & { originalError?: unknown }).originalError =
-          error;
-        throw enhancedError;
-      }
-      // Re-throw other errors as-is
-      const capturedErrorMessage =
-        error instanceof Error ? error.message : String(error);
-      const status =
-        typeof error === 'object' &&
-        error !== null &&
-        'status' in error &&
-        typeof (error as { status: unknown }).status === 'number'
-          ? (error as { status: number }).status
-          : undefined;
+    const executeRequest = () =>
+      client.chat.completions.create(requestBody, {
+        ...(abortSignal ? { signal: abortSignal } : {}),
+        ...(customHeaders ? { headers: customHeaders } : {}),
+      });
 
-      logger.error(
-        () =>
-          `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
-        {
-          model,
-          baseURL: baseURL ?? this.getBaseURL(),
-          streamingEnabled,
-          hasTools: formattedTools?.length ?? 0,
-          requestHasSystemPrompt: !!systemPrompt,
-          status,
-        },
-      );
-      throw error;
+    let response:
+      | OpenAI.Chat.Completions.ChatCompletion
+      | AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>
+      | undefined;
+
+    if (streamingEnabled) {
+      response = await retryWithBackoff(executeRequest, {
+        maxAttempts: maxRetries,
+        initialDelayMs,
+        shouldRetry: this.shouldRetryResponse.bind(this),
+        trackThrottleWaitTime: this.throttleTracker,
+      });
+    } else {
+      let compressedOnce = false;
+      while (true) {
+        try {
+          response = (await retryWithBackoff(executeRequest, {
+            maxAttempts: maxRetries,
+            initialDelayMs,
+            shouldRetry: this.shouldRetryResponse.bind(this),
+            trackThrottleWaitTime: this.throttleTracker,
+          })) as OpenAI.Chat.Completions.ChatCompletion;
+          break;
+        } catch (error) {
+          const errorMessage = String(error);
+          logger.debug(() => `[OpenAIProvider] Chat request error`, {
+            errorType: error?.constructor?.name,
+            status:
+              typeof error === 'object' && error && 'status' in error
+                ? (error as { status?: number }).status
+                : undefined,
+            errorKeys:
+              error && typeof error === 'object' ? Object.keys(error) : [],
+          });
+          const isCerebrasToolError =
+            errorMessage.includes('Tool is not present in the tools list') &&
+            (model.toLowerCase().includes('qwen') ||
+              this.getBaseURL()?.includes('cerebras'));
+
+          if (isCerebrasToolError) {
+            logger.error(
+              'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+              {
+                error,
+                model,
+                toolsProvided: formattedTools?.length || 0,
+                toolNames: formattedTools?.map((t) => t.function.name),
+                streamingEnabled,
+              },
+            );
+            const enhancedError = new Error(
+              `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+            );
+            (
+              enhancedError as Error & { originalError?: unknown }
+            ).originalError = error;
+            throw enhancedError;
+          }
+
+          if (
+            !compressedOnce &&
+            this.shouldCompressToolMessages(error, logger) &&
+            this.compressToolMessages(
+              requestBody.messages,
+              MAX_TOOL_RESPONSE_RETRY_CHARS,
+              logger,
+            )
+          ) {
+            compressedOnce = true;
+            logger.warn(
+              () =>
+                `[OpenAIProvider] Retrying request after compressing tool responses due to provider 400`,
+            );
+            continue;
+          }
+
+          const capturedErrorMessage =
+            error instanceof Error ? error.message : String(error);
+          const status =
+            typeof error === 'object' &&
+            error !== null &&
+            'status' in error &&
+            typeof (error as { status: unknown }).status === 'number'
+              ? (error as { status: number }).status
+              : undefined;
+
+          logger.error(
+            () =>
+              `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
+            {
+              model,
+              baseURL: baseURL ?? this.getBaseURL(),
+              streamingEnabled,
+              hasTools: formattedTools?.length ?? 0,
+              requestHasSystemPrompt: !!systemPrompt,
+              status,
+            },
+          );
+          throw error;
+        }
+      }
     }
 
     // Check if response is streaming or not
@@ -2574,6 +2913,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       status,
       errorMessage: error instanceof Error ? error.message : String(error),
       errorKeys: error && typeof error === 'object' ? Object.keys(error) : [],
+      errorData:
+        error && typeof error === 'object' && 'error' in error
+          ? (error as { error?: unknown }).error
+          : undefined,
     });
 
     // Retry on 429 rate limit errors or 5xx server errors
