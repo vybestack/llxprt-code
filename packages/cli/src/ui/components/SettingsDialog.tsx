@@ -91,29 +91,42 @@ export function SettingsDialog({
   >(new Set());
 
   useEffect(() => {
-    // Base settings for selected scope
-    let updated = structuredClone(settings.forScope(selectedScope).settings);
-    // Overlay globally pending (unsaved) changes so user sees their modifications in any scope
-    const newModified = new Set<string>();
-    const newRestartRequired = new Set<string>();
+    // Simplified logic: start with scope settings, overlay pending changes, ensure enum settings are loaded
+    const scopeSettings = settings.forScope(selectedScope).settings;
+    let updated = structuredClone(scopeSettings);
+
+    // Ensure enum settings are always loaded from merged settings (handles loading issues)
+    for (const [key, value] of Object.entries(settings.merged)) {
+      const def = getSettingDefinition(key);
+      if (def?.type === 'enum') {
+        (updated as Record<string, unknown>)[key] = value;
+      }
+    }
+
+    // Overlay globally pending (unsaved) changes
+    const newModified = new Set(modifiedSettings);
+    const newRestartRequired = new Set(_restartRequiredSettings);
+
     for (const [key, value] of globalPendingChanges.entries()) {
       const def = getSettingDefinition(key);
       if (def?.type === 'boolean' && typeof value === 'boolean') {
         updated = setPendingSettingValue(key, value, updated);
       } else if (
         (def?.type === 'number' && typeof value === 'number') ||
-        (def?.type === 'string' && typeof value === 'string')
+        (def?.type === 'string' && typeof value === 'string') ||
+        (def?.type === 'enum' && typeof value === 'string')
       ) {
         updated = setPendingSettingValueAny(key, value, updated);
       }
       newModified.add(key);
       if (requiresRestart(key)) newRestartRequired.add(key);
     }
+
     setPendingSettings(updated);
     setModifiedSettings(newModified);
     setRestartRequiredSettings(newRestartRequired);
     setShowRestartPrompt(newRestartRequired.size > 0);
-  }, [selectedScope, settings, globalPendingChanges]);
+  }, [selectedScope, settings, globalPendingChanges]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const generateSettingsItems = () => {
     const settingKeys = getDialogSettingKeys();
@@ -463,7 +476,111 @@ export function SettingsDialog({
           }
         } else if (name === 'return' || name === 'space') {
           const currentItem = items[activeSettingIndex];
-          if (
+          const currentDefinition = getSettingDefinition(
+            currentItem?.value || '',
+          );
+
+          // For boolean type, use toggle() function (simple on/off)
+          if (currentItem?.type === 'boolean') {
+            currentItem?.toggle();
+          }
+          // For enum types, handle cycle through options
+          else if (
+            currentDefinition?.type === 'enum' &&
+            currentDefinition.options
+          ) {
+            const options = currentDefinition.options;
+            const path = (currentItem?.value || '').split('.');
+
+            // Get current value from multiple places in order
+            let currentValue = getNestedValue(pendingSettings, path);
+
+            // If there's a global pending change for this key, use that first
+            if (
+              currentValue === undefined &&
+              globalPendingChanges.has(currentItem?.value || '')
+            ) {
+              currentValue = globalPendingChanges.get(currentItem?.value || '');
+            }
+
+            // If still undefined, try to get from merged settings
+            if (currentValue === undefined) {
+              currentValue = getNestedValue(settings.merged, path);
+            }
+
+            // If still undefined, use the default value
+            if (currentValue === undefined) {
+              currentValue = getDefaultValue(currentItem?.value || '');
+            }
+
+            const currentIndex = options.indexOf(currentValue as string);
+            const nextIndex =
+              currentIndex === -1 ? 0 : (currentIndex + 1) % options.length;
+            const newValue = options[nextIndex];
+
+            // Update pending settings
+            setPendingSettings((prev) =>
+              setPendingSettingValueAny(
+                currentItem?.value || '',
+                newValue,
+                prev,
+              ),
+            );
+
+            // Handle the setting change based on whether it requires restart
+            if (!requiresRestart(currentItem?.value || '')) {
+              // Save immediately for settings that don't require restart
+              saveSingleSetting(
+                currentItem?.value || '',
+                newValue,
+                settings,
+                selectedScope,
+              );
+
+              // Remove from modifiedSets since it's now saved
+              setModifiedSettings((prev) => {
+                const updated = new Set(prev);
+                updated.delete(currentItem?.value || '');
+                return updated;
+              });
+
+              setRestartRequiredSettings((prev) => {
+                const updated = new Set(prev);
+                updated.delete(currentItem?.value || '');
+                return updated;
+              });
+
+              // Remove from global pending changes if present
+              setGlobalPendingChanges((prev) => {
+                if (!prev.has(currentItem?.value || '')) return prev;
+                const next = new Map(prev);
+                next.delete(currentItem?.value || '');
+                return next;
+              });
+            } else {
+              // Mark as modified and needing restart
+              setModifiedSettings((prev) => {
+                const updated = new Set(prev).add(currentItem?.value || '');
+                const needsRestart = hasRestartRequiredSettings(updated);
+                if (needsRestart) {
+                  setShowRestartPrompt(true);
+                  setRestartRequiredSettings((prevRestart) =>
+                    new Set(prevRestart).add(currentItem?.value || ''),
+                  );
+                }
+                return updated;
+              });
+
+              // Store in globalPendingChanges
+              setGlobalPendingChanges((prev) => {
+                const next = new Map(prev);
+                next.set(currentItem?.value || '', newValue as PendingValue);
+                return next;
+              });
+            }
+          }
+          // For numbers and strings, use edit mode
+          else if (
             currentItem?.type === 'number' ||
             currentItem?.type === 'string'
           ) {
@@ -582,10 +699,22 @@ export function SettingsDialog({
           getRestartRequiredFromModified(modifiedSettings);
         const restartRequiredSet = new Set(restartRequiredSettings);
 
+        // Create an enhanced pendingSettings object that includes globalPendingChanges values
+        const finalPendingSettings = { ...pendingSettings } as Record<
+          string,
+          unknown
+        >;
+        for (const [key, value] of globalPendingChanges.entries()) {
+          const def = getSettingDefinition(key);
+          if (def?.type === 'enum' && typeof value === 'string') {
+            finalPendingSettings[key] = value;
+          }
+        }
+
         if (restartRequiredSet.size > 0) {
           saveModifiedSettings(
             restartRequiredSet,
-            pendingSettings,
+            finalPendingSettings, // Use enhanced version instead of just pendingSettings
             settings,
             selectedScope,
           );
@@ -684,6 +813,37 @@ export function SettingsDialog({
                 : defaultValue;
             const isDifferentFromDefault =
               effectiveCurrentValue !== defaultValue;
+
+            if (isDifferentFromDefault || isModified) {
+              displayValue += '*';
+            }
+          } else if (getSettingDefinition(item.value)?.type === 'enum') {
+            // Handle enum types - check multiple sources for the current value
+            const path = item.value.split('.');
+            let currentValue = getNestedValue(pendingSettings, path);
+
+            // Check globalPendingChanges for the most recent value (priority #1)
+            if (globalPendingChanges.has(item.value)) {
+              currentValue = globalPendingChanges.get(item.value);
+            }
+
+            // Check combined value (use with || fallback to prioritize)
+            const mergedValue = getNestedValue(settings.merged, path);
+            if (currentValue === undefined) {
+              currentValue = mergedValue;
+            }
+
+            // If still undefined, use the default value
+            if (currentValue === undefined) {
+              currentValue = getDefaultValue(item.value);
+            }
+
+            displayValue = String(currentValue);
+
+            // Add * if value differs from default OR if it's been modified
+            const isModified = modifiedSettings.has(item.value);
+            const defaultValue = getDefaultValue(item.value);
+            const isDifferentFromDefault = currentValue !== defaultValue;
 
             if (isDifferentFromDefault || isModified) {
               displayValue += '*';

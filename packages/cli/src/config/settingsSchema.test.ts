@@ -54,6 +54,7 @@ describe('SettingsSchema', () => {
         'folderTrustFeature',
         'useRipgrep',
         'debugKeystrokeLogging',
+        'toolCallProcessingMode',
       ];
 
       expectedSettings.forEach((setting) => {

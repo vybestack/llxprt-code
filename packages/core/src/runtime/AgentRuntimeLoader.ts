@@ -76,7 +76,7 @@ const defaultContentGeneratorFactory: ContentGeneratorFactory = (
   sessionId,
 ) => createContentGenerator(contentConfig, config, sessionId);
 
-const normalizeToolName = (name: string): string => name.trim().toLowerCase();
+import { normalizeToolName } from '../tools/toolNameUtils.js';
 
 type ToolGovernance = {
   allowed: Set<string>;
@@ -96,11 +96,15 @@ function buildToolGovernance(
   const excludedRaw = profile.config.getExcludeTools?.() ?? [];
 
   return {
-    allowed: new Set((allowedRaw ?? []).map((tool) => normalizeToolName(tool))),
-    disabled: new Set(
-      (disabledRaw ?? []).map((tool) => normalizeToolName(tool)),
+    allowed: new Set(
+      (allowedRaw ?? []).map((tool) => normalizeToolName(tool) || tool),
     ),
-    excluded: new Set(excludedRaw.map((tool) => normalizeToolName(tool))),
+    disabled: new Set(
+      (disabledRaw ?? []).map((tool) => normalizeToolName(tool) || tool),
+    ),
+    excluded: new Set(
+      excludedRaw.map((tool) => normalizeToolName(tool) || tool),
+    ),
   };
 }
 
@@ -108,7 +112,7 @@ function isToolPermitted(
   toolName: string,
   governance: ToolGovernance,
 ): boolean {
-  const canonical = normalizeToolName(toolName);
+  const canonical = normalizeToolName(toolName) || toolName;
   if (governance.excluded.has(canonical)) {
     return false;
   }

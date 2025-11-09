@@ -324,6 +324,7 @@ export function createProviderManager(
     textToolCallModels: settingsData.textToolCallModels,
     providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
     openaiResponsesEnabled: effectiveOpenaiResponsesEnabled,
+    toolCallProcessingMode: settingsData.toolCallProcessingMode,
     allowBrowserEnvironment,
     getEphemeralSettings: config
       ? () => config.getEphemeralSettings()

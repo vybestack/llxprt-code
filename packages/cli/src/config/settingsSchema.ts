@@ -14,7 +14,7 @@ import {
 import { CustomTheme } from '../ui/themes/theme.js';
 
 export interface SettingDefinition {
-  type: 'boolean' | 'string' | 'number' | 'array' | 'object';
+  type: 'boolean' | 'string' | 'number' | 'array' | 'object' | 'enum';
   label: string;
   category: string;
   requiresRestart: boolean;
@@ -25,6 +25,7 @@ export interface SettingDefinition {
   key?: string;
   properties?: SettingsSchema;
   showInDialog?: boolean;
+  options?: readonly string[];
 }
 
 export interface SettingsSchema {
@@ -33,6 +34,7 @@ export interface SettingsSchema {
 
 export type MemoryImportFormat = 'tree' | 'flat';
 export type DnsResolutionOrder = 'ipv4first' | 'verbatim';
+export type ToolCallProcessingMode = 'legacy' | 'pipeline';
 
 /**
  * The canonical schema for all settings.
@@ -429,6 +431,17 @@ export const SETTINGS_SCHEMA = {
     default: undefined as string | undefined,
     description: 'Command to run for tool calls.',
     showInDialog: false,
+  },
+  toolCallProcessingMode: {
+    type: 'enum',
+    label: 'Tool Call Processing Mode',
+    category: 'Advanced',
+    requiresRestart: true,
+    default: 'pipeline' as ToolCallProcessingMode,
+    description:
+      'Mode for processing tool calls. Pipeline mode is optimized, legacy mode uses older implementation.',
+    showInDialog: true,
+    options: ['legacy', 'pipeline'],
   },
   mcpServerCommand: {
     type: 'string',

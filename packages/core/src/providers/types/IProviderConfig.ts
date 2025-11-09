@@ -83,6 +83,13 @@ export interface IProviderConfig {
   openaiResponsesEnabled?: boolean;
 
   /**
+   * Tool call processing mode for OpenAI provider.
+   * - 'pipeline': Use optimized tool call pipeline (default)
+   * - 'legacy': Use original accumulated tool calls approach
+   */
+  toolCallProcessingMode?: 'pipeline' | 'legacy';
+
+  /**
    * Organization ID for providers that support organization-level access.
    */
   organizationId?: string;

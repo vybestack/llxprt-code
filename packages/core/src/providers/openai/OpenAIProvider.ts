@@ -33,6 +33,7 @@ import {
 import { DebugLogger } from '../../debug/index.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
+import { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
 import {
   ToolCallBlock,
   TextBlock,
@@ -46,9 +47,13 @@ import { retryWithBackoff } from '../../utils/retry.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from './openaiRequestParams.js';
+import { ToolCallPipeline } from './ToolCallPipeline.js';
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
-  override readonly name: string = 'openai';
+  private readonly textToolParser = new GemmaToolCallParser();
+  private readonly toolCallPipeline = new ToolCallPipeline();
+  private readonly toolCallProcessingMode: 'pipeline' | 'legacy';
+
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openai');
   }
@@ -105,6 +110,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       },
       config,
     );
+
+    // Initialize tool call processing mode - default to 'pipeline' (optimized)
+    this.toolCallProcessingMode = config?.toolCallProcessingMode ?? 'pipeline';
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002
@@ -679,9 +687,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P08
    * @requirement:REQ-SP4-003
-   * Internal implementation for chat completion using normalized options
+   * Legacy implementation for chat completion using accumulated tool calls approach
    */
-  private async *generateChatCompletionImpl(
+  private async *generateLegacyChatCompletionImpl(
     options: NormalizedGenerateChatOptions,
     toolFormatter: ToolFormatter,
     client: OpenAI,
@@ -1156,13 +1164,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             }
           }
 
-          // Handle tool calls
+          // Handle tool calls using legacy accumulated approach
           const deltaToolCalls = choice.delta?.tool_calls;
           if (deltaToolCalls && deltaToolCalls.length > 0) {
             for (const deltaToolCall of deltaToolCalls) {
               if (deltaToolCall.index === undefined) continue;
 
-              // Initialize or update accumulated tool call
               if (!accumulatedToolCalls[deltaToolCall.index]) {
                 accumulatedToolCalls[deltaToolCall.index] = {
                   id: deltaToolCall.id || '',
@@ -1204,42 +1211,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                   return;
                 }
 
-                let targetIndex = index;
-                const annotated =
-                  toolCall as OpenAI.Chat.Completions.ChatCompletionMessageToolCall & {
-                    index?: number;
-                  };
-                if (typeof annotated.index === 'number') {
-                  targetIndex = annotated.index;
-                } else if (toolCall.id) {
-                  const matchIndex = accumulatedToolCalls.findIndex(
-                    (existing) => existing && existing.id === toolCall.id,
-                  );
-                  if (matchIndex >= 0) {
-                    targetIndex = matchIndex;
-                  }
-                }
-
-                if (!accumulatedToolCalls[targetIndex]) {
-                  accumulatedToolCalls[targetIndex] = {
+                if (!accumulatedToolCalls[index]) {
+                  accumulatedToolCalls[index] = {
                     id: toolCall.id || '',
                     type: 'function',
                     function: {
                       name: toolCall.function?.name || '',
-                      arguments: '',
+                      arguments: toolCall.function?.arguments || '',
                     },
                   };
-                }
-
-                const target = accumulatedToolCalls[targetIndex];
-                if (toolCall.id) {
-                  target.id = toolCall.id;
-                }
-                if (toolCall.function?.name) {
-                  target.function.name = toolCall.function.name;
-                }
-                if (toolCall.function?.arguments !== undefined) {
-                  target.function.arguments = toolCall.function.arguments ?? '';
                 }
               },
             );
@@ -1279,24 +1259,60 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
       }
 
-      // Flush any remaining buffered text
+      // Check buffered text for <tool_call> format before flushing as plain text
       if (textBuffer.length > 0) {
-        yield {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'text',
-              text: textBuffer,
-            } as TextBlock,
-          ],
-        } as IContent;
+        // Try to parse <tool_call> format from buffered text
+        let parsedToolCalls: ToolCallBlock[] = [];
+        let cleanedText = textBuffer;
+
+        try {
+          const parsedResult = this.textToolParser.parse(textBuffer);
+          if (parsedResult.toolCalls.length > 0) {
+            // Convert parsed tool calls to ToolCallBlock format
+            parsedToolCalls = parsedResult.toolCalls.map(
+              (call: { name: string; arguments: Record<string, unknown> }) => ({
+                type: 'tool_call' as const,
+                id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                name: call.name,
+                parameters: call.arguments,
+              }),
+            );
+            cleanedText = parsedResult.cleanedContent;
+          }
+        } catch (error) {
+          const logger = this.getLogger();
+          logger.debug(
+            () => `TextToolCallParser failed on buffered text: ${error}`,
+          );
+        }
+
+        // Emit tool calls from text parsing first
+        if (parsedToolCalls.length > 0) {
+          yield {
+            speaker: 'ai',
+            blocks: parsedToolCalls,
+          } as IContent;
+        }
+
+        // Then emit any remaining cleaned text
+        if (cleanedText.trim().length > 0) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'text',
+                text: cleanedText,
+              } as TextBlock,
+            ],
+          } as IContent;
+        }
+
         textBuffer = '';
       }
 
-      // Emit accumulated tool calls as IContent if any
+      // Process and emit tool calls using legacy accumulated approach
       if (accumulatedToolCalls.length > 0) {
         const blocks: ToolCallBlock[] = [];
-        // Use the same detected format from earlier for consistency
 
         for (const tc of accumulatedToolCalls) {
           if (!tc) continue;
@@ -1409,20 +1425,69 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         for (const toolCall of choice.message.tool_calls) {
           if (toolCall.type === 'function') {
+            // Use tool name directly without normalization for legacy compatibility
+            const toolName = toolCall.function.name || '';
+
             // Process tool parameters with double-escape handling
             const processedParameters = processToolParameters(
               toolCall.function.arguments || '',
-              toolCall.function.name || '',
+              toolName,
               detectedFormat,
             );
 
             blocks.push({
               type: 'tool_call',
               id: this.normalizeToHistoryToolId(toolCall.id),
-              name: toolCall.function.name || '',
+              name: toolName,
               parameters: processedParameters,
             } as ToolCallBlock);
           }
+        }
+      }
+
+      // Additionally check for <tool_call> format in text content
+      if (
+        choice.message?.content &&
+        typeof choice.message.content === 'string'
+      ) {
+        try {
+          const parsedResult = this.textToolParser.parse(
+            choice.message.content,
+          );
+          if (parsedResult.toolCalls.length > 0) {
+            // Add tool calls found in text content
+            for (const call of parsedResult.toolCalls) {
+              blocks.push({
+                type: 'tool_call',
+                id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                name: call.name,
+                parameters: call.arguments,
+              } as ToolCallBlock);
+            }
+
+            // Update the text content to remove the tool call parts
+            if (choice.message.content !== parsedResult.cleanedContent) {
+              // Find the text block and update it
+              const textBlockIndex = blocks.findIndex(
+                (block) => block.type === 'text',
+              );
+              if (textBlockIndex >= 0) {
+                (blocks[textBlockIndex] as TextBlock).text =
+                  parsedResult.cleanedContent;
+              } else if (parsedResult.cleanedContent.trim()) {
+                // Add cleaned text if it doesn't exist
+                blocks.unshift({
+                  type: 'text',
+                  text: parsedResult.cleanedContent,
+                } as TextBlock);
+              }
+            }
+          }
+        } catch (error) {
+          const logger = this.getLogger();
+          logger.debug(
+            () => `TextToolCallParser failed on message content: ${error}`,
+          );
         }
       }
 
@@ -1528,8 +1593,884 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P08
    * @requirement:REQ-SP4-003
-   * Get the tool format for this provider using normalized options
-   * @returns The tool format to use
+   * Internal implementation for chat completion using normalized options
+   * Routes to appropriate implementation based on toolCallProcessingMode
+   */
+  private async *generateChatCompletionImpl(
+    options: NormalizedGenerateChatOptions,
+    toolFormatter: ToolFormatter,
+    client: OpenAI,
+    logger: DebugLogger,
+  ): AsyncGenerator<IContent, void, unknown> {
+    if (this.toolCallProcessingMode === 'legacy') {
+      yield* this.generateLegacyChatCompletionImpl(
+        options,
+        toolFormatter,
+        client,
+        logger,
+      );
+    } else {
+      yield* this.generatePipelineChatCompletionImpl(
+        options,
+        toolFormatter,
+        client,
+        logger,
+      );
+    }
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Pipeline implementation for chat completion using optimized tool call pipeline
+   */
+  private async *generatePipelineChatCompletionImpl(
+    options: NormalizedGenerateChatOptions,
+    toolFormatter: ToolFormatter,
+    client: OpenAI,
+    logger: DebugLogger,
+  ): AsyncGenerator<IContent, void, unknown> {
+    const { contents, tools, metadata } = options;
+    const model = options.resolved.model || this.getDefaultModel();
+    const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
+    const ephemeralSettings = options.invocation?.ephemerals ?? {};
+
+    if (logger.enabled) {
+      const resolved = options.resolved;
+      logger.debug(() => `[OpenAIProvider] Resolved request context`, {
+        provider: this.name,
+        model,
+        resolvedModel: resolved.model,
+        resolvedBaseUrl: resolved.baseURL,
+        authTokenPresent: Boolean(resolved.authToken),
+        messageCount: contents.length,
+        toolCount: tools?.length ?? 0,
+        metadataKeys: Object.keys(metadata ?? {}),
+      });
+    }
+
+    // Convert IContent to OpenAI messages format
+    const messages = this.convertToOpenAIMessages(contents);
+
+    // Detect the tool format to use (once at the start of the method)
+    const detectedFormat = this.detectToolFormat();
+
+    // Log the detected format for debugging
+    logger.debug(
+      () =>
+        `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
+      {
+        model,
+        detectedFormat,
+        provider: this.name,
+      },
+    );
+
+    // Convert Gemini format tools to the detected format
+    let formattedTools = toolFormatter.convertGeminiToFormat(
+      tools,
+      detectedFormat,
+    ) as
+      | Array<{
+          type: 'function';
+          function: {
+            name: string;
+            description: string;
+            parameters: Record<string, unknown>;
+          };
+        }>
+      | undefined;
+
+    // CRITICAL FIX: Ensure we never pass an empty tools array
+    // The OpenAI API errors when tools=[] but a tool call is attempted
+    if (Array.isArray(formattedTools) && formattedTools.length === 0) {
+      logger.warn(
+        () =>
+          `[OpenAIProvider] CRITICAL: Formatted tools is empty array! Setting to undefined to prevent API errors.`,
+        {
+          model,
+          inputTools: tools,
+          inputToolsLength: tools?.length,
+          inputFirstGroup: tools?.[0],
+          stackTrace: new Error().stack,
+        },
+      );
+      formattedTools = undefined;
+    }
+
+    // Debug log the conversion result - enhanced logging for intermittent issues
+    if (logger.enabled && formattedTools) {
+      logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
+        detectedFormat,
+        inputHadTools: !!tools,
+        inputToolsLength: tools?.length,
+        inputFirstGroup: tools?.[0],
+        inputFunctionDeclarationsLength:
+          tools?.[0]?.functionDeclarations?.length,
+        outputHasTools: !!formattedTools,
+        outputToolsLength: formattedTools?.length,
+        outputToolNames: formattedTools?.map((t) => t.function.name),
+      });
+    }
+
+    // Get streaming setting from ephemeral settings (default: enabled)
+    const streamingSetting = ephemeralSettings['streaming'];
+    const streamingEnabled = streamingSetting !== 'disabled';
+
+    // Get the system prompt
+    const flattenedToolNames =
+      tools?.flatMap((group) =>
+        group.functionDeclarations
+          .map((decl) => decl.name)
+          .filter((name): name is string => !!name),
+      ) ?? [];
+    const toolNamesArg =
+      tools === undefined ? undefined : Array.from(new Set(flattenedToolNames));
+
+    /**
+     * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+     * @requirement:REQ-SP4-003
+     * Source user memory from normalized options instead of global config
+     */
+    const userMemory = await resolveUserMemory(
+      options.userMemory,
+      () => options.invocation?.userMemory,
+    );
+    const systemPrompt = await getCoreSystemPromptAsync(
+      userMemory,
+      model,
+      toolNamesArg,
+    );
+
+    // Add system prompt as the first message in the array
+    const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      ...messages,
+    ];
+
+    const maxTokens =
+      (metadata?.maxTokens as number | undefined) ??
+      (ephemeralSettings['max-tokens'] as number | undefined);
+
+    // Build request - only include tools if they exist and are not empty
+    // IMPORTANT: Create a deep copy of tools to prevent mutation issues
+    const requestBody: OpenAI.Chat.ChatCompletionCreateParams = {
+      model,
+      messages: messagesWithSystem,
+      stream: streamingEnabled,
+    };
+
+    if (formattedTools && formattedTools.length > 0) {
+      requestBody.tools = JSON.parse(JSON.stringify(formattedTools));
+      requestBody.tool_choice = 'auto';
+    }
+
+    /**
+     * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+     * @requirement:REQ-SP4-002
+     * Extract per-call request overrides from normalized options instead of cached state
+     */
+    const requestOverrides = this.extractModelParamsFromOptions(options);
+    if (requestOverrides) {
+      if (logger.enabled) {
+        logger.debug(() => `[OpenAIProvider] Applying request overrides`, {
+          overrideKeys: Object.keys(requestOverrides),
+        });
+      }
+      Object.assign(requestBody, requestOverrides);
+    }
+
+    if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
+      requestBody.max_tokens = maxTokens;
+    }
+
+    // Debug log request summary for Cerebras/Qwen
+    const baseURL = options.resolved.baseURL ?? this.getBaseURL();
+
+    if (
+      logger.enabled &&
+      (model.toLowerCase().includes('qwen') || baseURL?.includes('cerebras'))
+    ) {
+      logger.debug(() => `Request to ${baseURL} for model ${model}:`, {
+        baseURL,
+        model,
+        streamingEnabled,
+        hasTools: 'tools' in requestBody,
+        toolCount: formattedTools?.length || 0,
+        messageCount: messages.length,
+        toolsInRequest:
+          'tools' in requestBody ? requestBody.tools?.length : 'not included',
+      });
+    }
+
+    // Get retry settings from ephemeral settings
+    const maxRetries =
+      (ephemeralSettings['retries'] as number | undefined) ?? 6; // Default for OpenAI
+    const initialDelayMs =
+      (ephemeralSettings['retrywait'] as number | undefined) ?? 4000; // Default for OpenAI
+
+    // Get stream options from ephemeral settings (default: include usage for token tracking)
+    const streamOptions = (ephemeralSettings['stream-options'] as
+      | { include_usage?: boolean }
+      | undefined) || { include_usage: true };
+
+    // Add stream options to request if streaming is enabled
+    if (streamingEnabled && streamOptions) {
+      Object.assign(requestBody, { stream_options: streamOptions });
+    }
+
+    // Log the exact tools being sent for debugging
+    if (logger.enabled && 'tools' in requestBody) {
+      logger.debug(() => `[OpenAIProvider] Exact tools being sent to API:`, {
+        toolCount: requestBody.tools?.length,
+        toolNames: requestBody.tools?.map((t) =>
+          'function' in t ? t.function?.name : undefined,
+        ),
+        firstTool: requestBody.tools?.[0],
+      });
+    }
+
+    // Wrap the API call with retry logic using centralized retry utility
+    if (logger.enabled) {
+      logger.debug(() => `[OpenAIProvider] Sending chat request`, {
+        model,
+        baseURL: baseURL ?? this.getBaseURL(),
+        streamingEnabled,
+        toolCount: formattedTools?.length ?? 0,
+        hasAuthToken: Boolean(options.resolved.authToken),
+        requestHasSystemPrompt: Boolean(systemPrompt?.length),
+        messageCount: messagesWithSystem.length,
+      });
+    }
+    let response;
+
+    // Debug log throttle tracker status
+    logger.debug(() => `Retry configuration:`, {
+      hasThrottleTracker: !!this.throttleTracker,
+      throttleTrackerType: typeof this.throttleTracker,
+      maxRetries,
+      initialDelayMs,
+    });
+
+    const customHeaders = this.getCustomHeaders();
+
+    if (logger.enabled) {
+      logger.debug(() => `[OpenAIProvider] Request body preview`, {
+        model: requestBody.model,
+        hasStop: 'stop' in requestBody,
+        hasMaxTokens: 'max_tokens' in requestBody,
+        hasResponseFormat: 'response_format' in requestBody,
+        overrideKeys: requestOverrides ? Object.keys(requestOverrides) : [],
+      });
+    }
+
+    try {
+      response = await retryWithBackoff(
+        () =>
+          client.chat.completions.create(requestBody, {
+            ...(abortSignal ? { signal: abortSignal } : {}),
+            ...(customHeaders ? { headers: customHeaders } : {}),
+          }),
+        {
+          maxAttempts: maxRetries,
+          initialDelayMs,
+          shouldRetry: this.shouldRetryResponse.bind(this),
+          trackThrottleWaitTime: this.throttleTracker,
+        },
+      );
+    } catch (error) {
+      // Special handling for Cerebras/Qwen "Tool not present" errors
+      const errorMessage = String(error);
+      if (
+        errorMessage.includes('Tool is not present in the tools list') &&
+        (model.toLowerCase().includes('qwen') ||
+          this.getBaseURL()?.includes('cerebras'))
+      ) {
+        logger.error(
+          'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+          {
+            error,
+            model,
+            toolsProvided: formattedTools?.length || 0,
+            toolNames: formattedTools?.map((t) => t.function.name),
+            streamingEnabled,
+          },
+        );
+        // Re-throw but with better context
+        const enhancedError = new Error(
+          `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+        );
+        (enhancedError as Error & { originalError?: unknown }).originalError =
+          error;
+        throw enhancedError;
+      }
+      // Re-throw other errors as-is
+      const capturedErrorMessage =
+        error instanceof Error ? error.message : String(error);
+      const status =
+        typeof error === 'object' &&
+        error !== null &&
+        'status' in error &&
+        typeof (error as { status: unknown }).status === 'number'
+          ? (error as { status: number }).status
+          : undefined;
+
+      logger.error(
+        () =>
+          `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
+        {
+          model,
+          baseURL: baseURL ?? this.getBaseURL(),
+          streamingEnabled,
+          hasTools: formattedTools?.length ?? 0,
+          requestHasSystemPrompt: !!systemPrompt,
+          status,
+        },
+      );
+      throw error;
+    }
+
+    // Check if response is streaming or not
+    if (streamingEnabled) {
+      // Process streaming response
+      let _accumulatedText = '';
+
+      // Initialize tool call pipeline for this streaming session
+      this.toolCallPipeline.reset();
+
+      // Buffer for accumulating text chunks for providers that need it
+      let textBuffer = '';
+      // Use the same detected format from earlier for consistency
+      // Buffer text for Qwen format providers to avoid stanza formatting
+      const shouldBufferText = detectedFormat === 'qwen';
+
+      // Track token usage from streaming chunks
+      let streamingUsage: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      } | null = null;
+
+      const allChunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = []; // Collect all chunks first
+
+      try {
+        // Handle streaming response - collect all chunks
+        for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+          if (abortSignal?.aborted) {
+            break;
+          }
+          allChunks.push(chunk);
+        }
+
+        // Now process all collected chunks
+        for (const chunk of allChunks) {
+          const chunkRecord = chunk as unknown as Record<string, unknown>;
+          let parsedData: Record<string, unknown> | undefined;
+          const rawData = chunkRecord?.data;
+          if (typeof rawData === 'string') {
+            try {
+              parsedData = JSON.parse(rawData) as Record<string, unknown>;
+            } catch {
+              parsedData = undefined;
+            }
+          } else if (rawData && typeof rawData === 'object') {
+            parsedData = rawData as Record<string, unknown>;
+          }
+
+          const streamingError =
+            chunkRecord?.error ??
+            parsedData?.error ??
+            (parsedData?.data as { error?: unknown } | undefined)?.error;
+          const streamingEvent = (chunkRecord?.event ?? parsedData?.event) as
+            | string
+            | undefined;
+          const streamingErrorMessage =
+            (streamingError as { message?: string } | undefined)?.message ??
+            (streamingError as { error?: string } | undefined)?.error ??
+            (parsedData as { message?: string } | undefined)?.message;
+          if (
+            streamingEvent === 'error' ||
+            (streamingError && typeof streamingError === 'object')
+          ) {
+            const errorMessage =
+              streamingErrorMessage ??
+              (typeof streamingError === 'string'
+                ? streamingError
+                : 'Streaming response reported an error.');
+            throw new Error(errorMessage);
+          }
+
+          // Extract usage information if present (typically in final chunk)
+          if (chunk.usage) {
+            streamingUsage = chunk.usage;
+          }
+
+          const choice = chunk.choices?.[0];
+          if (!choice) continue;
+
+          // Check for finish_reason to detect proper stream ending
+          if (choice.finish_reason) {
+            logger.debug(
+              () =>
+                `[Streaming] Stream finished with reason: ${choice.finish_reason}`,
+              {
+                model,
+                finishReason: choice.finish_reason,
+                hasAccumulatedText: _accumulatedText.length > 0,
+                hasAccumulatedTools:
+                  this.toolCallPipeline.getStats().collector.totalCalls > 0,
+                hasBufferedText: textBuffer.length > 0,
+              },
+            );
+
+            // If finish_reason is 'length', the response was cut off
+            if (choice.finish_reason === 'length') {
+              logger.debug(
+                () =>
+                  `Response truncated due to length limit for model ${model}`,
+              );
+            }
+
+            // Flush any buffered text when stream finishes
+            if (textBuffer.length > 0) {
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'text',
+                    text: textBuffer,
+                  } as TextBlock,
+                ],
+              } as IContent;
+              textBuffer = '';
+            }
+          }
+
+          // Handle text content - buffer for Qwen format, emit immediately for others
+          const deltaContent = choice.delta?.content;
+          if (deltaContent) {
+            _accumulatedText += deltaContent;
+
+            // Debug log for providers that need buffering
+            if (shouldBufferText) {
+              logger.debug(
+                () => `[Streaming] Chunk content for ${detectedFormat} format:`,
+                {
+                  deltaContent,
+                  length: deltaContent.length,
+                  hasNewline: deltaContent.includes('\n'),
+                  escaped: JSON.stringify(deltaContent),
+                  bufferSize: textBuffer.length,
+                },
+              );
+
+              // Buffer text to avoid stanza formatting
+              textBuffer += deltaContent;
+
+              // Emit buffered text when we have a complete sentence or paragraph
+              // Look for natural break points
+              if (
+                textBuffer.includes('\n') ||
+                textBuffer.endsWith('. ') ||
+                textBuffer.endsWith('! ') ||
+                textBuffer.endsWith('? ') ||
+                textBuffer.length > 100
+              ) {
+                yield {
+                  speaker: 'ai',
+                  blocks: [
+                    {
+                      type: 'text',
+                      text: textBuffer,
+                    } as TextBlock,
+                  ],
+                } as IContent;
+                textBuffer = '';
+              }
+            } else {
+              // For other providers, emit text immediately as before
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'text',
+                    text: deltaContent,
+                  } as TextBlock,
+                ],
+              } as IContent;
+            }
+          }
+
+          // Handle tool calls using the new pipeline
+          const deltaToolCalls = choice.delta?.tool_calls;
+          if (deltaToolCalls && deltaToolCalls.length > 0) {
+            for (const deltaToolCall of deltaToolCalls) {
+              if (deltaToolCall.index === undefined) continue;
+
+              // Add fragment to pipeline instead of accumulating strings
+              this.toolCallPipeline.addFragment(deltaToolCall.index, {
+                name: deltaToolCall.function?.name,
+                args: deltaToolCall.function?.arguments,
+              });
+            }
+          }
+
+          const choiceMessage = (
+            choice as {
+              message?: {
+                tool_calls?: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[];
+              };
+            }
+          ).message;
+          const messageToolCalls = choiceMessage?.tool_calls;
+          if (messageToolCalls && messageToolCalls.length > 0) {
+            messageToolCalls.forEach(
+              (
+                toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
+                index: number,
+              ) => {
+                if (!toolCall || toolCall.type !== 'function') {
+                  return;
+                }
+
+                // Add final complete tool call to pipeline
+                this.toolCallPipeline.addFragment(index, {
+                  name: toolCall.function?.name,
+                  args: toolCall.function?.arguments,
+                });
+              },
+            );
+          }
+        }
+      } catch (error) {
+        if (abortSignal?.aborted) {
+          throw error;
+        } else {
+          // Special handling for Cerebras/Qwen "Tool not present" errors
+          const errorMessage = String(error);
+          if (
+            errorMessage.includes('Tool is not present in the tools list') &&
+            (model.toLowerCase().includes('qwen') ||
+              this.getBaseURL()?.includes('cerebras'))
+          ) {
+            logger.error(
+              'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+              {
+                error,
+                model,
+                toolsProvided: formattedTools?.length || 0,
+                toolNames: formattedTools?.map((t) => t.function.name),
+                streamingEnabled,
+              },
+            );
+            // Re-throw but with better context
+            const enhancedError = new Error(
+              `Cerebras/Qwen API bug: Tool not found in list during streaming. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+            );
+            (
+              enhancedError as Error & { originalError?: unknown }
+            ).originalError = error;
+            throw enhancedError;
+          }
+          logger.error('Error processing streaming response:', error);
+          throw error;
+        }
+      }
+
+      // Check buffered text for <tool_call> format before flushing as plain text
+      if (textBuffer.length > 0) {
+        // Try to parse <tool_call> format from buffered text
+        let parsedToolCalls: ToolCallBlock[] = [];
+        let cleanedText = textBuffer;
+
+        try {
+          const parsedResult = this.textToolParser.parse(textBuffer);
+          if (parsedResult.toolCalls.length > 0) {
+            // Convert parsed tool calls to ToolCallBlock format
+            parsedToolCalls = parsedResult.toolCalls.map(
+              (call: { name: string; arguments: Record<string, unknown> }) => ({
+                type: 'tool_call' as const,
+                id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                name: call.name,
+                parameters: call.arguments,
+              }),
+            );
+            cleanedText = parsedResult.cleanedContent;
+          }
+        } catch (error) {
+          const logger = this.getLogger();
+          logger.debug(
+            () => `TextToolCallParser failed on buffered text: ${error}`,
+          );
+        }
+
+        // Emit tool calls from text parsing first
+        if (parsedToolCalls.length > 0) {
+          yield {
+            speaker: 'ai',
+            blocks: parsedToolCalls,
+          } as IContent;
+        }
+
+        // Then emit any remaining cleaned text
+        if (cleanedText.trim().length > 0) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'text',
+                text: cleanedText,
+              } as TextBlock,
+            ],
+          } as IContent;
+        }
+
+        textBuffer = '';
+      }
+
+      // Process and emit tool calls using the pipeline
+      const pipelineResult = await this.toolCallPipeline.process();
+      if (
+        pipelineResult.executed.length > 0 ||
+        pipelineResult.failed.length > 0
+      ) {
+        const blocks: ToolCallBlock[] = [];
+
+        // Process successful tool calls
+        for (const normalizedCall of pipelineResult.normalized) {
+          // Process tool parameters with double-escape handling
+          const processedParameters = processToolParameters(
+            normalizedCall.originalArgs || JSON.stringify(normalizedCall.args),
+            normalizedCall.name,
+            detectedFormat,
+          );
+
+          blocks.push({
+            type: 'tool_call',
+            id: this.normalizeToHistoryToolId(`call_${normalizedCall.index}`),
+            name: normalizedCall.name,
+            parameters: processedParameters,
+          });
+        }
+
+        // Handle failed tool calls (could emit as errors or warnings)
+        for (const failed of pipelineResult.failed) {
+          this.getLogger().warn(
+            `Tool call validation failed for index ${failed.index}: ${failed.validationErrors.join(', ')}`,
+          );
+        }
+
+        if (blocks.length > 0) {
+          const toolCallsContent: IContent = {
+            speaker: 'ai',
+            blocks,
+          };
+
+          // Add usage metadata if we captured it from streaming
+          if (streamingUsage) {
+            toolCallsContent.metadata = {
+              usage: {
+                promptTokens: streamingUsage.prompt_tokens || 0,
+                completionTokens: streamingUsage.completion_tokens || 0,
+                totalTokens:
+                  streamingUsage.total_tokens ||
+                  (streamingUsage.prompt_tokens || 0) +
+                    (streamingUsage.completion_tokens || 0),
+              },
+            };
+          }
+
+          yield toolCallsContent;
+        }
+      }
+
+      // If we have usage information but no tool calls, emit a metadata-only response
+      if (
+        streamingUsage &&
+        this.toolCallPipeline.getStats().collector.totalCalls === 0
+      ) {
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            usage: {
+              promptTokens: streamingUsage.prompt_tokens || 0,
+              completionTokens: streamingUsage.completion_tokens || 0,
+              totalTokens:
+                streamingUsage.total_tokens ||
+                (streamingUsage.prompt_tokens || 0) +
+                  (streamingUsage.completion_tokens || 0),
+            },
+          },
+        } as IContent;
+      }
+    } else {
+      // Handle non-streaming response
+      const completion = response as OpenAI.Chat.Completions.ChatCompletion;
+      const choice = completion.choices?.[0];
+
+      if (!choice) {
+        throw new Error('No choices in completion response');
+      }
+
+      // Log finish reason for debugging Qwen issues
+      if (choice.finish_reason) {
+        logger.debug(
+          () =>
+            `[Non-streaming] Response finish_reason: ${choice.finish_reason}`,
+          {
+            model,
+            finishReason: choice.finish_reason,
+            hasContent: !!choice.message?.content,
+            hasToolCalls: !!(
+              choice.message?.tool_calls && choice.message.tool_calls.length > 0
+            ),
+            contentLength: choice.message?.content?.length || 0,
+            toolCallCount: choice.message?.tool_calls?.length || 0,
+            detectedFormat,
+          },
+        );
+
+        // Warn if the response was truncated
+        if (choice.finish_reason === 'length') {
+          logger.warn(
+            () =>
+              `Response truncated due to max_tokens limit for model ${model}. Consider increasing max_tokens.`,
+          );
+        }
+      }
+
+      const blocks: Array<TextBlock | ToolCallBlock> = [];
+
+      // Handle text content
+      if (choice.message?.content) {
+        blocks.push({
+          type: 'text',
+          text: choice.message.content,
+        } as TextBlock);
+      }
+
+      // Handle tool calls
+      if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
+        // Use the same detected format from earlier for consistency
+
+        for (const toolCall of choice.message.tool_calls) {
+          if (toolCall.type === 'function') {
+            // Normalize tool name for consistency with streaming path
+            const normalizedName = this.toolCallPipeline.normalizeToolName(
+              toolCall.function.name,
+              toolCall.function.arguments,
+            );
+
+            // Process tool parameters with double-escape handling
+            const processedParameters = processToolParameters(
+              toolCall.function.arguments || '',
+              normalizedName,
+              detectedFormat,
+            );
+
+            blocks.push({
+              type: 'tool_call',
+              id: this.normalizeToHistoryToolId(toolCall.id),
+              name: normalizedName,
+              parameters: processedParameters,
+            } as ToolCallBlock);
+          }
+        }
+      }
+
+      // Additionally check for <tool_call> format in text content
+      if (
+        choice.message?.content &&
+        typeof choice.message.content === 'string'
+      ) {
+        try {
+          const parsedResult = this.textToolParser.parse(
+            choice.message.content,
+          );
+          if (parsedResult.toolCalls.length > 0) {
+            // Add tool calls found in text content
+            for (const call of parsedResult.toolCalls) {
+              blocks.push({
+                type: 'tool_call',
+                id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                name: call.name,
+                parameters: call.arguments,
+              } as ToolCallBlock);
+            }
+
+            // Update the text content to remove the tool call parts
+            if (choice.message.content !== parsedResult.cleanedContent) {
+              // Find the text block and update it
+              const textBlockIndex = blocks.findIndex(
+                (block) => block.type === 'text',
+              );
+              if (textBlockIndex >= 0) {
+                (blocks[textBlockIndex] as TextBlock).text =
+                  parsedResult.cleanedContent;
+              } else if (parsedResult.cleanedContent.trim()) {
+                // Add cleaned text if it doesn't exist
+                blocks.unshift({
+                  type: 'text',
+                  text: parsedResult.cleanedContent,
+                } as TextBlock);
+              }
+            }
+          }
+        } catch (error) {
+          const logger = this.getLogger();
+          logger.debug(
+            () => `TextToolCallParser failed on message content: ${error}`,
+          );
+        }
+      }
+
+      // Emit the complete response as a single IContent
+      if (blocks.length > 0) {
+        const responseContent: IContent = {
+          speaker: 'ai',
+          blocks,
+        };
+
+        // Add usage metadata from non-streaming response
+        if (completion.usage) {
+          responseContent.metadata = {
+            usage: {
+              promptTokens: completion.usage.prompt_tokens || 0,
+              completionTokens: completion.usage.completion_tokens || 0,
+              totalTokens:
+                completion.usage.total_tokens ||
+                (completion.usage.prompt_tokens || 0) +
+                  (completion.usage.completion_tokens || 0),
+            },
+          };
+        }
+
+        yield responseContent;
+      } else if (completion.usage) {
+        // Emit metadata-only response if no content blocks but have usage info
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            usage: {
+              promptTokens: completion.usage.prompt_tokens || 0,
+              completionTokens: completion.usage.completion_tokens || 0,
+              totalTokens:
+                completion.usage.total_tokens ||
+                (completion.usage.prompt_tokens || 0) +
+                  (completion.usage.completion_tokens || 0),
+            },
+          },
+        } as IContent;
+      }
+    }
+  }
+
+  /**
+   * @plan:PLAN-20251023-STATELESS-HARDENING.P08
+   * @requirement:REQ-SP4-003
+   * Legacy implementation for chat completion using accumulated tool calls approach
    */
   override getToolFormat(): string {
     const format = this.detectToolFormat();
