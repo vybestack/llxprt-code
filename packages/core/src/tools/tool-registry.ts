@@ -23,11 +23,9 @@ import { parse } from 'shell-quote';
 import { ToolErrorType } from './tool-error.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { DebugLogger } from '../debug/index.js';
+import { normalizeToolName } from './toolNameUtils.js';
 import type { EventEmitter } from 'node:events';
-
 type ToolParams = Record<string, unknown>;
-
-const normalizeToolName = (name: string): string => name.trim().toLowerCase();
 
 export class DiscoveredTool extends BaseTool<ToolParams, ToolResult> {
   constructor(
@@ -214,9 +212,15 @@ export class ToolRegistry {
     const excludedRaw = this.config.getExcludeTools?.() ?? [];
 
     return {
-      allowed: new Set(allowedRaw.map(normalizeToolName)),
-      disabled: new Set(disabledRaw.map(normalizeToolName)),
-      excluded: new Set(excludedRaw.map(normalizeToolName)),
+      allowed: new Set(
+        allowedRaw.map((name) => normalizeToolName(name) || name),
+      ),
+      disabled: new Set(
+        disabledRaw.map((name) => normalizeToolName(name) || name),
+      ),
+      excluded: new Set(
+        excludedRaw.map((name) => normalizeToolName(name) || name),
+      ),
     };
   }
 
@@ -224,7 +228,7 @@ export class ToolRegistry {
     toolName: string,
     governance: ReturnType<ToolRegistry['getToolGovernance']>,
   ): boolean {
-    const canonical = normalizeToolName(toolName);
+    const canonical = normalizeToolName(toolName) || toolName;
     if (governance.excluded.has(canonical)) {
       return false;
     }
@@ -590,7 +594,16 @@ export class ToolRegistry {
    * @param context Optional context to inject into the tool instance
    */
   getTool(name: string, context?: ToolContext): AnyDeclarativeTool | undefined {
-    const tool = this.tools.get(name);
+    // Try original name first (most common case)
+    let tool = this.tools.get(name);
+
+    // If not found, try normalized name for fuzzy matching
+    if (!tool) {
+      const normalizedName = normalizeToolName(name);
+      if (normalizedName && normalizedName !== name) {
+        tool = this.tools.get(normalizedName);
+      }
+    }
 
     if (!tool) {
       return undefined;
@@ -614,18 +627,23 @@ export class ToolRegistry {
     tool: AnyDeclarativeTool,
     targetMap: Map<string, AnyDeclarativeTool>,
   ): void {
-    if (targetMap.has(tool.name)) {
+    // Normalize the tool name for consistent storage and lookup
+    const normalizedName = normalizeToolName(tool.name) || tool.name;
+
+    if (targetMap.has(normalizedName)) {
       // For non-MCP tools, log warning and overwrite
       if (!(tool instanceof DiscoveredMCPTool)) {
         this.logger.warn(
           () =>
-            `Tool with name "${tool.name}" is already registered. Overwriting.`,
+            `Tool with name "${tool.name}" (normalized: "${normalizedName}") is already registered. Overwriting.`,
         );
       }
       // For MCP tools, we assume they already have unique names from generateMcpToolName(serverName, toolName)
       // so we simply overwrite (this should not happen in normal operation)
     }
-    targetMap.set(tool.name, tool);
+
+    // Store the tool with the normalized name for consistent lookup
+    targetMap.set(normalizedName, tool);
   }
 
   private async withDiscoveryLock<T>(task: () => Promise<T>): Promise<T> {

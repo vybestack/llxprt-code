@@ -98,7 +98,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const matches: MatchCandidate[] = [
       ...this.findBracketToolRequests(content),
       ...this.findJsonToolRequests(content),
-      ...this.findHermesToolRequests(content),
+      ...this.findXMLToolRequests(content),
       ...this.findInvokeToolRequests(content),
       ...this.findGenericXmlToolRequests(content),
       ...this.findUseToolRequests(content),
@@ -229,7 +229,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     return matches;
   }
 
-  private findHermesToolRequests(content: string): MatchCandidate[] {
+  private findXMLToolRequests(content: string): MatchCandidate[] {
     const matches: MatchCandidate[] = [];
     const startTag = '<tool_call>';
     const endTag = '</tool_call>';
@@ -242,33 +242,102 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       const end = content.indexOf(endTag, start + startTag.length);
       if (end === -1) break;
 
-      const jsonText = content.slice(start + startTag.length, end).trim();
-      let toolName = '';
-      let args = '{}';
-
-      try {
-        const parsed = JSON.parse(jsonText);
-        toolName = String(parsed.name ?? '');
-        args = JSON.stringify(parsed.arguments ?? {});
-      } catch (error) {
-        console.error(
-          `[GemmaToolCallParser] Failed to parse Hermes format: ${error}`,
-        );
-      }
-
+      const innerContent = content.slice(start + startTag.length, end).trim();
       const fullEnd = end + endTag.length;
-      matches.push({
+
+      // Smart parsing: First try JSON parsing (Hermes format), then try XML parsing
+      const match = this.parseToolCallContent(
+        innerContent,
         start,
-        end: fullEnd,
-        toolName,
-        rawArgs: args,
-        fullMatch: content.slice(start, fullEnd),
-      });
+        fullEnd,
+        content.slice(start, fullEnd),
+      );
+      if (match) {
+        matches.push(match);
+      }
 
       searchIndex = fullEnd;
     }
 
     return matches;
+  }
+
+  private parseToolCallContent(
+    innerContent: string,
+    start: number,
+    end: number,
+    fullMatch: string,
+  ): MatchCandidate | null {
+    // Option A: Try JSON parsing (Hermes format)
+    try {
+      const parsed = JSON.parse(innerContent);
+      if (typeof parsed === 'object' && parsed !== null && 'name' in parsed) {
+        // Hermes format validation
+        const toolName = String(parsed.name || '');
+        const args = parsed.arguments || {};
+        return {
+          start,
+          end,
+          toolName,
+          rawArgs: JSON.stringify(args),
+          fullMatch,
+        };
+      }
+    } catch {
+      // Not valid JSON, continue trying XML format
+    }
+
+    // Option B: Try XML parsing
+    const xmlResult = this.parseXmlContent(innerContent);
+    if (xmlResult.toolName) {
+      return {
+        start,
+        end,
+        toolName: xmlResult.toolName,
+        rawArgs: JSON.stringify(xmlResult.args),
+        fullMatch,
+      };
+    }
+
+    // All parsing failed, return null
+    return null;
+  }
+
+  private parseXmlContent(xmlContent: string): {
+    toolName: string;
+    args: Record<string, unknown>;
+  } {
+    const result = { toolName: '', args: {} as Record<string, unknown> };
+
+    // Parse XML-like format: tool_name followed by <arg_key>value</arg_key>
+    const lines = xmlContent
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line);
+
+    if (lines.length > 0) {
+      const potentialToolName = lines[0];
+
+      // Validate if tool name is reasonable (should not contain special characters or braces)
+      if (
+        potentialToolName &&
+        !potentialToolName.includes('{') &&
+        !potentialToolName.includes('}')
+      ) {
+        result.toolName = potentialToolName;
+
+        // Only parse parameters when there is a valid tool name
+        for (let i = 1; i < lines.length; i++) {
+          const argMatch = lines[i].match(/<(\w+)>([^<]*)<\/\1>/);
+          if (argMatch) {
+            const [, key, value] = argMatch;
+            result.args[key] = this.parseValue(value.trim());
+          }
+        }
+      }
+    }
+
+    return result;
   }
 
   private findInvokeToolRequests(content: string): MatchCandidate[] {

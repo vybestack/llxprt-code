@@ -125,6 +125,7 @@ export function getSystemDefaultsPath(): string {
 }
 
 export type { DnsResolutionOrder } from './settingsSchema.js';
+export type { ToolCallProcessingMode } from './settingsSchema.js';
 
 export enum SettingScope {
   User = 'User',

@@ -29,6 +29,7 @@ import {
   UnauthorizedError,
   toFriendlyError,
 } from '../utils/errors.js';
+import { normalizeToolName } from '../tools/toolNameUtils.js';
 import { GeminiChat, InvalidStreamError } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
@@ -438,12 +439,28 @@ export class Turn {
     const callId =
       fnCall.id ??
       `${fnCall.name}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const name = fnCall.name || 'undefined_tool_name';
+
+    // REAL FIX: Turn.ts also gets fragmented data - handle properly
+    let name = fnCall.name;
+    if (!name || name.trim() === '') {
+      // Turn may get incomplete data from fragmented FunctionCalls
+      // Keep undefined_tool_name for proper error detection
+      name = 'undefined_tool_name';
+    } else {
+      // Apply shared normalization for defined names
+      const normalized = normalizeToolName(name);
+      if (normalized) {
+        name = normalized;
+      } else {
+        name = 'undefined_tool_name';
+      }
+    }
+
     const args = (fnCall.args || {}) as Record<string, unknown>;
 
     const toolCallRequest: ToolCallRequestInfo = {
       callId,
-      name,
+      name: name || 'undefined_tool_name',
       args,
       isClientInitiated: false,
       prompt_id: this.prompt_id,

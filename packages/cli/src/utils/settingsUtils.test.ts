@@ -269,11 +269,13 @@ describe('SettingsUtils', () => {
         expect(uiKeys).not.toContain('theme'); // This is now marked false
       });
 
-      it('should not include Advanced category settings', () => {
+      it('should include Advanced category settings that have showInDialog=true', () => {
         const categories = getDialogSettingsByCategory();
 
-        // Advanced settings should be filtered out
-        expect(categories['Advanced']).toBeUndefined();
+        // Advanced settings with showInDialog=true should be included
+        expect(categories['Advanced']).toBeDefined();
+        expect(categories['Advanced']).toHaveLength(1);
+        expect(categories['Advanced'][0].key).toBe('toolCallProcessingMode');
       });
 
       it('should include settings with showInDialog=true', () => {
