@@ -126,7 +126,13 @@ export function SettingsDialog({
     setModifiedSettings(newModified);
     setRestartRequiredSettings(newRestartRequired);
     setShowRestartPrompt(newRestartRequired.size > 0);
-  }, [selectedScope, settings, globalPendingChanges]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    selectedScope,
+    settings,
+    globalPendingChanges,
+    _restartRequiredSettings,
+    modifiedSettings,
+  ]);
 
   const generateSettingsItems = () => {
     const settingKeys = getDialogSettingKeys();
