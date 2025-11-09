@@ -1146,7 +1146,7 @@ export class CoreToolScheduler {
   }
 }
 
-const normalizeToolName = (name: string): string => name.trim().toLowerCase();
+import { normalizeToolName } from '../tools/toolNameUtils.js';
 
 function buildToolGovernance(config: Config): {
   allowed: Set<string>;
@@ -1165,9 +1165,13 @@ function buildToolGovernance(config: Config): {
   const excludedRaw = config.getExcludeTools?.() ?? [];
 
   return {
-    allowed: new Set(allowedRaw.map(normalizeToolName)),
-    disabled: new Set(disabledRaw.map(normalizeToolName)),
-    excluded: new Set(excludedRaw.map(normalizeToolName)),
+    allowed: new Set(allowedRaw.map((tool) => normalizeToolName(tool) || tool)),
+    disabled: new Set(
+      disabledRaw.map((tool) => normalizeToolName(tool) || tool),
+    ),
+    excluded: new Set(
+      excludedRaw.map((tool) => normalizeToolName(tool) || tool),
+    ),
   };
 }
 
@@ -1175,7 +1179,7 @@ function isToolBlocked(
   toolName: string,
   governance: ReturnType<typeof buildToolGovernance>,
 ): boolean {
-  const canonical = normalizeToolName(toolName);
+  const canonical = normalizeToolName(toolName) || toolName;
   if (governance.excluded.has(canonical)) {
     return true;
   }

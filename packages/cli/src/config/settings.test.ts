@@ -198,6 +198,8 @@ describe('Settings Loading and Merging', () => {
         },
         enableTextToolCallParsing: false,
         textToolCallModels: [],
+        theme: undefined,
+        toolCallProcessingMode: 'pipeline',
         openaiResponsesEnabled: false,
         shellReplacement: false,
         oauthEnabledProviders: {},
@@ -285,6 +287,7 @@ describe('Settings Loading and Merging', () => {
         },
         enableTextToolCallParsing: false,
         textToolCallModels: [],
+        toolCallProcessingMode: 'pipeline',
         openaiResponsesEnabled: false,
         shellReplacement: false,
         oauthEnabledProviders: {},
@@ -379,6 +382,7 @@ describe('Settings Loading and Merging', () => {
         useRipgrep: false,
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
+        toolCallProcessingMode: 'pipeline',
         chatCompression: {},
         mcp: {},
         security: {},
@@ -386,6 +390,7 @@ describe('Settings Loading and Merging', () => {
         useSmartEdit: false,
         ...userSettingsContent,
       });
+      expect(settings.errors.length).toBe(0);
     });
 
     it('should load workspace settings if only workspace file exists', () => {
@@ -459,6 +464,7 @@ describe('Settings Loading and Merging', () => {
         },
         enableTextToolCallParsing: false,
         textToolCallModels: [],
+        toolCallProcessingMode: 'pipeline',
         openaiResponsesEnabled: false,
         shellReplacement: false,
         oauthEnabledProviders: {},
@@ -472,6 +478,7 @@ describe('Settings Loading and Merging', () => {
         useSmartEdit: false,
         ...workspaceSettingsContent,
       });
+      expect(settings.errors.length).toBe(0);
     });
 
     it('should merge user and workspace settings, with workspace taking precedence', () => {
@@ -548,6 +555,7 @@ describe('Settings Loading and Merging', () => {
         },
         enableTextToolCallParsing: false,
         textToolCallModels: [],
+        toolCallProcessingMode: 'pipeline',
         openaiResponsesEnabled: false,
         shellReplacement: false,
         oauthEnabledProviders: {},
@@ -562,6 +570,7 @@ describe('Settings Loading and Merging', () => {
         ...userSettingsContent,
         ...workspaceSettingsContent,
       });
+      expect(settings.errors.length).toBe(0);
     });
 
     it('should merge system, user, and workspace settings with workspace overriding user and user overriding system for theme', () => {
@@ -648,6 +657,7 @@ describe('Settings Loading and Merging', () => {
         },
         enableTextToolCallParsing: false,
         textToolCallModels: [],
+        toolCallProcessingMode: 'pipeline',
         openaiResponsesEnabled: false,
         shellReplacement: false,
         oauthEnabledProviders: {},
@@ -664,6 +674,7 @@ describe('Settings Loading and Merging', () => {
         ...systemSettingsContent,
         theme: 'dark',
       });
+      expect(settings.errors.length).toBe(0);
     });
 
     it('should merge all settings files with the correct precedence, letting user/workspace themes override system', () => {
@@ -775,6 +786,7 @@ describe('Settings Loading and Merging', () => {
         tools: {},
         useSmartEdit: false,
         theme: 'user-theme',
+        toolCallProcessingMode: 'pipeline',
         sandbox: false,
         telemetry: false,
         contextFileName: 'WORKSPACE_CONTEXT.md',
@@ -1736,6 +1748,7 @@ describe('Settings Loading and Merging', () => {
           },
           enableTextToolCallParsing: false,
           textToolCallModels: [],
+          toolCallProcessingMode: 'pipeline',
           openaiResponsesEnabled: false,
           shellReplacement: false,
           oauthEnabledProviders: {},

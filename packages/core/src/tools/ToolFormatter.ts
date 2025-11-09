@@ -29,6 +29,10 @@ import {
 import { ITool } from '../providers/ITool.js';
 import { ToolCallBlock } from '../services/history/IContent.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import {
+  logDoubleEscapingInChunk,
+  processToolParameters as doubleEscapeProcessToolParameters,
+} from './doubleEscapeUtils.js';
 
 export class ToolFormatter implements IToolFormatter {
   private logger = new DebugLogger('llxprt:tools:formatter');
@@ -402,47 +406,19 @@ export class ToolFormatter implements IToolFormatter {
           );
         }
 
-        // Check if arguments look double-stringified
-        if (format === 'qwen') {
-          const args = openAiToolCall.function.arguments;
-          try {
-            const parsed = JSON.parse(args);
-            if (typeof parsed === 'string') {
-              // Arguments were stringified, let's check if they're double-stringified
-              try {
-                const doubleParsed = JSON.parse(parsed);
-                this.logger.error(
-                  () =>
-                    `[Qwen] Arguments appear to be double-stringified for ${openAiToolCall.function.name}`,
-                  {
-                    firstParse: parsed,
-                    secondParse: doubleParsed,
-                    originalLength: args.length,
-                  },
-                );
-              } catch {
-                // Not double-stringified, just single stringified
-                this.logger.debug(
-                  () =>
-                    `[Qwen] Arguments are single-stringified for ${openAiToolCall.function.name}`,
-                );
-              }
-            }
-          } catch (e) {
-            this.logger.error(
-              () =>
-                `[Qwen] Failed to parse arguments for ${openAiToolCall.function.name}:`,
-              e,
-            );
-          }
-        }
+        // Process parameters using doubleEscapeUtils for formats that need special handling
+        const parameters = doubleEscapeProcessToolParameters(
+          openAiToolCall.function.arguments,
+          openAiToolCall.function.name,
+          format,
+        );
 
         return [
           {
             type: 'tool_call' as const,
             id: openAiToolCall.id,
             name: openAiToolCall.function.name,
-            parameters: JSON.parse(openAiToolCall.function.arguments),
+            parameters,
           },
         ];
       }
@@ -577,38 +553,29 @@ export class ToolFormatter implements IToolFormatter {
               );
             }
 
-            // Special Qwen double-stringification detection
+            // Use doubleEscapeUtils to detect potential double-stringification
             if (format === 'qwen') {
-              // Check if this looks like a double-stringified value
-              const chunk = deltaToolCall.function.arguments;
-              if (
-                chunk.includes('\\"[') ||
-                chunk.includes('\\\\"') ||
-                (chunk.startsWith('"\\"') && chunk.endsWith('\\""'))
-              ) {
-                this.logger.error(
-                  () =>
-                    `[Qwen] Detected potential double-stringification in chunk for ${tc.name}`,
-                  {
-                    chunk,
-                    pattern:
-                      'Contains escaped quotes that suggest double-stringification',
-                  },
-                );
-              }
+              logDoubleEscapingInChunk(
+                deltaToolCall.function.arguments || '',
+                tc.name || 'unknown',
+                format,
+              );
             }
 
             (tc as unknown as { _argumentsString: string })._argumentsString +=
               deltaToolCall.function.arguments;
 
-            // Remove excessive accumulation logging
-
-            // Try to parse parameters
+            // Try to parse parameters using doubleEscapeUtils for special formats
             try {
               const argsStr = (tc as unknown as { _argumentsString: string })
                 ._argumentsString;
               if (argsStr.trim()) {
-                tc.parameters = JSON.parse(argsStr);
+                // Process using doubleEscapeUtils for formats that need special handling
+                tc.parameters = doubleEscapeProcessToolParameters(
+                  argsStr,
+                  tc.name || 'unknown',
+                  format,
+                );
               }
             } catch {
               // Keep accumulating, parameters will be set when complete

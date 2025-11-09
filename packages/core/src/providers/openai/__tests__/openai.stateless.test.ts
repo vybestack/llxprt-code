@@ -278,4 +278,37 @@ describe('OpenAI provider stateless contract tests', () => {
     expect(request?.temperature).toBe(0.17);
     expect(getEphemerals).not.toHaveBeenCalled();
   });
+
+  describe('OpenAIProvider Dual-Mode Tool Call Processing', () => {
+    // Helper function to access private property for testing
+    function getToolCallProcessingMode(
+      provider: TestOpenAIProvider,
+    ): 'pipeline' | 'legacy' {
+      return (
+        provider as unknown as { toolCallProcessingMode: 'pipeline' | 'legacy' }
+      ).toolCallProcessingMode;
+    }
+
+    it('should create provider with pipeline mode (default)', () => {
+      const provider = new TestOpenAIProvider('test-key', undefined, {
+        toolCallProcessingMode: 'pipeline',
+      });
+      expect(provider).toBeDefined();
+      expect(getToolCallProcessingMode(provider)).toBe('pipeline');
+    });
+
+    it('should create provider with legacy mode', () => {
+      const provider = new TestOpenAIProvider('test-key', undefined, {
+        toolCallProcessingMode: 'legacy',
+      });
+      expect(provider).toBeDefined();
+      expect(getToolCallProcessingMode(provider)).toBe('legacy');
+    });
+
+    it('should default to pipeline mode when no mode specified', () => {
+      const provider = new TestOpenAIProvider('test-key');
+      expect(provider).toBeDefined();
+      expect(getToolCallProcessingMode(provider)).toBe('pipeline');
+    });
+  });
 });
