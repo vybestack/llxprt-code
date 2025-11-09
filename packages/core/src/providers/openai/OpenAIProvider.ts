@@ -62,7 +62,6 @@ const TOOL_ARGS_PREVIEW_LENGTH = 500;
 type ToolReplayMode = 'native' | 'textual';
 const TEXTUAL_TOOL_REPLAY_MODELS = new Set(['openrouter/polaris-alpha']);
 
-
 export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
   private readonly toolCallPipeline = new ToolCallPipeline();
