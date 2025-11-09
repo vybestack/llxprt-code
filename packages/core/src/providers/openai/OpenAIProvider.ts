@@ -48,17 +48,15 @@ import { retryWithBackoff } from '../../utils/retry.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from './openaiRequestParams.js';
+import { ensureJsonSafe } from '../../utils/unicodeUtils.js';
 import {
-  ensureJsonSafe,
-  hasUnicodeReplacements,
-} from '../../utils/unicodeUtils.js';
-import { limitOutputTokens } from '../../utils/toolOutputLimiter.js';
+  buildToolResponsePayload,
+  EMPTY_TOOL_RESULT_PLACEHOLDER,
+} from '../utils/toolResponsePayload.js';
 
 const MAX_TOOL_RESPONSE_CHARS = 1024;
 const MAX_TOOL_RESPONSE_RETRY_CHARS = 512;
-const MAX_TOOL_RESPONSE_TEXT_CHARS = 512;
 const TOOL_ARGS_PREVIEW_LENGTH = 500;
-const EMPTY_TOOL_RESULT_PLACEHOLDER = '[no tool result]';
 type ToolReplayMode = 'native' | 'textual';
 const TEXTUAL_TOOL_REPLAY_MODELS = new Set(['openrouter/polaris-alpha']);
 
@@ -660,96 +658,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return 'native';
   }
 
-  private coerceToString(value: unknown): string {
-    if (typeof value === 'string') {
-      return value;
-    }
-
-    try {
-      return JSON.stringify(value);
-    } catch {
-      try {
-        return String(value);
-      } catch {
-        return '[unserializable value]';
-      }
-    }
-  }
-
-  private formatToolResult(result: unknown): {
-    value?: string;
-    truncated?: boolean;
-    originalLength?: number;
-    raw?: string;
-  } {
-    if (result === undefined || result === null) {
-      return {};
-    }
-    if (typeof result === 'string') {
-      const limited = this.limitToolResponseText(result);
-      return { ...limited, raw: result };
-    }
-    try {
-      const serialized = JSON.stringify(result);
-      return { value: serialized, raw: serialized };
-    } catch {
-      const coerced = this.coerceToString(result);
-      return { value: coerced, raw: coerced };
-    }
-  }
-
-  private sanitizeResultString(result: string): {
-    text: string;
-    truncated: boolean;
-    originalLength: number;
-  } {
-    const sanitized = hasUnicodeReplacements(result)
-      ? ensureJsonSafe(result)
-      : result;
-
-    if (sanitized.length <= MAX_TOOL_RESPONSE_CHARS) {
-      return {
-        text: sanitized,
-        truncated: false,
-        originalLength: sanitized.length,
-      };
-    }
-
-    const truncatedText = `${sanitized.slice(
-      0,
-      MAX_TOOL_RESPONSE_CHARS,
-    )}… [truncated ${sanitized.length - MAX_TOOL_RESPONSE_CHARS} chars]`;
-
-    return {
-      text: truncatedText,
-      truncated: true,
-      originalLength: sanitized.length,
-    };
-  }
-
-  private limitToolResponseText(text: string): {
-    value: string;
-    truncated: boolean;
-    originalLength: number;
-  } {
-    let limited = text;
-    let truncated = false;
-    const originalLength = text.length;
-
-    const lines = limited.split('\n');
-    if (lines.length > 1) {
-      limited = `${lines[0]}\n[+${lines.length - 1} more lines omitted]`;
-      truncated = true;
-    }
-
-    if (limited.length > MAX_TOOL_RESPONSE_TEXT_CHARS) {
-      limited = `${limited.slice(0, MAX_TOOL_RESPONSE_TEXT_CHARS)}… [truncated ${limited.length - MAX_TOOL_RESPONSE_TEXT_CHARS} chars]`;
-      truncated = true;
-    }
-
-    return { value: limited, truncated, originalLength };
-  }
-
   private describeToolCallForText(block: ToolCallBlock): string {
     const normalizedArgs = this.normalizeToolCallArguments(block.parameters);
     const preview =
@@ -764,119 +672,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     block: ToolResponseBlock,
     config?: Config,
   ): string {
-    const payloadString = this.buildToolResponseContent(block, config);
-    try {
-      const parsed = JSON.parse(payloadString) as {
-        status?: string;
-        result?: string;
-        error?: string;
-        toolName?: string;
-        limitMessage?: string;
-      };
-      const header = `[TOOL RESULT] ${parsed.toolName ?? block.toolName ?? 'unknown_tool'} (${parsed.status ?? 'unknown'})`;
-      const bodyParts: string[] = [];
-      if (parsed.error) {
-        bodyParts.push(`error: ${parsed.error}`);
-      }
-      if (parsed.result && parsed.result !== EMPTY_TOOL_RESULT_PLACEHOLDER) {
-        bodyParts.push(parsed.result);
-      }
-      if (parsed.limitMessage) {
-        bodyParts.push(parsed.limitMessage);
-      }
-      return bodyParts.length > 0
-        ? `${header}\n${bodyParts.join('\n')}`
-        : header;
-    } catch {
-      return `[TOOL RESULT] ${block.toolName ?? 'unknown_tool'} ${payloadString}`;
+    const payload = buildToolResponsePayload(block, config);
+    const header = `[TOOL RESULT] ${payload.toolName ?? block.toolName ?? 'unknown_tool'} (${payload.status ?? 'unknown'})`;
+    const bodyParts: string[] = [];
+    if (payload.error) {
+      bodyParts.push(`error: ${payload.error}`);
     }
+    if (payload.result && payload.result !== EMPTY_TOOL_RESULT_PLACEHOLDER) {
+      bodyParts.push(payload.result);
+    }
+    if (payload.limitMessage) {
+      bodyParts.push(payload.limitMessage);
+    }
+    return bodyParts.length > 0 ? `${header}\n${bodyParts.join('\n')}` : header;
   }
 
   private buildToolResponseContent(
     block: ToolResponseBlock,
     config?: Config,
   ): string {
-    const payload: {
-      status: 'success' | 'error';
-      toolName?: string;
-      result: string;
-      error?: string;
-      truncated?: boolean;
-      originalLength?: number;
-      limitMessage?: string;
-    } = {
-      status: block.error ? 'error' : 'success',
-      toolName: block.toolName,
-      result: EMPTY_TOOL_RESULT_PLACEHOLDER,
-    };
-
-    const formatted = this.formatToolResult(block.result);
-    const serializedResult =
-      config && formatted.raw ? formatted.raw : formatted.value;
-    if (serializedResult) {
-      const limited = this.limitToolPayload(serializedResult, block, config);
-      payload.result = limited.text;
-      if (limited.truncated) {
-        payload.truncated = true;
-        payload.originalLength = limited.originalLength;
-      }
-      if (limited.limitMessage) {
-        payload.limitMessage = limited.limitMessage;
-      }
-    }
-    if (formatted.truncated) {
-      payload.truncated = true;
-      payload.originalLength =
-        formatted.originalLength ?? payload.originalLength;
-    }
-
-    if (block.error) {
-      payload.error = this.coerceToString(block.error);
-    }
-
+    const payload = buildToolResponsePayload(block, config);
     return ensureJsonSafe(JSON.stringify(payload));
-  }
-
-  private limitToolPayload(
-    serializedResult: string,
-    block: ToolResponseBlock,
-    config?: Config,
-  ): {
-    text: string;
-    truncated: boolean;
-    originalLength?: number;
-    limitMessage?: string;
-  } {
-    if (!serializedResult) {
-      return {
-        text: EMPTY_TOOL_RESULT_PLACEHOLDER,
-        truncated: false,
-      };
-    }
-
-    if (!config) {
-      const normalized = this.sanitizeResultString(serializedResult);
-      return {
-        text: normalized.text,
-        truncated: normalized.truncated,
-        originalLength: normalized.originalLength,
-      };
-    }
-
-    const limited = limitOutputTokens(
-      serializedResult,
-      config,
-      block.toolName ?? 'tool_response',
-    );
-    const candidate =
-      limited.content || limited.message || EMPTY_TOOL_RESULT_PLACEHOLDER;
-    const normalized = this.sanitizeResultString(candidate);
-    return {
-      text: normalized.text,
-      truncated: limited.wasTruncated || normalized.truncated,
-      originalLength: normalized.originalLength,
-      limitMessage: limited.wasTruncated ? limited.message : undefined,
-    };
   }
 
   private shouldCompressToolMessages(
@@ -1126,7 +942,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Convert IContent to OpenAI messages format
-    const configForMessages = options.config ?? this.globalConfig;
+    const configForMessages =
+      options.config ?? options.runtime?.config ?? this.globalConfig;
     const messages = this.convertToOpenAIMessages(
       contents,
       toolReplayMode,

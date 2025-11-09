@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { GeminiProvider } from './GeminiProvider.js';
 import { IContent } from '../../services/history/IContent.js';
+import type { Part } from '@google/genai';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 
 const generateContentStreamMock = vi.hoisted(() => vi.fn());
@@ -54,6 +55,83 @@ describe('GeminiProvider', () => {
     vi.clearAllMocks();
     generateContentStreamMock.mockReset();
     delete process.env.GEMINI_API_KEY;
+  });
+
+  it('serializes tool responses with error metadata and token limits', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'ack' }],
+              },
+            },
+          ],
+        };
+      },
+    };
+    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+    process.env.GEMINI_API_KEY = 'resolved-key';
+
+    const provider = new GeminiProvider('test-api-key');
+    const oversized = 'line\n'.repeat(2000);
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'summarize' }],
+          },
+          {
+            speaker: 'tool',
+            blocks: [
+              {
+                type: 'tool_response',
+                callId: 'hist_tool_caps',
+                toolName: 'read_file',
+                result: oversized,
+                error: 'file too large',
+              },
+            ],
+          },
+        ] as IContent[],
+        settingsOverrides: {
+          global: {
+            'tool-output-max-tokens': 50,
+            'tool-output-truncate-mode': 'truncate',
+          },
+          provider: {
+            'tool-output-max-tokens': 50,
+            'tool-output-truncate-mode': 'truncate',
+          },
+        },
+      }),
+    );
+
+    await generator.next();
+
+    const request = generateContentStreamMock.mock.calls[0][0];
+    const toolMessage = request.contents.find(
+      (msg: { parts: Part[] }) =>
+        msg.parts &&
+        msg.parts.some(
+          (part: Part) => 'functionResponse' in part && part.functionResponse,
+        ),
+    ) as { parts: Part[] };
+    const functionResponsePart = toolMessage.parts.find(
+      (part) => 'functionResponse' in part,
+    ) as { functionResponse: { response: Record<string, unknown> } };
+    const responsePayload = functionResponsePart.functionResponse
+      .response as Record<string, unknown>;
+
+    expect(responsePayload.status).toBe('error');
+    expect(responsePayload.error).toBe('file too large');
+    expect(String(responsePayload.result)).toContain(
+      '[Output truncated due to token limit]',
+    );
+    expect(String(responsePayload.limitMessage)).toMatch(/truncated/i);
   });
 
   // Clean up global state after each test

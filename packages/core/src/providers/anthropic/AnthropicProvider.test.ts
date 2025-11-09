@@ -262,6 +262,20 @@ describe('AnthropicProvider', () => {
     if (!runtimeContext.config) {
       runtimeContext.config = createRuntimeConfigStub(settingsService);
     }
+    runtimeContext.config.getEphemeralSettings = () => ({
+      ...settingsService.getAllGlobalSettings(),
+      ...settingsService.getProviderSettings(provider.name),
+    });
+    runtimeContext.config.getEphemeralSetting = (key: string) => {
+      const providerValue = settingsService.getProviderSetting(
+        provider.name,
+        key,
+      );
+      if (providerValue !== undefined) {
+        return providerValue;
+      }
+      return settingsService.get(key);
+    };
 
     // Re-activate the runtime context for test execution
     setActiveProviderRuntimeContext(runtimeContext);
@@ -559,6 +573,91 @@ describe('AnthropicProvider', () => {
         )
         .find((msg) => msg.content.includes('docs/example.md'));
       expect(duplicateUserText).toBeUndefined();
+    });
+
+    it('should truncate oversized tool_result payloads and mark errors', async () => {
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'Done' },
+          };
+        },
+      };
+
+      mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
+
+      const toolCallId = 'hist_tool_limit';
+      const oversized = 'line\n'.repeat(2000);
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Process file' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: toolCallId,
+              name: 'read_file',
+              parameters: { absolute_path: '/tmp/file.txt' },
+            },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: toolCallId,
+              toolName: 'read_file',
+              result: oversized,
+              error: 'validation failed',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(
+        buildCallOptions(messages, {
+          settingsOverrides: {
+            global: {
+              'tool-output-max-tokens': 50,
+              'tool-output-truncate-mode': 'truncate',
+            },
+            provider: {
+              'tool-output-max-tokens': 50,
+              'tool-output-truncate-mode': 'truncate',
+            },
+          },
+        }),
+      );
+      const collected: IContent[] = [];
+      for await (const chunk of generator) {
+        collected.push(chunk);
+      }
+
+      const request = mockMessagesCreate.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+      const toolResultMessage = anthropicMessages.find(
+        (msg) =>
+          msg.role === 'user' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((block) => block.type === 'tool_result'),
+      ) as AnthropicMessage;
+
+      expect(toolResultMessage).toBeDefined();
+      const toolResultBlock = (
+        toolResultMessage.content as AnthropicContentBlock[]
+      ).find(
+        (block) => block.type === 'tool_result',
+      ) as AnthropicContentBlock & { content: string; is_error?: boolean };
+
+      expect(toolResultBlock.is_error).toBe(true);
+      expect(toolResultBlock.content).toContain(
+        '[Output truncated due to token limit]',
+      );
     });
 
     it('should handle tool calls in the stream', async () => {
