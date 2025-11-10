@@ -70,7 +70,6 @@ describe('TaskTool', () => {
       subagent_name: 'helper',
       goal_prompt: 'Ship the feature',
       behaviour_prompts: ['Respect coding standards'],
-      run_limits: { max_turns: 12 },
       tool_whitelist: ['read_file', 'write_file'],
       output_spec: { summary: 'Outcome summary' },
       context: { extra: 'value' },
@@ -126,12 +125,11 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
-      isInteractiveEnvironment: () => true,
+      isInteractiveEnvironment: () => false,
     });
     const invocation = tool.build({
       subagent_name: 'helper',
       goal_prompt: 'Ship the feature',
-      run_limits: { interactive: false },
     });
 
     await invocation.execute(new AbortController().signal, undefined);

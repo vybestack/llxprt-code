@@ -753,9 +753,75 @@ export class HistoryService
     // Get the curated history
     const curated = this.getCurated();
 
+    // Ensure every tool response has a corresponding tool call for provider payloads
+    const normalized = this.ensureToolCallContinuity(curated);
+
     // Deep clone to avoid circular references in tool call parameters
     // We need a clean copy that can be serialized
-    return this.deepCloneWithoutCircularRefs(curated);
+    return this.deepCloneWithoutCircularRefs(normalized);
+  }
+
+  /**
+   * Ensure every tool_response has a matching tool_call.
+   * If compression removed the original tool_call, synthesize a minimal placeholder
+   * so providers receive a structurally valid transcript without losing context.
+   */
+  private ensureToolCallContinuity(contents: IContent[]): IContent[] {
+    const seenToolCallIds = new Set<string>();
+    const normalized: IContent[] = [];
+
+    for (const content of contents) {
+      if (content.blocks && content.blocks.length > 0) {
+        for (const block of content.blocks) {
+          if (block.type === 'tool_call') {
+            seenToolCallIds.add((block as ToolCallBlock).id);
+          }
+        }
+      }
+
+      if (content.speaker === 'tool' && content.blocks?.length) {
+        const missingResponses = content.blocks.filter(
+          (block) =>
+            block.type === 'tool_response' &&
+            !seenToolCallIds.has((block as ToolResponseBlock).callId),
+        ) as ToolResponseBlock[];
+
+        if (missingResponses.length > 0) {
+          const reconstructedBlocks = missingResponses.map((response) => {
+            const reconstructed: ToolCallBlock = {
+              type: 'tool_call',
+              id: response.callId,
+              name: response.toolName || 'unknown_tool',
+              parameters: { reconstructed: true },
+              description: 'Reconstructed tool call after compression',
+            };
+            return reconstructed;
+          });
+
+          this.logger.warn('Synthesizing missing tool_call for responses', {
+            callIds: reconstructedBlocks.map((block) => block.id),
+            toolNames: reconstructedBlocks.map((block) => block.name),
+          });
+
+          normalized.push({
+            speaker: 'ai',
+            blocks: reconstructedBlocks,
+            metadata: {
+              synthetic: true,
+              reason: 'reconstructed_tool_call',
+            },
+          });
+
+          for (const block of reconstructedBlocks) {
+            seenToolCallIds.add(block.id);
+          }
+        }
+      }
+
+      normalized.push(content);
+    }
+
+    return normalized;
   }
 
   /**

@@ -77,9 +77,13 @@ type RuntimeContextShape = {
 interface OpenAIRegistrationContext {
   apiKey?: string;
   baseUrl?: string;
-  providerConfig: IProviderConfig;
+  providerConfig: ProviderConfigWithToolMode;
   oauthManager: OAuthManager;
 }
+
+type ProviderConfigWithToolMode = IProviderConfig & {
+  toolCallProcessingMode?: 'pipeline' | 'legacy';
+};
 
 /**
  * Set a custom file system implementation (mainly for testing).
@@ -319,7 +323,7 @@ export function createProviderManager(
     });
   }
 
-  const openaiProviderConfig: IProviderConfig = {
+  const openaiProviderConfig: ProviderConfigWithToolMode = {
     enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
     textToolCallModels: settingsData.textToolCallModels,
     providerToolFormatOverrides: settingsData.providerToolFormatOverrides,

@@ -19,7 +19,6 @@ import {
   ContextState,
   SubagentTerminateMode,
   type OutputObject,
-  type RunConfig,
 } from '../core/subagent.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import type { SubagentManager } from '../config/subagentManager.js';
@@ -40,8 +39,6 @@ export interface TaskToolParams {
   behavior_prompts?: string[];
   behaviourPrompts?: string[];
   behaviorPrompts?: string[];
-  run_limits?: Partial<RunLimits>;
-  runLimits?: Partial<RunLimits>;
   tool_whitelist?: string[];
   toolWhitelist?: string[];
   output_spec?: Record<string, string>;
@@ -51,21 +48,13 @@ export interface TaskToolParams {
   contextVars?: Record<string, unknown>;
 }
 
-interface RunLimits {
-  max_time_minutes: number;
-  max_turns?: number;
-  interactive?: boolean;
-}
-
 interface TaskToolInvocationParams {
   subagentName: string;
   goalPrompt: string;
   behaviourPrompts: string[];
-  runConfig?: Partial<RunLimits>;
   toolWhitelist?: string[];
   outputSpec?: Record<string, string>;
   context: Record<string, unknown>;
-  interactive?: boolean;
 }
 
 export interface TaskToolDependencies {
@@ -143,13 +132,8 @@ class TaskToolInvocation extends BaseToolInvocation<
   }
 
   private createLaunchRequest(): SubagentLaunchRequest {
-    const {
-      subagentName,
-      behaviourPrompts,
-      runConfig,
-      toolWhitelist,
-      outputSpec,
-    } = this.normalized;
+    const { subagentName, behaviourPrompts, toolWhitelist, outputSpec } =
+      this.normalized;
 
     const launchRequest: SubagentLaunchRequest = {
       name: subagentName,
@@ -157,13 +141,6 @@ class TaskToolInvocation extends BaseToolInvocation<
 
     if (behaviourPrompts.length > 0) {
       launchRequest.behaviourPrompts = behaviourPrompts;
-    }
-
-    if (runConfig && Object.keys(runConfig).length > 0) {
-      launchRequest.runConfig = {
-        max_time_minutes: runConfig.max_time_minutes,
-        max_turns: runConfig.max_turns,
-      } as RunConfig;
     }
 
     let effectiveWhitelist = toolWhitelist;
@@ -200,7 +177,7 @@ class TaskToolInvocation extends BaseToolInvocation<
         launchRequest.toolConfig.tools.length > 0
           ? `${launchRequest.toolConfig.tools.length} tools`
           : 'no tools provided';
-      return `Prepared launch request for '${subagentName}': runConfig=${JSON.stringify(runConfig ?? {})}, toolConfig=${summary}`;
+      return `Prepared launch request for '${subagentName}': toolConfig=${summary}`;
     });
 
     if (outputSpec && Object.keys(outputSpec).length > 0) {
@@ -237,10 +214,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     }
 
     const launchRequest = this.createLaunchRequest();
-    taskLogger.debug(
-      () =>
-        `Launching subagent '${launchRequest.name}' with runConfig=${JSON.stringify(launchRequest.runConfig ?? {})}`,
-    );
+    taskLogger.debug(() => `Launching subagent '${launchRequest.name}'`);
 
     let launchResult:
       | Awaited<ReturnType<SubagentOrchestrator['launch']>>
@@ -316,8 +290,7 @@ class TaskToolInvocation extends BaseToolInvocation<
     try {
       const environmentInteractive =
         this.deps.isInteractiveEnvironment?.() ?? true;
-      const shouldRunInteractive =
-        this.normalized.interactive ?? environmentInteractive;
+      const shouldRunInteractive = environmentInteractive;
 
       if (shouldRunInteractive && typeof scope.runInteractive === 'function') {
         const schedulerFactory = this.deps.getSchedulerFactory?.();
@@ -490,27 +463,6 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
               'Additional behavioural prompts to append after the goal prompt.',
             items: { type: 'string' },
           },
-          run_limits: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              max_time_minutes: {
-                type: 'number',
-                description:
-                  'Optional maximum number of minutes the subagent may run before timing out.',
-              },
-              max_turns: {
-                type: 'number',
-                description:
-                  'Optional maximum number of turns before the subagent stops.',
-              },
-              interactive: {
-                type: 'boolean',
-                description:
-                  'Set to false to force the subagent into non-interactive mode. Defaults to true.',
-              },
-            },
-          },
           tool_whitelist: {
             type: 'array',
             items: { type: 'string' },
@@ -589,22 +541,6 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       .filter((prompt): prompt is string => Boolean(prompt))
       .filter((prompt, index, array) => array.indexOf(prompt) === index);
 
-    const runLimits = (params.run_limits ?? params.runLimits ?? undefined) as
-      | Partial<RunLimits>
-      | undefined;
-
-    let interactive: boolean | undefined;
-    let runConfig: Partial<RunLimits> | undefined;
-    if (runLimits && Object.keys(runLimits).length > 0) {
-      const { interactive: interactiveFlag, ...rest } = runLimits;
-      if (Object.keys(rest).length > 0) {
-        runConfig = { ...rest } as Partial<RunLimits>;
-      }
-      if (typeof interactiveFlag === 'boolean') {
-        interactive = interactiveFlag;
-      }
-    }
-
     const toolWhitelist = (params.tool_whitelist ?? params.toolWhitelist ?? [])
       .map((tool) => tool?.trim())
       .filter((tool): tool is string => Boolean(tool));
@@ -618,11 +554,9 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       subagentName,
       goalPrompt,
       behaviourPrompts,
-      runConfig,
       toolWhitelist: toolWhitelist.length > 0 ? toolWhitelist : undefined,
       outputSpec,
       context,
-      interactive,
     };
   }
 
