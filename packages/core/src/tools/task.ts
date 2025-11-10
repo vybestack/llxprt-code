@@ -597,8 +597,9 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
     let runConfig: Partial<RunLimits> | undefined;
     if (runLimits && Object.keys(runLimits).length > 0) {
       const { interactive: interactiveFlag, ...rest } = runLimits;
-      if (Object.keys(rest).length > 0) {
-        runConfig = { ...rest } as Partial<RunLimits>;
+      const sanitizedRunConfig = this.normalizeRunLimits(rest);
+      if (sanitizedRunConfig) {
+        runConfig = sanitizedRunConfig;
       }
       if (typeof interactiveFlag === 'boolean') {
         interactive = interactiveFlag;
@@ -654,5 +655,37 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       profileManager,
       foregroundConfig: this.config,
     });
+  }
+
+  private normalizeRunLimits(
+    raw: Partial<RunLimits>,
+  ): Partial<RunLimits> | undefined {
+    const sanitized: Partial<RunLimits> = {};
+
+    if (raw.max_time_minutes !== undefined) {
+      const minutes = Number(raw.max_time_minutes);
+      if (Number.isFinite(minutes) && minutes > 0) {
+        sanitized.max_time_minutes = minutes;
+      } else {
+        taskLogger.warn(
+          () =>
+            `[TaskTool] Ignoring run_limits.max_time_minutes=${raw.max_time_minutes} (must be a positive number)`,
+        );
+      }
+    }
+
+    if (raw.max_turns !== undefined) {
+      const turns = Number(raw.max_turns);
+      if (Number.isFinite(turns) && turns >= 2) {
+        sanitized.max_turns = Math.floor(turns);
+      } else {
+        taskLogger.warn(
+          () =>
+            `[TaskTool] Ignoring run_limits.max_turns=${raw.max_turns} (must be >= 2)`,
+        );
+      }
+    }
+
+    return Object.keys(sanitized).length > 0 ? sanitized : undefined;
   }
 }
