@@ -1269,13 +1269,44 @@ export class Config {
     if (key === 'streaming') {
       return this.normalizeAndPersistStreaming(rawValue);
     }
+    if (key === 'context-limit') {
+      const normalized = this.normalizeContextLimit(rawValue);
+      if (normalized !== undefined) {
+        if (normalized !== rawValue) {
+          this.settingsService.set(key, normalized);
+        }
+        return normalized;
+      }
+      return undefined;
+    }
     return rawValue;
+  }
+
+  private normalizeContextLimit(value: unknown): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+      return Math.floor(value);
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed === '') {
+        return undefined;
+      }
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return Math.floor(parsed);
+      }
+    }
+    return undefined;
   }
 
   setEphemeralSetting(key: string, value: unknown): void {
     let settingValue = value;
     if (key === 'streaming') {
       settingValue = this.normalizeStreamingValue(value);
+    }
+    if (key === 'context-limit') {
+      settingValue =
+        value === undefined ? undefined : this.normalizeContextLimit(value);
     }
 
     if (

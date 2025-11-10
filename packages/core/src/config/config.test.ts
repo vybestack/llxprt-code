@@ -929,6 +929,25 @@ describe('Server Config (config.ts)', () => {
       expect(mockSettingsService.get).toHaveBeenCalledTimes(6);
     });
 
+    it('should coerce numeric string context-limit values when reading', () => {
+      const config = new Config(baseParams);
+
+      vi.clearAllMocks();
+      mockSettingsService.get.mockImplementation((key: string) => {
+        if (key === 'context-limit') {
+          return '190000';
+        }
+        return undefined;
+      });
+
+      expect(config.getEphemeralSetting('context-limit')).toBe(190000);
+      expect(mockSettingsService.get).toHaveBeenCalledWith('context-limit');
+      expect(mockSettingsService.set).toHaveBeenCalledWith(
+        'context-limit',
+        190000,
+      );
+    });
+
     /**
      * @requirement REQ-002.1
      * @scenario Config delegates set with various data types
@@ -954,6 +973,18 @@ describe('Server Config (config.ts)', () => {
       });
 
       expect(mockSettingsService.set).toHaveBeenCalledTimes(6);
+    });
+
+    it('should normalize context-limit inputs before persisting', () => {
+      const config = new Config(baseParams);
+
+      vi.clearAllMocks();
+      config.setEphemeralSetting('context-limit', '190000');
+
+      expect(mockSettingsService.set).toHaveBeenCalledWith(
+        'context-limit',
+        190000,
+      );
     });
 
     /**
