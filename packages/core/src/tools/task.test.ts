@@ -70,7 +70,6 @@ describe('TaskTool', () => {
       subagent_name: 'helper',
       goal_prompt: 'Ship the feature',
       behaviour_prompts: ['Respect coding standards'],
-      run_limits: { max_turns: 12 },
       tool_whitelist: ['read_file', 'write_file'],
       output_spec: { summary: 'Outcome summary' },
       context: { extra: 'value' },
@@ -126,12 +125,11 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
-      isInteractiveEnvironment: () => true,
+      isInteractiveEnvironment: () => false,
     });
     const invocation = tool.build({
       subagent_name: 'helper',
       goal_prompt: 'Ship the feature',
-      run_limits: { interactive: false },
     });
 
     await invocation.execute(new AbortController().signal, undefined);
@@ -181,80 +179,6 @@ describe('TaskTool', () => {
     const [, options] = scope.runInteractive.mock.calls[0];
     expect(options?.schedulerFactory).toBe(schedulerFactory);
     expect(scope.runNonInteractive).not.toHaveBeenCalled();
-  });
-
-  it('ignores run_limits.max_turns below 2 to prevent single-turn runs', async () => {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    const scope = {
-      output: {
-        emitted_vars: {},
-        terminate_reason: SubagentTerminateMode.GOAL,
-      },
-      runInteractive: vi.fn().mockResolvedValue(undefined),
-      runNonInteractive: vi.fn(),
-      onMessage: undefined,
-    };
-    const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-101',
-      scope,
-      dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
-    });
-    const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const tool = new TaskTool(config, {
-      orchestratorFactory: () => orchestrator,
-      isInteractiveEnvironment: () => true,
-    });
-    const invocation = tool.build({
-      subagent_name: 'helper',
-      goal_prompt: 'Keep exploring',
-      run_limits: { max_turns: 1 },
-    });
-
-    await invocation.execute(new AbortController().signal, undefined);
-
-    expect(launch).toHaveBeenCalledTimes(1);
-    expect(launch.mock.calls[0][0].runConfig).toBeUndefined();
-  });
-
-  it('floors run_limits.max_turns when decimal values are provided', async () => {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    const scope = {
-      output: {
-        emitted_vars: {},
-        terminate_reason: SubagentTerminateMode.GOAL,
-      },
-      runInteractive: vi.fn().mockResolvedValue(undefined),
-      runNonInteractive: vi.fn(),
-      onMessage: undefined,
-    };
-    const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-102',
-      scope,
-      dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
-    });
-    const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const tool = new TaskTool(config, {
-      orchestratorFactory: () => orchestrator,
-      isInteractiveEnvironment: () => true,
-    });
-    const invocation = tool.build({
-      subagent_name: 'helper',
-      goal_prompt: 'Check rounding',
-      run_limits: { max_turns: 3.7 },
-    });
-
-    await invocation.execute(new AbortController().signal, undefined);
-
-    expect(launch).toHaveBeenCalledTimes(1);
-    expect(launch.mock.calls[0][0].runConfig?.max_turns).toBe(3);
   });
 
   it('surfaces launch errors with helpful messaging', async () => {
