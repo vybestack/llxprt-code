@@ -596,44 +596,67 @@ export class AuthPrecedenceResolver {
     const settingsService = this.resolveSettingsService(
       options?.settingsService ?? undefined,
     );
+    const providerKey = this.normalizeProviderId(this.config.providerId);
 
     const authOnly = isAuthOnlyEnabled(settingsService.get('authOnly'));
 
     if (!authOnly) {
-      const authKey = settingsService.get('auth-key');
-      if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
-        return authKey;
+      const providerSettings =
+        providerKey && typeof settingsService.getProviderSettings === 'function'
+          ? settingsService.getProviderSettings(providerKey)
+          : undefined;
+
+      const providerAuthKey = this.normalizeAuthValue(
+        providerSettings?.['auth-key'] ??
+          providerSettings?.authKey ??
+          providerSettings?.apiKey,
+      );
+      if (providerAuthKey) {
+        return providerAuthKey;
       }
 
-      const authKeyfile = settingsService.get('auth-keyfile');
-      if (authKeyfile && typeof authKeyfile === 'string') {
-        try {
+      const providerAuthKeyfile = this.normalizeAuthValue(
+        providerSettings?.['auth-keyfile'] ??
+          providerSettings?.authKeyfile ??
+          providerSettings?.apiKeyfile,
+      );
+      if (providerAuthKeyfile) {
+        const keyFromFile = await this.readKeyFile(providerAuthKeyfile);
+        if (keyFromFile) {
+          return keyFromFile;
+        }
+      }
+
+      if (this.shouldUseGlobalAuth(settingsService, providerKey)) {
+        const authKey = this.normalizeAuthValue(
+          settingsService.get('auth-key'),
+        );
+        if (authKey) {
+          return authKey;
+        }
+
+        const authKeyfile = this.normalizeAuthValue(
+          settingsService.get('auth-keyfile'),
+        );
+        if (authKeyfile) {
           const keyFromFile = await this.readKeyFile(authKeyfile);
           if (keyFromFile) {
             return keyFromFile;
           }
-        } catch (error) {
-          if (process.env.DEBUG) {
-            console.warn(
-              `Failed to read keyfile from SettingsService ${authKeyfile}:`,
-              error,
-            );
-          }
         }
       }
 
-      if (
-        this.config.apiKey &&
-        typeof this.config.apiKey === 'string' &&
-        this.config.apiKey.trim() !== ''
-      ) {
-        return this.config.apiKey;
+      const normalizedConfigKey = this.normalizeAuthValue(
+        this.config.apiKey ?? null,
+      );
+      if (normalizedConfigKey) {
+        return normalizedConfigKey;
       }
 
       if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
         for (const envVarName of this.config.envKeyNames) {
-          const envValue = process.env[envVarName];
-          if (envValue && envValue.trim() !== '') {
+          const envValue = this.normalizeAuthValue(process.env[envVarName]);
+          if (envValue) {
             return envValue;
           }
         }
@@ -647,11 +670,7 @@ export class AuthPrecedenceResolver {
       this.oauthManager &&
       this.config.oauthProvider
     ) {
-      const providerId =
-        this.config.providerId ??
-        this.config.oauthProvider ??
-        this.config.envKeyNames?.[0] ??
-        'unknown-provider';
+      const providerId = this.resolveProviderIdentifier(providerKey);
       const profileId = resolveProfileId(settingsService);
 
       let runtimeContext: ProviderRuntimeContext | null = null;
@@ -888,6 +907,57 @@ export class AuthPrecedenceResolver {
     }
 
     return null;
+  }
+
+  private normalizeAuthValue(value: unknown): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.toLowerCase() === 'none') {
+      return undefined;
+    }
+    return trimmed;
+  }
+
+  private normalizeProviderId(value?: string | null): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  }
+
+  private resolveProviderIdentifier(preferredProviderId?: string): string {
+    if (preferredProviderId && preferredProviderId.trim()) {
+      return preferredProviderId.trim();
+    }
+    const oauthProvider = this.normalizeProviderId(this.config.oauthProvider);
+    if (oauthProvider) {
+      return oauthProvider;
+    }
+    if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
+      return this.config.envKeyNames[0] ?? 'unknown-provider';
+    }
+    return 'unknown-provider';
+  }
+
+  private shouldUseGlobalAuth(
+    settingsService: SettingsService,
+    providerId?: string,
+  ): boolean {
+    if (!providerId) {
+      return true;
+    }
+    const activeProvider = settingsService.get('activeProvider');
+    if (typeof activeProvider !== 'string') {
+      return true;
+    }
+    const trimmed = activeProvider.trim();
+    if (!trimmed) {
+      return true;
+    }
+    return trimmed === providerId;
   }
 
   /**

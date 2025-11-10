@@ -192,6 +192,60 @@ describe('AuthPrecedenceResolver', () => {
       );
     });
 
+    it('uses provider-specific auth key even when provider is not active', async () => {
+      const settingsService = getSettingsService();
+      settingsService.set('activeProvider', 'openai');
+      settingsService.set('auth-key', 'openai-global-key');
+      settingsService.setProviderSetting(
+        'gemini',
+        'auth-key',
+        'gemini-provider-key',
+      );
+
+      const config: AuthPrecedenceConfig = {
+        providerId: 'gemini',
+        envKeyNames: ['GEMINI_API_KEY'],
+        isOAuthEnabled: true,
+        supportsOAuth: true,
+        oauthProvider: 'gemini',
+      };
+
+      const resolver = new AuthPrecedenceResolver(config, mockOAuthManager);
+      const result = await resolver.resolveAuthentication();
+
+      expect(result).toBe('gemini-provider-key');
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
+    });
+
+    it('falls back to OAuth when only another provider’s global auth-key is set', async () => {
+      const settingsService = getSettingsService();
+      settingsService.set('activeProvider', 'openai');
+      settingsService.set('auth-key', 'openai-global-key');
+
+      const config: AuthPrecedenceConfig = {
+        providerId: 'gemini',
+        envKeyNames: ['GEMINI_API_KEY'],
+        isOAuthEnabled: true,
+        supportsOAuth: true,
+        oauthProvider: 'gemini',
+      };
+
+      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(
+        'oauth-token-for-gemini',
+      );
+
+      const resolver = new AuthPrecedenceResolver(config, mockOAuthManager);
+      const result = await resolver.resolveAuthentication({
+        includeOAuth: true,
+      });
+
+      expect(result).toBe('oauth-token-for-gemini');
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith(
+        'gemini',
+        expect.any(Object),
+      );
+    });
+
     it('should return null when no authentication methods available', async () => {
       // Given: No auth methods available
       const config: AuthPrecedenceConfig = {
