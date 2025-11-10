@@ -178,9 +178,9 @@ export const SETTINGS_SCHEMA = {
     label: 'Max Turns Per Prompt',
     category: 'General',
     requiresRestart: false,
-    default: 100,
+    default: 200,
     description:
-      'Maximum number of turns allowed per prompt before stopping to prevent loops. Set to -1 for unlimited.',
+      'Maximum number of turns allowed per prompt before stopping to prevent loops. Set to -1 for unlimited (default: 200).',
     showInDialog: true,
   },
   memoryImportFormat: {
