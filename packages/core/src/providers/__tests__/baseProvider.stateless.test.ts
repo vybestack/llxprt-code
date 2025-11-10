@@ -163,6 +163,10 @@ class TestBaseProvider extends BaseProvider {
     this.snapshots = [];
   }
 
+  getCurrentBaseURL(): string | undefined {
+    return this.getBaseURL();
+  }
+
   private async recordSnapshot(
     callId: string,
     phase: string,
@@ -362,5 +366,27 @@ describe('BaseProvider stateless contract', () => {
     ).sort();
 
     expect(baselineTokens).toEqual(['']);
+  });
+
+  it('does not leak global base-url from another active provider', () => {
+    const settings = createSettingsService({
+      model: 'baseline-model',
+    });
+    settings.set('base-url', 'https://api.openai.com/v1');
+    settings.set('activeProvider', 'openai');
+
+    const provider = new TestBaseProvider(settings);
+    expect(provider.getCurrentBaseURL()).toBeUndefined();
+  });
+
+  it('still respects global base-url when provider is active', () => {
+    const settings = createSettingsService({
+      model: 'baseline-model',
+    });
+    settings.set('base-url', 'https://api.openai.com/v1');
+    settings.set('activeProvider', PROVIDER_NAME);
+
+    const provider = new TestBaseProvider(settings);
+    expect(provider.getCurrentBaseURL()).toBe('https://api.openai.com/v1');
   });
 });

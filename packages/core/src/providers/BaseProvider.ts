@@ -238,25 +238,52 @@ export abstract class BaseProvider implements IProvider {
   }
 
   private computeBaseURL(settingsService: SettingsService): string | undefined {
-    const ephemeralBaseUrl = settingsService.get('base-url') as
+    const normalizeBaseUrl = (value: unknown): string | undefined => {
+      if (typeof value !== 'string') {
+        return undefined;
+      }
+      const trimmed = value.trim();
+      if (!trimmed || trimmed.toLowerCase() === 'none') {
+        return undefined;
+      }
+      return trimmed;
+    };
+
+    const rawActiveProvider = settingsService.get('activeProvider') as
       | string
       | undefined;
-    if (ephemeralBaseUrl && ephemeralBaseUrl !== 'none') {
-      return ephemeralBaseUrl;
+    const activeProvider =
+      typeof rawActiveProvider === 'string' && rawActiveProvider.trim()
+        ? rawActiveProvider.trim()
+        : undefined;
+
+    if (!activeProvider || activeProvider === this.name) {
+      const ephemeralBaseUrl = normalizeBaseUrl(
+        settingsService.get('base-url'),
+      );
+      if (ephemeralBaseUrl) {
+        return ephemeralBaseUrl;
+      }
     }
 
     const providerSettings = settingsService.getProviderSettings(this.name);
-    const providerBaseUrl = providerSettings?.baseUrl as string | undefined;
-    if (providerBaseUrl && providerBaseUrl !== 'none') {
+    const providerBaseUrl =
+      normalizeBaseUrl(providerSettings?.baseUrl) ??
+      normalizeBaseUrl(
+        (providerSettings as { baseURL?: string | undefined })?.baseURL,
+      );
+    if (providerBaseUrl) {
       return providerBaseUrl;
     }
 
-    if (this.providerConfig?.baseUrl) {
-      return this.providerConfig.baseUrl;
+    const configBaseUrl = normalizeBaseUrl(this.providerConfig?.baseUrl);
+    if (configBaseUrl) {
+      return configBaseUrl;
     }
 
-    if (this.baseProviderConfig.baseURL) {
-      return this.baseProviderConfig.baseURL;
+    const defaultBaseUrl = normalizeBaseUrl(this.baseProviderConfig.baseURL);
+    if (defaultBaseUrl) {
+      return defaultBaseUrl;
     }
 
     return undefined;
