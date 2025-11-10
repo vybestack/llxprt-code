@@ -243,20 +243,12 @@ export function processToolParameters(
  * @returns The object with numeric strings converted to numbers
  */
 function convertStringNumbersToNumbers(obj: unknown): unknown {
-  if (obj === null || obj === undefined) {
-    return obj;
-  }
+  if (obj == null) return obj;
 
   if (typeof obj === 'string') {
-    // Check if it's a numeric string
-    if (/^-?\d+$/.test(obj)) {
-      // Integer
-      const num = parseInt(obj, 10);
-      if (!isNaN(num)) return num;
-    } else if (/^-?\d*\.?\d+$/.test(obj)) {
-      // Float
-      const num = parseFloat(obj);
-      if (!isNaN(num)) return num;
+    if (/^-?(?:\d+|\d*\.\d+)(?:[eE][+-]?\d+)?$/.test(obj)) {
+      const num = Number(obj);
+      if (Number.isFinite(num)) return num;
     }
     return obj;
   }
@@ -265,7 +257,10 @@ function convertStringNumbersToNumbers(obj: unknown): unknown {
     return obj.map(convertStringNumbersToNumbers);
   }
 
-  if (typeof obj === 'object') {
+  if (
+    typeof obj === 'object' &&
+    Object.getPrototypeOf(obj) === Object.prototype
+  ) {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
       result[key] = convertStringNumbersToNumbers(value);
