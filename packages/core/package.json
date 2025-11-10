@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-core",
-  "version": "0.5.0",
+  "version": "0.5.0-nightly.251110.b4367364",
   "description": "LLxprt Code Core",
   "repository": {
     "type": "git",
