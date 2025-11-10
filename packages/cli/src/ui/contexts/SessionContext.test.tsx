@@ -128,4 +128,25 @@ describe('SessionStatsContext', () => {
       consoleSpy.mockRestore();
     }
   });
+
+  it('should not trigger re-render when history token count is unchanged', () => {
+    const { result } = renderHook(() => useSessionStats(), {
+      wrapper: SessionStatsProvider,
+    });
+
+    const initialRenderCount = result.all.length;
+
+    act(() => {
+      result.current.updateHistoryTokenCount(256);
+    });
+
+    expect(result.current.stats.historyTokenCount).toBe(256);
+    expect(result.all.length).toBe(initialRenderCount + 1);
+
+    act(() => {
+      result.current.updateHistoryTokenCount(256);
+    });
+
+    expect(result.all.length).toBe(initialRenderCount + 1);
+  });
 });

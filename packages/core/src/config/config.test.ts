@@ -84,6 +84,8 @@ vi.mock('../core/client.js', () => ({
     getHistory: vi.fn().mockReturnValue([]),
     getHistoryService: vi.fn().mockReturnValue(null),
     setHistory: vi.fn(),
+    storeHistoryForLaterUse: vi.fn(),
+    dispose: vi.fn(),
   })),
 }));
 
@@ -559,6 +561,43 @@ describe('Server Config (config.ts)', () => {
       expect(mockOAuthManager.isAuthenticated).not.toHaveBeenCalled();
 
       // Verify client was initialized
+      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
+    });
+
+    it('should dispose the previous Gemini client before replacing it', async () => {
+      const config = new Config(baseParams);
+      const authType = AuthType.USE_GEMINI;
+      const mockContentConfig = {
+        model: 'gemini-flash',
+        apiKey: 'test-key',
+      };
+
+      (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
+
+      const dispose = vi.fn();
+      const mockExistingClient = {
+        isInitialized: vi.fn().mockReturnValue(true),
+        getHistory: vi.fn().mockResolvedValue([]),
+        getHistoryService: vi.fn().mockReturnValue(null),
+        dispose,
+      };
+
+      const mockNewClient = {
+        isInitialized: vi.fn().mockReturnValue(true),
+        getHistory: vi.fn().mockReturnValue([]),
+        getHistoryService: vi.fn().mockReturnValue(null),
+        storeHistoryForLaterUse: vi.fn(),
+        initialize: vi.fn().mockResolvedValue(undefined),
+      };
+
+      (
+        config as unknown as { geminiClient: typeof mockExistingClient }
+      ).geminiClient = mockExistingClient;
+      (GeminiClient as Mock).mockImplementation(() => mockNewClient);
+
+      await config.refreshAuth(authType);
+
+      expect(dispose).toHaveBeenCalledTimes(1);
       expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
     });
   });

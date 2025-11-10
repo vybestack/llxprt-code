@@ -247,6 +247,13 @@ export class GeminiClient {
     this.todoReminderService = new TodoReminderService();
   }
 
+  dispose(): void {
+    if (this._unsubscribe) {
+      this._unsubscribe();
+      this._unsubscribe = undefined;
+    }
+  }
+
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
     // Preserve chat history before resetting, but only if we don't already have stored history
     // (e.g., from storeHistoryForLaterUse called before initialize)
