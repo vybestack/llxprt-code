@@ -659,6 +659,80 @@ describe('HistoryService - Behavioral Tests', () => {
     });
   });
 
+  describe('Orphan tool responses handling', () => {
+    it('should synthesize missing tool_call entries so tool responses survive compression', () => {
+      const orphanCallId = 'hist_tool_orphan';
+
+      service.add(ContentFactory.createUserMessage('Please list files.'));
+      service.add(
+        ContentFactory.createToolResponse(orphanCallId, 'run_shell_command', {
+          output: '[Operation Cancelled]',
+        }),
+      );
+
+      const curated = service.getCuratedForProvider();
+      expect(curated).toHaveLength(3);
+
+      const synthesizedCall = curated[1];
+      expect(synthesizedCall.speaker).toBe('ai');
+      expect(synthesizedCall.metadata?.synthetic).toBe(true);
+      expect(synthesizedCall.metadata?.reason).toBe('reconstructed_tool_call');
+      expect(synthesizedCall.blocks).toHaveLength(1);
+      expect(synthesizedCall.blocks[0]).toMatchObject({
+        type: 'tool_call',
+        id: orphanCallId,
+        name: 'run_shell_command',
+      });
+
+      const toolMessage = curated[2];
+      expect(
+        toolMessage.blocks.some((block) => block.type === 'tool_response'),
+      ).toBe(true);
+    });
+
+    it('should keep tool responses unchanged when a matching tool_call exists', () => {
+      const callId = 'hist_tool_valid';
+
+      service.add(ContentFactory.createUserMessage('Please list files.'));
+      service.add({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: callId,
+            name: 'run_shell_command',
+            parameters: { command: 'ls' },
+          },
+        ],
+      });
+      service.add(
+        ContentFactory.createToolResponse(callId, 'run_shell_command', {
+          output: 'file.txt',
+        }),
+      );
+
+      const curated = service.getCuratedForProvider();
+      const toolResponses = curated
+        .filter((content) => content.speaker === 'tool')
+        .flatMap((content) =>
+          content.blocks.filter(
+            (block) =>
+              block.type === 'tool_response' &&
+              (block as ToolResponseBlock).callId === callId,
+          ),
+        );
+
+      expect(toolResponses).toHaveLength(1);
+      expect(
+        curated.some(
+          (content) =>
+            content.metadata?.synthetic &&
+            content.metadata?.reason === 'reconstructed_tool_call',
+        ),
+      ).toBe(false);
+    });
+  });
+
   // NEW TESTS FOR ID NORMALIZATION ARCHITECTURE
   // These tests SHOULD FAIL initially - that's the point of TDD
   describe('ID Normalization Architecture - NEW FAILING TESTS', () => {

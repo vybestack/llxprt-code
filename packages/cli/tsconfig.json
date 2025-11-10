@@ -8,7 +8,10 @@
     "baseUrl": ".",
     "paths": {
       "@vybestack/llxprt-code-core": ["../core/src/index.ts"],
-      "@vybestack/llxprt-code-core/*": ["../core/src/*"]
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"],
+      "@vybestack/llxprt-code-core/providers/types/IProviderConfig.js": [
+        "../core/src/providers/types/IProviderConfig.ts"
+      ]
     }
   },
   "include": [
