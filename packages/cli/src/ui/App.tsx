@@ -137,6 +137,11 @@ import { ProviderModelDialog } from './components/ProviderModelDialog.js';
 import { ProviderDialog } from './components/ProviderDialog.js';
 import { LoadProfileDialog } from './components/LoadProfileDialog.js';
 import { ToolsDialog } from './components/ToolsDialog.js';
+import {
+  shouldUpdateTokenMetrics,
+  toTokenMetricsSnapshot,
+  type TokenMetricsSnapshot,
+} from './utils/tokenMetricsTracker.js';
 
 // Todo UI imports
 import { TodoPanel } from './components/TodoPanel.js';
@@ -294,6 +299,7 @@ const App = (props: AppInternalProps) => {
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const historyTokenCleanupRef = useRef<(() => void) | null>(null);
   const lastHistoryServiceRef = useRef<unknown>(null);
+  const lastPublishedHistoryTokensRef = useRef<number | null>(null);
   const tokenLogger = useMemo(
     () => new DebugLogger('llxprt:ui:tokentracking'),
     [],
@@ -318,7 +324,11 @@ const App = (props: AppInternalProps) => {
         } else if (historyService) {
           // Always get the current token count even if not a new instance
           const currentTokens = historyService.getTotalTokens();
-          if (currentTokens > 0) {
+          if (
+            currentTokens > 0 &&
+            currentTokens !== lastPublishedHistoryTokensRef.current
+          ) {
+            lastPublishedHistoryTokensRef.current = currentTokens;
             updateHistoryTokenCount(currentTokens);
           }
         }
@@ -346,7 +356,10 @@ const App = (props: AppInternalProps) => {
               () =>
                 `Received tokensUpdated event: totalTokens=${event.totalTokens}`,
             );
-            updateHistoryTokenCount(event.totalTokens);
+            if (event.totalTokens !== lastPublishedHistoryTokensRef.current) {
+              lastPublishedHistoryTokensRef.current = event.totalTokens;
+              updateHistoryTokenCount(event.totalTokens);
+            }
           };
 
           historyService.on('tokensUpdated', handleTokensUpdated);
@@ -354,6 +367,7 @@ const App = (props: AppInternalProps) => {
           // Initialize with current token count
           const currentTokens = historyService.getTotalTokens();
           tokenLogger.debug(() => `Initial token count: ${currentTokens}`);
+          lastPublishedHistoryTokensRef.current = currentTokens;
           updateHistoryTokenCount(currentTokens);
 
           // Store cleanup function for later
@@ -373,6 +387,7 @@ const App = (props: AppInternalProps) => {
         historyTokenCleanupRef.current = null;
       }
       lastHistoryServiceRef.current = null;
+      lastPublishedHistoryTokensRef.current = null;
     };
   }, [config, updateHistoryTokenCount, tokenLogger]);
   const [staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
@@ -395,6 +410,7 @@ const App = (props: AppInternalProps) => {
     throttleWaitTimeMs: 0,
     sessionTokenTotal: 0,
   });
+  const tokenMetricsSnapshotRef = useRef<TokenMetricsSnapshot | null>(null);
   const [_corgiMode, setCorgiMode] = useState(false);
   const [_isTrustedFolderState, _setIsTrustedFolder] = useState(
     isWorkspaceTrusted(settings.merged),
@@ -761,15 +777,28 @@ const App = (props: AppInternalProps) => {
       const metrics = runtime.getActiveProviderMetrics();
       const usage = runtime.getSessionTokenUsage();
 
+      if (
+        !shouldUpdateTokenMetrics(
+          tokenMetricsSnapshotRef.current,
+          metrics,
+          usage,
+        )
+      ) {
+        return;
+      }
+
+      const snapshot = toTokenMetricsSnapshot(metrics, usage);
+      tokenMetricsSnapshotRef.current = snapshot;
+
       setTokenMetrics({
-        tokensPerMinute: metrics?.tokensPerMinute ?? 0,
-        throttleWaitTimeMs: metrics?.throttleWaitTimeMs ?? 0,
-        sessionTokenTotal: usage.total,
+        tokensPerMinute: snapshot.tokensPerMinute,
+        throttleWaitTimeMs: snapshot.throttleWaitTimeMs,
+        sessionTokenTotal: snapshot.sessionTokenTotal,
       });
 
       uiTelemetryService.setTokenTrackingMetrics({
-        tokensPerMinute: metrics?.tokensPerMinute ?? 0,
-        throttleWaitTimeMs: metrics?.throttleWaitTimeMs ?? 0,
+        tokensPerMinute: snapshot.tokensPerMinute,
+        throttleWaitTimeMs: snapshot.throttleWaitTimeMs,
         sessionTokenUsage: usage,
       });
     };

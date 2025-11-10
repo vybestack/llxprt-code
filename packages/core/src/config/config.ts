@@ -607,12 +607,13 @@ export class Config {
     const logger = new DebugLogger('llxprt:config:refreshAuth');
 
     // Save the current conversation history AND HistoryService before creating a new client
+    const previousGeminiClient = this.geminiClient;
     let existingHistory: Content[] = [];
     let existingHistoryService: HistoryService | null = null;
 
-    if (this.geminiClient && this.geminiClient.isInitialized()) {
-      existingHistory = await this.geminiClient.getHistory();
-      existingHistoryService = this.geminiClient.getHistoryService();
+    if (previousGeminiClient && previousGeminiClient.isInitialized()) {
+      existingHistory = await previousGeminiClient.getHistory();
+      existingHistoryService = previousGeminiClient.getHistoryService();
       logger.debug('Retrieved existing state', {
         historyLength: existingHistory.length,
         hasHistoryService: !!existingHistoryService,
@@ -705,6 +706,21 @@ export class Config {
 
     // Only assign to instance properties after successful initialization
     this.contentGeneratorConfig = newContentGeneratorConfig;
+    if (
+      previousGeminiClient &&
+      typeof previousGeminiClient.dispose === 'function'
+    ) {
+      try {
+        previousGeminiClient.dispose();
+      } catch (error) {
+        logger.warn(
+          () =>
+            `Failed to dispose previous GeminiClient: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+      }
+    }
     this.geminiClient = newGeminiClient;
 
     // Verify history was preserved

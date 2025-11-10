@@ -115,10 +115,15 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const updateHistoryTokenCount = useCallback((count: number) => {
-    setStats((prevState) => ({
-      ...prevState,
-      historyTokenCount: count,
-    }));
+    setStats((prevState) => {
+      if (prevState.historyTokenCount === count) {
+        return prevState;
+      }
+      return {
+        ...prevState,
+        historyTokenCount: count,
+      };
+    });
   }, []);
 
   // FIX: Use a ref to provide stable callback that always returns latest value
