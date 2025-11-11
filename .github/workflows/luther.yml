@@ -441,6 +441,17 @@ jobs:
             exit 0
           fi
 
+          # Prevent Luther from opening PRs that only change package-lock.json
+          non_lock_changes="$(git status --porcelain | sed 's/^.. //' | grep -v '^package-lock\.json$' || true)"
+          if [[ -z "$non_lock_changes" ]]; then
+            {
+              echo "Detected changes only in package-lock.json; skipping commit to avoid lockfile-only PR."
+              echo "Re-run Luther after applying additional code changes manually."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           git add -A
           git commit -m "Luther: address #${ISSUE_NUMBER}"
           git push --force-with-lease origin "$ISSUE_BRANCH"
