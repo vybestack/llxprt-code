@@ -60,6 +60,9 @@ research/
 packages/vscode-ide-companion/*.vsix
 tmp/
 
+#Luther directory
+luther/
+
 # Stryker mutation testing temporary files
 .stryker-tmp/
 **/.stryker-tmp/
