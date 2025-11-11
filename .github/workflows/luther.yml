@@ -316,6 +316,7 @@ jobs:
             node scripts/start.js \
               --provider openai \
               --model zai-glm-4.6 \
+              --yolo \
               --key "${CEREBRAS_API_KEY}" \
               --set modelparam.temperature=1 \
               --set modelparam.max_tokens=10000 \
