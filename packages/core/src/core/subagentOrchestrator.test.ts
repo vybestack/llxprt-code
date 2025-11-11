@@ -306,7 +306,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     expect(runConfigArg.max_turns).toBeUndefined();
   });
 
-  it('defaults to unlimited runtime when neither profile nor request specify limits', async () => {
+  it('defaults max_turns to 200 when neither profile nor request specify limits', async () => {
     const subagentConfig: SubagentConfig = {
       name: 'default-helper',
       profile: 'default-profile',
@@ -341,7 +341,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const [, , , , runConfigArg] = factory.mock.calls[0];
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
-    expect(runConfigArg.max_turns).toBeUndefined();
+    expect(runConfigArg.max_turns).toBe(200);
   });
 });
 

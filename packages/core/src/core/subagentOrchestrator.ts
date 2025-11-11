@@ -236,7 +236,9 @@ export class SubagentOrchestrator {
     ]);
 
     const maxTurns =
-      custom?.max_turns !== undefined ? custom.max_turns : profileMaxTurns;
+      custom?.max_turns !== undefined
+        ? custom.max_turns
+        : (profileMaxTurns ?? 200);
 
     if (maxTurns !== undefined && maxTurns > 0) {
       runConfig.max_turns = Math.floor(maxTurns);
