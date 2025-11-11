@@ -112,7 +112,7 @@ Runtime isolation now extends to provider authentication. The auth precedence re
 - **Nested runtimes** – `activateIsolatedRuntimeContext` in `runtimeSettings.ts` calls `enterRuntimeScope` to push a child runtime. Nested scopes inherit metadata, but each receives a distinct `runtimeAuthScopeId` so revocation remains precise.
 - **OAuth managers** – The CLI registers an `OAuthManager` per runtime. Providers fetch tokens via the manager, which stores refresh state inside the runtime registry rather than global singletons.
 
-For a full walkthrough of the authentication handshake see `docs/auth/runtime-scoped-auth.stub.md`; the migration guide below summarises integration requirements.
+Authentication details are covered in the migration guide below.
 
 ### Multi-context Orchestration
 
