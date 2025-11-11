@@ -1,4 +1,0 @@
-
-> @vybestack/llxprt-code@0.5.0 format
-> prettier --experimental-cli --write .
-
