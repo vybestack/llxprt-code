@@ -60,13 +60,41 @@ jobs:
             printf '%s' "$value"
           }
 
+          branch_exists() {
+            local name="$1"
+            git show-ref --verify --quiet "refs/heads/${name}" >/dev/null 2>&1 && return 0
+            git ls-remote --exit-code --heads origin "${name}" >/dev/null 2>&1 && return 0
+            return 1
+          }
+
+          ensure_unique_branch() {
+            local base="$1"
+            local candidate="$base"
+
+            if branch_exists "$candidate"; then
+              # Append a UTC timestamp suffix until we find a unique name.
+              while true; do
+                local timestamp
+                timestamp="$(date -u '+%Y%m%d%H%M%S')"
+                candidate="${base}-${timestamp}"
+                if ! branch_exists "$candidate"; then
+                  break
+                fi
+                sleep 1
+              done
+            fi
+
+            printf '%s' "$candidate"
+          }
+
           manual_input="$(sanitize_number "${MANUAL_ISSUE_INPUT:-}")"
           if [[ -n "$manual_input" ]]; then
             if [[ ! "$manual_input" =~ ^[0-9]+$ ]]; then
               echo "Manual issue override must be numeric. Received: ${manual_input}" >&2
               exit 1
             fi
-            branch="luther-issue${manual_input}"
+            base_branch="luther-issue${manual_input}"
+            branch="$(ensure_unique_branch "$base_branch")"
             {
               echo "issue_number=${manual_input}"
               echo "branch=${branch}"
@@ -92,7 +120,8 @@ jobs:
           fi
 
           issue_number="$(jq -r 'sort_by(.createdAt)[0].number' <<<"$issues_json")"
-          branch="luther-issue${issue_number}"
+          base_branch="luther-issue${issue_number}"
+          branch="$(ensure_unique_branch "$base_branch")"
           {
             echo "issue_number=${issue_number}"
             echo "branch=${branch}"
