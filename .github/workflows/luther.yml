@@ -240,7 +240,6 @@ jobs:
 
           max_attempts="${LUTHER_MAX_ATTEMPTS:-3}"
           success_attempt=""
-          failure_reason="No attempt succeeded."
 
           if [[ ! -s "$ISSUE_BODY_PATH" ]]; then
             echo "_No issue body provided._" > "$ISSUE_BODY_PATH"
@@ -334,7 +333,6 @@ jobs:
 
             if [[ "$llxprt_exit" -eq 0 && -z "$qa_failure_command" ]]; then
               success_attempt="${attempt}"
-              failure_reason=""
               {
                 echo "Attempt ${attempt}: ✅ All QA commands passed."
               } | tee -a "$history_file"
