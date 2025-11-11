@@ -42,7 +42,7 @@ jobs:
       CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
       LUTHER_MAX_ATTEMPTS: 3
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      DEBUG: ${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}
+      LLXPRT_DEBUG: ${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}
       DEBUG_OUTPUT: stderr
     steps:
       - name: Checkout repository
@@ -120,7 +120,7 @@ jobs:
       - name: Force debug logging for manual run
         if: github.event_name == 'workflow_dispatch' && inputs.force_debug == true
         run: |
-          echo "DEBUG=llxprt:*" >> "$GITHUB_ENV"
+          echo "LLXPRT_DEBUG=llxprt:*" >> "$GITHUB_ENV"
           echo "DEBUG_OUTPUT=stderr" >> "$GITHUB_ENV"
 
       - name: Fetch issue metadata
