@@ -618,7 +618,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
 
   beforeEach(() => {
     mockConfig = {
-      getEphemeralSetting: vi.fn().mockReturnValue(100), // Default max turns
+      getEphemeralSetting: vi.fn().mockReturnValue(200), // Default max turns
       getDebugMode: () => false,
       getTelemetryEnabled: () => true,
     } as unknown as Config;
@@ -670,12 +670,12 @@ describe('LoopDetectionService Max Turns Detection', () => {
     expect(loggers.logLoopDetected).not.toHaveBeenCalled();
   });
 
-  it('should use default value of 100 when setting is undefined', async () => {
+  it('should use default value of 200 when setting is undefined', async () => {
     // Return undefined to test default
     mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(undefined);
 
     // Advance to just before default limit
-    await advanceTurns(99);
+    await advanceTurns(199);
     expect(loggers.logLoopDetected).not.toHaveBeenCalled();
 
     // One more turn should trigger the default limit

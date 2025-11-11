@@ -42,7 +42,7 @@ export const ephemeralSettingHelp: Record<string, string> = {
   retrywait:
     'Initial delay in milliseconds between retry attempts (default: varies by provider)',
   maxTurnsPerPrompt:
-    'Maximum number of turns allowed per prompt before stopping (default: 100, -1 for unlimited)',
+    'Maximum number of turns allowed per prompt before stopping (default: 200, -1 for unlimited)',
   authOnly:
     'Force providers to use OAuth authentication only, ignoring API keys and environment variables',
   dumponerror:

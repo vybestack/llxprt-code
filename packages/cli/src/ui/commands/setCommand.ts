@@ -69,7 +69,7 @@ const ephemeralSettingHelp: Record<string, string> = {
     'Initial delay in milliseconds between retry attempts (default: varies by provider)',
   // Loop prevention settings
   maxTurnsPerPrompt:
-    'Maximum number of turns allowed per prompt before stopping (default: 100, -1 for unlimited)',
+    'Maximum number of turns allowed per prompt before stopping (default: 200, -1 for unlimited)',
 };
 
 /**

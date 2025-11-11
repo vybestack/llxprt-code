@@ -4,55 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// import type { Content } from '@google/genai'; // Currently unused
 import { createHash } from 'node:crypto';
 import { GeminiEventType, ServerGeminiStreamEvent } from '../core/turn.js';
 import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
 import { Config } from '../config/config.js';
-// import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js'; // Currently unused
-// import {
-//   isFunctionCall,
-//   isFunctionResponse,
-// } from '../utils/messageInspectors.js'; // Currently unused
 
 const TOOL_CALL_LOOP_THRESHOLD = 10;
 const CONTENT_LOOP_THRESHOLD = 15;
 const CONTENT_CHUNK_SIZE = 50;
 const MAX_HISTORY_LENGTH = 1000;
-
-/**
- * The number of recent conversation turns to include in the history when asking the LLM to check for a loop.
- * Currently unused - reserved for future implementation.
- */
-// const LLM_LOOP_CHECK_HISTORY_COUNT = 20;
-
-/**
- * The number of turns that must pass in a single prompt before the LLM-based loop check is activated.
- * Currently unused - reserved for future implementation.
- */
-// const LLM_CHECK_AFTER_TURNS = 30;
-
-/**
- * The default interval, in number of turns, at which the LLM-based loop check is performed.
- * This value is adjusted dynamically based on the LLM's confidence.
- * Currently unused - reserved for future implementation.
- */
-// const DEFAULT_LLM_CHECK_INTERVAL = 3;
-
-/**
- * The minimum interval for LLM-based loop checks.
- * This is used when the confidence of a loop is high, to check more frequently.
- * Currently unused - reserved for future implementation.
- */
-// const MIN_LLM_CHECK_INTERVAL = 5;
-
-/**
- * The maximum interval for LLM-based loop checks.
- * This is used when the confidence of a loop is low, to check less frequently.
- * Currently unused - reserved for future implementation.
- */
-// const MAX_LLM_CHECK_INTERVAL = 15;
 
 /**
  * Service for detecting and preventing infinite loops in AI responses.
@@ -75,9 +36,6 @@ export class LoopDetectionService {
 
   // Turn tracking for potential future rule-based checks
   private turnsInCurrentPrompt = 0;
-
-  // LLM-based loop detection - currently unused, reserved for future implementation
-  // private llmCheckInterval = DEFAULT_LLM_CHECK_INTERVAL;
 
   constructor(config: Config) {
     this.config = config;
@@ -129,7 +87,7 @@ export class LoopDetectionService {
 
     // Check if max turns per prompt is configured and exceeded
     const maxTurnsPerPrompt =
-      (this.config.getEphemeralSetting('maxTurnsPerPrompt') as number) ?? 100;
+      (this.config.getEphemeralSetting('maxTurnsPerPrompt') as number) ?? 200;
     if (
       maxTurnsPerPrompt > 0 &&
       this.turnsInCurrentPrompt >= maxTurnsPerPrompt
@@ -342,105 +300,6 @@ export class LoopDetectionService {
     );
     return originalChunk === currentChunk;
   }
-
-  // Currently unused - reserved for future implementation
-  /*
-  private trimRecentHistory(recentHistory: Content[]): Content[] {
-    // A function response must be preceded by a function call.
-    // Continuously removes dangling function calls from the end of the history
-    // until the last turn is not a function call.
-    while (
-      recentHistory.length > 0 &&
-      isFunctionCall(recentHistory[recentHistory.length - 1])
-    ) {
-      recentHistory.pop();
-    }
-
-    // A function response should follow a function call.
-    // Continuously removes leading function responses from the beginning of history
-    // until the first turn is not a function response.
-    while (recentHistory.length > 0 && isFunctionResponse(recentHistory[0])) {
-      recentHistory.shift();
-    }
-
-    return recentHistory;
-  }
-  */
-
-  // Currently unused - reserved for future implementation
-  /*
-  private async checkForLoopWithLLM(signal: AbortSignal) {
-    const recentHistory = (await this.config
-      .getGeminiClient()
-      .getHistory())
-      .slice(-LLM_LOOP_CHECK_HISTORY_COUNT);
-
-    const trimmedHistory = this.trimRecentHistory(recentHistory);
-
-    const prompt = `You are a sophisticated AI diagnostic agent specializing in identifying when a conversational AI is stuck in an unproductive state. Your task is to analyze the provided conversation history and determine if the assistant has ceased to make meaningful progress.
-
-An unproductive state is characterized by one or more of the following patterns over the last 5 or more assistant turns:
-
-Repetitive Actions: The assistant repeats the same tool calls or conversational responses a decent number of times. This includes simple loops (e.g., tool_A, tool_A, tool_A) and alternating patterns (e.g., tool_A, tool_B, tool_A, tool_B, ...).
-
-Cognitive Loop: The assistant seems unable to determine the next logical step. It might express confusion, repeatedly ask the same questions, or generate responses that don't logically follow from the previous turns, indicating it's stuck and not advancing the task.
-
-Crucially, differentiate between a true unproductive state and legitimate, incremental progress.
-For example, a series of 'tool_A' or 'tool_B' tool calls that make small, distinct changes to the same file (like adding docstrings to functions one by one) is considered forward progress and is NOT a loop. A loop would be repeatedly replacing the same text with the same content, or cycling between a small set of files with no net change.
-
-Please analyze the conversation history to determine the possibility that the conversation is stuck in a repetitive, non-productive state.`;
-    const contents = [
-      ...trimmedHistory,
-      { role: 'user', parts: [{ text: prompt }] },
-    ];
-    const schema: Record<string, unknown> = {
-      type: 'object',
-      properties: {
-        reasoning: {
-          type: 'string',
-          description:
-            'Your reasoning on if the conversation is looping without forward progress.',
-        },
-        confidence: {
-          type: 'number',
-          description:
-            'A number between 0.0 and 1.0 representing your confidence that the conversation is in an unproductive state.',
-        },
-      },
-      required: ['reasoning', 'confidence'],
-    };
-    let result;
-    try {
-      result = await this.config
-        .getGeminiClient()
-        .generateJson(contents, schema, signal, DEFAULT_GEMINI_FLASH_MODEL);
-    } catch (e) {
-      // Do nothing, treat it as a non-loop.
-      this.config.getDebugMode() ? console.error(e) : console.debug(e);
-      return false;
-    }
-
-    if (typeof result['confidence'] === 'number') {
-      if (result['confidence'] > 0.9) {
-        if (typeof result['reasoning'] === 'string' && result['reasoning']) {
-          console.warn(result['reasoning']);
-        }
-        logLoopDetected(
-          this.config,
-          new LoopDetectedEvent(LoopType.LLM_DETECTED_LOOP, this.promptId),
-        );
-        return true;
-      } else {
-        // this.llmCheckInterval = Math.round(
-        //   MIN_LLM_CHECK_INTERVAL +
-        //     (MAX_LLM_CHECK_INTERVAL - MIN_LLM_CHECK_INTERVAL) *
-        //       (1 - result['confidence']),
-        // );
-      }
-    }
-    return false;
-  }
-  */
 
   /**
    * Resets all loop detection state.
