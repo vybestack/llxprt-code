@@ -1,0 +1,481 @@
+name: Luther Autonomous Agent
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Optional issue number to override the Luther queue.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  luther:
+    name: Run Luther agent
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      MANUAL_ISSUE_INPUT: "${{ github.event_name == 'workflow_dispatch' && inputs.issue_number || '' }}"
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+      OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+      LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
+      LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
+      KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
+      CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
+      LUTHER_MAX_ATTEMPTS: 3
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+
+      - name: Select issue for Luther
+        id: select_issue
+        run: |
+          set -euo pipefail
+
+          sanitize_number() {
+            local value="$1"
+            value="${value//[[:space:]]/}"
+            value="${value#\#}"
+            printf '%s' "$value"
+          }
+
+          manual_input="$(sanitize_number "${MANUAL_ISSUE_INPUT:-}")"
+          if [[ -n "$manual_input" ]]; then
+            if [[ ! "$manual_input" =~ ^[0-9]+$ ]]; then
+              echo "Manual issue override must be numeric. Received: ${manual_input}" >&2
+              exit 1
+            fi
+            branch="luther-issue${manual_input}"
+            {
+              echo "issue_number=${manual_input}"
+              echo "branch=${branch}"
+              echo "selection_mode=manual"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          issues_json="$(gh issue list \
+            --state open \
+            --label 'OK for Luther' \
+            --json number,createdAt,assignees \
+            --limit 100 \
+            --search 'no:assignee sort:created-asc')"
+
+          if [[ "$(jq 'length' <<<"$issues_json")" -eq 0 ]]; then
+            {
+              echo 'issue_number='
+              echo 'branch='
+              echo 'selection_mode=auto'
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          issue_number="$(jq -r 'sort_by(.createdAt)[0].number' <<<"$issues_json")"
+          branch="luther-issue${issue_number}"
+          {
+            echo "issue_number=${issue_number}"
+            echo "branch=${branch}"
+            echo 'selection_mode=auto'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: No eligible issues
+        if: steps.select_issue.outputs.issue_number == ''
+        run: |
+          echo "No open, unassigned issues labeled 'OK for Luther' were found." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ensure Luther labels exist
+        if: steps.select_issue.outputs.issue_number != ''
+        run: |
+          set -euo pipefail
+          while IFS='|' read -r label color description; do
+            gh label create "$label" --color "$color" --description "$description" >/dev/null 2>&1 || true
+          done <<'EOF'
+          OK for Luther|bfd4f2|Eligible for Luther autonomous agent
+          Luther working|0366d6|Issue currently processed by Luther
+          Luther done|0e8a16|Completed via Luther workflow
+          luther-failed|cb2431|Latest Luther attempt failed
+          EOF
+
+      - name: Fetch issue metadata
+        id: issue_data
+        if: steps.select_issue.outputs.issue_number != ''
+        env:
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+        run: |
+          set -euo pipefail
+          mkdir -p luther/state
+          issue_json_path="luther/state/issue.json"
+          gh issue view "$ISSUE_NUMBER" --json number,title,body,url,labels,assignees > "$issue_json_path"
+          title="$(jq -r '.title' "$issue_json_path")"
+          url="$(jq -r '.url' "$issue_json_path")"
+          assignee_count="$(jq '.assignees | length' "$issue_json_path")"
+          body_path="luther/state/issue-body.md"
+          jq -r '.body // ""' "$issue_json_path" > "$body_path"
+          {
+            echo "title<<EOF"
+            printf '%s\n' "$title"
+            echo "EOF"
+            echo "url=${url}"
+            echo "assignee_count=${assignee_count}"
+            echo "body_path=${body_path}"
+            echo "json_path=${issue_json_path}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Claim issue and update labels
+        id: claim_issue
+        if: steps.select_issue.outputs.issue_number != ''
+        env:
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+          SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
+          ISSUE_JSON: ${{ steps.issue_data.outputs.json_path }}
+          ISSUE_URL: ${{ steps.issue_data.outputs.url }}
+          RUN_URL: ${{ env.RUN_URL }}
+        run: |
+          set -euo pipefail
+          assignee_count="$(jq '.assignees | length' "$ISSUE_JSON")"
+          if [[ "${SELECTION_MODE}" == 'auto' && "$assignee_count" -gt 0 ]]; then
+            echo "Issue #${ISSUE_NUMBER} now has an assignee; skipping." >> "$GITHUB_STEP_SUMMARY"
+            echo "should_continue=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${SELECTION_MODE}" == 'auto' ]]; then
+            if ! jq -e '.labels[]?.name | select(. == "OK for Luther")' "$ISSUE_JSON" >/dev/null; then
+              echo "Issue #${ISSUE_NUMBER} no longer has the 'OK for Luther' label; assuming another run claimed it." >> "$GITHUB_STEP_SUMMARY"
+              echo "should_continue=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          # Refresh labels to reflect active work
+          gh issue edit "$ISSUE_NUMBER" --remove-label "Luther done" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE_NUMBER" --remove-label "luther-failed" >/dev/null 2>&1 || true
+          if [[ "${SELECTION_MODE}" == 'auto' ]]; then
+            gh issue edit "$ISSUE_NUMBER" --remove-label "OK for Luther" >/dev/null 2>&1 || true
+          fi
+          gh issue edit "$ISSUE_NUMBER" --add-label "Luther working" >/dev/null 2>&1
+
+          dispatch_note="scheduled queue"
+          if [[ "${SELECTION_MODE}" == 'manual' ]]; then
+            dispatch_note="manual override"
+          fi
+
+          gh issue comment "$ISSUE_NUMBER" -F - <<EOF
+          Luther is starting work on this issue (${dispatch_note}). Tracking branch: \`${ISSUE_BRANCH}\`.
+
+          - Run: ${RUN_URL}
+          - Selection: ${dispatch_note}
+
+          I'll update this thread with results when the workflow finishes.
+          EOF
+
+          echo "should_continue=true" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        if: steps.claim_issue.outputs.should_continue == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4.4.0
+        with:
+          node-version: '24.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.claim_issue.outputs.should_continue == 'true'
+        run: npm ci
+
+      - name: Fix rollup platform dependency
+        if: steps.claim_issue.outputs.should_continue == 'true'
+        run: |
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            npm install @rollup/rollup-win32-x64-msvc --no-save || true
+          fi
+
+      - name: Configure git and working branch
+        if: steps.claim_issue.outputs.should_continue == 'true'
+        env:
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "Luther[bot]"
+          git config user.email "luther-bot@vybestack.dev"
+          git fetch origin main --depth=1
+          git checkout -B "$ISSUE_BRANCH" origin/main
+
+      - name: Run Luther attempts
+        id: run_attempts
+        if: steps.claim_issue.outputs.should_continue == 'true'
+        env:
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+          ISSUE_TITLE: ${{ steps.issue_data.outputs.title }}
+          ISSUE_URL: ${{ steps.issue_data.outputs.url }}
+          ISSUE_BODY_PATH: ${{ steps.issue_data.outputs.body_path }}
+          SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p luther/artifacts luther/state
+          history_file="luther/state/attempt-history.md"
+          : > "$history_file"
+          results_file="luther/state/failure-summary.txt"
+          : > "$results_file"
+          qa_names=("format:check" "lint" "typecheck" "test" "build")
+          qa_commands=("npm run format:check" "npm run lint" "npm run typecheck" "npm run test" "npm run build")
+
+          max_attempts="${LUTHER_MAX_ATTEMPTS:-3}"
+          success_attempt=""
+
+          if [[ ! -s "$ISSUE_BODY_PATH" ]]; then
+            echo "_No issue body provided._" > "$ISSUE_BODY_PATH"
+          fi
+
+          for attempt in $(seq 1 "$max_attempts"); do
+            attempt_dir="luther/artifacts/attempt-${attempt}"
+            mkdir -p "$attempt_dir"
+            prompt_file="${attempt_dir}/prompt.txt"
+
+            {
+              echo "You are Luther, an autonomous maintenance agent for the LLxprt Code repository."
+              echo
+              echo "Issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
+              echo "URL: ${ISSUE_URL}"
+              echo
+              echo "Issue body:"
+              echo "----------------------------------------"
+              cat "$ISSUE_BODY_PATH"
+              echo
+              echo "----------------------------------------"
+              echo
+              echo "Repository branch: ${ISSUE_BRANCH}"
+              echo "Selection mode: ${SELECTION_MODE}"
+              echo
+              echo "Requirements:"
+              echo "- Follow a strict test-first workflow: write or update tests before implementation."
+              echo "- Limit work to resolving this issue; avoid touching unrelated areas."
+              echo "- Leave git commits/pushes to the workflow; keep changes in the working tree."
+              echo "- Reference the issue as #${ISSUE_NUMBER} inside any summaries you produce."
+              echo "- After making changes, run (locally) the same QA commands that the workflow will run:"
+              echo "  npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
+              echo "- Produce a final response summarizing changes and the tests you ran."
+              echo
+              if [[ -s "$history_file" ]]; then
+                echo "Previous attempts summary:"
+                cat "$history_file"
+                echo
+              else
+                echo "This is the first attempt for this run."
+                echo
+              fi
+              echo "Focus on resolving the root cause, updating documentation/tests as needed, and ensuring the commands above pass."
+            } > "$prompt_file"
+
+            echo "Running LLxprt for attempt ${attempt}"
+            llxprt_log="${attempt_dir}/llxprt.log"
+            set +e
+            node scripts/start.js \
+              --provider openai \
+              --model zai-glm-4.6 \
+              --key "${CEREBRAS_API_KEY}" \
+              --set modelparam.temperature=1 \
+              --set modelparam.max_tokens=10000 \
+              --set context-limit=121000 \
+              --set base-url=https://api.cerebras.ai/v1 \
+              --set shell-replacement=true \
+              --prompt "$(cat "$prompt_file")" 2>&1 | tee "$llxprt_log"
+            llxprt_exit="${PIPESTATUS[0]}"
+            set -e
+
+            if [[ "$llxprt_exit" -ne 0 ]]; then
+              echo "Attempt ${attempt}: LLxprt exited with status ${llxprt_exit}" | tee -a "$history_file"
+              echo "Attempt ${attempt}: LLxprt exited with status ${llxprt_exit}" > "$results_file"
+            fi
+
+            qa_failure_command=""
+            if [[ "$llxprt_exit" -eq 0 ]]; then
+              for idx in "${!qa_commands[@]}"; do
+                cmd="${qa_commands[$idx]}"
+                name="${qa_names[$idx]}"
+                log_file="${attempt_dir}/${name//[: ]/_}.log"
+                echo "Attempt ${attempt}: running ${cmd}"
+                set +e
+                bash -lc "$cmd" >"$log_file" 2>&1
+                cmd_exit=$?
+                set -e
+                if [[ "$cmd_exit" -ne 0 ]]; then
+                  qa_failure_command="${cmd}"
+                  {
+                    echo "Attempt ${attempt}: ${cmd} failed with exit code ${cmd_exit}."
+                    echo "See ${log_file} for details."
+                  } | tee -a "$history_file"
+                  tail -n 100 "$log_file" > "$results_file"
+                  break
+                fi
+              done
+            else
+              echo "Attempt ${attempt}: skipped QA commands because LLxprt exited with ${llxprt_exit}." >> "$history_file"
+            fi
+
+            if [[ "$llxprt_exit" -eq 0 && -z "$qa_failure_command" ]]; then
+              success_attempt="${attempt}"
+              {
+                echo "Attempt ${attempt}: ✅ All QA commands passed."
+              } | tee -a "$history_file"
+              break
+            fi
+
+            if [[ "$attempt" -lt "$max_attempts" ]]; then
+              echo "Attempt ${attempt} failed; preparing for retry." >> "$history_file"
+            fi
+          done
+
+          if [[ -n "$success_attempt" ]]; then
+            echo "result=success" >> "$GITHUB_OUTPUT"
+            echo "success_attempt=${success_attempt}" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=failure" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [[ -z "$success_attempt" && -s "$results_file" ]]; then
+            {
+              echo "failure_summary<<EOF"
+              cat "$results_file"
+              echo
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "history_path=${history_file}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push changes
+        id: commit_push
+        if: steps.run_attempts.outputs.result == 'success'
+        env:
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No changes found to commit." >> "$GITHUB_STEP_SUMMARY"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git add -A
+          git commit -m "Luther: address #${ISSUE_NUMBER}"
+          git push --force-with-lease origin "$ISSUE_BRANCH"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update pull request
+        id: pr
+        if: steps.commit_push.outputs.has_changes == 'true'
+        env:
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+          ISSUE_TITLE: ${{ steps.issue_data.outputs.title }}
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+          ISSUE_URL: ${{ steps.issue_data.outputs.url }}
+          RUN_URL: ${{ env.RUN_URL }}
+        run: |
+          set -euo pipefail
+          pr_title="Luther: ${ISSUE_TITLE}"
+          pr_body=$(cat <<EOF
+          ## Summary
+          - Automated Luther run for #${ISSUE_NUMBER}
+          - See workflow run: ${RUN_URL}
+
+          Refs #${ISSUE_NUMBER}
+          EOF
+          )
+
+          pr_url=""
+          if gh pr view "$ISSUE_BRANCH" >/dev/null 2>&1; then
+            gh pr edit "$ISSUE_BRANCH" --title "$pr_title" --body "$pr_body"
+            pr_url="$(gh pr view "$ISSUE_BRANCH" --json url -q .url)"
+          else
+            pr_url="$(gh pr create --head "$ISSUE_BRANCH" --base main --title "$pr_title" --body "$pr_body")"
+          fi
+
+          echo "pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Update issue on success
+        if: steps.run_attempts.outputs.result == 'success' && steps.commit_push.outputs.has_changes == 'true'
+        env:
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+          PR_URL: ${{ steps.pr.outputs.pr_url }}
+          RUN_URL: ${{ env.RUN_URL }}
+        run: |
+          set -euo pipefail
+          gh issue edit "$ISSUE_NUMBER" --remove-label "Luther working" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE_NUMBER" --remove-label "luther-failed" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE_NUMBER" --add-label "Luther done" >/dev/null 2>&1 || true
+
+          summary="Luther completed successfully. QA logs are available from the workflow run."
+          if [[ -n "${PR_URL}" ]]; then
+            summary="${summary}\n\nPR: ${PR_URL}"
+          fi
+
+          gh issue comment "$ISSUE_NUMBER" -F - <<EOF
+          ✅ Luther finished successfully.
+
+          - Workflow: ${RUN_URL}
+          - ${summary}
+          EOF
+
+      - name: No-op success handler
+        if: steps.run_attempts.outputs.result == 'success' && steps.commit_push.outputs.has_changes != 'true'
+        env:
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+          RUN_URL: ${{ env.RUN_URL }}
+        run: |
+          set -euo pipefail
+          gh issue edit "$ISSUE_NUMBER" --remove-label "Luther working" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE_NUMBER" --add-label "luther-failed" >/dev/null 2>&1 || true
+          gh issue comment "$ISSUE_NUMBER" -F - <<EOF
+          ⚠️ Luther completed all commands but no file changes were detected, so no PR was created.
+
+          - Workflow: ${RUN_URL}
+          - Next step: Investigate manually and relabel as needed.
+          EOF
+
+      - name: Update issue on failure
+        if: steps.claim_issue.outputs.should_continue == 'true' && steps.run_attempts.outputs.result != 'success'
+        env:
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+          RUN_URL: ${{ env.RUN_URL }}
+          FAILURE_SUMMARY: ${{ steps.run_attempts.outputs.failure_summary }}
+        run: |
+          set -euo pipefail
+          gh issue edit "$ISSUE_NUMBER" --remove-label "Luther working" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE_NUMBER" --add-label "luther-failed" >/dev/null 2>&1 || true
+
+          gh issue comment "$ISSUE_NUMBER" -F - <<EOF
+          ⚠️ Luther was unable to complete this issue after the allotted attempts.
+
+          - Workflow: ${RUN_URL}
+          - Failure summary:
+
+          ${FAILURE_SUMMARY:-"(see artifacts for details)"}
+          EOF
+
+      - name: Upload Luther artifacts
+        if: always() && steps.claim_issue.outputs.should_continue == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # ratchet:actions/upload-artifact@v4
+        with:
+          name: luther-run-${{ github.run_id }}
+          path: luther
+          if-no-files-found: warn
