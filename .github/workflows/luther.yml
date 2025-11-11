@@ -9,6 +9,11 @@ on:
         description: 'Optional issue number to override the Luther queue.'
         required: false
         type: string
+      force_debug:
+        description: 'Set DEBUG=llxprt:* for this run (overrides repo DEBUG vars).'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -37,6 +42,8 @@ jobs:
       CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
       LUTHER_MAX_ATTEMPTS: 3
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      DEBUG: ${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}
+      DEBUG_OUTPUT: stderr
     steps:
       - name: Checkout repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
@@ -109,6 +116,12 @@ jobs:
           Luther done|0e8a16|Completed via Luther workflow
           luther-failed|cb2431|Latest Luther attempt failed
           EOF
+
+      - name: Force debug logging for manual run
+        if: github.event_name == 'workflow_dispatch' && inputs.force_debug == true
+        run: |
+          echo "DEBUG=llxprt:*" >> "$GITHUB_ENV"
+          echo "DEBUG_OUTPUT=stderr" >> "$GITHUB_ENV"
 
       - name: Fetch issue metadata
         id: issue_data
