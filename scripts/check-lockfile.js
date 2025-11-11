@@ -30,8 +30,17 @@ if (lockfile === null) {
 }
 const packages = lockfile.packages || {};
 const invalidPackages = [];
+const packagesWithPeerFlag = [];
 
 for (const [location, details] of Object.entries(packages)) {
+  if (
+    details &&
+    typeof details === 'object' &&
+    Object.prototype.hasOwnProperty.call(details, 'peer')
+  ) {
+    packagesWithPeerFlag.push(location || '<root>');
+  }
+
   // 1. Skip the root package itself.
   if (location === '') {
     continue;
@@ -68,11 +77,25 @@ for (const [location, details] of Object.entries(packages)) {
   invalidPackages.push(location);
 }
 
+let hasErrors = false;
+
 if (invalidPackages.length > 0) {
   console.error(
     '\nError: The following dependencies in package-lock.json are missing the "resolved" or "integrity" field:',
   );
   invalidPackages.forEach((pkg) => console.error(`- ${pkg}`));
+  hasErrors = true;
+}
+
+if (packagesWithPeerFlag.length > 0) {
+  console.error(
+    '\nError: package-lock.json contains unsupported "peer" flags on the following entries:',
+  );
+  packagesWithPeerFlag.forEach((pkg) => console.error(`- ${pkg}`));
+  hasErrors = true;
+}
+
+if (hasErrors) {
   process.exitCode = 1;
 } else {
   console.log('Lockfile check passed.');
