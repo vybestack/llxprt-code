@@ -253,7 +253,7 @@ jobs:
           results_file="luther/state/failure-summary.txt"
           : > "$results_file"
           qa_names=("format" "lint" "typecheck" "test" "build")
-          qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test" "npm run build")
+          qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test:ci" "npm run build")
 
           max_attempts="${LUTHER_MAX_ATTEMPTS:-3}"
           success_attempt=""
