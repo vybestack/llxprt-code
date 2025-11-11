@@ -165,9 +165,7 @@ jobs:
           # Refresh labels to reflect active work
           gh issue edit "$ISSUE_NUMBER" --remove-label "Luther done" >/dev/null 2>&1 || true
           gh issue edit "$ISSUE_NUMBER" --remove-label "luther-failed" >/dev/null 2>&1 || true
-          if [[ "${SELECTION_MODE}" == 'auto' ]]; then
-            gh issue edit "$ISSUE_NUMBER" --remove-label "OK for Luther" >/dev/null 2>&1 || true
-          fi
+          gh issue edit "$ISSUE_NUMBER" --remove-label "OK for Luther" >/dev/null 2>&1 || true
           gh issue edit "$ISSUE_NUMBER" --add-label "Luther working" >/dev/null 2>&1
 
           dispatch_note="scheduled queue"
