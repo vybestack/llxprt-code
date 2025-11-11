@@ -10,6 +10,46 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+const lockfilePath = path.join(__dirname, '..', 'package-lock.json');
+
+function stripPeerFlagsFromLockfile() {
+  if (!fs.existsSync(lockfilePath)) {
+    return;
+  }
+
+  try {
+    const lockfile = JSON.parse(fs.readFileSync(lockfilePath, 'utf-8'));
+    const packages = lockfile.packages;
+    if (!packages) {
+      return;
+    }
+
+    let modified = false;
+    for (const details of Object.values(packages)) {
+      if (
+        details &&
+        typeof details === 'object' &&
+        Object.prototype.hasOwnProperty.call(details, 'peer')
+      ) {
+        delete details.peer;
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      fs.writeFileSync(lockfilePath, `${JSON.stringify(lockfile, null, 2)}\n`);
+      console.log('Removed unsupported "peer" flags from package-lock.json');
+    }
+  } catch (error) {
+    console.warn(
+      'Warning: Unable to sanitize package-lock.json "peer" flags:',
+      error.message,
+    );
+  }
+}
+
+stripPeerFlagsFromLockfile();
+
 // Prevent infinite recursion when npm install triggers postinstall
 if (process.env.LLXPRT_POSTINSTALL_RUNNING === 'true') {
   process.exit(0);
