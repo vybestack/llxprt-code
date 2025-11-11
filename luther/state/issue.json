@@ -1,0 +1,21 @@
+{
+  "assignees": [],
+  "body": "references gemini, update it to current capabilities.",
+  "labels": [
+    {
+      "id": "LA_kwDOPB5qbc8AAAACDwYZiw",
+      "name": "good first issue",
+      "description": "Good for newcomers",
+      "color": "7057ff"
+    },
+    {
+      "id": "LA_kwDOPB5qbc8AAAACPYz8CQ",
+      "name": "OK for Luther",
+      "description": "Eligible for Luther autonomous agent",
+      "color": "bfd4f2"
+    }
+  ],
+  "number": 466,
+  "title": "update   https://github.com/vybestack/llxprt-code/blob/main/docs/sandbox.md",
+  "url": "https://github.com/vybestack/llxprt-code/issues/466"
+}
