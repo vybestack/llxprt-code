@@ -10,7 +10,7 @@ on:
         required: false
         type: string
       force_debug:
-        description: 'Set DEBUG=llxprt:* for this run (overrides repo DEBUG vars).'
+        description: 'Set LLXPRT_DEBUG=llxprt:* for this run (overrides repo debug vars).'
         required: false
         type: boolean
         default: false
@@ -137,6 +137,8 @@ jobs:
           url="$(jq -r '.url' "$issue_json_path")"
           assignee_count="$(jq '.assignees | length' "$issue_json_path")"
           body_path="luther/state/issue-body.md"
+          labels_value="$(jq -r '[.labels[].name] | join(", ")' "$issue_json_path")"
+          is_doc_issue="$(jq -r 'if any(.labels[]?.name; . == "documentation") then "true" else "false" end' "$issue_json_path")"
           jq -r '.body // ""' "$issue_json_path" > "$body_path"
           {
             echo "title<<EOF"
@@ -146,6 +148,8 @@ jobs:
             echo "assignee_count=${assignee_count}"
             echo "body_path=${body_path}"
             echo "json_path=${issue_json_path}"
+            echo "labels=${labels_value}"
+            echo "is_doc_issue=${is_doc_issue}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Claim issue and update labels
@@ -238,6 +242,8 @@ jobs:
           ISSUE_URL: ${{ steps.issue_data.outputs.url }}
           ISSUE_BODY_PATH: ${{ steps.issue_data.outputs.body_path }}
           SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
+          ISSUE_LABELS: ${{ steps.issue_data.outputs.labels }}
+          IS_DOC_ISSUE: ${{ steps.issue_data.outputs.is_doc_issue }}
         run: |
           set -euo pipefail
 
@@ -246,8 +252,8 @@ jobs:
           : > "$history_file"
           results_file="luther/state/failure-summary.txt"
           : > "$results_file"
-          qa_names=("format:check" "lint" "typecheck" "test" "build")
-          qa_commands=("npm run format:check" "npm run lint" "npm run typecheck" "npm run test" "npm run build")
+          qa_names=("format" "lint" "typecheck" "test" "build")
+          qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test" "npm run build")
 
           max_attempts="${LUTHER_MAX_ATTEMPTS:-3}"
           success_attempt=""
@@ -266,6 +272,7 @@ jobs:
               echo
               echo "Issue #${ISSUE_NUMBER}: ${ISSUE_TITLE}"
               echo "URL: ${ISSUE_URL}"
+              echo "Labels: ${ISSUE_LABELS:-<none>}"
               echo
               echo "Issue body:"
               echo "----------------------------------------"
@@ -277,12 +284,19 @@ jobs:
               echo "Selection mode: ${SELECTION_MODE}"
               echo
               echo "Requirements:"
-              echo "- Follow a strict test-first workflow: write or update tests before implementation."
+              if [[ "${IS_DOC_ISSUE}" == "true" ]]; then
+                echo "- This issue is documentation-focused; you may update docs directly without writing new automated tests, but still describe any manual validation you perform."
+              else
+                echo "- Follow a strict test-first workflow: write or update tests before implementation."
+              fi
               echo "- Limit work to resolving this issue; avoid touching unrelated areas."
               echo "- Leave git commits/pushes to the workflow; keep changes in the working tree."
               echo "- Reference the issue as #${ISSUE_NUMBER} inside any summaries you produce."
               echo "- After making changes, run (locally) the same QA commands that the workflow will run:"
-              echo "  npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
+              echo "  npm run format && npm run lint && npm run typecheck && npm run test && npm run build"
+              echo "- Do not use web-search or web-fetch tools; stay within the repository context."
+              echo "- Do not spawn subagents (e.g., /task or named profiles like 'joethecoder'); complete the work yourself in this session."
+              echo "- Do not rely on local-only profiles or secrets that are unavailable in CI; assume only the data in this repository is accessible."
               echo "- Produce a final response summarizing changes and the tests you ran."
               echo
               if [[ -s "$history_file" ]]; then
@@ -315,6 +329,11 @@ jobs:
             if [[ "$llxprt_exit" -ne 0 ]]; then
               echo "Attempt ${attempt}: LLxprt exited with status ${llxprt_exit}" | tee -a "$history_file"
               echo "Attempt ${attempt}: LLxprt exited with status ${llxprt_exit}" > "$results_file"
+              {
+                echo "---- LLxprt log (last 100 lines) ----"
+                tail -n 100 "$llxprt_log"
+                echo "--------------------------------------"
+              } >> "$history_file"
             fi
 
             qa_failure_command=""
@@ -330,14 +349,19 @@ jobs:
                 set -e
                 if [[ "$cmd_exit" -ne 0 ]]; then
                   qa_failure_command="${cmd}"
-                  {
-                    echo "Attempt ${attempt}: ${cmd} failed with exit code ${cmd_exit}."
-                    echo "See ${log_file} for details."
-                  } | tee -a "$history_file"
-                  tail -n 100 "$log_file" > "$results_file"
-                  break
-                fi
-              done
+                {
+                  echo "Attempt ${attempt}: ${cmd} failed with exit code ${cmd_exit}."
+                  echo "See ${log_file} for details."
+                } | tee -a "$history_file"
+                tail -n 100 "$log_file" > "$results_file"
+                {
+                  echo "---- ${name} log (last 100 lines) ----"
+                  tail -n 100 "$log_file"
+                  echo "--------------------------------------"
+                } >> "$history_file"
+                break
+              fi
+            done
             else
               echo "Attempt ${attempt}: skipped QA commands because LLxprt exited with ${llxprt_exit}." >> "$history_file"
             fi
