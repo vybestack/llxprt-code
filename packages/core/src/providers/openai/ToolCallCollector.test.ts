@@ -65,4 +65,63 @@ describe('ToolCallCollector', () => {
       expect(completeCalls).toHaveLength(0);
     });
   });
+
+  describe('Fragment accumulation (Problem 1)', () => {
+    it('should correctly accumulate arguments fragments', () => {
+      // Simulate streaming fragments like Qwen model produces
+      collector.addFragment(0, { name: 'test_tool' });
+      collector.addFragment(0, { args: '{"param1": ' });
+      collector.addFragment(0, { args: '"value1", ' });
+      collector.addFragment(0, { args: '"param2": ' });
+      collector.addFragment(0, { args: '"value2"}' });
+
+      const completeCalls = collector.getCompleteCalls();
+      expect(completeCalls).toHaveLength(1);
+      expect(completeCalls[0].name).toBe('test_tool');
+      expect(completeCalls[0].args).toBe(
+        '{"param1": "value1", "param2": "value2"}',
+      );
+
+      // Verify it's valid JSON
+      const parsedArgs = JSON.parse(completeCalls[0].args || '');
+      expect(parsedArgs).toEqual({
+        param1: 'value1',
+        param2: 'value2',
+      });
+    });
+
+    it('should handle arguments split across multiple fragments', () => {
+      // Test case that would fail with overwrite logic (old bug)
+      collector.addFragment(0, { name: 'test_tool' });
+      collector.addFragment(0, { args: 'incomplete_json' }); // First fragment
+      collector.addFragment(0, { args: '_continuation' }); // Second fragment
+
+      const completeCalls = collector.getCompleteCalls();
+      expect(completeCalls).toHaveLength(1);
+      expect(completeCalls[0].args).toBe('incomplete_json_continuation');
+    });
+
+    it('should accumulate empty args correctly', () => {
+      collector.addFragment(0, { name: 'test_tool' });
+      collector.addFragment(0, { args: '' });
+      collector.addFragment(0, { args: '{}' });
+
+      const completeCalls = collector.getCompleteCalls();
+      expect(completeCalls).toHaveLength(1);
+      expect(completeCalls[0].args).toBe('{}');
+    });
+
+    it('should handle name fragments correctly (last name wins)', () => {
+      // Name should use override logic (last fragment wins)
+      collector.addFragment(0, { name: 'partial' });
+      collector.addFragment(0, { name: 'partial_tool' });
+      collector.addFragment(0, { name: 'test_tool' });
+      collector.addFragment(0, { args: '{}' });
+
+      const completeCalls = collector.getCompleteCalls();
+      expect(completeCalls).toHaveLength(1);
+      expect(completeCalls[0].name).toBe('test_tool'); // Last name wins
+      expect(completeCalls[0].args).toBe('{}');
+    });
+  });
 });

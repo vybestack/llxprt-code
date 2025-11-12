@@ -88,16 +88,22 @@ describe('ToolCallPipeline', () => {
       expect(result.executed[0].error).toBe('Tool failed');
     });
 
-    it('should handle invalid JSON arguments', async () => {
-      pipeline.registerTool('test_tool', vi.fn().mockResolvedValue('success'));
+    it('should handle invalid JSON arguments gracefully', async () => {
+      // When processToolParameters returns a string (fallback for invalid JSON),
+      // it should be wrapped as { value: string } and the tool should still execute
+      const mockTool = vi.fn().mockResolvedValue('success');
+      pipeline.registerTool('test_tool', mockTool);
 
       pipeline.addFragment(0, { name: 'test_tool' });
       pipeline.addFragment(0, { args: 'invalid json' });
 
       const result = await pipeline.process();
 
-      expect(result.executed).toHaveLength(0);
-      expect(result.failed).toHaveLength(1);
+      expect(result.executed).toHaveLength(1);
+      expect(result.executed[0].success).toBe(true);
+      // Tool should receive the wrapped arguments
+      expect(mockTool).toHaveBeenCalledWith({ value: 'invalid json' });
+      expect(result.failed).toHaveLength(0);
     });
 
     it('should handle tools without arguments', async () => {
