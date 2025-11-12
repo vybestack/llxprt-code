@@ -437,7 +437,7 @@ export const SETTINGS_SCHEMA = {
     label: 'Tool Call Processing Mode',
     category: 'Advanced',
     requiresRestart: true,
-    default: 'pipeline' as ToolCallProcessingMode,
+    default: 'legacy' as ToolCallProcessingMode,
     description:
       'Mode for processing tool calls. Pipeline mode is optimized, legacy mode uses older implementation.',
     showInDialog: true,
