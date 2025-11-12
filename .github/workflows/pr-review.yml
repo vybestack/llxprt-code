@@ -411,9 +411,9 @@ jobs:
           set -euo pipefail
           verdict="unknown"
           if [[ -f review/comment.md ]]; then
-            if grep -q '⚠️ Needs Work' review/comment.md; then
+            if grep -qi 'Needs Work' review/comment.md; then
               verdict="needs_work"
-            elif grep -q '✅ Ready' review/comment.md; then
+            elif grep -qi 'Ready' review/comment.md; then
               verdict="ready"
             fi
           fi
