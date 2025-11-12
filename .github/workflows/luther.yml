@@ -337,6 +337,10 @@ jobs:
             npm install @rollup/rollup-win32-x64-msvc --no-save || true
           fi
 
+      - name: Install LLxprt CLI nightly
+        if: steps.claim_issue.outputs.should_continue == 'true'
+        run: npm install -g @vybestack/llxprt@nightly
+
       - name: Configure git and working branch
         if: steps.claim_issue.outputs.should_continue == 'true'
         env:
@@ -347,7 +351,7 @@ jobs:
           git config user.name "Luther[bot]"
           git config user.email "luther-bot@vybestack.dev"
           if [[ "${SELECTION_MODE}" == 'remediation' ]]; then
-            git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}" --depth=0
+            git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}"
             git checkout "$ISSUE_BRANCH"
           else
             git fetch origin main --depth=1
@@ -466,7 +470,7 @@ jobs:
             echo "Running LLxprt for attempt ${attempt}"
             llxprt_log="${attempt_dir}/llxprt.log"
             set +e
-            node scripts/start.js \
+            llxprt \
               --provider openai \
               --model zai-glm-4.6 \
               --yolo \
