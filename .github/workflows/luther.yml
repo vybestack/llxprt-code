@@ -110,11 +110,19 @@ jobs:
           remediation_json="$(gh pr list \
             --state open \
             --label 'luther remediate' \
-            --exclude-label 'luther exhausted' \
-            --json number,updatedAt,headRefName,headRepositoryOwner \
+            --json number,updatedAt,headRefName,headRepositoryOwner,labels \
             --limit 50)"
 
-          remediation_pr="$(jq -r --arg owner "$repo_owner" '[.[] | select(.headRepositoryOwner.login == $owner)] | sort_by(.updatedAt)[0].number // ""' <<<"$remediation_json")"
+          remediation_pr="$(
+            jq -r --arg owner "$repo_owner" '
+              [
+                .[] |
+                select(.headRepositoryOwner.login == $owner) |
+                select(((.labels // []) | map(.name)) | index("luther exhausted") | not)
+              ]
+              | sort_by(.updatedAt)[0].number // ""
+            ' <<<"$remediation_json"
+          )"
 
           if [[ -n "$remediation_pr" ]]; then
             pr_json_path="luther/state/remediation-pr.json"
@@ -339,9 +347,9 @@ jobs:
 
           mkdir -p luther/artifacts luther/state
           history_file="luther/state/attempt-history.md"
-          : > "$history_file"
+          truncate -s 0 "$history_file"
           results_file="luther/state/failure-summary.txt"
-          : > "$results_file"
+          truncate -s 0 "$results_file"
           qa_names=("format" "lint" "typecheck" "test" "build")
           qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test:ci" "npm run build")
 
@@ -424,7 +432,7 @@ jobs:
                 echo "---- LLxprt log (last 100 lines) ----"
                 tail -n 100 "$llxprt_log"
                 echo "--------------------------------------"
-              } >> "$history_file"
+              } | tee -a "$history_file" >/dev/null
             fi
 
             qa_failure_command=""
@@ -449,12 +457,12 @@ jobs:
                   echo "---- ${name} log (last 100 lines) ----"
                   tail -n 100 "$log_file"
                   echo "--------------------------------------"
-                } >> "$history_file"
+                } | tee -a "$history_file" >/dev/null
                 break
               fi
             done
             else
-              echo "Attempt ${attempt}: skipped QA commands because LLxprt exited with ${llxprt_exit}." >> "$history_file"
+              echo "Attempt ${attempt}: skipped QA commands because LLxprt exited with ${llxprt_exit}." | tee -a "$history_file" >/dev/null
             fi
 
             if [[ "$llxprt_exit" -eq 0 && -z "$qa_failure_command" ]]; then
@@ -466,17 +474,21 @@ jobs:
             fi
 
             if [[ "$attempt" -lt "$max_attempts" ]]; then
-              echo "Attempt ${attempt} failed; preparing for retry." >> "$history_file"
+              echo "Attempt ${attempt} failed; preparing for retry." | tee -a "$history_file" >/dev/null
             fi
           done
 
           if [[ -n "$success_attempt" ]]; then
-            echo "result=success" >> "$GITHUB_OUTPUT"
-            echo "success_attempt=${success_attempt}" >> "$GITHUB_OUTPUT"
-            echo "attempts_exhausted=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "result=success"
+              echo "success_attempt=${success_attempt}"
+              echo "attempts_exhausted=false"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "result=failure" >> "$GITHUB_OUTPUT"
-            echo "attempts_exhausted=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "result=failure"
+              echo "attempts_exhausted=true"
+            } >> "$GITHUB_OUTPUT"
           fi
 
           if [[ -z "$success_attempt" && -s "$results_file" ]]; then
