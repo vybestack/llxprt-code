@@ -343,6 +343,7 @@ jobs:
              - Flag “mock theater” tests (mocks that only assert implementation details without executing new logic).
              - State whether coverage likely increased, decreased, or stayed flat. Use the diff + test changes + coverage summary to justify the direction even if approximate.
           5. Stay within the diff—do not reference untouched files except when describing dependencies directly affected.
+          6. If evidence for adequate automated testing is missing or inconclusive, treat the change as unsafe and plan to return it for remediation.
 
           ### Output format
           Produce a single markdown comment exactly in this structure and nothing else:
@@ -364,7 +365,7 @@ jobs:
           - Additional bullets on test gaps or strengths (mention if tests feel like “mock theater”).
 
           **Verdict**
-          - Start with \`✅ Ready\` if the PR addresses the issues with acceptable risk, otherwise start with \`⚠️ Needs Work\` and summarize blockers in one line.
+          - Default to \`⚠️ Needs Work\` unless you can cite specific evidence (code + tests) that risk is low; only start with \`✅ Ready\` when requirements are fully satisfied and test coverage is sufficient.
 
           If information is missing, state assumptions explicitly. Keep the overall length under 350 words.
           `;
