@@ -34,6 +34,7 @@
     "predocs:settings": "npm run build --workspace @vybestack/llxprt-code-core",
     "schema:settings": "tsx ./scripts/generate-settings-schema.ts",
     "docs:settings": "tsx ./scripts/generate-settings-doc.ts",
+    "docs:keybindings": "tsx ./scripts/generate-keybindings-doc.ts",
     "build": "node scripts/build.js",
     "preinstall": "node scripts/preinstall.cjs",
     "postinstall": "node scripts/postinstall.cjs",
