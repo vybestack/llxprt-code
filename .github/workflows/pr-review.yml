@@ -196,8 +196,8 @@ jobs:
           set -euo pipefail
           ci_name="LLxprt Code CI"
           attempt=0
-          max_attempts=60
-          sleep_seconds=30
+          max_attempts=12
+          sleep_seconds=300
           ci_status="missing"
           ci_conclusion=""
           ci_url=""
