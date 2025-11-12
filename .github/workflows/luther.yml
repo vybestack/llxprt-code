@@ -110,11 +110,19 @@ jobs:
           remediation_json="$(gh pr list \
             --state open \
             --label 'luther remediate' \
-            --exclude-label 'luther exhausted' \
-            --json number,updatedAt,headRefName,headRepositoryOwner \
+            --json number,updatedAt,headRefName,headRepositoryOwner,labels \
             --limit 50)"
 
-          remediation_pr="$(jq -r --arg owner "$repo_owner" '[.[] | select(.headRepositoryOwner.login == $owner)] | sort_by(.updatedAt)[0].number // ""' <<<"$remediation_json")"
+          remediation_pr="$(
+            jq -r --arg owner "$repo_owner" '
+              [
+                .[] |
+                select(.headRepositoryOwner.login == $owner) |
+                select(((.labels // []) | map(.name)) | index("luther exhausted") | not)
+              ]
+              | sort_by(.updatedAt)[0].number // ""
+            ' <<<"$remediation_json"
+          )"
 
           if [[ -n "$remediation_pr" ]]; then
             pr_json_path="luther/state/remediation-pr.json"
@@ -222,6 +230,30 @@ jobs:
             echo "is_doc_issue=${is_doc_issue}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Fetch issue comments
+        id: issue_comments
+        if: steps.select_issue.outputs.issue_number != ''
+        env:
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+        run: |
+          set -euo pipefail
+          issue_comments_path="luther/state/issue-comments.json"
+          gh api "/repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+            > "$issue_comments_path" || echo '[]' > "$issue_comments_path"
+          echo "comments_path=${issue_comments_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch remediation PR comments
+        id: pr_comments
+        if: steps.select_issue.outputs.pr_number != ''
+        env:
+          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          pr_comments_path="luther/state/pr-comments.json"
+          gh api "/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            > "$pr_comments_path" || echo '[]' > "$pr_comments_path"
+          echo "comments_path=${pr_comments_path}" >> "$GITHUB_OUTPUT"
+
       - name: Claim issue and update labels
         id: claim_issue
         if: steps.select_issue.outputs.issue_number != ''
@@ -305,6 +337,10 @@ jobs:
             npm install @rollup/rollup-win32-x64-msvc --no-save || true
           fi
 
+      - name: Install LLxprt CLI nightly
+        if: steps.claim_issue.outputs.should_continue == 'true'
+        run: npm install -g @vybestack/llxprt@nightly
+
       - name: Configure git and working branch
         if: steps.claim_issue.outputs.should_continue == 'true'
         env:
@@ -315,7 +351,7 @@ jobs:
           git config user.name "Luther[bot]"
           git config user.email "luther-bot@vybestack.dev"
           if [[ "${SELECTION_MODE}" == 'remediation' ]]; then
-            git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}" --depth=0
+            git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}"
             git checkout "$ISSUE_BRANCH"
           else
             git fetch origin main --depth=1
@@ -334,14 +370,33 @@ jobs:
           SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
           ISSUE_LABELS: ${{ steps.issue_data.outputs.labels }}
           IS_DOC_ISSUE: ${{ steps.issue_data.outputs.is_doc_issue }}
+          ISSUE_COMMENTS_PATH: ${{ steps.issue_comments.outputs.comments_path }}
+          PR_COMMENTS_PATH: ${{ steps.pr_comments.outputs.comments_path }}
         run: |
           set -euo pipefail
 
           mkdir -p luther/artifacts luther/state
           history_file="luther/state/attempt-history.md"
-          : > "$history_file"
+          truncate -s 0 "$history_file"
           results_file="luther/state/failure-summary.txt"
-          : > "$results_file"
+          truncate -s 0 "$results_file"
+          format_comments() {
+            local file="$1"
+            if [[ -z "$file" || ! -s "$file" ]]; then
+              return
+            fi
+            jq -r '
+              sort_by(.created_at) |
+              reverse |
+              .[:5] |
+              reverse |
+              map("* [" + ((.user.login // "unknown")) + " @ " + ((.created_at // "?")) + "] " +
+                  ((.body // "") | gsub("\r";"") | gsub("\n"; "\n  "))) |
+              .[]
+            ' "$file"
+          }
+          issue_comments_text="$(format_comments "${ISSUE_COMMENTS_PATH:-}")"
+          pr_comments_text="$(format_comments "${PR_COMMENTS_PATH:-}")"
           qa_names=("format" "lint" "typecheck" "test" "build")
           qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test:ci" "npm run build")
 
@@ -369,6 +424,18 @@ jobs:
               cat "$ISSUE_BODY_PATH"
               echo
               echo "----------------------------------------"
+              echo
+              echo "Recent issue comments:"
+              if [[ -n "$issue_comments_text" ]]; then
+                printf '%s\n' "$issue_comments_text"
+              else
+                echo "- (none)"
+              fi
+              if [[ -n "$pr_comments_text" ]]; then
+                echo
+                echo "Recent PR comments:"
+                printf '%s\n' "$pr_comments_text"
+              fi
               echo
               echo "Repository branch: ${ISSUE_BRANCH}"
               echo "Selection mode: ${SELECTION_MODE}"
@@ -403,7 +470,7 @@ jobs:
             echo "Running LLxprt for attempt ${attempt}"
             llxprt_log="${attempt_dir}/llxprt.log"
             set +e
-            node scripts/start.js \
+            llxprt \
               --provider openai \
               --model zai-glm-4.6 \
               --yolo \
@@ -424,7 +491,7 @@ jobs:
                 echo "---- LLxprt log (last 100 lines) ----"
                 tail -n 100 "$llxprt_log"
                 echo "--------------------------------------"
-              } >> "$history_file"
+              } | tee -a "$history_file" >/dev/null
             fi
 
             qa_failure_command=""
@@ -449,12 +516,12 @@ jobs:
                   echo "---- ${name} log (last 100 lines) ----"
                   tail -n 100 "$log_file"
                   echo "--------------------------------------"
-                } >> "$history_file"
+                } | tee -a "$history_file" >/dev/null
                 break
               fi
             done
             else
-              echo "Attempt ${attempt}: skipped QA commands because LLxprt exited with ${llxprt_exit}." >> "$history_file"
+              echo "Attempt ${attempt}: skipped QA commands because LLxprt exited with ${llxprt_exit}." | tee -a "$history_file" >/dev/null
             fi
 
             if [[ "$llxprt_exit" -eq 0 && -z "$qa_failure_command" ]]; then
@@ -466,17 +533,21 @@ jobs:
             fi
 
             if [[ "$attempt" -lt "$max_attempts" ]]; then
-              echo "Attempt ${attempt} failed; preparing for retry." >> "$history_file"
+              echo "Attempt ${attempt} failed; preparing for retry." | tee -a "$history_file" >/dev/null
             fi
           done
 
           if [[ -n "$success_attempt" ]]; then
-            echo "result=success" >> "$GITHUB_OUTPUT"
-            echo "success_attempt=${success_attempt}" >> "$GITHUB_OUTPUT"
-            echo "attempts_exhausted=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "result=success"
+              echo "success_attempt=${success_attempt}"
+              echo "attempts_exhausted=false"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "result=failure" >> "$GITHUB_OUTPUT"
-            echo "attempts_exhausted=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "result=failure"
+              echo "attempts_exhausted=true"
+            } >> "$GITHUB_OUTPUT"
           fi
 
           if [[ -z "$success_attempt" && -s "$results_file" ]]; then

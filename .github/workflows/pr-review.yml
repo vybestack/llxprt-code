@@ -58,11 +58,18 @@ jobs:
 
       - name: 'Fetch pull request head'
         id: 'fetch_head'
+        env:
+          HEAD_REF_VALUE: '${{ github.event.pull_request.head.ref }}'
+          HEAD_REPO_VALUE: '${{ github.event.pull_request.head.repo.full_name }}'
         run: |
           set -euo pipefail
           pr_ref="refs/pr/${PR_NUMBER}"
-          head_repo='${{ github.event.pull_request.head.repo.full_name }}'
-          head_ref='${{ github.event.pull_request.head.ref }}'
+          head_repo="${HEAD_REPO_VALUE:-${REPO}}"
+          head_ref="${HEAD_REF_VALUE:-}"
+          if [[ -z "$head_ref" ]]; then
+            echo "Head ref is unavailable for PR ${PR_NUMBER}; aborting." >&2
+            exit 1
+          fi
 
           if [[ "${head_repo}" == "${REPO}" ]]; then
             git fetch --no-tags --prune --depth=1 origin "${head_ref}:${pr_ref}"
@@ -92,45 +99,30 @@ jobs:
             --json number,title,url,body,isDraft,closingIssuesReferences,additions,deletions,changedFiles,commits,author,headRefName,baseRefName,labels \
             > "${pr_json}"
 
-          node --eval '
-            const fs = require("fs");
-            const data = JSON.parse(fs.readFileSync("review/pr.json", "utf8"));
-            const numbers = new Set();
-            if (Array.isArray(data.closingIssuesReferences)) {
-              for (const issue of data.closingIssuesReferences) {
-                if (issue && issue.number) {
-                  numbers.add(String(issue.number));
-                }
-              }
-            }
-            const body = data.body || "";
-            for (const match of body.matchAll(/#(\d+)/g)) {
-              numbers.add(match[1]);
-            }
-            fs.writeFileSync(
-              "review/issue_numbers.txt",
-              Array.from(numbers).sort().join("\n"),
-            );
-          '
+          jq -r '
+            [
+              (.closingIssuesReferences // [] | map(.number | tostring)),
+              ((.body // "") | [match("#([0-9]+)"; "g") | .captures[0].string] // [])
+            ]
+            | add
+            | unique
+            | .[]
+          ' "${pr_json}" > review/issue_numbers.txt
 
-          node --eval '
-            const fs = require("fs");
-            const data = JSON.parse(fs.readFileSync("review/pr.json", "utf8"));
-            const labels = (data.labels || []).map((label) => label.name);
-            const author = (data.author && data.author.login) || "";
-            const branch = data.headRefName || "";
-            const isLuther =
-              branch.startsWith("luther-") ||
-              author === "app/github-actions" ||
-              labels.includes("Luther Done");
-            console.log(`IS_LUTHER_PR=${isLuther ? "true" : "false"}`);
-            console.log(
-              `HAS_LUTHER_REMEDIATE=${labels.includes("luther remediate") ? "true" : "false"}`,
-            );
-            console.log(
-              `HAS_LUTHER_EXHAUSTED=${labels.includes("luther exhausted") ? "true" : "false"}`,
-            );
-          ' >> "$GITHUB_ENV"
+          jq -r '
+            def has_label($name):
+              ((.labels // []) | map(.name) | index($name)) != null;
+            def as_bool($value): if $value then "true" else "false" end;
+            [
+              "IS_LUTHER_PR=" + as_bool(
+                ((.headRefName // "") | tostring | startswith("luther-")) or
+                ((.author // {}) | .login == "app/github-actions") or
+                has_label("Luther Done")
+              ),
+              "HAS_LUTHER_REMEDIATE=" + as_bool(has_label("luther remediate")),
+              "HAS_LUTHER_EXHAUSTED=" + as_bool(has_label("luther exhausted"))
+            ] | .[]
+          ' "${pr_json}" >> "$GITHUB_ENV"
 
           issues_file='review/issue_numbers.txt'
           if [[ ! -s "${issues_file}" ]]; then
@@ -194,10 +186,9 @@ jobs:
         id: 'ci_wait'
         run: |
           set -euo pipefail
-          ci_name="LLxprt Code CI"
           attempt=0
-          max_attempts=60
-          sleep_seconds=30
+          max_attempts=12
+          sleep_seconds=300
           ci_status="missing"
           ci_conclusion=""
           ci_url=""
@@ -264,6 +255,7 @@ jobs:
         if: steps.issue_gate.outputs.should_review == 'true'
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2016,SC2026
           node --eval '
           const fs = require("fs");
           const path = require("path");
