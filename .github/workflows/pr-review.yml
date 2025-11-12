@@ -179,8 +179,11 @@ jobs:
           ci_id=""
           while [[ ${attempt} -lt ${max_attempts} ]]; do
             attempt=$((attempt + 1))
-            runs_json="$(gh api "repos/${REPO}/actions/runs" -F event="pull_request" -F per_page=100)"
-            run_record="$(jq -c '[.workflow_runs[] | select(.name == "'"${ci_name}"'" and .head_sha == "'"${PR_HEAD_SHA}"'")] | sort_by(.run_number) | last // {}' <<<"${runs_json}")"
+            runs_json="$(gh api "/repos/${REPO}/actions/workflows/ci.yml/runs" \
+              -F event="pull_request" \
+              -F head_sha="${PR_HEAD_SHA}" \
+              -F per_page=50)"
+            run_record="$(jq -c '.workflow_runs | sort_by(.run_number) | last // {}' <<<"${runs_json}")"
             ci_id="$(jq -r '.id // ""' <<<"${run_record}")"
             if [[ -z "${ci_id}" || "${ci_id}" == "null" ]]; then
               echo "Attempt ${attempt}: CI run not found yet."
