@@ -305,10 +305,10 @@ describe('OpenAI provider stateless contract tests', () => {
       expect(getToolCallProcessingMode(provider)).toBe('legacy');
     });
 
-    it('should default to pipeline mode when no mode specified', () => {
+    it('should default to legacy mode when no mode specified', () => {
       const provider = new TestOpenAIProvider('test-key');
       expect(provider).toBeDefined();
-      expect(getToolCallProcessingMode(provider)).toBe('pipeline');
+      expect(getToolCallProcessingMode(provider)).toBe('legacy');
     });
   });
 });

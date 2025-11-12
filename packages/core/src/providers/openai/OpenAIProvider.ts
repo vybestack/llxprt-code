@@ -125,7 +125,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     );
 
     // Initialize tool call processing mode - default to 'pipeline' (optimized)
-    this.toolCallProcessingMode = config?.toolCallProcessingMode ?? 'pipeline';
+    this.toolCallProcessingMode = config?.toolCallProcessingMode ?? 'legacy';
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002
