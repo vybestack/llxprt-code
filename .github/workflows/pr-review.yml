@@ -165,6 +165,17 @@ jobs:
           echo "ISSUE_NUMBERS=${issues_csv}" >> "$GITHUB_ENV"
           echo "should_review=true" >> "$GITHUB_OUTPUT"
 
+      - name: 'Set up Node.js'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          cache: 'npm'
+
+      - name: 'Install dependencies'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: npm ci
+
       - name: 'Wait for LLxprt Code CI result'
         if: steps.issue_gate.outputs.should_review == 'true'
         id: 'ci_wait'
