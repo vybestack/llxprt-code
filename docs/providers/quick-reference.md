@@ -2,6 +2,20 @@
 
 This guide provides concise setup instructions for common LLM providers. For complete documentation, see the [full provider guide](../cli/providers.md).
 
+## Model Geometry Cheat Sheet
+
+Use the values below when setting `/set context-limit` and model parameters so that the CLI respects each provider's limits. Temperatures are the defaults we ship in `~/.llxprt/profiles`.
+
+| Provider      | Reference Model            | Context Limit | Max Tokens | Temperature | Extra Settings                |
+| ------------- | -------------------------- | ------------- | ---------- | ----------- | ----------------------------- |
+| OpenAI        | `o3-mini`                  | `200000`      | `4096`     | `0.2`       | –                             |
+| Anthropic     | `claude-sonnet-4-20250115` | `200000`      | `4096`     | `0.7`       | –                             |
+| Google Gemini | `gemini-2.0-flash`         | `1000000`     | `8192`     | `0.8`       | –                             |
+| Cerebras      | `zai-glm-4.6`              | `121000`      | `10000`    | `1.0`       | `/set shell-replacement true` |
+| Qwen          | `qwen3-coder-pro`          | `32000`       | `8192`     | `0.7`       | –                             |
+
+> **Tip:** Run `/set modelparam.max_tokens=<value>` and `/set modelparam.temperature=<value>` for per-provider tuning. If you use an OpenAI-compatible provider, you can also pass these settings with `--set` when launching `node scripts/start.js`.
+
 ## Provider Configuration Methods
 
 LLxprt Code supports two main ways to configure providers:
@@ -41,6 +55,9 @@ For providers without aliases, use the OpenAI protocol:
 /provider openai
 /key sk-your-openai-key
 /model o3-mini
+/set context-limit 200000
+/set modelparam.max_tokens=4096
+/set modelparam.temperature=0.2
 ```
 
 **Common models:** `o3-mini`, `o1-preview`, `gpt-4o`, `gpt-4.1`
@@ -55,6 +72,9 @@ For providers without aliases, use the OpenAI protocol:
 /provider anthropic
 /key sk-ant-your-key
 /model claude-sonnet-4-20250115
+/set context-limit 200000
+/set modelparam.max_tokens=4096
+/set modelparam.temperature=0.7
 ```
 
 #### Or OAuth (Claude Pro/Max)
@@ -77,6 +97,9 @@ Note: OAuth is lazy - authentication happens when you first use the provider.
 /provider gemini
 /key your-gemini-key
 /model gemini-2.0-flash
+/set context-limit 1000000
+/set modelparam.max_tokens=8192
+/set modelparam.temperature=0.8
 ```
 
 #### Or OAuth
@@ -97,6 +120,10 @@ Note: OAuth is lazy - authentication happens when you first use the provider.
 /provider synthetic
 /key your-synthetic-key
 /model hf:zai-org/GLM-4.6
+/set context-limit 121000
+/set modelparam.max_tokens=10000
+/set modelparam.temperature=1
+/set shell-replacement true
 ```
 
 **Popular models:** `hf:zai-org/GLM-4.6`, `hf:mistralai/Mixtral-8x7B`
@@ -115,6 +142,9 @@ Note: OAuth is lazy - authentication happens when you first use the provider.
 /provider qwen
 /key your-qwen-key
 /model qwen3-coder-pro
+/set context-limit 32000
+/set modelparam.max_tokens=8192
+/set modelparam.temperature=0.7
 ```
 
 ### Models Requiring Custom BaseURL
@@ -128,6 +158,9 @@ These providers use the OpenAI-compatible endpoint approach:
 /baseurl https://api.x.ai/v1/
 /key your-xai-key
 /model grok-3
+/set context-limit 131072
+/set modelparam.max_tokens=8192
+/set modelparam.temperature=0.6
 ```
 
 #### OpenRouter
@@ -137,6 +170,9 @@ These providers use the OpenAI-compatible endpoint approach:
 /baseurl https://openrouter.ai/api/v1/
 /key your-openrouter-key
 /model qwen/qwen3-coder
+/set context-limit 32000
+/set modelparam.max_tokens=8192
+/set modelparam.temperature=0.7
 ```
 
 #### Fireworks
@@ -146,6 +182,9 @@ These providers use the OpenAI-compatible endpoint approach:
 /baseurl https://api.fireworks.ai/inference/v1/
 /key your-fireworks-key
 /model accounts/fireworks/models/llama-v3p3-70b-instruct
+/set context-limit 131072
+/set modelparam.max_tokens=8192
+/set modelparam.temperature=0.7
 ```
 
 #### Cerebras
@@ -154,7 +193,11 @@ These providers use the OpenAI-compatible endpoint approach:
 /provider openai
 /baseurl https://api.cerebras.ai/v1/
 /key your-cerebras-key
-/model qwen-3-coder-480b
+/model zai-glm-4.6
+/set context-limit 121000
+/set modelparam.max_tokens=10000
+/set modelparam.temperature=1
+/set shell-replacement true
 ```
 
 #### Chutes AI
