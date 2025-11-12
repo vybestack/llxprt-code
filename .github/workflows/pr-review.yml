@@ -58,11 +58,14 @@ jobs:
 
       - name: 'Fetch pull request head'
         id: 'fetch_head'
+        env:
+          HEAD_REF: '${{ github.event.pull_request.head.ref }}'
+          HEAD_REPO: '${{ github.event.pull_request.head.repo.full_name }}'
         run: |
           set -euo pipefail
           pr_ref="refs/pr/${PR_NUMBER}"
-          head_repo='${{ github.event.pull_request.head.repo.full_name }}'
-          head_ref='${{ github.event.pull_request.head.ref }}'
+          head_repo="${HEAD_REPO:-${REPO}}"
+          head_ref="${HEAD_REF}"
 
           if [[ "${head_repo}" == "${REPO}" ]]; then
             git fetch --no-tags --prune --depth=1 origin "${head_ref}:${pr_ref}"
@@ -194,7 +197,6 @@ jobs:
         id: 'ci_wait'
         run: |
           set -euo pipefail
-          ci_name="LLxprt Code CI"
           attempt=0
           max_attempts=12
           sleep_seconds=300
