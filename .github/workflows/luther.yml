@@ -87,6 +87,8 @@ jobs:
             printf '%s' "$candidate"
           }
 
+          mkdir -p luther/state
+
           manual_input="$(sanitize_number "${MANUAL_ISSUE_INPUT:-}")"
           if [[ -n "$manual_input" ]]; then
             if [[ ! "$manual_input" =~ ^[0-9]+$ ]]; then
@@ -99,8 +101,43 @@ jobs:
               echo "issue_number=${manual_input}"
               echo "branch=${branch}"
               echo "selection_mode=manual"
+              echo "pr_number="
             } >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          repo_owner="${GITHUB_REPOSITORY%%/*}"
+          remediation_json="$(gh pr list \
+            --state open \
+            --label 'luther remediate' \
+            --exclude-label 'luther exhausted' \
+            --json number,updatedAt,headRefName,headRepositoryOwner \
+            --limit 50)"
+
+          remediation_pr="$(jq -r --arg owner "$repo_owner" '[.[] | select(.headRepositoryOwner.login == $owner)] | sort_by(.updatedAt)[0].number // ""' <<<"$remediation_json")"
+
+          if [[ -n "$remediation_pr" ]]; then
+            pr_json_path="luther/state/remediation-pr.json"
+            gh pr view "$remediation_pr" --json number,body,title,url,headRefName > "$pr_json_path"
+            branch="$(jq -r '.headRefName // ""' "$pr_json_path")"
+
+            if [[ -z "$branch" ]]; then
+              echo "Unable to resolve branch for PR #${remediation_pr}; falling back to issue queue." >> "$GITHUB_STEP_SUMMARY"
+            else
+              issue_number="$(jq -r '.body // ""' "$pr_json_path" | grep -o '#[0-9]\+' | head -n1 | tr -d '#')"
+              issue_number="$(sanitize_number "${issue_number}")"
+              if [[ -z "$issue_number" ]]; then
+                issue_number="${remediation_pr}"
+              fi
+              {
+                echo "issue_number=${issue_number}"
+                echo "branch=${branch}"
+                echo "selection_mode=remediation"
+                echo "pr_number=${remediation_pr}"
+              } >> "$GITHUB_OUTPUT"
+              echo "Selected PR #${remediation_pr} (branch ${branch}) for remediation." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
           fi
 
           issues_json="$(gh issue list \
@@ -115,6 +152,7 @@ jobs:
               echo 'issue_number='
               echo 'branch='
               echo 'selection_mode=auto'
+              echo 'pr_number='
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -126,12 +164,13 @@ jobs:
             echo "issue_number=${issue_number}"
             echo "branch=${branch}"
             echo 'selection_mode=auto'
+            echo 'pr_number='
           } >> "$GITHUB_OUTPUT"
 
       - name: No eligible issues
         if: steps.select_issue.outputs.issue_number == ''
         run: |
-          echo "No open, unassigned issues labeled 'OK for Luther' were found." >> "$GITHUB_STEP_SUMMARY"
+          echo "No remediation PRs or open, unassigned issues labeled 'OK for Luther' were found." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Ensure Luther labels exist
         if: steps.select_issue.outputs.issue_number != ''
@@ -142,8 +181,10 @@ jobs:
           done <<'EOF'
           OK for Luther|bfd4f2|Eligible for Luther autonomous agent
           Luther working|0366d6|Issue currently processed by Luther
-          Luther done|0e8a16|Completed via Luther workflow
+          Luther Done|0e8a16|Completed via Luther workflow
           luther-failed|cb2431|Latest Luther attempt failed
+          luther remediate|d4c5f9|PR requires additional Luther remediation
+          luther exhausted|b60205|Luther has exhausted automated remediation attempts
           EOF
 
       - name: Force debug logging for manual run
@@ -191,6 +232,7 @@ jobs:
           ISSUE_JSON: ${{ steps.issue_data.outputs.json_path }}
           ISSUE_URL: ${{ steps.issue_data.outputs.url }}
           RUN_URL: ${{ env.RUN_URL }}
+          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
         run: |
           set -euo pipefail
           assignee_count="$(jq '.assignees | length' "$ISSUE_JSON")"
@@ -209,7 +251,7 @@ jobs:
           fi
 
           # Refresh labels to reflect active work
-          gh issue edit "$ISSUE_NUMBER" --remove-label "Luther done" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE_NUMBER" --remove-label "Luther Done" >/dev/null 2>&1 || true
           gh issue edit "$ISSUE_NUMBER" --remove-label "luther-failed" >/dev/null 2>&1 || true
           gh issue edit "$ISSUE_NUMBER" --remove-label "OK for Luther" >/dev/null 2>&1 || true
           gh issue edit "$ISSUE_NUMBER" --add-label "Luther working" >/dev/null 2>&1
@@ -217,6 +259,8 @@ jobs:
           dispatch_note="scheduled queue"
           if [[ "${SELECTION_MODE}" == 'manual' ]]; then
             dispatch_note="manual override"
+          elif [[ "${SELECTION_MODE}" == 'remediation' ]]; then
+            dispatch_note="PR remediation"
           fi
 
           gh issue comment "$ISSUE_NUMBER" -F - <<EOF
@@ -224,9 +268,20 @@ jobs:
 
           - Run: ${RUN_URL}
           - Selection: ${dispatch_note}
+          $(if [[ "${SELECTION_MODE}" == 'remediation' && -n "${PR_NUMBER}" ]]; then echo "- Remediating PR #${PR_NUMBER}"; fi)
 
           I'll update this thread with results when the workflow finishes.
           EOF
+
+          if [[ "${SELECTION_MODE}" == 'remediation' ]]; then
+            pr_target="${PR_NUMBER:-}"
+            if [[ -z "$pr_target" ]]; then
+              pr_target="$(gh pr view "${ISSUE_BRANCH}" --json number -q .number 2>/dev/null || true)"
+            fi
+            if [[ -n "$pr_target" ]]; then
+              gh pr edit "$pr_target" --remove-label "luther remediate" >/dev/null 2>&1 || true
+            fi
+          fi
 
           echo "should_continue=true" >> "$GITHUB_OUTPUT"
 
@@ -254,12 +309,18 @@ jobs:
         if: steps.claim_issue.outputs.should_continue == 'true'
         env:
           ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+          SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
         run: |
           set -euo pipefail
           git config user.name "Luther[bot]"
           git config user.email "luther-bot@vybestack.dev"
-          git fetch origin main --depth=1
-          git checkout -B "$ISSUE_BRANCH" origin/main
+          if [[ "${SELECTION_MODE}" == 'remediation' ]]; then
+            git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}" --depth=0
+            git checkout "$ISSUE_BRANCH"
+          else
+            git fetch origin main --depth=1
+            git checkout -B "$ISSUE_BRANCH" origin/main
+          fi
 
       - name: Run Luther attempts
         id: run_attempts
@@ -412,8 +473,10 @@ jobs:
           if [[ -n "$success_attempt" ]]; then
             echo "result=success" >> "$GITHUB_OUTPUT"
             echo "success_attempt=${success_attempt}" >> "$GITHUB_OUTPUT"
+            echo "attempts_exhausted=false" >> "$GITHUB_OUTPUT"
           else
             echo "result=failure" >> "$GITHUB_OUTPUT"
+            echo "attempts_exhausted=true" >> "$GITHUB_OUTPUT"
           fi
 
           if [[ -z "$success_attempt" && -s "$results_file" ]]; then
@@ -471,6 +534,7 @@ jobs:
           ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
           ISSUE_URL: ${{ steps.issue_data.outputs.url }}
           RUN_URL: ${{ env.RUN_URL }}
+          SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
         run: |
           set -euo pipefail
           pr_title="Luther: ${ISSUE_TITLE}"
@@ -485,13 +549,29 @@ jobs:
 
           pr_url=""
           if gh pr view "$ISSUE_BRANCH" >/dev/null 2>&1; then
-            gh pr edit "$ISSUE_BRANCH" --title "$pr_title" --body "$pr_body"
+            if [[ "${SELECTION_MODE}" != 'remediation' ]]; then
+              gh pr edit "$ISSUE_BRANCH" --title "$pr_title" --body "$pr_body"
+            fi
             pr_url="$(gh pr view "$ISSUE_BRANCH" --json url -q .url)"
           else
             pr_url="$(gh pr create --head "$ISSUE_BRANCH" --base main --title "$pr_title" --body "$pr_body")"
           fi
 
           echo "pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Label pull request status
+        if: steps.commit_push.outputs.has_changes == 'true'
+        env:
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+        run: |
+          set -euo pipefail
+          pr_number="$(gh pr view "$ISSUE_BRANCH" --json number -q .number 2>/dev/null || true)"
+          if [[ -z "$pr_number" ]]; then
+            exit 0
+          fi
+          gh pr edit "$pr_number" --remove-label "luther remediate" >/dev/null 2>&1 || true
+          gh pr edit "$pr_number" --remove-label "luther exhausted" >/dev/null 2>&1 || true
+          gh pr edit "$pr_number" --add-label "Luther Done" >/dev/null 2>&1 || true
 
       - name: Update issue on success
         if: steps.run_attempts.outputs.result == 'success' && steps.commit_push.outputs.has_changes == 'true'
@@ -503,7 +583,7 @@ jobs:
           set -euo pipefail
           gh issue edit "$ISSUE_NUMBER" --remove-label "Luther working" >/dev/null 2>&1 || true
           gh issue edit "$ISSUE_NUMBER" --remove-label "luther-failed" >/dev/null 2>&1 || true
-          gh issue edit "$ISSUE_NUMBER" --add-label "Luther done" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE_NUMBER" --add-label "Luther Done" >/dev/null 2>&1 || true
 
           summary="Luther completed successfully. QA logs are available from the workflow run."
           if [[ -n "${PR_URL}" ]]; then
@@ -552,6 +632,27 @@ jobs:
 
           ${FAILURE_SUMMARY:-"(see artifacts for details)"}
           EOF
+
+      - name: Update remediation labels on failure
+        if: steps.claim_issue.outputs.should_continue == 'true' && steps.run_attempts.outputs.result != 'success' && steps.select_issue.outputs.selection_mode == 'remediation'
+        env:
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
+          ATTEMPTS_EXHAUSTED: ${{ steps.run_attempts.outputs.attempts_exhausted }}
+        run: |
+          set -euo pipefail
+          pr_target="${PR_NUMBER:-}"
+          if [[ -z "$pr_target" ]]; then
+            pr_target="$(gh pr view "${ISSUE_BRANCH}" --json number -q .number 2>/dev/null || true)"
+          fi
+          if [[ -z "$pr_target" ]]; then
+            exit 0
+          fi
+          if [[ "${ATTEMPTS_EXHAUSTED}" == 'true' ]]; then
+            gh pr edit "$pr_target" --add-label "luther exhausted" >/dev/null 2>&1 || true
+          else
+            gh pr edit "$pr_target" --add-label "luther remediate" >/dev/null 2>&1 || true
+          fi
 
       - name: Upload Luther artifacts
         if: always() && steps.claim_issue.outputs.should_continue == 'true'

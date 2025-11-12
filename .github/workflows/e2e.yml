@@ -27,19 +27,81 @@ on:
         required: false
 
 jobs:
+  doc_change_filter:
+    name: 'Detect doc-only changes'
+    runs-on: 'ubuntu-latest'
+    outputs:
+      docs_only: '${{ steps.detect.outputs.docs_only }}'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: 'Determine documentation-only PR'
+        id: 'detect'
+        env:
+          PR_NUMBER: >-
+            ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && github.event.pull_request.number || '' }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PR_NUMBER:-}" ]]; then
+            echo "docs_only=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files="$(gh api \
+            --paginate \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --jq '.[].filename' || true)"
+
+          if [[ -z "$files" ]]; then
+            echo "docs_only=true" >>"$GITHUB_OUTPUT"
+            {
+              echo "### Documentation-only PR detected"
+              echo "Skipping E2E suites for this PR."
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          docs_only=true
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              docs/*|README.md|README.*|*.md|*.mdx|*.rst|*.txt|*.adoc)
+                ;;
+              *)
+                docs_only=false
+                break
+                ;;
+            esac
+          done <<<"$files"
+
+          echo "docs_only=${docs_only}" >>"$GITHUB_OUTPUT"
+          if [[ "$docs_only" == "true" ]]; then
+            {
+              echo "### Documentation-only PR detected"
+              echo "Skipping E2E suites for this PR."
+            } >>"$GITHUB_STEP_SUMMARY"
+          fi
+
   e2e-test:
     name: 'E2E Test (${{ matrix.os }}) - ${{ matrix.sandbox }}'
+    needs: 'doc_change_filter'
     # This condition ensures the job runs for pushes to main, merge groups,
     # PRs from the base repo, OR PRs from forks with the correct label.
     if: |
-      github.event_name == 'push' ||
-      github.event_name == 'merge_group' ||
-      github.event_name == 'workflow_dispatch' ||
-      (
-        (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') &&
+      needs.doc_change_filter.outputs.docs_only != 'true' && (
+        github.event_name == 'push' ||
+        github.event_name == 'merge_group' ||
+        github.event_name == 'workflow_dispatch' ||
         (
-          github.event.pull_request.head.repo.full_name == github.repository ||
-          contains(github.event.pull_request.labels.*.name, 'maintainer:e2e:ok')
+          (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') &&
+          (
+            github.event.pull_request.head.repo.full_name == github.repository ||
+            contains(github.event.pull_request.labels.*.name, 'maintainer:e2e:ok')
+          )
         )
       )
     runs-on: '${{ matrix.os }}'
@@ -251,13 +313,38 @@ jobs:
           fi
         shell: bash
 
-      - name: 'Upload provider error report'
+      - name: 'Collect provider error reports'
         if: failure()
+        id: 'collect_provider_errors'
+        run: |
+          set -euo pipefail
+          mkdir -p provider-errors
+          shopt -s nullglob
+          declare -a roots=(
+            "/tmp"
+            "${TMPDIR:-}"
+            "${RUNNER_TEMP:-}"
+            "${TEMP:-}"
+            "${TMP:-}"
+          )
+          for dir in "${roots[@]}"; do
+            [[ -z "$dir" || ! -d "$dir" ]] && continue
+            for file in "$dir"/llxprt-client-error-*; do
+              [[ -f "$file" ]] || continue
+              cp "$file" "provider-errors/$(basename "$file")"
+            done
+          done
+          if compgen -G 'provider-errors/*' >/dev/null; then
+            echo "found=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "found=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: 'Upload provider error report'
+        if: failure() && steps.collect_provider_errors.outputs.found == 'true'
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
-          name: 'provider-error-${{ matrix.os }}-${{ matrix.sandbox }}-${{ github.run_id }}'
-          path: |
-            /tmp/llxprt-client-error-*
-            /var/folders/**/llxprt-client-error-*
-            C:/Users/*/AppData/Local/Temp/llxprt-client-error-*
+          name: >-
+            provider-error-${{ matrix.os }}-${{ replace(matrix.sandbox, ':', '-') }}-${{ github.run_id }}
+          path: 'provider-errors'
           if-no-files-found: 'ignore'
