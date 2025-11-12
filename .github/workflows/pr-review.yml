@@ -165,6 +165,26 @@ jobs:
           echo "ISSUE_NUMBERS=${issues_csv}" >> "$GITHUB_ENV"
           echo "should_review=true" >> "$GITHUB_OUTPUT"
 
+      - name: 'Detect documentation-only change'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: |
+          set -euo pipefail
+          diff_list="review/changed-list.txt"
+          git diff --name-only "${BASE_SHA}" "${PR_HEAD_SHA}" > "${diff_list}"
+          docs_only=true
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              docs/*|README.md|README.*|*.md|*.mdx|*.rst|*.txt|*.adoc)
+                ;;
+              *)
+                docs_only=false
+                break
+                ;;
+            esac
+          done < "${diff_list}"
+          echo "DOCS_ONLY=${docs_only}" >> "$GITHUB_ENV"
+
       - name: 'Install LLxprt CLI nightly'
         if: steps.issue_gate.outputs.should_review == 'true'
         run: npm install -g @vybestack/llxprt-code@nightly
@@ -334,6 +354,9 @@ jobs:
           ## Patch (first 4000 lines)
           ${diffPatch}
 
+          ## Doc-only change
+          ${process.env.DOCS_ONLY || 'unknown'}
+
           ### Review requirements
           1. Verify the implementation actually resolves the linked issue(s). Explicitly tie file-level evidence back to the issue requirements.
           2. Identify likely side effects introduced by the diff (config changes, shared modules, performance impacts, etc.) and call them out.
@@ -343,7 +366,7 @@ jobs:
              - Flag “mock theater” tests (mocks that only assert implementation details without executing new logic).
              - State whether coverage likely increased, decreased, or stayed flat. Use the diff + test changes + coverage summary to justify the direction even if approximate.
           5. Stay within the diff—do not reference untouched files except when describing dependencies directly affected.
-          6. If evidence for adequate automated testing is missing or inconclusive, treat the change as unsafe and plan to return it for remediation.
+          6. If this is not a documentation-only change and you cannot cite meaningful automated tests (integration or otherwise) that cover the new behavior, treat the PR as unsafe and plan to return it for remediation.
 
           ### Output format
           Produce a single markdown comment exactly in this structure and nothing else:
@@ -365,7 +388,7 @@ jobs:
           - Additional bullets on test gaps or strengths (mention if tests feel like “mock theater”).
 
           **Verdict**
-          - Default to \`⚠️ Needs Work\` unless you can cite specific evidence (code + tests) that risk is low; only start with \`✅ Ready\` when requirements are fully satisfied and test coverage is sufficient.
+          - Default to \`⚠️ Needs Work\` unless you can cite specific evidence (code + tests) that risk is low; only start with \`✅ Ready\` when requirements are fully satisfied, the change is truly documentation-only, or adequate automated coverage exists.
 
           If information is missing, state assumptions explicitly. Keep the overall length under 350 words.
           `;
