@@ -128,10 +128,10 @@ jobs:
               labels.includes("Luther Done");
             console.log(`IS_LUTHER_PR=${isLuther ? "true" : "false"}`);
             console.log(
-              `HAS_LUTHER_REMEDIATE=${labels.includes("luther remediate") ? "true" : "false"}`,
+              `HAS_LUTHER_REMEDIATE=${labels.includes("luther remediate") ? "true" : "false"}`
             );
             console.log(
-              `HAS_LUTHER_EXHAUSTED=${labels.includes("luther exhausted") ? "true" : "false"}`,
+              `HAS_LUTHER_EXHAUSTED=${labels.includes("luther exhausted") ? "true" : "false"}`
             );
           ' >> "$GITHUB_ENV"
 
