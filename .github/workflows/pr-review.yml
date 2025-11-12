@@ -43,17 +43,17 @@ jobs:
       LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
       DEBUG_OUTPUT: 'stderr'
     steps:
-      - name: 'Prepare review workspace'
-        run: |
-          set -euo pipefail
-          mkdir -p review/issues
-          : > review/comment.md
-
       - name: 'Checkout base revision'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
         with:
           ref: '${{ github.event.pull_request.base.sha }}'
           fetch-depth: 0
+
+      - name: 'Prepare review workspace'
+        run: |
+          set -euo pipefail
+          mkdir -p review/issues
+          : > review/comment.md
 
       - name: 'Fetch pull request head'
         id: 'fetch_head'
