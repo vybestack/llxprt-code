@@ -298,6 +298,18 @@ describe('runNonInteractive', () => {
     ).rejects.toThrow(apiError);
   });
 
+  it('should propagate error when API error occurs in runNonInteractive', async () => {
+    const apiError = new Error('API rate limit exceeded');
+    mockGeminiClient.sendMessageStream.mockImplementation(() => {
+      throw apiError;
+    });
+
+    // The error should propagate through runNonInteractive
+    await expect(
+      runNonInteractive(mockConfig, 'Trigger API limit', 'prompt-id-7'),
+    ).rejects.toThrow(apiError);
+  });
+
   it('should not exit if a tool is not found, and should send error back to model', async () => {
     const toolCallEvent: ServerGeminiStreamEvent = {
       type: GeminiEventType.ToolCallRequest,
