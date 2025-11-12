@@ -230,6 +230,30 @@ jobs:
             echo "is_doc_issue=${is_doc_issue}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Fetch issue comments
+        id: issue_comments
+        if: steps.select_issue.outputs.issue_number != ''
+        env:
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+        run: |
+          set -euo pipefail
+          issue_comments_path="luther/state/issue-comments.json"
+          gh api "/repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+            > "$issue_comments_path" || echo '[]' > "$issue_comments_path"
+          echo "comments_path=${issue_comments_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch remediation PR comments
+        id: pr_comments
+        if: steps.select_issue.outputs.pr_number != ''
+        env:
+          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          pr_comments_path="luther/state/pr-comments.json"
+          gh api "/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            > "$pr_comments_path" || echo '[]' > "$pr_comments_path"
+          echo "comments_path=${pr_comments_path}" >> "$GITHUB_OUTPUT"
+
       - name: Claim issue and update labels
         id: claim_issue
         if: steps.select_issue.outputs.issue_number != ''
@@ -342,6 +366,8 @@ jobs:
           SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
           ISSUE_LABELS: ${{ steps.issue_data.outputs.labels }}
           IS_DOC_ISSUE: ${{ steps.issue_data.outputs.is_doc_issue }}
+          ISSUE_COMMENTS_PATH: ${{ steps.issue_comments.outputs.comments_path }}
+          PR_COMMENTS_PATH: ${{ steps.pr_comments.outputs.comments_path }}
         run: |
           set -euo pipefail
 
@@ -350,6 +376,23 @@ jobs:
           truncate -s 0 "$history_file"
           results_file="luther/state/failure-summary.txt"
           truncate -s 0 "$results_file"
+          format_comments() {
+            local file="$1"
+            if [[ -z "$file" || ! -s "$file" ]]; then
+              return
+            fi
+            jq -r '
+              sort_by(.created_at) |
+              reverse |
+              .[:5] |
+              reverse |
+              map("* [" + ((.user.login // "unknown")) + " @ " + ((.created_at // "?")) + "] " +
+                  ((.body // "") | gsub("\r";"") | gsub("\n"; "\n  "))) |
+              .[]
+            ' "$file"
+          }
+          issue_comments_text="$(format_comments "${ISSUE_COMMENTS_PATH:-}")"
+          pr_comments_text="$(format_comments "${PR_COMMENTS_PATH:-}")"
           qa_names=("format" "lint" "typecheck" "test" "build")
           qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test:ci" "npm run build")
 
@@ -377,6 +420,18 @@ jobs:
               cat "$ISSUE_BODY_PATH"
               echo
               echo "----------------------------------------"
+              echo
+              echo "Recent issue comments:"
+              if [[ -n "$issue_comments_text" ]]; then
+                printf '%s\n' "$issue_comments_text"
+              else
+                echo "- (none)"
+              fi
+              if [[ -n "$pr_comments_text" ]]; then
+                echo
+                echo "Recent PR comments:"
+                printf '%s\n' "$pr_comments_text"
+              fi
               echo
               echo "Repository branch: ${ISSUE_BRANCH}"
               echo "Selection mode: ${SELECTION_MODE}"
