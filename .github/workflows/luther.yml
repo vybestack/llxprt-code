@@ -452,6 +452,11 @@ jobs:
             exit 0
           fi
 
+          # Always discard package-lock.json changes from Luther commits
+          if git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
+            git checkout -- package-lock.json
+          fi
+
           git add -A
           git commit -m "Luther: address #${ISSUE_NUMBER}"
           git push --force-with-lease origin "$ISSUE_BRANCH"
