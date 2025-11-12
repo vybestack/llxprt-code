@@ -326,7 +326,7 @@ export class MemoryTool
   ) {
     super(
       MemoryTool.Name,
-      'Save Memory',
+      'SaveMemory',
       memoryToolDescription,
       Kind.Think,
       memoryToolSchemaData.parametersJsonSchema as Record<string, unknown>,
