@@ -180,7 +180,7 @@ jobs:
           ci_id=""
           while [[ ${attempt} -lt ${max_attempts} ]]; do
             attempt=$((attempt + 1))
-            runs_json="$(gh api "/repos/${REPO}/actions/workflows/ci.yml/runs" \
+            runs_json="$(gh api -X GET "/repos/${REPO}/actions/workflows/ci.yml/runs" \
               -F event="pull_request" \
               -F head_sha="${PR_HEAD_SHA}" \
               -F per_page=50)"
