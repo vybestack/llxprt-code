@@ -150,6 +150,7 @@ import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
 import { WorkspaceMigrationDialog } from './components/WorkspaceMigrationDialog.js';
 import { isWorkspaceTrusted } from '../config/trustedFolders.js';
 import { globalOAuthUI } from '../auth/global-oauth-ui.js';
+import { WelcomeScreen } from './components/WelcomeScreen.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -298,6 +299,20 @@ const App = (props: AppInternalProps) => {
 
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const historyTokenCleanupRef = useRef<(() => void) | null>(null);
+  const [showWelcomeScreen, setShowWelcomeScreen] = useState(false);
+
+  // Check if welcome screen should be shown
+  useEffect(() => {
+    const hasProvider =
+      Object.keys(settings.merged.providerApiKeys || {}).length > 0;
+    if (!hasProvider && !showWelcomeScreen) {
+      setShowWelcomeScreen(true);
+    }
+  }, [settings, showWelcomeScreen]);
+
+  const handleWelcomeComplete = useCallback(() => {
+    setShowWelcomeScreen(false);
+  }, []);
   const lastHistoryServiceRef = useRef<unknown>(null);
   const lastPublishedHistoryTokensRef = useRef<number | null>(null);
   const tokenLogger = useMemo(
@@ -1752,6 +1767,9 @@ const App = (props: AppInternalProps) => {
           )}
         </Box>
       </Box>
+      {showWelcomeScreen && (
+        <WelcomeScreen onComplete={handleWelcomeComplete} />
+      )}
     </StreamingContext.Provider>
   );
 };
