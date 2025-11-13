@@ -1386,4 +1386,156 @@ describe('Config getHooks', () => {
     expect(retrievedHooks).toEqual(allEventHooks);
     expect(Object.keys(retrievedHooks!)).toHaveLength(11); // All hook event types
   });
+
+  describe('setModel', () => {
+    it('should allow setting a pro (any) model and disable fallback mode', () => {
+      const config = new Config(baseParams);
+      config.setFallbackMode(true);
+      expect(config.isInFallbackMode()).toBe(true);
+
+      const proModel = 'gemini-2.5-pro';
+      config.setModel(proModel);
+
+      expect(config.getModel()).toBe(proModel);
+      expect(config.isInFallbackMode()).toBe(false);
+      expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith(proModel);
+    });
+
+    it('should allow setting auto model from non-auto model and disable fallback mode', () => {
+      const config = new Config(baseParams);
+      config.setFallbackMode(true);
+      expect(config.isInFallbackMode()).toBe(true);
+
+      config.setModel('auto');
+
+      expect(config.getModel()).toBe('auto');
+      expect(config.isInFallbackMode()).toBe(false);
+      expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith('auto');
+    });
+
+    it('should allow setting auto model from auto model if it is in the fallback mode', () => {
+      const config = new Config({
+        cwd: '/tmp',
+        targetDir: '/path/to/target',
+        debugMode: false,
+        sessionId: 'test-session-id',
+        model: 'auto',
+        usageStatisticsEnabled: false,
+      });
+      config.setFallbackMode(true);
+      expect(config.isInFallbackMode()).toBe(true);
+
+      config.setModel('auto');
+
+      expect(config.getModel()).toBe('auto');
+      expect(config.isInFallbackMode()).toBe(false);
+      expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith('auto');
+    });
+  });
+});
+
+describe('Config getExperiments', () => {
+  const baseParams: ConfigParameters = {
+    cwd: '/tmp',
+    targetDir: '/path/to/target',
+    debugMode: false,
+    sessionId: 'test-session-id',
+    model: 'gemini-pro',
+    usageStatisticsEnabled: false,
+  };
+
+  it('should return undefined when no experiments are provided', () => {
+    const config = new Config(baseParams);
+    expect(config.getExperiments()).toBeUndefined();
+  });
+
+  it('should return empty object when empty experiments are provided', () => {
+    const configWithEmptyExps = new Config({
+      ...baseParams,
+      experiments: { flags: {}, experimentIds: [] },
+    });
+    expect(configWithEmptyExps.getExperiments()).toEqual({
+      flags: {},
+      experimentIds: [],
+    });
+  });
+
+  it('should return the experiments configuration when provided', () => {
+    const mockExps = {
+      flags: {
+        testFlag: { boolValue: true },
+      },
+      experimentIds: [],
+    };
+
+    const config = new Config({
+      ...baseParams,
+      experiments: mockExps,
+    });
+
+    const retrievedExps = config.getExperiments();
+    expect(retrievedExps).toEqual(mockExps);
+    expect(retrievedExps).toBe(mockExps); // Should return the same reference
+  });
+});
+
+describe('Config setExperiments logging', () => {
+  const baseParams: ConfigParameters = {
+    cwd: '/tmp',
+    targetDir: '/path/to/target',
+    debugMode: false,
+    sessionId: 'test-session-id',
+    model: 'gemini-pro',
+    usageStatisticsEnabled: false,
+  };
+
+  it('logs a sorted, non-truncated summary of experiments when they are set', () => {
+    const config = new Config(baseParams);
+    const debugSpy = vi
+      .spyOn(debugLogger, 'debug')
+      .mockImplementation(() => {});
+    const experiments = {
+      flags: {
+        ZetaFlag: {
+          boolValue: true,
+          stringValue: 'zeta',
+          int32ListValue: { values: [1, 2] },
+        },
+        AlphaFlag: {
+          boolValue: false,
+          stringValue: 'alpha',
+          stringListValue: { values: ['a', 'b', 'c'] },
+        },
+        MiddleFlag: {
+          // Intentionally sparse to ensure undefined values are omitted
+          floatValue: 0.42,
+          int32ListValue: { values: [] },
+        },
+      },
+      experimentIds: [101, 99],
+    };
+
+    config.setExperiments(experiments);
+
+    const logCall = debugSpy.mock.calls.find(
+      ([message]) => message === 'Experiments loaded',
+    );
+    expect(logCall).toBeDefined();
+    const loggedSummary = logCall?.[1] as string;
+    expect(typeof loggedSummary).toBe('string');
+    expect(loggedSummary).toContain('experimentIds');
+    expect(loggedSummary).toContain('101');
+    expect(loggedSummary).toContain('AlphaFlag');
+    expect(loggedSummary).toContain('ZetaFlag');
+    const alphaIndex = loggedSummary.indexOf('AlphaFlag');
+    const zetaIndex = loggedSummary.indexOf('ZetaFlag');
+    expect(alphaIndex).toBeGreaterThan(-1);
+    expect(zetaIndex).toBeGreaterThan(-1);
+    expect(alphaIndex).toBeLessThan(zetaIndex);
+    expect(loggedSummary).toContain('\n');
+    expect(loggedSummary).not.toContain('stringListLength: 0');
+    expect(loggedSummary).not.toContain('int32ListLength: 0');
+
+    debugSpy.mockRestore();
+  });
 });

@@ -1008,7 +1008,11 @@ export class Config {
       this.contentGeneratorConfig.model = newModel;
     }
     // Also update the base model so it persists across refreshAuth
-    this.model = newModel;
+    if (this.model !== newModel || this.inFallbackMode) {
+      this.model = newModel;
+      coreEvents.emitModelChanged(newModel);
+    }
+    this.setFallbackMode(false);
   }
 
   isInFallbackMode(): boolean {
