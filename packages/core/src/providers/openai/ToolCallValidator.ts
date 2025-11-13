@@ -85,11 +85,8 @@ export class ToolCallValidator {
       result.isValid = false;
     }
 
-    // Check parameter format
-    if (candidate.args && !this.isValidArgs(candidate.args)) {
-      errors.push('Tool call arguments are not valid JSON');
-      result.isValid = false;
-    }
+    // Remove strict JSON validation - let processToolParameters handle it
+    // This prevents over-validation that blocks valid tool calls
 
     result.validationErrors = errors;
 
@@ -117,18 +114,6 @@ export class ToolCallValidator {
   private isValidToolName(name: string): boolean {
     // Allow letters, numbers, underscores and hyphens
     return /^[a-zA-Z0-9_-]+$/.test(name);
-  }
-
-  /**
-   * Check if parameters are valid JSON
-   */
-  private isValidArgs(args: string): boolean {
-    try {
-      JSON.parse(args);
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   /**

@@ -130,15 +130,17 @@ export class ToolCallCollector {
       fragments: [...fragments].sort((a, b) => a.timestamp - b.timestamp),
     };
 
-    // Assemble final result (later fragments override earlier ones)
+    // Assemble final result - name uses override, args use accumulation
+    let accumulatedArgs = '';
     for (const fragment of result.fragments) {
       if (fragment.name) {
-        result.name = fragment.name;
+        result.name = fragment.name; // name uses override logic
       }
       if (fragment.args) {
-        result.args = fragment.args;
+        accumulatedArgs += fragment.args; // args use accumulation logic
       }
     }
+    result.args = accumulatedArgs;
 
     if (!result.name) {
       logger.error(`Assembled tool call ${index} missing name`);
@@ -156,17 +158,12 @@ export class ToolCallCollector {
     existing: ToolCallFragment,
     newFragment: ToolCallFragment,
   ): boolean {
+    // Only check for duplicate names, not args
+    // Args fragments should be accumulated, not treated as duplicates
     if (
       existing.name &&
       newFragment.name &&
       existing.name === newFragment.name
-    ) {
-      return true;
-    }
-    if (
-      existing.args &&
-      newFragment.args &&
-      existing.args === newFragment.args
     ) {
       return true;
     }
