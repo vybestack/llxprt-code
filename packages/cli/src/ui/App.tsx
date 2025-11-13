@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  WelcomeScreen,
+  useShowWelcomeScreen,
+} from './components/WelcomeScreen.js';
 import React, {
   useCallback,
   useEffect,
@@ -223,6 +227,35 @@ const App = (props: AppInternalProps) => {
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
+  const [welcomeScreenDismissed, setWelcomeScreenDismissed] = useState(false);
+
+  // Check if welcome screen should be shown
+  const shouldShowWelcomeScreen = useShowWelcomeScreen();
+
+  // Welcome screen handlers
+  const handleDismissWelcomeScreen = useCallback(() => {
+    setWelcomeScreenDismissed(true);
+  }, []);
+
+  const handleOpenConfig = useCallback(() => {
+    // Open configuration dialog
+    console.log('Opening configuration dialog...');
+  }, []);
+
+  const handleOpenDocs = useCallback(() => {
+    // Open documentation
+    console.log('Opening documentation...');
+  }, []);
+
+  const handleOpenTutorials = useCallback(() => {
+    // Open tutorials
+    console.log('Opening tutorials...');
+  }, []);
+
+  const handleGoogleAuth = useCallback(() => {
+    // Initiate Google authentication
+    console.log('Initiating Google authentication...');
+  }, []);
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
   const { stdout } = useStdout();
   const nightly = version.includes('nightly');
@@ -1336,6 +1369,23 @@ const App = (props: AppInternalProps) => {
     : isPowerShell
       ? '  Type your message, @path/to/file or +path/to/file'
       : '  Type your message or @path/to/file';
+
+  // Show welcome screen if conditions are met
+  if (shouldShowWelcomeScreen && !welcomeScreenDismissed) {
+    return (
+      <StreamingContext.Provider value={streamingState}>
+        <Box justifyContent="center" alignItems="center" height="100%">
+          <WelcomeScreen
+            onDismiss={handleDismissWelcomeScreen}
+            onOpenConfig={handleOpenConfig}
+            onOpenDocs={handleOpenDocs}
+            onOpenTutorials={handleOpenTutorials}
+            onGoogleAuth={handleGoogleAuth}
+          />
+        </Box>
+      </StreamingContext.Provider>
+    );
+  }
 
   return (
     <StreamingContext.Provider value={streamingState}>
