@@ -339,7 +339,7 @@ jobs:
 
       - name: Install LLxprt CLI nightly
         if: steps.claim_issue.outputs.should_continue == 'true'
-        run: npm install -g @vybestack/llxprt@nightly
+        run: npm install -g @vybestack/llxprt-code@nightly
 
       - name: Configure git and working branch
         if: steps.claim_issue.outputs.should_continue == 'true'
