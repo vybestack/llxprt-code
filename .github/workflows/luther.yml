@@ -346,12 +346,18 @@ jobs:
         env:
           ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
           SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
+          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
         run: |
           set -euo pipefail
           git config user.name "Luther[bot]"
           git config user.email "luther-bot@vybestack.dev"
           if [[ "${SELECTION_MODE}" == 'remediation' ]]; then
-            git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}"
+            pr_number="${PR_NUMBER:-}"
+            if [[ -n "$pr_number" ]]; then
+              git fetch origin "pull/${pr_number}/head:${ISSUE_BRANCH}" --depth=1
+            else
+              git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}" --depth=1
+            fi
             git checkout "$ISSUE_BRANCH"
           else
             git fetch origin main --depth=1
