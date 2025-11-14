@@ -18,17 +18,13 @@ const __dirname = path.dirname(__filename);
 // Handle different directory structures between development and bundle environments
 // In development: packages/cli/src/providers/aliases/
 // In bundle: bundle/providers/aliases/
-let BUILTIN_ALIAS_DIR: string;
-if (
-  __dirname.includes('bundle') ||
-  fs.existsSync(path.join(__dirname, 'providers'))
-) {
-  // Bundle environment: __dirname is bundle/, aliases at providers/aliases/
-  BUILTIN_ALIAS_DIR = path.join(__dirname, 'providers', 'aliases');
-} else {
-  // Development environment: __dirname is packages/cli/src/providers/, aliases at aliases/
-  BUILTIN_ALIAS_DIR = path.join(__dirname, 'aliases');
-}
+const BUNDLE_ALIAS_DIR = path.join(__dirname, 'providers', 'aliases');
+const DEV_ALIAS_DIR = path.join(__dirname, 'aliases');
+
+// Prefer the bundle layout if it actually exists, otherwise fall back to dev layout.
+const BUILTIN_ALIAS_DIR = fs.existsSync(BUNDLE_ALIAS_DIR)
+  ? BUNDLE_ALIAS_DIR
+  : DEV_ALIAS_DIR;
 
 export type ProviderAliasSource = 'user' | 'builtin';
 
