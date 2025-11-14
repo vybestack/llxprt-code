@@ -14,7 +14,17 @@ const SUPPORTED_EXTENSIONS = new Set(['.config', '.json']);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const BUILTIN_ALIAS_DIR = path.join(__dirname, 'aliases');
+
+// Handle different directory structures between development and bundle environments
+// In development: packages/cli/src/providers/aliases/
+// In bundle: bundle/providers/aliases/
+const BUNDLE_ALIAS_DIR = path.join(__dirname, 'providers', 'aliases');
+const DEV_ALIAS_DIR = path.join(__dirname, 'aliases');
+
+// Prefer the bundle layout if it actually exists, otherwise fall back to dev layout.
+const BUILTIN_ALIAS_DIR = fs.existsSync(BUNDLE_ALIAS_DIR)
+  ? BUNDLE_ALIAS_DIR
+  : DEV_ALIAS_DIR;
 
 export type ProviderAliasSource = 'user' | 'builtin';
 
