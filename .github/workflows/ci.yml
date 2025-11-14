@@ -37,6 +37,8 @@ jobs:
   doc_change_filter:
     name: 'Detect doc-only changes'
     runs-on: 'ubuntu-latest'
+    env:
+      GH_TOKEN: '${{ github.token }}'
     outputs:
       docs_only: '${{ steps.detect.outputs.docs_only }}'
     steps:
