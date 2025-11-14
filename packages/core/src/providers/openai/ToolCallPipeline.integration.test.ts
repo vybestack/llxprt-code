@@ -14,34 +14,31 @@
  * limitations under the License.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+/**
+ * ToolCallPipeline Integration Tests - Adapted for new architecture
+ *
+ * This test file preserves the valuable test scenarios from the original
+ * integration test but adapts them to the new simplified pipeline architecture.
+ *
+ * Key changes from original:
+ * - Removed tool execution testing (now handled by Core layer)
+ * - Focus on pipeline collection and normalization
+ * - Test real processToolParameters behavior (not mocked)
+ * - Verify pipeline output format matches Core layer expectations
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ToolCallPipeline } from './ToolCallPipeline.js';
 
-// Mock processToolParameters to simulate different scenarios
-vi.mock('../../tools/doubleEscapeUtils.js', () => ({
-  processToolParameters: vi.fn(),
-}));
-
-import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
-
-describe('ToolCallPipeline Integration Tests', () => {
+describe('ToolCallPipeline Integration Tests (New Architecture)', () => {
   let pipeline: ToolCallPipeline;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    pipeline = new ToolCallPipeline(['test_tool', 'another_tool']);
+    pipeline = new ToolCallPipeline();
   });
 
   describe('Streaming tool call simulation', () => {
     it('should handle fragmented JSON arguments correctly (Problem 1 fix)', async () => {
-      // Mock processToolParameters to return parsed object
-      const mockParsedArgs = { param1: 'value1', param2: 'value2' };
-      vi.mocked(processToolParameters).mockReturnValue(mockParsedArgs);
-
-      // Register a mock tool
-      const mockTool = vi.fn().mockResolvedValue('success');
-      pipeline.registerTool('test_tool', mockTool);
-
       // Simulate streaming fragments (like Qwen model produces)
       // Fragment 1: tool name
       pipeline.addFragment(0, { name: 'test_tool' });
@@ -55,56 +52,39 @@ describe('ToolCallPipeline Integration Tests', () => {
       // Process the pipeline
       const result = await pipeline.process();
 
-      // Verify the tool was executed successfully
-      expect(result.executed).toHaveLength(1);
-      expect(result.executed[0].success).toBe(true);
-      expect(result.executed[0].result).toBe('success');
+      // Verify the tool was normalized successfully
+      expect(result.normalized).toHaveLength(1);
+      expect(result.failed).toHaveLength(0);
 
-      // Verify processToolParameters was called with the accumulated args
-      expect(processToolParameters).toHaveBeenCalledWith(
+      const normalizedCall = result.normalized[0];
+      expect(normalizedCall.name).toBe('test_tool');
+      expect(normalizedCall.args).toEqual({
+        param1: 'value1',
+        param2: 'value2',
+      });
+      expect(normalizedCall.originalArgs).toBe(
         '{"param1": "value1", "param2": "value2"}',
-        'unknown_tool',
-        'unknown',
       );
-
-      // Verify the tool received the correct arguments
-      expect(mockTool).toHaveBeenCalledWith(mockParsedArgs);
     });
 
     it('should handle processToolParameters returning string (Problem 2 fix)', async () => {
-      // This simulates the case where processToolParameters returns a string
-      // instead of an object (e.g., when JSON parsing fails)
-      const stringResult = 'fallback string result';
-      vi.mocked(processToolParameters).mockReturnValue(stringResult);
-
-      const mockTool = vi.fn().mockResolvedValue('tool executed');
-      pipeline.registerTool('test_tool', mockTool);
-
-      // Add fragments
+      // Add fragments with invalid JSON that will be wrapped as string
       pipeline.addFragment(0, { name: 'test_tool' });
       pipeline.addFragment(0, { args: 'invalid json' });
 
       const result = await pipeline.process();
 
-      // Should still execute successfully, with args wrapped as { value: string }
-      expect(result.executed).toHaveLength(1);
-      expect(result.executed[0].success).toBe(true);
+      // Should still normalize successfully, with args wrapped as { value: string }
+      expect(result.normalized).toHaveLength(1);
+      expect(result.failed).toHaveLength(0);
 
-      // Verify the tool received the wrapped arguments
-      expect(mockTool).toHaveBeenCalledWith({ value: stringResult });
+      const normalizedCall = result.normalized[0];
+      expect(normalizedCall.name).toBe('test_tool');
+      expect(normalizedCall.args).toEqual({ value: 'invalid json' });
+      expect(normalizedCall.originalArgs).toBe('invalid json');
     });
 
     it('should handle multiple concurrent tool calls', async () => {
-      vi.mocked(processToolParameters).mockReturnValue({});
-
-      const mockTool1 = vi.fn().mockResolvedValue('result1');
-      const mockTool2 = vi.fn().mockResolvedValue('result2');
-
-      pipeline.registerTools({
-        test_tool: mockTool1,
-        another_tool: mockTool2,
-      });
-
       // Tool call 1: fragmented args
       pipeline.addFragment(0, { name: 'test_tool' });
       pipeline.addFragment(0, { args: '{"param": ' });
@@ -116,69 +96,61 @@ describe('ToolCallPipeline Integration Tests', () => {
 
       const result = await pipeline.process();
 
-      expect(result.executed).toHaveLength(2);
-      expect(result.executed.every((r) => r.success)).toBe(true);
+      expect(result.normalized).toHaveLength(2);
+      expect(result.failed).toHaveLength(0);
 
-      expect(mockTool1).toHaveBeenCalledWith({});
-      expect(mockTool2).toHaveBeenCalledWith({});
+      const call1 = result.normalized.find((c) => c.index === 0);
+      const call2 = result.normalized.find((c) => c.index === 1);
+
+      expect(call1?.name).toBe('test_tool');
+      expect(call1?.args).toEqual({ param: 'value' });
+
+      expect(call2?.name).toBe('another_tool');
+      expect(call2?.args).toEqual({});
     });
 
     it('should handle malformed arguments gracefully', async () => {
-      // Simulate processToolParameters returning malformed data
-      vi.mocked(processToolParameters).mockReturnValue(null);
-
-      const mockTool = vi.fn().mockResolvedValue('executed');
-      pipeline.registerTool('test_tool', mockTool);
-
       pipeline.addFragment(0, { name: 'test_tool' });
       pipeline.addFragment(0, { args: 'malformed' });
 
       const result = await pipeline.process();
 
-      // Should still execute with empty args
-      expect(result.executed).toHaveLength(1);
-      expect(mockTool).toHaveBeenCalledWith({});
+      // Should still normalize with args wrapped as { value: string }
+      expect(result.normalized).toHaveLength(1);
+      expect(result.failed).toHaveLength(0);
+
+      const normalizedCall = result.normalized[0];
+      expect(normalizedCall.args).toEqual({ value: 'malformed' });
     });
 
-    it('should reject invalid tool names', async () => {
-      vi.mocked(processToolParameters).mockReturnValue({});
-
-      pipeline.addFragment(0, { name: 'invalid_tool' });
+    it('should handle tools with empty names', async () => {
+      pipeline.addFragment(0, { name: '' });
       pipeline.addFragment(0, { args: '{}' });
 
       const result = await pipeline.process();
 
-      expect(result.executed).toHaveLength(0);
-      expect(result.failed).toHaveLength(1);
-      expect(result.failed[0].validationErrors).toContain(
-        "Tool name 'invalid_tool' is not in allowed list",
-      );
+      // Empty names should be filtered out
+      expect(result.normalized).toHaveLength(0);
+      expect(result.failed).toHaveLength(0);
     });
 
-    it('should handle tool execution failures', async () => {
-      vi.mocked(processToolParameters).mockReturnValue({});
-
-      const failingTool = vi.fn().mockRejectedValue(new Error('Tool crashed'));
-      pipeline.registerTool('test_tool', failingTool);
-
+    it('should handle tools without arguments', async () => {
       pipeline.addFragment(0, { name: 'test_tool' });
-      pipeline.addFragment(0, { args: '{}' });
 
       const result = await pipeline.process();
 
-      expect(result.executed).toHaveLength(1);
-      expect(result.executed[0].success).toBe(false);
-      expect(result.executed[0].error).toBe('Tool crashed');
+      expect(result.normalized).toHaveLength(1);
+      expect(result.failed).toHaveLength(0);
+
+      const normalizedCall = result.normalized[0];
+      expect(normalizedCall.name).toBe('test_tool');
+      expect(normalizedCall.args).toEqual({});
+      expect(normalizedCall.originalArgs).toBe('');
     });
   });
 
   describe('Pipeline reset behavior', () => {
     it('should reset collector after processing', async () => {
-      vi.mocked(processToolParameters).mockReturnValue({});
-
-      const mockTool = vi.fn().mockResolvedValue('success');
-      pipeline.registerTool('test_tool', mockTool);
-
       // First batch
       pipeline.addFragment(0, { name: 'test_tool' });
       pipeline.addFragment(0, { args: '{}' });
@@ -194,46 +166,168 @@ describe('ToolCallPipeline Integration Tests', () => {
       pipeline.addFragment(1, { args: '{}' });
 
       const result2 = await pipeline.process();
-      expect(result2.executed).toHaveLength(1);
+      expect(result2.normalized).toHaveLength(1);
+    });
+
+    it('should handle empty processing', async () => {
+      const result = await pipeline.process();
+
+      expect(result.normalized).toHaveLength(0);
+      expect(result.failed).toHaveLength(0);
+      expect(result.stats.collected).toBe(0);
     });
   });
 
   describe('Qwen-specific scenarios', () => {
     it('should handle Qwen double-escaped JSON fragments', async () => {
-      // Simulate Qwen's double-escaped JSON that processToolParameters should fix
-      const correctedJson = { param: 'value' };
-
-      vi.mocked(processToolParameters).mockReturnValue(correctedJson);
-
-      const mockTool = vi.fn().mockResolvedValue('qwen success');
-      pipeline.registerTool('test_tool', mockTool);
-
-      // Simulate fragmented double-escaped content
+      // Simulate fragmented double-escaped content that processToolParameters should fix
+      // This represents the case where Qwen model outputs a JSON string that gets double-escaped
+      // Original: {"param":"value"} becomes: "{\"param\":\"value\"}"
       pipeline.addFragment(0, { name: 'test_tool' });
-      pipeline.addFragment(0, { args: '{"param": ' });
-      pipeline.addFragment(0, { args: '\\"value\\"}' }); // Fragmented escaping
+      pipeline.addFragment(0, { args: '"{\\"param\\":\\"value\\"}"' }); // Double-escaped JSON
 
       const result = await pipeline.process();
 
-      expect(result.executed).toHaveLength(1);
-      expect(mockTool).toHaveBeenCalledWith(correctedJson);
+      expect(result.normalized).toHaveLength(1);
+      expect(result.failed).toHaveLength(0);
+
+      const normalizedCall = result.normalized[0];
+      expect(normalizedCall.name).toBe('test_tool');
+      // processToolParameters should handle the double-escaping
+      expect(normalizedCall.originalArgs).toBe('"{\\"param\\":\\"value\\"}"');
+      // The processed args should be the parsed object with double-escaping fixed
+      expect(normalizedCall.args).toEqual({ param: 'value' });
     });
 
     it('should handle Qwen fallback to string when JSON is malformed', async () => {
       // When processToolParameters can't fix the JSON, it returns a string
-      const fallbackString = 'unparseable content';
-      vi.mocked(processToolParameters).mockReturnValue(fallbackString);
-
-      const mockTool = vi.fn().mockResolvedValue('fallback executed');
-      pipeline.registerTool('test_tool', mockTool);
-
       pipeline.addFragment(0, { name: 'test_tool' });
       pipeline.addFragment(0, { args: 'completely malformed {{{' });
 
       const result = await pipeline.process();
 
-      expect(result.executed).toHaveLength(1);
-      expect(mockTool).toHaveBeenCalledWith({ value: fallbackString });
+      expect(result.normalized).toHaveLength(1);
+      expect(result.failed).toHaveLength(0);
+
+      const normalizedCall = result.normalized[0];
+      expect(normalizedCall.args).toEqual({
+        value: 'completely malformed {{{',
+      });
+    });
+
+    it('should handle tool name normalization', async () => {
+      pipeline.addFragment(0, { name: 'TEST_TOOL' });
+      pipeline.addFragment(0, { args: '{}' });
+
+      const result = await pipeline.process();
+
+      expect(result.normalized).toHaveLength(1);
+      expect(result.normalized[0].name).toBe('test_tool'); // Should be lowercase
+    });
+
+    it('should handle tool name with whitespace', async () => {
+      pipeline.addFragment(0, { name: '  test_tool  ' });
+      pipeline.addFragment(0, { args: '{}' });
+
+      const result = await pipeline.process();
+
+      expect(result.normalized).toHaveLength(1);
+      expect(result.normalized[0].name).toBe('test_tool'); // Should be trimmed
+    });
+  });
+
+  describe('Error handling and edge cases', () => {
+    it('should handle null arguments', async () => {
+      pipeline.addFragment(0, { name: 'test_tool' });
+      pipeline.addFragment(0, { args: '' });
+
+      const result = await pipeline.process();
+
+      expect(result.normalized).toHaveLength(1);
+      expect(result.normalized[0].args).toEqual({});
+    });
+
+    it('should handle undefined arguments', async () => {
+      pipeline.addFragment(0, { name: 'test_tool' });
+      // Don't add args fragment
+
+      const result = await pipeline.process();
+
+      expect(result.normalized).toHaveLength(1);
+      expect(result.normalized[0].args).toEqual({});
+    });
+
+    it('should provide accurate statistics', async () => {
+      pipeline.addFragment(0, { name: 'test_tool' });
+      pipeline.addFragment(0, { args: '{}' });
+      pipeline.addFragment(1, { name: 'another_tool' });
+      pipeline.addFragment(1, { args: 'invalid' });
+
+      const result = await pipeline.process();
+
+      expect(result.stats.collected).toBe(2);
+      expect(result.stats.normalized).toBe(2);
+      expect(result.stats.failed).toBe(0);
+    });
+  });
+
+  describe('Normalization edge cases', () => {
+    it('should handle complex nested JSON', async () => {
+      const complexJson = {
+        nested: {
+          array: [1, 2, 3],
+          object: { key: 'value' },
+        },
+        simple: 'string',
+      };
+
+      pipeline.addFragment(0, { name: 'test_tool' });
+      pipeline.addFragment(0, { args: JSON.stringify(complexJson) });
+
+      const result = await pipeline.process();
+
+      expect(result.normalized).toHaveLength(1);
+      expect(result.normalized[0].args).toEqual(complexJson);
+    });
+
+    it('should handle special characters in arguments', async () => {
+      // This test verifies comprehensive internationalization support for tool parameters
+      // Including multiple languages, scripts, emojis, and special characters
+      //
+      // Why this is important:
+      // - Users may interact with AI in their native language worldwide
+      // - Models may generate tool calls with diverse character sets
+      // - System must properly handle UTF-8 encoding and Unicode characters
+      // - Ensures no data corruption during pipeline processing across all languages
+      // - Validates support for right-to-left languages and complex scripts
+      //
+      // Test case includes comprehensive character coverage:
+      // - English: "Hello"
+      // - Chinese (Simplified): "世界" (world)
+      // - Japanese: "こんにちは" (hello)
+      // - Korean: "안녕하세요" (hello)
+      // - Arabic: "مرحبا" (hello) - tests right-to-left script
+      // - Hebrew: "שלום" (hello) - tests right-to-left script
+      // - Russian: "Привет" (hello) - tests Cyrillic script
+      // - Hindi: "नमस्ते" (hello) - tests Devanagari script
+      // - Emoji: "🌍🚀💻" (Earth, rocket, computer)
+      // - Mathematical symbols: "∑∏∫"
+      // - Currency symbols: "$€¥£"
+      const internationalText = `Hello 世界 こんにちは 안녕하세요 مرحبا שלום Привет नमस्ते 🌍🚀💻 ∑∏∫ $€¥£`;
+      const specialChars = `{"message": "${internationalText}", "greeting": "Bonjour le monde! 🌟"}`;
+
+      pipeline.addFragment(0, { name: 'test_tool' });
+      pipeline.addFragment(0, { args: specialChars });
+
+      const result = await pipeline.process();
+
+      expect(result.normalized).toHaveLength(1);
+      // Verify that all international characters are preserved exactly as input
+      // This tests comprehensive UTF-8 encoding/decoding through the entire pipeline
+      expect(result.normalized[0].args).toEqual({
+        message: internationalText,
+        greeting: 'Bonjour le monde! 🌟',
+      });
     });
   });
 });

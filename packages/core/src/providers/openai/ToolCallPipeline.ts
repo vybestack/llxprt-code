@@ -15,54 +15,49 @@
  */
 
 /**
- * ToolCallPipeline - Tool call processing pipeline
+ * ToolCallPipeline - Simplified tool call processing pipeline
  *
- * Integrated solution for collection, validation, normalization, and execution phases.
- * Replaces the original accumulation logic, providing reliable ToolCalls processing.
+ * Focused on collection and normalization phases only.
+ * Tool execution is handled by the Core layer, not Provider layer.
  */
 
 import { DebugLogger } from '../../debug/index.js';
 import { ToolCallCollector } from './ToolCallCollector.js';
-import { ToolCallValidator, ValidatedToolCall } from './ToolCallValidator.js';
 import {
   ToolCallNormalizer,
   NormalizedToolCall,
 } from './ToolCallNormalizer.js';
-import {
-  ToolCallExecutor,
-  ToolExecutionResult,
-  ToolFunction,
-} from './ToolCallExecutor.js';
 
 const logger = new DebugLogger('llxprt:providers:openai:toolCallPipeline');
 
+export interface FailedToolCall {
+  index: number;
+  name?: string;
+  args?: string;
+  isValid: boolean;
+  validationErrors: string[];
+}
+
 export interface PipelineResult {
-  executed: ToolExecutionResult[];
   normalized: NormalizedToolCall[];
-  failed: ValidatedToolCall[];
+  failed: FailedToolCall[];
   stats: {
     collected: number;
-    validated: number;
     normalized: number;
-    executed: number;
     failed: number;
   };
 }
 
 /**
- * ToolCallPipeline - Complete tool call processing pipeline
+ * Simplified ToolCallPipeline - Collection and normalization only
  */
 export class ToolCallPipeline {
   private collector: ToolCallCollector;
-  private validator: ToolCallValidator;
   private normalizer: ToolCallNormalizer;
-  private executor: ToolCallExecutor;
 
-  constructor(allowedToolNames: string[] = []) {
+  constructor() {
     this.collector = new ToolCallCollector();
-    this.validator = new ToolCallValidator(allowedToolNames);
     this.normalizer = new ToolCallNormalizer();
-    this.executor = new ToolCallExecutor();
   }
 
   /**
@@ -73,50 +68,69 @@ export class ToolCallPipeline {
   }
 
   /**
-   * Process all collected tool calls
+   * Process all collected tool calls (collection + normalization only)
    */
   async process(): Promise<PipelineResult> {
-    logger.debug('Starting tool call pipeline processing');
+    logger.debug('Starting simplified tool call pipeline processing');
 
     // Phase 1: Collect complete calls
     const candidates = this.collector.getCompleteCalls();
     logger.debug(`Collected ${candidates.length} complete tool calls`);
 
-    // Phase 2: Validate calls
-    const validatedCalls = this.validator.validateBatch(candidates);
-    const validCalls = validatedCalls.filter((call) => call.isValid);
-    const invalidCalls = validatedCalls.filter((call) => !call.isValid);
-    logger.debug(
-      `Validated ${validCalls.length} valid, ${invalidCalls.length} invalid tool calls`,
-    );
+    // Phase 2: Normalize calls directly (no separate validation needed)
+    const normalizedCalls: NormalizedToolCall[] = [];
+    const failedCalls: FailedToolCall[] = [];
 
-    // Phase 3: Normalize calls
-    const normalizedCalls = this.normalizer.normalizeBatch(validCalls);
-    logger.debug(`Normalized ${normalizedCalls.length} tool calls`);
+    for (const candidate of candidates) {
+      try {
+        // Create a mock validated call for normalization
+        const mockValidatedCall = {
+          index: candidate.index,
+          name: candidate.name || '',
+          args: candidate.args || '',
+          isValid: true,
+          validationErrors: [],
+        };
 
-    // Phase 4: Execute calls
-    const executionResults = await this.executor.executeBatch(normalizedCalls);
-    const successfulResults = executionResults.filter(
-      (result) => result.success,
-    );
-    const failedResults = executionResults.filter((result) => !result.success);
+        const normalized = this.normalizer.normalize(mockValidatedCall);
+        if (normalized) {
+          normalizedCalls.push(normalized);
+        } else {
+          failedCalls.push({
+            index: candidate.index,
+            name: candidate.name,
+            args: candidate.args,
+            isValid: false,
+            validationErrors: ['Normalization failed'],
+          });
+        }
+      } catch (error) {
+        failedCalls.push({
+          index: candidate.index,
+          name: candidate.name,
+          args: candidate.args,
+          isValid: false,
+          validationErrors: [
+            error instanceof Error ? error.message : 'Unknown error',
+          ],
+        });
+      }
+    }
+
     logger.debug(
-      `Executed ${successfulResults.length} successful, ${failedResults.length} failed tool calls`,
+      `Normalized ${normalizedCalls.length} tool calls, ${failedCalls.length} failed`,
     );
 
     // Reset collector for next batch
     this.collector.reset();
 
     const result: PipelineResult = {
-      executed: executionResults,
       normalized: normalizedCalls,
-      failed: invalidCalls,
+      failed: failedCalls,
       stats: {
         collected: candidates.length,
-        validated: validCalls.length,
         normalized: normalizedCalls.length,
-        executed: successfulResults.length,
-        failed: invalidCalls.length + failedResults.length,
+        failed: failedCalls.length,
       },
     };
 
@@ -124,39 +138,6 @@ export class ToolCallPipeline {
       `Pipeline processing completed: ${JSON.stringify(result.stats)}`,
     );
     return result;
-  }
-
-  /**
-   * Register tool function
-   */
-  registerTool(name: string, fn: ToolFunction): void {
-    this.executor.registerTool(name, fn);
-    this.validator.updateAllowedTools(this.executor.getRegisteredTools());
-  }
-
-  /**
-   * Register tool functions in batch
-   */
-  registerTools(tools: Record<string, ToolFunction>): void {
-    this.executor.registerTools(tools);
-    this.validator.updateAllowedTools(this.executor.getRegisteredTools());
-  }
-
-  /**
-   * Check if tool is registered
-   */
-  isToolRegistered(name: string): boolean {
-    return this.executor.isToolRegistered(name);
-  }
-
-  /**
-   * Get pipeline statistics
-   */
-  getStats() {
-    return {
-      collector: this.collector.getStats(),
-      registeredTools: this.executor.getRegisteredTools().length,
-    };
   }
 
   /**
@@ -173,6 +154,15 @@ export class ToolCallPipeline {
 
     const normalized = this.normalizer.normalize(mockValidatedCall);
     return normalized?.name || name || '';
+  }
+
+  /**
+   * Get pipeline statistics
+   */
+  getStats() {
+    return {
+      collector: this.collector.getStats(),
+    };
   }
 
   /**

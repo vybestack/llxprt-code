@@ -17,8 +17,8 @@
 /**
  * ToolCallNormalizer - Normalizes tool calls
  *
- * Responsible for normalizing validated tool calls to standard format,
- * preparing them for execution phase.
+ * Responsible for normalizing tool calls to standard format,
+ * preparing them for Core layer execution.
  */
 
 import { DebugLogger } from '../../debug/index.js';
@@ -31,6 +31,15 @@ export interface NormalizedToolCall {
   name: string;
   args: Record<string, unknown>;
   originalArgs?: string;
+}
+
+// Local interface to replace dependency on ToolCallValidator
+export interface ValidatedToolCall {
+  index: number;
+  name: string;
+  args?: string;
+  isValid: boolean;
+  validationErrors: string[];
 }
 
 /**
@@ -93,7 +102,7 @@ export class ToolCallNormalizer {
 
     // Use processToolParameters to handle double-escaping and format-specific issues
     // Let it auto-detect issues instead of relying on format parameter
-    const processed = processToolParameters(args, 'unknown_tool', 'unknown');
+    const processed = processToolParameters(args, 'unknown_tool');
 
     // Normalize the result to a Record<string, unknown>
     if (typeof processed === 'object' && processed !== null) {
@@ -122,6 +131,3 @@ export class ToolCallNormalizer {
     return true;
   }
 }
-
-// Import type from ToolCallValidator
-import { ValidatedToolCall } from './ToolCallValidator.js';

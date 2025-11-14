@@ -53,7 +53,6 @@ describe('ToolCallNormalizer', () => {
       expect(processToolParameters).toHaveBeenCalledWith(
         '{"param1": "value1"}',
         'unknown_tool',
-        'unknown',
       );
     });
 
@@ -77,7 +76,6 @@ describe('ToolCallNormalizer', () => {
       expect(processToolParameters).toHaveBeenCalledWith(
         'invalid json that gets returned as string',
         'unknown_tool',
-        'unknown',
       );
     });
 

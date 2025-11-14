@@ -1660,7 +1660,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           const processedParameters = processToolParameters(
             tc.function.arguments || '',
             tc.function.name || '',
-            detectedFormat,
           );
 
           blocks.push({
@@ -1771,7 +1770,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             const processedParameters = processToolParameters(
               toolCall.function.arguments || '',
               toolName,
-              detectedFormat,
             );
 
             blocks.push({
@@ -2570,7 +2568,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Process and emit tool calls using the pipeline
       const pipelineResult = await this.toolCallPipeline.process();
       if (
-        pipelineResult.executed.length > 0 ||
+        pipelineResult.normalized.length > 0 ||
         pipelineResult.failed.length > 0
       ) {
         const blocks: ToolCallBlock[] = [];
@@ -2581,7 +2579,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           const processedParameters = processToolParameters(
             normalizedCall.originalArgs || JSON.stringify(normalizedCall.args),
             normalizedCall.name,
-            detectedFormat,
           );
 
           blocks.push({
@@ -2705,7 +2702,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             const processedParameters = processToolParameters(
               toolCall.function.arguments || '',
               normalizedName,
-              detectedFormat,
             );
 
             blocks.push({

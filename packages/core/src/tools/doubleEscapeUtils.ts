@@ -173,67 +173,88 @@ export function detectDoubleEscapingInChunk(chunk: string): boolean {
  * Processes tool call parameters, fixing double-escaping if detected
  * @param parametersString - The JSON string containing tool parameters
  * @param toolName - Name of the tool (for logging)
- * @param format - The tool format being used (for context)
+ * @param format - The tool format being used (for context, optional)
  * @returns Processed parameters object
  */
 export function processToolParameters(
   parametersString: string,
   toolName: string,
-  format: string,
+  format?: string,
 ): unknown {
   if (!parametersString.trim()) {
     return {};
   }
 
-  // Only apply double-escape handling for formats that need it
-  if (!shouldUseDoubleEscapeHandling(format)) {
-    // For formats that don't need double-escape handling, parse the JSON string
-    try {
-      return JSON.parse(parametersString);
-    } catch (e) {
-      logger.debug(() => `Failed to parse tool parameters as JSON: ${e}`);
-      return parametersString; // Return as-is if not valid JSON
+  // Try multiple parsing strategies without format dependency
+  return tryMultipleParsingStrategies(parametersString, toolName, format);
+}
+
+/**
+ * Try multiple parsing strategies to handle tool parameters
+ * @param parametersString - The JSON string containing tool parameters
+ * @param toolName - Name of the tool (for logging)
+ * @param format - The tool format being used (for context, optional)
+ * @returns Processed parameters object
+ */
+function tryMultipleParsingStrategies(
+  parametersString: string,
+  toolName: string,
+  format?: string,
+): unknown {
+  // Strategy 1: Direct JSON parsing
+  try {
+    const parsed = JSON.parse(parametersString);
+    // Handle empty string case
+    if (typeof parsed === 'string' && parsed.trim() === '') {
+      return {};
     }
+    // If the parsed result is a string that looks like JSON,
+    // it might be double-escaped, so continue to strategy 2
+    if (typeof parsed === 'string' && parsed.trim().startsWith('{')) {
+      // Don't return yet, let strategy 2 handle the double-escaping
+    } else {
+      return parsed;
+    }
+  } catch {
+    // Continue to next strategy
   }
 
-  // Apply double-escape detection and fixing for qwen format
+  // Strategy 2: Detect and repair double escaping (existing logic, no format dependency)
   const detection = detectDoubleEscaping(parametersString);
+  if (detection.correctedValue !== undefined) {
+    if (detection.isDoubleEscaped) {
+      logger.error(
+        () =>
+          `[${format || 'auto'}] Fixed double-escaped parameters for ${toolName}`,
+        {
+          tool: toolName,
+          format: format || 'auto',
+          originalLength: parametersString.length,
+          fixed: true,
+        },
+      );
+    }
+    const result = convertStringNumbersToNumbers(detection.correctedValue);
+    // Handle empty string case for double-escaped results
+    if (typeof result === 'string' && result.trim() === '') {
+      return {};
+    }
+    return result;
+  }
 
-  if (detection.isDoubleEscaped) {
+  // Strategy 3: Return original string (last resort)
+  if (detection.detectionDetails.error) {
     logger.error(
-      () => `[${format}] Fixed double-escaped parameters for ${toolName}`,
+      () => `[${format || 'auto'}] Failed to parse parameters for ${toolName}`,
       {
         tool: toolName,
-        format,
-        originalLength: parametersString.length,
-        fixed: true,
-      },
-    );
-    // Convert string numbers to actual numbers for qwen format
-    return convertStringNumbersToNumbers(detection.correctedValue);
-  } else if (detection.detectionDetails.error) {
-    logger.error(
-      () => `[${format}] Failed to parse parameters for ${toolName}`,
-      {
-        tool: toolName,
-        format,
+        format: format || 'auto',
         error: detection.detectionDetails.error,
       },
     );
-    // Return the string as-is if parsing fails
-    return parametersString;
   }
 
-  // Convert string numbers to actual numbers for qwen format
-  const normalized = detection.correctedValue;
-  if (typeof normalized === 'string') {
-    const trimmed = normalized.trim();
-    if (trimmed.length === 0) {
-      return {};
-    }
-  }
-
-  return convertStringNumbersToNumbers(normalized);
+  return parametersString;
 }
 
 /**
