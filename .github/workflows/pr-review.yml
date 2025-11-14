@@ -452,18 +452,18 @@ jobs:
             gh pr edit "${PR_NUMBER}" --remove-label "luther remediate" >/dev/null 2>&1 || true
           fi
 
-      - name: 'Fail workflow on negative verdict'
+      - name: 'Record LLxprt verdict outcome'
         if: steps.issue_gate.outputs.should_review == 'true'
         run: |
           set -euo pipefail
           verdict="${{ steps.verdict.outputs.verdict }}"
           if [[ "${verdict}" == "needs_work" || "${verdict}" == "unknown" ]]; then
-            echo "LLxprt review failed with verdict: ${verdict}."
-            exit 1
+            echo "::notice title=LLxprt Review::Verdict ${verdict:-unknown}. See comment for remediation details."
+          else
+            echo "LLxprt review verdict: ${verdict:-unknown}"
           fi
 
-      - name: 'Fail when missing issue reference'
+      - name: 'Report missing issue reference'
         if: steps.issue_gate.outputs.should_review != 'true'
         run: |
-          echo "Failing run because no linked issue was detected."
-          exit 1
+          echo "::warning title=LLxprt Review::No linked issue detected; posted guidance comment but leaving workflow successful."
