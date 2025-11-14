@@ -114,6 +114,15 @@
     "simple-git": "^3.28.0",
     "strip-ansi": "^7.1.0"
   },
+  "overrides": {
+    "js-yaml": "4.1.1",
+    "@textlint/linter-formatter": {
+      "js-yaml": "npm:js-yaml@4.1.1"
+    },
+    "rc-config-loader": {
+      "js-yaml": "npm:js-yaml@4.1.1"
+    }
+  },
   "optionalDependencies": {
     "@lydell/node-pty": "1.1.0",
     "@lydell/node-pty-darwin-arm64": "1.1.0",
