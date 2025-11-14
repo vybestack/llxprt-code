@@ -181,40 +181,31 @@ jobs:
         if: steps.issue_gate.outputs.should_review == 'true'
         run: npm install -g @vybestack/llxprt-code@nightly
 
-      - name: 'Wait for LLxprt Code CI result'
+      - name: 'Capture LLxprt Code CI status'
         if: steps.issue_gate.outputs.should_review == 'true'
         id: 'ci_wait'
         run: |
           set -euo pipefail
-          attempt=0
-          max_attempts=12
-          sleep_seconds=300
-          ci_status="missing"
-          ci_conclusion=""
-          ci_url=""
-          ci_id=""
-          while [[ ${attempt} -lt ${max_attempts} ]]; do
-            attempt=$((attempt + 1))
-            runs_json="$(gh api -X GET "/repos/${REPO}/actions/workflows/ci.yml/runs" \
-              -F event="pull_request" \
-              -F head_sha="${PR_HEAD_SHA}" \
-              -F per_page=50)"
-            run_record="$(jq -c '.workflow_runs | sort_by(.run_number) | last // {}' <<<"${runs_json}")"
-            ci_id="$(jq -r '.id // ""' <<<"${run_record}")"
-            if [[ -z "${ci_id}" || "${ci_id}" == "null" ]]; then
-              echo "Attempt ${attempt}: CI run not found yet."
-              sleep "${sleep_seconds}"
-              continue
+          ci_status="pending"
+          ci_conclusion="pending"
+          ci_url="N/A"
+          runs_json="$(gh api -X GET "/repos/${REPO}/actions/workflows/ci.yml/runs" \
+            -F event="pull_request" \
+            -F head_sha="${PR_HEAD_SHA}" \
+            -F per_page=50)"
+          run_record="$(jq -c '.workflow_runs | sort_by(.run_number) | last // {}' <<<"${runs_json}")"
+          ci_id="$(jq -r '.id // ""' <<<"${run_record}")"
+          if [[ -n "${ci_id}" && "${ci_id}" != "null" ]]; then
+            ci_status="$(jq -r '.status // "unknown"' <<<"${run_record}")"
+            ci_conclusion="$(jq -r '.conclusion // "pending"' <<<"${run_record}")"
+            ci_url="$(jq -r '.html_url // "N/A"' <<<"${run_record}")"
+            echo "LLxprt Code CI run ${ci_id} status=${ci_status}, conclusion=${ci_conclusion}."
+            if [[ "${ci_status}" != "completed" ]]; then
+              echo "CI run is still ${ci_status}; continuing review without waiting for completion."
             fi
-            ci_status="$(jq -r '.status' <<<"${run_record}")"
-            ci_conclusion="$(jq -r '.conclusion // ""' <<<"${run_record}")"
-            ci_url="$(jq -r '.html_url' <<<"${run_record}")"
-            echo "Attempt ${attempt}: CI status=${ci_status}, conclusion=${ci_conclusion:-<pending>}."
-            if [[ "${ci_status}" == "completed" ]]; then
-              break
-            fi
-            sleep "${sleep_seconds}"
-          done
+          else
+            echo "No LLxprt Code CI run has started yet for head SHA ${PR_HEAD_SHA}; continuing review with status pending."
+          fi
           {
             echo "CI_STATUS=${ci_status}"
             echo "CI_CONCLUSION=${ci_conclusion:-unknown}"
