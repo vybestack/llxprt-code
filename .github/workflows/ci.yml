@@ -64,10 +64,10 @@ jobs:
             --jq '.[].filename' || true)"
 
           if [[ -z "$files" ]]; then
-            echo "docs_only=true" >>"$GITHUB_OUTPUT"
+            echo "docs_only=false" >>"$GITHUB_OUTPUT"
             {
-              echo "### Documentation-only PR detected"
-              echo "No files reported in diff; skipping test suites."
+              echo "### Unable to determine doc-only status"
+              echo "GitHub API returned no files; running full CI to be safe."
             } >>"$GITHUB_STEP_SUMMARY"
             exit 0
           fi
