@@ -70,8 +70,13 @@ export class ToolCallPipeline {
   /**
    * Process all collected tool calls (collection + normalization only)
    */
-  async process(): Promise<PipelineResult> {
+  async process(abortSignal?: AbortSignal): Promise<PipelineResult> {
     logger.debug('Starting simplified tool call pipeline processing');
+
+    // Check for cancellation at the start
+    if (abortSignal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
 
     // Phase 1: Collect complete calls
     const candidates = this.collector.getCompleteCalls();
@@ -82,6 +87,10 @@ export class ToolCallPipeline {
     const failedCalls: FailedToolCall[] = [];
 
     for (const candidate of candidates) {
+      // Check for cancellation in processing loop
+      if (abortSignal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
       try {
         // Create a mock validated call for normalization
         const mockValidatedCall = {
