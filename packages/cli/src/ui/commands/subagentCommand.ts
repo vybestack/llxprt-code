@@ -15,8 +15,17 @@ import {
   CommandKind,
 } from './types.js';
 import { Colors } from '../colors.js';
-import { SubagentConfig } from '@vybestack/llxprt-code-core';
-import { FunctionCallingConfigMode } from '@google/genai';
+import {
+  Config,
+  DebugLogger,
+  GeminiClient,
+  SubagentConfig,
+  createRuntimeStateFromConfig,
+} from '@vybestack/llxprt-code-core';
+import {
+  FunctionCallingConfigMode,
+  SendMessageParameters,
+} from '@google/genai';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -47,6 +56,8 @@ function parseSaveArgs(args: string): {
   const [, name, profile, mode, input] = match;
   return { name, profile, mode: mode as 'auto' | 'manual', input };
 }
+
+const autoPromptLogger = new DebugLogger('llxprt:subagent:auto');
 
 /**
  * Handle manual mode subagent save
@@ -310,8 +321,79 @@ const saveCommand: SlashCommand = {
         };
       }
 
+      // Construct prompt
+      const autoModePrompt = `Generate a detailed system prompt for a subagent with the following purpose:\n\n${input}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
+
+      const requestPayload: SendMessageParameters = {
+        message: autoModePrompt,
+        config: {
+          toolConfig: {
+            functionCallingConfig: {
+              mode: FunctionCallingConfigMode.NONE,
+            },
+          },
+        },
+      };
+      (requestPayload.config as Record<string, unknown>).serverTools = [];
+      const preparedServerTools = (
+        requestPayload.config as {
+          serverTools?: unknown;
+        }
+      ).serverTools;
+      autoPromptLogger.log(
+        () => '[subagent:auto] prepared Gemini auto payload',
+        {
+          provider:
+            typeof configService.getProvider === 'function'
+              ? configService.getProvider()
+              : undefined,
+          serverTools: preparedServerTools,
+          functionCallingMode:
+            (
+              requestPayload.config?.toolConfig?.functionCallingConfig as
+                | { mode?: unknown }
+                | undefined
+            )?.mode ?? 'unset',
+        },
+      );
+
       try {
-        const client = configService.getGeminiClient();
+        let client = configService.getGeminiClient();
+
+        const requestFromClient = async (
+          targetClient: GeminiClient,
+          options?: { useRuntimeScope?: boolean },
+        ): Promise<{ text?: string }> => {
+          const executeRequest = () =>
+            targetClient.generateDirectMessage(
+              requestPayload,
+              'subagent-auto-prompt',
+            );
+          if (options?.useRuntimeScope === false) {
+            return executeRequest();
+          }
+          try {
+            const runtimeBridge = getRuntimeBridge();
+            return await runtimeBridge.runWithScope(executeRequest);
+          } catch (_runtimeError) {
+            return executeRequest();
+          }
+        };
+
+        const providerName =
+          typeof configService.getProvider === 'function'
+            ? configService.getProvider()?.toLowerCase()
+            : undefined;
+        let cleanupDetached: GeminiClient | undefined;
+        let useRuntimeScope = true;
+        if (!client || providerName === 'gemini') {
+          cleanupDetached =
+            subagentAutoPromptHelpers.createDetachedGeminiClientForAutoPrompt(
+              configService,
+            );
+          client = cleanupDetached;
+          useRuntimeScope = false;
+        }
 
         if (!client) {
           return {
@@ -322,45 +404,13 @@ const saveCommand: SlashCommand = {
           };
         }
 
-        // Construct prompt
-        const autoModePrompt = `Generate a detailed system prompt for a subagent with the following purpose:\n\n${input}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
-
-        // Call LLM with a direct request that bypasses tool declarations and history
-        let response;
+        let response: { text?: string };
         try {
-          const runtimeBridge = getRuntimeBridge();
-          response = await runtimeBridge.runWithScope(() =>
-            client.generateDirectMessage(
-              {
-                message: autoModePrompt,
-                config: {
-                  tools: [],
-                  toolConfig: {
-                    functionCallingConfig: {
-                      mode: FunctionCallingConfigMode.NONE,
-                    },
-                  },
-                },
-              },
-              'subagent-auto-prompt',
-            ),
-          );
-        } catch (_runtimeError) {
-          response = await client.generateDirectMessage(
-            {
-              message: autoModePrompt,
-              config: {
-                tools: [],
-                toolConfig: {
-                  functionCallingConfig: {
-                    mode: FunctionCallingConfigMode.NONE,
-                  },
-                },
-              },
-            },
-            'subagent-auto-prompt',
-          );
+          response = await requestFromClient(client, { useRuntimeScope });
+        } finally {
+          cleanupDetached?.dispose?.();
         }
+
         finalSystemPrompt = response.text || '';
 
         if (finalSystemPrompt.trim() === '') {
@@ -371,12 +421,19 @@ const saveCommand: SlashCommand = {
               'Error: Model returned empty response. Try manual mode or rephrase your description.',
           };
         }
-      } catch (_error) {
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        console.warn(
+          '[subagent:auto] Gemini prompt generation failed:',
+          errorMessage,
+          'config=',
+          JSON.stringify(requestPayload.config),
+        );
         return {
           type: 'message',
           messageType: 'error',
-          content:
-            'Error: Failed to generate system prompt. Try manual mode or check your connection.',
+          content: `Error: Failed to generate system prompt (${errorMessage}). Try manual mode or check your connection.`,
         };
       }
       // Dispatch to shared save logic for auto mode
@@ -828,4 +885,23 @@ export const subagentCommand: SlashCommand = {
       content: `Available subagent subcommands:\n${subCommandsList}`,
     };
   },
+};
+
+function createDetachedGeminiClientForAutoPrompt(config: Config): GeminiClient {
+  const baseRuntimeId =
+    typeof config.getSessionId === 'function'
+      ? config.getSessionId()
+      : undefined;
+  const runtimeState = createRuntimeStateFromConfig(config, {
+    runtimeId: `${baseRuntimeId ?? 'llxprt-session'}#subagent-auto#${Date.now().toString(36)}`,
+  });
+  const client = new GeminiClient(config, runtimeState);
+  if (typeof client.clearTools === 'function') {
+    client.clearTools();
+  }
+  return client;
+}
+
+export const subagentAutoPromptHelpers = {
+  createDetachedGeminiClientForAutoPrompt,
 };

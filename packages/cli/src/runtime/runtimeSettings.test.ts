@@ -3,6 +3,7 @@ import type {
   Config,
   SettingsService,
   ProviderManager,
+  Profile,
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '../auth/oauth-manager.js';
 
@@ -617,6 +618,72 @@ describe('runtimeSettings helpers', () => {
 
     await deleteProfileByName('demo');
     expect(await listSavedProfiles()).not.toContain('demo');
+  });
+
+  it('captures GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION when saving a profile snapshot', async () => {
+    const previousProject = process.env.GOOGLE_CLOUD_PROJECT;
+    const previousLocation = process.env.GOOGLE_CLOUD_LOCATION;
+    process.env.GOOGLE_CLOUD_PROJECT = 'gcp-project-from-env';
+    process.env.GOOGLE_CLOUD_LOCATION = 'us-west4';
+    activeProviderName = 'gemini';
+    try {
+      await saveProfileSnapshot('gemini-gcp');
+      const savedProfile = profileStore.get('gemini-gcp') as {
+        ephemeralSettings: Record<string, unknown>;
+      };
+      expect(savedProfile.ephemeralSettings.GOOGLE_CLOUD_PROJECT).toBe(
+        'gcp-project-from-env',
+      );
+      expect(savedProfile.ephemeralSettings.GOOGLE_CLOUD_LOCATION).toBe(
+        'us-west4',
+      );
+    } finally {
+      if (previousProject === undefined) {
+        delete process.env.GOOGLE_CLOUD_PROJECT;
+      } else {
+        process.env.GOOGLE_CLOUD_PROJECT = previousProject;
+      }
+      if (previousLocation === undefined) {
+        delete process.env.GOOGLE_CLOUD_LOCATION;
+      } else {
+        process.env.GOOGLE_CLOUD_LOCATION = previousLocation;
+      }
+    }
+  });
+
+  it('restores GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION when loading a profile', async () => {
+    const previousProject = process.env.GOOGLE_CLOUD_PROJECT;
+    const previousLocation = process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'model-a',
+      modelParams: {},
+      ephemeralSettings: {
+        GOOGLE_CLOUD_PROJECT: 'saved-project',
+        GOOGLE_CLOUD_LOCATION: 'europe-west1',
+      } as Profile['ephemeralSettings'],
+    };
+
+    try {
+      await applyProfileSnapshot(profile);
+      expect(process.env.GOOGLE_CLOUD_PROJECT).toBe('saved-project');
+      expect(process.env.GOOGLE_CLOUD_LOCATION).toBe('europe-west1');
+    } finally {
+      if (previousProject === undefined) {
+        delete process.env.GOOGLE_CLOUD_PROJECT;
+      } else {
+        process.env.GOOGLE_CLOUD_PROJECT = previousProject;
+      }
+      if (previousLocation === undefined) {
+        delete process.env.GOOGLE_CLOUD_LOCATION;
+      } else {
+        process.env.GOOGLE_CLOUD_LOCATION = previousLocation;
+      }
+    }
   });
 
   it('exposes runtime status helpers', () => {

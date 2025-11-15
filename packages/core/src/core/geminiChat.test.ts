@@ -17,6 +17,7 @@ import {
   GenerateContentConfig,
   Part,
   GenerateContentResponse,
+  FunctionCallingConfigMode,
 } from '@google/genai';
 import {
   GeminiChat,
@@ -282,6 +283,48 @@ describe('GeminiChat', () => {
       await chat.sendMessage({ message: 'hello safe' }, 'prompt-id-safe');
 
       expect(compressionSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('clearTools', () => {
+    it('removes generationConfig tools from GeminiChat', () => {
+      const internalChat = chat as unknown as {
+        clearTools: () => void;
+        generationConfig: GenerateContentConfig;
+      };
+      internalChat.generationConfig.tools = [{ functionDeclarations: [] }];
+      internalChat.clearTools();
+      expect(internalChat.generationConfig.tools).toBeUndefined();
+    });
+  });
+
+  describe('generateDirectMessage', () => {
+    it('propagates server tool overrides through metadata when config specifies them', async () => {
+      const overrideConfig: GenerateContentConfig & { serverTools?: string[] } =
+        {
+          toolConfig: {
+            functionCallingConfig: {
+              mode: FunctionCallingConfigMode.NONE,
+            },
+          },
+        };
+      overrideConfig.serverTools = [];
+
+      await chat.generateDirectMessage(
+        {
+          message: 'auto prompt request',
+          config: overrideConfig,
+        },
+        'auto-prompt',
+      );
+
+      const callArgs = mockProvider.generateChatCompletion.mock.calls[0]?.[0];
+      expect(callArgs?.metadata?.geminiDirectOverrides).toEqual(
+        expect.objectContaining({
+          serverTools: [],
+          toolConfig: overrideConfig.toolConfig,
+        }),
+      );
     });
   });
 

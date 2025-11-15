@@ -419,6 +419,111 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(result.dispose).toBeTypeOf('function');
   });
 
+  it('copies base-url into both baseUrl and baseURL provider settings for subagent runtimes', async () => {
+    const qwenBaseUrl = 'https://portal.qwen.ai/v1';
+    const qwenProfile: Profile = {
+      version: 1,
+      provider: 'qwen',
+      model: 'qwen3-coder-plus',
+      modelParams: {},
+      ephemeralSettings: {
+        'base-url': qwenBaseUrl,
+      },
+    };
+
+    const qwenSubagent: SubagentConfig = {
+      name: 'qwencoder',
+      profile: 'qwen',
+      systemPrompt: 'Qwen coder',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(qwenSubagent);
+    const loadProfile = vi.fn().mockResolvedValue(qwenProfile);
+
+    const runtimeBundle = createRuntimeBundle('qwen');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+    const scope = {
+      runtimeContext: runtimeBundle.runtimeContext,
+      getAgentId: () => 'qwencoder-1',
+    } as unknown as SubAgentScopeInstance;
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockResolvedValue(scope);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({
+      name: qwenSubagent.name,
+    });
+
+    const loaderArgs = runtimeLoader.mock.calls[0][0];
+    const providerSettings =
+      loaderArgs.profile.providerRuntime.settingsService.getProviderSettings(
+        'qwen',
+      );
+    expect(providerSettings.baseUrl).toBe(qwenBaseUrl);
+    expect(providerSettings.baseURL).toBe(qwenBaseUrl);
+  });
+
+  it('injects base-url into runtime state for provider normalization', async () => {
+    const qwenBaseUrl = 'https://portal.qwen.ai/v1';
+    const qwenProfile: Profile = {
+      version: 1,
+      provider: 'qwen',
+      model: 'qwen3-coder-plus',
+      modelParams: {},
+      ephemeralSettings: {
+        'base-url': qwenBaseUrl,
+      },
+    };
+
+    const qwenSubagent: SubagentConfig = {
+      name: 'qwencoder',
+      profile: 'qwen',
+      systemPrompt: 'Qwen coder',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(qwenSubagent);
+    const loadProfile = vi.fn().mockResolvedValue(qwenProfile);
+
+    const runtimeBundle = createRuntimeBundle('qwen');
+    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+
+    const scope = {
+      runtimeContext: runtimeBundle.runtimeContext,
+      getAgentId: () => 'qwencoder-1',
+    } as unknown as SubAgentScopeInstance;
+    const scopeFactory = vi
+      .fn<typeof SubAgentScope.create>()
+      .mockResolvedValue(scope);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory,
+      runtimeLoader,
+    });
+
+    await orchestrator.launch({
+      name: qwenSubagent.name,
+    });
+
+    const loaderArgs = runtimeLoader.mock.calls[0][0];
+    expect(loaderArgs.profile.state.baseUrl).toBe(qwenBaseUrl);
+  });
+
   it('provides a dispose hook that clears runtime history and returns unique agent ids per launch', async () => {
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
     const loadProfile = vi.fn().mockResolvedValue(profile);

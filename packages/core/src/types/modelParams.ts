@@ -80,6 +80,10 @@ export interface EphemeralSettings {
   'tools.allowed'?: string[];
   /** Explicit disable-list of tool names */
   'tools.disabled'?: string[];
+  /** Google Cloud project identifier for Gemini auth */
+  GOOGLE_CLOUD_PROJECT?: string;
+  /** Google Cloud location identifier for Gemini auth */
+  GOOGLE_CLOUD_LOCATION?: string;
 }
 
 /**
