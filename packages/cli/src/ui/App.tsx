@@ -1681,6 +1681,8 @@ const App = (props: AppInternalProps) => {
                     focus={isFocused}
                     vimHandleInput={vimHandleInput}
                     placeholder={placeholder}
+                    approvalMode={showAutoAcceptIndicator}
+                    vimModeEnabled={vimModeEnabled}
                   />
                 </>
               )}

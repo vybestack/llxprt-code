@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,8 +9,8 @@ import { waitFor, act } from '@testing-library/react';
 import type { InputPromptProps } from './InputPrompt.js';
 import { InputPrompt } from './InputPrompt.js';
 import type { TextBuffer } from './shared/text-buffer.js';
-import type { Config } from '@google/gemini-cli-core';
-import { ApprovalMode } from '@google/gemini-cli-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
@@ -79,7 +79,6 @@ const mockSlashCommands: SlashCommand[] = [
         description: 'Resume a chat',
         kind: CommandKind.BUILT_IN,
         action: vi.fn(),
-        completion: async () => ['fix-foo', 'fix-bar'],
       },
     ],
   },
@@ -117,7 +116,6 @@ describe('InputPrompt', () => {
         mockBuffer.cursor = [0, newText.length];
         mockBuffer.viewportVisualLines = [newText];
         mockBuffer.allVisualLines = [newText];
-        mockBuffer.visualToLogicalMap = [[0, 0]];
       }),
       replaceRangeByOffset: vi.fn(),
       viewportVisualLines: [''],
@@ -162,6 +160,7 @@ describe('InputPrompt', () => {
       showSuggestions: false,
       visibleStartIndex: 0,
       isPerfectMatch: false,
+      activeHint: '',
       navigateUp: vi.fn(),
       navigateDown: vi.fn(),
       resetCompletionState: vi.fn(),
@@ -170,8 +169,11 @@ describe('InputPrompt', () => {
       handleAutocomplete: vi.fn(),
       promptCompletion: {
         text: '',
+        isLoading: false,
+        isActive: false,
         accept: vi.fn(),
         clear: vi.fn(),
+        markSelected: vi.fn(),
       },
     };
     mockedUseCommandCompletion.mockReturnValue(mockCommandCompletion);
@@ -199,7 +201,9 @@ describe('InputPrompt', () => {
     );
 
     mockedUseKittyKeyboardProtocol.mockReturnValue({
-      supported: false,
+      supported: true,
+      enabled: true,
+      checking: false,
     });
 
     props = {
@@ -393,7 +397,7 @@ describe('InputPrompt', () => {
     it('should handle Ctrl+V when clipboard has an image', async () => {
       vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(true);
       vi.mocked(clipboardUtils.saveClipboardImage).mockResolvedValue(
-        '/test/.gemini-clipboard/clipboard-123.png',
+        '/test/.llxprt-clipboard/clipboard-123.png',
       );
 
       const { stdin, unmount } = renderWithProviders(
@@ -453,7 +457,7 @@ describe('InputPrompt', () => {
     it('should insert image path at cursor position with proper spacing', async () => {
       const imagePath = path.join(
         'test',
-        '.gemini-clipboard',
+        '.llxprt-clipboard',
         'clipboard-456.png',
       );
       vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(true);
@@ -1383,11 +1387,6 @@ describe('InputPrompt', () => {
       mockBuffer.lines = text.split('\n');
       mockBuffer.viewportVisualLines = text.split('\n');
       mockBuffer.visualCursor = [1, 3]; // cursor on 'o' in 'second'
-      mockBuffer.visualToLogicalMap = [
-        [0, 0],
-        [1, 0],
-        [2, 0],
-      ];
 
       const { stdout, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -1405,10 +1404,6 @@ describe('InputPrompt', () => {
       mockBuffer.lines = text.split('\n');
       mockBuffer.viewportVisualLines = text.split('\n');
       mockBuffer.visualCursor = [1, 0]; // cursor on 's' in 'second'
-      mockBuffer.visualToLogicalMap = [
-        [0, 0],
-        [1, 0],
-      ];
 
       const { stdout, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -1426,10 +1421,6 @@ describe('InputPrompt', () => {
       mockBuffer.lines = text.split('\n');
       mockBuffer.viewportVisualLines = text.split('\n');
       mockBuffer.visualCursor = [0, 10]; // cursor after 'first line'
-      mockBuffer.visualToLogicalMap = [
-        [0, 0],
-        [1, 0],
-      ];
 
       const { stdout, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -1446,12 +1437,7 @@ describe('InputPrompt', () => {
       mockBuffer.text = text;
       mockBuffer.lines = text.split('\n');
       mockBuffer.viewportVisualLines = text.split('\n');
-      mockBuffer.visualCursor = [1, 0]; // cursor on the blank line
-      mockBuffer.visualToLogicalMap = [
-        [0, 0],
-        [1, 0],
-        [2, 0],
-      ];
+      mockBuffer.visualCursor = [1, 0]; // cursor on blank line
 
       const { stdout, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -1476,12 +1462,6 @@ describe('InputPrompt', () => {
       mockBuffer.viewportVisualLines = text.split('\n');
       mockBuffer.allVisualLines = text.split('\n');
       mockBuffer.visualCursor = [2, 5]; // cursor at the end of "world"
-      // Provide a visual-to-logical mapping for each visual line
-      mockBuffer.visualToLogicalMap = [
-        [0, 0], // 'hello' starts at col 0 of logical line 0
-        [1, 0], // '' (blank) is logical line 1, col 0
-        [2, 0], // 'world' is logical line 2, col 0
-      ];
 
       const { stdout, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
@@ -1541,7 +1521,11 @@ describe('InputPrompt', () => {
   describe('paste auto-submission protection', () => {
     beforeEach(() => {
       vi.useFakeTimers();
-      mockedUseKittyKeyboardProtocol.mockReturnValue({ supported: false });
+      mockedUseKittyKeyboardProtocol.mockReturnValue({
+        supported: false,
+        enabled: false,
+        checking: false,
+      });
     });
 
     afterEach(() => {
@@ -1606,7 +1590,11 @@ describe('InputPrompt', () => {
       {
         name: 'kitty',
         setup: () =>
-          mockedUseKittyKeyboardProtocol.mockReturnValue({ supported: true }),
+          mockedUseKittyKeyboardProtocol.mockReturnValue({
+            supported: true,
+            enabled: true,
+            checking: false,
+          }),
       },
     ])(
       'should allow immediate submission for a trusted paste ($name)',
@@ -1885,7 +1873,7 @@ describe('InputPrompt', () => {
       expect(mockHandleAutocomplete).toHaveBeenCalledWith(0);
       expect(props.buffer.setText).toHaveBeenCalledWith('echo hello');
       unmount();
-    }, 15000);
+    });
 
     it('submits the highlighted entry on Enter and exits reverse-search', async () => {
       // Mock the reverse search completion to return suggestions
@@ -2326,7 +2314,7 @@ describe('InputPrompt', () => {
         <InputPrompt {...props} />,
       );
       await wait();
-      expect(stdout.lastFrame()).not.toContain(`{chalk.inverse(' ')}`);
+      expect(stdout.lastFrame()).not.toContain(chalk.inverse(' '));
       // This snapshot is good to make sure there was an input prompt but does
       // not show the inverted cursor because snapshots do not show colors.
       expect(stdout.lastFrame()).toMatchSnapshot();
@@ -2334,16 +2322,16 @@ describe('InputPrompt', () => {
     });
   });
 
-  it('should still allow input when shell is not focused', async () => {
-    const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />, {
-      shellFocus: false,
-    });
+  it('should ignore input when not focused', async () => {
+    const { stdin, unmount } = renderWithProviders(
+      <InputPrompt {...props} focus={false} />,
+    );
     await wait();
 
     stdin.write('a');
     await wait();
 
-    expect(mockBuffer.handleInput).toHaveBeenCalled();
+    expect(mockBuffer.handleInput).not.toHaveBeenCalled();
     unmount();
   });
   it('should prevent slash commands from being queued while streaming', async () => {

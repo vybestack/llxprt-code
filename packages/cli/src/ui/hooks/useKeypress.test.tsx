@@ -5,9 +5,8 @@
  */
 
 import { act } from 'react';
-import { render } from '../../test-utils/render.js';
+import { renderWithProviders as render } from '../../test-utils/render.js';
 import { useKeypress } from './useKeypress.js';
-import { KeypressProvider } from '../contexts/KeypressContext.js';
 import { useStdin } from 'ink';
 import { EventEmitter } from 'node:events';
 import type { Mock } from 'vitest';
@@ -21,9 +20,6 @@ vi.mock('ink', async (importOriginal) => {
     useStdin: vi.fn(),
   };
 });
-
-const PASTE_START = '\x1B[200~';
-const PASTE_END = '\x1B[201~';
 
 class MockStdin extends EventEmitter {
   isTTY = true;
@@ -50,18 +46,14 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
       useKeypress(onKeypress, { isActive });
       return null;
     }
-    return render(
-      <KeypressProvider kittyProtocolEnabled={useKitty}>
-        <TestComponent />
-      </KeypressProvider>,
-    );
+    return render(<TestComponent />, { kittyProtocolEnabled: useKitty });
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     stdin = new MockStdin();
     (useStdin as Mock).mockReturnValue({
-      stdin: stdin as any,
+      stdin: stdin as unknown as NodeJS.ReadStream,
       setRawMode: mockSetRawMode,
       isRawModeSupported: true,
       internal_exitOnCtrlC: true,
@@ -70,17 +62,29 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
 
     // Mock process.versions.node for Node.js version checks
     originalNodeVersion = process.versions.node;
-    Object.defineProperty(process.versions, 'node', {
-      value: '20.0.0',
-      configurable: true,
-    });
+    try {
+      Object.defineProperty(process.versions, 'node', {
+        value: '20.0.0',
+        configurable: true,
+      });
+    } catch (_error) {
+      // If we can't override the Node version, skip version-specific tests
+      console.warn(
+        'Could not override process.versions.node, version-specific tests may be skipped',
+      );
+    }
   });
 
   afterEach(() => {
-    Object.defineProperty(process.versions, 'node', {
-      value: originalNodeVersion,
-      configurable: true,
-    });
+    try {
+      Object.defineProperty(process.versions, 'node', {
+        value: originalNodeVersion,
+        configurable: true,
+      });
+    } catch (_error) {
+      // If we can't restore the Node version, that's unfortunate but not critical
+      console.warn('Could not restore process.versions.node');
+    }
   });
 
   it('should not listen if isActive is false', () => {
@@ -96,7 +100,18 @@ describe.each([true, false])(`useKeypress with useKitty=%s`, (useKitty) => {
     { key: { name: 'up', sequence: '\x1b[A' } },
     { key: { name: 'down', sequence: '\x1b[B' } },
     { key: { name: 'tab', sequence: '\x1b[Z', shift: true } },
+    { key: { name: 'return', sequence: '\x1b[13u', kittyProtocol: true } },
+    { key: { name: 'f1', sequence: '\x1b[11~', kittyProtocol: true } },
+    {
+      key: {
+        name: 'up',
+        sequence: '\x1b[1;2A',
+        shift: true,
+        kittyProtocol: true,
+      },
+    },
   ])('should listen for keypress when active for key $key.name', ({ key }) => {
+    if (key.kittyProtocol && !useKitty) return;
     renderKeypressHook(true);
     act(() => stdin.write(key.sequence));
     expect(onKeypress).toHaveBeenCalledWith(expect.objectContaining(key));
