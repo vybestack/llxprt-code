@@ -386,7 +386,11 @@ export const useGeminiStream = (
         cancelOngoingRequest();
       }
     },
-    { isActive: streamingState === StreamingState.Responding },
+    {
+      isActive:
+        streamingState === StreamingState.Responding ||
+        streamingState === StreamingState.WaitingForConfirmation,
+    },
   );
 
   const scheduleNextQueuedSubmission = useCallback(() => {
