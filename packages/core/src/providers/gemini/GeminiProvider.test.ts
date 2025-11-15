@@ -57,6 +57,99 @@ describe('GeminiProvider', () => {
     delete process.env.GEMINI_API_KEY;
   });
 
+  it('respects metadata geminiDirectOverrides when building request config', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'direct override ack' }],
+              },
+            },
+          ],
+        };
+      },
+    };
+    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+    process.env.GEMINI_API_KEY = 'override-key';
+
+    const provider = new GeminiProvider('override-key');
+    const overrides = {
+      serverTools: [],
+      toolConfig: {
+        functionCallingConfig: {
+          mode: 'NONE',
+        },
+      },
+    };
+
+    const generator = provider.generateChatCompletion(
+      createProviderCallOptions({
+        providerName: provider.name,
+        contents: [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello overrides' }],
+          },
+        ] as IContent[],
+        metadata: {
+          geminiDirectOverrides: overrides,
+        },
+      }),
+    );
+
+    await generator.next();
+
+    const request = generateContentStreamMock.mock.calls[0][0];
+    expect(request.config.serverTools).toEqual([]);
+    expect(request.config.toolConfig).toEqual(overrides.toolConfig);
+  });
+
+  it('applies gemini ephemerals but ignores global tools governance entries', async () => {
+    const fakeStream = {
+      async *[Symbol.asyncIterator]() {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'ephemeral ack' }],
+              },
+            },
+          ],
+        };
+      },
+    };
+    generateContentStreamMock.mockResolvedValueOnce(fakeStream);
+    process.env.GEMINI_API_KEY = 'ephemeral-key';
+
+    const provider = new GeminiProvider('ephemeral-key');
+    const options = createProviderCallOptions({
+      providerName: provider.name,
+      contents: [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'hello ephemerals' }],
+        },
+      ] as IContent[],
+    });
+    options.invocation = {
+      ...options.invocation,
+      ephemerals: {
+        ...options.invocation.ephemerals,
+        tools: { allowed: ['read_file'], disabled: ['web_search'] },
+        gemini: { maxOutputTokens: 42 },
+      },
+    };
+
+    const generator = provider.generateChatCompletion(options);
+    await generator.next();
+
+    const request = generateContentStreamMock.mock.calls[0][0];
+    expect(request.config.maxOutputTokens).toBe(42);
+    expect(request.config.tools).toBeUndefined();
+  });
+
   it('serializes tool responses with error metadata and token limits', async () => {
     const fakeStream = {
       async *[Symbol.asyncIterator]() {

@@ -42,6 +42,17 @@ export interface ProfileApplicationResult {
 
 const logger = new DebugLogger('llxprt:runtime:profile');
 
+function getStringValue(
+  ephemerals: Profile['ephemeralSettings'],
+  key: string,
+): string | undefined {
+  const value = (ephemerals as Record<string, unknown>)[key];
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value;
+  }
+  return undefined;
+}
+
 /**
  * @plan PLAN-20251020-STATELESSPROVIDER3.P09
  * @requirement REQ-SP3-002
@@ -230,13 +241,37 @@ export async function applyProfileWithGuards(
     );
   }
 
+  const gcpProject = getStringValue(
+    profile.ephemeralSettings,
+    'GOOGLE_CLOUD_PROJECT',
+  );
+  if (gcpProject) {
+    setEphemeralSetting('GOOGLE_CLOUD_PROJECT', gcpProject);
+    process.env.GOOGLE_CLOUD_PROJECT = gcpProject;
+  }
+
+  const gcpLocation = getStringValue(
+    profile.ephemeralSettings,
+    'GOOGLE_CLOUD_LOCATION',
+  );
+  if (gcpLocation) {
+    setEphemeralSetting('GOOGLE_CLOUD_LOCATION', gcpLocation);
+    process.env.GOOGLE_CLOUD_LOCATION = gcpLocation;
+  }
+
   // STEP 3: NOW switch provider - auth is already in SettingsService
   // When switchActiveProvider calls getModels(), AuthResolver will find
   // the auth-key in SettingsService (set in Step 2)
   // CRITICAL: Preserve the auth and base-url ephemerals we just set
   const providerSwitch = await switchActiveProvider(targetProviderName, {
     autoOAuth: false,
-    preserveEphemerals: ['auth-key', 'auth-keyfile', 'base-url'],
+    preserveEphemerals: [
+      'auth-key',
+      'auth-keyfile',
+      'base-url',
+      'GOOGLE_CLOUD_PROJECT',
+      'GOOGLE_CLOUD_LOCATION',
+    ],
   });
   const infoMessages = [...providerSwitch.infoMessages];
 
@@ -274,7 +309,13 @@ export async function applyProfileWithGuards(
   }
 
   // STEP 5: Apply non-auth ephemerals
-  const appliedKeys = new Set(['auth-key', 'auth-keyfile', 'base-url']);
+  const appliedKeys = new Set([
+    'auth-key',
+    'auth-keyfile',
+    'base-url',
+    'GOOGLE_CLOUD_PROJECT',
+    'GOOGLE_CLOUD_LOCATION',
+  ]);
   const otherEphemerals = Object.entries(
     profile.ephemeralSettings ?? {},
   ).filter(([key]) => !appliedKeys.has(key));

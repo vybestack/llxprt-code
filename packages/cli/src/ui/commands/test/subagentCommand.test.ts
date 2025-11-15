@@ -57,6 +57,7 @@ import { SessionStatsState } from '../../contexts/SessionContext.js';
 import { spawnSync } from 'child_process';
 
 let subagentCommand: typeof import('../subagentCommand.js').subagentCommand;
+let subagentCommandModule: typeof import('../subagentCommand.js');
 
 beforeAll(async () => {
   // Reset modules to ensure fresh import with mocks
@@ -76,6 +77,7 @@ beforeAll(async () => {
   // Import AFTER mock is set up
   const mod = await import('../subagentCommand.js?t=' + Date.now());
   subagentCommand = mod.subagentCommand;
+  subagentCommandModule = mod;
 });
 
 type TestContextOptions = {
@@ -730,7 +732,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
           mode: FunctionCallingConfigMode.NONE,
         },
       },
-      tools: [],
+      serverTools: [],
     });
 
     // Verify success message type and content
@@ -761,9 +763,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     expect(result?.type).toBe('message');
     if (result && result.type === 'message') {
       expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(
-        /failed to generate|connection|manual mode/i,
-      );
+      expect(result.content).toMatch(/Network error/);
     }
     expect(mockGeminiClient.generateDirectMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -773,7 +773,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
               mode: FunctionCallingConfigMode.NONE,
             },
           },
-          tools: [],
+          serverTools: [],
         },
       }),
       expect.any(String),
@@ -803,11 +803,69 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
               mode: FunctionCallingConfigMode.NONE,
             },
           },
-          tools: [],
+          serverTools: [],
         },
       }),
       expect.any(String),
     );
+  });
+
+  it('falls back to a detached Gemini client when the primary client fails and provider is gemini', async () => {
+    const primaryClient = {
+      generateDirectMessage: vi.fn(),
+    };
+
+    const fallbackResponseText = 'Fallback prompt from detached Gemini client.';
+    const fallbackClient = {
+      generateDirectMessage: vi.fn().mockResolvedValue({
+        text: fallbackResponseText,
+      }),
+      dispose: vi.fn(),
+    };
+
+    const helperSpy = vi
+      .spyOn(
+        subagentCommandModule.subagentAutoPromptHelpers,
+        'createDetachedGeminiClientForAutoPrompt',
+      )
+      .mockReturnValue(fallbackClient as never);
+
+    (context as unknown as { services: { config: unknown } }).services.config =
+      {
+        getGeminiClient: vi.fn(() => primaryClient),
+        getProvider: vi.fn(() => 'gemini'),
+      };
+
+    const saveSpy = vi.spyOn(subagentManager, 'saveSubagent');
+
+    runWithScopeMock.mockClear();
+
+    const args = 'testagent testprofile auto "expert prompt"';
+    const actionResult = await subagentCommand.subCommands![0].action!(
+      context,
+      args,
+    );
+
+    expect(primaryClient.generateDirectMessage).not.toHaveBeenCalled();
+    expect(helperSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        getProvider: expect.any(Function),
+      }),
+    );
+    expect(fallbackClient.generateDirectMessage).toHaveBeenCalled();
+    expect(saveSpy).toHaveBeenCalledWith(
+      'testagent',
+      'testprofile',
+      fallbackResponseText,
+    );
+    expect(runWithScopeMock).not.toHaveBeenCalled();
+    expect(actionResult).toBeDefined();
+    expect(actionResult?.type).toBe('message');
+    if (actionResult?.type === 'message') {
+      expect(actionResult.messageType).toBe('info');
+      expect(actionResult.content).toContain('Subagent');
+    }
+    helperSpy.mockRestore();
   });
 
   it('should use correct prompt template for LLM', async () => {

@@ -617,7 +617,10 @@ describe('Gemini provider stateless contract tests', () => {
       | { config?: Record<string, unknown> }
       | undefined;
     expect(lastRequest).toBeDefined();
-    expect(lastRequest?.config).toMatchObject({ temperature: 0.23 });
+    expect(lastRequest?.config).toMatchObject({
+      temperature: 0.23,
+      serverTools: ['web_search', 'web_fetch'],
+    });
     expect(getEphemerals).not.toHaveBeenCalled();
   });
 });

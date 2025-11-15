@@ -860,6 +860,8 @@ const PROFILE_EPHEMERAL_KEYS: readonly string[] = [
   'context-limit',
   'compression-threshold',
   'base-url',
+  'GOOGLE_CLOUD_PROJECT',
+  'GOOGLE_CLOUD_LOCATION',
   'tool-format',
   'api-version',
   'custom-headers',
@@ -921,6 +923,20 @@ export function buildRuntimeProfileSnapshot(): Profile {
     const baseUrl = providerSettings.baseUrl as string | undefined;
     if (baseUrl) {
       snapshot['base-url'] = baseUrl;
+    }
+  }
+
+  if (snapshot['GOOGLE_CLOUD_PROJECT'] === undefined) {
+    const project = process.env.GOOGLE_CLOUD_PROJECT;
+    if (typeof project === 'string' && project.trim().length > 0) {
+      snapshot['GOOGLE_CLOUD_PROJECT'] = project;
+    }
+  }
+
+  if (snapshot['GOOGLE_CLOUD_LOCATION'] === undefined) {
+    const location = process.env.GOOGLE_CLOUD_LOCATION;
+    if (typeof location === 'string' && location.trim().length > 0) {
+      snapshot['GOOGLE_CLOUD_LOCATION'] = location;
     }
   }
 
