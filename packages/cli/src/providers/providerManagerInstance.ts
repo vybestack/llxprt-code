@@ -512,6 +512,46 @@ function registerAliasProviders(
   }
 }
 
+type AliasAwareOpenAIProvider = OpenAIProvider & {
+  authResolver?: {
+    updateConfig: (config: { providerId?: string }) => void;
+  };
+  baseProviderConfig?: {
+    name?: string;
+  };
+};
+
+/**
+ * Ensure alias providers use their own identifier when resolving authentication.
+ * Without this, API keys saved via `/key` are stored under the alias name,
+ * but the OpenAI provider would continue to look up credentials under `openai`.
+ */
+export function bindOpenAIAliasIdentity(
+  provider: OpenAIProvider,
+  alias: string,
+): void {
+  const aliasName = alias?.trim();
+  if (!aliasName) {
+    return;
+  }
+
+  Object.defineProperty(provider, 'name', {
+    value: aliasName,
+    writable: false,
+    enumerable: true,
+    configurable: true,
+  });
+
+  const aliasAwareProvider = provider as unknown as AliasAwareOpenAIProvider;
+  if (aliasAwareProvider.baseProviderConfig) {
+    aliasAwareProvider.baseProviderConfig.name = aliasName;
+  }
+
+  aliasAwareProvider.authResolver?.updateConfig?.({
+    providerId: aliasName,
+  });
+}
+
 function createOpenAIAliasProvider(
   entry: ProviderAliasEntry,
   openaiApiKey: string | undefined,
@@ -568,12 +608,7 @@ function createOpenAIAliasProvider(
       configuredDefaultModel || originalGetDefaultModel();
   }
 
-  Object.defineProperty(provider, 'name', {
-    value: entry.alias,
-    writable: false,
-    enumerable: true,
-    configurable: true,
-  });
+  bindOpenAIAliasIdentity(provider, entry.alias);
 
   return provider;
 }

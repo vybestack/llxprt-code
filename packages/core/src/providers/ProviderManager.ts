@@ -411,7 +411,8 @@ export class ProviderManager implements IProviderManager {
           : undefined),
       baseURL:
         rawOptions.resolved?.baseURL ??
-        (providerSettings.baseURL as string | undefined),
+        (providerSettings.baseURL as string | undefined) ??
+        (providerSettings.baseUrl as string | undefined),
       authToken:
         rawOptions.resolved?.authToken ??
         (providerSettings.apiKey as string | undefined),
@@ -422,6 +423,52 @@ export class ProviderManager implements IProviderManager {
         provider: targetProvider,
       },
     };
+
+    const effectiveConfig = rawOptions.config ?? config ?? null;
+    if (
+      effectiveConfig &&
+      typeof (
+        effectiveConfig as Config & {
+          getEphemeralSetting?: (key: string) => unknown;
+        }
+      ).getEphemeralSetting === 'function' &&
+      (typeof resolved.authToken !== 'string' ||
+        resolved.authToken.trim() === '')
+    ) {
+      const globalAuthKey = (
+        effectiveConfig as Config & {
+          getEphemeralSetting?: (key: string) => unknown;
+        }
+      ).getEphemeralSetting?.('auth-key') as string | undefined;
+
+      if (globalAuthKey && globalAuthKey.trim() !== '') {
+        resolved.authToken = globalAuthKey.trim();
+      } else if (process.env.DEBUG) {
+        console.debug(
+          `[ProviderManager] Missing auth token for provider '${targetProvider}' even after checking global auth-key.`,
+        );
+      }
+    }
+
+    if (!resolved.baseURL) {
+      const configBaseUrl =
+        typeof config.getEphemeralSetting === 'function'
+          ? (config.getEphemeralSetting('base-url') as string | undefined)
+          : undefined;
+      if (configBaseUrl && typeof configBaseUrl === 'string') {
+        const trimmed = configBaseUrl.trim();
+        if (trimmed) {
+          resolved.baseURL = trimmed;
+        }
+      }
+    }
+
+    if (!resolved.baseURL) {
+      const providerBaseUrl = this.getBaseUrlFromProvider(providerInstance);
+      if (providerBaseUrl) {
+        resolved.baseURL = providerBaseUrl;
+      }
+    }
 
     // REQ-SP4-003: Validate required fields in resolved options
     const missingFields: string[] = [];
@@ -1175,5 +1222,87 @@ export class ProviderManager implements IProviderManager {
     }
 
     return 'Providers have similar capabilities';
+  }
+
+  private getBaseUrlFromProvider(
+    provider: IProvider | undefined,
+  ): string | undefined {
+    if (!provider) {
+      return undefined;
+    }
+
+    const visited = new Set<IProvider>();
+    let current: IProvider | undefined = provider;
+
+    while (current) {
+      if (visited.has(current)) {
+        break;
+      }
+      visited.add(current);
+
+      const baseConfig = (
+        current as {
+          baseProviderConfig?: { baseURL?: string; baseUrl?: string };
+        }
+      ).baseProviderConfig;
+      if (baseConfig) {
+        const candidate =
+          typeof baseConfig.baseURL === 'string' &&
+          baseConfig.baseURL.trim() !== ''
+            ? baseConfig.baseURL.trim()
+            : typeof baseConfig.baseUrl === 'string' &&
+                baseConfig.baseUrl.trim() !== ''
+              ? baseConfig.baseUrl.trim()
+              : undefined;
+        if (candidate) {
+          return candidate;
+        }
+      }
+
+      const providerConfig = (
+        current as {
+          providerConfig?: { baseURL?: string; baseUrl?: string };
+        }
+      ).providerConfig;
+      if (providerConfig) {
+        const candidate =
+          typeof providerConfig.baseURL === 'string' &&
+          providerConfig.baseURL.trim() !== ''
+            ? providerConfig.baseURL.trim()
+            : typeof providerConfig.baseUrl === 'string' &&
+                providerConfig.baseUrl.trim() !== ''
+              ? providerConfig.baseUrl.trim()
+              : undefined;
+        if (candidate) {
+          return candidate;
+        }
+      }
+
+      const maybeHasBaseUrl = current as unknown as {
+        getBaseURL?: () => string | undefined;
+      };
+      if (typeof maybeHasBaseUrl.getBaseURL === 'function') {
+        try {
+          const reported = maybeHasBaseUrl.getBaseURL();
+          if (reported && reported.trim() !== '') {
+            return reported.trim();
+          }
+        } catch {
+          // ignore provider errors
+        }
+      }
+
+      const maybeWrapped = current as unknown as {
+        wrappedProvider?: IProvider;
+      };
+      if (maybeWrapped.wrappedProvider) {
+        current = maybeWrapped.wrappedProvider;
+        continue;
+      }
+
+      break;
+    }
+
+    return undefined;
   }
 }

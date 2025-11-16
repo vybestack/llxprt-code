@@ -8,9 +8,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   sanitizeForByteString,
   needsSanitization,
+  OpenAIProvider,
+  SettingsService,
 } from '@vybestack/llxprt-code-core';
 import { MockFileSystem } from './IFileSystem.js';
-import { setFileSystem } from './providerManagerInstance.js';
+import {
+  setFileSystem,
+  bindOpenAIAliasIdentity,
+} from './providerManagerInstance.js';
 
 // Mock os module and set homedir before imports
 vi.mock('os', async (importOriginal) => {
@@ -137,5 +142,32 @@ describe('API key sanitization regression tests', () => {
       expect(result.key).not.toContain('\uFFFD');
       expect(result.key).not.toContain('\x00');
     });
+  });
+});
+
+describe('bindOpenAIAliasIdentity', () => {
+  it('rebinds auth resolution to the alias provider name', async () => {
+    const provider = new OpenAIProvider(
+      undefined,
+      'https://example.com/openai/v1',
+    );
+    const settingsService = new SettingsService();
+    provider.setRuntimeSettingsService(settingsService);
+
+    settingsService.set('activeProvider', 'Synthetic');
+    settingsService.setProviderSetting('openai', 'apiKey', 'sk-openai');
+    settingsService.setProviderSetting('Synthetic', 'apiKey', 'sk-alias');
+
+    const resolver = provider as unknown as {
+      getAuthToken(): Promise<string>;
+    };
+
+    const beforeAlias = await resolver.getAuthToken();
+    expect(beforeAlias).toBe('sk-openai');
+
+    bindOpenAIAliasIdentity(provider, 'Synthetic');
+
+    const afterAlias = await resolver.getAuthToken();
+    expect(afterAlias).toBe('sk-alias');
   });
 });
