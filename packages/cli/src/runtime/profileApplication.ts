@@ -465,8 +465,7 @@ export async function applyProfileWithGuards(
     );
   }
 
-  const appliedModelName =
-    modelResult?.nextModel || requestedModel || fallbackModel;
+  const appliedModelName = modelResult.nextModel;
   if (appliedModelName) {
     infoMessages.push(
       `Model set to '${appliedModelName}' for provider '${provider.name}'.`,
