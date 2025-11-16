@@ -267,7 +267,9 @@ export class SubagentOrchestrator {
     profile: Profile,
     modelConfig: ModelConfig,
   ): ContentGeneratorConfig {
-    const authKey = profile.ephemeralSettings['auth-key'];
+    const authKey = this.getStringSetting(profile.ephemeralSettings, [
+      'auth-key',
+    ]);
     const proxy = this.getStringSetting(profile.ephemeralSettings, [
       'proxy',
       'proxy-url',
@@ -285,7 +287,7 @@ export class SubagentOrchestrator {
     return {
       model: modelConfig.model,
       authType,
-      apiKey: typeof authKey === 'string' ? authKey : undefined,
+      apiKey: authKey,
       proxy,
     };
   }
@@ -349,8 +351,10 @@ export class SubagentOrchestrator {
       service.set(`providers.${provider}.baseURL`, undefined);
     }
 
-    const authKey = profile.ephemeralSettings['auth-key'];
-    if (typeof authKey === 'string') {
+    const authKey = this.getStringSetting(profile.ephemeralSettings, [
+      'auth-key',
+    ]);
+    if (authKey) {
       service.set('auth-key', authKey);
       service.set(`providers.${provider}.apiKey`, authKey);
     }
@@ -483,13 +487,14 @@ export class SubagentOrchestrator {
     modelConfig: ModelConfig,
     agentRuntimeId: string,
   ): AgentRuntimeState {
-    const authKey = profile.ephemeralSettings['auth-key'];
-    const authType =
-      typeof authKey === 'string'
-        ? profile.provider.includes('gemini')
-          ? AuthType.USE_GEMINI
-          : AuthType.API_KEY
-        : AuthType.USE_PROVIDER;
+    const authKey = this.getStringSetting(profile.ephemeralSettings, [
+      'auth-key',
+    ]);
+    const authType = authKey
+      ? profile.provider.includes('gemini')
+        ? AuthType.USE_GEMINI
+        : AuthType.API_KEY
+      : AuthType.USE_PROVIDER;
 
     const sessionId = `${this.baseSessionId()}::${agentRuntimeId}`;
     const baseUrl = this.getStringSetting(profile.ephemeralSettings, [
@@ -501,8 +506,7 @@ export class SubagentOrchestrator {
       provider: profile.provider,
       model: modelConfig.model,
       authType,
-      authPayload:
-        typeof authKey === 'string' ? { apiKey: authKey } : undefined,
+      authPayload: authKey ? { apiKey: authKey } : undefined,
       baseUrl,
       proxyUrl: this.getStringSetting(profile.ephemeralSettings, [
         'proxy',

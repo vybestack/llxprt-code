@@ -619,6 +619,10 @@ const RESERVED_PROVIDER_SETTING_KEYS = new Set([
   'api-key',
   'apiKeyfile',
   'api-keyfile',
+  'auth-key',
+  'authKey',
+  'auth-keyfile',
+  'authKeyfile',
   'baseUrl',
   'baseURL',
   'base-url',
@@ -883,6 +887,31 @@ const PROFILE_EPHEMERAL_KEYS: readonly string[] = [
   'maxTurnsPerPrompt',
 ];
 
+const SENSITIVE_MODEL_PARAM_KEYS = new Set([
+  'auth-key',
+  'authKey',
+  'auth-keyfile',
+  'authKeyfile',
+  'apiKey',
+  'api-key',
+  'apiKeyfile',
+  'api-keyfile',
+  'base-url',
+  'baseUrl',
+  'baseURL',
+]);
+
+function stripSensitiveModelParams<T extends Record<string, unknown>>(
+  params: T,
+): T {
+  for (const key of SENSITIVE_MODEL_PARAM_KEYS) {
+    if (key in params) {
+      delete params[key as keyof T];
+    }
+  }
+  return params;
+}
+
 export function buildRuntimeProfileSnapshot(): Profile {
   const { config, settingsService, providerManager } = getCliRuntimeServices();
   const providerName =
@@ -940,7 +969,9 @@ export function buildRuntimeProfileSnapshot(): Profile {
     }
   }
 
-  const modelParams = extractModelParams(providerSettings) as ModelParams;
+  const modelParams = stripSensitiveModelParams(
+    extractModelParams(providerSettings) as ModelParams,
+  );
 
   return {
     version: 1,
@@ -1198,6 +1229,108 @@ export interface ProviderRuntimeStatus {
  * @requirement:REQ-SP-005
  * @pseudocode:cli-runtime.md lines 9-10
  */
+function normalizeProviderBaseUrl(baseUrl?: string | null): string | undefined {
+  if (!baseUrl) {
+    return undefined;
+  }
+  const trimmed = baseUrl.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'none') {
+    return undefined;
+  }
+  return trimmed;
+}
+
+function extractProviderBaseUrl(
+  provider: unknown,
+  visited = new Set<unknown>(),
+): string | undefined {
+  if (!provider) {
+    return undefined;
+  }
+
+  if (typeof provider === 'object' && provider !== null) {
+    if (visited.has(provider)) {
+      return undefined;
+    }
+    visited.add(provider);
+  }
+
+  if (
+    provider &&
+    typeof provider === 'object' &&
+    'wrappedProvider' in provider &&
+    (provider as { wrappedProvider?: unknown }).wrappedProvider
+  ) {
+    const unwrapped = (provider as { wrappedProvider?: unknown })
+      .wrappedProvider;
+    const candidate = extractProviderBaseUrl(unwrapped, visited);
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  const direct =
+    normalizeProviderBaseUrl(
+      (provider as { baseUrl?: string | null }).baseUrl ??
+        (provider as { baseURL?: string | null }).baseURL,
+    ) ??
+    normalizeProviderBaseUrl(
+      (provider as { BaseUrl?: string | null }).BaseUrl ??
+        (provider as { BaseURL?: string | null }).BaseURL,
+    );
+  if (direct) {
+    return direct;
+  }
+
+  const configCandidate = (
+    provider as {
+      providerConfig?: { baseUrl?: string; baseURL?: string };
+    }
+  ).providerConfig;
+  if (configCandidate) {
+    const fromConfig = normalizeProviderBaseUrl(
+      configCandidate.baseUrl ?? configCandidate.baseURL,
+    );
+    if (fromConfig) {
+      return fromConfig;
+    }
+  }
+
+  const baseProviderConfig = (
+    provider as {
+      baseProviderConfig?: { baseURL?: string; baseUrl?: string };
+    }
+  ).baseProviderConfig;
+  if (baseProviderConfig) {
+    const baseProviderUrl = normalizeProviderBaseUrl(
+      baseProviderConfig.baseURL ?? baseProviderConfig.baseUrl,
+    );
+    if (baseProviderUrl) {
+      return baseProviderUrl;
+    }
+  }
+
+  if (
+    'getBaseURL' in (provider as Record<string, unknown>) &&
+    typeof (provider as { getBaseURL?: () => string | undefined })
+      .getBaseURL === 'function'
+  ) {
+    try {
+      const reported = (
+        provider as { getBaseURL: () => string | undefined }
+      ).getBaseURL();
+      const normalized = normalizeProviderBaseUrl(reported);
+      if (normalized) {
+        return normalized;
+      }
+    } catch {
+      // Ignore provider errors when probing for base URL hints
+    }
+  }
+
+  return undefined;
+}
+
 export async function switchActiveProvider(
   providerName: string,
   options: {
@@ -1350,6 +1483,15 @@ export async function switchActiveProvider(
   let providerBaseUrl: string | undefined;
   if (name === 'qwen') {
     providerBaseUrl = 'https://portal.qwen.ai/v1';
+  }
+  if (!providerBaseUrl) {
+    const providerForBaseUrl =
+      typeof providerManager.getProviderByName === 'function'
+        ? providerManager.getProviderByName(name)
+        : null;
+    providerBaseUrl = extractProviderBaseUrl(
+      providerForBaseUrl ?? activeProvider,
+    );
   }
   const explicitBaseUrl =
     explicitConfigBaseUrl ??
@@ -1582,9 +1724,6 @@ export async function updateActiveProviderApiKey(
   settingsService.setProviderSetting(providerName, 'apiKey', trimmed);
   config.setEphemeralSetting('auth-key', trimmed);
   config.setEphemeralSetting('auth-keyfile', undefined);
-
-  // Also store as 'auth-key' in provider settings for bundle compatibility
-  settingsService.setProviderSetting(providerName, 'auth-key', trimmed);
 
   if (providerName === 'gemini') {
     authType = AuthType.USE_GEMINI;

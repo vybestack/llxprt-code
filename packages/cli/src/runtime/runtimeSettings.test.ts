@@ -149,6 +149,7 @@ const {
     params: Record<string, unknown> | undefined;
     defaultModel = 'default-model';
     isPaidMode = vi.fn(() => false);
+    wrappedProvider?: StubProviderInstance;
 
     constructor(name: string) {
       this.name = name;
@@ -168,6 +169,10 @@ const {
 
     getModelParams() {
       return this.params;
+    }
+
+    getBaseURL() {
+      return this.baseUrl;
     }
   }
 
@@ -489,6 +494,41 @@ describe('runtimeSettings helpers', () => {
     expect(config.getModel()).toBe('anthropic-default-model');
   });
 
+  it('switchActiveProvider uses provider-reported base URL when not stored in settings', async () => {
+    const { config, settingsService } = getCliRuntimeServices() as unknown as {
+      config: StubConfigInstance;
+      settingsService: StubSettingsServiceInstance;
+    };
+
+    const syntheticInner = new StubProvider('synthetic-inner');
+    syntheticInner.baseUrl = 'https://api.synthetic.new/openai/v1';
+    syntheticInner.defaultModel = 'hf:zai-org/GLM-4.6';
+
+    const syntheticWrapper = new StubProvider('synthetic');
+    syntheticWrapper.baseUrl = undefined;
+    syntheticWrapper.defaultModel = syntheticInner.defaultModel;
+    syntheticWrapper.wrappedProvider = syntheticInner;
+
+    providers.synthetic = syntheticWrapper;
+
+    const result = await switchActiveProvider('synthetic');
+
+    expect(result.nextProvider).toBe('synthetic');
+    expect(config.getEphemeralSetting('base-url')).toBe(
+      'https://api.synthetic.new/openai/v1',
+    );
+    const syntheticSettings = settingsService.getProviderSettings('synthetic');
+    expect(syntheticSettings.baseUrl).toBe(
+      'https://api.synthetic.new/openai/v1',
+    );
+    expect(syntheticSettings.baseURL).toBe(
+      'https://api.synthetic.new/openai/v1',
+    );
+
+    delete providers.synthetic;
+    activeProviderName = 'openai';
+  });
+
   it('setActiveModel updates provider and config', async () => {
     const { config, settingsService } = getCliRuntimeServices() as unknown as {
       config: StubConfigInstance;
@@ -584,6 +624,21 @@ describe('runtimeSettings helpers', () => {
     expect(snapshot.ephemeralSettings['custom-headers']).toEqual({
       Authorization: 'Bearer 123',
     });
+  });
+
+  it('buildRuntimeProfileSnapshot omits auth data from model params', async () => {
+    const { settingsService, config } = getCliRuntimeServices() as unknown as {
+      settingsService: StubSettingsServiceInstance;
+      config: StubConfigInstance;
+    };
+    settingsService.setProviderSetting('openai', 'auth-key', 'snapshot-key');
+    settingsService.setProviderSetting('openai', 'apiKey', 'snapshot-key');
+    settingsService.setProviderSetting('openai', 'temperature', 0.42);
+    config.setEphemeralSetting('auth-key', 'snapshot-key');
+
+    const snapshot = buildRuntimeProfileSnapshot();
+
+    expect(snapshot.modelParams).toEqual({ temperature: 0.42 });
   });
 
   it('applyProfileSnapshot switches provider and applies settings', async () => {

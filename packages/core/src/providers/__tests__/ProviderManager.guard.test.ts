@@ -290,6 +290,75 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     expect(normalized.metadata?._normalized).toBe(true);
   });
 
+  it('uses config base-url fallback when provider settings omit baseURL', () => {
+    const settingsService = new SettingsService();
+    const config = createRuntimeConfigStub(settingsService, {
+      getEphemeralSetting: (key: string) =>
+        key === 'base-url' ? 'https://config-fallback.example.com' : undefined,
+    }) as Config;
+    const manager = new ProviderManager({ settingsService, config });
+
+    settingsService.set('activeProvider', 'stub-provider');
+    settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
+    settingsService.setProviderSetting('stub-provider', 'apiKey', 'test-key');
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: settingsService,
+        config,
+        runtime: {
+          runtimeId: 'runtime-config-baseurl',
+          settingsService,
+          config,
+        },
+      },
+      'stub-provider',
+    );
+
+    expect(normalized.resolved?.baseURL).toBe(
+      'https://config-fallback.example.com',
+    );
+  });
+
+  it('derives base-url from provider configuration when settings and config lack it', () => {
+    const settingsService = new SettingsService();
+    const config = createRuntimeConfigStub(settingsService) as Config;
+    const manager = new ProviderManager({ settingsService, config });
+
+    const provider = new HarnessProvider(config, settingsService);
+    const providerConfigRef = provider as unknown as {
+      baseProviderConfig?: { baseURL?: string };
+    };
+    if (providerConfigRef.baseProviderConfig) {
+      providerConfigRef.baseProviderConfig.baseURL =
+        'https://provider-config.example.com';
+    }
+    manager.registerProvider(provider);
+
+    settingsService.set('activeProvider', provider.name);
+    settingsService.setProviderSetting(provider.name, 'model', 'test-model');
+    settingsService.setProviderSetting(provider.name, 'apiKey', 'test-key');
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: settingsService,
+        config,
+        runtime: {
+          runtimeId: 'runtime-provider-baseurl',
+          settingsService,
+          config,
+        },
+      },
+      provider.name,
+    );
+
+    expect(normalized.resolved?.baseURL).toBe(
+      'https://provider-config.example.com',
+    );
+  });
+
   it('merges metadata from runtime context @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-005', () => {
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-005
     const settingsService = new SettingsService();

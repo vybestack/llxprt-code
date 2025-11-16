@@ -607,18 +607,14 @@ export class AuthPrecedenceResolver {
           : undefined;
 
       const providerAuthKey = this.normalizeAuthValue(
-        providerSettings?.['auth-key'] ??
-          providerSettings?.authKey ??
-          providerSettings?.apiKey,
+        providerSettings?.['auth-key'] ?? providerSettings?.apiKey,
       );
       if (providerAuthKey) {
         return providerAuthKey;
       }
 
       const providerAuthKeyfile = this.normalizeAuthValue(
-        providerSettings?.['auth-keyfile'] ??
-          providerSettings?.authKeyfile ??
-          providerSettings?.apiKeyfile,
+        providerSettings?.['auth-keyfile'] ?? providerSettings?.apiKeyfile,
       );
       if (providerAuthKeyfile) {
         const keyFromFile = await this.readKeyFile(providerAuthKeyfile);
