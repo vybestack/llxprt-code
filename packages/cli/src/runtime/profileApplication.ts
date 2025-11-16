@@ -260,6 +260,7 @@ export async function applyProfileWithGuards(
   // STEP 2: Load and IMMEDIATELY apply auth to SettingsService BEFORE provider switch
   // This makes auth available in SettingsService so switchActiveProvider() won't trigger OAuth
   let authKeyApplied = false;
+  let resolvedAuthKeyfilePath: string | null = null;
   const authKeyfile = sanitizedProfile.ephemeralSettings?.['auth-keyfile'];
   if (
     authKeyfile &&
@@ -281,6 +282,7 @@ export async function applyProfileWithGuards(
         setEphemeralSetting('auth-keyfile', filePath);
         setProviderApiKey(authKey);
         setProviderApiKeyfile(filePath);
+        resolvedAuthKeyfilePath = filePath;
         authKeyApplied = true;
         logger.debug(
           () =>
@@ -385,6 +387,10 @@ export async function applyProfileWithGuards(
     const { message } = await updateActiveProviderApiKey(currentAuthKey);
     if (message) {
       infoMessages.push(message);
+    }
+    if (authKeyApplied && resolvedAuthKeyfilePath) {
+      setEphemeralSetting('auth-key', undefined);
+      setEphemeralSetting('auth-keyfile', resolvedAuthKeyfilePath);
     }
   }
 

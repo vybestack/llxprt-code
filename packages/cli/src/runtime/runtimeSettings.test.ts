@@ -626,6 +626,17 @@ describe('runtimeSettings helpers', () => {
     });
   });
 
+  it('buildRuntimeProfileSnapshot excludes auth-key when auth-keyfile is set', async () => {
+    const config = getCliRuntimeConfig() as unknown as StubConfigInstance;
+    config.setEphemeralSetting('auth-keyfile', '/tmp/apikey');
+    config.setEphemeralSetting('auth-key', 'file-derived-key');
+
+    const snapshot = buildRuntimeProfileSnapshot();
+
+    expect(snapshot.ephemeralSettings['auth-keyfile']).toBe('/tmp/apikey');
+    expect(snapshot.ephemeralSettings['auth-key']).toBeUndefined();
+  });
+
   it('buildRuntimeProfileSnapshot omits auth data from model params', async () => {
     const { settingsService, config } = getCliRuntimeServices() as unknown as {
       settingsService: StubSettingsServiceInstance;
