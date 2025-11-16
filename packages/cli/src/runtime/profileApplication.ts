@@ -334,7 +334,7 @@ export async function applyProfileWithGuards(
   }
 
   const gcpProject = getStringValue(
-    profile.ephemeralSettings,
+    sanitizedProfile.ephemeralSettings,
     'GOOGLE_CLOUD_PROJECT',
   );
   if (gcpProject) {
@@ -343,7 +343,7 @@ export async function applyProfileWithGuards(
   }
 
   const gcpLocation = getStringValue(
-    profile.ephemeralSettings,
+    sanitizedProfile.ephemeralSettings,
     'GOOGLE_CLOUD_LOCATION',
   );
   if (gcpLocation) {
