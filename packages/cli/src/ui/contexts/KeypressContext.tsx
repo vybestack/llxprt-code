@@ -473,8 +473,11 @@ export function KeypressProvider({
           let letter: string | undefined;
 
           // Standard ASCII letters
-          if (keyCode >= 'a'.charCodeAt(0) && keyCode <= 'z'.charCodeAt(0)) {
-            letter = String.fromCharCode(keyCode);
+          if (
+            (keyCode >= 'a'.charCodeAt(0) && keyCode <= 'z'.charCodeAt(0)) ||
+            (keyCode >= 'A'.charCodeAt(0) && keyCode <= 'Z'.charCodeAt(0))
+          ) {
+            letter = String.fromCharCode(keyCode).toLowerCase();
           }
           // Handle IME interference: if Ctrl is pressed and we get a non-ASCII character,
           // try to map it back to the intended Ctrl+letter
