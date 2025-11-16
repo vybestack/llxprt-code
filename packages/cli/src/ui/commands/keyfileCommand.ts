@@ -102,6 +102,7 @@ export const keyfileCommand: SlashCommand = {
 
       const result = await runtime.updateActiveProviderApiKey(apiKey);
       runtime.setEphemeralSetting('auth-keyfile', resolvedPath);
+      runtime.setEphemeralSetting('auth-key', undefined);
       context.services.settings.setProviderKeyfile?.(
         providerName,
         resolvedPath,

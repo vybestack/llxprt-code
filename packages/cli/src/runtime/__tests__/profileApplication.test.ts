@@ -613,6 +613,7 @@ describe('profileApplication helpers', () => {
 
     // Verify auth-keyfile ephemeral was set (use expectedPath for cross-platform compatibility)
     expect(configStub.getEphemeralSetting('auth-keyfile')).toBe(expectedPath);
+    expect(configStub.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 });
 

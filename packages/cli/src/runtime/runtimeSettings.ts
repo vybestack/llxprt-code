@@ -931,17 +931,27 @@ export function buildRuntimeProfileSnapshot(): Profile {
 
   const ephemeralSettings = config.getEphemeralSettings();
   const snapshot: Record<string, unknown> = {};
+  const ephemeralRecord = ephemeralSettings as Record<string, unknown>;
+  const hasAuthKeyfile =
+    ephemeralRecord['auth-keyfile'] !== undefined &&
+    ephemeralRecord['auth-keyfile'] !== null;
 
   for (const key of PROFILE_EPHEMERAL_KEYS) {
-    const value = (ephemeralSettings as Record<string, unknown>)[key];
+    if (key === 'auth-key' && hasAuthKeyfile) {
+      continue;
+    }
+    const value = ephemeralRecord[key];
     if (value !== undefined) {
       snapshot[key] = value;
     }
   }
 
-  if (!('auth-keyfile' in snapshot) || snapshot['auth-keyfile'] === undefined) {
+  const snapshotHasAuthKeyfile =
+    snapshot['auth-keyfile'] !== undefined && snapshot['auth-keyfile'] !== null;
+
+  if (!snapshotHasAuthKeyfile && snapshot['auth-key'] === undefined) {
     const authKey =
-      (ephemeralSettings as Record<string, unknown>)['auth-key'] ??
+      ephemeralRecord['auth-key'] ??
       (settingsService.get('auth-key') as string | undefined);
     if (authKey) {
       snapshot['auth-key'] = authKey;
@@ -1935,6 +1945,7 @@ export async function applyCliArgumentOverrides(
     const resolvedPath = keyfileToUse.replace(/^~/, homedir());
     const keyContent = await readFile(resolvedPath, 'utf-8');
     await updateActiveProviderApiKey(keyContent.trim());
+    config.setEphemeralSetting('auth-key', undefined);
     config.setEphemeralSetting('auth-keyfile', resolvedPath);
   }
 
