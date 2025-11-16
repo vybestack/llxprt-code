@@ -877,7 +877,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Validates tool message sequence to ensure each tool message has a corresponding tool_calls in previous message
+   * Validates tool message sequence to ensure each tool message has a corresponding tool_calls
    * This prevents "messages with role 'tool' must be a response to a preceeding message with 'tool_calls'" errors
    *
    * Only validates when there are tool_calls present in conversation to avoid breaking isolated tool response tests
@@ -907,40 +907,47 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return validatedMessages;
     }
 
+    // Track the most recent assistant's tool_call IDs and already consumed tool_call_ids
+    let lastAssistantToolCallIds: string[] = [];
+    const consumedToolCallIds = new Set<string>();
+
     // Iterate through messages to check tool message sequence
-    for (let i = 1; i < validatedMessages.length; i++) {
+    for (let i = 0; i < validatedMessages.length; i++) {
       const current = validatedMessages[i];
-      const previous = validatedMessages[i - 1];
 
-      // Check if current message is a tool message
-      if (current.role === 'tool') {
-        // Type guard to ensure previous message is an assistant message with tool_calls
-        const isAssistantWithToolCalls =
-          previous.role === 'assistant' &&
-          'tool_calls' in previous &&
-          Array.isArray(previous.tool_calls);
+      if (
+        current.role === 'assistant' &&
+        'tool_calls' in current &&
+        Array.isArray(current.tool_calls)
+      ) {
+        // Update lastAssistantToolCallIds and reset consumed set when we encounter a new assistant message with tool_calls
+        lastAssistantToolCallIds = current.tool_calls.map((tc) => tc.id);
+        consumedToolCallIds.clear();
+      } else if (current.role === 'tool') {
+        // Validate tool message against the last assistant's tool_calls
+        const isValidToolCall = lastAssistantToolCallIds.includes(
+          current.tool_call_id || '',
+        );
+        const isDuplicate = consumedToolCallIds.has(current.tool_call_id || '');
 
-        const hasMatchingToolCall =
-          isAssistantWithToolCalls &&
-          previous.tool_calls?.some(
-            (tc: OpenAI.Chat.ChatCompletionMessageToolCall) =>
-              tc.id === current.tool_call_id,
-          );
+        let removalReason: string | undefined;
 
-        if (!hasMatchingToolCall) {
+        if (!isValidToolCall) {
+          removalReason = 'tool_call_id not found in last assistant tool_calls';
+        } else if (isDuplicate) {
+          removalReason = 'duplicate tool_call_id already consumed';
+        }
+
+        if (removalReason) {
           // Log the invalid sequence for debugging
           logger.warn(
-            `[OpenAIProvider] Invalid tool message sequence detected - removing orphaned tool message`,
+            `[OpenAIProvider] Invalid tool message sequence detected - removing orphaned tool message: ${removalReason}`,
             {
               currentIndex: i,
               toolCallId: current.tool_call_id,
-              previousRole: previous.role,
-              previousHasToolCalls: isAssistantWithToolCalls,
-              previousToolCallIds: isAssistantWithToolCalls
-                ? previous.tool_calls?.map(
-                    (tc: OpenAI.Chat.ChatCompletionMessageToolCall) => tc.id,
-                  )
-                : undefined,
+              lastAssistantToolCallIds,
+              consumedToolCallIds: Array.from(consumedToolCallIds),
+              removalReason,
             },
           );
 
@@ -948,7 +955,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           validatedMessages.splice(i, 1);
           i--; // Adjust index since we removed an element
           removedCount++;
+        } else {
+          // Mark this tool_call_id as consumed
+          if (current.tool_call_id) {
+            consumedToolCallIds.add(current.tool_call_id);
+          }
         }
+      } else if (current.role !== 'assistant') {
+        // Clear lastAssistantToolCallIds when we encounter a non-assistant message
+        lastAssistantToolCallIds = [];
+        consumedToolCallIds.clear();
       }
     }
 
