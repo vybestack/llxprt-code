@@ -682,6 +682,13 @@ export class GeminiClient {
     this.getChat().setTools(tools);
   }
 
+  clearTools(): void {
+    delete this.generateContentConfig.tools;
+    if (this.chat && typeof this.chat.clearTools === 'function') {
+      this.chat.clearTools();
+    }
+  }
+
   async resetChat(): Promise<void> {
     // If chat exists, clear its history service
     if (this.chat) {

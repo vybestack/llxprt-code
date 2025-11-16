@@ -343,6 +343,10 @@ export class SubagentOrchestrator {
     ]);
     if (baseUrl) {
       service.set(`providers.${provider}.baseUrl`, baseUrl);
+      service.set(`providers.${provider}.baseURL`, baseUrl);
+    } else {
+      service.set(`providers.${provider}.baseUrl`, undefined);
+      service.set(`providers.${provider}.baseURL`, undefined);
     }
 
     const authKey = this.getStringSetting(profile.ephemeralSettings, [
@@ -490,6 +494,9 @@ export class SubagentOrchestrator {
         : AuthType.USE_PROVIDER;
 
     const sessionId = `${this.baseSessionId()}::${agentRuntimeId}`;
+    const baseUrl = this.getStringSetting(profile.ephemeralSettings, [
+      'base-url',
+    ]);
 
     return createAgentRuntimeState({
       runtimeId: agentRuntimeId,
@@ -498,6 +505,7 @@ export class SubagentOrchestrator {
       authType,
       authPayload:
         typeof authKey === 'string' ? { apiKey: authKey } : undefined,
+      baseUrl,
       proxyUrl: this.getStringSetting(profile.ephemeralSettings, [
         'proxy',
         'proxy-url',

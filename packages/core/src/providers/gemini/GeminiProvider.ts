@@ -1133,17 +1133,60 @@ export class GeminiProvider extends BaseProvider {
             ),
           );
 
-    const serverTools = ['web_search', 'web_fetch'];
+    const directOverridesRaw = (
+      options.metadata as { geminiDirectOverrides?: unknown }
+    )?.geminiDirectOverrides;
+    const directOverrides =
+      directOverridesRaw && typeof directOverridesRaw === 'object'
+        ? (directOverridesRaw as Record<string, unknown>)
+        : undefined;
+
+    const serverToolsOverride =
+      directOverrides && 'serverTools' in directOverrides
+        ? directOverrides.serverTools
+        : options.config &&
+            typeof (options.config as { serverTools?: unknown }).serverTools !==
+              'undefined'
+          ? (options.config as { serverTools?: unknown }).serverTools
+          : undefined;
+    const serverTools = Array.isArray(serverToolsOverride)
+      ? serverToolsOverride
+      : ['web_search', 'web_fetch'];
+
+    const toolConfigOverride =
+      directOverrides && 'toolConfig' in directOverrides
+        ? directOverrides.toolConfig
+        : undefined;
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
     // Get model params per call from ephemeral settings, not cached instance state
-    const requestOverrides = options.invocation?.ephemerals ?? {};
-    const requestConfig: Record<string, unknown> = {
-      serverTools,
-      ...(requestOverrides ?? {}),
+    const allEphemerals = options.invocation?.ephemerals ?? {};
+    const {
+      tools: _ignoredTools,
+      gemini: geminiSpecific,
+      ...generalEphemerals
+    } = allEphemerals as Record<string, unknown>;
+    const requestOverrides: Record<string, unknown> = {
+      ...generalEphemerals,
+      ...(geminiSpecific && typeof geminiSpecific === 'object'
+        ? (geminiSpecific as Record<string, unknown>)
+        : {}),
     };
+    const requestConfig: Record<string, unknown> = {
+      ...requestOverrides,
+    };
+    requestConfig.serverTools = serverTools;
     if (geminiTools) {
       requestConfig.tools = geminiTools;
     }
+    if (toolConfigOverride) {
+      requestConfig.toolConfig = toolConfigOverride;
+    }
+    const requestLogger = new DebugLogger('llxprt:provider:gemini:logging');
+    requestLogger.log(() => '[GeminiProvider] request config overrides', {
+      hasDirectOverrides: !!directOverrides,
+      serverTools,
+      toolConfigOverride: toolConfigOverride ? 'present' : 'absent',
+    });
 
     // Create appropriate client and generate content
     const baseURL = options.resolved.baseURL ?? this.getBaseURL();

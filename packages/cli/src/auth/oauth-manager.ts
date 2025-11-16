@@ -181,6 +181,11 @@ export class OAuthManager {
 
       // 3. Store token using tokenStore
       await this.tokenStore.saveToken(providerName, providerToken);
+
+      // 4. Ensure provider marked as OAuth enabled after successful auth
+      if (!this.isOAuthEnabled(providerName)) {
+        this.setOAuthEnabledState(providerName, true);
+      }
     } catch (error) {
       // Propagate provider authentication errors
       if (error instanceof Error) {
@@ -202,8 +207,19 @@ export class OAuthManager {
     // Get all registered providers and check their status
     for (const [providerName, _provider] of this.providers) {
       try {
-        const token = await this.tokenStore.getToken(providerName);
         const oauthEnabled = this.isOAuthEnabled(providerName);
+
+        if (!oauthEnabled) {
+          statuses.push({
+            provider: providerName,
+            authenticated: false,
+            authType: 'none',
+            oauthEnabled,
+          });
+          continue;
+        }
+
+        const token = await this.tokenStore.getToken(providerName);
 
         if (token) {
           // Provider is authenticated, calculate time until expiry
@@ -534,24 +550,7 @@ export class OAuthManager {
     const currentlyEnabled = this.isOAuthEnabled(providerName);
     const newState = !currentlyEnabled;
 
-    if (this.settings) {
-      // If we have settings, persist the state
-      // Get current OAuth enabled providers or initialize empty object
-      const oauthEnabledProviders =
-        this.settings.merged.oauthEnabledProviders || {};
-      oauthEnabledProviders[providerName] = newState;
-
-      // Save the updated configuration
-      this.settings.setValue(
-        SettingScope.User,
-        'oauthEnabledProviders',
-        oauthEnabledProviders,
-      );
-    } else {
-      // No settings available, store in memory only
-      // This allows OAuth to work even without a settings file
-      this.inMemoryOAuthState.set(providerName, newState);
-    }
+    this.setOAuthEnabledState(providerName, newState);
 
     return newState;
   }
@@ -570,6 +569,21 @@ export class OAuthManager {
     } else {
       // Fall back to in-memory state if no settings
       return this.inMemoryOAuthState.get(providerName) ?? false;
+    }
+  }
+
+  private setOAuthEnabledState(providerName: string, enabled: boolean): void {
+    if (this.settings) {
+      const oauthEnabledProviders =
+        this.settings.merged.oauthEnabledProviders || {};
+      oauthEnabledProviders[providerName] = enabled;
+      this.settings.setValue(
+        SettingScope.User,
+        'oauthEnabledProviders',
+        oauthEnabledProviders,
+      );
+    } else {
+      this.inMemoryOAuthState.set(providerName, enabled);
     }
   }
 
