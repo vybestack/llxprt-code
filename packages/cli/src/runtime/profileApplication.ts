@@ -46,17 +46,6 @@ export interface ProfileApplicationResult {
 
 const logger = new DebugLogger('llxprt:runtime:profile');
 
-function getStringValue(
-  ephemerals: Profile['ephemeralSettings'],
-  key: string,
-): string | undefined {
-  const value = (ephemerals as Record<string, unknown>)[key];
-  if (typeof value === 'string' && value.trim() !== '') {
-    return value;
-  }
-  return undefined;
-}
-
 /**
  * @plan PLAN-20251020-STATELESSPROVIDER3.P09
  * @requirement REQ-SP3-002
@@ -103,6 +92,244 @@ export function selectAvailableProvider(
 }
 
 /**
+ * Sanitizes profile input and applies pre-switch authentication wiring.
+ *
+ * This function performs STEP 2 of profile application:
+ * - Propagates authentication and base URL parameters from modelParams to ephemeralSettings
+ * - Removes sensitive keys from modelParams after propagation
+ * - Loads and applies authentication keys from keyfiles to SettingsService BEFORE provider switch
+ * - Ensures auth is available so switchActiveProvider() won't trigger OAuth
+ *
+ * @param profile - The profile to sanitize (will be mutated)
+ * @param targetProviderName - The name of the target provider for auth application
+ * @param warnings - Array to collect warning messages (will be mutated)
+ * @param settingsService - The settings service instance
+ * @returns Promise<boolean> - true if auth key was applied from keyfile, false otherwise
+ */
+async function sanitizeProfileAndApplyAuth(
+  profile: Profile,
+  targetProviderName: string,
+  warnings: string[],
+  settingsService: ReturnType<typeof getCliRuntimeServices>['settingsService'],
+): Promise<boolean> {
+  const propagateModelParamToEphemeral = (
+    aliases: string[],
+    targetKey: 'auth-key' | 'auth-keyfile' | 'base-url',
+  ): void => {
+    if (
+      profile.ephemeralSettings[targetKey] === undefined ||
+      profile.ephemeralSettings[targetKey] === null
+    ) {
+      for (const alias of aliases) {
+        const candidate = profile.modelParams?.[alias as keyof ModelParams];
+        if (typeof candidate === 'string' && candidate.trim() !== '') {
+          profile.ephemeralSettings[targetKey] = candidate;
+          break;
+        }
+      }
+    }
+    for (const alias of aliases) {
+      if (profile.modelParams && alias in profile.modelParams) {
+        delete profile.modelParams[alias as keyof ModelParams];
+      }
+    }
+  };
+
+  propagateModelParamToEphemeral(['auth-key', 'authKey'], 'auth-key');
+  propagateModelParamToEphemeral(
+    ['auth-keyfile', 'authKeyfile'],
+    'auth-keyfile',
+  );
+  propagateModelParamToEphemeral(
+    ['base-url', 'baseUrl', 'baseURL'],
+    'base-url',
+  );
+  if (profile.modelParams) {
+    const extraSensitiveKeys = [
+      'apiKey',
+      'api-key',
+      'apiKeyfile',
+      'api-keyfile',
+    ];
+    for (const key of extraSensitiveKeys) {
+      if (key in profile.modelParams) {
+        delete profile.modelParams[key as keyof ModelParams];
+      }
+    }
+  }
+
+  // STEP 2: Load and IMMEDIATELY apply auth to SettingsService BEFORE provider switch
+  // This makes auth available in SettingsService so switchActiveProvider() won't trigger OAuth
+  let authKeyApplied = false;
+  const authKeyfile = profile.ephemeralSettings?.['auth-keyfile'];
+  if (
+    authKeyfile &&
+    typeof authKeyfile === 'string' &&
+    authKeyfile.trim() !== ''
+  ) {
+    const resolvedPath = authKeyfile.replace(/^~(?=$|\/)/, homedir());
+    const filePath = path.resolve(resolvedPath);
+    try {
+      const fileContents = await fs.readFile(filePath, 'utf-8');
+      const authKey = fileContents.trim();
+      logger.debug(
+        () => `[profile] loaded keyfile '${filePath}' length=${authKey.length}`,
+      );
+
+      if (authKey && authKey.length > 0) {
+        settingsService.setProviderSetting(
+          targetProviderName,
+          'apiKey',
+          authKey,
+        );
+        authKeyApplied = true;
+        logger.debug(
+          () =>
+            `[profile] set apiKey from keyfile for provider '${targetProviderName}'`,
+        );
+      } else {
+        warnings.push(
+          `Auth keyfile '${authKeyfile}' is empty or contains only whitespace`,
+        );
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      warnings.push(`Failed to load auth keyfile '${authKeyfile}': ${message}`);
+      logger.warn(
+        () => `[profile] failed to load keyfile '${authKeyfile}': ${message}`,
+      );
+    }
+  }
+
+  const authKey = profile.ephemeralSettings?.['auth-key'];
+  if (!authKeyApplied && authKey && typeof authKey === 'string') {
+    const trimmedKey = authKey.trim();
+    if (trimmedKey.length > 0) {
+      settingsService.setProviderSetting(
+        targetProviderName,
+        'apiKey',
+        trimmedKey,
+      );
+      authKeyApplied = true;
+      logger.debug(
+        () =>
+          `[profile] set apiKey from auth-key for provider '${targetProviderName}'`,
+      );
+    }
+  }
+
+  return authKeyApplied;
+}
+
+/**
+ * Applies non-auth ephemeral settings from a profile.
+ *
+ * This function applies all ephemeral settings except those already handled
+ * by earlier steps (auth-key, auth-keyfile, base-url, GOOGLE_CLOUD_PROJECT,
+ * GOOGLE_CLOUD_LOCATION).
+ *
+ * @param profile - The sanitized profile containing ephemeral settings
+ * @param logger - Logger instance for debug output
+ */
+function applyNonAuthEphemerals(profile: Profile, logger: DebugLogger): void {
+  const appliedKeys = new Set([
+    'auth-key',
+    'auth-keyfile',
+    'base-url',
+    'GOOGLE_CLOUD_PROJECT',
+    'GOOGLE_CLOUD_LOCATION',
+  ]);
+  const otherEphemerals = Object.entries(
+    profile.ephemeralSettings ?? {},
+  ).filter(([key]) => !appliedKeys.has(key));
+
+  for (const [key, value] of otherEphemerals) {
+    logger.debug(
+      () => `[profile] applying ephemeral '${key}' => ${JSON.stringify(value)}`,
+    );
+    setEphemeralSetting(key, value);
+  }
+}
+
+/**
+ * Applies model and model parameters from a profile.
+ *
+ * This function handles model selection (with fallback), sets the active model,
+ * and applies model parameters by clearing existing parameters that are not
+ * in the profile and setting new ones from the profile.
+ *
+ * @param sanitizedProfile - The sanitized profile containing model and modelParams
+ * @param providerRecord - The provider record for getting default model
+ * @param warnings - Array to accumulate warnings
+ * @param infoMessages - Array to accumulate info messages
+ * @param logger - Logger instance for debug output
+ * @param config - Configuration service for getting ephemeral settings
+ * @param providerManager - Provider manager for getting active provider
+ * @returns Object containing final model name and updated arrays
+ */
+async function applyModelAndParams(
+  sanitizedProfile: Profile,
+  providerRecord: ReturnType<
+    ReturnType<
+      typeof getCliRuntimeServices
+    >['providerManager']['getProviderByName']
+  > | null,
+  warnings: string[],
+  infoMessages: string[],
+  logger: DebugLogger,
+  config: ReturnType<typeof getCliRuntimeServices>['config'],
+  providerManager: ReturnType<typeof getCliRuntimeServices>['providerManager'],
+): Promise<{
+  finalModel: string;
+  infoMessages: string[];
+  warnings: string[];
+}> {
+  const requestedModel =
+    typeof sanitizedProfile.model === 'string'
+      ? sanitizedProfile.model.trim()
+      : '';
+  const fallbackModel =
+    providerRecord?.getDefaultModel?.() ??
+    config.getModel() ??
+    providerManager.getActiveProvider()?.getDefaultModel?.() ??
+    '';
+  if (!requestedModel && !fallbackModel) {
+    throw new Error(
+      `Profile '${sanitizedProfile.provider}' does not specify a model and no default is available.`,
+    );
+  }
+
+  const modelResult = await setActiveModel(requestedModel || fallbackModel);
+  const appliedModelName = modelResult.nextModel ?? '';
+  logger.debug(
+    () =>
+      `[profile] model requested='${requestedModel || '(none)'}' fallback='${fallbackModel || '(none)'}' => applied='${appliedModelName}'`,
+  );
+
+  const oldParams = getActiveModelParams();
+  const newParams = sanitizedProfile.modelParams ?? {};
+  const newParamsKeys = Object.keys(newParams);
+
+  const oldParamsToRemove = Object.keys(oldParams).filter(
+    (k) => !newParamsKeys.includes(k),
+  );
+  for (const key of oldParamsToRemove) {
+    clearActiveModelParam(key);
+    logger.debug(() => `[profile] cleared old modelParam '${key}'`);
+  }
+
+  for (const key of newParamsKeys) {
+    const value = newParams[key];
+    setActiveModelParam(key, value);
+    logger.debug(
+      () => `[profile] set modelParam '${key}' => ${JSON.stringify(value)}`,
+    );
+  }
+
+  return { finalModel: appliedModelName, infoMessages, warnings };
+}
+
+/**
  * @plan PLAN-20251020-STATELESSPROVIDER3.P09
  * @requirement REQ-SP3-002
  * @pseudocode profile-application.md lines 1-22
@@ -145,82 +372,6 @@ export async function applyProfileWithGuards(
     ephemeralSettings: { ...(profileInput.ephemeralSettings ?? {}) },
   };
 
-  const setProviderApiKey = (apiKey: string | undefined): void => {
-    if (!apiKey || apiKey.trim() === '') {
-      return;
-    }
-    settingsService.setProviderSetting(targetProviderName, 'apiKey', apiKey);
-  };
-
-  const setProviderApiKeyfile = (filePath: string | undefined): void => {
-    if (!filePath || filePath.trim() === '') {
-      return;
-    }
-    settingsService.setProviderSetting(
-      targetProviderName,
-      'apiKeyfile',
-      filePath,
-    );
-  };
-
-  const setProviderBaseUrl = (baseUrl: string | undefined): void => {
-    if (!baseUrl || baseUrl.trim() === '') {
-      return;
-    }
-    settingsService.setProviderSetting(targetProviderName, 'baseUrl', baseUrl);
-    settingsService.setProviderSetting(targetProviderName, 'baseURL', baseUrl);
-  };
-
-  const propagateModelParamToEphemeral = (
-    aliases: string[],
-    targetKey: 'auth-key' | 'auth-keyfile' | 'base-url',
-  ): void => {
-    if (
-      sanitizedProfile.ephemeralSettings[targetKey] === undefined ||
-      sanitizedProfile.ephemeralSettings[targetKey] === null
-    ) {
-      for (const alias of aliases) {
-        const candidate =
-          sanitizedProfile.modelParams?.[alias as keyof ModelParams];
-        if (typeof candidate === 'string' && candidate.trim() !== '') {
-          sanitizedProfile.ephemeralSettings[targetKey] = candidate;
-          break;
-        }
-      }
-    }
-    for (const alias of aliases) {
-      if (
-        sanitizedProfile.modelParams &&
-        alias in sanitizedProfile.modelParams
-      ) {
-        delete sanitizedProfile.modelParams[alias as keyof ModelParams];
-      }
-    }
-  };
-
-  propagateModelParamToEphemeral(['auth-key', 'authKey'], 'auth-key');
-  propagateModelParamToEphemeral(
-    ['auth-keyfile', 'authKeyfile'],
-    'auth-keyfile',
-  );
-  propagateModelParamToEphemeral(
-    ['base-url', 'baseUrl', 'baseURL'],
-    'base-url',
-  );
-  if (sanitizedProfile.modelParams) {
-    const extraSensitiveKeys = [
-      'apiKey',
-      'api-key',
-      'apiKeyfile',
-      'api-keyfile',
-    ];
-    for (const key of extraSensitiveKeys) {
-      if (key in sanitizedProfile.modelParams) {
-        delete sanitizedProfile.modelParams[key as keyof ModelParams];
-      }
-    }
-  }
-
   const targetProviderName = selection.providerName;
   if (warnings.length > 0) {
     logger.debug(
@@ -232,6 +383,14 @@ export async function applyProfileWithGuards(
       `[profile] target provider '${targetProviderName}' (requested='${requestedProvider ?? 'none'}')`,
   );
   const providerRecord = providerManager.getProviderByName(targetProviderName);
+
+  // STEP 2: Sanitize profile and apply pre-switch auth
+  await sanitizeProfileAndApplyAuth(
+    sanitizedProfile,
+    targetProviderName,
+    warnings,
+    settingsService,
+  );
   if (!providerRecord) {
     warnings.push(
       `Provider '${targetProviderName}' not registered; skipping provider-specific updates.`,
@@ -257,98 +416,19 @@ export async function applyProfileWithGuards(
     setEphemeralSetting(key, undefined);
   }
 
-  // STEP 2: Load and IMMEDIATELY apply auth to SettingsService BEFORE provider switch
-  // This makes auth available in SettingsService so switchActiveProvider() won't trigger OAuth
-  let authKeyApplied = false;
-  const authKeyfile = sanitizedProfile.ephemeralSettings?.['auth-keyfile'];
-  if (
-    authKeyfile &&
-    typeof authKeyfile === 'string' &&
-    authKeyfile.trim() !== ''
-  ) {
-    const resolvedPath = authKeyfile.replace(/^~(?=$|\/)/, homedir());
-    const filePath = path.resolve(resolvedPath);
-    try {
-      const fileContents = await fs.readFile(filePath, 'utf-8');
-      const authKey = fileContents.trim();
-      logger.debug(
-        () => `[profile] loaded keyfile '${filePath}' length=${authKey.length}`,
-      );
-
-      if (authKey) {
-        // CRITICAL: Set in SettingsService BEFORE provider switch
-        setEphemeralSetting('auth-key', authKey);
-        setEphemeralSetting('auth-keyfile', filePath);
-        setProviderApiKey(authKey);
-        setProviderApiKeyfile(filePath);
-        authKeyApplied = true;
-        logger.debug(
-          () =>
-            `[profile] applied auth to SettingsService before switch (keyfile)`,
-        );
-
-        // Also set provider-specific keyfile
-        const maybeExtended = settingsService as {
-          setProviderKeyfile?: (provider: string, keyfilePath: string) => void;
-        };
-        maybeExtended.setProviderKeyfile?.(targetProviderName, filePath);
-      } else {
-        warnings.push(
-          `Keyfile '${authKeyfile}' was empty; falling back to existing credentials.`,
-        );
-        // Still set the ephemeral even if empty
-        setEphemeralSetting('auth-keyfile', filePath);
-        setProviderApiKeyfile(filePath);
-      }
-    } catch (error) {
-      warnings.push(
-        `Failed to load keyfile '${authKeyfile}': ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-      // Still set the ephemeral to the original path even if it failed
-      setEphemeralSetting('auth-keyfile', authKeyfile);
-      setProviderApiKeyfile(authKeyfile);
-    }
+  // Apply GCP environment settings if present in profile
+  const gcpProjectValue =
+    sanitizedProfile.ephemeralSettings?.['GOOGLE_CLOUD_PROJECT'];
+  if (typeof gcpProjectValue === 'string' && gcpProjectValue.trim() !== '') {
+    setEphemeralSetting('GOOGLE_CLOUD_PROJECT', gcpProjectValue);
+    process.env.GOOGLE_CLOUD_PROJECT = gcpProjectValue;
   }
 
-  // Fall back to direct auth-key if keyfile didn't work or wasn't provided
-  if (!authKeyApplied && sanitizedProfile.ephemeralSettings?.['auth-key']) {
-    const authKey = sanitizedProfile.ephemeralSettings['auth-key'] as string;
-    setEphemeralSetting('auth-key', authKey);
-    setProviderApiKey(authKey);
-    logger.debug(
-      () =>
-        `[profile] applied auth to SettingsService before switch (direct key)`,
-    );
-  }
-
-  // Set base-url before switch too
-  if (sanitizedProfile.ephemeralSettings?.['base-url']) {
-    const baseUrl = sanitizedProfile.ephemeralSettings['base-url'] as string;
-    setEphemeralSetting('base-url', baseUrl);
-    setProviderBaseUrl(baseUrl);
-    logger.debug(
-      () => `[profile] applied base-url to SettingsService before switch`,
-    );
-  }
-
-  const gcpProject = getStringValue(
-    sanitizedProfile.ephemeralSettings,
-    'GOOGLE_CLOUD_PROJECT',
-  );
-  if (gcpProject) {
-    setEphemeralSetting('GOOGLE_CLOUD_PROJECT', gcpProject);
-    process.env.GOOGLE_CLOUD_PROJECT = gcpProject;
-  }
-
-  const gcpLocation = getStringValue(
-    sanitizedProfile.ephemeralSettings,
-    'GOOGLE_CLOUD_LOCATION',
-  );
-  if (gcpLocation) {
-    setEphemeralSetting('GOOGLE_CLOUD_LOCATION', gcpLocation);
-    process.env.GOOGLE_CLOUD_LOCATION = gcpLocation;
+  const gcpLocationValue =
+    sanitizedProfile.ephemeralSettings?.['GOOGLE_CLOUD_LOCATION'];
+  if (typeof gcpLocationValue === 'string' && gcpLocationValue.trim() !== '') {
+    setEphemeralSetting('GOOGLE_CLOUD_LOCATION', gcpLocationValue);
+    process.env.GOOGLE_CLOUD_LOCATION = gcpLocationValue;
   }
 
   // STEP 3: NOW switch provider - auth is already in SettingsService
@@ -404,68 +484,27 @@ export async function applyProfileWithGuards(
   }
 
   // STEP 5: Apply non-auth ephemerals
-  const appliedKeys = new Set([
-    'auth-key',
-    'auth-keyfile',
-    'base-url',
-    'GOOGLE_CLOUD_PROJECT',
-    'GOOGLE_CLOUD_LOCATION',
-  ]);
-  const otherEphemerals = Object.entries(
-    sanitizedProfile.ephemeralSettings ?? {},
-  ).filter(([key]) => !appliedKeys.has(key));
-
-  for (const [key, value] of otherEphemerals) {
-    logger.debug(
-      () => `[profile] applying ephemeral '${key}' => ${JSON.stringify(value)}`,
-    );
-    setEphemeralSetting(key, value);
-  }
+  applyNonAuthEphemerals(sanitizedProfile, logger);
 
   // STEP 6: Apply model and modelParams
-  const requestedModel =
-    typeof sanitizedProfile.model === 'string'
-      ? sanitizedProfile.model.trim()
-      : '';
-  const fallbackModel =
-    providerRecord?.getDefaultModel?.() ??
-    config.getModel() ??
-    providerManager.getActiveProvider()?.getDefaultModel?.() ??
-    '';
-  if (!requestedModel && !fallbackModel) {
-    throw new Error(
-      `Profile '${sanitizedProfile.provider}' does not specify a model and no default is available.`,
-    );
-  }
-
-  // Issue #453: Do NOT restore old ephemeral settings that were not in the profile
-  // Ephemeral settings should only contain what's explicitly set in the loaded profile
-  // This prevents credentials and settings from leaking between profiles/providers
-
-  const modelResult = await setActiveModel(requestedModel || fallbackModel);
-
-  const profileParams = sanitizedProfile.modelParams ?? {};
-  const existingParams = getActiveModelParams();
-
-  for (const [key, value] of Object.entries(profileParams)) {
-    setActiveModelParam(key, value);
-  }
-
-  for (const key of Object.keys(existingParams)) {
-    if (!(key in profileParams)) {
-      clearActiveModelParam(key);
-    }
-  }
+  const modelAndParamsResult = await applyModelAndParams(
+    sanitizedProfile,
+    providerRecord,
+    warnings,
+    infoMessages,
+    logger,
+    config,
+    providerManager,
+  );
+  const appliedModelName = modelAndParamsResult.finalModel;
 
   const provider = providerManager.getActiveProvider();
-
   if (!provider) {
     throw new Error(
       `[oauth-manager] Active provider "${targetProviderName}" is not registered.`,
     );
   }
 
-  const appliedModelName = modelResult.nextModel;
   if (appliedModelName) {
     infoMessages.push(
       `Model set to '${appliedModelName}' for provider '${provider.name}'.`,
