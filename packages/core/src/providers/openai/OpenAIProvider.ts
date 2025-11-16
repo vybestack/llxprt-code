@@ -871,7 +871,116 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       }
     }
 
-    return messages;
+    // Validate tool message sequence to prevent API errors
+    // This ensures each tool message has a corresponding tool_calls in previous message
+    return this.validateToolMessageSequence(messages);
+  }
+
+  /**
+   * Validates tool message sequence to ensure each tool message has a corresponding tool_calls
+   * This prevents "messages with role 'tool' must be a response to a preceeding message with 'tool_calls'" errors
+   *
+   * Only validates when there are tool_calls present in conversation to avoid breaking isolated tool response tests
+   *
+   * @param messages - The converted OpenAI messages to validate
+   * @returns The validated messages with invalid tool messages removed
+   */
+  private validateToolMessageSequence(
+    messages: OpenAI.Chat.ChatCompletionMessageParam[],
+  ): OpenAI.Chat.ChatCompletionMessageParam[] {
+    const logger = this.getLogger();
+    const validatedMessages = [...messages];
+    let removedCount = 0;
+
+    // Check if there are any tool_calls in conversation
+    // If no tool_calls exist, this might be isolated tool response testing - skip validation
+    const hasToolCallsInConversation = validatedMessages.some(
+      (msg) =>
+        msg.role === 'assistant' &&
+        'tool_calls' in msg &&
+        Array.isArray(msg.tool_calls) &&
+        msg.tool_calls.length > 0,
+    );
+
+    // Only validate if there are tool_calls in conversation
+    if (!hasToolCallsInConversation) {
+      return validatedMessages;
+    }
+
+    // Track the most recent assistant's tool_call IDs and already consumed tool_call_ids
+    let lastAssistantToolCallIds: string[] = [];
+    const consumedToolCallIds = new Set<string>();
+
+    // Iterate through messages to check tool message sequence
+    for (let i = 0; i < validatedMessages.length; i++) {
+      const current = validatedMessages[i];
+
+      if (
+        current.role === 'assistant' &&
+        'tool_calls' in current &&
+        Array.isArray(current.tool_calls)
+      ) {
+        // Update lastAssistantToolCallIds and reset consumed set when we encounter a new assistant message with tool_calls
+        lastAssistantToolCallIds = current.tool_calls.map((tc) => tc.id);
+        consumedToolCallIds.clear();
+      } else if (current.role === 'tool') {
+        // Validate tool message against the last assistant's tool_calls
+        const isValidToolCall = lastAssistantToolCallIds.includes(
+          current.tool_call_id || '',
+        );
+        const isDuplicate = consumedToolCallIds.has(current.tool_call_id || '');
+
+        let removalReason: string | undefined;
+
+        if (!isValidToolCall) {
+          removalReason = 'tool_call_id not found in last assistant tool_calls';
+        } else if (isDuplicate) {
+          removalReason = 'duplicate tool_call_id already consumed';
+        }
+
+        if (removalReason) {
+          // Log the invalid sequence for debugging
+          logger.warn(
+            `[OpenAIProvider] Invalid tool message sequence detected - removing orphaned tool message: ${removalReason}`,
+            {
+              currentIndex: i,
+              toolCallId: current.tool_call_id,
+              lastAssistantToolCallIds,
+              consumedToolCallIds: Array.from(consumedToolCallIds),
+              removalReason,
+            },
+          );
+
+          // Remove the invalid tool message
+          validatedMessages.splice(i, 1);
+          i--; // Adjust index since we removed an element
+          removedCount++;
+        } else {
+          // Mark this tool_call_id as consumed
+          if (current.tool_call_id) {
+            consumedToolCallIds.add(current.tool_call_id);
+          }
+        }
+      } else if (current.role !== 'assistant') {
+        // Clear lastAssistantToolCallIds when we encounter a non-assistant message
+        lastAssistantToolCallIds = [];
+        consumedToolCallIds.clear();
+      }
+    }
+
+    // Log summary if any messages were removed
+    if (removedCount > 0) {
+      logger.debug(
+        `[OpenAIProvider] Tool message sequence validation completed - removed ${removedCount} orphaned tool messages`,
+        {
+          originalMessageCount: messages.length,
+          validatedMessageCount: validatedMessages.length,
+          removedCount,
+        },
+      );
+    }
+
+    return validatedMessages;
   }
 
   private getContentPreview(
