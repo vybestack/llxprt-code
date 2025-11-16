@@ -67,6 +67,41 @@ describe('TemplateEngine', () => {
       expect(vars.WORKSPACE_ROOT).toBe('unknown');
       expect(vars.WORKSPACE_DIRECTORIES).toBe('unknown');
     });
+
+    it('should expose the captured session start timestamp when provided', () => {
+      const context: PromptContext = {
+        provider: 'gemini',
+        model: 'flash',
+        enabledTools: [],
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+          sessionStartedAt: 'Jan 02, 2025 08:00 AM UTC',
+        } as PromptContext['environment'],
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+
+      expect(vars['SESSION_STARTED_AT']).toBe('Jan 02, 2025 08:00 AM UTC');
+    });
+
+    it('falls back to CURRENT_DATETIME when session start timestamp is missing', () => {
+      const context: PromptContext = {
+        provider: 'gemini',
+        model: 'flash',
+        enabledTools: [],
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          hasIdeCompanion: false,
+        },
+      };
+
+      const vars = engine.createVariablesFromContext(context);
+
+      expect(vars['SESSION_STARTED_AT']).toBe(vars['CURRENT_DATETIME']);
+    });
   });
 
   describe('basic variable substitution', () => {

@@ -216,6 +216,13 @@ export class TemplateEngine {
     });
     variables['CURRENT_TIME'] = now.toLocaleTimeString();
     variables['CURRENT_DATETIME'] = now.toLocaleString();
+    const sessionStartedAt =
+      context.environment?.sessionStartedAt &&
+      context.environment.sessionStartedAt.trim() !== ''
+        ? context.environment.sessionStartedAt
+        : undefined;
+    variables['SESSION_STARTED_AT'] =
+      sessionStartedAt ?? variables['CURRENT_DATETIME'];
     variables['PLATFORM'] = process.platform;
 
     return variables;

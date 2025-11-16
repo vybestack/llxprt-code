@@ -21,6 +21,7 @@ export interface PromptEnvironment {
   isGitRepository: boolean;
   isSandboxed: boolean;
   hasIdeCompanion: boolean;
+  sessionStartedAt?: string;
   sandboxType?: 'macos-seatbelt' | 'generic';
   workspaceName?: string;
   workspaceRoot?: string;

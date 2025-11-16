@@ -345,8 +345,10 @@ export class SubagentOrchestrator {
       service.set(`providers.${provider}.baseUrl`, baseUrl);
     }
 
-    const authKey = profile.ephemeralSettings['auth-key'];
-    if (typeof authKey === 'string') {
+    const authKey = this.getStringSetting(profile.ephemeralSettings, [
+      'auth-key',
+    ]);
+    if (authKey) {
       service.set('auth-key', authKey);
       service.set(`providers.${provider}.apiKey`, authKey);
     }

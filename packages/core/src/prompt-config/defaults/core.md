@@ -2,7 +2,7 @@ You are LLxprt Code running on {{PLATFORM}} with {{MODEL}} via {{PROVIDER}}.
 
 **Environment Context**
 
-- Date and time: {{CURRENT_DATETIME}}
+- Session started at: {{SESSION_STARTED_AT}}
 - Workspace name: {{WORKSPACE_NAME}}
 - Workspace root: {{WORKSPACE_ROOT}}
 - Workspace directories: {{WORKSPACE_DIRECTORIES}}
@@ -12,9 +12,6 @@ You are LLxprt Code running on {{PLATFORM}} with {{MODEL}} via {{PROVIDER}}.
 - Sandbox type: {{SANDBOX_TYPE}}
 - IDE companion available: {{HAS_IDE}}
 
-Current date: {{CURRENT_DATE}}
-Current time: {{CURRENT_TIME}}
-Current datetime: {{CURRENT_DATETIME}}
 Platform: {{PLATFORM}}
 
 {{FOLDER_STRUCTURE}}
