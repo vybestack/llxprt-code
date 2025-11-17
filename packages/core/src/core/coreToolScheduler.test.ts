@@ -725,6 +725,26 @@ describe('convertToFunctionResponse', () => {
     const result = convertToFunctionResponse(toolName, callId, llmContent);
     expect(result).toEqual([llmContent]);
   });
+
+  it('should trim string outputs using tool-output limits when config is provided', () => {
+    const llmContent = Array(5000).fill('long-line').join('\n');
+    const config = {
+      getEphemeralSettings: () => ({
+        'tool-output-max-tokens': 50,
+        'tool-output-truncate-mode': 'truncate',
+      }),
+    } as unknown as Config;
+
+    const result = convertToFunctionResponse(
+      toolName,
+      callId,
+      llmContent,
+      config,
+    );
+    expect(
+      result[0]?.functionResponse?.response?.['output'] as string,
+    ).toContain('[Output truncated due to token limit]');
+  });
 });
 
 class MockEditToolInvocation extends BaseToolInvocation<

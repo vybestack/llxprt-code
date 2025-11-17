@@ -455,6 +455,7 @@ export async function executeToolCall(
       toolCallRequest.name,
       toolCallRequest.callId,
       finalLlmContent,
+      config,
     );
 
     // Return BOTH the tool call and response as an array

@@ -6,7 +6,10 @@
 
 import { encoding_for_model } from '@dqbd/tiktoken';
 import { TextDecoder } from 'node:util';
-import { Config } from '../config/config.js';
+
+export interface ToolOutputSettingsProvider {
+  getEphemeralSettings(): Record<string, unknown>;
+}
 
 // Default limits
 export const DEFAULT_MAX_TOKENS = 50000;
@@ -86,7 +89,9 @@ export interface TruncatedOutput {
 /**
  * Get output limit configuration from ephemeral settings
  */
-export function getOutputLimits(config: Config): OutputLimitConfig {
+export function getOutputLimits(
+  config: ToolOutputSettingsProvider,
+): OutputLimitConfig {
   const ephemeralSettings = config.getEphemeralSettings();
 
   return {
@@ -108,7 +113,7 @@ export function getOutputLimits(config: Config): OutputLimitConfig {
  */
 export function limitOutputTokens(
   content: string,
-  config: Config,
+  config: ToolOutputSettingsProvider,
   toolName: string,
 ): TruncatedOutput {
   const limits = getOutputLimits(config);
