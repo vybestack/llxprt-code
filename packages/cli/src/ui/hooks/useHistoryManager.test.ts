@@ -199,4 +199,43 @@ describe('useHistoryManager', () => {
     expect(result.current.history[1].text).toBe('Gemini response');
     expect(result.current.history[2].text).toBe('Message 1');
   });
+
+  it('should trim history when maxItems is reached', () => {
+    const { result } = renderHook(() =>
+      useHistory({ maxItems: 2, maxBytes: -1 }),
+    );
+    const timestamp = Date.now();
+    act(() => {
+      result.current.addItem({ type: 'info', text: 'first' }, timestamp);
+      result.current.addItem({ type: 'info', text: 'second' }, timestamp + 1);
+      result.current.addItem({ type: 'info', text: 'third' }, timestamp + 2);
+    });
+
+    expect(result.current.history).toHaveLength(2);
+    expect(result.current.history[0].text).toBe('second');
+    expect(result.current.history[1].text).toBe('third');
+  });
+
+  it('should trim history based on maxBytes budget', () => {
+    const { result } = renderHook(() =>
+      useHistory({ maxItems: 10, maxBytes: 200 }),
+    );
+    const timestamp = Date.now();
+
+    act(() => {
+      result.current.addItem(
+        { type: 'info', text: 'x'.repeat(500) },
+        timestamp,
+      );
+    });
+
+    expect(result.current.history).toHaveLength(1);
+
+    act(() => {
+      result.current.addItem({ type: 'info', text: 'small' }, timestamp + 1);
+    });
+
+    expect(result.current.history).toHaveLength(1);
+    expect(result.current.history[0].text).toBe('small');
+  });
 });
