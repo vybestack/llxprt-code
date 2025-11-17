@@ -2335,71 +2335,95 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     if (streamingEnabled) {
-      // Streaming mode - use simple retry structure
-      try {
-        response = await retryWithBackoff(
-          () =>
-            client.chat.completions.create(requestBody, {
-              ...(abortSignal ? { signal: abortSignal } : {}),
-              ...(customHeaders ? { headers: customHeaders } : {}),
-            }),
-          {
-            maxAttempts: maxRetries,
-            initialDelayMs,
-            shouldRetry: this.shouldRetryResponse.bind(this),
-            trackThrottleWaitTime: this.throttleTracker,
-          },
-        );
-      } catch (error) {
-        // Special handling for Cerebras/Qwen "Tool not present" errors
-        const errorMessage = String(error);
-        if (
-          errorMessage.includes('Tool is not present in the tools list') &&
-          (model.toLowerCase().includes('qwen') ||
-            this.getBaseURL()?.includes('cerebras'))
-        ) {
-          logger.error(
-            'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+      // Streaming mode - use retry loop with compression support
+      let compressedOnce = false;
+      while (true) {
+        try {
+          response = await retryWithBackoff(
+            () =>
+              client.chat.completions.create(requestBody, {
+                ...(abortSignal ? { signal: abortSignal } : {}),
+                ...(customHeaders ? { headers: customHeaders } : {}),
+              }),
             {
-              error,
-              model,
-              toolsProvided: formattedTools?.length || 0,
-              toolNames: formattedTools?.map((t) => t.function.name),
-              streamingEnabled,
+              maxAttempts: maxRetries,
+              initialDelayMs,
+              shouldRetry: this.shouldRetryResponse.bind(this),
+              trackThrottleWaitTime: this.throttleTracker,
             },
           );
-          // Re-throw but with better context
-          const enhancedError = new Error(
-            `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
-          );
-          (enhancedError as Error & { originalError?: unknown }).originalError =
-            error;
-          throw enhancedError;
-        }
-        // Re-throw other errors as-is
-        const capturedErrorMessage =
-          error instanceof Error ? error.message : String(error);
-        const status =
-          typeof error === 'object' &&
-          error !== null &&
-          'status' in error &&
-          typeof (error as { status: unknown }).status === 'number'
-            ? (error as { status: number }).status
-            : undefined;
+          break;
+        } catch (error) {
+          // Special handling for Cerebras/Qwen "Tool not present" errors
+          const errorMessage = String(error);
+          if (
+            errorMessage.includes('Tool is not present in the tools list') &&
+            (model.toLowerCase().includes('qwen') ||
+              this.getBaseURL()?.includes('cerebras'))
+          ) {
+            logger.error(
+              'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+              {
+                error,
+                model,
+                toolsProvided: formattedTools?.length || 0,
+                toolNames: formattedTools?.map((t) => t.function.name),
+                streamingEnabled,
+              },
+            );
+            // Re-throw but with better context
+            const enhancedError = new Error(
+              `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+            );
+            (
+              enhancedError as Error & { originalError?: unknown }
+            ).originalError = error;
+            throw enhancedError;
+          }
 
-        logger.error(
-          () =>
-            `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
-          {
-            model,
-            baseURL: baseURL ?? this.getBaseURL(),
-            streamingEnabled,
-            hasTools: formattedTools?.length ?? 0,
-            requestHasSystemPrompt: !!systemPrompt,
-            status,
-          },
-        );
-        throw error;
+          // Tool message compression logic
+          if (
+            !compressedOnce &&
+            this.shouldCompressToolMessages(error, logger) &&
+            this.compressToolMessages(
+              requestBody.messages,
+              MAX_TOOL_RESPONSE_RETRY_CHARS,
+              logger,
+            )
+          ) {
+            compressedOnce = true;
+            logger.warn(
+              () =>
+                `[OpenAIProvider] Retrying streaming request after compressing tool responses due to provider 400`,
+            );
+            continue;
+          }
+
+          // Re-throw other errors as-is
+          const capturedErrorMessage =
+            error instanceof Error ? error.message : String(error);
+          const status =
+            typeof error === 'object' &&
+            error !== null &&
+            'status' in error &&
+            typeof (error as { status: unknown }).status === 'number'
+              ? (error as { status: number }).status
+              : undefined;
+
+          logger.error(
+            () =>
+              `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
+            {
+              model,
+              baseURL: baseURL ?? this.getBaseURL(),
+              streamingEnabled,
+              hasTools: formattedTools?.length ?? 0,
+              requestHasSystemPrompt: !!systemPrompt,
+              status,
+            },
+          );
+          throw error;
+        }
       }
     } else {
       // Non-streaming mode - use comprehensive retry loop with compression
