@@ -27,6 +27,7 @@ import {
   formatLimitedOutput,
 } from '../utils/toolOutputLimiter.js';
 import { summarizeToolOutput } from '../utils/summarizer.js';
+import { stripShellMarkers } from '../utils/shell-markers.js';
 import {
   ShellExecutionService,
   ShellOutputEvent,
@@ -178,6 +179,12 @@ class ShellToolInvocation extends BaseToolInvocation<
             // Instrument chained commands with a lightweight marker to indicate which subcommand is starting.
             // This helps the UI display the currently running segment without guessing.
             // Only apply when using a POSIX shell and when a simple && chain is present.
+            //
+            // Limitations: This simple split('&&') approach does not handle:
+            // - Quoted strings containing && (e.g., echo "foo && bar" && echo baz)
+            // - Escaped delimiters or other shell operators (||, ;, |)
+            // - Complex shell syntax (if/for/while loops, functions, etc.)
+            // For such cases, instrumentation is skipped and the command runs as-is.
             const parts = command
               .split('&&')
               .map((s) => s.trim())
@@ -373,13 +380,7 @@ class ShellToolInvocation extends BaseToolInvocation<
         : {};
 
       // Remove runtime marker lines from model-facing content to reduce summarization cost
-      const stripMarkerLines = (text: string): string =>
-        text
-          .split('\n')
-          .filter((line) => !line.trim().startsWith('__LLXPRT_CMD__:'))
-          .join('\n');
-
-      const llmContentStripped = stripMarkerLines(llmContent);
+      const llmContentStripped = stripShellMarkers(llmContent);
       let llmPayload = llmContentStripped;
       if (
         summarizeConfig &&
