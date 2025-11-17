@@ -16,7 +16,10 @@ import {
   SlashCommandActionReturn,
 } from '../ui/commands/types.js';
 import { ICommandLoader } from './types.js';
-import { PromptArgument } from '@modelcontextprotocol/sdk/types.js';
+import {
+  PromptArgument,
+  PromptMessage,
+} from '@modelcontextprotocol/sdk/types.js';
 
 /**
  * Discovers and loads executable slash commands from prompts exposed by
@@ -123,7 +126,10 @@ export class McpPromptLoader implements ICommandLoader {
                 };
               }
 
-              if (!result.messages?.[0]?.content?.text) {
+              const responseText = McpPromptLoader.extractFirstTextContent(
+                result.messages,
+              );
+              if (!responseText) {
                 return {
                   type: 'message',
                   messageType: 'error',
@@ -134,7 +140,7 @@ export class McpPromptLoader implements ICommandLoader {
 
               return {
                 type: 'submit_prompt',
-                content: JSON.stringify(result.messages[0].content.text),
+                content: JSON.stringify(responseText),
               };
             } catch (error) {
               return {
@@ -194,6 +200,16 @@ export class McpPromptLoader implements ICommandLoader {
       }
     }
     return Promise.resolve(promptCommands);
+  }
+
+  private static extractFirstTextContent(
+    messages?: PromptMessage[],
+  ): string | null {
+    const firstContent = messages?.[0]?.content;
+    if (firstContent && firstContent.type === 'text') {
+      return firstContent.text;
+    }
+    return null;
   }
 
   /**

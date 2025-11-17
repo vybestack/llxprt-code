@@ -747,7 +747,17 @@ export async function main() {
     config,
   );
 
-  await runNonInteractive(nonInteractiveConfig, input, prompt_id);
+  try {
+    await runNonInteractive(nonInteractiveConfig, input, prompt_id);
+  } catch (error) {
+    const printableError =
+      error instanceof Error ? (error.stack ?? error.message) : String(error);
+    console.error(`Non-interactive run failed: ${printableError}`);
+    // Call cleanup before process.exit, which causes cleanup to not run
+    await runExitCleanup();
+    // Non-interactive mode should exit with error code 1 for API errors
+    process.exit(1);
+  }
   // Call cleanup before process.exit, which causes cleanup to not run
   await runExitCleanup();
   process.exit(0);

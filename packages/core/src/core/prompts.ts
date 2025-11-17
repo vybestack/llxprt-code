@@ -19,6 +19,8 @@ import type {
 const MAX_FOLDER_STRUCTURE_LINES = 40;
 const MAX_FOLDER_STRUCTURE_CHARS = 6000;
 const MAX_FOLDER_STRUCTURE_TOP_LEVEL = 20;
+const SESSION_STARTED_AT = new Date();
+const SESSION_STARTED_AT_LABEL = SESSION_STARTED_AT.toLocaleString();
 
 // Singleton instance of PromptService
 let promptService: PromptService | null = null;
@@ -187,6 +189,7 @@ async function buildPromptContext(
     isGitRepository: isGitRepository(cwd),
     isSandboxed: !!process.env.SANDBOX,
     hasIdeCompanion: false,
+    sessionStartedAt: SESSION_STARTED_AT_LABEL,
     workingDirectory: cwd,
     workspaceRoot: cwd,
     workspaceName: path.basename(cwd),

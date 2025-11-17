@@ -85,33 +85,38 @@ const ModelUsageTable: React.FC<{
   const requestsWidth = 8;
   const inputTokensWidth = 15;
   const outputTokensWidth = 15;
+  const tableWidth =
+    nameWidth + requestsWidth + inputTokensWidth + outputTokensWidth;
 
   return (
     <Box flexDirection="column" marginTop={1}>
       {/* Header */}
       <Box>
         <Box width={nameWidth}>
-          <Text bold>Model Usage</Text>
+          <Text bold color={theme.text.accent}>
+            Model Usage
+          </Text>
         </Box>
         <Box width={requestsWidth} justifyContent="flex-end">
-          <Text bold>Reqs</Text>
+          <Text bold color={theme.text.accent}>
+            Reqs
+          </Text>
         </Box>
         <Box width={inputTokensWidth} justifyContent="flex-end">
-          <Text bold>Input Tokens</Text>
+          <Text bold color={theme.text.accent}>
+            Input Tokens
+          </Text>
         </Box>
         <Box width={outputTokensWidth} justifyContent="flex-end">
-          <Text bold>Output Tokens</Text>
+          <Text bold color={theme.text.accent}>
+            Output Tokens
+          </Text>
         </Box>
       </Box>
       {/* Divider */}
-      <Box
-        borderStyle="round"
-        borderBottom={true}
-        borderTop={false}
-        borderLeft={false}
-        borderRight={false}
-        width={nameWidth + requestsWidth + inputTokensWidth + outputTokensWidth}
-      ></Box>
+      <Box width={tableWidth}>
+        <Text color={theme.text.secondary}>{'─'.repeat(tableWidth)}</Text>
+      </Box>
 
       {/* Rows */}
       {Object.entries(models).map(([name, modelMetrics]) => (

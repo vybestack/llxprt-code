@@ -34,6 +34,66 @@ env:
   SHELLCHECK_VERSION: '0.11.0'
   YAMLLINT_VERSION: '1.35.1'
 jobs:
+  doc_change_filter:
+    name: 'Detect doc-only changes'
+    runs-on: 'ubuntu-latest'
+    env:
+      GH_TOKEN: '${{ github.token }}'
+    outputs:
+      docs_only: '${{ steps.detect.outputs.docs_only }}'
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: 'Determine documentation-only PR'
+        id: 'detect'
+        env:
+          PR_NUMBER: >-
+            ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PR_NUMBER:-}" ]]; then
+            echo "docs_only=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files="$(gh api \
+            --paginate \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --jq '.[].filename' || true)"
+
+          if [[ -z "$files" ]]; then
+            echo "docs_only=false" >>"$GITHUB_OUTPUT"
+            {
+              echo "### Unable to determine doc-only status"
+              echo "GitHub API returned no files; running full CI to be safe."
+            } >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          docs_only=true
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              docs/*|README.md|README.*|*.md|*.mdx|*.rst|*.txt|*.adoc)
+                ;;
+              *)
+                docs_only=false
+                break
+                ;;
+            esac
+          done <<<"$files"
+
+          echo "docs_only=${docs_only}" >>"$GITHUB_OUTPUT"
+          if [[ "$docs_only" == "true" ]]; then
+            {
+              echo "### Documentation-only PR detected"
+              echo "Skipping automated test suites (unit + coverage) for this PR."
+            } >>"$GITHUB_STEP_SUMMARY"
+          fi
   #
   # Lint: GitHub Actions
   #
@@ -267,7 +327,10 @@ jobs:
   test:
     name: 'Test'
     runs-on: '${{ matrix.os }}'
-    needs: 'lint'
+    needs:
+      - 'lint'
+      - 'doc_change_filter'
+    if: ${{ needs.doc_change_filter.outputs.docs_only != 'true' }}
     permissions:
       contents: 'read'
       checks: 'write'

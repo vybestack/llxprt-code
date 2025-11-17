@@ -12,6 +12,10 @@ import {
   ChatCompressionSettings,
 } from '@vybestack/llxprt-code-core';
 import { CustomTheme } from '../ui/themes/theme.js';
+import {
+  DEFAULT_HISTORY_MAX_BYTES,
+  DEFAULT_HISTORY_MAX_ITEMS,
+} from '../constants/historyLimits.js';
 
 export interface SettingDefinition {
   type: 'boolean' | 'string' | 'number' | 'array' | 'object' | 'enum';
@@ -124,6 +128,26 @@ export const SETTINGS_SCHEMA = {
     requiresRestart: false,
     default: false,
     description: 'Display memory usage information in the UI',
+    showInDialog: true,
+  },
+  historyMaxItems: {
+    type: 'number',
+    label: 'History Max Items',
+    category: 'UI',
+    requiresRestart: false,
+    default: DEFAULT_HISTORY_MAX_ITEMS,
+    description:
+      'Maximum number of history entries to keep in the scrollback before trimming the oldest ones. Set to -1 for unlimited.',
+    showInDialog: true,
+  },
+  historyMaxBytes: {
+    type: 'number',
+    label: 'History Max Bytes',
+    category: 'UI',
+    requiresRestart: false,
+    default: DEFAULT_HISTORY_MAX_BYTES,
+    description:
+      'Approximate maximum number of bytes to keep in history. Older entries are removed once this budget is exceeded. Set to -1 for unlimited.',
     showInDialog: true,
   },
   customWittyPhrases: {
@@ -437,7 +461,7 @@ export const SETTINGS_SCHEMA = {
     label: 'Tool Call Processing Mode',
     category: 'Advanced',
     requiresRestart: true,
-    default: 'pipeline' as ToolCallProcessingMode,
+    default: 'legacy' as ToolCallProcessingMode,
     description:
       'Mode for processing tool calls. Pipeline mode is optimized, legacy mode uses older implementation.',
     showInDialog: true,

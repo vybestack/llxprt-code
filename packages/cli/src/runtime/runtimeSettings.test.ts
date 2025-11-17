@@ -3,6 +3,7 @@ import type {
   Config,
   SettingsService,
   ProviderManager,
+  Profile,
 } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '../auth/oauth-manager.js';
 
@@ -148,6 +149,7 @@ const {
     params: Record<string, unknown> | undefined;
     defaultModel = 'default-model';
     isPaidMode = vi.fn(() => false);
+    wrappedProvider?: StubProviderInstance;
 
     constructor(name: string) {
       this.name = name;
@@ -167,6 +169,10 @@ const {
 
     getModelParams() {
       return this.params;
+    }
+
+    getBaseURL() {
+      return this.baseUrl;
     }
   }
 
@@ -488,6 +494,41 @@ describe('runtimeSettings helpers', () => {
     expect(config.getModel()).toBe('anthropic-default-model');
   });
 
+  it('switchActiveProvider uses provider-reported base URL when not stored in settings', async () => {
+    const { config, settingsService } = getCliRuntimeServices() as unknown as {
+      config: StubConfigInstance;
+      settingsService: StubSettingsServiceInstance;
+    };
+
+    const syntheticInner = new StubProvider('synthetic-inner');
+    syntheticInner.baseUrl = 'https://api.synthetic.new/openai/v1';
+    syntheticInner.defaultModel = 'hf:zai-org/GLM-4.6';
+
+    const syntheticWrapper = new StubProvider('synthetic');
+    syntheticWrapper.baseUrl = undefined;
+    syntheticWrapper.defaultModel = syntheticInner.defaultModel;
+    syntheticWrapper.wrappedProvider = syntheticInner;
+
+    providers.synthetic = syntheticWrapper;
+
+    const result = await switchActiveProvider('synthetic');
+
+    expect(result.nextProvider).toBe('synthetic');
+    expect(config.getEphemeralSetting('base-url')).toBe(
+      'https://api.synthetic.new/openai/v1',
+    );
+    const syntheticSettings = settingsService.getProviderSettings('synthetic');
+    expect(syntheticSettings.baseUrl).toBe(
+      'https://api.synthetic.new/openai/v1',
+    );
+    expect(syntheticSettings.baseURL).toBe(
+      'https://api.synthetic.new/openai/v1',
+    );
+
+    delete providers.synthetic;
+    activeProviderName = 'openai';
+  });
+
   it('setActiveModel updates provider and config', async () => {
     const { config, settingsService } = getCliRuntimeServices() as unknown as {
       config: StubConfigInstance;
@@ -585,6 +626,32 @@ describe('runtimeSettings helpers', () => {
     });
   });
 
+  it('buildRuntimeProfileSnapshot excludes auth-key when auth-keyfile is set', async () => {
+    const config = getCliRuntimeConfig() as unknown as StubConfigInstance;
+    config.setEphemeralSetting('auth-keyfile', '/tmp/apikey');
+    config.setEphemeralSetting('auth-key', 'file-derived-key');
+
+    const snapshot = buildRuntimeProfileSnapshot();
+
+    expect(snapshot.ephemeralSettings['auth-keyfile']).toBe('/tmp/apikey');
+    expect(snapshot.ephemeralSettings['auth-key']).toBeUndefined();
+  });
+
+  it('buildRuntimeProfileSnapshot omits auth data from model params', async () => {
+    const { settingsService, config } = getCliRuntimeServices() as unknown as {
+      settingsService: StubSettingsServiceInstance;
+      config: StubConfigInstance;
+    };
+    settingsService.setProviderSetting('openai', 'auth-key', 'snapshot-key');
+    settingsService.setProviderSetting('openai', 'apiKey', 'snapshot-key');
+    settingsService.setProviderSetting('openai', 'temperature', 0.42);
+    config.setEphemeralSetting('auth-key', 'snapshot-key');
+
+    const snapshot = buildRuntimeProfileSnapshot();
+
+    expect(snapshot.modelParams).toEqual({ temperature: 0.42 });
+  });
+
   it('applyProfileSnapshot switches provider and applies settings', async () => {
     const profile = buildRuntimeProfileSnapshot();
     profile.provider = 'anthropic';
@@ -617,6 +684,72 @@ describe('runtimeSettings helpers', () => {
 
     await deleteProfileByName('demo');
     expect(await listSavedProfiles()).not.toContain('demo');
+  });
+
+  it('captures GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION when saving a profile snapshot', async () => {
+    const previousProject = process.env.GOOGLE_CLOUD_PROJECT;
+    const previousLocation = process.env.GOOGLE_CLOUD_LOCATION;
+    process.env.GOOGLE_CLOUD_PROJECT = 'gcp-project-from-env';
+    process.env.GOOGLE_CLOUD_LOCATION = 'us-west4';
+    activeProviderName = 'gemini';
+    try {
+      await saveProfileSnapshot('gemini-gcp');
+      const savedProfile = profileStore.get('gemini-gcp') as {
+        ephemeralSettings: Record<string, unknown>;
+      };
+      expect(savedProfile.ephemeralSettings.GOOGLE_CLOUD_PROJECT).toBe(
+        'gcp-project-from-env',
+      );
+      expect(savedProfile.ephemeralSettings.GOOGLE_CLOUD_LOCATION).toBe(
+        'us-west4',
+      );
+    } finally {
+      if (previousProject === undefined) {
+        delete process.env.GOOGLE_CLOUD_PROJECT;
+      } else {
+        process.env.GOOGLE_CLOUD_PROJECT = previousProject;
+      }
+      if (previousLocation === undefined) {
+        delete process.env.GOOGLE_CLOUD_LOCATION;
+      } else {
+        process.env.GOOGLE_CLOUD_LOCATION = previousLocation;
+      }
+    }
+  });
+
+  it('restores GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION when loading a profile', async () => {
+    const previousProject = process.env.GOOGLE_CLOUD_PROJECT;
+    const previousLocation = process.env.GOOGLE_CLOUD_LOCATION;
+    delete process.env.GOOGLE_CLOUD_PROJECT;
+    delete process.env.GOOGLE_CLOUD_LOCATION;
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'model-a',
+      modelParams: {},
+      ephemeralSettings: {
+        GOOGLE_CLOUD_PROJECT: 'saved-project',
+        GOOGLE_CLOUD_LOCATION: 'europe-west1',
+      } as Profile['ephemeralSettings'],
+    };
+
+    try {
+      await applyProfileSnapshot(profile);
+      expect(process.env.GOOGLE_CLOUD_PROJECT).toBe('saved-project');
+      expect(process.env.GOOGLE_CLOUD_LOCATION).toBe('europe-west1');
+    } finally {
+      if (previousProject === undefined) {
+        delete process.env.GOOGLE_CLOUD_PROJECT;
+      } else {
+        process.env.GOOGLE_CLOUD_PROJECT = previousProject;
+      }
+      if (previousLocation === undefined) {
+        delete process.env.GOOGLE_CLOUD_LOCATION;
+      } else {
+        process.env.GOOGLE_CLOUD_LOCATION = previousLocation;
+      }
+    }
   });
 
   it('exposes runtime status helpers', () => {

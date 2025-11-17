@@ -14,6 +14,8 @@ describe('SettingsSchema', () => {
         'theme',
         'customThemes',
         'showMemoryUsage',
+        'historyMaxItems',
+        'historyMaxBytes',
         'usageStatisticsEnabled',
         'autoConfigureMaxOldSpaceSize',
         'preferredEditor',

@@ -489,6 +489,36 @@ export class GeminiChat {
     };
   }
 
+  private extractDirectGeminiOverrides(config?: GenerateContentConfig):
+    | {
+        serverTools?: unknown;
+        toolConfig?: GenerateContentConfig['toolConfig'];
+      }
+    | undefined {
+    if (!config || typeof config !== 'object') {
+      return undefined;
+    }
+    const overrides: {
+      serverTools?: unknown;
+      toolConfig?: GenerateContentConfig['toolConfig'];
+    } = {};
+    const rawConfig = config as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(rawConfig, 'serverTools')) {
+      overrides.serverTools = rawConfig.serverTools;
+    }
+    if (config.toolConfig) {
+      overrides.toolConfig = config.toolConfig;
+    }
+
+    if (
+      typeof overrides.serverTools === 'undefined' &&
+      typeof overrides.toolConfig === 'undefined'
+    ) {
+      return undefined;
+    }
+    return overrides;
+  }
+
   /**
    * @plan PLAN-20251028-STATELESS6.P10
    * @requirement REQ-STAT6-002.3
@@ -1127,6 +1157,9 @@ export class GeminiChat {
                   }>;
                 }>)
               : undefined;
+          const directOverrides = this.extractDirectGeminiOverrides(
+            params.config as GenerateContentConfig | undefined,
+          );
 
           const baseUrlForCall = this.resolveProviderBaseUrl(provider);
           const activeAuthType = this.runtimeState.authType;
@@ -1147,7 +1180,12 @@ export class GeminiChat {
 
           const runtimeContext = this.buildProviderRuntime(
             'GeminiChat.streamGeneration',
-            { toolCount: toolsFromConfig?.length ?? 0 },
+            {
+              toolCount: toolsFromConfig?.length ?? 0,
+              ...(directOverrides
+                ? { geminiDirectOverrides: directOverrides }
+                : {}),
+            },
           );
 
           const streamResponse = provider.generateChatCompletion({
@@ -1457,6 +1495,10 @@ export class GeminiChat {
 
   setTools(tools: Tool[]): void {
     this.generationConfig.tools = tools;
+  }
+
+  clearTools(): void {
+    delete this.generationConfig.tools;
   }
 
   /**

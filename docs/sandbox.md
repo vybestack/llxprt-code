@@ -47,11 +47,11 @@ Cross-platform sandboxing with complete process isolation.
 
 ```bash
 # Enable sandboxing with command flag
-gemini -s -p "analyze the code structure"
+llxprt --sandbox "analyze the code structure"
 
 # Use environment variable
 export LLXPRT_SANDBOX=true
-gemini -p "run the test suite"
+llxprt "run the test suite"
 
 # Configure in settings.json
 {
@@ -126,19 +126,19 @@ export SANDBOX_SET_UID_GID=false  # Disable UID/GID mapping
 ### Debug mode
 
 ```bash
-DEBUG=1 gemini -s -p "debug command"
+DEBUG=1 llxprt --sandbox "debug command"
 ```
 
-**Note:** If you have `DEBUG=true` in a project's `.env` file, it won't affect gemini-cli due to automatic exclusion. Use `.gemini/.env` files for gemini-cli specific debug settings.
+**Note:** If you have `DEBUG=true` in a project's `.env` file, it won't affect llxprt due to automatic exclusion. Use `.llxprt/.env` files for llxprt specific debug settings.
 
 ### Inspect sandbox
 
 ```bash
 # Check environment
-gemini -s -p "run shell command: env | grep SANDBOX"
+llxprt --sandbox "run shell command: env | grep SANDBOX"
 
 # List mounts
-gemini -s -p "run shell command: mount | grep workspace"
+llxprt --sandbox "run shell command: mount | grep workspace"
 ```
 
 ## Security notes

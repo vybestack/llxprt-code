@@ -5,10 +5,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fc from 'fast-check';
 import { DebugLogger } from './DebugLogger.js';
+import { ConfigurationManager } from './ConfigurationManager.js';
 
 describe('DebugLogger', () => {
+  const configManager = ConfigurationManager.getInstance();
+
   beforeEach(() => {
     vi.clearAllMocks();
+    configManager.setEphemeralConfig({
+      output: { target: 'file,stderr' },
+    });
   });
 
   /**

@@ -17,11 +17,12 @@
 /**
  * ToolCallNormalizer - Normalizes tool calls
  *
- * Responsible for normalizing validated tool calls to standard format,
- * preparing them for execution phase.
+ * Responsible for normalizing tool calls to standard format,
+ * preparing them for Core layer execution.
  */
 
 import { DebugLogger } from '../../debug/index.js';
+import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 
 const logger = new DebugLogger('llxprt:providers:openai:toolCallNormalizer');
 
@@ -30,6 +31,15 @@ export interface NormalizedToolCall {
   name: string;
   args: Record<string, unknown>;
   originalArgs?: string;
+}
+
+// Local interface to replace dependency on ToolCallValidator
+export interface ValidatedToolCall {
+  index: number;
+  name: string;
+  args?: string;
+  isValid: boolean;
+  validationErrors: string[];
 }
 
 /**
@@ -83,29 +93,27 @@ export class ToolCallNormalizer {
   }
 
   /**
-   * Parse arguments string to object
+   * Parse arguments string to object using processToolParameters
    */
   private parseArgs(args?: string): Record<string, unknown> {
     if (!args || !args.trim()) {
       return {};
     }
 
-    try {
-      const parsed = JSON.parse(args);
-      if (typeof parsed === 'object' && parsed !== null) {
-        return parsed;
-      } else {
-        logger.warn(
-          'Tool call args is not a valid object, wrapping in {value}',
-        );
-        return { value: parsed };
-      }
-    } catch (error) {
-      logger.warn(
-        `Failed to parse tool call args as JSON: ${error}, treating as string`,
-      );
-      return { value: args };
+    // Use processToolParameters to handle double-escaping and format-specific issues
+    // Let it auto-detect issues instead of relying on format parameter
+    const processed = processToolParameters(args, 'unknown_tool');
+
+    // Normalize the result to a Record<string, unknown>
+    if (typeof processed === 'object' && processed !== null) {
+      return processed as Record<string, unknown>;
     }
+
+    if (typeof processed === 'string') {
+      return { value: processed };
+    }
+
+    return {};
   }
 
   /**
@@ -123,6 +131,3 @@ export class ToolCallNormalizer {
     return true;
   }
 }
-
-// Import type from ToolCallValidator
-import { ValidatedToolCall } from './ToolCallValidator.js';

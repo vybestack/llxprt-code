@@ -379,6 +379,39 @@ describe('profileApplication helpers', () => {
     expect(configStub.getEphemeralSetting('context-limit')).toBe(200000);
   });
 
+  it('reports the actual profile model instead of the provider default in info messages', async () => {
+    const profile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'glm-4.6',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    switchActiveProviderMock.mockResolvedValueOnce({
+      infoMessages: [
+        "Active model is 'gpt-5' for provider 'openai'.",
+        'Use /key to set API key if needed.',
+      ],
+      changed: true,
+      authType: 'key',
+    });
+    setActiveModelMock.mockResolvedValueOnce({ nextModel: 'glm-4.6' });
+
+    const result = await applyProfileWithGuards(profile, {
+      profileName: 'synthetic',
+    });
+
+    expect(result.infoMessages).toContain(
+      "Model set to 'glm-4.6' for provider 'openai'.",
+    );
+    expect(
+      result.infoMessages.some((message) =>
+        message.includes("Active model is 'gpt-5'"),
+      ),
+    ).toBe(false);
+  });
+
   it('should read keyfile before switching provider (stash→switch→apply pattern)', async () => {
     // Mock fs.readFile to track when it's called
     const readFileSpy = vi.mocked(mockFs.readFile);
@@ -580,6 +613,7 @@ describe('profileApplication helpers', () => {
 
     // Verify auth-keyfile ephemeral was set (use expectedPath for cross-platform compatibility)
     expect(configStub.getEphemeralSetting('auth-keyfile')).toBe(expectedPath);
+    expect(configStub.getEphemeralSetting('auth-key')).toBeUndefined();
   });
 });
 
@@ -840,6 +874,37 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
     // CRITICAL ASSERTION: auth must be available when switchActiveProvider is called
     // This prevents OAuth from being triggered during provider switch
     expect(authAvailableAtSwitchTime).toBe(true);
+  });
+
+  it('hydrates legacy modelParams auth entries into ephemerals', async () => {
+    providerManagerStub.available = ['anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4',
+      modelParams: {
+        'auth-key': 'legacy-auth-key',
+        'base-url': 'https://legacy.example.com/v1',
+        temperature: 0.25,
+      },
+      ephemeralSettings: {},
+    };
+
+    await applyProfileWithGuards(profile, {
+      profileName: 'legacy-profile',
+    });
+
+    expect(configStub.getEphemeralSetting('auth-key')).toBe('legacy-auth-key');
+    expect(configStub.getEphemeralSetting('base-url')).toBe(
+      'https://legacy.example.com/v1',
+    );
+    expect(updateActiveProviderApiKeyMock).toHaveBeenCalledWith(
+      'legacy-auth-key',
+    );
   });
 
   it('should NOT trigger OAuth when profile has keyfile and provider switch calls getModels', async () => {

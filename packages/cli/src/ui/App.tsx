@@ -56,6 +56,10 @@ import { ShellConfirmationDialog } from './components/ShellConfirmationDialog.js
 import { RadioButtonSelect } from './components/shared/RadioButtonSelect.js';
 import { Colors } from './colors.js';
 import { loadHierarchicalLlxprtMemory } from '../config/config.js';
+import {
+  DEFAULT_HISTORY_MAX_BYTES,
+  DEFAULT_HISTORY_MAX_ITEMS,
+} from '../constants/historyLimits.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { Tips } from './components/Tips.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
@@ -226,7 +230,21 @@ const App = (props: AppInternalProps) => {
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
   const { stdout } = useStdout();
   const nightly = version.includes('nightly');
-  const { history, addItem, clearItems, loadHistory } = useHistory();
+  const historyLimits = useMemo(
+    () => ({
+      maxItems:
+        typeof settings.merged.historyMaxItems === 'number'
+          ? settings.merged.historyMaxItems
+          : DEFAULT_HISTORY_MAX_ITEMS,
+      maxBytes:
+        typeof settings.merged.historyMaxBytes === 'number'
+          ? settings.merged.historyMaxBytes
+          : DEFAULT_HISTORY_MAX_BYTES,
+    }),
+    [settings.merged.historyMaxItems, settings.merged.historyMaxBytes],
+  );
+  const { history, addItem, clearItems, loadHistory } =
+    useHistory(historyLimits);
   const { updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
   const registerTodoPause = useCallback(() => {

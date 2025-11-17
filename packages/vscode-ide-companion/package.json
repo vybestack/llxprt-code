@@ -138,5 +138,14 @@
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "zod": "^3.25.76"
+  },
+  "overrides": {
+    "js-yaml": "4.1.1",
+    "@textlint/linter-formatter": {
+      "js-yaml": "npm:js-yaml@4.1.1"
+    },
+    "rc-config-loader": {
+      "js-yaml": "npm:js-yaml@4.1.1"
+    }
   }
 }

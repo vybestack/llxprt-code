@@ -60,19 +60,92 @@ jobs:
             printf '%s' "$value"
           }
 
+          branch_exists() {
+            local name="$1"
+            git show-ref --verify --quiet "refs/heads/${name}" >/dev/null 2>&1 && return 0
+            git ls-remote --exit-code --heads origin "${name}" >/dev/null 2>&1 && return 0
+            return 1
+          }
+
+          ensure_unique_branch() {
+            local base="$1"
+            local candidate="$base"
+
+            if branch_exists "$candidate"; then
+              # Append a UTC timestamp suffix until we find a unique name.
+              while true; do
+                local timestamp
+                timestamp="$(date -u '+%Y%m%d%H%M%S')"
+                candidate="${base}-${timestamp}"
+                if ! branch_exists "$candidate"; then
+                  break
+                fi
+                sleep 1
+              done
+            fi
+
+            printf '%s' "$candidate"
+          }
+
+          mkdir -p luther/state
+
           manual_input="$(sanitize_number "${MANUAL_ISSUE_INPUT:-}")"
           if [[ -n "$manual_input" ]]; then
             if [[ ! "$manual_input" =~ ^[0-9]+$ ]]; then
               echo "Manual issue override must be numeric. Received: ${manual_input}" >&2
               exit 1
             fi
-            branch="luther-issue${manual_input}"
+            base_branch="luther-issue${manual_input}"
+            branch="$(ensure_unique_branch "$base_branch")"
             {
               echo "issue_number=${manual_input}"
               echo "branch=${branch}"
               echo "selection_mode=manual"
+              echo "pr_number="
             } >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+
+          repo_owner="${GITHUB_REPOSITORY%%/*}"
+          remediation_json="$(gh pr list \
+            --state open \
+            --label 'luther remediate' \
+            --json number,updatedAt,headRefName,headRepositoryOwner,labels \
+            --limit 50)"
+
+          remediation_pr="$(
+            jq -r --arg owner "$repo_owner" '
+              [
+                .[] |
+                select(.headRepositoryOwner.login == $owner) |
+                select(((.labels // []) | map(.name)) | index("luther exhausted") | not)
+              ]
+              | sort_by(.updatedAt)[0].number // ""
+            ' <<<"$remediation_json"
+          )"
+
+          if [[ -n "$remediation_pr" ]]; then
+            pr_json_path="luther/state/remediation-pr.json"
+            gh pr view "$remediation_pr" --json number,body,title,url,headRefName > "$pr_json_path"
+            branch="$(jq -r '.headRefName // ""' "$pr_json_path")"
+
+            if [[ -z "$branch" ]]; then
+              echo "Unable to resolve branch for PR #${remediation_pr}; falling back to issue queue." >> "$GITHUB_STEP_SUMMARY"
+            else
+              issue_number="$(jq -r '.body // ""' "$pr_json_path" | grep -o '#[0-9]\+' | head -n1 | tr -d '#')"
+              issue_number="$(sanitize_number "${issue_number}")"
+              if [[ -z "$issue_number" ]]; then
+                issue_number="${remediation_pr}"
+              fi
+              {
+                echo "issue_number=${issue_number}"
+                echo "branch=${branch}"
+                echo "selection_mode=remediation"
+                echo "pr_number=${remediation_pr}"
+              } >> "$GITHUB_OUTPUT"
+              echo "Selected PR #${remediation_pr} (branch ${branch}) for remediation." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
           fi
 
           issues_json="$(gh issue list \
@@ -87,22 +160,25 @@ jobs:
               echo 'issue_number='
               echo 'branch='
               echo 'selection_mode=auto'
+              echo 'pr_number='
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           issue_number="$(jq -r 'sort_by(.createdAt)[0].number' <<<"$issues_json")"
-          branch="luther-issue${issue_number}"
+          base_branch="luther-issue${issue_number}"
+          branch="$(ensure_unique_branch "$base_branch")"
           {
             echo "issue_number=${issue_number}"
             echo "branch=${branch}"
             echo 'selection_mode=auto'
+            echo 'pr_number='
           } >> "$GITHUB_OUTPUT"
 
       - name: No eligible issues
         if: steps.select_issue.outputs.issue_number == ''
         run: |
-          echo "No open, unassigned issues labeled 'OK for Luther' were found." >> "$GITHUB_STEP_SUMMARY"
+          echo "No remediation PRs or open, unassigned issues labeled 'OK for Luther' were found." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Ensure Luther labels exist
         if: steps.select_issue.outputs.issue_number != ''
@@ -113,8 +189,10 @@ jobs:
           done <<'EOF'
           OK for Luther|bfd4f2|Eligible for Luther autonomous agent
           Luther working|0366d6|Issue currently processed by Luther
-          Luther done|0e8a16|Completed via Luther workflow
+          Luther Done|0e8a16|Completed via Luther workflow
           luther-failed|cb2431|Latest Luther attempt failed
+          luther remediate|d4c5f9|PR requires additional Luther remediation
+          luther exhausted|b60205|Luther has exhausted automated remediation attempts
           EOF
 
       - name: Force debug logging for manual run
@@ -152,6 +230,30 @@ jobs:
             echo "is_doc_issue=${is_doc_issue}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Fetch issue comments
+        id: issue_comments
+        if: steps.select_issue.outputs.issue_number != ''
+        env:
+          ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
+        run: |
+          set -euo pipefail
+          issue_comments_path="luther/state/issue-comments.json"
+          gh api "/repos/${GITHUB_REPOSITORY}/issues/${ISSUE_NUMBER}/comments" \
+            > "$issue_comments_path" || echo '[]' > "$issue_comments_path"
+          echo "comments_path=${issue_comments_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch remediation PR comments
+        id: pr_comments
+        if: steps.select_issue.outputs.pr_number != ''
+        env:
+          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          pr_comments_path="luther/state/pr-comments.json"
+          gh api "/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            > "$pr_comments_path" || echo '[]' > "$pr_comments_path"
+          echo "comments_path=${pr_comments_path}" >> "$GITHUB_OUTPUT"
+
       - name: Claim issue and update labels
         id: claim_issue
         if: steps.select_issue.outputs.issue_number != ''
@@ -162,6 +264,7 @@ jobs:
           ISSUE_JSON: ${{ steps.issue_data.outputs.json_path }}
           ISSUE_URL: ${{ steps.issue_data.outputs.url }}
           RUN_URL: ${{ env.RUN_URL }}
+          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
         run: |
           set -euo pipefail
           assignee_count="$(jq '.assignees | length' "$ISSUE_JSON")"
@@ -180,7 +283,7 @@ jobs:
           fi
 
           # Refresh labels to reflect active work
-          gh issue edit "$ISSUE_NUMBER" --remove-label "Luther done" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE_NUMBER" --remove-label "Luther Done" >/dev/null 2>&1 || true
           gh issue edit "$ISSUE_NUMBER" --remove-label "luther-failed" >/dev/null 2>&1 || true
           gh issue edit "$ISSUE_NUMBER" --remove-label "OK for Luther" >/dev/null 2>&1 || true
           gh issue edit "$ISSUE_NUMBER" --add-label "Luther working" >/dev/null 2>&1
@@ -188,6 +291,8 @@ jobs:
           dispatch_note="scheduled queue"
           if [[ "${SELECTION_MODE}" == 'manual' ]]; then
             dispatch_note="manual override"
+          elif [[ "${SELECTION_MODE}" == 'remediation' ]]; then
+            dispatch_note="PR remediation"
           fi
 
           gh issue comment "$ISSUE_NUMBER" -F - <<EOF
@@ -195,9 +300,20 @@ jobs:
 
           - Run: ${RUN_URL}
           - Selection: ${dispatch_note}
+          $(if [[ "${SELECTION_MODE}" == 'remediation' && -n "${PR_NUMBER}" ]]; then echo "- Remediating PR #${PR_NUMBER}"; fi)
 
           I'll update this thread with results when the workflow finishes.
           EOF
+
+          if [[ "${SELECTION_MODE}" == 'remediation' ]]; then
+            pr_target="${PR_NUMBER:-}"
+            if [[ -z "$pr_target" ]]; then
+              pr_target="$(gh pr view "${ISSUE_BRANCH}" --json number -q .number 2>/dev/null || true)"
+            fi
+            if [[ -n "$pr_target" ]]; then
+              gh pr edit "$pr_target" --remove-label "luther remediate" >/dev/null 2>&1 || true
+            fi
+          fi
 
           echo "should_continue=true" >> "$GITHUB_OUTPUT"
 
@@ -221,16 +337,32 @@ jobs:
             npm install @rollup/rollup-win32-x64-msvc --no-save || true
           fi
 
+      - name: Install LLxprt CLI nightly
+        if: steps.claim_issue.outputs.should_continue == 'true'
+        run: npm install -g @vybestack/llxprt-code@nightly
+
       - name: Configure git and working branch
         if: steps.claim_issue.outputs.should_continue == 'true'
         env:
           ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+          SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
+          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
         run: |
           set -euo pipefail
           git config user.name "Luther[bot]"
           git config user.email "luther-bot@vybestack.dev"
-          git fetch origin main --depth=1
-          git checkout -B "$ISSUE_BRANCH" origin/main
+          if [[ "${SELECTION_MODE}" == 'remediation' ]]; then
+            pr_number="${PR_NUMBER:-}"
+            if [[ -n "$pr_number" ]]; then
+              git fetch origin "pull/${pr_number}/head:${ISSUE_BRANCH}" --depth=1
+            else
+              git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}" --depth=1
+            fi
+            git checkout "$ISSUE_BRANCH"
+          else
+            git fetch origin main --depth=1
+            git checkout -B "$ISSUE_BRANCH" origin/main
+          fi
 
       - name: Run Luther attempts
         id: run_attempts
@@ -244,14 +376,33 @@ jobs:
           SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
           ISSUE_LABELS: ${{ steps.issue_data.outputs.labels }}
           IS_DOC_ISSUE: ${{ steps.issue_data.outputs.is_doc_issue }}
+          ISSUE_COMMENTS_PATH: ${{ steps.issue_comments.outputs.comments_path }}
+          PR_COMMENTS_PATH: ${{ steps.pr_comments.outputs.comments_path }}
         run: |
           set -euo pipefail
 
           mkdir -p luther/artifacts luther/state
           history_file="luther/state/attempt-history.md"
-          : > "$history_file"
+          truncate -s 0 "$history_file"
           results_file="luther/state/failure-summary.txt"
-          : > "$results_file"
+          truncate -s 0 "$results_file"
+          format_comments() {
+            local file="$1"
+            if [[ -z "$file" || ! -s "$file" ]]; then
+              return
+            fi
+            jq -r '
+              sort_by(.created_at) |
+              reverse |
+              .[:5] |
+              reverse |
+              map("* [" + ((.user.login // "unknown")) + " @ " + ((.created_at // "?")) + "] " +
+                  ((.body // "") | gsub("\r";"") | gsub("\n"; "\n  "))) |
+              .[]
+            ' "$file"
+          }
+          issue_comments_text="$(format_comments "${ISSUE_COMMENTS_PATH:-}")"
+          pr_comments_text="$(format_comments "${PR_COMMENTS_PATH:-}")"
           qa_names=("format" "lint" "typecheck" "test" "build")
           qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test:ci" "npm run build")
 
@@ -279,6 +430,18 @@ jobs:
               cat "$ISSUE_BODY_PATH"
               echo
               echo "----------------------------------------"
+              echo
+              echo "Recent issue comments:"
+              if [[ -n "$issue_comments_text" ]]; then
+                printf '%s\n' "$issue_comments_text"
+              else
+                echo "- (none)"
+              fi
+              if [[ -n "$pr_comments_text" ]]; then
+                echo
+                echo "Recent PR comments:"
+                printf '%s\n' "$pr_comments_text"
+              fi
               echo
               echo "Repository branch: ${ISSUE_BRANCH}"
               echo "Selection mode: ${SELECTION_MODE}"
@@ -313,7 +476,7 @@ jobs:
             echo "Running LLxprt for attempt ${attempt}"
             llxprt_log="${attempt_dir}/llxprt.log"
             set +e
-            node scripts/start.js \
+            llxprt \
               --provider openai \
               --model zai-glm-4.6 \
               --yolo \
@@ -334,7 +497,7 @@ jobs:
                 echo "---- LLxprt log (last 100 lines) ----"
                 tail -n 100 "$llxprt_log"
                 echo "--------------------------------------"
-              } >> "$history_file"
+              } | tee -a "$history_file" >/dev/null
             fi
 
             qa_failure_command=""
@@ -359,12 +522,12 @@ jobs:
                   echo "---- ${name} log (last 100 lines) ----"
                   tail -n 100 "$log_file"
                   echo "--------------------------------------"
-                } >> "$history_file"
+                } | tee -a "$history_file" >/dev/null
                 break
               fi
             done
             else
-              echo "Attempt ${attempt}: skipped QA commands because LLxprt exited with ${llxprt_exit}." >> "$history_file"
+              echo "Attempt ${attempt}: skipped QA commands because LLxprt exited with ${llxprt_exit}." | tee -a "$history_file" >/dev/null
             fi
 
             if [[ "$llxprt_exit" -eq 0 && -z "$qa_failure_command" ]]; then
@@ -376,15 +539,21 @@ jobs:
             fi
 
             if [[ "$attempt" -lt "$max_attempts" ]]; then
-              echo "Attempt ${attempt} failed; preparing for retry." >> "$history_file"
+              echo "Attempt ${attempt} failed; preparing for retry." | tee -a "$history_file" >/dev/null
             fi
           done
 
           if [[ -n "$success_attempt" ]]; then
-            echo "result=success" >> "$GITHUB_OUTPUT"
-            echo "success_attempt=${success_attempt}" >> "$GITHUB_OUTPUT"
+            {
+              echo "result=success"
+              echo "success_attempt=${success_attempt}"
+              echo "attempts_exhausted=false"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "result=failure" >> "$GITHUB_OUTPUT"
+            {
+              echo "result=failure"
+              echo "attempts_exhausted=true"
+            } >> "$GITHUB_OUTPUT"
           fi
 
           if [[ -z "$success_attempt" && -s "$results_file" ]]; then
@@ -412,6 +581,22 @@ jobs:
             exit 0
           fi
 
+          # Prevent Luther from opening PRs that only change package-lock.json
+          non_lock_changes="$(git status --porcelain | sed 's/^.. //' | grep -v '^package-lock\.json$' || true)"
+          if [[ -z "$non_lock_changes" ]]; then
+            {
+              echo "Detected changes only in package-lock.json; skipping commit to avoid lockfile-only PR."
+              echo "Re-run Luther after applying additional code changes manually."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Always discard package-lock.json changes from Luther commits
+          if git ls-files --error-unmatch package-lock.json >/dev/null 2>&1; then
+            git checkout -- package-lock.json
+          fi
+
           git add -A
           git commit -m "Luther: address #${ISSUE_NUMBER}"
           git push --force-with-lease origin "$ISSUE_BRANCH"
@@ -426,6 +611,7 @@ jobs:
           ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
           ISSUE_URL: ${{ steps.issue_data.outputs.url }}
           RUN_URL: ${{ env.RUN_URL }}
+          SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
         run: |
           set -euo pipefail
           pr_title="Luther: ${ISSUE_TITLE}"
@@ -440,13 +626,29 @@ jobs:
 
           pr_url=""
           if gh pr view "$ISSUE_BRANCH" >/dev/null 2>&1; then
-            gh pr edit "$ISSUE_BRANCH" --title "$pr_title" --body "$pr_body"
+            if [[ "${SELECTION_MODE}" != 'remediation' ]]; then
+              gh pr edit "$ISSUE_BRANCH" --title "$pr_title" --body "$pr_body"
+            fi
             pr_url="$(gh pr view "$ISSUE_BRANCH" --json url -q .url)"
           else
             pr_url="$(gh pr create --head "$ISSUE_BRANCH" --base main --title "$pr_title" --body "$pr_body")"
           fi
 
           echo "pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Label pull request status
+        if: steps.commit_push.outputs.has_changes == 'true'
+        env:
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+        run: |
+          set -euo pipefail
+          pr_number="$(gh pr view "$ISSUE_BRANCH" --json number -q .number 2>/dev/null || true)"
+          if [[ -z "$pr_number" ]]; then
+            exit 0
+          fi
+          gh pr edit "$pr_number" --remove-label "luther remediate" >/dev/null 2>&1 || true
+          gh pr edit "$pr_number" --remove-label "luther exhausted" >/dev/null 2>&1 || true
+          gh pr edit "$pr_number" --add-label "Luther Done" >/dev/null 2>&1 || true
 
       - name: Update issue on success
         if: steps.run_attempts.outputs.result == 'success' && steps.commit_push.outputs.has_changes == 'true'
@@ -458,7 +660,7 @@ jobs:
           set -euo pipefail
           gh issue edit "$ISSUE_NUMBER" --remove-label "Luther working" >/dev/null 2>&1 || true
           gh issue edit "$ISSUE_NUMBER" --remove-label "luther-failed" >/dev/null 2>&1 || true
-          gh issue edit "$ISSUE_NUMBER" --add-label "Luther done" >/dev/null 2>&1 || true
+          gh issue edit "$ISSUE_NUMBER" --add-label "Luther Done" >/dev/null 2>&1 || true
 
           summary="Luther completed successfully. QA logs are available from the workflow run."
           if [[ -n "${PR_URL}" ]]; then
@@ -507,6 +709,27 @@ jobs:
 
           ${FAILURE_SUMMARY:-"(see artifacts for details)"}
           EOF
+
+      - name: Update remediation labels on failure
+        if: steps.claim_issue.outputs.should_continue == 'true' && steps.run_attempts.outputs.result != 'success' && steps.select_issue.outputs.selection_mode == 'remediation'
+        env:
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
+          ATTEMPTS_EXHAUSTED: ${{ steps.run_attempts.outputs.attempts_exhausted }}
+        run: |
+          set -euo pipefail
+          pr_target="${PR_NUMBER:-}"
+          if [[ -z "$pr_target" ]]; then
+            pr_target="$(gh pr view "${ISSUE_BRANCH}" --json number -q .number 2>/dev/null || true)"
+          fi
+          if [[ -z "$pr_target" ]]; then
+            exit 0
+          fi
+          if [[ "${ATTEMPTS_EXHAUSTED}" == 'true' ]]; then
+            gh pr edit "$pr_target" --add-label "luther exhausted" >/dev/null 2>&1 || true
+          else
+            gh pr edit "$pr_target" --add-label "luther remediate" >/dev/null 2>&1 || true
+          fi
 
       - name: Upload Luther artifacts
         if: always() && steps.claim_issue.outputs.should_continue == 'true'
