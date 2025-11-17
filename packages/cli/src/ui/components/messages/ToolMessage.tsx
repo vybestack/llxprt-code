@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Text } from 'ink';
 import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { DiffRenderer } from './DiffRenderer.js';
@@ -13,6 +13,8 @@ import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { GeminiRespondingSpinner } from '../GeminiRespondingSpinner.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
 import { TOOL_STATUS } from '../../constants.js';
+import { useKeypress } from '../../hooks/useKeypress.js';
+import { stripShellMarkers } from '@vybestack/llxprt-code-core';
 
 const STATIC_HEIGHT = 1;
 const RESERVED_LINE_COUNT = 5; // for tool name, status, padding etc.
@@ -40,6 +42,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   terminalWidth,
   emphasis = 'medium',
   renderOutputAsMarkdown = true,
+  isFocused = true,
 }) => {
   const availableHeight = availableTerminalHeight
     ? Math.max(
@@ -55,6 +58,20 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     renderOutputAsMarkdown = false;
   }
 
+  const [isDetailsVisible, setIsDetailsVisible] = useState(false);
+
+  useKeypress(
+    (key) => {
+      // Handle 'ctrl' + 'r' key for full-command toggle while executing
+      if (key.ctrl && key.name === 'r') {
+        if (status === ToolCallStatus.Executing) {
+          setIsDetailsVisible((prev) => !prev);
+        }
+      }
+    },
+    { isActive: isFocused },
+  );
+
   const childWidth = terminalWidth - 3; // account for padding.
   if (typeof resultDisplay === 'string') {
     if (resultDisplay.length > MAXIMUM_RESULT_DISPLAY_CHARACTERS) {
@@ -63,6 +80,96 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         '...' + resultDisplay.slice(-MAXIMUM_RESULT_DISPLAY_CHARACTERS);
     }
   }
+  // Build a filtered version for visual rendering (hide runtime markers).
+  const visualResultDisplay =
+    typeof resultDisplay === 'string'
+      ? stripShellMarkers(resultDisplay)
+      : resultDisplay;
+  // Prefer explicit runtime markers, fallback to best-effort inference for shell chains.
+  const deriveCurrentSubcommand = (): string | null => {
+    if (status !== ToolCallStatus.Executing) return null;
+    if (!description) return null;
+    const outputString =
+      typeof resultDisplay === 'string' ? resultDisplay : undefined;
+    if (outputString) {
+      const lines = outputString
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i];
+        const marker = '__LLXPRT_CMD__:';
+        const idx = line.indexOf(marker);
+        if (idx !== -1) {
+          const seg = line.slice(idx + marker.length).trim();
+          if (seg) return seg;
+        }
+      }
+    }
+    // Fallback: parse description if no explicit markers found.
+    // Limitations: This heuristic assumes:
+    // - Simple && chains (does not handle quoted strings, escaped delimiters, or other operators)
+    // - Optional echo commands for progress tracking
+    // - Standard metadata format in description (' [in dir]' and ' (desc...)')
+    // May produce incorrect results for:
+    // - Commands with parentheses or brackets in unexpected positions
+    // - Non-echo-based command chains
+    // - Multiple echo statements with the same text
+    // - Complex shell syntax (if/for/while loops, functions, etc.)
+    // Strip optional metadata appended by getDescription: ' [in dir]' and ' (desc...)'
+    let raw = description;
+    const paren = raw.indexOf(' (');
+    const bracket = raw.indexOf(' [in ');
+    const cut =
+      paren === -1
+        ? bracket
+        : bracket === -1
+          ? paren
+          : Math.min(paren, bracket);
+    if (cut > 0) raw = raw.slice(0, cut);
+
+    const segments = raw
+      .split('&&')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (segments.length === 0) return null;
+
+    const lastLine =
+      outputString
+        ?.split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0)
+        .pop() ?? '';
+
+    const extractEchoText = (cmd: string): string | null => {
+      const m = cmd.match(/^\s*echo\s+(.*)$/i);
+      if (!m) return null;
+      let text = m[1].trim();
+      if (
+        (text.startsWith('"') && text.endsWith('"')) ||
+        (text.startsWith("'") && text.endsWith("'"))
+      ) {
+        text = text.slice(1, -1);
+      }
+      return text;
+    };
+
+    let idx = 0;
+    if (lastLine) {
+      for (let i = 0; i < segments.length; i++) {
+        const t = extractEchoText(segments[i]);
+        if (t && t === lastLine) {
+          idx = Math.min(i + 1, segments.length - 1);
+        }
+      }
+    }
+    return segments[idx] ?? null;
+  };
+
+  const currentSubcommand =
+    isDetailsVisible && status === ToolCallStatus.Executing
+      ? deriveCurrentSubcommand()
+      : null;
   return (
     <Box paddingX={1} paddingY={0} flexDirection="column">
       <Box minHeight={1}>
@@ -75,13 +182,27 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         />
         {emphasis === 'high' && <TrailingIndicator />}
       </Box>
+      {status === ToolCallStatus.Executing && !isDetailsVisible && (
+        <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
+          <Text color={Colors.Gray} dimColor>
+            Press &apos;ctrl+r&apos; to show running command
+          </Text>
+        </Box>
+      )}
+      {currentSubcommand && (
+        <Box paddingLeft={STATUS_INDICATOR_WIDTH} marginTop={1} width="100%">
+          <Text color={Colors.AccentCyan}>
+            Running: <Text color={Colors.Foreground}>{currentSubcommand}</Text>
+          </Text>
+        </Box>
+      )}
       {resultDisplay && (
         <Box paddingLeft={STATUS_INDICATOR_WIDTH} width="100%" marginTop={1}>
           <Box flexDirection="column">
             {typeof resultDisplay === 'string' && renderOutputAsMarkdown && (
               <Box flexDirection="column">
                 <MarkdownDisplay
-                  text={resultDisplay}
+                  text={visualResultDisplay as string}
                   isPending={false}
                   availableTerminalHeight={availableHeight}
                   terminalWidth={childWidth}
@@ -92,7 +213,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
               <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
                 <Box>
                   <Text color={Colors.Foreground} wrap="wrap">
-                    {resultDisplay}
+                    {visualResultDisplay as string}
                   </Text>
                 </Box>
               </MaxSizedBox>
@@ -157,12 +278,14 @@ type ToolInfo = {
   description: string;
   status: ToolCallStatus;
   emphasis: TextEmphasis;
+  showFullDescription?: boolean;
 };
 const ToolInfo: React.FC<ToolInfo> = ({
   name,
   description,
   status,
   emphasis,
+  showFullDescription = false,
 }) => {
   const nameColor = React.useMemo<string>(() => {
     switch (emphasis) {
@@ -181,7 +304,7 @@ const ToolInfo: React.FC<ToolInfo> = ({
   return (
     <Box>
       <Text
-        wrap="truncate-end"
+        wrap={showFullDescription ? 'wrap' : 'truncate-end'}
         strikethrough={status === ToolCallStatus.Canceled}
       >
         <Text color={nameColor} bold>

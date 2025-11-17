@@ -51,6 +51,7 @@ export interface IndividualToolCallDisplay {
   status: ToolCallStatus;
   confirmationDetails: ToolCallConfirmationDetails | undefined;
   renderOutputAsMarkdown?: boolean;
+  isFocused?: boolean;
 }
 
 export interface CompressionProps {
