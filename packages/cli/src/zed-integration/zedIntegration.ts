@@ -908,6 +908,7 @@ class Session {
         fc.name,
         callId,
         toolResult.llmContent,
+        this.config,
       );
       const message = this.extractToolResultText(toolResult);
 

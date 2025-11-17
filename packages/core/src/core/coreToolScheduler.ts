@@ -34,6 +34,10 @@ import {
 import * as Diff from 'diff';
 import levenshtein from 'fast-levenshtein';
 import { doesToolInvocationMatch } from '../utils/tool-utils.js';
+import {
+  limitOutputTokens,
+  ToolOutputSettingsProvider,
+} from '../utils/toolOutputLimiter.js';
 
 export type ValidatingToolCall = {
   status: 'validating';
@@ -150,10 +154,61 @@ function createFunctionResponsePart(
   };
 }
 
+function limitStringOutput(
+  text: string,
+  toolName: string,
+  config?: ToolOutputSettingsProvider,
+): string {
+  if (!config || typeof config.getEphemeralSettings !== 'function') {
+    return text;
+  }
+  const limited = limitOutputTokens(text, config, toolName);
+  if (!limited.wasTruncated) {
+    return limited.content;
+  }
+  if (limited.content && limited.content.length > 0) {
+    return limited.content;
+  }
+  return limited.message ?? '';
+}
+
+function limitFunctionResponsePart(
+  part: Part,
+  toolName: string,
+  config?: ToolOutputSettingsProvider,
+): Part {
+  if (!config || !part.functionResponse) {
+    return part;
+  }
+  const response = part.functionResponse.response;
+  if (!response || typeof response !== 'object') {
+    return part;
+  }
+  const existingOutput = response['output'];
+  if (typeof existingOutput !== 'string') {
+    return part;
+  }
+  const limitedOutput = limitStringOutput(existingOutput, toolName, config);
+  if (limitedOutput === existingOutput) {
+    return part;
+  }
+  return {
+    ...part,
+    functionResponse: {
+      ...part.functionResponse,
+      response: {
+        ...response,
+        output: limitedOutput,
+      },
+    },
+  };
+}
+
 export function convertToFunctionResponse(
   toolName: string,
   callId: string,
   llmContent: PartListUnion,
+  config?: ToolOutputSettingsProvider,
 ): Part[] {
   const contentToProcess =
     Array.isArray(llmContent) && llmContent.length === 1
@@ -161,7 +216,8 @@ export function convertToFunctionResponse(
       : llmContent;
 
   if (typeof contentToProcess === 'string') {
-    return [createFunctionResponsePart(callId, toolName, contentToProcess)];
+    const limitedOutput = limitStringOutput(contentToProcess, toolName, config);
+    return [createFunctionResponsePart(callId, toolName, limitedOutput)];
   }
 
   if (Array.isArray(contentToProcess)) {
@@ -172,7 +228,11 @@ export function convertToFunctionResponse(
 
     if (hasFunctionResponse) {
       // Already has function response(s), return as-is without creating duplicates
-      return toParts(contentToProcess);
+      return toParts(contentToProcess).map((part) =>
+        typeof part === 'object' && part.functionResponse
+          ? limitFunctionResponsePart(part, toolName, config)
+          : part,
+      );
     }
 
     // No existing function response, create one
@@ -191,10 +251,15 @@ export function convertToFunctionResponse(
         getResponseTextFromParts(
           contentToProcess.functionResponse.response['content'] as Part[],
         ) || '';
-      return [createFunctionResponsePart(callId, toolName, stringifiedOutput)];
+      const limitedOutput = limitStringOutput(
+        stringifiedOutput,
+        toolName,
+        config,
+      );
+      return [createFunctionResponsePart(callId, toolName, limitedOutput)];
     }
-    // It's a functionResponse that we should pass through as is.
-    return [contentToProcess];
+    // It's a functionResponse that we should pass through after enforcing limits.
+    return [limitFunctionResponsePart(contentToProcess, toolName, config)];
   }
 
   if (contentToProcess.inlineData || contentToProcess.fileData) {
@@ -211,9 +276,12 @@ export function convertToFunctionResponse(
   }
 
   if (contentToProcess.text !== undefined) {
-    return [
-      createFunctionResponsePart(callId, toolName, contentToProcess.text),
-    ];
+    const limitedOutput = limitStringOutput(
+      contentToProcess.text,
+      toolName,
+      config,
+    );
+    return [createFunctionResponsePart(callId, toolName, limitedOutput)];
   }
 
   // Default case for other kinds of parts.
@@ -1000,6 +1068,7 @@ export class CoreToolScheduler {
                 toolName,
                 callId,
                 toolResult.llmContent,
+                this.config,
               );
               const metadataAgentId = extractAgentIdFromMetadata(
                 toolResult.metadata as Record<string, unknown> | undefined,
