@@ -198,10 +198,10 @@ function resolveActiveStep(
         remainingArgs.shift();
         consumedCount += 1;
         consumedLiterals += 1;
-        currentSchema = mergeSchemas(
-          matched.next,
-          currentSchema.slice(nextIndex),
-        );
+        const remainingSchema = matched.stopPropagation
+          ? []
+          : currentSchema.slice(nextIndex);
+        currentSchema = mergeSchemas(matched.next, remainingSchema);
         continue;
       }
 

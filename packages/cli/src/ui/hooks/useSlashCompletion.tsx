@@ -308,7 +308,8 @@ export function useSlashCompletion(
         }
       }
 
-      const isArgumentCompletion = leafSupportsArguments;
+      const hasArgumentTokens = remainingParts.length > 0 || hasTrailingSpace;
+      const isArgumentCompletion = leafSupportsArguments && hasArgumentTokens;
 
       // Set completion range
       const activePartial = leafSupportsArguments

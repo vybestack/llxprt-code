@@ -24,6 +24,7 @@ export interface LiteralArgument {
   readonly value: string;
   readonly description?: string;
   readonly next?: CommandArgumentSchema;
+  readonly stopPropagation?: boolean;
 }
 
 // Line 3: Option structure definition

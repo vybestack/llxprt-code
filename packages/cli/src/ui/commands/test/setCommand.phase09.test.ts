@@ -187,6 +187,30 @@ describe('setCommand schema integration', () => {
     });
   });
 
+  describe('literal completion termination', () => {
+    it('should stop suggesting new keys after completing a literal value @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', async () => {
+      const result = await handler(
+        mockContext,
+        '',
+        '/set context-limit 50000 ',
+      );
+
+      expect(result.suggestions).toEqual([]);
+      expect(result.hint).toBe('');
+    });
+
+    it('should not reopen selection after socket-keepalive value @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', async () => {
+      const result = await handler(
+        mockContext,
+        '',
+        '/set socket-keepalive true ',
+      );
+
+      expect(result.suggestions).toEqual([]);
+      expect(result.hint).toBe('');
+    });
+  });
+
   describe('hint text correctness', () => {
     it('should show appropriate hints for context-limit setting @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', async () => {
       const result = await handler(mockContext, '', '/set context-limit ');
