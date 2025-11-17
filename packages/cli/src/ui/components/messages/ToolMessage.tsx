@@ -14,6 +14,7 @@ import { GeminiRespondingSpinner } from '../GeminiRespondingSpinner.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
 import { TOOL_STATUS } from '../../constants.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
+import { stripShellMarkers } from '@vybestack/llxprt-code-core';
 
 const STATIC_HEIGHT = 1;
 const RESERVED_LINE_COUNT = 5; // for tool name, status, padding etc.
@@ -80,15 +81,9 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     }
   }
   // Build a filtered version for visual rendering (hide runtime markers).
-  const filterRuntimeMarkers = (text: string): string =>
-    text
-      .split('\n')
-      .filter((line) => !line.trim().startsWith('__LLXPRT_CMD__:'))
-      .join('\n')
-      .trimEnd();
   const visualResultDisplay =
     typeof resultDisplay === 'string'
-      ? filterRuntimeMarkers(resultDisplay)
+      ? stripShellMarkers(resultDisplay)
       : resultDisplay;
   // Prefer explicit runtime markers, fallback to best-effort inference for shell chains.
   const deriveCurrentSubcommand = (): string | null => {
@@ -111,6 +106,16 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         }
       }
     }
+    // Fallback: parse description if no explicit markers found.
+    // Limitations: This heuristic assumes:
+    // - Simple && chains (does not handle quoted strings, escaped delimiters, or other operators)
+    // - Optional echo commands for progress tracking
+    // - Standard metadata format in description (' [in dir]' and ' (desc...)')
+    // May produce incorrect results for:
+    // - Commands with parentheses or brackets in unexpected positions
+    // - Non-echo-based command chains
+    // - Multiple echo statements with the same text
+    // - Complex shell syntax (if/for/while loops, functions, etc.)
     // Strip optional metadata appended by getDescription: ' [in dir]' and ' (desc...)'
     let raw = description;
     const paren = raw.indexOf(' (');
