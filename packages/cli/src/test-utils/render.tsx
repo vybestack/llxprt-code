@@ -10,9 +10,14 @@ import { KeypressProvider } from '../ui/contexts/KeypressContext.js';
 
 export const renderWithProviders = (
   component: React.ReactElement,
+  {
+    kittyProtocolEnabled = true,
+  }: {
+    kittyProtocolEnabled?: boolean;
+  } = {},
 ): ReturnType<typeof render> =>
   render(
-    <KeypressProvider kittyProtocolEnabled={true}>
+    <KeypressProvider kittyProtocolEnabled={kittyProtocolEnabled}>
       {component}
     </KeypressProvider>,
   );

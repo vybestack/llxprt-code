@@ -213,6 +213,7 @@ const createSettingLiteral = (spec: SettingLiteralSpec): LiteralArgument => ({
   kind: 'literal' as const,
   value: spec.value,
   description: `${toTitleCase(spec.value)} option`,
+  stopPropagation: true,
   next: [
     {
       kind: 'value' as const,
@@ -234,6 +235,7 @@ const setSchema: CommandArgumentSchema = [
     kind: 'literal',
     value: 'unset',
     description: 'Unset option',
+    stopPropagation: true,
     next: [
       {
         kind: 'value',
@@ -312,6 +314,7 @@ const setSchema: CommandArgumentSchema = [
     kind: 'literal',
     value: 'modelparam',
     description: 'Model parameter option',
+    stopPropagation: true,
     next: [
       {
         kind: 'value',
@@ -363,6 +366,7 @@ const setSchema: CommandArgumentSchema = [
     kind: 'literal',
     value: 'emojifilter',
     description: 'Emoji filter option',
+    stopPropagation: true,
     next: [
       {
         kind: 'value',
