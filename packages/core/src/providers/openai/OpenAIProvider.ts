@@ -1225,6 +1225,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
 
     if (formattedTools && formattedTools.length > 0) {
+      // Clone tool messages before compression to preserve original payload
       requestBody.tools = JSON.parse(JSON.stringify(formattedTools));
       requestBody.tool_choice = 'auto';
     }
@@ -1675,6 +1676,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
       } catch (error) {
         if (abortSignal?.aborted) {
+          // Special handling for AbortError to avoid noise logs
+          if (error instanceof Error && error.name === 'AbortError') {
+            logger.debug('Legacy streaming response cancelled by AbortSignal');
+            throw error;
+          }
           throw error;
         } else {
           // Special handling for Cerebras/Qwen "Tool not present" errors
@@ -2224,6 +2230,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
 
     if (formattedTools && formattedTools.length > 0) {
+      // Clone tool messages before compression to preserve original payload
       requestBody.tools = JSON.parse(JSON.stringify(formattedTools));
       requestBody.tool_choice = 'auto';
     }
@@ -2713,6 +2720,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
       } catch (error) {
         if (abortSignal?.aborted) {
+          // Special handling for AbortError to avoid noise logs
+          if (error instanceof Error && error.name === 'AbortError') {
+            logger.debug(
+              'Pipeline streaming response cancelled by AbortSignal',
+            );
+            throw error;
+          }
           throw error;
         } else {
           // Special handling for Cerebras/Qwen "Tool not present" errors
