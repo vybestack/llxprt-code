@@ -185,11 +185,13 @@ class ShellToolInvocation extends BaseToolInvocation<
             // - Escaped delimiters or other shell operators (||, ;, |)
             // - Complex shell syntax (if/for/while loops, functions, etc.)
             // For such cases, instrumentation is skipped and the command runs as-is.
+            const hasComplexSyntax =
+              /["'`\\]|\|\||;|\||^if\s|^for\s|^while\s/.test(command);
             const parts = command
               .split('&&')
               .map((s) => s.trim())
               .filter((s) => s.length > 0);
-            if (parts.length > 1) {
+            if (parts.length > 1 && !hasComplexSyntax) {
               command = parts
                 .map((seg) => `echo __LLXPRT_CMD__:${seg}; ${seg}`)
                 .join(' && ');
