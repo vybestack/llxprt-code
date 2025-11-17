@@ -13,7 +13,7 @@ This report thoroughly analyzes the differences between Pipeline mode and Legacy
 1. During streaming: Directly accumulate to accumulatedToolCalls
 2. After streaming ends: Unified processing of all tool calls
 3. Processing logic: processToolParameters + Direct sending to Core layer
-```
+```text
 
 ### Key Implementation
 
@@ -63,7 +63,7 @@ for (const tc of accumulatedToolCalls) {
     parameters: processedParameters,
   });
 }
-```
+```text
 
 ### Legacy Advantages
 
@@ -87,7 +87,7 @@ for (const tc of accumulatedToolCalls) {
 1. During streaming: addFragment to ToolCallCollector
 2. After streaming ends: process() handles collected tool calls
 3. Processing logic: Collection → Validation → Normalization → Output
-```
+```text
 
 ### Current Problem Implementation
 
@@ -110,7 +110,7 @@ if (this.options.providerFormat === 'qwen') {
   }
   return processed as Record<string, unknown>;
 }
-```
+```text
 
 ### Pipeline Advantages
 
@@ -141,15 +141,15 @@ if (this.options.providerFormat === 'qwen') {
 
 #### Legacy Mode Data Flow
 
-```
+```text
 Streaming Chunk → accumulatedToolCalls[] → processToolParameters → ToolCallBlock → IContent
-```
+```text
 
 #### Pipeline Mode Data Flow
 
-```
+```text
 Streaming Chunk → ToolCallFragment → ToolCallCandidate → ProcessedToolCall → NormalizedToolCall → ToolCallBlock → IContent
-```
+```text
 
 ### Key Difference Points
 
@@ -161,7 +161,7 @@ tc.function.arguments += deltaToolCall.function.arguments;
 
 // Pipeline: Incorrect overwrite (needs correction)
 result.args = fragment.args; // Should change to accumulation
-```
+```text
 
 #### 2. Parameter Processing Timing
 
@@ -175,7 +175,7 @@ const processedParameters = processToolParameters(
 
 // Pipeline: Processing in process() stage (currently has over-validation problem)
 const parsedArgs = this.parseArgsStrictly(candidate.args);
-```
+```text
 
 #### 3. Tool Name Handling
 
@@ -185,7 +185,7 @@ name: tc.function.name || '',
 
 // Pipeline: Normalization processing (advantage)
 name: call.normalizedName,
-```
+```text
 
 ## Correct Pipeline Introduction Strategy
 
@@ -236,7 +236,7 @@ private parseArgs(args?: string): Record<string, unknown> {
 
   return {};
 }
-```
+```text
 
 #### Phase 2: Maintain Legacy Compatibility
 
@@ -259,7 +259,7 @@ private async *generatePipelineChatCompletionImpl(
     yield toolCallsContent;
   }
 }
-```
+```text
 
 #### Phase 3: Unified Interface
 
@@ -286,7 +286,7 @@ class PipelineToolCallHandler implements ToolCallHandler {
     /* Pipeline logic */
   }
 }
-```
+```text
 
 #### Reasons for Gradual Integration Adoption
 
@@ -303,7 +303,7 @@ class PipelineToolCallHandler implements ToolCallHandler {
 // 1. Fix ToolCallCollector
 // 2. Simplify ToolCallProcessor
 // 3. Test Qwen model tool calls
-```
+```text
 
 ##### Step 2: Parallel Testing (2-3 days)
 
@@ -311,7 +311,7 @@ class PipelineToolCallHandler implements ToolCallHandler {
 // Run both modes simultaneously in test environment
 // Compare output result consistency
 // Record differences and problems
-```
+```text
 
 ##### Step 3: Gradual Replacement (3-5 days)
 
@@ -319,7 +319,7 @@ class PipelineToolCallHandler implements ToolCallHandler {
 // First replace problem models (like Qwen)
 // Then expand to other models
 // Finally completely replace Legacy
-```
+```text
 
 ##### Step 4: Cleanup and Optimization (1-2 days)
 
@@ -327,7 +327,7 @@ class PipelineToolCallHandler implements ToolCallHandler {
 // Remove Legacy code
 // Clean unnecessary components
 // Optimize performance
-```
+```text
 
 ### Key Integration Points
 
@@ -349,7 +349,7 @@ const blocks: ToolCallBlock[] = pipelineResult.normalized.map((call) => ({
   name: call.name,
   parameters: call.args,
 }));
-```
+```text
 
 #### 2. Consistent Error Handling
 
@@ -362,7 +362,7 @@ private handleToolCallErrors(failedCalls: any[]): void {
     );
   }
 }
-```
+```text
 
 #### 3. Performance Monitoring
 
@@ -373,7 +373,7 @@ const pipelineResult = await this.toolCallPipeline.process();
 const pipelineDuration = Date.now() - pipelineStartTime;
 
 logger.debug(`Pipeline processing completed in ${pipelineDuration}ms`);
-```
+```text
 
 ## Success Standards
 

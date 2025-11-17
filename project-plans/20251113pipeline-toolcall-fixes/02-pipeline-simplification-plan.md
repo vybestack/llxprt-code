@@ -35,7 +35,7 @@ Based on in-depth analysis, we identified overdesign problems in the Pipeline ar
 if (fragment.args) {
   result.args = fragment.args; // ❌ Overwrite instead of accumulation
 }
-```
+```text
 
 **Corrected Implementation Applied**:
 
@@ -51,7 +51,7 @@ for (const fragment of result.fragments) {
   }
 }
 result.args = accumulatedArgs;
-```
+```text
 
 **File**: `packages/core/src/providers/openai/ToolCallCollector.ts`
 
@@ -128,7 +128,7 @@ export class ToolCallProcessor {
     return {};
   }
 }
-```
+```text
 
 **File**: `packages/core/src/providers/openai/ToolCallProcessor.ts`
 
@@ -149,7 +149,7 @@ export class ToolCallProcessor {
 rm packages/core/src/providers/openai/ToolCallValidator.ts
 rm packages/core/src/providers/openai/ToolCallNormalizer.ts
 rm packages/core/src/providers/openai/ToolCallExecutor.ts
-```
+```text
 
 **Files to Retain**:
 
@@ -208,7 +208,7 @@ export class ToolCallPipeline {
     };
   }
 }
-```
+```text
 
 **File**: `packages/core/src/providers/openai/ToolCallPipeline.ts`
 
@@ -312,7 +312,7 @@ export class ToolCallPipeline {
 ```bash
 # Run test to observe problems
 DEBUG=llxprt:* node scripts/start.js --profile-load qwen3-coder-plus --prompt "run shell 'bd' to check task status"
-```
+```text
 
 ### Post-repair Verification
 
@@ -324,7 +324,7 @@ DEBUG=llxprt:* node scripts/start.js --profile-load qwen3-coder-plus --prompt "r
 npm run test
 npm run typecheck
 npm run lint
-```
+```text
 
 ## Notes
 

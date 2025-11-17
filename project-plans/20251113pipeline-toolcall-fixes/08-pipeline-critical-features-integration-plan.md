@@ -32,13 +32,13 @@ This integration plan addresses three critical missing features in Pipeline mode
 
 ### 1.2 Dependency Relationship Map
 
-```
+```text
 Tool Replay Mode (Independent)
     ↓
 Non-Streaming Error Handling (Foundation)
     ↓
 Tool Message Compression (Dependent)
-```
+```text
 
 **Implementation Order Rationale**:
 1. **Tool Replay Mode**: Simple parameter addition, no dependencies
@@ -162,7 +162,7 @@ if (logger.enabled && toolReplayMode !== 'native') {
       `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
   );
 }
-```
+```text
 
 #### Step 1.2: Testing and Validation (1-2 hours)
 - Create unit tests for textual mode detection
@@ -226,7 +226,7 @@ while (true) {
     throw error;
   }
 }
-```
+```text
 
 #### Step 2.2: Error Handling Priority Verification (1-2 hours)
 - Verify error handling order
@@ -262,7 +262,7 @@ if (
   );
   continue;
 }
-```
+```text
 
 #### Step 3.2: Integration Testing (1 hour)
 - Test compression with OpenRouter scenarios
@@ -302,7 +302,7 @@ describe('Compression Integration', () => {
   it('prevents infinite compression loops');
   it('integrates with retry loop correctly');
 });
-```
+```text
 
 #### Integration Testing Strategy
 ```bash
@@ -315,7 +315,7 @@ DEBUG=llxprt:* node scripts/start.js --profile-load openrouter-model --prompt "r
 
 # Test Scenario 3: Error Handling Order
 # Test various error scenarios to verify priority order
-```
+```text
 
 #### End-to-End Testing Strategy
 - Test with all supported providers

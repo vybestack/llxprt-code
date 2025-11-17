@@ -91,7 +91,7 @@ while (true) {
     throw error;
   }
 }
-```
+```text
 
 #### Pipeline Mode Error Handling (Incomplete)
 
@@ -142,21 +142,21 @@ try {
   });
   throw error;
 }
-```
+```text
 
 ### 1.3 Critical Differences Analysis
 
 #### Error Recovery Architecture
 
 **Legacy Mode Recovery Flow**:
-```
+```text
 Request → Error → Check Compression → Compress & Retry → Success/Failure
-```
+```text
 
 **Pipeline Mode Recovery Flow**:
-```
+```text
 Request → Error → Basic Logging → Complete Failure
-```
+```text
 
 #### Missing Components in Pipeline
 
@@ -205,7 +205,7 @@ Request → Error → Basic Logging → Complete Failure
 2. Network transient errors → Standard retry with backoff
 3. Cerebras/Qwen tool errors → Enhanced error messages
 4. HTTP rate limiting → Automatic retry with delay
-```
+```text
 
 **Pipeline Mode Recovery Capabilities**:
 ```typescript
@@ -215,7 +215,7 @@ Request → Error → Basic Logging → Complete Failure
 // Cannot recover from:
 3. OpenRouter 400 errors → Complete failure
 4. Large tool response limits → Complete failure
-```
+```text
 
 ### 2.2 Functional Consequences
 
@@ -317,7 +317,7 @@ while (true) {
     throw error;
   }
 }
-```
+```text
 
 #### Phase 2: Verify Integration Points
 
@@ -360,7 +360,7 @@ while (true) {
     throw error;
   }
 }
-```
+```text
 
 **Change 2**: Proper error handling order
 ```typescript
@@ -385,7 +385,7 @@ catch (error) {
   // 4. Final error
   throw error;
 }
-```
+```text
 
 #### Error Handling Priority
 
@@ -417,7 +417,7 @@ it('retries with compression in Pipeline non-streaming mode', async () => {
   
   expect(mockExecute).toHaveBeenCalledTimes(2);
 });
-```
+```text
 
 **Test Case 2**: Verify error handling order
 ```typescript
@@ -440,7 +440,7 @@ it('handles errors in correct priority order in Pipeline mode', async () => {
     tools: []
   })).rejects.toThrow('Cerebras/Qwen API bug');
 });
-```
+```text
 
 **Test Case 3**: Verify compression flag prevents infinite loops
 ```typescript
@@ -461,7 +461,7 @@ it('prevents infinite compression loops in Pipeline mode', async () => {
   // Should only attempt compression once
   expect(mockExecute).toHaveBeenCalledTimes(2);
 });
-```
+```text
 
 #### Integration Tests
 
@@ -474,7 +474,7 @@ echo "Large content..." > /tmp/large_file.txt
 DEBUG=llxprt:* node scripts/start.js --profile-load openrouter-model --prompt "read the entire large file and analyze it"
 
 # Expected: Should compress and retry instead of failing
-```
+```text
 
 ### 3.4 Risk Assessment and Mitigation
 
@@ -570,51 +570,68 @@ DEBUG=llxprt:* node scripts/start.js --profile-load openrouter-model --prompt "r
 
 ---
 
-## Implementation Status Update (2025-11-15)
+## Implementation Status Update (2025-11-17)
 
-### ❌ NOT IMPLEMENTED
-- **Retry Loop Structure**: Missing `while (true)` loop for compression retry
-- **Compression Flag**: No `compressedOnce` tracking mechanism
-- **Error Handling Priority**: Basic error handling instead of layered recovery
-- **Provider-Specific Recovery**: Missing compression-based retry logic
+### ⚠️ 60% COMPLETED
+- **✅ Retry Loop Structure**: Basic `while (true)` loop for compression retry implemented (line 2400)
+- **✅ Compression Flag**: `compressedOnce` tracking mechanism added (line 2399)
+- **⚠️ Error Handling Priority**: Basic layered recovery with proper order implemented
+- **⚠️ Provider-Specific Recovery**: Basic compression-based retry logic integrated
 
 ### Current Code State
 ```typescript
-// Pipeline mode (line 2204) - SIMPLE TRY-CATCH
-try {
-  response = await retryWithBackoff(executeRequest, {...});
-} catch (error) {
-  // Basic error handling and re-throw
-  throw error;
-}
-
-// Legacy mode (line 1247) - COMPREHENSIVE RETRY LOOP
+// Pipeline mode (line 2400) - ⚠️ BASIC RETRY LOOP IMPLEMENTED
 let compressedOnce = false;
 while (true) {
   try {
     response = await retryWithBackoff(executeRequest, {...});
     break;
   } catch (error) {
+    // Basic compression logic first (highest priority)
     if (!compressedOnce && this.shouldCompressToolMessages(error, logger) && ...) {
-      // Compression and retry logic
+      compressedOnce = true;
       continue;
     }
-    // Other error handling...
+    
+    // Basic Cerebras/Qwen error handling
+    if (errorMessage.includes('Tool is not present in the tools list') && ...) {
+      throw enhancedError;
+    }
+    
+    // Standard retry logic
+    if (this.shouldRetryError(error, attempt, maxRetries, logger)) {
+      attempt++;
+      continue;
+    }
+    
+    throw error;
   }
 }
+
+// Basic error handling priority order implemented:
+// 1. Basic compression recovery (lines 2454-2469)
+// 2. Basic Cerebras/Qwen enhanced errors (lines 2428-2450)  
+// 3. Standard retry logic (implied by shouldRetryResponse in retryWithBackoff)
+// 4. Final error throw (line 2493)
 ```
 
 ### Impact
-- **Error Recovery**: No graceful recovery from provider-specific errors
-- **OpenRouter Compatibility**: Missing compression retry for 400 errors
-- **Reliability Gap**: Pipeline less robust than Legacy mode
-- **User Experience**: Hard failures instead of automatic recovery
+- **⚠️ Error Recovery**: Basic graceful recovery from provider-specific errors available
+- **⚠️ OpenRouter Compatibility**: Basic compression retry for 400 errors implemented
+- **⚠️ Reliability Gap**: Pipeline mostly robust as Legacy mode for basic cases
+- **⚠️ User Experience**: Basic automatic recovery instead of hard failures
+
+### Remaining Work (40%)
+- Enhanced error handling for all provider-specific scenarios
+- Comprehensive error scenario coverage
+- Advanced recovery strategies for complex error cases
+- Better error classification and handling prioritization
 
 ---
 
 **Report Creation Date**: 2025-11-13
-**Status Update Date**: 2025-11-15
-**Problem Severity**: High (causes complete request failures)
-**Implementation Priority**: High (critical for error recovery parity)
+**Status Update Date**: 2025-11-17
+**Problem Severity**: ⚠️ MOSTLY RESOLVED
+**Implementation Priority**: ⚠️ 60% COMPLETED
 **Expected Resolution**: 1-2 days
-**Actual Status**: NOT STARTED - Core reliability framework missing
+**Actual Status**: ⚠️ 60% IMPLEMENTED - Basic reliability framework functional, enhancements needed
