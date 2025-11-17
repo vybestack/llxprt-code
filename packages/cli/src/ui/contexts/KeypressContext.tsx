@@ -76,6 +76,47 @@ const ALT_KEY_CHARACTER_MAP: Record<string, string> = {
   '\u03A9': 'z',
 };
 
+// IME interference handling constants - moved to module level for performance
+const IME_CTRL_C_MAPPINGS = new Map<number, 'c'>([
+  [12559, 'c'], // Chinese Bopomofo: ㄏ
+  [12363, 'c'], // Japanese Hiragana: か
+  [12459, 'c'], // Japanese Katakana: カ
+  [12622, 'c'], // Korean Hangul: ᄎ
+  [231, 'c'], // French/Portuguese: ç
+]);
+
+const IME_ESSENTIAL_MAPPINGS = new Map<number, string>([
+  // Basic editing shortcuts - highest frequency usage
+  [12558, 'v'], // Chinese Bopomofo: ㄎ - Ctrl+V (paste)
+  [12557, 'x'], // Chinese Bopomofo: ㄍ - Ctrl+X (cut)
+  [12556, 'z'], // Chinese Bopomofo: ㄐ - Ctrl+Z (undo)
+  [12554, 'a'], // Chinese Bopomofo: ㄒ - Ctrl+A (select all)
+  [12553, 's'], // Chinese Bopomofo: ㄓ - Ctrl+S (save)
+
+  // Japanese IME - most common interference
+  [12364, 'v'], // Hiragana: き - Ctrl+V
+  [12366, 'x'], // Hiragana: く - Ctrl+X
+  [12378, 'z'], // Hiragana: ず - Ctrl+Z
+  [12354, 'a'], // Hiragana: あ - Ctrl+A
+  [12377, 's'], // Hiragana: す - Ctrl+S
+
+  // Korean Hangul - essential patterns
+  [48708, 'v'], // 비 - Ctrl+V
+  [49828, 'x'], // 시 - Ctrl+X
+  [51652, 'z'], // 지 - Ctrl+Z
+  [50500, 'a'], // 아 - Ctrl+A
+  [49836, 's'], // 사 - Ctrl+S
+
+  // Common European diacritics that interfere with Ctrl shortcuts
+  [226, 'v'], // Vietnamese: â - Ctrl+V
+  [225, 'a'], // Vietnamese: á - Ctrl+A
+  [234, 'e'], // Vietnamese: ê - Ctrl+E
+  [233, 'e'], // French: é - Ctrl+E
+  [228, 'a'], // German: ä - Ctrl+A
+  [246, 'o'], // German: ö - Ctrl+O
+  [252, 'u'], // German: ü - Ctrl+U
+]);
+
 /**
  * Maps symbols from parameterized functional keys `\x1b[1;1<letter>`
  * to their corresponding key names (e.g., 'up', 'f1').
@@ -259,57 +300,13 @@ export function KeypressProvider({
     // This is a short-term solution to handle the most common IME conflicts
     // while we develop a proper internationalization strategy.
     const handleIMECtrlChar = (code: number): string | null => {
-      // Priority handling for Ctrl+C - the most critical shortcut
-      // This ensures interrupt/cancel functionality works across IME configurations
-      const ctrlCMappings: { [key: number]: string } = {
-        // Most commonly encountered Ctrl+C interference patterns
-        12559: 'c', // Chinese Bopomofo: ㄏ
-        12363: 'c', // Japanese Hiragana: か
-        12459: 'c', // Japanese Katakana: カ
-        12622: 'c', // Korean Hangul: ᄎ
-        231: 'c', // French/Portuguese: ç
-      };
-
       // Check for Ctrl+C first (highest priority for system stability)
-      if (ctrlCMappings[code]) {
+      // This ensures interrupt/cancel functionality works across IME configurations
+      if (IME_CTRL_C_MAPPINGS.has(code)) {
         return 'c';
       }
 
-      // Minimal essential mappings for core editor functionality
-      // Only includes the most frequently used shortcuts that break with IME
-      const essentialMappings = new Map<number, string>([
-        // Basic editing shortcuts - highest frequency usage
-        [12558, 'v'], // Chinese Bopomofo: ㄎ - Ctrl+V (paste)
-        [12557, 'x'], // Chinese Bopomofo: ㄍ - Ctrl+X (cut)
-        [12556, 'z'], // Chinese Bopomofo: ㄐ - Ctrl+Z (undo)
-        [12554, 'a'], // Chinese Bopomofo: ㄒ - Ctrl+A (select all)
-        [12553, 's'], // Chinese Bopomofo: ㄓ - Ctrl+S (save)
-
-        // Japanese IME - most common interference
-        [12364, 'v'], // Hiragana: き - Ctrl+V
-        [12366, 'x'], // Hiragana: く - Ctrl+X
-        [12378, 'z'], // Hiragana: ず - Ctrl+Z
-        [12354, 'a'], // Hiragana: あ - Ctrl+A
-        [12377, 's'], // Hiragana: す - Ctrl+S
-
-        // Korean Hangul - essential patterns
-        [48708, 'v'], // 비 - Ctrl+V
-        [49828, 'x'], // 시 - Ctrl+X
-        [51652, 'z'], // 지 - Ctrl+Z
-        [50500, 'a'], // 아 - Ctrl+A
-        [49836, 's'], // 사 - Ctrl+S
-
-        // Common European diacritics that interfere with Ctrl shortcuts
-        [226, 'v'], // Vietnamese: â - Ctrl+V
-        [225, 'a'], // Vietnamese: á - Ctrl+A
-        [234, 'e'], // Vietnamese: ê - Ctrl+E
-        [233, 'e'], // French: é - Ctrl+E
-        [228, 'a'], // German: ä - Ctrl+A
-        [246, 'o'], // German: ö - Ctrl+O
-        [252, 'u'], // German: ü - Ctrl+U
-      ]);
-
-      return essentialMappings.get(code) || null;
+      return IME_ESSENTIAL_MAPPINGS.get(code) || null;
     };
 
     // Parse a single complete kitty sequence from the start (prefix) of the
@@ -928,10 +925,11 @@ export function KeypressProvider({
 
         if (isPrefixNext) {
           nextMarkerPos = prefixPos;
+          markerLength = pasteModePrefixBuffer.length;
         } else if (isSuffixNext) {
           nextMarkerPos = suffixPos;
+          markerLength = pasteModeSuffixBuffer.length;
         }
-        markerLength = pasteModeSuffixBuffer.length;
 
         if (nextMarkerPos === -1) {
           keypressStream.write(data.slice(pos));
