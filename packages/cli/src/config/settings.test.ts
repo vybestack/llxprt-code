@@ -61,6 +61,10 @@ import {
   loadEnvironment,
 } from './settings';
 import { FatalConfigError, LLXPRT_DIR } from '@vybestack/llxprt-code-core';
+import {
+  DEFAULT_HISTORY_MAX_BYTES,
+  DEFAULT_HISTORY_MAX_ITEMS,
+} from '../constants/historyLimits.js';
 
 const MOCK_WORKSPACE_DIR = '/mock/workspace';
 // Use the (mocked) SETTINGS_DIRECTORY_NAME for consistency
@@ -164,6 +168,8 @@ describe('Settings Loading and Merging', () => {
         hideModelInfo: false,
         hideSandboxStatus: false,
         showMemoryUsage: false,
+        historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
+        historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
         maxSessionTurns: -1,
@@ -253,6 +259,8 @@ describe('Settings Loading and Merging', () => {
         hideModelInfo: false,
         hideSandboxStatus: false,
         showMemoryUsage: false,
+        historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
+        historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
         maxSessionTurns: -1,
@@ -342,6 +350,8 @@ describe('Settings Loading and Merging', () => {
         hideModelInfo: false,
         hideSandboxStatus: false,
         showMemoryUsage: false,
+        historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
+        historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
         maxSessionTurns: -1,
@@ -430,6 +440,8 @@ describe('Settings Loading and Merging', () => {
         hideModelInfo: false,
         hideSandboxStatus: false,
         showMemoryUsage: false,
+        historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
+        historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
         maxSessionTurns: -1,
@@ -521,6 +533,8 @@ describe('Settings Loading and Merging', () => {
         hideModelInfo: false,
         hideSandboxStatus: false,
         showMemoryUsage: false,
+        historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
+        historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
         maxSessionTurns: -1,
@@ -623,6 +637,8 @@ describe('Settings Loading and Merging', () => {
         hideModelInfo: false,
         hideSandboxStatus: false,
         showMemoryUsage: false,
+        historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
+        historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
         maxSessionTurns: -1,
@@ -734,6 +750,8 @@ describe('Settings Loading and Merging', () => {
         hideModelInfo: false,
         hideSandboxStatus: false,
         showMemoryUsage: false,
+        historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
+        historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
         maxSessionTurns: -1,
@@ -1714,6 +1732,8 @@ describe('Settings Loading and Merging', () => {
           hideModelInfo: false,
           hideSandboxStatus: false,
           showMemoryUsage: false,
+          historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
+          historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
           usageStatisticsEnabled: true,
           autoConfigureMaxOldSpaceSize: false,
           maxSessionTurns: -1,

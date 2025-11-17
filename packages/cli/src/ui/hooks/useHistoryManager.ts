@@ -4,9 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
+import { Buffer } from 'node:buffer';
 import { HistoryItem } from '../types.js';
 import { ConversationContext } from '../../utils/ConversationContext.js';
+import {
+  DEFAULT_HISTORY_MAX_BYTES,
+  DEFAULT_HISTORY_MAX_ITEMS,
+} from '../../constants/historyLimits.js';
 
 // Type for the updater function passed to updateHistoryItem
 type HistoryItemUpdater = (
@@ -24,15 +29,39 @@ export interface UseHistoryManagerReturn {
   loadHistory: (newHistory: HistoryItem[]) => void;
 }
 
+export interface UseHistoryOptions {
+  maxItems?: number;
+  maxBytes?: number;
+}
+
+interface HistoryLimits {
+  maxItems: number;
+  maxBytes: number;
+}
+
 /**
  * Custom hook to manage the chat history state.
  *
  * Encapsulates the history array, message ID generation, adding items,
  * updating items, and clearing the history.
  */
-export function useHistory(): UseHistoryManagerReturn {
+export function useHistory(
+  options?: UseHistoryOptions,
+): UseHistoryManagerReturn {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const messageIdCounterRef = useRef(0);
+  const maxItems = options?.maxItems;
+  const maxBytes = options?.maxBytes;
+  const limits = useMemo(
+    () => normalizeHistoryLimits({ maxItems, maxBytes }),
+    [maxItems, maxBytes],
+  );
+  const limitsRef = useRef<HistoryLimits>(limits);
+
+  useEffect(() => {
+    limitsRef.current = limits;
+    setHistory((prev) => trimHistory(prev, limits));
+  }, [limits]);
 
   // Generates a unique message ID based on a timestamp and a counter.
   const getNextMessageId = useCallback((baseTimestamp: number): number => {
@@ -41,7 +70,7 @@ export function useHistory(): UseHistoryManagerReturn {
   }, []);
 
   const loadHistory = useCallback((newHistory: HistoryItem[]) => {
-    setHistory(newHistory);
+    setHistory(trimHistory(newHistory, limitsRef.current));
   }, []);
 
   // Adds a new item to the history state with a unique ID.
@@ -62,7 +91,7 @@ export function useHistory(): UseHistoryManagerReturn {
             return prevHistory; // Don't add the duplicate
           }
         }
-        return [...prevHistory, newItem];
+        return trimHistory([...prevHistory, newItem], limitsRef.current);
       });
       return id; // Return the generated ID (even if not added, to keep signature)
     },
@@ -82,15 +111,18 @@ export function useHistory(): UseHistoryManagerReturn {
       updates: Partial<Omit<HistoryItem, 'id'>> | HistoryItemUpdater,
     ) => {
       setHistory((prevHistory) =>
-        prevHistory.map((item) => {
-          if (item.id === id) {
-            // Apply updates based on whether it's an object or a function
-            const newUpdates =
-              typeof updates === 'function' ? updates(item) : updates;
-            return { ...item, ...newUpdates } as HistoryItem;
-          }
-          return item;
-        }),
+        trimHistory(
+          prevHistory.map((item) => {
+            if (item.id === id) {
+              // Apply updates based on whether it's an object or a function
+              const newUpdates =
+                typeof updates === 'function' ? updates(item) : updates;
+              return { ...item, ...newUpdates } as HistoryItem;
+            }
+            return item;
+          }),
+          limitsRef.current,
+        ),
       );
     },
     [],
@@ -110,4 +142,64 @@ export function useHistory(): UseHistoryManagerReturn {
     clearItems,
     loadHistory,
   };
+}
+
+function normalizeHistoryLimits(options?: UseHistoryOptions): HistoryLimits {
+  return {
+    maxItems: normalizeLimit(options?.maxItems, DEFAULT_HISTORY_MAX_ITEMS),
+    maxBytes: normalizeLimit(options?.maxBytes, DEFAULT_HISTORY_MAX_BYTES),
+  };
+}
+
+function normalizeLimit(value: number | undefined, fallback: number): number {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  if (value < 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.floor(value);
+}
+
+function trimHistory(
+  items: HistoryItem[],
+  limits: HistoryLimits,
+): HistoryItem[] {
+  let trimmed = items;
+
+  if (Number.isFinite(limits.maxItems) && trimmed.length > limits.maxItems) {
+    trimmed = trimmed.slice(trimmed.length - limits.maxItems);
+  }
+
+  if (Number.isFinite(limits.maxBytes)) {
+    let totalBytes = 0;
+    const reversed: HistoryItem[] = [];
+
+    for (let i = trimmed.length - 1; i >= 0; i--) {
+      const item = trimmed[i];
+      const itemBytes = estimateHistoryItemBytes(item);
+
+      if (totalBytes + itemBytes > limits.maxBytes && reversed.length > 0) {
+        break;
+      }
+
+      totalBytes += itemBytes;
+      reversed.push(item);
+    }
+
+    trimmed = reversed.reverse();
+  }
+
+  return trimmed;
+}
+
+function estimateHistoryItemBytes(item: HistoryItem): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(item), 'utf8');
+  } catch {
+    return 0;
+  }
 }
