@@ -124,7 +124,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       config,
     );
 
-    // Initialize tool call processing mode - default to 'pipeline' (optimized)
+    // Initialize tool call processing mode - default to 'legacy' (fallback)
     this.toolCallProcessingMode = config?.toolCallProcessingMode ?? 'legacy';
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -1225,7 +1225,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
 
     if (formattedTools && formattedTools.length > 0) {
-      requestBody.tools = JSON.parse(JSON.stringify(formattedTools));
+      // Attach tool definitions; they are not mutated by compression logic
+      requestBody.tools = formattedTools;
       requestBody.tool_choice = 'auto';
     }
 
@@ -1674,7 +1675,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           }
         }
       } catch (error) {
-        if (abortSignal?.aborted) {
+        if (
+          abortSignal?.aborted ||
+          (error &&
+            typeof error === 'object' &&
+            'name' in error &&
+            error.name === 'AbortError')
+        ) {
+          // Signal was aborted - treat as intentional cancellation
+          logger.debug(
+            () =>
+              `Legacy streaming response cancelled by AbortSignal (error: ${error instanceof Error ? error.name : 'unknown'})`,
+          );
           throw error;
         } else {
           // Special handling for Cerebras/Qwen "Tool not present" errors
@@ -2095,8 +2107,25 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
+    // Determine tool replay mode for model compatibility (e.g., polaris-alpha)
+    const toolReplayMode = this.determineToolReplayMode(model);
+
     // Convert IContent to OpenAI messages format
-    const messages = this.convertToOpenAIMessages(contents);
+    const configForMessages =
+      options.config ?? options.runtime?.config ?? this.globalConfig;
+    const messages = this.convertToOpenAIMessages(
+      contents,
+      toolReplayMode,
+      configForMessages,
+    );
+
+    // Log tool replay mode usage for debugging
+    if (logger.enabled && toolReplayMode !== 'native') {
+      logger.debug(
+        () =>
+          `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
+      );
+    }
 
     // Detect the tool format to use (once at the start of the method)
     const detectedFormat = this.detectToolFormat();
@@ -2207,7 +2236,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
 
     if (formattedTools && formattedTools.length > 0) {
-      requestBody.tools = JSON.parse(JSON.stringify(formattedTools));
+      // Attach tool definitions; they are not mutated by compression logic
+      requestBody.tools = formattedTools;
       requestBody.tool_choice = 'auto';
     }
 
@@ -2310,70 +2340,196 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
-    try {
-      response = await retryWithBackoff(
-        () =>
-          client.chat.completions.create(requestBody, {
-            ...(abortSignal ? { signal: abortSignal } : {}),
-            ...(customHeaders ? { headers: customHeaders } : {}),
-          }),
-        {
-          maxAttempts: maxRetries,
-          initialDelayMs,
-          shouldRetry: this.shouldRetryResponse.bind(this),
-          trackThrottleWaitTime: this.throttleTracker,
-        },
-      );
-    } catch (error) {
-      // Special handling for Cerebras/Qwen "Tool not present" errors
-      const errorMessage = String(error);
-      if (
-        errorMessage.includes('Tool is not present in the tools list') &&
-        (model.toLowerCase().includes('qwen') ||
-          this.getBaseURL()?.includes('cerebras'))
-      ) {
-        logger.error(
-          'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
-          {
-            error,
-            model,
-            toolsProvided: formattedTools?.length || 0,
-            toolNames: formattedTools?.map((t) => t.function.name),
-            streamingEnabled,
-          },
-        );
-        // Re-throw but with better context
-        const enhancedError = new Error(
-          `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
-        );
-        (enhancedError as Error & { originalError?: unknown }).originalError =
-          error;
-        throw enhancedError;
-      }
-      // Re-throw other errors as-is
-      const capturedErrorMessage =
-        error instanceof Error ? error.message : String(error);
-      const status =
-        typeof error === 'object' &&
-        error !== null &&
-        'status' in error &&
-        typeof (error as { status: unknown }).status === 'number'
-          ? (error as { status: number }).status
-          : undefined;
+    if (streamingEnabled) {
+      // Streaming mode - use retry loop with compression support
+      let compressedOnce = false;
+      while (true) {
+        try {
+          response = await retryWithBackoff(
+            () =>
+              client.chat.completions.create(requestBody, {
+                ...(abortSignal ? { signal: abortSignal } : {}),
+                ...(customHeaders ? { headers: customHeaders } : {}),
+              }),
+            {
+              maxAttempts: maxRetries,
+              initialDelayMs,
+              shouldRetry: this.shouldRetryResponse.bind(this),
+              trackThrottleWaitTime: this.throttleTracker,
+            },
+          );
+          break;
+        } catch (error) {
+          // Special handling for Cerebras/Qwen "Tool not present" errors
+          const errorMessage = String(error);
+          if (
+            errorMessage.includes('Tool is not present in the tools list') &&
+            (model.toLowerCase().includes('qwen') ||
+              this.getBaseURL()?.includes('cerebras'))
+          ) {
+            logger.error(
+              'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+              {
+                error,
+                model,
+                toolsProvided: formattedTools?.length || 0,
+                toolNames: formattedTools?.map((t) => t.function.name),
+                streamingEnabled,
+              },
+            );
+            // Re-throw but with better context
+            const enhancedError = new Error(
+              `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+            );
+            (
+              enhancedError as Error & { originalError?: unknown }
+            ).originalError = error;
+            throw enhancedError;
+          }
 
-      logger.error(
-        () =>
-          `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
-        {
-          model,
-          baseURL: baseURL ?? this.getBaseURL(),
-          streamingEnabled,
-          hasTools: formattedTools?.length ?? 0,
-          requestHasSystemPrompt: !!systemPrompt,
-          status,
-        },
-      );
-      throw error;
+          // Tool message compression logic
+          if (
+            !compressedOnce &&
+            this.shouldCompressToolMessages(error, logger) &&
+            this.compressToolMessages(
+              requestBody.messages,
+              MAX_TOOL_RESPONSE_RETRY_CHARS,
+              logger,
+            )
+          ) {
+            compressedOnce = true;
+            logger.warn(
+              () =>
+                `[OpenAIProvider] Retrying streaming request after compressing tool responses due to provider 400`,
+            );
+            continue;
+          }
+
+          // Re-throw other errors as-is
+          const capturedErrorMessage =
+            error instanceof Error ? error.message : String(error);
+          const status =
+            typeof error === 'object' &&
+            error !== null &&
+            'status' in error &&
+            typeof (error as { status: unknown }).status === 'number'
+              ? (error as { status: number }).status
+              : undefined;
+
+          logger.error(
+            () =>
+              `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
+            {
+              model,
+              baseURL: baseURL ?? this.getBaseURL(),
+              streamingEnabled,
+              hasTools: formattedTools?.length ?? 0,
+              requestHasSystemPrompt: !!systemPrompt,
+              status,
+            },
+          );
+          throw error;
+        }
+      }
+    } else {
+      // Non-streaming mode - use comprehensive retry loop with compression
+      let compressedOnce = false;
+      while (true) {
+        try {
+          response = (await retryWithBackoff(
+            () =>
+              client.chat.completions.create(requestBody, {
+                ...(abortSignal ? { signal: abortSignal } : {}),
+                ...(customHeaders ? { headers: customHeaders } : {}),
+              }),
+            {
+              maxAttempts: maxRetries,
+              initialDelayMs,
+              shouldRetry: this.shouldRetryResponse.bind(this),
+              trackThrottleWaitTime: this.throttleTracker,
+            },
+          )) as OpenAI.Chat.Completions.ChatCompletion;
+          break;
+        } catch (error) {
+          const errorMessage = String(error);
+          logger.debug(() => `[OpenAIProvider] Chat request error`, {
+            errorType: error?.constructor?.name,
+            status:
+              typeof error === 'object' && error && 'status' in error
+                ? (error as { status?: number }).status
+                : undefined,
+            errorKeys:
+              error && typeof error === 'object' ? Object.keys(error) : [],
+          });
+
+          const isCerebrasToolError =
+            errorMessage.includes('Tool is not present in the tools list') &&
+            (model.toLowerCase().includes('qwen') ||
+              this.getBaseURL()?.includes('cerebras'));
+
+          if (isCerebrasToolError) {
+            logger.error(
+              'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+              {
+                error,
+                model,
+                toolsProvided: formattedTools?.length || 0,
+                toolNames: formattedTools?.map((t) => t.function.name),
+                streamingEnabled,
+              },
+            );
+            const enhancedError = new Error(
+              `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+            );
+            (
+              enhancedError as Error & { originalError?: unknown }
+            ).originalError = error;
+            throw enhancedError;
+          }
+
+          // Tool message compression logic
+          if (
+            !compressedOnce &&
+            this.shouldCompressToolMessages(error, logger) &&
+            this.compressToolMessages(
+              requestBody.messages,
+              MAX_TOOL_RESPONSE_RETRY_CHARS,
+              logger,
+            )
+          ) {
+            compressedOnce = true;
+            logger.warn(
+              () =>
+                `[OpenAIProvider] Retrying request after compressing tool responses due to provider 400`,
+            );
+            continue;
+          }
+
+          const capturedErrorMessage =
+            error instanceof Error ? error.message : String(error);
+          const status =
+            typeof error === 'object' &&
+            error !== null &&
+            'status' in error &&
+            typeof (error as { status: unknown }).status === 'number'
+              ? (error as { status: number }).status
+              : undefined;
+
+          logger.error(
+            () =>
+              `[OpenAIProvider] Chat completion failed for model '${model}' at '${baseURL ?? this.getBaseURL() ?? 'default'}': ${capturedErrorMessage}`,
+            {
+              model,
+              baseURL: baseURL ?? this.getBaseURL(),
+              streamingEnabled,
+              hasTools: formattedTools?.length ?? 0,
+              requestHasSystemPrompt: !!systemPrompt,
+              status,
+            },
+          );
+          throw error;
+        }
+      }
     }
 
     // Check if response is streaming or not
@@ -2410,6 +2566,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         // Now process all collected chunks
         for (const chunk of allChunks) {
+          // Check for cancellation during chunk processing
+          if (abortSignal?.aborted) {
+            break;
+          }
           const chunkRecord = chunk as unknown as Record<string, unknown>;
           let parsedData: Record<string, unknown> | undefined;
           const rawData = chunkRecord?.data;
@@ -2589,7 +2749,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           }
         }
       } catch (error) {
-        if (abortSignal?.aborted) {
+        if (
+          abortSignal?.aborted ||
+          (error &&
+            typeof error === 'object' &&
+            'name' in error &&
+            error.name === 'AbortError')
+        ) {
+          // Signal was aborted - treat as intentional cancellation
+          logger.debug(
+            () =>
+              `Pipeline streaming response cancelled by AbortSignal (error: ${error instanceof Error ? error.name : 'unknown'})`,
+          );
           throw error;
         } else {
           // Special handling for Cerebras/Qwen "Tool not present" errors
@@ -2675,7 +2846,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       }
 
       // Process and emit tool calls using the pipeline
-      const pipelineResult = await this.toolCallPipeline.process();
+      const pipelineResult = await this.toolCallPipeline.process(abortSignal);
       if (
         pipelineResult.normalized.length > 0 ||
         pipelineResult.failed.length > 0

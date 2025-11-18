@@ -61,6 +61,21 @@ export class ToolCallPipeline {
   }
 
   /**
+   * Create a consistent AbortError with DOMException polyfill support
+   */
+  private createAbortError(): Error {
+    // Use DOMException if available (modern environments)
+    if (typeof DOMException !== 'undefined') {
+      return new DOMException('Aborted', 'AbortError');
+    }
+
+    // Fallback for environments without DOMException support
+    const error = new Error('Aborted');
+    error.name = 'AbortError';
+    return error;
+  }
+
+  /**
    * Add tool call fragment
    */
   addFragment(index: number, fragment: Partial<ToolCallFragment>): void {
@@ -70,8 +85,13 @@ export class ToolCallPipeline {
   /**
    * Process all collected tool calls (collection + normalization only)
    */
-  async process(): Promise<PipelineResult> {
+  async process(abortSignal?: AbortSignal): Promise<PipelineResult> {
     logger.debug('Starting simplified tool call pipeline processing');
+
+    // Check for cancellation at the start
+    if (abortSignal?.aborted) {
+      throw this.createAbortError();
+    }
 
     // Phase 1: Collect complete calls
     const candidates = this.collector.getCompleteCalls();
@@ -81,48 +101,54 @@ export class ToolCallPipeline {
     const normalizedCalls: NormalizedToolCall[] = [];
     const failedCalls: FailedToolCall[] = [];
 
-    for (const candidate of candidates) {
-      try {
-        // Create a mock validated call for normalization
-        const mockValidatedCall = {
-          index: candidate.index,
-          name: candidate.name || '',
-          args: candidate.args || '',
-          isValid: true,
-          validationErrors: [],
-        };
+    try {
+      for (const candidate of candidates) {
+        // Check for cancellation in processing loop
+        if (abortSignal?.aborted) {
+          throw this.createAbortError();
+        }
+        try {
+          // Create a mock validated call for normalization
+          const mockValidatedCall = {
+            index: candidate.index,
+            name: candidate.name || '',
+            args: candidate.args || '',
+            isValid: true,
+            validationErrors: [],
+          };
 
-        const normalized = this.normalizer.normalize(mockValidatedCall);
-        if (normalized) {
-          normalizedCalls.push(normalized);
-        } else {
+          const normalized = this.normalizer.normalize(mockValidatedCall);
+          if (normalized) {
+            normalizedCalls.push(normalized);
+          } else {
+            failedCalls.push({
+              index: candidate.index,
+              name: candidate.name,
+              args: candidate.args,
+              isValid: false,
+              validationErrors: ['Normalization failed'],
+            });
+          }
+        } catch (error) {
           failedCalls.push({
             index: candidate.index,
             name: candidate.name,
             args: candidate.args,
             isValid: false,
-            validationErrors: ['Normalization failed'],
+            validationErrors: [
+              error instanceof Error ? error.message : 'Unknown error',
+            ],
           });
         }
-      } catch (error) {
-        failedCalls.push({
-          index: candidate.index,
-          name: candidate.name,
-          args: candidate.args,
-          isValid: false,
-          validationErrors: [
-            error instanceof Error ? error.message : 'Unknown error',
-          ],
-        });
       }
+
+      logger.debug(
+        `Normalized ${normalizedCalls.length} tool calls, ${failedCalls.length} failed`,
+      );
+    } finally {
+      // Reset collector for next batch - always executed even on abort
+      this.collector.reset();
     }
-
-    logger.debug(
-      `Normalized ${normalizedCalls.length} tool calls, ${failedCalls.length} failed`,
-    );
-
-    // Reset collector for next batch
-    this.collector.reset();
 
     const result: PipelineResult = {
       normalized: normalizedCalls,
