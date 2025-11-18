@@ -20,8 +20,12 @@ import type { OAuthCredentials } from '../mcp/token-storage/types.js';
 import { Storage } from '../config/storage.js';
 
 import * as path from 'node:path';
-import * as os from 'node:os';
 import { promises as fs } from 'node:fs';
+
+const mockHomedir = vi.hoisted(() => vi.fn(() => '/mock/home'));
+vi.mock('node:os', () => ({
+  homedir: mockHomedir,
+}));
 
 // Mock external dependencies
 vi.mock('../mcp/token-storage/hybrid-token-storage.js');
@@ -76,7 +80,7 @@ describe('OAuthCredentialStorage', () => {
     vi.spyOn(fs, 'rm').mockResolvedValue(undefined);
 
     vi.spyOn(Storage, 'getOAuthCredsPath').mockReturnValue(llxprtFilePath);
-    vi.spyOn(os, 'homedir').mockReturnValue('/mock/home');
+    mockHomedir.mockReturnValue('/mock/home');
   });
 
   afterEach(() => {

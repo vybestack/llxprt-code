@@ -12,7 +12,6 @@ vi.mock('../utils/secure-browser-launcher.js', () => ({
   openBrowserSecurely: mockOpenBrowserSecurely,
 }));
 vi.mock('node:crypto');
-vi.mock('./oauth-token-storage.js');
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as http from 'node:http';
@@ -116,6 +115,11 @@ describe('MCPOAuthProvider', () => {
     scope: 'read write',
   };
 
+  let saveTokenSpy: ReturnType<typeof vi.spyOn>;
+  let getCredentialsSpy: ReturnType<typeof vi.spyOn>;
+  let deleteCredentialsSpy: ReturnType<typeof vi.spyOn>;
+  let isTokenExpiredSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockOpenBrowserSecurely.mockClear();
@@ -146,8 +150,18 @@ describe('MCPOAuthProvider', () => {
     });
 
     // Mock token storage
-    vi.mocked(MCPOAuthTokenStorage.saveToken).mockResolvedValue(undefined);
-    vi.mocked(MCPOAuthTokenStorage.getToken).mockResolvedValue(null);
+    saveTokenSpy = vi
+      .spyOn(MCPOAuthTokenStorage.prototype, 'saveToken')
+      .mockResolvedValue(undefined);
+    getCredentialsSpy = vi
+      .spyOn(MCPOAuthTokenStorage.prototype, 'getCredentials')
+      .mockResolvedValue(null);
+    deleteCredentialsSpy = vi
+      .spyOn(MCPOAuthTokenStorage.prototype, 'deleteCredentials')
+      .mockResolvedValue(undefined);
+    isTokenExpiredSpy = vi
+      .spyOn(MCPOAuthTokenStorage, 'isTokenExpired')
+      .mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -207,7 +221,7 @@ describe('MCPOAuthProvider', () => {
       expect(mockOpenBrowserSecurely).toHaveBeenCalledWith(
         expect.stringContaining('authorize'),
       );
-      expect(MCPOAuthTokenStorage.saveToken).toHaveBeenCalledWith(
+      expect(saveTokenSpy).toHaveBeenCalledWith(
         'test-server',
         expect.objectContaining({ accessToken: 'access_token_123' }),
         'test-client-id',
@@ -613,10 +627,8 @@ describe('MCPOAuthProvider', () => {
         updatedAt: Date.now(),
       };
 
-      vi.mocked(MCPOAuthTokenStorage.getToken).mockResolvedValue(
-        validCredentials,
-      );
-      vi.mocked(MCPOAuthTokenStorage.isTokenExpired).mockReturnValue(false);
+      getCredentialsSpy.mockResolvedValue(validCredentials);
+      isTokenExpiredSpy.mockReturnValue(false);
 
       const result = await MCPOAuthProvider.getValidToken(
         'test-server',
@@ -635,10 +647,8 @@ describe('MCPOAuthProvider', () => {
         updatedAt: Date.now(),
       };
 
-      vi.mocked(MCPOAuthTokenStorage.getToken).mockResolvedValue(
-        expiredCredentials,
-      );
-      vi.mocked(MCPOAuthTokenStorage.isTokenExpired).mockReturnValue(true);
+      getCredentialsSpy.mockResolvedValue(expiredCredentials);
+      isTokenExpiredSpy.mockReturnValue(true);
 
       const refreshResponse = {
         access_token: 'new_access_token',
@@ -662,7 +672,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       expect(result).toBe('new_access_token');
-      expect(MCPOAuthTokenStorage.saveToken).toHaveBeenCalledWith(
+      expect(saveTokenSpy).toHaveBeenCalledWith(
         'test-server',
         expect.objectContaining({ accessToken: 'new_access_token' }),
         'test-client-id',
@@ -672,7 +682,7 @@ describe('MCPOAuthProvider', () => {
     });
 
     it('should return null when no credentials exist', async () => {
-      vi.mocked(MCPOAuthTokenStorage.getToken).mockResolvedValue(null);
+      getCredentialsSpy.mockResolvedValue(null);
 
       const result = await MCPOAuthProvider.getValidToken(
         'test-server',
@@ -691,11 +701,9 @@ describe('MCPOAuthProvider', () => {
         updatedAt: Date.now(),
       };
 
-      vi.mocked(MCPOAuthTokenStorage.getToken).mockResolvedValue(
-        expiredCredentials,
-      );
-      vi.mocked(MCPOAuthTokenStorage.isTokenExpired).mockReturnValue(true);
-      vi.mocked(MCPOAuthTokenStorage.removeToken).mockResolvedValue(undefined);
+      getCredentialsSpy.mockResolvedValue(expiredCredentials);
+      isTokenExpiredSpy.mockReturnValue(true);
+      deleteCredentialsSpy.mockResolvedValue(undefined);
 
       mockFetch.mockResolvedValueOnce(
         createMockResponse({
@@ -712,9 +720,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       expect(result).toBeNull();
-      expect(MCPOAuthTokenStorage.removeToken).toHaveBeenCalledWith(
-        'test-server',
-      );
+      expect(deleteCredentialsSpy).toHaveBeenCalledWith('test-server');
       expect(console.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to refresh token'),
       );
@@ -733,10 +739,8 @@ describe('MCPOAuthProvider', () => {
         updatedAt: Date.now(),
       };
 
-      vi.mocked(MCPOAuthTokenStorage.getToken).mockResolvedValue(
-        tokenWithoutRefresh,
-      );
-      vi.mocked(MCPOAuthTokenStorage.isTokenExpired).mockReturnValue(true);
+      getCredentialsSpy.mockResolvedValue(tokenWithoutRefresh);
+      isTokenExpiredSpy.mockReturnValue(true);
 
       const result = await MCPOAuthProvider.getValidToken(
         'test-server',

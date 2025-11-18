@@ -120,8 +120,7 @@ export class OAuthCredentialStorage {
           typeof error === 'object' &&
           error !== null &&
           'code' in error &&
-          // @ts-expect-error code may exist on the error object
-          error.code === 'ENOENT'
+          (error as NodeJS.ErrnoException).code === 'ENOENT'
         ) {
           continue;
         }

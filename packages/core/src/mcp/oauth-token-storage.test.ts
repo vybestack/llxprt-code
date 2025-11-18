@@ -4,13 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
-import type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
-import type {
-  OAuthCredentials,
-  TokenStorage,
-} from './token-storage/types.js';
+import type { MCPOAuthToken } from './token-store.js';
+import type { OAuthCredentials, TokenStorage } from './token-storage/types.js';
 
 class MockTokenStorage implements TokenStorage {
   private readonly tokens = new Map<string, OAuthCredentials>();
@@ -20,9 +17,7 @@ class MockTokenStorage implements TokenStorage {
     this.shouldThrow = shouldThrow;
   }
 
-  async getCredentials(
-    serverName: string,
-  ): Promise<OAuthCredentials | null> {
+  async getCredentials(serverName: string): Promise<OAuthCredentials | null> {
     if (this.shouldThrow) {
       throw new Error('Mock get error');
     }
@@ -51,10 +46,16 @@ class MockTokenStorage implements TokenStorage {
   }
 
   async getAllCredentials(): Promise<Map<string, OAuthCredentials>> {
+    if (this.shouldThrow) {
+      throw new Error('Mock get error');
+    }
     return new Map(this.tokens);
   }
 
   async clearAll(): Promise<void> {
+    if (this.shouldThrow) {
+      throw new Error('Mock clear error');
+    }
     this.tokens.clear();
   }
 }
@@ -137,9 +138,9 @@ describe('MCPOAuthTokenStorage', () => {
 
   it('throws when attempting to save invalid data', async () => {
     // Invalid server name
-    await expect(
-      MCPOAuthTokenStorage.saveToken('', mockToken),
-    ).rejects.toThrow('Server name must be a non-empty string');
+    await expect(MCPOAuthTokenStorage.saveToken('', mockToken)).rejects.toThrow(
+      'Server name must be a non-empty string',
+    );
 
     // Invalid token
     await expect(
@@ -173,9 +174,9 @@ describe('MCPOAuthTokenStorage', () => {
   it('handles backend errors gracefully', async () => {
     mockStore.setShouldThrow(true);
 
-    await expect(
-      MCPOAuthTokenStorage.loadTokens(),
-    ).rejects.toThrowError('Mock get error');
+    await expect(MCPOAuthTokenStorage.loadTokens()).rejects.toThrowError(
+      'Mock get error',
+    );
 
     await expect(
       MCPOAuthTokenStorage.saveToken('demo', mockToken),
