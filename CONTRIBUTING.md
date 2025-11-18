@@ -22,8 +22,6 @@ for this purpose.
 
 ### Self Assigning Issues
 
-If you're looking for an issue to work on, check out our list of issues that are labeled ["help wanted"](https://github.com/vybestack/llxprt-code/issues?q=is%3Aissue+state%3Aopen+label%3A%22help+wanted%22).
-
 To assign an issue to yourself, simply add a comment with the text `/assign`. The comment must contain only that text and nothing else. This command will assign the issue to you, provided it is not already assigned.
 
 Please note that you can have a maximum of 3 issues assigned to you at any given time.
