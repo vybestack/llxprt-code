@@ -296,27 +296,14 @@ export class IDEServer {
             `llxprt-ide-server-${process.ppid}.json`,
           );
           this.log(`IDE server listening on port ${this.port}`);
-<<<<<<< HEAD
-          await writePortAndWorkspace(
+          await writePortAndWorkspace({
             context,
-            this.port,
-            this.portFile,
-            this.ppidPortFile,
-            this.log,
-          );
-=======
-
-          if (this.authToken) {
-            await writePortAndWorkspace({
-              context,
-              port: this.port,
-              portFile: this.portFile,
-              ppidPortFile: this.ppidPortFile,
-              authToken: this.authToken,
-              log: this.log,
-            });
-          }
->>>>>>> 12f584fff (feat(vscode-ide-companion): add auth token validation to IDE server (#8491))
+            port: this.port,
+            portFile: this.portFile,
+            ppidPortFile: this.ppidPortFile,
+            authToken: this.authToken!,
+            log: this.log,
+          });
         }
         resolve();
       });
