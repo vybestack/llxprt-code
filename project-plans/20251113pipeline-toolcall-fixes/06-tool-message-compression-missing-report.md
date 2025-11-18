@@ -1,10 +1,21 @@
 # Tool Message Compression Implementation Report
 
+> **📋 HISTORICAL DOCUMENTATION** - For Reference Only  
+> **Status**: 🟡 75% IMPLEMENTED - Core compression logic working  
+> **Current Status**: See `IMPLEMENTATION_STATUS_SUMMARY.md` for up-to-date project status
+
+---
+**PR #16 Context**: This document is part of the Pipeline ToolCall Fixes implementation.
+**Core PR Goal**: Restore Pipeline functionality and achieve Legacy mode parity.
+**Document Role**: Implementation status of Tool Message Compression - 75% COMPLETE.
+**Current Status**: Basic OpenRouter 400 error handling working, optimizations needed.
+---
+
 ## Executive Summary
 
 This report documents the implementation status of Tool Message Compression in Pipeline mode. Previously identified as missing functionality, this feature has been **75% implemented** with core compression logic in place. Basic handling for OpenRouter 400 errors from large tool responses is now available, though some optimizations remain.
 
-**Current Status**: ⚠️ **75% IMPLEMENTED** - Core compression logic working, optimizations needed for full reliability.
+**Historical Status**: ⚠️ **75% IMPLEMENTED** - Core compression logic working, optimizations needed for full reliability.
 
 ---
 

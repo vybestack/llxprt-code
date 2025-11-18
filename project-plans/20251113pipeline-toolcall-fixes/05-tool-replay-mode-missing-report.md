@@ -1,10 +1,21 @@
 # Tool Replay Mode Support Implementation Report
 
+> **📋 HISTORICAL DOCUMENTATION** - For Reference Only  
+> **Status**: 🟡 80% IMPLEMENTED - Core functionality working  
+> **Current Status**: See `IMPLEMENTATION_STATUS_SUMMARY.md` for up-to-date project status
+
+---
+**PR #16 Context**: This document is part of the Pipeline ToolCall Fixes implementation.
+**Core PR Goal**: Restore Pipeline functionality and achieve Legacy mode parity.
+**Document Role**: Implementation status of Tool Replay Mode - 80% COMPLETE.
+**Current Status**: Basic polaris-alpha support working, some enhancements remain.
+---
+
 ## Executive Summary
 
 This report documents the implementation status of Tool Replay Mode support in Pipeline mode. Previously identified as missing functionality, this feature has been **80% implemented** with core infrastructure in place. Basic support for `openrouter/polaris-alpha` is now available, though some enhancements remain.
 
-**Current Status**: ⚠️ **80% IMPLEMENTED** - Core functionality working, enhancements needed for full compatibility.
+**Historical Status**: ⚠️ **80% IMPLEMENTED** - Core functionality working, enhancements needed for full compatibility.
 
 ---
 

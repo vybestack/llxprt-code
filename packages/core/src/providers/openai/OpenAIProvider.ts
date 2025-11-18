@@ -124,7 +124,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       config,
     );
 
-    // Initialize tool call processing mode - default to 'pipeline' (optimized)
+    // Initialize tool call processing mode - default to 'legacy' (fallback)
     this.toolCallProcessingMode = config?.toolCallProcessingMode ?? 'legacy';
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -1225,8 +1225,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
 
     if (formattedTools && formattedTools.length > 0) {
-      // Clone tool messages before compression to preserve original payload
-      requestBody.tools = JSON.parse(JSON.stringify(formattedTools));
+      // Attach tool definitions; they are not mutated by compression logic
+      requestBody.tools = formattedTools;
       requestBody.tool_choice = 'auto';
     }
 
@@ -1675,12 +1675,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           }
         }
       } catch (error) {
-        if (abortSignal?.aborted) {
-          // Special handling for AbortError to avoid noise logs
-          if (error instanceof Error && error.name === 'AbortError') {
-            logger.debug('Legacy streaming response cancelled by AbortSignal');
-            throw error;
-          }
+        if (
+          abortSignal?.aborted ||
+          (error &&
+            typeof error === 'object' &&
+            'name' in error &&
+            error.name === 'AbortError')
+        ) {
+          // Signal was aborted - treat as intentional cancellation
+          logger.debug(
+            () =>
+              `Legacy streaming response cancelled by AbortSignal (error: ${error instanceof Error ? error.name : 'unknown'})`,
+          );
           throw error;
         } else {
           // Special handling for Cerebras/Qwen "Tool not present" errors
@@ -2230,8 +2236,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
 
     if (formattedTools && formattedTools.length > 0) {
-      // Clone tool messages before compression to preserve original payload
-      requestBody.tools = JSON.parse(JSON.stringify(formattedTools));
+      // Attach tool definitions; they are not mutated by compression logic
+      requestBody.tools = formattedTools;
       requestBody.tool_choice = 'auto';
     }
 
@@ -2743,14 +2749,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           }
         }
       } catch (error) {
-        if (abortSignal?.aborted) {
-          // Special handling for AbortError to avoid noise logs
-          if (error instanceof Error && error.name === 'AbortError') {
-            logger.debug(
-              'Pipeline streaming response cancelled by AbortSignal',
-            );
-            throw error;
-          }
+        if (
+          abortSignal?.aborted ||
+          (error &&
+            typeof error === 'object' &&
+            'name' in error &&
+            error.name === 'AbortError')
+        ) {
+          // Signal was aborted - treat as intentional cancellation
+          logger.debug(
+            () =>
+              `Pipeline streaming response cancelled by AbortSignal (error: ${error instanceof Error ? error.name : 'unknown'})`,
+          );
           throw error;
         } else {
           // Special handling for Cerebras/Qwen "Tool not present" errors

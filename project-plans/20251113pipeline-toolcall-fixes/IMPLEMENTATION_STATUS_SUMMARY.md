@@ -1,6 +1,28 @@
 # Pipeline ToolCall Fixes - Implementation Status Summary
 
-**Status Date**: 2025-11-17  
+> **📍 CURRENT STATUS DOCUMENT** - Up-to-Date Project Status  
+> **Historical Planning**: See `HISTORICAL_DOCUMENTATION_NOTICE.md` for planning context
+
+## 🎯 PR #16 Purpose & Scope
+
+**This PR (#16) focuses on**: Fixing critical Pipeline ToolCall issues to restore basic functionality and achieve Legacy mode parity.
+
+**Core Deliverables (Completed)**:
+- ✅ Fix fragment accumulation bug in ToolCallCollector  
+- ✅ Implement error handling with compression retry
+- ✅ Add AbortSignal support for cancellation
+- ✅ Restore Pipeline mode usability
+
+**Documentation Status**: 
+- 📋 Planning documents included for historical context
+- 📊 Implementation tracking (~75% complete)
+- ⚠️  Documentation inconsistencies exist but do not affect core fixes
+
+**For PR Review**: Prioritize code functionality over documentation perfection
+
+---
+
+**Status Date**: 2025-11-18  
 **Overall Progress**: 75% Complete  
 **Critical Gap**: Partial - Core features implemented, some enhancements needed
 

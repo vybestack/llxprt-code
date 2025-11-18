@@ -138,18 +138,25 @@ export class ToolCallProcessor {
 
 **Files to Remove**:
 
-1. ❌ `ToolCallValidator.ts` - Function duplicates ToolCallProcessor
-2. ❌ `ToolCallNormalizer.ts` - Function merged into ToolCallProcessor
+1. ✅ `ToolCallValidator.ts` - REMOVED (functionality integrated into ToolCallProcessor)
+2. 🟡 `ToolCallNormalizer.ts` - RETAINED (still actively used in ToolCallPipeline.ts)
 3. ❌ `ToolCallExecutor.ts` - Should not execute tools in Provider layer
 
-**Removal Steps**:
+**Status Update**: Phase Three partially executed as of 2025-11-17.
 
+**Completed Actions**:
+- ✅ `ToolCallValidator.ts` - REMOVED (functionality integrated into ToolCallProcessor)
+- 🟡 `ToolCallNormalizer.ts` - RETAINED (still actively used in ToolCallPipeline.ts)
+- ❌ `ToolCallExecutor.ts` - Should not execute tools in Provider layer (removal pending)
+
+**Retention Decision**: ToolCallNormalizer.ts remains as it's actively imported and used in ToolCallPipeline.ts for normalization functionality.
+
+**Historical Removal Commands** (for reference only):
 ```bash
-# Remove after confirming no other references
-rm packages/core/src/providers/openai/ToolCallValidator.ts
-rm packages/core/src/providers/openai/ToolCallNormalizer.ts
-rm packages/core/src/providers/openai/ToolCallExecutor.ts
-```text
+# Completed: ToolCallValidator.ts removed on 2025-11-15
+# Pending: ToolCallNormalizer.ts retention decision made - will NOT be removed
+# Pending: ToolCallExecutor.ts removal still under consideration
+```
 
 **Files to Retain**:
 
@@ -312,7 +319,7 @@ export class ToolCallPipeline {
 ```bash
 # Run test to observe problems
 DEBUG=llxprt:* node scripts/start.js --profile-load qwen3-coder-plus --prompt "run shell 'bd' to check task status"
-```text
+```
 
 ### Post-repair Verification
 
@@ -324,7 +331,7 @@ DEBUG=llxprt:* node scripts/start.js --profile-load qwen3-coder-plus --prompt "r
 npm run test
 npm run typecheck
 npm run lint
-```text
+```
 
 ## Notes
 

@@ -1,10 +1,14 @@
 # Non-Streaming Error Handling Gap Analysis Report
 
+> **📋 HISTORICAL DOCUMENTATION** - For Reference Only  
+> **Status**: 🟡 60% IMPLEMENTED - Basic error handling working  
+> **Current Status**: See `IMPLEMENTATION_STATUS_SUMMARY.md` for up-to-date project status
+
 ## Executive Summary
 
 This report documents the critical gaps in non-streaming error handling between Pipeline and Legacy modes. While both modes handle basic errors similarly, Pipeline mode lacks the sophisticated tool message compression and retry mechanisms that make Legacy mode resilient to provider-specific limitations, particularly for OpenRouter's large tool response constraints.
 
-**Key Findings**: Pipeline mode is missing critical error recovery logic, causing complete failures in scenarios where Legacy mode would gracefully recover and retry.
+**Historical Key Findings**: Pipeline mode was missing critical error recovery logic, causing complete failures in scenarios where Legacy mode would gracefully recover and retry.
 
 ---
 
