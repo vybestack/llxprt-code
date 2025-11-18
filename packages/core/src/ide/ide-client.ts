@@ -371,6 +371,7 @@ export class IdeClient {
       return {
         port: ideInfo?.port?.toString(),
         workspacePath: ideInfo?.workspacePath,
+        authToken: ideInfo?.authToken,
       };
     } catch (_) {
       return {};

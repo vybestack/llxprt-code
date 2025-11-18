@@ -31,8 +31,15 @@ class MockToolInvocation extends BaseToolInvocation<
     super(params);
   }
 
-  async execute(_abortSignal: AbortSignal): Promise<ToolResult> {
-    const result = await this.tool.executeFn(this.params);
+  async execute(
+    abortSignal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
+    const result = await this.tool.executeFn(
+      this.params,
+      abortSignal,
+      updateOutput,
+    );
     if (
       result &&
       typeof result === 'object' &&
@@ -105,8 +112,15 @@ export class MockModifiableToolInvocation extends BaseToolInvocation<
     super(params);
   }
 
-  async execute(_abortSignal: AbortSignal): Promise<ToolResult> {
-    const result = await this.tool.executeFn(this.params);
+  async execute(
+    abortSignal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
+    const result = await this.tool.executeFn(
+      this.params,
+      abortSignal,
+      updateOutput,
+    );
     if (
       result &&
       typeof result === 'object' &&

@@ -15,6 +15,10 @@ import {
   Kind,
 } from '../tools/tools.js';
 
+type Vi = (typeof import('vitest'))['vi'];
+
+const globalVi = (globalThis as { vi?: Vi }).vi;
+
 interface MockToolOptions {
   name: string;
   displayName?: string;
@@ -48,7 +52,7 @@ class MockToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
-    return this.tool.execute(this.params, signal, updateOutput);
+    return this.tool.executeFn(this.params, signal, updateOutput);
   }
 
   override shouldConfirmExecute(
@@ -65,45 +69,85 @@ class MockToolInvocation extends BaseToolInvocation<
 /**
  * A highly configurable mock tool for testing purposes.
  */
+type ExecuteFn = (
+  params: { [key: string]: unknown },
+  signal: AbortSignal,
+  updateOutput?: (output: string) => void,
+) => Promise<ToolResult>;
+
+type VitestMockFactory = NonNullable<Vi>['fn'];
+type ExecuteMock = VitestMockFactory extends (...args: infer _A) => infer R
+  ? R
+  : ExecuteFn;
+
+function createExecuteFn(impl: ExecuteFn, fallbackName: string): ExecuteMock {
+  if (globalVi) {
+    return globalVi.fn(impl) as ExecuteMock;
+  }
+
+  const fallback: ExecuteFn = async (params, signal, updateOutput) =>
+    await impl(params, signal, updateOutput);
+
+  // Attach minimal metadata so debugging remains useful even without vitest mocks
+  Object.defineProperty(fallback, 'name', {
+    value: `MockToolExecute(${fallbackName})`,
+    configurable: true,
+  });
+  return fallback as unknown as ExecuteMock;
+}
+
 export class MockTool extends BaseDeclarativeTool<
   { [key: string]: unknown },
   ToolResult
 > {
+  shouldConfirm = false;
+  executeFn: ExecuteMock;
   shouldConfirmExecute: (
     params: { [key: string]: unknown },
     signal: AbortSignal,
   ) => Promise<ToolCallConfirmationDetails | false>;
-  execute: (
-    params: { [key: string]: unknown },
-    signal: AbortSignal,
-    updateOutput?: (output: string) => void,
-  ) => Promise<ToolResult>;
 
-  constructor(options: MockToolOptions) {
+  constructor(optionsOrName: MockToolOptions | string = { name: 'mock-tool' }) {
+    const options: MockToolOptions =
+      typeof optionsOrName === 'string'
+        ? { name: optionsOrName }
+        : optionsOrName;
     super(
       options.name,
       options.displayName ?? options.name,
       options.description ?? options.name,
       Kind.Other,
-      options.params,
+      options.params ??
+        ({
+          type: 'object',
+          properties: { param: { type: 'string' } },
+        } as object),
       options.isOutputMarkdown ?? false,
       options.canUpdateOutput ?? false,
     );
 
+    const defaultExecute: ExecuteFn = async () => ({
+      llmContent: `Tool ${this.name} executed successfully.`,
+      returnDisplay: `Tool ${this.name} executed successfully.`,
+    });
+    const executeImpl = options.execute ?? defaultExecute;
+    this.executeFn = createExecuteFn(executeImpl, options.name);
     if (options.shouldConfirmExecute) {
-      this.shouldConfirmExecute = options.shouldConfirmExecute;
+      this.shouldConfirmExecute = (params, signal) =>
+        options.shouldConfirmExecute!(params, signal);
     } else {
-      this.shouldConfirmExecute = () => Promise.resolve(false);
-    }
-
-    if (options.execute) {
-      this.execute = options.execute;
-    } else {
-      this.execute = () =>
-        Promise.resolve({
-          llmContent: `Tool ${this.name} executed successfully.`,
-          returnDisplay: `Tool ${this.name} executed successfully.`,
-        });
+      this.shouldConfirmExecute = async () => {
+        if (!this.shouldConfirm) {
+          return false;
+        }
+        return {
+          type: 'exec',
+          title: `Confirm ${this.displayName}`,
+          command: this.name,
+          rootCommand: this.name,
+          onConfirm: async () => {},
+        };
+      };
     }
   }
 

@@ -6,7 +6,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { homedir } from 'node:os';
 import {
   getErrorMessage,
   isWithinRoot,
@@ -14,10 +13,9 @@ import {
 } from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
 import type { Settings } from './settings.js';
+import { USER_SETTINGS_DIR } from './paths.js';
 
 export const TRUSTED_FOLDERS_FILENAME = 'trustedFolders.json';
-export const SETTINGS_DIRECTORY_NAME = '.llxprt';
-export const USER_SETTINGS_DIR = path.join(homedir(), SETTINGS_DIRECTORY_NAME);
 
 export function getTrustedFoldersPath(): string {
   if (process.env['GEMINI_CLI_TRUSTED_FOLDERS_PATH']) {

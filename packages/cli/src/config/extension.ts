@@ -86,7 +86,7 @@ export class ExtensionStorage {
 }
 
 export function getWorkspaceExtensions(workspaceDir: string): Extension[] {
-  return loadExtensionsFromDir(workspaceDir);
+  return loadExtensionsFromDir(workspaceDir, workspaceDir);
 }
 
 async function copyExtension(
@@ -120,7 +120,7 @@ export function loadExtensions(
 ): Extension[] {
   const settings = loadSettings(workspaceDir).merged;
   const disabledExtensions = settings.extensions?.disabled ?? [];
-  const allExtensions = [...loadUserExtensions()];
+  const allExtensions = [...loadUserExtensions(workspaceDir)];
 
   if ((isWorkspaceTrusted(settings) ?? true) && !settings.extensionManagement) {
     allExtensions.push(...getWorkspaceExtensions(workspaceDir));
@@ -139,8 +139,10 @@ export function loadExtensions(
   return Array.from(uniqueExtensions.values());
 }
 
-export function loadUserExtensions(): Extension[] {
-  const userExtensions = loadExtensionsFromDir(os.homedir());
+export function loadUserExtensions(
+  workspaceDir: string = process.cwd(),
+): Extension[] {
+  const userExtensions = loadExtensionsFromDir(os.homedir(), workspaceDir);
 
   const uniqueExtensions = new Map<string, Extension>();
   for (const extension of userExtensions) {
@@ -152,7 +154,10 @@ export function loadUserExtensions(): Extension[] {
   return Array.from(uniqueExtensions.values());
 }
 
-export function loadExtensionsFromDir(dir: string): Extension[] {
+export function loadExtensionsFromDir(
+  dir: string,
+  workspaceDir: string = dir,
+): Extension[] {
   const storage = new Storage(dir);
   const extensionsDir = storage.getExtensionsDir();
   if (!fs.existsSync(extensionsDir)) {
@@ -163,7 +168,7 @@ export function loadExtensionsFromDir(dir: string): Extension[] {
   for (const subdir of fs.readdirSync(extensionsDir)) {
     const extensionDir = path.join(extensionsDir, subdir);
 
-    const extension = loadExtension({ extensionDir, workspaceDir: dir });
+    const extension = loadExtension({ extensionDir, workspaceDir });
     if (extension != null) {
       extensions.push(extension);
     }
@@ -337,7 +342,7 @@ export async function installExtension(
   cwd: string = process.cwd(),
 ): Promise<string> {
   const settings = loadSettings(cwd).merged;
-  if (!isWorkspaceTrusted(settings)) {
+  if (isWorkspaceTrusted(settings) === false) {
     throw new Error(
       `Could not install extension from untrusted folder at ${installMetadata.source}`,
     );
@@ -390,7 +395,7 @@ export async function installExtension(
     const extensionStorage = new ExtensionStorage(newExtensionName);
     const destinationPath = extensionStorage.getExtensionDir();
 
-    const installedExtensions = loadUserExtensions();
+    const installedExtensions = loadUserExtensions(cwd);
     if (
       installedExtensions.some(
         (installed) => installed.config.name === newExtensionName,
@@ -446,9 +451,9 @@ async function loadExtensionConfig(
 
 export async function uninstallExtension(
   extensionName: string,
-  _cwd: string = process.cwd(),
+  cwd: string = process.cwd(),
 ): Promise<void> {
-  const installedExtensions = loadUserExtensions();
+  const installedExtensions = loadUserExtensions(cwd);
   if (
     !installedExtensions.some(
       (installed) => installed.config.name === extensionName,
@@ -494,7 +499,7 @@ export async function updateExtensionByName(
   extensionName: string,
   cwd: string = process.cwd(),
 ): Promise<ExtensionUpdateInfo | undefined> {
-  const installedExtensions = loadUserExtensions();
+  const installedExtensions = loadUserExtensions(cwd);
   const extension = installedExtensions.find(
     (installed) => installed.config.name === extensionName,
   );

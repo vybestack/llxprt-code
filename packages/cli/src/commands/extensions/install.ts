@@ -23,6 +23,7 @@ export async function handleInstall(args: InstallArgs) {
 
     if (args.source) {
       const { source } = args;
+      const isSsoSource = source.startsWith('sso://');
       if (
         source.startsWith('http://') ||
         source.startsWith('https://') ||
@@ -33,6 +34,12 @@ export async function handleInstall(args: InstallArgs) {
           source,
           type: 'git',
         };
+        if (isSsoSource) {
+          console.warn(
+            'sso:// URLs require a git-remote-sso helper or protocol remapping. ' +
+              'Ensure your environment provides a git transport for sso:// before continuing.',
+          );
+        }
       } else if (ORG_REPO_REGEX.test(source)) {
         installMetadata = {
           source: `https://github.com/${source}.git`,

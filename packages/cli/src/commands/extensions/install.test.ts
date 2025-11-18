@@ -34,10 +34,12 @@ describe('handleInstall', () => {
   let consoleLogSpy: MockInstance;
   let consoleErrorSpy: MockInstance;
   let processExitSpy: MockInstance;
+  let consoleWarnSpy: MockInstance;
 
   beforeEach(() => {
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     processExitSpy = vi
       .spyOn(process, 'exit')
       .mockImplementation(() => undefined as never);
@@ -114,6 +116,9 @@ describe('handleInstall', () => {
       source: 'sso://google.com',
       type: 'git',
     });
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('sso:// URLs require a git-remote-sso helper'),
+    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "sso-extension" installed successfully and enabled.',
     );

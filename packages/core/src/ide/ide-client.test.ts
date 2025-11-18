@@ -33,6 +33,7 @@ vi.mock('node:fs', async (importOriginal) => {
     ...(actual as object),
     promises: {
       readFile: vi.fn(),
+      readdir: vi.fn(),
     },
     realpathSync: (p: string) => p,
     existsSync: () => false,
