@@ -76,6 +76,47 @@ const ALT_KEY_CHARACTER_MAP: Record<string, string> = {
   '\u03A9': 'z',
 };
 
+// IME interference handling constants - moved to module level for performance
+const IME_CTRL_C_MAPPINGS = new Map<number, 'c'>([
+  [12559, 'c'], // Chinese Bopomofo: ㄏ
+  [12363, 'c'], // Japanese Hiragana: か
+  [12459, 'c'], // Japanese Katakana: カ
+  [12622, 'c'], // Korean Hangul: ᄎ
+  [231, 'c'], // French/Portuguese: ç
+]);
+
+const IME_ESSENTIAL_MAPPINGS = new Map<number, string>([
+  // Basic editing shortcuts - highest frequency usage
+  [12558, 'v'], // Chinese Bopomofo: ㄎ - Ctrl+V (paste)
+  [12557, 'x'], // Chinese Bopomofo: ㄍ - Ctrl+X (cut)
+  [12556, 'z'], // Chinese Bopomofo: ㄐ - Ctrl+Z (undo)
+  [12554, 'a'], // Chinese Bopomofo: ㄒ - Ctrl+A (select all)
+  [12553, 's'], // Chinese Bopomofo: ㄓ - Ctrl+S (save)
+
+  // Japanese IME - most common interference
+  [12364, 'v'], // Hiragana: き - Ctrl+V
+  [12366, 'x'], // Hiragana: く - Ctrl+X
+  [12378, 'z'], // Hiragana: ず - Ctrl+Z
+  [12354, 'a'], // Hiragana: あ - Ctrl+A
+  [12377, 's'], // Hiragana: す - Ctrl+S
+
+  // Korean Hangul - essential patterns
+  [48708, 'v'], // 비 - Ctrl+V
+  [49828, 'x'], // 시 - Ctrl+X
+  [51652, 'z'], // 지 - Ctrl+Z
+  [50500, 'a'], // 아 - Ctrl+A
+  [49836, 's'], // 사 - Ctrl+S
+
+  // Common European diacritics that interfere with Ctrl shortcuts
+  [226, 'v'], // Vietnamese: â - Ctrl+V
+  [225, 'a'], // Vietnamese: á - Ctrl+A
+  [234, 'e'], // Vietnamese: ê - Ctrl+E
+  [233, 'e'], // French: é - Ctrl+E
+  [228, 'a'], // German: ä - Ctrl+A
+  [246, 'o'], // German: ö - Ctrl+O
+  [252, 'u'], // German: ü - Ctrl+U
+]);
+
 /**
  * Maps symbols from parameterized functional keys `\x1b[1;1<letter>`
  * to their corresponding key names (e.g., 'up', 'f1').
@@ -254,6 +295,20 @@ export function KeypressProvider({
       return false;
     };
 
+    // Temporary workaround for IME interference with Ctrl combinations
+    // TODO: Replace with a more robust IME-aware input handling system
+    // This is a short-term solution to handle the most common IME conflicts
+    // while we develop a proper internationalization strategy.
+    const handleIMECtrlChar = (code: number): string | null => {
+      // Check for Ctrl+C first (highest priority for system stability)
+      // This ensures interrupt/cancel functionality works across IME configurations
+      if (IME_CTRL_C_MAPPINGS.has(code)) {
+        return 'c';
+      }
+
+      return IME_ESSENTIAL_MAPPINGS.get(code) || null;
+    };
+
     // Parse a single complete kitty sequence from the start (prefix) of the
     // buffer and return both the Key and the number of characters consumed.
     // This lets us "peel off" one complete event when multiple sequences arrive
@@ -411,24 +466,39 @@ export function KeypressProvider({
         }
 
         // Ctrl+letters and Alt+letters
-        if (
-          (ctrl || alt) &&
-          keyCode >= 'a'.charCodeAt(0) &&
-          keyCode <= 'z'.charCodeAt(0)
-        ) {
-          const letter = String.fromCharCode(keyCode);
-          return {
-            key: {
-              name: letter,
-              ctrl,
-              meta: alt,
-              shift,
-              paste: false,
-              sequence: buffer.slice(0, m[0].length),
-              kittyProtocol: true,
-            },
-            length: m[0].length,
-          };
+        if (ctrl || alt) {
+          let letter: string | undefined;
+
+          // Standard ASCII letters
+          if (
+            (keyCode >= 'a'.charCodeAt(0) && keyCode <= 'z'.charCodeAt(0)) ||
+            (keyCode >= 'A'.charCodeAt(0) && keyCode <= 'Z'.charCodeAt(0))
+          ) {
+            letter = String.fromCharCode(keyCode).toLowerCase();
+          }
+          // Handle IME interference: if Ctrl is pressed and we get a non-ASCII character,
+          // try to map it back to the intended Ctrl+letter
+          else if (ctrl && keyCode > 127) {
+            const mappedLetter = handleIMECtrlChar(keyCode);
+            if (mappedLetter) {
+              letter = mappedLetter;
+            }
+          }
+
+          if (letter) {
+            return {
+              key: {
+                name: letter,
+                ctrl,
+                meta: alt,
+                shift,
+                paste: false,
+                sequence: buffer.slice(0, m[0].length),
+                kittyProtocol: true,
+              },
+              length: m[0].length,
+            };
+          }
         }
       }
 
@@ -855,10 +925,11 @@ export function KeypressProvider({
 
         if (isPrefixNext) {
           nextMarkerPos = prefixPos;
+          markerLength = pasteModePrefixBuffer.length;
         } else if (isSuffixNext) {
           nextMarkerPos = suffixPos;
+          markerLength = pasteModeSuffixBuffer.length;
         }
-        markerLength = pasteModeSuffixBuffer.length;
 
         if (nextMarkerPos === -1) {
           keypressStream.write(data.slice(pos));
