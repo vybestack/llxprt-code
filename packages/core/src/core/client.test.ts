@@ -31,7 +31,11 @@ import {
   Part,
   PartListUnion,
 } from '@google/genai';
-import { findCompressSplitPoint, GeminiClient } from './client.js';
+import {
+  findCompressSplitPoint,
+  GeminiClient,
+  isThinkingSupported,
+} from './client.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import {
   ContentGenerator,
@@ -155,6 +159,22 @@ async function fromAsync<T>(promise: AsyncGenerator<T>): Promise<readonly T[]> {
   }
   return results;
 }
+
+describe('isThinkingSupported', () => {
+  it('should return true for gemini-2.5', () => {
+    expect(isThinkingSupported('gemini-2.5')).toBe(true);
+    expect(isThinkingSupported('gemini-2.5-flash')).toBe(true);
+  });
+
+  it('should return false for gemini-2.0 models', () => {
+    expect(isThinkingSupported('gemini-2.0-flash')).toBe(false);
+    expect(isThinkingSupported('gemini-2.0-pro')).toBe(false);
+  });
+
+  it('should return true for other models', () => {
+    expect(isThinkingSupported('some-other-model')).toBe(true);
+  });
+});
 
 describe('findCompressSplitPoint', () => {
   it('should throw an error for non-positive numbers', () => {

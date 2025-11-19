@@ -50,6 +50,7 @@ import {
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { tokenLimit } from './tokenLimits.js';
+
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext, type IdeContext, type File } from '../ide/ideContext.js';
 import {
@@ -68,9 +69,8 @@ import type { IContent } from '../services/history/IContent.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
-function isThinkingSupported(model: string) {
-  if (model.startsWith('gemini-2.5')) return true;
-  return false;
+export function isThinkingSupported(model: string) {
+  return !model.startsWith('gemini-2.0');
 }
 
 /**
