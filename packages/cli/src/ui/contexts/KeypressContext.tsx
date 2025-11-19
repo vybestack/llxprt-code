@@ -38,6 +38,13 @@ import {
 } from '../utils/platformConstants.js';
 
 import { FOCUS_IN, FOCUS_OUT } from '../hooks/useFocus.js';
+import {
+  ENABLE_BRACKETED_PASTE,
+  DISABLE_BRACKETED_PASTE,
+  ENABLE_FOCUS_TRACKING,
+  DISABLE_FOCUS_TRACKING,
+  SHOW_CURSOR,
+} from '../utils/terminalSequences.js';
 
 const ESC = '\u001B';
 export const PASTE_MODE_PREFIX = `${ESC}[200~`;
@@ -244,7 +251,8 @@ export function KeypressProvider({
     };
 
     const wasRaw = stdin.isRaw;
-    if (wasRaw === false) {
+    const rawManaged = wasRaw === false;
+    if (rawManaged) {
       setRawMode(true);
     }
 
@@ -877,6 +885,21 @@ export function KeypressProvider({
       if (handleFocusEvent(key)) return;
       if (handlePasteEvent(key)) return;
 
+      // Handle Ctrl+Z (suspend) - must check before other handlers
+      if (key.name === 'z' && key.ctrl && !key.meta && rawManaged) {
+        // Disable raw mode
+        setRawMode(false);
+
+        // Restore cursor and disable terminal modes
+        process.stdout.write(SHOW_CURSOR);
+        process.stdout.write(DISABLE_BRACKETED_PASTE);
+        process.stdout.write(DISABLE_FOCUS_TRACKING);
+
+        // Send SIGTSTP to suspend the process
+        process.kill(process.pid, 'SIGTSTP');
+        return;
+      }
+
       if (isPaste) {
         pasteBuffer = Buffer.concat([pasteBuffer, Buffer.from(key.sequence)]);
         return;
@@ -959,6 +982,21 @@ export function KeypressProvider({
       }
     };
 
+    // Handle SIGCONT (process resume after tmux reattach or fg)
+    const handleSigcont = () => {
+      if (!rawManaged) return;
+
+      // Resume stdin and re-enable raw mode
+      stdin.resume();
+      setRawMode(true);
+
+      // Re-send terminal control sequences
+      process.stdout.write(ENABLE_BRACKETED_PASTE);
+      process.stdout.write(ENABLE_FOCUS_TRACKING);
+    };
+
+    process.on('SIGCONT', handleSigcont);
+
     let rl: readline.Interface;
     if (usePassthrough) {
       rl = readline.createInterface({
@@ -983,6 +1021,9 @@ export function KeypressProvider({
       }
 
       rl.close();
+
+      // Remove SIGCONT listener
+      process.removeListener('SIGCONT', handleSigcont);
 
       // Restore the terminal to its original state.
       if (wasRaw === false) {
