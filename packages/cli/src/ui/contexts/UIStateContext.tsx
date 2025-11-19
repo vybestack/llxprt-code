@@ -62,6 +62,7 @@ export interface UIState {
   showPrivacyNotice: boolean;
   isOAuthCodeDialogOpen: boolean;
   isPermissionsDialogOpen: boolean;
+  isProQuotaDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];

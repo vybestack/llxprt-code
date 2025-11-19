@@ -99,6 +99,7 @@ export interface UIActions {
 
   // Confirmation handlers
   handleConfirmationSelect: (value: boolean) => void;
+  handleProQuotaChoice: (choice: 'auth' | 'continue') => void;
 
   // IDE prompt
   handleIdePromptComplete: (result: IdeIntegrationNudgeResult) => void;

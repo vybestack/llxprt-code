@@ -11,10 +11,10 @@ import React, {
   useMemo,
   useState,
   useRef,
+
 } from 'react';
 import { type DOMElement, measureElement, useStdin, useStdout } from 'ink';
 import {
-  StreamingState,
   MessageType,
   ToolCallStatus,
   type HistoryItemWithoutId,
@@ -30,6 +30,7 @@ import {
   IdeClient,
   ideContext,
   type IdeContext,
+  type IdeInfo,
   getErrorMessage,
   getAllLlxprtMdFilenames,
   isEditorAvailable,
@@ -57,7 +58,7 @@ import {
 } from '../constants/historyLimits.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
-import { registerCleanup } from '../utils/cleanup.js';
+import { registerCleanup, runExitCleanup } from '../utils/cleanup.js';
 import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
 import { calculateMainAreaWidth } from './utils/ui-sizing.js';
@@ -109,7 +110,6 @@ import {
   type UIActions,
 } from './contexts/UIActionsContext.js';
 import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
-
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
@@ -183,7 +183,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const inputHistoryStore = useInputHistoryStore();
 
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
-  const currentIDE = config.getIdeClient()?.getCurrentIde();
+  const [currentIDE, setCurrentIDE] = useState<IdeInfo | null>(null);
   useEffect(() => {
     const ideClient = config.getIdeClient();
     if (ideClient) {
@@ -287,6 +287,7 @@ export const AppContainer = (props: AppContainerProps) => {
     () => new DebugLogger('llxprt:ui:tokentracking'),
     [],
   );
+
 
   // Set up history token count listener
   useEffect(() => {
@@ -399,6 +400,19 @@ export const AppContainer = (props: AppContainerProps) => {
   const [_isTrustedFolderState, _setIsTrustedFolder] = useState(
     isWorkspaceTrusted(settings.merged),
   );
+
+  // Core hooks and processors
+  const {
+    vimEnabled: vimModeEnabled,
+    vimMode,
+    toggleVimEnabled,
+  } = useVimMode();
+
+  const onAuthError = useCallback(() => {
+    setAuthError('reauth required');
+    // Open the auth dialog when authentication errors occur
+    appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
+  }, [setAuthError, appDispatch]);
   const [currentModel, setCurrentModel] = useState(config.getModel());
 
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
@@ -422,6 +436,11 @@ export const AppContainer = (props: AppContainerProps) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [providerModels, setProviderModels] = useState<IModel[]>([]);
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
+  const [isProQuotaDialogOpen, setIsProQuotaDialogOpen] = useState(false);
+  const [proQuotaDialogResolver, setProQuotaDialogResolver] = useState<
+    ((value: boolean) => void) | null
+  >(null);
+
 
   const openPermissionsDialog = useCallback(() => {
     setIsPermissionsDialogOpen(true);
@@ -438,71 +457,7 @@ export const AppContainer = (props: AppContainerProps) => {
     onWorkspaceMigrationDialogClose,
   } = useWorkspaceMigration(settings);
 
-  useEffect(() => {
-    const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
-    // Set the initial value
-    setIdeContextState(ideContext.getIdeContext());
-    return unsubscribe;
-  }, []);
 
-  // Update currentModel when settings change - get it from the SAME place as diagnostics
-  useEffect(() => {
-    const updateModel = async () => {
-      const settingsService = getSettingsService();
-
-      // Try to get from SettingsService first (same as diagnostics does)
-      if (settingsService && settingsService.getDiagnosticsData) {
-        try {
-          const diagnosticsData = await settingsService.getDiagnosticsData();
-          if (diagnosticsData && diagnosticsData.model) {
-            setCurrentModel(diagnosticsData.model);
-            return;
-          }
-        } catch (_error) {
-          // Fall through to config
-        }
-      }
-
-      // Otherwise use config (which is what diagnostics falls back to)
-      setCurrentModel(config.getModel());
-    };
-
-    // Update immediately
-    updateModel();
-
-    // Also listen for any changes if SettingsService is available
-    const settingsService = getSettingsService();
-    if (settingsService) {
-      settingsService.on('settings-changed', updateModel);
-      return () => {
-        settingsService.off('settings-changed', updateModel);
-      };
-    }
-
-    return undefined;
-  }, [config]);
-
-  useEffect(() => {
-    const openDebugConsole = () => {
-      setShowErrorDetails(true);
-      setConstrainHeight(false); // Make sure the user sees the full message.
-    };
-    appEvents.on(AppEvent.OpenDebugConsole, openDebugConsole);
-
-    const logErrorHandler = (errorMessage: unknown) => {
-      handleNewMessage({
-        type: 'error',
-        content: String(errorMessage),
-        count: 1,
-      });
-    };
-    appEvents.on(AppEvent.LogError, logErrorHandler);
-
-    return () => {
-      appEvents.off(AppEvent.OpenDebugConsole, openDebugConsole);
-      appEvents.off(AppEvent.LogError, logErrorHandler);
-    };
-  }, [handleNewMessage]);
 
   const openPrivacyNotice = useCallback(() => {
     setShowPrivacyNotice(true);
@@ -511,8 +466,6 @@ export const AppContainer = (props: AppContainerProps) => {
   const handleEscapePromptChange = useCallback((showPrompt: boolean) => {
     setShowEscapePrompt(showPrompt);
   }, []);
-
-  const initialPromptSubmitted = useRef(false);
 
   const errorCount = useMemo(
     () =>
@@ -531,26 +484,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const { isSettingsDialogOpen, openSettingsDialog, closeSettingsDialog } =
     useSettingsCommand();
-
-  const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
-    useFolderTrust(settings, config);
-
-  const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
-  useEffect(() => {
-    if (ideNeedsRestart) {
-      // IDE trust changed, force a restart.
-      setShowIdeRestartPrompt(true);
-    }
-  }, [ideNeedsRestart]);
-
-  useKeypress(
-    (key) => {
-      if (key.name === 'r' || key.name === 'R') {
-        process.exit(0);
-      }
-    },
-    { isActive: showIdeRestartPrompt },
-  );
 
   const {
     isAuthDialogOpen,
@@ -804,9 +737,6 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [runtime]);
 
   // Terminal and UI setup
-  // Terminal and UI setup
-  const isInitialMount = useRef(true);
-
   const widthFraction = 0.9;
   // Calculate inputWidth accounting for:
   // - Prompt: 2 chars ("! " or "> ")
@@ -837,12 +767,6 @@ export const AppContainer = (props: AppContainerProps) => {
     return editorType as EditorType;
   }, [settings, openEditorDialog]);
 
-  const onAuthError = useCallback(() => {
-    setAuthError('reauth required');
-    // Open the auth dialog when authentication errors occur
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
-  }, [setAuthError, appDispatch]);
-
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
     cancelAuthentication();
@@ -853,12 +777,66 @@ export const AppContainer = (props: AppContainerProps) => {
     setShowPrivacyNotice(false);
   }, []);
 
-  // Core hooks and processors
-  const {
-    vimEnabled: vimModeEnabled,
-    vimMode,
-    toggleVimEnabled,
-  } = useVimMode();
+  // Memoize viewport to ensure it updates when inputWidth changes
+  const viewport = useMemo(
+    () => ({ height: 10, width: inputWidth }),
+    [inputWidth],
+  );
+
+  const buffer = useTextBuffer({
+    initialText: '',
+    viewport,
+    stdin,
+    setRawMode,
+    isValidPath,
+    shellModeActive,
+  });
+
+
+
+  const handleUserCancel = useCallback(() => {
+    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
+    if (lastUserMessage) {
+      buffer.setText(lastUserMessage);
+    }
+  }, [buffer, inputHistoryStore.inputHistory]);
+
+  const slashCommandActions = useMemo(
+    () => ({
+      openAuthDialog: openAuthDialog,
+      openThemeDialog,
+      openEditorDialog,
+      openProviderDialog,
+      openProviderModelDialog,
+      openLoadProfileDialog,
+      openToolsDialog,
+      openPrivacyNotice: () => setShowPrivacyNotice(true),
+      openSettingsDialog,
+      quit: (messages: HistoryItem[]) => {
+        setQuittingMessages(messages);
+        setTimeout(async () => {
+          await runExitCleanup();
+          process.exit(0);
+        }, 100);
+      },
+      setDebugMessage,
+      toggleCorgiMode: () => setCorgiMode((prev) => !prev),
+    }),
+    [
+      openAuthDialog,
+      openThemeDialog,
+      openEditorDialog,
+      openProviderDialog,
+      openProviderModelDialog,
+      openLoadProfileDialog,
+      openToolsDialog,
+      openSettingsDialog,
+      setQuittingMessages,
+      setDebugMessage,
+      setShowPrivacyNotice,
+      setCorgiMode,
+    ],
+  );
 
   const {
     handleSlashCommand,
@@ -892,30 +870,292 @@ export const AppContainer = (props: AppContainerProps) => {
     openPermissionsDialog,
   );
 
-  // Memoize viewport to ensure it updates when inputWidth changes
-  const viewport = useMemo(
-    () => ({ height: 10, width: inputWidth }),
-    [inputWidth],
+
+
+  const cancelHandlerRef = useRef<() => void>(() => { });
+
+  const {
+    streamingState,
+    submitQuery,
+    initError,
+    pendingHistoryItems: pendingGeminiHistoryItems,
+    thought,
+    cancelOngoingRequest,
+  } = useGeminiStream(
+    config.getGeminiClient(),
+    history,
+    addItem,
+    config,
+    settings,
+    setDebugMessage,
+    handleSlashCommand,
+    shellModeActive,
+    getPreferredEditor,
+    onAuthError,
+    performMemoryRefresh,
+    refreshStatic,
+    handleUserCancel,
+    registerTodoPause,
   );
 
-  const buffer = useTextBuffer({
-    initialText: '',
-    viewport,
-    stdin,
-    setRawMode,
-    isValidPath,
-    shellModeActive,
+  cancelHandlerRef.current = useCallback(() => {
+    const pendingHistoryItems = [
+      ...pendingSlashCommandHistoryItems,
+      ...pendingGeminiHistoryItems,
+    ];
+    if (isToolExecuting(pendingHistoryItems)) {
+      buffer.setText(''); // Just clear the prompt
+      return;
+    }
+
+    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
+    const textToSet = lastUserMessage || '';
+
+    if (textToSet) {
+      buffer.setText(textToSet);
+    }
+  }, [
+    buffer,
+    inputHistoryStore.inputHistory,
+    pendingSlashCommandHistoryItems,
+    pendingGeminiHistoryItems,
+  ]);
+
+  const handleFinalSubmit = useCallback(
+    (submittedValue: string) => {
+      const trimmedValue = submittedValue.trim();
+      if (trimmedValue.length > 0) {
+        // Add to independent input history
+        inputHistoryStore.addInput(trimmedValue);
+        submitQuery(trimmedValue);
+      }
+    },
+    [submitQuery, inputHistoryStore],
+  );
+
+  const { handleUserInputSubmit } = useTodoPausePreserver({
+    controller: todoPauseController,
+    updateTodos,
+    handleFinalSubmit,
   });
 
-  // Independent input history management (unaffected by /clear)
+  const handleClearScreen = useCallback(() => {
+    clearItems();
+    clearConsoleMessagesState();
+    console.clear();
+    refreshStatic();
+  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
 
+  const handleProQuotaChoice = useCallback(
+    (choice: 'auth' | 'continue') => {
+      setIsProQuotaDialogOpen(false);
+      if (proQuotaDialogResolver) {
+        if (choice === 'auth') {
+          proQuotaDialogResolver(false); // Don't continue with fallback, show auth dialog
+          openAuthDialog();
+        } else {
+          proQuotaDialogResolver(true); // Continue with fallback model
+        }
+        setProQuotaDialogResolver(null);
+      }
+    },
+    [proQuotaDialogResolver, openAuthDialog],
+  );
 
-  const handleUserCancel = useCallback(() => {
-    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
-    if (lastUserMessage) {
-      buffer.setText(lastUserMessage);
+  const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
+
+  const isInputActive = !initError && !isProcessing;
+
+  // Compute available terminal height based on controls measurement
+  // Using useLayoutEffect for proper layout timing (from Phase 03 analysis)
+  const [availableTerminalHeight, setAvailableTerminalHeight] = useState(
+    () => terminalHeight - staticExtraHeight,
+  );
+
+  useLayoutEffect(() => {
+    if (mainControlsRef.current) {
+      const fullFooterMeasurement = measureElement(mainControlsRef.current);
+      const newHeight = Math.max(
+        terminalHeight - fullFooterMeasurement.height - staticExtraHeight,
+        0,
+      );
+      setAvailableTerminalHeight(newHeight);
+    } else {
+      setAvailableTerminalHeight(
+        Math.max(terminalHeight - staticExtraHeight, 0),
+      );
     }
-  }, [buffer, inputHistoryStore.inputHistory]);
+  }, [terminalHeight, mainControlsRef.current]);
+
+  // Update shell execution config with proper terminal height calculations
+  useEffect(() => {
+    if ((config as any).setShellExecutionConfig) {
+      (config as any).setShellExecutionConfig({
+        terminalWidth: Math.floor(terminalWidth * SHELL_WIDTH_FRACTION),
+        terminalHeight: Math.max(
+          Math.floor(availableTerminalHeight - SHELL_HEIGHT_PADDING),
+          1,
+        ),
+        // pager: settings.merged.tools?.shell?.pager,
+        // showColor: settings.merged.tools?.shell?.showColor,
+      });
+    }
+  }, [terminalWidth, availableTerminalHeight, config]);
+
+
+
+  // Context file names computation
+  const contextFileNames = useMemo(() => {
+    const fromSettings = settings.merged.contextFileName;
+    return fromSettings
+      ? Array.isArray(fromSettings)
+        ? fromSettings
+        : [fromSettings]
+      : getAllLlxprtMdFilenames();
+  }, [settings.merged.contextFileName]);
+  // Initial prompt handling
+  const initialPrompt = useMemo(() => config.getQuestion(), [config]);
+  const initialPromptSubmitted = useRef(false);
+  const geminiClient = config.getGeminiClient();
+
+  useEffect(() => {
+    if (
+      initialPrompt &&
+      !initialPromptSubmitted.current &&
+      !isAuthenticating &&
+      !isAuthDialogOpen &&
+      !isThemeDialogOpen &&
+      !isEditorDialogOpen &&
+      !isProviderDialogOpen &&
+      !isProviderModelDialogOpen &&
+      !isToolsDialogOpen &&
+      !showPrivacyNotice &&
+      geminiClient?.isInitialized?.()
+    ) {
+      handleFinalSubmit(initialPrompt);
+      initialPromptSubmitted.current = true;
+    }
+  }, [
+    initialPrompt,
+    handleFinalSubmit,
+    isAuthenticating,
+    isAuthDialogOpen,
+    isThemeDialogOpen,
+    isEditorDialogOpen,
+    isProviderDialogOpen,
+    isProviderModelDialogOpen,
+    isToolsDialogOpen,
+    showPrivacyNotice,
+    geminiClient,
+  ]);
+
+
+
+  useEffect(() => {
+    const getIde = async () => {
+      const ideClient = await IdeClient.getInstance();
+      const currentIde = ideClient.getCurrentIde();
+      setCurrentIDE(currentIde || null);
+    };
+    getIde();
+  }, []);
+
+
+  const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
+    useFolderTrust(settings, config);
+  const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
+  const isInitialMount = useRef(true);
+
+  useEffect(() => {
+    if (ideNeedsRestart) {
+      // IDE trust changed, force a restart.
+      setShowIdeRestartPrompt(true);
+    }
+  }, [ideNeedsRestart]);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    const handler = setTimeout(() => {
+      refreshStatic();
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [terminalWidth, refreshStatic]);
+
+
+  useEffect(() => {
+    const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
+    // Set the initial value
+    setIdeContextState(ideContext.getIdeContext());
+    return unsubscribe;
+  }, []);
+
+  // Update currentModel when settings change - get it from the SAME place as diagnostics
+  useEffect(() => {
+    const updateModel = async () => {
+      const settingsService = getSettingsService();
+
+      // Try to get from SettingsService first (same as diagnostics does)
+      if (settingsService && settingsService.getDiagnosticsData) {
+        try {
+          const diagnosticsData = await settingsService.getDiagnosticsData();
+          if (diagnosticsData && diagnosticsData.model) {
+            setCurrentModel(diagnosticsData.model);
+            return;
+          }
+        } catch (_error) {
+          // Fall through to config
+        }
+      }
+
+      // Otherwise use config (which is what diagnostics falls back to)
+      setCurrentModel(config.getModel());
+    };
+
+    // Update immediately
+    updateModel();
+
+    // Also listen for any changes if SettingsService is available
+    const settingsService = getSettingsService();
+    if (settingsService) {
+      settingsService.on('settings-changed', updateModel);
+      return () => {
+        settingsService.off('settings-changed', updateModel);
+      };
+    }
+
+    return undefined;
+  }, [config]);
+
+  useEffect(() => {
+    const openDebugConsole = () => {
+      setShowErrorDetails(true);
+      setConstrainHeight(false); // Make sure the user sees the full message.
+    };
+    appEvents.on(AppEvent.OpenDebugConsole, openDebugConsole);
+
+    const logErrorHandler = (errorMessage: unknown) => {
+      handleNewMessage({
+        type: 'error',
+        content: String(errorMessage),
+        count: 1,
+      });
+    };
+    appEvents.on(AppEvent.LogError, logErrorHandler);
+
+    return () => {
+      appEvents.off(AppEvent.OpenDebugConsole, openDebugConsole);
+      appEvents.off(AppEvent.LogError, logErrorHandler);
+    };
+  }, [handleNewMessage]);
+
+
 
   const handleOAuthCodeDialogClose = useCallback(() => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
@@ -942,29 +1182,7 @@ export const AppContainer = (props: AppContainerProps) => {
     [runtime],
   );
 
-  const {
-    streamingState,
-    submitQuery,
-    initError,
-    pendingHistoryItems: pendingGeminiHistoryItems,
-    thought,
-    cancelOngoingRequest,
-  } = useGeminiStream(
-    config.getGeminiClient(),
-    history,
-    addItem,
-    config,
-    settings,
-    setDebugMessage,
-    handleSlashCommand,
-    shellModeActive,
-    getPreferredEditor,
-    onAuthError,
-    performMemoryRefresh,
-    refreshStatic,
-    handleUserCancel,
-    registerTodoPause,
-  );
+
 
   const pendingHistoryItems = useMemo(
     () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
@@ -972,7 +1190,7 @@ export const AppContainer = (props: AppContainerProps) => {
   );
 
   // Update the cancel handler with message queue support
-  const cancelHandlerRef = useRef<(() => void) | null>(null);
+
   cancelHandlerRef.current = useCallback(() => {
     if (isToolExecuting(pendingHistoryItems)) {
       buffer.setText(''); // Just clear the prompt
@@ -987,24 +1205,7 @@ export const AppContainer = (props: AppContainerProps) => {
     }
   }, [buffer, inputHistoryStore.inputHistory, pendingHistoryItems]);
 
-  // Input handling - queue messages for processing
-  const handleFinalSubmit = useCallback(
-    (submittedValue: string) => {
-      const trimmedValue = submittedValue.trim();
-      if (trimmedValue.length > 0) {
-        // Add to independent input history
-        inputHistoryStore.addInput(trimmedValue);
-        submitQuery(trimmedValue);
-      }
-    },
-    [submitQuery, inputHistoryStore],
-  );
 
-  const { handleUserInputSubmit } = useTodoPausePreserver({
-    controller: todoPauseController,
-    updateTodos,
-    handleFinalSubmit,
-  });
 
   const handleIdePromptComplete = useCallback(
     (result: IdeIntegrationNudgeResult) => {
@@ -1031,7 +1232,7 @@ export const AppContainer = (props: AppContainerProps) => {
     [handleSlashCommand, settings],
   );
 
-  const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
+
 
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
@@ -1170,18 +1371,7 @@ export const AppContainer = (props: AppContainerProps) => {
   // Initialize independent input history from logger
 
 
-  const isInputActive =
-    (streamingState === StreamingState.Idle ||
-      streamingState === StreamingState.Responding) &&
-    !initError &&
-    !isProcessing;
 
-  const handleClearScreen = useCallback(() => {
-    clearItems();
-    clearConsoleMessagesState();
-    console.clear();
-    refreshStatic();
-  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
 
   const handleConfirmationSelect = useCallback(
     (value: boolean) => {
@@ -1196,18 +1386,10 @@ export const AppContainer = (props: AppContainerProps) => {
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
 
-  useLayoutEffect(() => {
-    if (mainControlsRef.current) {
-      const fullFooterMeasurement = measureElement(mainControlsRef.current);
-      setFooterHeight(fullFooterMeasurement.height);
-    }
-  }, [terminalHeight, consoleMessages, showErrorDetails]);
 
 
-  const availableTerminalHeight = useMemo(
-    () => terminalHeight - footerHeight - staticExtraHeight,
-    [terminalHeight, footerHeight],
-  );
+
+
 
   // Flicker detection - measures root UI element vs terminal height
   // to detect overflow that could cause flickering (issue #456)
@@ -1236,33 +1418,7 @@ export const AppContainer = (props: AppContainerProps) => {
     };
   }, [constrainHeight]);
 
-  useEffect(() => {
-    // skip refreshing Static during first mount
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
 
-    // debounce so it doesn't fire up too often during resize
-    const handler = setTimeout(() => {
-      if (streamingState === StreamingState.Idle) {
-        refreshStatic();
-      } else {
-        setStaticNeedsRefresh(true);
-      }
-    }, 300);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [terminalWidth, terminalHeight, refreshStatic, streamingState]);
-
-  useEffect(() => {
-    if (streamingState === StreamingState.Idle && _staticNeedsRefresh) {
-      setStaticNeedsRefresh(false);
-      refreshStatic();
-    }
-  }, [streamingState, refreshStatic, _staticNeedsRefresh]);
 
   const filteredConsoleMessages = useMemo(() => {
     if (config.getDebugMode()) {
@@ -1273,47 +1429,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
 
 
-  const contextFileNames = useMemo(() => {
-    const fromSettings = settings.merged.contextFileName;
-    if (fromSettings) {
-      return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
-    }
-    return getAllLlxprtMdFilenames();
-  }, [settings.merged.contextFileName]);
 
-  const initialPrompt = useMemo(() => config.getQuestion(), [config]);
-  const geminiClient = config.getGeminiClient();
-
-  useEffect(() => {
-    if (
-      initialPrompt &&
-      !initialPromptSubmitted.current &&
-      !isAuthenticating &&
-      !isAuthDialogOpen &&
-      !isThemeDialogOpen &&
-      !isEditorDialogOpen &&
-      !isProviderDialogOpen &&
-      !isProviderModelDialogOpen &&
-      !isToolsDialogOpen &&
-      !showPrivacyNotice &&
-      geminiClient
-    ) {
-      submitQuery(initialPrompt);
-      initialPromptSubmitted.current = true;
-    }
-  }, [
-    initialPrompt,
-    submitQuery,
-    isAuthenticating,
-    isAuthDialogOpen,
-    isThemeDialogOpen,
-    isEditorDialogOpen,
-    isProviderDialogOpen,
-    isProviderModelDialogOpen,
-    isToolsDialogOpen,
-    showPrivacyNotice,
-    geminiClient,
-  ]);
 
   const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
 
@@ -1365,6 +1481,7 @@ export const AppContainer = (props: AppContainerProps) => {
     showPrivacyNotice,
     isOAuthCodeDialogOpen: appState.openDialogs.oauthCode,
     isPermissionsDialogOpen,
+    isProQuotaDialogOpen,
 
     // Dialog data
     providerOptions,
@@ -1541,6 +1658,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Confirmation handlers
     handleConfirmationSelect,
+    handleProQuotaChoice,
 
     // IDE prompt
     handleIdePromptComplete,
