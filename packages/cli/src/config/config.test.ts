@@ -24,6 +24,7 @@ import { ExtensionStorage } from './extension.js';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { RESUME_LATEST } from '../utils/sessionUtils.js';
 
 vi.mock('./trustedFolders.js', () => ({
   isWorkspaceTrusted: vi.fn().mockReturnValue(true), // Default to trusted
@@ -512,6 +513,50 @@ describe('parseArguments', () => {
 
     mockExit.mockRestore();
     mockConsoleError.mockRestore();
+  });
+
+  it('should throw an error when resuming a session without prompt in non-interactive mode', async () => {
+    const originalIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = false;
+    process.argv = ['node', 'script.js', '--resume', 'session-id'];
+
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called');
+    });
+
+    const mockConsoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    try {
+      await expect(parseArguments({} as Settings)).rejects.toThrow(
+        'process.exit called',
+      );
+
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'When resuming a session, you must provide a message via --prompt (-p) or stdin',
+        ),
+      );
+    } finally {
+      mockExit.mockRestore();
+      mockConsoleError.mockRestore();
+      process.stdin.isTTY = originalIsTTY;
+    }
+  });
+
+  it('should return RESUME_LATEST constant when --resume is passed without a value', async () => {
+    const originalIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = true; // Make it interactive to avoid validation error
+    process.argv = ['node', 'script.js', '--resume'];
+
+    try {
+      const argv = await parseArguments({} as Settings);
+      expect(argv.resume).toBe(RESUME_LATEST);
+      expect(argv.resume).toBe('latest');
+    } finally {
+      process.stdin.isTTY = originalIsTTY;
+    }
   });
 
   it('should support comma-separated values for --allowed-tools', async () => {

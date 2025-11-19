@@ -48,6 +48,7 @@ import * as dotenv from 'dotenv';
 import * as os from 'node:os';
 import { resolvePath } from '../utils/resolvePath.js';
 import { appEvents } from '../utils/events.js';
+import { RESUME_LATEST } from '../utils/sessionUtils.js';
 
 import { isWorkspaceTrusted } from './trustedFolders.js';
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P04
@@ -162,6 +163,9 @@ export interface CliArgs {
   keyfile: string | undefined;
   baseurl: string | undefined;
   proxy: string | undefined;
+  resume: string | typeof RESUME_LATEST | undefined;
+  listSessions: boolean | undefined;
+  deleteSession: string | undefined;
   includeDirectories: string[] | undefined;
   profileLoad: string | undefined;
   loadMemoryFromIncludeDirectories: boolean | undefined;
@@ -336,6 +340,29 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           type: 'string',
           description:
             'Proxy for LLxprt client, like schema://user:password@host:port',
+        })
+        .option('resume', {
+          alias: 'r',
+          type: 'string',
+          skipValidation: true,
+          description:
+            'Resume a previous session. Use "latest" for most recent or index number (e.g. --resume 5)',
+          coerce: (value: string): string => {
+            if (value === '') {
+              return RESUME_LATEST;
+            }
+            return value;
+          },
+        })
+        .option('list-sessions', {
+          type: 'boolean',
+          description:
+            'List available sessions for the current project and exit.',
+        })
+        .option('delete-session', {
+          type: 'string',
+          description:
+            'Delete a session by index and exit.',
         })
         .option('include-directories', {
           type: 'array',
