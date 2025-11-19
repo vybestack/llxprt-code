@@ -5,10 +5,11 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import { useKeypress } from '../hooks/useKeypress.js';
 // Import utility functions for future use
 // import { truncateEnd, truncateStart } from '../utils/responsive.js';
 
@@ -122,44 +123,51 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
     }
   }, [selectedIndex, scrollOffset, contentHeight]);
 
-  useInput((input, key) => {
-    if (key.escape || input === 'q') {
-      return onClose();
-    }
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape' || key.sequence === 'q') {
+        return onClose();
+      }
 
-    if (key.upArrow || input === 'k') {
-      setSelectedIndex((prev) => Math.max(0, prev - 1));
-    }
+      if (reversedEntries.length === 0) {
+        return;
+      }
 
-    if (key.downArrow || input === 'j') {
-      setSelectedIndex((prev) =>
-        Math.min(reversedEntries.length - 1, prev + 1),
-      );
-    }
+      if (key.name === 'up' || key.sequence === 'k') {
+        setSelectedIndex((prev) => Math.max(0, prev - 1));
+      }
 
-    if (key.pageUp) {
-      setSelectedIndex((prev) =>
-        Math.max(0, prev - Math.floor(contentHeight / 2)),
-      );
-    }
+      if (key.name === 'down' || key.sequence === 'j') {
+        setSelectedIndex((prev) =>
+          Math.min(reversedEntries.length - 1, prev + 1),
+        );
+      }
 
-    if (key.pageDown) {
-      setSelectedIndex((prev) =>
-        Math.min(
-          reversedEntries.length - 1,
-          prev + Math.floor(contentHeight / 2),
-        ),
-      );
-    }
+      if (key.name === 'pageup') {
+        setSelectedIndex((prev) =>
+          Math.max(0, prev - Math.floor(contentHeight / 2)),
+        );
+      }
 
-    if (input === 'g') {
-      setSelectedIndex(0);
-    }
+      if (key.name === 'pagedown') {
+        setSelectedIndex((prev) =>
+          Math.min(
+            reversedEntries.length - 1,
+            prev + Math.floor(contentHeight / 2),
+          ),
+        );
+      }
 
-    if (input === 'G') {
-      setSelectedIndex(reversedEntries.length - 1);
-    }
-  });
+      if (key.sequence === 'g') {
+        setSelectedIndex(0);
+      }
+
+      if (key.sequence === 'G') {
+        setSelectedIndex(reversedEntries.length - 1);
+      }
+    },
+    { isActive: true },
+  );
 
   const renderEntry = (entry: LogEntry, index: number, isSelected: boolean) => {
     const globalIndex = scrollOffset + index;

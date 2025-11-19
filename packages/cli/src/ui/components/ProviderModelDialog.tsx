@@ -5,11 +5,12 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
 import { IModel } from '../../providers/index.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { truncateStart } from '../utils/responsive.js';
+import { useKeypress } from '../hooks/useKeypress.js';
 
 interface ProviderModelDialogProps {
   models: IModel[];
@@ -115,49 +116,60 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   const maxDialogWidth = isNarrow ? width : Math.floor(width * 0.8);
 
   const move = (delta: number) => {
+    if (filteredModels.length === 0) return;
     let next = index + delta;
     if (next < 0) next = 0;
     if (next >= filteredModels.length) next = filteredModels.length - 1;
     setIndex(next);
   };
 
-  useInput((input, key) => {
-    // Guard against undefined input to prevent Ink library errors
-    if (!key) return;
-
-    if (key.escape) {
-      if (isSearching && searchTerm.length > 0) {
-        setSearchTerm('');
-      } else {
-        return onClose();
-      }
-    }
-
-    if (isSearching) {
-      if (key.return) {
-        if (filteredModels.length > 0) {
-          setIsSearching(false);
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        if (isSearching && searchTerm.length > 0) {
+          setSearchTerm('');
+        } else {
+          return onClose();
         }
-      } else if (key.tab || (key.downArrow && searchTerm.length === 0)) {
-        setIsSearching(false);
-      } else if (key.backspace || key.delete) {
-        setSearchTerm((prev) => prev.slice(0, -1));
-      } else if (input && typeof input === 'string' && !key.ctrl && !key.meta) {
-        setSearchTerm((prev) => prev + input);
       }
-    } else {
-      if (key.return && filteredModels.length > 0) {
-        return onSelect(filteredModels[index].id);
+
+      if (isSearching) {
+        if (key.name === 'return') {
+          if (filteredModels.length > 0) {
+            setIsSearching(false);
+          }
+        } else if (
+          key.name === 'tab' ||
+          (key.name === 'down' && searchTerm.length === 0)
+        ) {
+          setIsSearching(false);
+        } else if (key.name === 'backspace' || key.name === 'delete') {
+          setSearchTerm((prev) => prev.slice(0, -1));
+        } else if (
+          key.sequence &&
+          typeof key.sequence === 'string' &&
+          !key.ctrl &&
+          !key.meta &&
+          key.insertable
+        ) {
+          setSearchTerm((prev) => prev + key.sequence);
+        }
+      } else {
+        if (key.name === 'return' && filteredModels.length > 0) {
+          return onSelect(filteredModels[index].id);
+        }
+        if (key.name === 'tab' || (key.name === 'up' && index === 0)) {
+          setIsSearching(true);
+          return;
+        }
+        if (key.name === 'left') move(-1);
+        if (key.name === 'right') move(1);
+        if (key.name === 'up') move(-columns);
+        if (key.name === 'down') move(columns);
       }
-      if (key.tab || (key.upArrow && index === 0)) {
-        setIsSearching(true);
-      }
-      if (key.leftArrow) move(-1);
-      if (key.rightArrow) move(1);
-      if (key.upArrow) move(-columns);
-      if (key.downArrow) move(columns);
-    }
-  });
+    },
+    { isActive: true },
+  );
 
   const renderItem = (m: IModel, i: number, isLastInRow: boolean) => {
     const selected = i === index;

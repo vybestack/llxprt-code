@@ -5,10 +5,11 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
+import { useKeypress } from '../hooks/useKeypress.js';
 
 interface ToolsDialogProps {
   tools: AnyDeclarativeTool[];
@@ -59,11 +60,14 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
     [items],
   );
 
-  useInput((_, key) => {
-    if (key.escape) {
-      onClose();
-    }
-  });
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        onClose();
+      }
+    },
+    { isActive: true },
+  );
 
   if (availableTools.length === 0) {
     return (
