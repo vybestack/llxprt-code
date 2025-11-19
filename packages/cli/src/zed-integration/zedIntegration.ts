@@ -659,23 +659,14 @@ class Session {
           );
         }
 
-        // If this is an abort error due to cancellation, handle it gracefully
         if (
-          pendingSend.signal.aborted &&
-          isNodeError(error) &&
-          error.name === 'AbortError'
+          pendingSend.signal.aborted ||
+          (error instanceof Error && error.name === 'AbortError')
         ) {
-          // Don't throw - let the cancellation be handled below
-        } else {
-          throw error;
+          return { stopReason: 'cancelled' };
         }
-      }
 
-      // Check for cancellation after stream processing but before tool execution
-      if (pendingSend.signal.aborted) {
-        // Return cancellation without adding to conversation history
-        // The conversation state should remain clean for proper context handling
-        return { stopReason: 'cancelled' };
+        throw error;
       }
 
       if (functionCalls.length > 0) {
