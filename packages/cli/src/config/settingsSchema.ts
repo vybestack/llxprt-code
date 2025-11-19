@@ -105,7 +105,16 @@ export const SETTINGS_SCHEMA = {
     category: 'UI',
     requiresRestart: false,
     default: false,
-    description: 'Hide the application banner',
+    description: 'Hide application banner',
+    showInDialog: true,
+  },
+  useFullWidth: {
+    type: 'boolean',
+    label: 'Use Full Width',
+    category: 'UI',
+    requiresRestart: false,
+    default: true,
+    description: 'Use full terminal width instead of margins',
     showInDialog: true,
   },
   hideFooter: {

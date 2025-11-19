@@ -44,6 +44,8 @@ import { registerCleanup } from '../utils/cleanup.js';
 import { useHistory } from './hooks/useHistoryManager.js';
 import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
+import { useKittyKeyboardProtocol } from './hooks/useKittyKeyboardProtocol.js';
+import { calculateMainAreaWidth } from './utils/ui-sizing.js';
 import {
   useTodoPausePreserver,
   TodoPausePreserver,
@@ -1274,7 +1276,7 @@ export const AppContainer = (props: AppContainerProps) => {
     geminiClient,
   ]);
 
-  const mainAreaWidth = Math.floor(terminalWidth * 0.9);
+  const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
 
   // Detect PowerShell for file reference syntax tip
   const isPowerShell =
