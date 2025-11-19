@@ -39,6 +39,11 @@ export const LoadProfileDialog: React.FC<LoadProfileDialogProps> = ({
   useKeypress(
     (key) => {
       if (key.name === 'escape') return onClose();
+
+      if (profiles.length === 0) {
+        return;
+      }
+
       if (key.name === 'return') return onSelect(profiles[index]);
       if (key.name === 'left') move(-1);
       if (key.name === 'right') move(1);

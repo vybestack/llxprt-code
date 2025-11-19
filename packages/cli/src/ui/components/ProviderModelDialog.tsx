@@ -116,6 +116,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   const maxDialogWidth = isNarrow ? width : Math.floor(width * 0.8);
 
   const move = (delta: number) => {
+    if (filteredModels.length === 0) return;
     let next = index + delta;
     if (next < 0) next = 0;
     if (next >= filteredModels.length) next = filteredModels.length - 1;
@@ -159,6 +160,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
         }
         if (key.name === 'tab' || (key.name === 'up' && index === 0)) {
           setIsSearching(true);
+          return;
         }
         if (key.name === 'left') move(-1);
         if (key.name === 'right') move(1);

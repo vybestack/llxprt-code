@@ -108,6 +108,9 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
         if (key.name === 'tab') {
           setIsSearching(true);
         }
+        if (filteredProviders.length === 0) {
+          return;
+        }
         if (key.name === 'left') move(-1);
         if (key.name === 'right') move(1);
         if (key.name === 'up') move(-columns);

@@ -129,6 +129,10 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
         return onClose();
       }
 
+      if (reversedEntries.length === 0) {
+        return;
+      }
+
       if (key.name === 'up' || key.sequence === 'k') {
         setSelectedIndex((prev) => Math.max(0, prev - 1));
       }
