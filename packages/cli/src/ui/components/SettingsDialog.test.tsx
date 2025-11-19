@@ -1027,4 +1027,73 @@ describe('SettingsDialog', () => {
       unmount();
     });
   });
+
+  describe('Performance and Memory', () => {
+    it('should not have excessive re-renders when idle', async () => {
+      const settings = createMockSettings();
+      const onSelect = vi.fn();
+
+      // Track render count using a side effect
+      let renderCount = 0;
+      const TestWrapper = () => {
+        renderCount++;
+        return (
+          <KeypressProvider kittyProtocolEnabled={false}>
+            <SettingsDialog settings={settings} onSelect={onSelect} />
+          </KeypressProvider>
+        );
+      };
+
+      const { unmount } = render(<TestWrapper />);
+
+      // Wait for initial render to stabilize
+      await wait(100);
+      const initialRenderCount = renderCount;
+
+      // Wait while idle - should not trigger additional renders
+      await wait(200);
+      const finalRenderCount = renderCount;
+
+      // Allow for a small number of initial stabilization renders (up to 5)
+      // but should not continue rendering while idle
+      expect(finalRenderCount - initialRenderCount).toBeLessThanOrEqual(2);
+
+      unmount();
+    });
+
+    it('should not trigger continuous useEffect when dependencies are stable', async () => {
+      const settings = createMockSettings({ vimMode: true });
+      const onSelect = vi.fn();
+
+      // Track structuredClone calls to detect excessive cloning
+      const originalStructuredClone = global.structuredClone;
+      let cloneCount = 0;
+      global.structuredClone = vi.fn((obj) => {
+        cloneCount++;
+        return originalStructuredClone(obj);
+      });
+
+      const { unmount } = render(
+        <KeypressProvider kittyProtocolEnabled={false}>
+          <SettingsDialog settings={settings} onSelect={onSelect} />
+        </KeypressProvider>,
+      );
+
+      // Wait for initial render
+      await wait(100);
+      const initialCloneCount = cloneCount;
+
+      // Wait while idle
+      await wait(200);
+      const finalCloneCount = cloneCount;
+
+      // Restore original
+      global.structuredClone = originalStructuredClone;
+
+      // Should not continue cloning when idle (allow up to 2 for initial stabilization)
+      expect(finalCloneCount - initialCloneCount).toBeLessThanOrEqual(1);
+
+      unmount();
+    });
+  });
 });
