@@ -307,8 +307,6 @@ export { Storage } from './config/storage.js';
 
 // Export models
 export * from './config/models.js';
-// Export test utils (note: vi globals accessed lazily inside helpers)
-export * from './test-utils/index.js';
 
 // --- Subagent Feature: PLAN-20250117-SUBAGENTCONFIG ---
 export { SubagentManager } from './config/subagentManager.js';

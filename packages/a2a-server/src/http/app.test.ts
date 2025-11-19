@@ -11,8 +11,8 @@ import type {
 import {
   GeminiEventType,
   ApprovalMode,
-  MockTool,
 } from '@vybestack/llxprt-code-core';
+import { MockTool } from '@vybestack/llxprt-code-core/src/test-utils/mock-tool.js';
 import type {
   TaskStatusUpdateEvent,
   SendStreamingMessageSuccessResponse,
