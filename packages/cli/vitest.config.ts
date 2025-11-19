@@ -23,7 +23,9 @@ const baseExcludePatterns = [
   '**/*.integration.{test,spec}.?(c|m)[jt]s?(x)',
   // Temporarily exclude ALL React DOM tests that have React 19 compatibility issues
   // This is a comprehensive exclusion until React 19 compatibility is properly resolved
+  // EXCEPT KeypressContext.test.tsx which we're actively working on for issue #263
   '**/*.test.tsx',
+  '!**/KeypressContext.test.tsx',
   '**/gemini.test.tsx',
   // Exclude UI component tests that may directly import React DOM
   '**/ui/components/**/*.test.ts',
@@ -53,7 +55,12 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['**/*.{test,spec}.?(c|m)[jt]s?(x)', 'config.test.ts'],
+    include: [
+      '**/*.{test,spec}.?(c|m)[jt]s?(x)',
+      'config.test.ts',
+      // Temporarily include KeypressContext test for issue #263
+      'src/ui/contexts/KeypressContext.test.tsx',
+    ],
     exclude: baseExcludePatterns,
     environment: 'jsdom',
     globals: true,
