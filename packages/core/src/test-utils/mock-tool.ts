@@ -14,10 +14,7 @@ import {
   BaseToolInvocation,
   Kind,
 } from '../tools/tools.js';
-
-type Vi = (typeof import('vitest'))['vi'];
-
-const globalVi = (globalThis as { vi?: Vi }).vi;
+import { vi } from 'vitest';
 
 interface MockToolOptions {
   name: string;
@@ -75,25 +72,10 @@ type ExecuteFn = (
   updateOutput?: (output: string) => void,
 ) => Promise<ToolResult>;
 
-type VitestMockFactory = NonNullable<Vi>['fn'];
-type ExecuteMock = VitestMockFactory extends (...args: infer _A) => infer R
-  ? R
-  : ExecuteFn;
+type ExecuteMock = ReturnType<typeof vi.fn<ExecuteFn>>;
 
-function createExecuteFn(impl: ExecuteFn, fallbackName: string): ExecuteMock {
-  if (globalVi) {
-    return globalVi.fn(impl) as ExecuteMock;
-  }
-
-  const fallback: ExecuteFn = async (params, signal, updateOutput) =>
-    await impl(params, signal, updateOutput);
-
-  // Attach minimal metadata so debugging remains useful even without vitest mocks
-  Object.defineProperty(fallback, 'name', {
-    value: `MockToolExecute(${fallbackName})`,
-    configurable: true,
-  });
-  return fallback as unknown as ExecuteMock;
+function createExecuteFn(impl: ExecuteFn, _fallbackName: string): ExecuteMock {
+  return vi.fn(impl);
 }
 
 export class MockTool extends BaseDeclarativeTool<

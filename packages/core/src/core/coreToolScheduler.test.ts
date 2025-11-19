@@ -113,7 +113,6 @@ async function waitForStatus(
   });
   return matchingCall;
 }
-import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
 
 describe('CoreToolScheduler', () => {
   it('should cancel a tool call if the signal is aborted before confirmation', async () => {
@@ -248,7 +247,7 @@ describe('CoreToolScheduler', () => {
 
   it('propagates agentId from request to completed call payloads', async () => {
     const mockTool = new MockTool('mockTool');
-    mockTool.executeFn.mockReturnValue({
+    mockTool.executeFn.mockResolvedValue({
       llmContent: 'Tool executed',
       returnDisplay: 'Tool executed',
     });
@@ -315,7 +314,7 @@ describe('CoreToolScheduler', () => {
 
   it('prefers tool result metadata agentId when present', async () => {
     const mockTool = new MockTool('mockTool');
-    mockTool.executeFn.mockReturnValue({
+    mockTool.executeFn.mockResolvedValue({
       llmContent: 'Tool executed',
       returnDisplay: 'Tool executed',
       metadata: { agentId: 'agent-meta-456' },
@@ -382,7 +381,7 @@ describe('CoreToolScheduler', () => {
 
   it('defaults agentId when scheduler receives a request without one', async () => {
     const mockTool = new MockTool('mockTool');
-    mockTool.executeFn.mockReturnValue({
+    mockTool.executeFn.mockResolvedValue({
       llmContent: 'Tool executed',
       returnDisplay: 'Tool executed',
     });
@@ -1112,7 +1111,7 @@ describe('CoreToolScheduler YOLO mode', () => {
   it('should execute tool requiring confirmation directly without waiting', async () => {
     // Arrange
     const mockTool = new MockTool();
-    mockTool.executeFn.mockReturnValue({
+    mockTool.executeFn.mockResolvedValue({
       llmContent: 'Tool executed',
       returnDisplay: 'Tool executed',
     });
@@ -1335,7 +1334,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
   it('should auto-approve a tool call if it is on the allowedTools list', async () => {
     // Arrange
     const mockTool = new MockTool('mockTool');
-    mockTool.executeFn.mockReturnValue({
+    mockTool.executeFn.mockResolvedValue({
       llmContent: 'Tool executed',
       returnDisplay: 'Tool executed',
     });
