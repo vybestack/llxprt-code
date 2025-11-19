@@ -11,6 +11,7 @@ import * as fs from 'fs';
 
 export const LLXPRT_DIR = '.llxprt';
 export const PROVIDER_ACCOUNTS_FILENAME = 'provider_accounts.json';
+export const OAUTH_FILE = 'oauth_creds.json';
 const TMP_DIR_NAME = 'tmp';
 
 export class Storage {
@@ -75,7 +76,7 @@ export class Storage {
   }
 
   static getOAuthCredsPath(): string {
-    return path.join(Storage.getGlobalLlxprtDir(), 'oauth_creds.json');
+    return path.join(Storage.getGlobalLlxprtDir(), OAUTH_FILE);
   }
 
   getProjectRoot(): string {

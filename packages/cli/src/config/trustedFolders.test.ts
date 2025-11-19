@@ -31,7 +31,7 @@ import * as path from 'path';
 
 import {
   loadTrustedFolders,
-  USER_TRUSTED_FOLDERS_PATH,
+  getTrustedFoldersPath,
   TrustLevel,
   isWorkspaceTrusted,
 } from './trustedFolders.js';
@@ -83,10 +83,10 @@ describe('Trusted Folders Loading', () => {
   describe('isPathTrusted', () => {
     function setup({ config = {} as Record<string, TrustLevel> } = {}) {
       (mockFsExistsSync as Mock).mockImplementation(
-        (p) => p === USER_TRUSTED_FOLDERS_PATH,
+        (p) => p === getTrustedFoldersPath(),
       );
       (fs.readFileSync as Mock).mockImplementation((p) => {
-        if (p === USER_TRUSTED_FOLDERS_PATH) return JSON.stringify(config);
+        if (p === getTrustedFoldersPath()) return JSON.stringify(config);
         return '{}';
       });
 
@@ -127,7 +127,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('should load user rules if only user file exists', () => {
-    const userPath = USER_TRUSTED_FOLDERS_PATH;
+    const userPath = getTrustedFoldersPath();
     (mockFsExistsSync as Mock).mockImplementation((p) => p === userPath);
     const userContent = {
       '/user/folder': TrustLevel.TRUST_FOLDER,
@@ -145,7 +145,7 @@ describe('Trusted Folders Loading', () => {
   });
 
   it('should handle JSON parsing errors gracefully', () => {
-    const userPath = USER_TRUSTED_FOLDERS_PATH;
+    const userPath = getTrustedFoldersPath();
     (mockFsExistsSync as Mock).mockImplementation((p) => p === userPath);
     (fs.readFileSync as Mock).mockImplementation((p) => {
       if (p === userPath) return 'invalid json';
@@ -159,6 +159,31 @@ describe('Trusted Folders Loading', () => {
     expect(errors[0].message).toContain('Unexpected token');
   });
 
+  it('should use GEMINI_CLI_TRUSTED_FOLDERS_PATH env var if set', () => {
+    const customPath = '/custom/path/to/trusted_folders.json';
+    process.env['GEMINI_CLI_TRUSTED_FOLDERS_PATH'] = customPath;
+
+    (mockFsExistsSync as Mock).mockImplementation((p) => p === customPath);
+    const userContent = {
+      '/user/folder/from/env': TrustLevel.TRUST_FOLDER,
+    };
+    (fs.readFileSync as Mock).mockImplementation((p) => {
+      if (p === customPath) return JSON.stringify(userContent);
+      return '{}';
+    });
+
+    const { rules, errors } = loadTrustedFolders();
+    expect(rules).toEqual([
+      {
+        path: '/user/folder/from/env',
+        trustLevel: TrustLevel.TRUST_FOLDER,
+      },
+    ]);
+    expect(errors).toEqual([]);
+
+    delete process.env['GEMINI_CLI_TRUSTED_FOLDERS_PATH'];
+  });
+
   it('setValue should update the user config and save it', () => {
     const loadedFolders = loadTrustedFolders();
     loadedFolders.setValue('/new/path', TrustLevel.TRUST_FOLDER);
@@ -167,7 +192,7 @@ describe('Trusted Folders Loading', () => {
       TrustLevel.TRUST_FOLDER,
     );
     expect(mockFsWriteFileSync).toHaveBeenCalledWith(
-      USER_TRUSTED_FOLDERS_PATH,
+      getTrustedFoldersPath(),
       JSON.stringify({ '/new/path': TrustLevel.TRUST_FOLDER }, null, 2),
       { encoding: 'utf-8', mode: 0o600 },
     );
@@ -184,13 +209,13 @@ describe('isWorkspaceTrusted', () => {
   beforeEach(() => {
     vi.spyOn(process, 'cwd').mockImplementation(() => mockCwd);
     vi.spyOn(fs, 'readFileSync').mockImplementation((p) => {
-      if (p === USER_TRUSTED_FOLDERS_PATH) {
+      if (p === getTrustedFoldersPath()) {
         return JSON.stringify(mockRules);
       }
       return '{}';
     });
     vi.spyOn(fs, 'existsSync').mockImplementation(
-      (p) => p === USER_TRUSTED_FOLDERS_PATH,
+      (p) => p === getTrustedFoldersPath(),
     );
   });
 

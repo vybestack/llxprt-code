@@ -23,6 +23,13 @@ import {
   AnyToolInvocation,
   ContextAwareTool,
 } from '../index.js';
+
+interface QueuedRequest {
+  request: ToolCallRequestInfo | ToolCallRequestInfo[];
+  signal: AbortSignal;
+  resolve: () => void;
+  reject: (reason?: Error) => void;
+}
 import { DEFAULT_AGENT_ID } from './turn.js';
 import { Part, PartListUnion } from '@google/genai';
 import { getResponseTextFromParts } from '../utils/generateContentResponseUtilities.js';
@@ -365,12 +372,7 @@ export class CoreToolScheduler {
   private onEditorClose: () => void;
   private isFinalizingToolCalls = false;
   private isScheduling = false;
-  private requestQueue: Array<{
-    request: ToolCallRequestInfo | ToolCallRequestInfo[];
-    signal: AbortSignal;
-    resolve: () => void;
-    reject: (reason?: Error) => void;
-  }> = [];
+  private requestQueue: QueuedRequest[] = [];
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -882,6 +884,15 @@ export class CoreToolScheduler {
             );
           }
         } catch (error) {
+          if (signal.aborted) {
+            this.setStatusInternal(
+              reqInfo.callId,
+              'cancelled',
+              'Tool call cancelled by user.',
+            );
+            continue;
+          }
+
           this.setStatusInternal(
             reqInfo.callId,
             'error',

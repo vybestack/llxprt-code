@@ -75,6 +75,12 @@ For example, if both a user and the `gcp` extension define a `deploy` command:
 - `/deploy` - Executes the user's deploy command
 - `/gcp.deploy` - Executes the extension's deploy command (marked with `[gcp]` tag)
 
+## Installing extensions with custom transports
+
+LLxprt allows `llxprt extensions install --source sso://example/repo` so enterprise customers can use single-sign-on Git remotes. Git does **not** natively understand the `sso://` protocol — you must provide a [`git-remote-<name>` helper](https://git-scm.com/docs/git-remote-helpers) (for example, `git-remote-sso`) or configure Git to remap the protocol before running the command. If the helper is missing, Git will fail with `fatal: Unable to find remote helper for 'sso'`.
+
+The CLI emits a warning whenever you install from an `sso://` URL to remind you to configure the helper. If you do not control the helper, fall back to `https://` or SSH URLs instead.
+
 # Variables
 
 Gemini CLI extensions allow variable substitution in `gemini-extension.json`. This can be useful if e.g., you need the current directory to run an MCP server using `"cwd": "${extensionPath}${/}run.ts"`.
@@ -84,4 +90,5 @@ Gemini CLI extensions allow variable substitution in `gemini-extension.json`. Th
 | variable                   | description                                                                                                                                                     |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `${extensionPath}`         | The fully-qualified path of the extension in the user's filesystem e.g., '/Users/username/.gemini/extensions/example-extension'. This will not unwrap symlinks. |
+| `${workspacePath}`         | The fully-qualified path of the current workspace.                                                                                                              |
 | `${/} or ${pathSeparator}` | The path separator (differs per OS).                                                                                                                            |

@@ -6,7 +6,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { homedir } from 'node:os';
 import {
   getErrorMessage,
   isWithinRoot,
@@ -14,14 +13,16 @@ import {
 } from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
 import type { Settings } from './settings.js';
+import { USER_SETTINGS_DIR } from './paths.js';
 
 export const TRUSTED_FOLDERS_FILENAME = 'trustedFolders.json';
-export const SETTINGS_DIRECTORY_NAME = '.llxprt';
-export const USER_SETTINGS_DIR = path.join(homedir(), SETTINGS_DIRECTORY_NAME);
-export const USER_TRUSTED_FOLDERS_PATH = path.join(
-  USER_SETTINGS_DIR,
-  TRUSTED_FOLDERS_FILENAME,
-);
+
+export function getTrustedFoldersPath(): string {
+  if (process.env['GEMINI_CLI_TRUSTED_FOLDERS_PATH']) {
+    return process.env['GEMINI_CLI_TRUSTED_FOLDERS_PATH'];
+  }
+  return path.join(USER_SETTINGS_DIR, TRUSTED_FOLDERS_FILENAME);
+}
 
 export enum TrustLevel {
   TRUST_FOLDER = 'TRUST_FOLDER',
@@ -110,7 +111,7 @@ export function loadTrustedFolders(): LoadedTrustedFolders {
   const errors: TrustedFoldersError[] = [];
   const userConfig: Record<string, TrustLevel> = {};
 
-  const userPath = USER_TRUSTED_FOLDERS_PATH;
+  const userPath = getTrustedFoldersPath();
 
   // Load user trusted folders
   try {
