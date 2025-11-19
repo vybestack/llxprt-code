@@ -43,6 +43,7 @@ esbuild
     outfile: 'bundle/llxprt.js',
     platform: 'node',
     format: 'esm',
+    conditions: ['production'],
     plugins: [nodeModulePlugin],
     external: [
       '@lydell/node-pty',
@@ -62,12 +63,14 @@ esbuild
     },
     define: {
       'process.env.CLI_VERSION': JSON.stringify(pkg.version),
+      'process.env.NODE_ENV': '"production"',
     },
     banner: {
       js: `import * as nodeModule from 'node:module'; const require = nodeModule.createRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename);`,
     },
     loader: { '.node': 'file' },
     metafile: true,
+    minify: true,
     write: true,
   })
   .then(() => {
