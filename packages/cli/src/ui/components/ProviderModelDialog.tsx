@@ -122,7 +122,9 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   };
 
   useInput((input, key) => {
-    // Guard against undefined input to prevent Ink library errors
+    // Guard against invalid input/key combinations
+    // Numeric pad Enter can provide a valid key object but undefined input
+    // which causes Ink's internal code to fail when checking input.startsWith()
     if (!key) return;
 
     if (key.escape) {
