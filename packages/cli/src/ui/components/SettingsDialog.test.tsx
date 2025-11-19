@@ -1073,27 +1073,29 @@ describe('SettingsDialog', () => {
         return originalStructuredClone(obj);
       });
 
-      const { unmount } = render(
-        <KeypressProvider kittyProtocolEnabled={false}>
-          <SettingsDialog settings={settings} onSelect={onSelect} />
-        </KeypressProvider>,
-      );
+      try {
+        const { unmount } = render(
+          <KeypressProvider kittyProtocolEnabled={false}>
+            <SettingsDialog settings={settings} onSelect={onSelect} />
+          </KeypressProvider>,
+        );
 
-      // Wait for initial render
-      await wait(100);
-      const initialCloneCount = cloneCount;
+        // Wait for initial render
+        await wait(100);
+        const initialCloneCount = cloneCount;
 
-      // Wait while idle
-      await wait(200);
-      const finalCloneCount = cloneCount;
+        // Wait while idle
+        await wait(200);
+        const finalCloneCount = cloneCount;
 
-      // Restore original
-      global.structuredClone = originalStructuredClone;
+        // Should not continue cloning when idle (allow up to 2 for initial stabilization)
+        expect(finalCloneCount - initialCloneCount).toBeLessThanOrEqual(1);
 
-      // Should not continue cloning when idle (allow up to 2 for initial stabilization)
-      expect(finalCloneCount - initialCloneCount).toBeLessThanOrEqual(1);
-
-      unmount();
+        unmount();
+      } finally {
+        // Restore original even if test fails
+        global.structuredClone = originalStructuredClone;
+      }
     });
   });
 });
