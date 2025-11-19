@@ -95,6 +95,7 @@
     "lodash": "^4.17.21",
     "memfs": "^4.17.2",
     "mock-fs": "^5.5.0",
+    "patch-package": "^8.0.1",
     "prettier": "^3.5.3",
     "react-devtools-core": "^6.1.2",
     "tsx": "^4.20.3",

@@ -5,8 +5,9 @@
  */
 
 import React, { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
+import { useKeypress } from '../hooks/useKeypress.js';
 
 interface LoadProfileDialogProps {
   profiles: string[];
@@ -35,14 +36,17 @@ export const LoadProfileDialog: React.FC<LoadProfileDialogProps> = ({
     setIndex(next);
   };
 
-  useInput((input, key) => {
-    if (key.escape) return onClose();
-    if (key.return) return onSelect(profiles[index]);
-    if (key.leftArrow) move(-1);
-    if (key.rightArrow) move(1);
-    if (key.upArrow) move(-columns);
-    if (key.downArrow) move(columns);
-  });
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') return onClose();
+      if (key.name === 'return') return onSelect(profiles[index]);
+      if (key.name === 'left') move(-1);
+      if (key.name === 'right') move(1);
+      if (key.name === 'up') move(-columns);
+      if (key.name === 'down') move(columns);
+    },
+    { isActive: !isLoading },
+  );
 
   const renderItem = (name: string, i: number) => {
     const selected = i === index;

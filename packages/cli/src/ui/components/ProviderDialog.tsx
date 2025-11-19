@@ -5,10 +5,11 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { truncateEnd } from '../utils/responsive.js';
+import { useKeypress } from '../hooks/useKeypress.js';
 
 interface ProviderDialogProps {
   providers: string[];
@@ -69,48 +70,52 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
     setIndex(next);
   };
 
-  useInput((input, key) => {
-    // Guard against invalid input/key combinations
-    // Numeric pad Enter can provide a valid key object but undefined input
-    // which causes Ink's internal code to fail when checking input.startsWith()
-    if (!key) return;
-
-    if (key.escape) {
-      if (isSearching && searchTerm.length > 0) {
-        setSearchTerm('');
-      } else {
-        return onClose();
-      }
-    }
-
-    if (isSearching || isNarrow) {
-      if (key.return) {
-        if (filteredProviders.length > 0) {
-          if (isNarrow) {
-            return onSelect(filteredProviders[index]);
-          }
-          setIsSearching(false);
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        if (isSearching && searchTerm.length > 0) {
+          setSearchTerm('');
+        } else {
+          return onClose();
         }
-      } else if (key.tab && !isNarrow) {
-        setIsSearching(false);
-      } else if (key.backspace || key.delete) {
-        setSearchTerm((prev) => prev.slice(0, -1));
-      } else if (input && typeof input === 'string' && !key.ctrl && !key.meta) {
-        setSearchTerm((prev) => prev + input);
       }
-    } else {
-      if (key.return && filteredProviders.length > 0) {
-        return onSelect(filteredProviders[index]);
+
+      if (isSearching || isNarrow) {
+        if (key.name === 'return') {
+          if (filteredProviders.length > 0) {
+            if (isNarrow) {
+              return onSelect(filteredProviders[index]);
+            }
+            setIsSearching(false);
+          }
+        } else if (key.name === 'tab' && !isNarrow) {
+          setIsSearching(false);
+        } else if (key.name === 'backspace' || key.name === 'delete') {
+          setSearchTerm((prev) => prev.slice(0, -1));
+        } else if (
+          key.sequence &&
+          typeof key.sequence === 'string' &&
+          !key.ctrl &&
+          !key.meta &&
+          key.insertable
+        ) {
+          setSearchTerm((prev) => prev + key.sequence);
+        }
+      } else {
+        if (key.name === 'return' && filteredProviders.length > 0) {
+          return onSelect(filteredProviders[index]);
+        }
+        if (key.name === 'tab') {
+          setIsSearching(true);
+        }
+        if (key.name === 'left') move(-1);
+        if (key.name === 'right') move(1);
+        if (key.name === 'up') move(-columns);
+        if (key.name === 'down') move(columns);
       }
-      if (key.tab) {
-        setIsSearching(true);
-      }
-      if (key.leftArrow) move(-1);
-      if (key.rightArrow) move(1);
-      if (key.upArrow) move(-columns);
-      if (key.downArrow) move(columns);
-    }
-  });
+    },
+    { isActive: true },
+  );
 
   const renderItem = (name: string, i: number) => {
     const selected = i === index && (!isSearching || isNarrow);
