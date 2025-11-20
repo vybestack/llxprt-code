@@ -1160,6 +1160,7 @@ export async function loadCliConfig(
     argv.promptWords && argv.promptWords.some((word) => word.trim() !== '');
   const interactive =
     !!argv.promptInteractive ||
+    !!argv.experimentalAcp ||
     (process.stdin.isTTY && !hasPromptWords && !argv.prompt);
 
   const allowedTools = argv.allowedTools || settings.allowedTools || [];
@@ -1167,7 +1168,7 @@ export async function loadCliConfig(
 
   // In non-interactive mode, exclude tools that require a prompt.
   const extraExcludes: string[] = [];
-  if (!interactive && !argv.experimentalAcp) {
+  if (!interactive) {
     const defaultExcludes = [ShellTool.Name, EditTool.Name, WriteFileTool.Name];
     const autoEditExcludes = [ShellTool.Name];
 
