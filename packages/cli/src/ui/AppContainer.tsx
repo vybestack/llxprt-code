@@ -370,6 +370,15 @@ export const AppContainer = (props: AppContainerProps) => {
   const [showIdeRestartPrompt, setShowIdeRestartPrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [providerModels, setProviderModels] = useState<IModel[]>([]);
+  const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
+
+  const openPermissionsDialog = useCallback(() => {
+    setIsPermissionsDialogOpen(true);
+  }, []);
+
+  const closePermissionsDialog = useCallback(() => {
+    setIsPermissionsDialogOpen(false);
+  }, []);
 
   const {
     showWorkspaceMigrationDialog,
@@ -830,6 +839,7 @@ export const AppContainer = (props: AppContainerProps) => {
     toggleVimEnabled,
     setIsProcessing,
     setLlxprtMdFileCount,
+    openPermissionsDialog,
   );
 
   // Memoize viewport to ensure it updates when inputWidth changes
@@ -1300,6 +1310,7 @@ export const AppContainer = (props: AppContainerProps) => {
     showWorkspaceMigrationDialog,
     showPrivacyNotice,
     isOAuthCodeDialogOpen: appState.openDialogs.oauthCode,
+    isPermissionsDialogOpen,
 
     // Dialog data
     providerOptions,
@@ -1450,6 +1461,9 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Folder trust dialog
     handleFolderTrustSelect,
+
+    // Permissions dialog
+    closePermissionsDialog,
 
     // Workspace migration dialog
     onWorkspaceMigrationDialogOpen,

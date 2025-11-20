@@ -63,6 +63,7 @@ export const useSlashCommandProcessor = (
   toggleVimEnabled: () => Promise<boolean>,
   setIsProcessing: (isProcessing: boolean) => void,
   setLlxprtMdFileCount: (count: number) => void,
+  openPermissionsDialog: () => void,
 ) => {
   const session = useSessionStats();
   const [commands, setCommands] = useState<readonly SlashCommand[]>([]);
@@ -480,6 +481,9 @@ export const useSlashCommandProcessor = (
                     case 'settings':
                       openSettingsDialog();
                       return { type: 'handled' };
+                    case 'permissions':
+                      openPermissionsDialog();
+                      return { type: 'handled' };
                     default: {
                       const unhandled: never = result.dialog;
                       throw new Error(
@@ -651,6 +655,7 @@ export const useSlashCommandProcessor = (
       setSessionShellAllowlist,
       setIsProcessing,
       setConfirmationRequest,
+      openPermissionsDialog,
     ],
   );
 

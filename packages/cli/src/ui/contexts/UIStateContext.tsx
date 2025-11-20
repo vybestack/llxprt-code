@@ -61,6 +61,7 @@ export interface UIState {
   showWorkspaceMigrationDialog: boolean;
   showPrivacyNotice: boolean;
   isOAuthCodeDialogOpen: boolean;
+  isPermissionsDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];

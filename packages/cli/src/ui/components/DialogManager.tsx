@@ -31,6 +31,7 @@ import { ToolsDialog } from './ToolsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
 import { DetailedMessagesDisplay } from './DetailedMessagesDisplay.js';
 import { ShowMoreLines } from './ShowMoreLines.js';
+import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
 
 interface DialogManagerProps {
   config: Config;
@@ -290,6 +291,16 @@ export const DialogManager = ({
       <PrivacyNotice
         onExit={uiActions.handlePrivacyNoticeExit}
         config={config}
+      />
+    );
+  }
+
+  // Permissions dialog
+  if (uiState.isPermissionsDialogOpen) {
+    return (
+      <PermissionsModifyTrustDialog
+        onExit={uiActions.closePermissionsDialog}
+        addItem={uiActions.addItem}
       />
     );
   }
