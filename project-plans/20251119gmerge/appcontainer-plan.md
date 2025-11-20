@@ -242,3 +242,54 @@ Objective: replace llxprt’s monolithic `packages/cli/src/ui/App.tsx` render lo
 - All llxprt features (multi-provider, tools/timeouts/todo, OAuth/auth, token metrics, trust/IDE/workspace, custom slash commands, Vim/Kitty input) work unchanged.
 - Flicker eliminated under #456 scenario; flicker detector active.
 - Tests updated and pass; full AGENTS command list passes.
+
+---
+
+## Current Status (2025-11-20)
+
+### ✅ Completed Fixes
+
+#### 1. Flicker Detection Wired (commit 6c4f5dbe6)
+- Created `useFlickerDetector.ts` hook matching upstream pattern
+- Detection-only approach (for telemetry) - not reactive prevention
+- AppContainer correctly:
+  - Measures footer with `useLayoutEffect` for synchronous timing
+  - Calculates `availableTerminalHeight` for child component self-truncation
+  - Calls `useFlickerDetector(rootUiRef, terminalHeight, constrainHeight)`
+  - Passes `availableTerminalHeight` to UIState for layout components
+- Tests added in `useFlickerDetector.test.ts`
+- Flicker event added to `AppEvent` enum
+
+#### 2. appReducer Consolidated (single source of truth)
+- Removed dead `AppWithState` export from AppContainer.tsx
+- Removed unused imports (appReducer, initialAppState, AppDispatchProvider)
+- Canonical reducer remains in App.tsx `AppWithState` (production)
+- SessionController.tsx reducer is intentional test fixture (test isolation)
+- Two reducers are acceptable: production vs test-only
+
+#### 3. DialogManager Coverage Verified (no regression)
+All 9 appReducer dialog states are properly rendered:
+- theme → ThemeDialog ✓
+- auth → AuthDialog/AuthInProgress ✓
+- editor → EditorSettingsDialog ✓
+- provider → ProviderDialog ✓
+- providerModel → ProviderModelDialog ✓
+- loadProfile → LoadProfileDialog ✓
+- tools → ToolsDialog ✓
+- oauthCode → OAuthCodeDialog ✓
+- privacy → PrivacyNotice ✓
+
+Additional DialogManager dialogs (via UIState booleans):
+- WorkspaceMigrationDialog ✓
+- IdeIntegrationNudge ✓
+- FolderTrustDialog ✓
+- ShellConfirmationDialog ✓
+- Generic confirmation dialog ✓
+- IDE restart prompt ✓
+
+**Note:** LoggingDialog exists but awaits explicit integration requirement.
+
+### Remaining Work
+- Update batch tracking docs
+- Re-evaluate skipped commits (#73, #109, #133, #145)
+- Continue Batches 11-13 cherry-picks

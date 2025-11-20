@@ -74,13 +74,7 @@ import { useVim } from './hooks/vim.js';
 import { useKeypress, Key } from './hooks/useKeypress.js';
 import { keyMatchers, Command } from './keyMatchers.js';
 import * as fs from 'fs';
-import {
-  appReducer,
-  initialAppState,
-  type AppState,
-  type AppAction,
-} from './reducers/appReducer.js';
-import { AppDispatchProvider } from './contexts/AppDispatchContext.js';
+import { type AppState, type AppAction } from './reducers/appReducer.js';
 import { UpdateObject } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
 import { useSettingsCommand } from './hooks/useSettingsCommand.js';
@@ -1501,18 +1495,5 @@ export const AppContainer = (props: AppContainerProps) => {
         />
       </UIActionsProvider>
     </UIStateProvider>
-  );
-};
-
-// Export AppWithState wrapper for backwards compatibility
-export const AppWithState = (
-  props: Omit<AppContainerProps, 'appState' | 'appDispatch'>,
-) => {
-  const [appState, appDispatch] = React.useReducer(appReducer, initialAppState);
-
-  return (
-    <AppDispatchProvider value={appDispatch}>
-      <AppContainer {...props} appState={appState} appDispatch={appDispatch} />
-    </AppDispatchProvider>
   );
 };
