@@ -5,28 +5,29 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { spawn } from 'node:child_process';
+import * as childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { relaunchAppInChildProcess } from './relaunch.js';
 import { RELAUNCH_EXIT_CODE } from './bootstrap.js';
 
-// Mock child_process.spawn
-vi.mock('node:child_process', () => ({
-  spawn: vi.fn(),
-}));
+vi.mock('node:child_process');
+
+const mockedChildProcess = vi.mocked(childProcess);
 
 describe('relaunchAppInChildProcess', () => {
-  const mockSpawn = vi.mocked(spawn);
   let mockChildProcess: EventEmitter;
+  let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
+    originalEnv = process.env;
     mockChildProcess = new EventEmitter();
-    mockSpawn.mockReturnValue(
-      mockChildProcess as unknown as ReturnType<typeof spawn>,
+    mockedChildProcess.spawn.mockReturnValue(
+      mockChildProcess as unknown as ReturnType<typeof childProcess.spawn>,
     );
   });
 
   afterEach(() => {
+    process.env = originalEnv;
     vi.clearAllMocks();
   });
 
@@ -38,7 +39,7 @@ describe('relaunchAppInChildProcess', () => {
     mockChildProcess.emit('close', 0);
     await promise;
 
-    expect(mockSpawn).toHaveBeenCalledWith(
+    expect(mockedChildProcess.spawn).toHaveBeenCalledWith(
       process.execPath,
       expect.arrayContaining(nodeArgs),
       expect.objectContaining({
@@ -57,7 +58,7 @@ describe('relaunchAppInChildProcess', () => {
     mockChildProcess.emit('close', 0);
     await promise;
 
-    const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
+    const spawnArgs = mockedChildProcess.spawn.mock.calls[0][1] as string[];
     // First should be the node args
     expect(spawnArgs[0]).toBe('--max-old-space-size=4096');
     // Remaining should be from process.argv.slice(1)
@@ -71,7 +72,10 @@ describe('relaunchAppInChildProcess', () => {
     mockChildProcess.emit('close', 0);
     await promise;
 
-    const spawnEnv = mockSpawn.mock.calls[0][2]?.env as Record<string, string>;
+    const spawnEnv = mockedChildProcess.spawn.mock.calls[0][2]?.env as Record<
+      string,
+      string
+    >;
     expect(spawnEnv.LLXPRT_CODE_NO_RELAUNCH).toBe('true');
   });
 
@@ -112,21 +116,23 @@ describe('relaunchAppInChildProcess', () => {
     mockChildProcess.emit('close', 0);
     await promise;
 
-    const spawnOptions = mockSpawn.mock.calls[0][2];
+    const spawnOptions = mockedChildProcess.spawn.mock.calls[0][2];
     expect(spawnOptions?.stdio).toBe('inherit');
   });
 
   it('should preserve existing environment variables', async () => {
     const nodeArgs = ['--max-old-space-size=4096'];
-    const originalEnv = { ...process.env, CUSTOM_VAR: 'test-value' };
-    process.env = originalEnv;
+    process.env = { ...process.env, CUSTOM_VAR: 'test-value' };
 
     const promise = relaunchAppInChildProcess(nodeArgs);
 
     mockChildProcess.emit('close', 0);
     await promise;
 
-    const spawnEnv = mockSpawn.mock.calls[0][2]?.env as Record<string, string>;
+    const spawnEnv = mockedChildProcess.spawn.mock.calls[0][2]?.env as Record<
+      string,
+      string
+    >;
     expect(spawnEnv.CUSTOM_VAR).toBe('test-value');
   });
 });
