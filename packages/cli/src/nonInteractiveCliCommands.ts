@@ -56,6 +56,7 @@ export const handleSlashCommand = async (
         sessionStartTime: new Date(),
         metrics: uiTelemetryService.getMetrics(),
         lastPromptTokenCount: 0,
+        historyTokenCount: 0,
         promptCount: 1,
       };
 

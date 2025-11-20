@@ -13,17 +13,16 @@ import type { CommandContext } from '../commands/types.js';
  */
 export function createNonInteractiveUI(): CommandContext['ui'] {
   return {
-    addItem: (_item, _timestamp) => 0,
+    addItem: (_item: Parameters<CommandContext['ui']['addItem']>[0], _timestamp: number) => 0,
     clear: () => {},
-    setDebugMessage: (_message) => {},
-    loadHistory: (_newHistory) => {},
+    setDebugMessage: (_message: string) => {},
+    loadHistory: (_newHistory: Parameters<CommandContext['ui']['loadHistory']>[0]) => {},
     pendingItem: null,
-    setPendingItem: (_item) => {},
+    setPendingItem: (_item: Parameters<CommandContext['ui']['setPendingItem']>[0]) => {},
     toggleCorgiMode: () => {},
     toggleVimEnabled: async () => false,
-    setGeminiMdFileCount: (_count) => {},
+    setLlxprtMdFileCount: (_count: number) => {},
+    updateHistoryTokenCount: (_count: number) => {},
     reloadCommands: () => {},
-    extensionsUpdateState: new Map(),
-    setExtensionsUpdateState: (_updateState) => {},
   };
 }

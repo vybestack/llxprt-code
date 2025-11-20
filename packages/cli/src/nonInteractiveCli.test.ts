@@ -12,7 +12,6 @@ import {
   shutdownTelemetry,
   GeminiEventType,
   ServerGeminiStreamEvent,
-  FatalInputError,
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
