@@ -1105,27 +1105,10 @@ describe('Gemini Client (client.ts)', () => {
         } as unknown as Parameters<typeof recordActivity>[0]);
       }
 
-<<<<<<< HEAD
       expect(
         (client as unknown as { toolCallReminderLevel: string })
           .toolCallReminderLevel,
       ).toBe('base');
-=======
-      const initialChat = client.getChat();
-      const result = await client.tryCompressChat('prompt-id-1', false); // force = true
-      const newChat = client.getChat();
-
-      expect(mockGenerateContentFn).toHaveBeenCalled();
-
-      expect(result).toEqual({
-        compressionStatus: CompressionStatus.COMPRESSED,
-        originalTokenCount,
-        newTokenCount,
-      });
-
-      // Assert that the chat was reset
-      expect(newChat).not.toBe(initialChat);
->>>>>>> c93eed638 (fix(core): Compression was broken when routing enabled (#9183))
     });
   });
 
