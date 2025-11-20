@@ -328,12 +328,6 @@ const deleteCommand: SlashCommand = {
       };
     }
   },
-  completion: async (context, partialArg) => {
-    const chatDetails = await getSavedChatTags(context, true);
-    return chatDetails
-      .map((chat) => chat.name)
-      .filter((name) => name.startsWith(partialArg));
-  },
 };
 
 export function serializeHistoryToMarkdown(history: Content[]): string {

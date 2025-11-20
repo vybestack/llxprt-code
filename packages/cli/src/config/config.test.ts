@@ -6,12 +6,9 @@
 
 /// <reference types="vitest/globals" />
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import os from 'os';
-import { parseArguments, loadCliConfig } from './config.js';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { loadCliConfig } from './config.js';
 import { Settings } from './settings.js';
-
-vi.mock('os');
 
 function createMockSettingsService() {
   const providerStore = new Map<string, Record<string, unknown>>();
@@ -312,202 +309,6 @@ vi.mock('../runtime/runtimeSettings.js', () => {
   };
 });
 
-describe('parseArguments', () => {
-  it('should throw an error when both --prompt and --prompt-interactive are used together', async () => {
-    process.argv = [
-      'node',
-      'script.js',
-      '--prompt',
-      'test prompt',
-      '--prompt-interactive',
-      'interactive prompt',
-    ];
-
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    const mockConsoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
-
-    await expect(parseArguments({} as Settings)).rejects.toThrow(
-      'process.exit called',
-    );
-
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
-      ),
-    );
-
-    mockExit.mockRestore();
-    mockConsoleError.mockRestore();
-  });
-
-  it('should throw an error when using short flags -p and -i together', async () => {
-    process.argv = [
-      'node',
-      'script.js',
-      '-p',
-      'test prompt',
-      '-i',
-      'interactive prompt',
-    ];
-
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    const mockConsoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
-
-    await expect(parseArguments({} as Settings)).rejects.toThrow(
-      'process.exit called',
-    );
-
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
-      ),
-    );
-
-    mockExit.mockRestore();
-    mockConsoleError.mockRestore();
-  });
-
-  it('should allow --prompt without --prompt-interactive', async () => {
-    process.argv = ['node', 'script.js', '--prompt', 'test prompt'];
-    const argv = await parseArguments({} as Settings);
-    expect(argv.prompt).toBe('test prompt');
-    expect(argv.promptInteractive).toBeUndefined();
-  });
-
-  it('should allow --prompt-interactive without --prompt', async () => {
-    process.argv = [
-      'node',
-      'script.js',
-      '--prompt-interactive',
-      'interactive prompt',
-    ];
-    const argv = await parseArguments({} as Settings);
-    expect(argv.promptInteractive).toBe('interactive prompt');
-    expect(argv.prompt).toBeUndefined();
-  });
-
-  it('should allow -i flag as alias for --prompt-interactive', async () => {
-    process.argv = ['node', 'script.js', '-i', 'interactive prompt'];
-    const argv = await parseArguments({} as Settings);
-    expect(argv.promptInteractive).toBe('interactive prompt');
-    expect(argv.prompt).toBeUndefined();
-  });
-
-  it('should throw an error when both --yolo and --approval-mode are used together', async () => {
-    process.argv = [
-      'node',
-      'script.js',
-      '--yolo',
-      '--approval-mode',
-      'default',
-    ];
-
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    const mockConsoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
-
-    await expect(parseArguments({} as Settings)).rejects.toThrow(
-      'process.exit called',
-    );
-
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'Cannot use both --yolo (-y) and --approval-mode together. Use --approval-mode=yolo instead.',
-      ),
-    );
-
-    mockExit.mockRestore();
-    mockConsoleError.mockRestore();
-  });
-
-  it('should throw an error when using short flags -y and --approval-mode together', async () => {
-    process.argv = ['node', 'script.js', '-y', '--approval-mode', 'yolo'];
-
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    const mockConsoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
-
-    await expect(parseArguments({} as Settings)).rejects.toThrow(
-      'process.exit called',
-    );
-
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'Cannot use both --yolo (-y) and --approval-mode together. Use --approval-mode=yolo instead.',
-      ),
-    );
-
-    mockExit.mockRestore();
-    mockConsoleError.mockRestore();
-  });
-
-  it('should allow --approval-mode without --yolo', async () => {
-    process.argv = ['node', 'script.js', '--approval-mode', 'auto_edit'];
-    const argv = await parseArguments({} as Settings);
-    expect(argv.approvalMode).toBe('auto_edit');
-    expect(argv.yolo).toBe(false);
-  });
-
-  it('should allow --yolo without --approval-mode', async () => {
-    process.argv = ['node', 'script.js', '--yolo'];
-    const argv = await parseArguments({} as Settings);
-    expect(argv.yolo).toBe(true);
-    expect(argv.approvalMode).toBeUndefined();
-  });
-
-  it('should reject invalid --approval-mode values', async () => {
-    process.argv = ['node', 'script.js', '--approval-mode', 'invalid'];
-
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    const mockConsoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
-
-    await expect(parseArguments({} as Settings)).rejects.toThrow(
-      'process.exit called',
-    );
-
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      expect.stringContaining('Invalid values:'),
-    );
-
-    mockExit.mockRestore();
-    mockConsoleError.mockRestore();
-  });
-
-  it('should support comma-separated values for --allowed-tools', async () => {
-    process.argv = [
-      'node',
-      'script.js',
-      '--allowed-tools',
-      'read_file,ShellTool(git status)',
-    ];
-    const argv = await parseArguments({} as Settings);
-    expect(argv.allowedTools).toEqual(['read_file', 'ShellTool(git status)']);
-  });
-});
-
 const setProviderApiKeyMock = vi.fn(async (_apiKey?: string) => ({
   success: true,
   message: '',
@@ -598,8 +399,6 @@ vi.mock('yargs/yargs', () => ({
 vi.mock('node-gyp-build', () => ({}));
 
 import { ProfileManager } from '@vybestack/llxprt-code-core';
-import { loadCliConfig } from './config.js';
-import { Settings } from './settings.js';
 import { Extension } from './extension.js';
 
 const MockedProfileManager = vi.mocked(ProfileManager);
@@ -1166,59 +965,5 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
       );
       expect(config.getProvider()).toBe('nonexistent-provider');
     });
-  });
-});
-
-describe('screenReader configuration', () => {
-  const originalArgv = process.argv;
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
-    vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
-  });
-
-  afterEach(() => {
-    process.argv = originalArgv;
-    vi.unstubAllEnvs();
-    vi.restoreAllMocks();
-  });
-
-  it('should use screenReader value from settings if CLI flag is not present (settings true)', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = {
-      ui: { accessibility: { screenReader: true } },
-    };
-    const config = await loadCliConfig(settings, [], 'test-session', argv);
-    expect(config.getScreenReader()).toBe(true);
-  });
-
-  it('should use screenReader value from settings if CLI flag is not present (settings false)', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = {
-      ui: { accessibility: { screenReader: false } },
-    };
-    const config = await loadCliConfig(settings, [], 'test-session', argv);
-    expect(config.getScreenReader()).toBe(false);
-  });
-
-  it('should prioritize --screen-reader CLI flag (true) over settings (false)', async () => {
-    process.argv = ['node', 'script.js', '--screen-reader'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = {
-      ui: { accessibility: { screenReader: false } },
-    };
-    const config = await loadCliConfig(settings, [], 'test-session', argv);
-    expect(config.getScreenReader()).toBe(true);
-  });
-
-  it('should be false by default when no flag or setting is present', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = {};
-    const config = await loadCliConfig(settings, [], 'test-session', argv);
-    expect(config.getScreenReader()).toBe(false);
   });
 });

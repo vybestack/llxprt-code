@@ -34,9 +34,11 @@ vi.mock('fs/promises', () => ({
   default: {
     stat: vi.fn(),
     readdir: vi.fn().mockResolvedValue(['file1.txt', 'file2.txt'] as string[]),
+    writeFile: vi.fn().mockResolvedValue(undefined),
   },
   stat: vi.fn(),
   readdir: vi.fn().mockResolvedValue(['file1.txt', 'file2.txt'] as string[]),
+  writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('chatCommand', () => {
@@ -50,7 +52,7 @@ describe('chatCommand', () => {
   let mockGetHistory: ReturnType<typeof vi.fn>;
 
   const getSubCommand = (
-    name: 'list' | 'save' | 'resume' | 'delete',
+    name: 'list' | 'save' | 'resume' | 'delete' | 'share',
   ): SlashCommand => {
     const subCommand = chatCommand.subCommands?.find(
       (cmd) => cmd.name === name,
@@ -101,7 +103,7 @@ describe('chatCommand', () => {
   it('should have the correct main command definition', () => {
     expect(chatCommand.name).toBe('chat');
     expect(chatCommand.description).toBe('Manage conversation history.');
-    expect(chatCommand.subCommands).toHaveLength(4);
+    expect(chatCommand.subCommands).toHaveLength(5);
   });
 
   describe('list subcommand', () => {
