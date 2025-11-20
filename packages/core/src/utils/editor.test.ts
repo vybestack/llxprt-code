@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -21,12 +21,13 @@ import {
   isEditorAvailable,
   type EditorType,
 } from './editor.js';
-import { execSync, execFileSync, spawn } from 'child_process';
+import { execSync, spawn, spawnSync } from 'node:child_process';
+import { debugLogger } from './debugLogger.js';
 
 vi.mock('child_process', () => ({
   execSync: vi.fn(),
-  execFileSync: vi.fn(),
   spawn: vi.fn(),
+  spawnSync: vi.fn(() => ({ error: null, status: 0 })),
 }));
 
 const originalPlatform = process.platform;
@@ -34,7 +35,7 @@ const originalPlatform = process.platform;
 describe('editor utils', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.SANDBOX;
+    vi.unstubAllEnvs();
     Object.defineProperty(process, 'platform', {
       value: originalPlatform,
       writable: true,
@@ -43,7 +44,7 @@ describe('editor utils', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    delete process.env.SANDBOX;
+    vi.unstubAllEnvs();
     Object.defineProperty(process, 'platform', {
       value: originalPlatform,
       writable: true,
@@ -72,6 +73,11 @@ describe('editor utils', () => {
       { editor: 'neovim', commands: ['nvim'], win32Commands: ['nvim'] },
       { editor: 'zed', commands: ['zed', 'zeditor'], win32Commands: ['zed'] },
       { editor: 'emacs', commands: ['emacs'], win32Commands: ['emacs.exe'] },
+      {
+        editor: 'antigravity',
+        commands: ['agy'],
+        win32Commands: ['agy.cmd'],
+      },
     ];
 
     for (const { editor, commands, win32Commands } of testCases) {
@@ -171,6 +177,11 @@ describe('editor utils', () => {
       },
       { editor: 'cursor', commands: ['cursor'], win32Commands: ['cursor'] },
       { editor: 'zed', commands: ['zed', 'zeditor'], win32Commands: ['zed'] },
+      {
+        editor: 'antigravity',
+        commands: ['agy'],
+        win32Commands: ['agy.cmd'],
+      },
     ];
 
     for (const { editor, commands, win32Commands } of guiEditors) {
@@ -289,9 +300,9 @@ describe('editor utils', () => {
             '-c',
             'wincmd h | setlocal statusline=OLD\\ FILE',
             '-c',
-            'wincmd l | setlocal statusline=%#StatusBold#NEW\\ FILE\\ :wqa(save\\ &\\ quit)\\ \\|\\ :qa!(quit)\\ \\|\\ i/esc(toggle\\ edit\\ mode)',
+            'wincmd l | setlocal statusline=%#StatusBold#NEW\\ FILE\\ :wqa(save\\ &\\ quit)\\ \\|\\ i/esc(toggle\\ edit\\ mode)',
             '-c',
-            'autocmd WinClosed * qa!',
+            'autocmd BufWritePost * wqa',
             'old.txt',
             'new.txt',
           ],
@@ -303,12 +314,7 @@ describe('editor utils', () => {
       const command = getDiffCommand('old.txt', 'new.txt', 'emacs');
       expect(command).toEqual({
         command: 'emacs',
-        args: [
-          '--eval',
-          '(ediff (car (cdr command-line-args-left)) (car (cddr command-line-args-left)))',
-          'old.txt',
-          'new.txt',
-        ],
+        args: ['--eval', '(ediff "old.txt" "new.txt")'],
       });
     });
 
@@ -320,24 +326,24 @@ describe('editor utils', () => {
   });
 
   describe('openDiff', () => {
-    const spawnEditors: EditorType[] = [
+    const guiEditors: EditorType[] = [
       'vscode',
       'vscodium',
       'windsurf',
       'cursor',
       'zed',
     ];
-    for (const editor of spawnEditors) {
+
+    for (const editor of guiEditors) {
       it(`should call spawn for ${editor}`, async () => {
-        const mockSpawn = {
-          on: vi.fn((event, cb) => {
-            if (event === 'close') {
-              cb(0);
-            }
-          }),
-        };
-        (spawn as Mock).mockReturnValue(mockSpawn);
-        await openDiff('old.txt', 'new.txt', editor, () => {});
+        const mockSpawnOn = vi.fn((event, cb) => {
+          if (event === 'close') {
+            cb(0);
+          }
+        });
+        (spawn as Mock).mockReturnValue({ on: mockSpawnOn });
+
+        await openDiff('old.txt', 'new.txt', editor);
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor)!;
         expect(spawn).toHaveBeenCalledWith(
           diffCommand.command,
@@ -347,74 +353,49 @@ describe('editor utils', () => {
             shell: process.platform === 'win32',
           },
         );
-        expect(mockSpawn.on).toHaveBeenCalledWith(
-          'close',
-          expect.any(Function),
-        );
-        expect(mockSpawn.on).toHaveBeenCalledWith(
-          'error',
-          expect.any(Function),
-        );
+        expect(mockSpawnOn).toHaveBeenCalledWith('close', expect.any(Function));
+        expect(mockSpawnOn).toHaveBeenCalledWith('error', expect.any(Function));
       });
 
       it(`should reject if spawn for ${editor} fails`, async () => {
         const mockError = new Error('spawn error');
-        const mockSpawn = {
-          on: vi.fn((event, cb) => {
-            if (event === 'error') {
-              cb(mockError);
-            }
-          }),
-        };
-        (spawn as Mock).mockReturnValue(mockSpawn);
-        await expect(
-          openDiff('old.txt', 'new.txt', editor, () => {}),
-        ).rejects.toThrow('spawn error');
-      });
+        const mockSpawnOn = vi.fn((event, cb) => {
+          if (event === 'error') {
+            cb(mockError);
+          }
+        });
+        (spawn as Mock).mockReturnValue({ on: mockSpawnOn });
 
-      it(`should reject if ${editor} exits with non-zero code`, async () => {
-        const mockSpawn = {
-          on: vi.fn((event, cb) => {
-            if (event === 'close') {
-              cb(1);
-            }
-          }),
-        };
-        (spawn as Mock).mockReturnValue(mockSpawn);
-        await expect(
-          openDiff('old.txt', 'new.txt', editor, () => {}),
-        ).rejects.toThrow(`${editor} exited with code 1`);
-      });
-    }
-
-    const execFileSyncEditors: EditorType[] = ['vim', 'neovim', 'emacs'];
-    for (const editor of execFileSyncEditors) {
-      it(`should call execFileSync for ${editor} on non-windows`, async () => {
-        Object.defineProperty(process, 'platform', { value: 'linux' });
-        await openDiff('old.txt', 'new.txt', editor, () => {});
-        expect(execFileSync).toHaveBeenCalledTimes(1);
-        const diffCommand = getDiffCommand('old.txt', 'new.txt', editor)!;
-        expect(execFileSync).toHaveBeenCalledWith(
-          diffCommand.command,
-          diffCommand.args,
-          {
-            stdio: 'inherit',
-            encoding: 'utf8',
-          },
+        await expect(openDiff('old.txt', 'new.txt', editor)).rejects.toThrow(
+          'spawn error',
         );
       });
 
-      it(`should call execFileSync for ${editor} on windows`, async () => {
-        Object.defineProperty(process, 'platform', { value: 'win32' });
-        await openDiff('old.txt', 'new.txt', editor, () => {});
-        expect(execFileSync).toHaveBeenCalledTimes(1);
+      it(`should reject if ${editor} exits with non-zero code`, async () => {
+        const mockSpawnOn = vi.fn((event, cb) => {
+          if (event === 'close') {
+            cb(1);
+          }
+        });
+        (spawn as Mock).mockReturnValue({ on: mockSpawnOn });
+
+        await expect(openDiff('old.txt', 'new.txt', editor)).rejects.toThrow(
+          `${editor} exited with code 1`,
+        );
+      });
+    }
+
+    const terminalEditors: EditorType[] = ['vim', 'neovim', 'emacs'];
+
+    for (const editor of terminalEditors) {
+      it(`should call spawnSync for ${editor}`, async () => {
+        await openDiff('old.txt', 'new.txt', editor);
         const diffCommand = getDiffCommand('old.txt', 'new.txt', editor)!;
-        expect(execFileSync).toHaveBeenCalledWith(
+        expect(spawnSync).toHaveBeenCalledWith(
           diffCommand.command,
           diffCommand.args,
           {
             stdio: 'inherit',
-            encoding: 'utf8',
           },
         );
       });
@@ -422,54 +403,19 @@ describe('editor utils', () => {
 
     it('should log an error if diff command is not available', async () => {
       const consoleErrorSpy = vi
-        .spyOn(console, 'error')
+        .spyOn(debugLogger, 'error')
         .mockImplementation(() => {});
       // @ts-expect-error Testing unsupported editor
-      await openDiff('old.txt', 'new.txt', 'foobar', () => {});
+      await openDiff('old.txt', 'new.txt', 'foobar');
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'No diff tool available. Install a supported editor.',
       );
-    });
-
-    describe('onEditorClose callback', () => {
-      it('should call onEditorClose for execFileSync editors', async () => {
-        (execFileSync as Mock).mockReturnValue(Buffer.from(`/usr/bin/`));
-        const onEditorClose = vi.fn();
-        await openDiff('old.txt', 'new.txt', 'vim', onEditorClose);
-        expect(execFileSync).toHaveBeenCalledTimes(1);
-        expect(onEditorClose).toHaveBeenCalledTimes(1);
-      });
-
-      it('should call onEditorClose for execFileSync editors when an error is thrown', async () => {
-        (execFileSync as Mock).mockImplementation(() => {
-          throw new Error('test error');
-        });
-        const onEditorClose = vi.fn();
-        openDiff('old.txt', 'new.txt', 'vim', onEditorClose);
-        expect(execFileSync).toHaveBeenCalledTimes(1);
-        expect(onEditorClose).toHaveBeenCalledTimes(1);
-      });
-
-      it('should not call onEditorClose for spawn editors', async () => {
-        const onEditorClose = vi.fn();
-        const mockSpawn = {
-          on: vi.fn((event, cb) => {
-            if (event === 'close') {
-              cb(0);
-            }
-          }),
-        };
-        (spawn as Mock).mockReturnValue(mockSpawn);
-        await openDiff('old.txt', 'new.txt', 'vscode', onEditorClose);
-        expect(spawn).toHaveBeenCalledTimes(1);
-        expect(onEditorClose).not.toHaveBeenCalled();
-      });
     });
   });
 
   describe('allowEditorTypeInSandbox', () => {
     it('should allow vim in sandbox mode', () => {
-      process.env.SANDBOX = 'sandbox';
+      vi.stubEnv('SANDBOX', 'sandbox');
       expect(allowEditorTypeInSandbox('vim')).toBe(true);
     });
 
@@ -478,7 +424,7 @@ describe('editor utils', () => {
     });
 
     it('should allow emacs in sandbox mode', () => {
-      process.env.SANDBOX = 'sandbox';
+      vi.stubEnv('SANDBOX', 'sandbox');
       expect(allowEditorTypeInSandbox('emacs')).toBe(true);
     });
 
@@ -487,7 +433,7 @@ describe('editor utils', () => {
     });
 
     it('should allow neovim in sandbox mode', () => {
-      process.env.SANDBOX = 'sandbox';
+      vi.stubEnv('SANDBOX', 'sandbox');
       expect(allowEditorTypeInSandbox('neovim')).toBe(true);
     });
 
@@ -504,7 +450,7 @@ describe('editor utils', () => {
     ];
     for (const editor of guiEditors) {
       it(`should not allow ${editor} in sandbox mode`, () => {
-        process.env.SANDBOX = 'sandbox';
+        vi.stubEnv('SANDBOX', 'sandbox');
         expect(allowEditorTypeInSandbox(editor)).toBe(false);
       });
 
@@ -541,25 +487,25 @@ describe('editor utils', () => {
 
     it('should return false for vscode when installed and in sandbox mode', () => {
       (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/code'));
-      process.env.SANDBOX = 'sandbox';
+      vi.stubEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('vscode')).toBe(false);
     });
 
     it('should return true for vim when installed and in sandbox mode', () => {
       (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/vim'));
-      process.env.SANDBOX = 'sandbox';
+      vi.stubEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('vim')).toBe(true);
     });
 
     it('should return true for emacs when installed and in sandbox mode', () => {
       (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/emacs'));
-      process.env.SANDBOX = 'sandbox';
+      vi.stubEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('emacs')).toBe(true);
     });
 
     it('should return true for neovim when installed and in sandbox mode', () => {
       (execSync as Mock).mockReturnValue(Buffer.from('/usr/bin/nvim'));
-      process.env.SANDBOX = 'sandbox';
+      vi.stubEnv('SANDBOX', 'sandbox');
       expect(isEditorAvailable('neovim')).toBe(true);
     });
   });

@@ -9,16 +9,31 @@ import { join } from 'path';
 import { Storage } from '@vybestack/llxprt-code-core';
 
 const cleanupFunctions: Array<(() => void) | (() => Promise<void>)> = [];
+const syncCleanupFunctions: Array<() => void> = [];
 let cleanupInProgress = false;
 
 export function registerCleanup(fn: (() => void) | (() => Promise<void>)) {
   cleanupFunctions.push(fn);
 }
 
+export function registerSyncCleanup(fn: () => void) {
+  syncCleanupFunctions.push(fn);
+}
+
 export async function runExitCleanup() {
   // Guard against concurrent cleanup if signal handlers fire multiple times
   if (cleanupInProgress) return;
   cleanupInProgress = true;
+
+  // Run sync cleanups first (e.g., stdio restoration)
+  for (const fn of syncCleanupFunctions) {
+    try {
+      fn();
+    } catch (_) {
+      // Ignore errors during cleanup.
+    }
+  }
+  syncCleanupFunctions.length = 0;
 
   for (const fn of cleanupFunctions) {
     try {

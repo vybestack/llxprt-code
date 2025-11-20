@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,6 +8,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { execSync } from 'child_process';
 import * as os from 'os';
 import { detect as chardetDetect } from 'chardet';
+import { debugLogger } from './debugLogger.js';
 
 // Mock dependencies
 vi.mock('child_process');
@@ -30,7 +31,7 @@ describe('Shell Command Processor - Encoding Functions', () => {
   let mockedChardetDetect: ReturnType<typeof vi.mocked<typeof chardetDetect>>;
 
   beforeEach(() => {
-    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(debugLogger, 'warn').mockImplementation(() => {});
     mockedExecSync = vi.mocked(execSync);
     mockedOsPlatform = vi.mocked(os.platform);
     mockedChardetDetect = vi.mocked(chardetDetect);

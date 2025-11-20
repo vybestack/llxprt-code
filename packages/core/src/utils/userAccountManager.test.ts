@@ -1,14 +1,17 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
+import type { Mock } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { UserAccountManager } from './userAccountManager.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
+import { GEMINI_DIR } from './paths.js';
+import { debugLogger } from './debugLogger.js';
 
 vi.mock('os', async (importOriginal) => {
   const os = await importOriginal<typeof import('os')>();
@@ -25,11 +28,11 @@ describe('UserAccountManager', () => {
 
   beforeEach(() => {
     tempHomeDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'llxprt-code-test-home-'),
+      path.join(os.tmpdir(), 'gemini-cli-test-home-'),
     );
     (os.homedir as Mock).mockReturnValue(tempHomeDir);
     accountsFile = () =>
-      path.join(tempHomeDir, '.llxprt', 'provider_accounts.json');
+      path.join(tempHomeDir, GEMINI_DIR, 'google_accounts.json');
     userAccountManager = new UserAccountManager();
   });
 
@@ -100,7 +103,7 @@ describe('UserAccountManager', () => {
       fs.mkdirSync(path.dirname(accountsFile()), { recursive: true });
       fs.writeFileSync(accountsFile(), 'not valid json');
       const consoleLogSpy = vi
-        .spyOn(console, 'log')
+        .spyOn(debugLogger, 'log')
         .mockImplementation(() => {});
 
       await userAccountManager.cacheGoogleAccount('test1@google.com');
@@ -119,7 +122,7 @@ describe('UserAccountManager', () => {
         JSON.stringify({ active: 'test1@google.com', old: 'not-an-array' }),
       );
       const consoleLogSpy = vi
-        .spyOn(console, 'log')
+        .spyOn(debugLogger, 'log')
         .mockImplementation(() => {});
 
       await userAccountManager.cacheGoogleAccount('test2@google.com');
@@ -159,7 +162,7 @@ describe('UserAccountManager', () => {
       fs.mkdirSync(path.dirname(accountsFile()), { recursive: true });
       fs.writeFileSync(accountsFile(), '{ "active": "test@google.com"'); // Invalid JSON
       const consoleLogSpy = vi
-        .spyOn(console, 'log')
+        .spyOn(debugLogger, 'log')
         .mockImplementation(() => {});
 
       const account = userAccountManager.getCachedGoogleAccount();
@@ -208,7 +211,7 @@ describe('UserAccountManager', () => {
       fs.mkdirSync(path.dirname(accountsFile()), { recursive: true });
       fs.writeFileSync(accountsFile(), 'not valid json');
       const consoleLogSpy = vi
-        .spyOn(console, 'log')
+        .spyOn(debugLogger, 'log')
         .mockImplementation(() => {});
 
       await userAccountManager.clearCachedGoogleAccount();
@@ -270,7 +273,7 @@ describe('UserAccountManager', () => {
       fs.mkdirSync(path.dirname(accountsFile()), { recursive: true });
       fs.writeFileSync(accountsFile(), 'invalid json');
       const consoleDebugSpy = vi
-        .spyOn(console, 'log')
+        .spyOn(debugLogger, 'log')
         .mockImplementation(() => {});
 
       expect(userAccountManager.getLifetimeGoogleAccounts()).toBe(0);
@@ -317,7 +320,7 @@ describe('UserAccountManager', () => {
         JSON.stringify({ active: null, old: 1 }),
       );
       const consoleLogSpy = vi
-        .spyOn(console, 'log')
+        .spyOn(debugLogger, 'log')
         .mockImplementation(() => {});
 
       expect(userAccountManager.getLifetimeGoogleAccounts()).toBe(0);

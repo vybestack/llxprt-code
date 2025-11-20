@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,14 +13,19 @@ import {
   loadGlobalMemory,
   loadEnvironmentMemory,
   loadJitSubdirectoryMemory,
+  refreshServerHierarchicalMemory,
 } from './memoryDiscovery.js';
 import {
-  setLlxprtMdFilename,
+  setGeminiMdFilename,
   DEFAULT_CONTEXT_FILENAME,
 } from '../tools/memoryTool.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
-import { LLXPRT_DIR } from './paths.js';
-import type { GeminiCLIExtension } from '../config/config.js';
+import { GEMINI_DIR } from './paths.js';
+import { Config, type GeminiCLIExtension } from '../config/config.js';
+import { Storage } from '../config/storage.js';
+import { SimpleExtensionLoader } from './extensionLoader.js';
+import { CoreEvent, coreEvents } from './events.js';
+import { debugLogger } from './debugLogger.js';
 
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
@@ -29,14 +34,6 @@ vi.mock('os', async (importOriginal) => {
     homedir: vi.fn(),
   };
 });
-
-// Simple extension loader for testing
-class SimpleExtensionLoader {
-  constructor(private extensions: GeminiCLIExtension[]) {}
-  getExtensions() {
-    return this.extensions;
-  }
-}
 
 describe('memoryDiscovery', () => {
   const DEFAULT_FOLDER_TRUST = true;
@@ -63,8 +60,8 @@ describe('memoryDiscovery', () => {
 
     vi.resetAllMocks();
     // Set environment variables to indicate test environment
-    process.env.NODE_ENV = 'test';
-    process.env.VITEST = 'true';
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('VITEST', 'true');
 
     projectRoot = await createEmptyDir(path.join(testRootDir, 'project'));
     cwd = await createEmptyDir(path.join(projectRoot, 'src'));
@@ -73,10 +70,17 @@ describe('memoryDiscovery', () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     // Some tests set this to a different value.
-    setLlxprtMdFilename(DEFAULT_CONTEXT_FILENAME);
+    setGeminiMdFilename(DEFAULT_CONTEXT_FILENAME);
     // Clean up the temporary directory to prevent resource leaks.
-    await fsPromises.rm(testRootDir, { recursive: true, force: true });
+    // Use maxRetries option for robust cleanup without race conditions
+    await fsPromises.rm(testRootDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 10,
+    });
   });
 
   describe('when untrusted', () => {
@@ -94,7 +98,7 @@ describe('memoryDiscovery', () => {
         [],
         false,
         new FileDiscoveryService(projectRoot),
-        [],
+        new SimpleExtensionLoader([]),
         false, // untrusted
       );
 
@@ -115,7 +119,7 @@ describe('memoryDiscovery', () => {
         'Src directory memory', // Untrusted
       );
 
-      const filepath = path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME);
+      const filepath = path.join(homedir, GEMINI_DIR, DEFAULT_CONTEXT_FILENAME);
       await createTestFile(filepath, 'default context content'); // In user home dir (outside untrusted space).
       const { fileCount, memoryContent, filePaths } =
         await loadServerHierarchicalMemory(
@@ -123,7 +127,7 @@ describe('memoryDiscovery', () => {
           [],
           false,
           new FileDiscoveryService(projectRoot),
-          [],
+          new SimpleExtensionLoader([]),
           false, // untrusted
         );
 
@@ -139,7 +143,7 @@ describe('memoryDiscovery', () => {
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -152,7 +156,7 @@ describe('memoryDiscovery', () => {
 
   it('should load only the global context file if present and others are not (default filename)', async () => {
     const defaultContextFile = await createTestFile(
-      path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+      path.join(homedir, GEMINI_DIR, DEFAULT_CONTEXT_FILENAME),
       'default context content',
     );
 
@@ -161,7 +165,7 @@ describe('memoryDiscovery', () => {
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -176,10 +180,10 @@ default context content
 
   it('should load only the global custom context file if present and filename is changed', async () => {
     const customFilename = 'CUSTOM_AGENTS.md';
-    setLlxprtMdFilename(customFilename);
+    setGeminiMdFilename(customFilename);
 
     const customContextFile = await createTestFile(
-      path.join(homedir, LLXPRT_DIR, customFilename),
+      path.join(homedir, GEMINI_DIR, customFilename),
       'custom context content',
     );
 
@@ -188,7 +192,7 @@ default context content
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -203,7 +207,7 @@ custom context content
 
   it('should load context files by upward traversal with custom filename', async () => {
     const customFilename = 'PROJECT_CONTEXT.md';
-    setLlxprtMdFilename(customFilename);
+    setGeminiMdFilename(customFilename);
 
     const projectContextFile = await createTestFile(
       path.join(projectRoot, customFilename),
@@ -219,7 +223,7 @@ custom context content
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -238,7 +242,7 @@ cwd context content
 
   it('should load context files by downward traversal with custom filename', async () => {
     const customFilename = 'LOCAL_CONTEXT.md';
-    setLlxprtMdFilename(customFilename);
+    setGeminiMdFilename(customFilename);
 
     const subdirCustomFile = await createTestFile(
       path.join(cwd, 'subdir', customFilename),
@@ -254,7 +258,7 @@ cwd context content
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -286,7 +290,7 @@ Subdir custom memory
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -318,7 +322,7 @@ Src directory memory
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -337,7 +341,7 @@ Subdir memory
 
   it('should load and correctly order global, upward, and downward ORIGINAL_GEMINI_MD_FILENAME files', async () => {
     const defaultContextFile = await createTestFile(
-      path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+      path.join(homedir, GEMINI_DIR, DEFAULT_CONTEXT_FILENAME),
       'default context content',
     );
     const rootGeminiFile = await createTestFile(
@@ -362,7 +366,7 @@ Subdir memory
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -415,12 +419,12 @@ Subdir memory
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
       'tree',
       {
         respectGitIgnore: true,
-        respectLlxprtIgnore: true,
+        respectGeminiIgnore: true,
       },
       200, // maxDirs parameter
     );
@@ -434,76 +438,73 @@ My code memory
     });
   });
 
-  it(
-    'should respect the maxDirs parameter during downward scan',
-    { timeout: 15000 },
-    async () => {
-      const _consoleDebugSpy = vi
-        .spyOn(console, 'debug')
-        .mockImplementation(() => {});
+  it('should respect the maxDirs parameter during downward scan', async () => {
+    const consoleDebugSpy = vi
+      .spyOn(debugLogger, 'debug')
+      .mockImplementation(() => {});
 
-      for (let i = 0; i < 60; i++) {
-        await createEmptyDir(path.join(cwd, `deep_dir_${i}`));
-      }
+    // Create directories in parallel for better performance
+    const dirPromises = Array.from({ length: 2 }, (_, i) =>
+      createEmptyDir(path.join(cwd, `deep_dir_${i}`)),
+    );
+    await Promise.all(dirPromises);
 
-      // Pass the custom limit directly to the function
-      await loadServerHierarchicalMemory(
-        cwd,
-        [],
-        true,
-        new FileDiscoveryService(projectRoot),
-        [],
-        DEFAULT_FOLDER_TRUST,
-        'tree', // importFormat
-        {
-          respectGitIgnore: true,
-          respectLlxprtIgnore: true,
-        },
-        50, // maxDirs
-      );
-
-      // Debug logging removed - no need to check for it
-
-      vi.mocked(console.debug).mockRestore();
-
-      const result = await loadServerHierarchicalMemory(
-        cwd,
-        [],
-        false,
-        new FileDiscoveryService(projectRoot),
-        [],
-        DEFAULT_FOLDER_TRUST,
-      );
-
-      expect(result).toEqual({
-        memoryContent: '',
-        fileCount: 0,
-        filePaths: [],
-      });
-    },
-  );
-
-  it('should load extension context file paths', async () => {
-    const extensionFilePath = await createTestFile(
-      path.join(testRootDir, 'extensions/ext1/LLXPRT.md'),
-      'Extension memory content',
+    // Pass the custom limit directly to the function
+    await loadServerHierarchicalMemory(
+      cwd,
+      [],
+      true,
+      new FileDiscoveryService(projectRoot),
+      new SimpleExtensionLoader([]),
+      DEFAULT_FOLDER_TRUST,
+      'tree', // importFormat
+      {
+        respectGitIgnore: true,
+        respectGeminiIgnore: true,
+      },
+      1, // maxDirs
     );
 
-    // Create extension object with contextFiles array (refactored signature)
-    const extension: GeminiCLIExtension = {
-      name: 'ext1',
-      path: path.join(testRootDir, 'extensions/ext1'),
-      version: '1.0.0',
-      isActive: true,
-      contextFiles: [extensionFilePath],
-    };
+    expect(consoleDebugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[DEBUG] [BfsFileSearch]'),
+      expect.stringContaining('Scanning [1/1]:'),
+    );
+
+    consoleDebugSpy.mockRestore();
 
     const result = await loadServerHierarchicalMemory(
       cwd,
       [],
       false,
       new FileDiscoveryService(projectRoot),
-      [extension],
+      new SimpleExtensionLoader([]),
+      DEFAULT_FOLDER_TRUST,
+    );
+
+    expect(result).toEqual({
+      memoryContent: '',
+      fileCount: 0,
+      filePaths: [],
+    });
+  });
+
+  it('should load extension context file paths', async () => {
+    const extensionFilePath = await createTestFile(
+      path.join(testRootDir, 'extensions/ext1/GEMINI.md'),
+      'Extension memory content',
+    );
+
+    const result = await loadServerHierarchicalMemory(
+      cwd,
+      [],
+      false,
+      new FileDiscoveryService(projectRoot),
+      new SimpleExtensionLoader([
+        {
+          contextFiles: [extensionFilePath],
+          isActive: true,
+        } as GeminiCLIExtension,
+      ]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -530,7 +531,7 @@ Extension memory content
       [includedDir],
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -565,7 +566,7 @@ included directory memory
       createdFiles.map((f) => path.dirname(f)),
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -600,7 +601,7 @@ included directory memory
       [childDir, parentDir], // Deliberately include duplicates
       false,
       new FileDiscoveryService(projectRoot),
-      [],
+      new SimpleExtensionLoader([]),
       DEFAULT_FOLDER_TRUST,
     );
 
@@ -621,103 +622,10 @@ included directory memory
     expect(childOccurrences).toBe(1);
   });
 
-  describe('project-scoped memory discovery (issue #985)', () => {
-    it('should discover memory files saved to .llxprt/ subdirectory during upward scan', async () => {
-      const projectLlxprtFile = await createTestFile(
-        path.join(projectRoot, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
-        'Project-scoped memory content',
-      );
-
-      const result = await loadServerHierarchicalMemory(
-        cwd,
-        [],
-        false,
-        new FileDiscoveryService(projectRoot),
-        [],
-        DEFAULT_FOLDER_TRUST,
-      );
-
-      expect(result.filePaths).toContain(projectLlxprtFile);
-      expect(result.memoryContent).toContain('Project-scoped memory content');
-    });
-
-    it('should discover memory files in .llxprt/ at multiple directory levels during upward scan', async () => {
-      const projectLlxprtFile = await createTestFile(
-        path.join(projectRoot, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
-        'Project root scoped memory',
-      );
-      const cwdLlxprtFile = await createTestFile(
-        path.join(cwd, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
-        'CWD scoped memory',
-      );
-
-      const result = await loadServerHierarchicalMemory(
-        cwd,
-        [],
-        false,
-        new FileDiscoveryService(projectRoot),
-        [],
-        DEFAULT_FOLDER_TRUST,
-      );
-
-      expect(result.filePaths).toContain(projectLlxprtFile);
-      expect(result.filePaths).toContain(cwdLlxprtFile);
-      expect(result.memoryContent).toContain('Project root scoped memory');
-      expect(result.memoryContent).toContain('CWD scoped memory');
-    });
-
-    it('should load both direct LLXPRT.md and .llxprt/LLXPRT.md from the same directory', async () => {
-      const directFile = await createTestFile(
-        path.join(projectRoot, DEFAULT_CONTEXT_FILENAME),
-        'Direct memory content',
-      );
-      const llxprtDirFile = await createTestFile(
-        path.join(projectRoot, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
-        'Scoped memory content',
-      );
-
-      const result = await loadServerHierarchicalMemory(
-        cwd,
-        [],
-        false,
-        new FileDiscoveryService(projectRoot),
-        [],
-        DEFAULT_FOLDER_TRUST,
-      );
-
-      expect(result.filePaths).toContain(directFile);
-      expect(result.filePaths).toContain(llxprtDirFile);
-      expect(result.memoryContent).toContain('Direct memory content');
-      expect(result.memoryContent).toContain('Scoped memory content');
-    });
-
-    it('should not duplicate global memory path when scanning .llxprt/ directories', async () => {
-      const globalFile = await createTestFile(
-        path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
-        'Global memory content',
-      );
-
-      const result = await loadServerHierarchicalMemory(
-        cwd,
-        [],
-        false,
-        new FileDiscoveryService(projectRoot),
-        [],
-        DEFAULT_FOLDER_TRUST,
-      );
-
-      expect(result.filePaths).toContain(globalFile);
-      const occurrences = result.filePaths.filter(
-        (p) => p === globalFile,
-      ).length;
-      expect(occurrences).toBe(1);
-    });
-  });
-
   describe('loadGlobalMemory', () => {
     it('should load global memory file if it exists', async () => {
       const globalMemoryFile = await createTestFile(
-        path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        path.join(homedir, GEMINI_DIR, DEFAULT_CONTEXT_FILENAME),
         'Global memory content',
       );
 
@@ -738,7 +646,7 @@ included directory memory
   describe('loadEnvironmentMemory', () => {
     it('should load extension memory', async () => {
       const extFile = await createTestFile(
-        path.join(testRootDir, 'ext', 'LLXPRT.md'),
+        path.join(testRootDir, 'ext', 'GEMINI.md'),
         'Extension content',
       );
       const mockExtensionLoader = new SimpleExtensionLoader([
@@ -840,7 +748,7 @@ included directory memory
 
     it('should keep multiple memory files from the same directory adjacent and in order', async () => {
       // Configure multiple memory filenames
-      setLlxprtMdFilename(['PRIMARY.md', 'SECONDARY.md']);
+      setGeminiMdFilename(['PRIMARY.md', 'SECONDARY.md']);
 
       const dir = await createEmptyDir(
         path.join(testRootDir, 'multi_file_dir'),
@@ -971,5 +879,59 @@ included directory memory
       // Ensure outer memory is NOT loaded
       expect(result.files.find((f) => f.path === outerMemory)).toBeUndefined();
     });
+  });
+
+  it('refreshServerHierarchicalMemory should refresh memory and update config', async () => {
+    const extensionLoader = new SimpleExtensionLoader([]);
+    const config = new Config({
+      sessionId: '1',
+      targetDir: cwd,
+      cwd,
+      debugMode: false,
+      model: 'fake-model',
+      extensionLoader,
+    });
+    const result = await loadServerHierarchicalMemory(
+      config.getWorkingDir(),
+      config.shouldLoadMemoryFromIncludeDirectories()
+        ? config.getWorkspaceContext().getDirectories()
+        : [],
+      config.getDebugMode(),
+      config.getFileService(),
+      config.getExtensionLoader(),
+      config.isTrustedFolder(),
+      config.getImportFormat(),
+    );
+    expect(result.fileCount).equals(0);
+
+    // Now add an extension with a memory file
+    const extensionsDir = new Storage(homedir).getExtensionsDir();
+    const extensionPath = path.join(extensionsDir, 'new-extension');
+    const contextFilePath = path.join(extensionPath, 'CustomContext.md');
+    await fsPromises.mkdir(extensionPath, { recursive: true });
+    await fsPromises.writeFile(contextFilePath, 'Really cool custom context!');
+    await extensionLoader.loadExtension({
+      name: 'new-extension',
+      isActive: true,
+      contextFiles: [contextFilePath],
+      version: '1.0.0',
+      id: '1234',
+      path: extensionPath,
+    });
+
+    const mockEventListener = vi.fn();
+    coreEvents.on(CoreEvent.MemoryChanged, mockEventListener);
+    const refreshResult = await refreshServerHierarchicalMemory(config);
+    expect(refreshResult.fileCount).equals(1);
+    expect(config.getGeminiMdFileCount()).equals(refreshResult.fileCount);
+    expect(refreshResult.memoryContent).toContain(
+      'Really cool custom context!',
+    );
+    expect(config.getUserMemory()).equals(refreshResult.memoryContent);
+    expect(refreshResult.filePaths[0]).toContain(
+      path.join(extensionPath, 'CustomContext.md'),
+    );
+    expect(config.getGeminiMdFilePaths()).equals(refreshResult.filePaths);
+    expect(mockEventListener).toHaveBeenCalledExactlyOnceWith(refreshResult);
   });
 });

@@ -1,21 +1,24 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import {
-  modifyWithEditor,
+import type {
   ModifyContext,
   ModifiableDeclarativeTool,
+} from './modifiable-tool.js';
+import {
+  modifyWithEditor,
   isModifiableDeclarativeTool,
 } from './modifiable-tool.js';
-import { EditorType } from '../utils/editor.js';
-import fs from 'fs';
-import fsp from 'fs/promises';
-import os from 'os';
-import * as path from 'path';
+import type { EditorType } from '../utils/editor.js';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import * as path from 'node:path';
+import { debugLogger } from '../utils/debugLogger.js';
 
 // Mock dependencies
 const mockOpenDiff = vi.hoisted(() => vi.fn());
@@ -73,12 +76,9 @@ describe('modifyWithEditor', () => {
         })),
     };
 
-    mockOpenDiff.mockImplementation(
-      async (_oldPath, newPath, _editor, onEditorCloseCallback) => {
-        await fsp.writeFile(newPath, modifiedContent, 'utf8');
-        onEditorCloseCallback?.();
-      },
-    );
+    mockOpenDiff.mockImplementation(async (_oldPath, newPath) => {
+      await fsp.writeFile(newPath, modifiedContent, 'utf8');
+    });
 
     mockCreatePatch.mockReturnValue('mock diff content');
   });
@@ -105,7 +105,6 @@ describe('modifyWithEditor', () => {
         mockModifyContext,
         'vscode' as EditorType,
         abortSignal,
-        vi.fn(),
       );
 
       expect(mockModifyContext.getCurrentContent).toHaveBeenCalledWith(
@@ -172,28 +171,6 @@ describe('modifyWithEditor', () => {
         mockModifyContext,
         'vscode' as EditorType,
         abortSignal,
-        vi.fn(),
-      );
-    });
-
-    it('should invoke onEditorOpen before calling openDiff', async () => {
-      const onEditorOpen = vi.fn();
-      const onEditorClose = vi.fn();
-
-      await modifyWithEditor(
-        mockParams,
-        mockModifyContext,
-        'vscode' as EditorType,
-        abortSignal,
-        onEditorClose,
-        onEditorOpen,
-      );
-
-      expect(onEditorOpen).toHaveBeenCalledTimes(1);
-      expect(onEditorClose).toHaveBeenCalledTimes(1);
-      expect(mockOpenDiff).toHaveBeenCalledTimes(1);
-      expect(onEditorOpen.mock.invocationCallOrder[0]).toBeLessThan(
-        mockOpenDiff.mock.invocationCallOrder[0],
       );
     });
   });
@@ -209,7 +186,6 @@ describe('modifyWithEditor', () => {
       mockModifyContext,
       'vscode' as EditorType,
       abortSignal,
-      vi.fn(),
     );
 
     expect(mockCreatePatch).toHaveBeenCalledWith(
@@ -238,7 +214,6 @@ describe('modifyWithEditor', () => {
       mockModifyContext,
       'vscode' as EditorType,
       abortSignal,
-      vi.fn(),
     );
 
     expect(mockCreatePatch).toHaveBeenCalledWith(
@@ -257,6 +232,62 @@ describe('modifyWithEditor', () => {
     expect(result.updatedDiff).toBe('mock diff content');
   });
 
+  it('should honor override content values when provided', async () => {
+    const overrideCurrent = 'override current content';
+    const overrideProposed = 'override proposed content';
+    mockModifyContext.getCurrentContent = vi.fn();
+    mockModifyContext.getProposedContent = vi.fn();
+
+    await modifyWithEditor(
+      mockParams,
+      mockModifyContext,
+      'vscode' as EditorType,
+      abortSignal,
+      {
+        currentContent: overrideCurrent,
+        proposedContent: overrideProposed,
+      },
+    );
+
+    expect(mockModifyContext.getCurrentContent).not.toHaveBeenCalled();
+    expect(mockModifyContext.getProposedContent).not.toHaveBeenCalled();
+    expect(mockCreatePatch).toHaveBeenCalledWith(
+      path.basename(mockParams.filePath),
+      overrideCurrent,
+      modifiedContent,
+      'Current',
+      'Proposed',
+      expect.any(Object),
+    );
+  });
+
+  it('should treat null override as explicit empty content', async () => {
+    mockModifyContext.getCurrentContent = vi.fn();
+    mockModifyContext.getProposedContent = vi.fn();
+
+    await modifyWithEditor(
+      mockParams,
+      mockModifyContext,
+      'vscode' as EditorType,
+      abortSignal,
+      {
+        currentContent: null,
+        proposedContent: 'override proposed content',
+      },
+    );
+
+    expect(mockModifyContext.getCurrentContent).not.toHaveBeenCalled();
+    expect(mockModifyContext.getProposedContent).not.toHaveBeenCalled();
+    expect(mockCreatePatch).toHaveBeenCalledWith(
+      path.basename(mockParams.filePath),
+      '',
+      modifiedContent,
+      'Current',
+      'Proposed',
+      expect.any(Object),
+    );
+  });
+
   it('should clean up temp files even if editor fails', async () => {
     const editorError = new Error('Editor failed to open');
     mockOpenDiff.mockRejectedValue(editorError);
@@ -269,7 +300,6 @@ describe('modifyWithEditor', () => {
         mockModifyContext,
         'vscode' as EditorType,
         abortSignal,
-        vi.fn(),
       ),
     ).rejects.toThrow('Editor failed to open');
 
@@ -285,7 +315,7 @@ describe('modifyWithEditor', () => {
 
   it('should handle temp file cleanup errors gracefully', async () => {
     const consoleErrorSpy = vi
-      .spyOn(console, 'error')
+      .spyOn(debugLogger, 'error')
       .mockImplementation(() => {});
     vi.spyOn(fs, 'unlinkSync').mockImplementation(() => {
       throw new Error('Failed to delete file');
@@ -299,7 +329,6 @@ describe('modifyWithEditor', () => {
       mockModifyContext,
       'vscode' as EditorType,
       abortSignal,
-      vi.fn(),
     );
 
     expect(consoleErrorSpy).toHaveBeenCalledTimes(3);
@@ -326,7 +355,6 @@ describe('modifyWithEditor', () => {
       mockModifyContext,
       'vscode' as EditorType,
       abortSignal,
-      vi.fn(),
     );
 
     expect(mockOpenDiff).toHaveBeenCalledOnce();
@@ -348,7 +376,6 @@ describe('modifyWithEditor', () => {
       mockModifyContext,
       'vscode' as EditorType,
       abortSignal,
-      vi.fn(),
     );
 
     expect(mockOpenDiff).toHaveBeenCalledOnce();

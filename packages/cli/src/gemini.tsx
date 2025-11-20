@@ -74,6 +74,10 @@ import {
   SessionPersistenceService,
   type PersistedSession,
   parseAndFormatApiError,
+  coreEvents,
+  CoreEvent,
+  type OutputPayload,
+  type ConsoleLogPayload,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { theme } from './ui/colors.js';
@@ -85,6 +89,7 @@ import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import {
   cleanupCheckpoints,
   registerCleanup,
+  registerSyncCleanup,
   runExitCleanup,
 } from './utils/cleanup.js';
 import { getCliVersion } from './utils/version.js';
@@ -110,6 +115,11 @@ import { computeWindowTitle } from './utils/windowTitle.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
+import {
+  patchStdio,
+  writeToStderr,
+  writeToStdout,
+} from './utils/stdio.js';
 import {
   setCliRuntimeContext,
   switchActiveProvider,
@@ -303,7 +313,7 @@ export async function startInteractiveUI(
     process.on('exit', () => {
       disableMouseEvents();
       if (process.stdout.isTTY) {
-        process.stdout.write(
+        writeToStdout(
           DISABLE_BRACKETED_PASTE + DISABLE_FOCUS_TRACKING + SHOW_CURSOR,
         );
       }
@@ -346,6 +356,13 @@ export async function startInteractiveUI(
 }
 
 export async function main() {
+  const cleanupStdio = patchStdio();
+  registerSyncCleanup(() => {
+    // This is needed to ensure we don't lose any buffered output.
+    initializeOutputListenersAndFlush();
+    cleanupStdio();
+  });
+
   setupUnhandledRejectionHandler();
 
   // Create .llxprt directory if it doesn't exist
@@ -1090,6 +1107,8 @@ export async function main() {
     arg.startsWith('--prompt'),
   );
 
+  initializeOutputListenersAndFlush();
+
   try {
     await runNonInteractive({
       config: nonInteractiveConfig,
@@ -1103,7 +1122,7 @@ export async function main() {
       const formatter = new JsonFormatter();
       const normalizedError =
         error instanceof Error ? error : new Error(String(error));
-      process.stderr.write(`${formatter.formatError(normalizedError, 1)}\n`);
+      writeToStderr(`${formatter.formatError(normalizedError, 1)}\n`);
     } else {
       const printableError = formatNonInteractiveError(error);
       console.error(`Non-interactive run failed: ${printableError}`);
@@ -1121,10 +1140,34 @@ export async function main() {
 function setWindowTitle(title: string, settings: LoadedSettings) {
   if (!settings.merged.ui?.hideWindowTitle) {
     const windowTitle = computeWindowTitle(title);
-    process.stdout.write(`\x1b]2;${windowTitle}\x07`);
+    writeToStdout(`\x1b]2;${windowTitle}\x07`);
 
     process.on('exit', () => {
-      process.stdout.write(`\x1b]2;\x07`);
+      writeToStdout(`\x1b]2;\x07`);
     });
   }
+}
+
+function initializeOutputListenersAndFlush() {
+  // If there are no listeners for output, make sure we flush so output is not
+  // lost.
+  if (coreEvents.listenerCount(CoreEvent.Output) === 0) {
+    // In non-interactive mode, ensure we drain any buffered output or logs to stderr
+    coreEvents.on(CoreEvent.Output, (payload: OutputPayload) => {
+      if (payload.isStderr) {
+        writeToStderr(payload.chunk, payload.encoding);
+      } else {
+        writeToStdout(payload.chunk, payload.encoding);
+      }
+    });
+
+    coreEvents.on(CoreEvent.ConsoleLog, (payload: ConsoleLogPayload) => {
+      if (payload.type === 'error' || payload.type === 'warn') {
+        writeToStderr(payload.content);
+      } else {
+        writeToStdout(payload.content);
+      }
+    });
+  }
+  coreEvents.drainBacklogs();
 }
