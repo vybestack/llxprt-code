@@ -34,6 +34,10 @@ import { MockModifiableTool } from '../test-utils/tools.js';
 import { Part, PartListUnion } from '@google/genai';
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
 
+// Test constants for tool output truncation
+const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 30000;
+const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 100;
+
 class AbortDuringConfirmationInvocation extends BaseToolInvocation<
   Record<string, unknown>,
   ToolResult
@@ -79,6 +83,65 @@ class AbortDuringConfirmationTool extends BaseDeclarativeTool<
       'Test tool that aborts while confirming execution.',
       Kind.Other,
       { type: 'object', properties: {} },
+    );
+  }
+
+  protected createInvocation(
+    params: Record<string, unknown>,
+  ): ToolInvocation<Record<string, unknown>, ToolResult> {
+    return new AbortDuringConfirmationInvocation(
+      this.abortController,
+      this.abortError,
+      params,
+    );
+  }
+}
+
+class AbortDuringConfirmationInvocation extends BaseToolInvocation<
+  Record<string, unknown>,
+  ToolResult
+> {
+  constructor(
+    private readonly abortController: AbortController,
+    private readonly abortError: Error,
+    params: Record<string, unknown>,
+  ) {
+    super(params);
+  }
+
+  override async shouldConfirmExecute(
+    _signal: AbortSignal,
+  ): Promise<ToolCallConfirmationDetails | false> {
+    this.abortController.abort();
+    throw this.abortError;
+  }
+
+  async execute(_abortSignal: AbortSignal): Promise<ToolResult> {
+    throw new Error('execute should not be called when confirmation fails');
+  }
+
+  getDescription(): string {
+    return 'Abort during confirmation invocation';
+  }
+}
+
+class AbortDuringConfirmationTool extends BaseDeclarativeTool<
+  Record<string, unknown>,
+  ToolResult
+> {
+  constructor(
+    private readonly abortController: AbortController,
+    private readonly abortError: Error,
+  ) {
+    super(
+      'abortDuringConfirmationTool',
+      'Abort During Confirmation Tool',
+      'A tool that aborts while confirming execution.',
+      Kind.Other,
+      {
+        type: 'object',
+        properties: {},
+      },
     );
   }
 
@@ -213,7 +276,20 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
         authType: 'oauth-personal',
       }),
+      getShellExecutionConfig: () => ({
+        terminalWidth: 90,
+        terminalHeight: 30,
+      }),
+      storage: {
+        getProjectTempDir: () => '/tmp',
+      },
+      getTruncateToolOutputThreshold: () =>
+        DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+      getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
       getToolRegistry: () => mockToolRegistry,
+      getUseSmartEdit: () => false,
+      getUseModelRouter: () => false,
+      getGeminiClient: () => null,
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({

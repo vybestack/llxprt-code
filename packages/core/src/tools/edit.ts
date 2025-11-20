@@ -387,7 +387,8 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       if (abortSignal.aborted) {
         throw error;
       }
-      console.error('Failed to calculate edit:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.log(`Error preparing edit: ${errorMsg}`);
       return false;
     }
 
