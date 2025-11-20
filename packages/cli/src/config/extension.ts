@@ -18,6 +18,7 @@ import { recursivelyHydrateStrings } from './extensions/variables.js';
 import { SettingScope, loadSettings } from './settings.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
+import { downloadFromGitHubRelease } from './extensions/github.js';
 import type { LoadExtensionContext } from './extensions/variableSchema.js';
 
 export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
@@ -406,6 +407,12 @@ export async function installExtension(
     tempDir = await ExtensionStorage.createTmpDir();
     await cloneFromGit(installMetadata.source, tempDir);
     localSourcePath = tempDir;
+  } else if (installMetadata.type === 'github-release') {
+    tempDir = await ExtensionStorage.createTmpDir();
+    const result = await downloadFromGitHubRelease(installMetadata, tempDir);
+    // Update the ref in metadata to the actual tag that was downloaded
+    installMetadata.ref = result.tagName;
+    localSourcePath = tempDir;
   } else if (
     installMetadata.type === 'local' ||
     installMetadata.type === 'link'
@@ -444,7 +451,11 @@ export async function installExtension(
 
     await fs.promises.mkdir(destinationPath, { recursive: true });
 
-    if (installMetadata.type === 'local' || installMetadata.type === 'git') {
+    if (
+      installMetadata.type === 'local' ||
+      installMetadata.type === 'git' ||
+      installMetadata.type === 'github-release'
+    ) {
       await copyExtension(localSourcePath, destinationPath);
     }
 
