@@ -50,6 +50,9 @@ export class GeminiOAuthProvider implements OAuthProvider {
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,
   ) => number;
+  private authCodeResolver?: (code: string) => void;
+  private authCodeRejecter?: (error: Error) => void;
+  private pendingAuthPromise?: Promise<string>;
 
   constructor(
     tokenStore?: TokenStore,
@@ -84,6 +87,43 @@ export class GeminiOAuthProvider implements OAuthProvider {
     ) => number,
   ): void {
     this.addItem = addItem;
+  }
+
+  /**
+   * Wait for authorization code from UI dialog
+   */
+  waitForAuthCode(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      this.authCodeResolver = resolve;
+      this.authCodeRejecter = reject;
+    });
+  }
+
+  /**
+   * Submit authorization code from UI dialog
+   */
+  submitAuthCode(code: string): void {
+    if (this.authCodeResolver) {
+      this.authCodeResolver(code);
+      this.authCodeResolver = undefined;
+      this.authCodeRejecter = undefined;
+    }
+  }
+
+  /**
+   * Cancel OAuth flow
+   */
+  cancelAuth(): void {
+    if (this.authCodeRejecter) {
+      const error = OAuthErrorFactory.fromUnknown(
+        this.name,
+        new Error('OAuth authentication was cancelled by user'),
+        'user cancellation',
+      );
+      this.authCodeRejecter(error);
+      this.authCodeResolver = undefined;
+      this.authCodeRejecter = undefined;
+    }
   }
 
   /**
@@ -154,11 +194,161 @@ export class GeminiOAuthProvider implements OAuthProvider {
     );
   }
 
+
+  /**
+   * Fallback auth flow when browser cannot be opened
+   * Displays URL and waits for user to paste authorization code
+   */
+  private async fallbackAuthFlow(): Promise<void> {
+    await this.errorHandler.wrapMethod(
+      async () => {
+        const { OAuth2Client, CodeChallengeMethod } = await import('google-auth-library');
+        const crypto = await import('crypto');
+        
+        // Generate PKCE parameters
+        const codeVerifier = crypto.randomBytes(32).toString('base64url');
+        const codeChallenge = crypto
+          .createHash('sha256')
+          .update(codeVerifier)
+          .digest('base64url');
+        const state = crypto.randomBytes(32).toString('hex');
+
+        // Create OAuth2 client with redirect URI for manual flow
+        const redirectUri = 'http://localhost:8765/oauth2callback';
+        const client = new OAuth2Client({
+          clientId: process.env.GOOGLE_CLIENT_ID || '1087459693054-kh5t5o33ocq7ik2h62puk0q6lruqcuvj.apps.googleusercontent.com',
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET || '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',
+          redirectUri,
+        });
+
+        // Generate authorization URL
+        const authUrl = client.generateAuthUrl({
+          access_type: 'offline',
+          scope: [
+            'https://www.googleapis.com/auth/generative-language.retriever',
+            'https://www.googleapis.com/auth/userinfo.email',
+          ],
+          code_challenge_method: CodeChallengeMethod.S256,
+          code_challenge: codeChallenge,
+          state,
+        });
+
+        // Display URL to user
+        const addItem = this.addItem || globalOAuthUI.getAddItem();
+        if (addItem) {
+          const historyItem: HistoryItemWithoutId = {
+            type: 'oauth_url',
+            text: `Please authorize with Gemini:\n1. Visit the URL below\n2. Complete authorization\n3. Paste the full callback URL (starting with http://localhost:8765/oauth2callback?...)`,
+            url: authUrl,
+          };
+          addItem(historyItem, Date.now());
+        }
+
+        console.log('Visit the following URL to authorize:');
+        console.log(authUrl);
+        console.log('\nAfter authorizing, paste the full callback URL here.');
+
+        // Set global flags for UI to detect
+        (global as any).__oauth_provider = 'gemini';
+        (global as any).__oauth_needs_code = true;
+
+        // Wait for user to submit the callback URL
+        this.pendingAuthPromise = new Promise<string>((resolve, reject) => {
+          this.authCodeResolver = resolve;
+          this.authCodeRejecter = reject;
+          setTimeout(() => {
+            const timeoutError = OAuthErrorFactory.fromUnknown(
+              this.name,
+              new Error('OAuth authentication timed out after 5 minutes'),
+              'authentication timeout',
+            );
+            reject(timeoutError);
+          }, 5 * 60 * 1000);
+        });
+
+        const callbackUrl = await this.pendingAuthPromise;
+
+        // Parse the callback URL
+        const urlObj = new URL(callbackUrl);
+        const code = urlObj.searchParams.get('code');
+        const returnedState = urlObj.searchParams.get('state');
+
+        if (!code) {
+          throw OAuthErrorFactory.fromUnknown(
+            this.name,
+            new Error('No authorization code in callback URL'),
+            'invalid callback',
+          );
+        }
+
+        if (returnedState !== state) {
+          throw OAuthErrorFactory.fromUnknown(
+            this.name,
+            new Error('State mismatch in OAuth callback'),
+            'security error',
+          );
+        }
+
+        // Exchange code for tokens
+        const { tokens } = await client.getToken({
+          code,
+          codeVerifier,
+        });
+
+        if (!tokens.access_token) {
+          throw OAuthErrorFactory.fromUnknown(
+            this.name,
+            new Error('No access token received'),
+            'token exchange failed',
+          );
+        }
+
+        // Save the token
+        const token: OAuthToken = {
+          token_type: 'Bearer',
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token ?? undefined,
+          expiry: tokens.expiry_date
+            ? tokens.expiry_date
+            : Date.now() + 3600 * 1000,
+        };
+
+        if (this.tokenStore) {
+          await this.tokenStore.saveToken('gemini', token);
+          this.currentToken = token;
+
+          const addItem = this.addItem || globalOAuthUI.getAddItem();
+          if (addItem) {
+            addItem(
+              {
+                type: 'info',
+                text: 'Successfully authenticated with Google Gemini!',
+              },
+              Date.now(),
+            );
+          }
+        }
+      },
+      this.name,
+      'fallbackAuthFlow',
+    );
+  }
+
+
   async initiateAuth(): Promise<void> {
     await this.ensureInitialized();
 
-    return this.errorHandler.wrapMethod(
+    await this.errorHandler.wrapMethod(
       async () => {
+        const interactive = shouldLaunchBrowser();
+
+        // If browser is not available, go straight to fallback
+        if (!interactive) {
+          this.logger.debug(() => 'Browser not available, using fallback flow');
+          await this.fallbackAuthFlow();
+          return;
+        }
+
         // Import the existing Google OAuth infrastructure
         const coreModule = await import('@vybestack/llxprt-code-core');
         const { getOauthClient, AuthType } = coreModule;
@@ -167,7 +357,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
         // Type assertion is needed since we're creating a partial Config for test mode
         const config = {
           getProxy: () => undefined,
-          isBrowserLaunchSuppressed: () => !shouldLaunchBrowser(),
+          isBrowserLaunchSuppressed: () => false,
         } as unknown as Parameters<typeof getOauthClient>[1];
 
         // Use the existing Google OAuth infrastructure to get a client
@@ -177,7 +367,26 @@ export class GeminiOAuthProvider implements OAuthProvider {
         } catch (error) {
           // Handle browser auth cancellation or other auth failures
           if (error instanceof Error) {
-            // Show error message to user if addItem is available
+            // Check for specific cancellation messages - trigger fallback
+            if (
+              error.message.includes('cancelled') ||
+              error.message.includes('denied') ||
+              error.message.includes('access_denied') ||
+              error.message.includes('user_cancelled') ||
+              error.message.includes('Browser') ||
+              error.message.includes('browser')
+            ) {
+              this.logger.debug(
+                () =>
+                  `Browser auth cancelled, attempting fallback: ${error.message}`,
+              );
+
+              // Attempt fallback flow
+              await this.fallbackAuthFlow();
+              return;
+            }
+
+            // Show error message to user for other errors
             const addItem = this.addItem || globalOAuthUI.getAddItem();
             if (addItem) {
               addItem(
@@ -189,55 +398,13 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
                 Date.now(),
               );
             }
-
-            // Check for specific cancellation messages
-            if (
-              error.message.includes('cancelled') ||
-              error.message.includes('denied') ||
-              error.message.includes('access_denied') ||
-              error.message.includes('user_cancelled')
-            ) {
-              // CRITICAL FIX: Trigger fallback flow instead of failing
-              this.logger.debug(
-                () =>
-                  `Browser auth cancelled, triggering fallback: ${error.message}`,
-              );
-
-              // Show fallback instructions to user
-              const fallbackMessage = `Browser authentication was cancelled or failed.\nFallback options:\n1. Use API key: /keyfile <path-to-your-gemini-key>\n2. Set environment: export GEMINI_API_KEY=<your-key>\n3. Try OAuth again: /auth gemini enable`;
-
-              const addItem = this.addItem || globalOAuthUI.getAddItem();
-              if (addItem) {
-                addItem(
-                  {
-                    type: 'info',
-                    text: fallbackMessage,
-                  },
-                  Date.now(),
-                );
-              } else {
-                console.log('\\n' + '─'.repeat(60));
-                console.log('Browser authentication was cancelled or failed.');
-                console.log('Fallback options:');
-                console.log(
-                  '1. Use API key: /keyfile <path-to-your-gemini-key>',
-                );
-                console.log(
-                  '2. Set environment: export GEMINI_API_KEY=<your-key>',
-                );
-                console.log('3. Try OAuth again: /auth gemini enable');
-                console.log('─'.repeat(60));
-              }
-
-              // Throw a user-friendly error that doesn't hang the system
-              throw OAuthErrorFactory.authenticationRequired(this.name, {
-                reason:
-                  'Browser authentication was cancelled or failed. Please use one of the fallback options shown above, or check the URL in your history.',
-              });
-            }
           }
-          // Re-throw other authentication errors
-          throw error;
+
+          throw OAuthErrorFactory.fromUnknown(
+            this.name,
+            error,
+            'failed to obtain OAuth client',
+          );
         }
 
         // The client should now have valid credentials
@@ -275,14 +442,16 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
           }
         } else {
           throw OAuthErrorFactory.authenticationRequired(this.name, {
-            reason: 'No valid credentials received from Google OAuth',
+            reason: 'OAuth succeeded but no credentials received',
           });
         }
       },
       this.name,
       'initiateAuth',
-    )();
+    );
   }
+
+
 
   async getToken(): Promise<OAuthToken | null> {
     await this.ensureInitialized();
@@ -320,21 +489,31 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
 
   async refreshIfNeeded(): Promise<OAuthToken | null> {
     await this.ensureInitialized();
-    if (!this.currentToken) {
-      return null;
-    }
 
     return this.errorHandler.handleGracefully(
       async () => {
-        // Check if token needs refresh (30 second buffer)
-        const now = Date.now() / 1000;
-        const expiresAt = this.currentToken!.expiry;
+        // First check if we have a current token
+        if (!this.currentToken) {
+          // Try to get from token store
+          if (this.tokenStore) {
+            const storedToken = await this.tokenStore.getToken('gemini');
+            if (storedToken) {
+              this.currentToken = storedToken;
+            }
+          }
+        }
 
-        if (expiresAt && expiresAt <= now + 30) {
-          // Token is expired or expires soon
-          // Since actual Gemini OAuth refresh is handled by the GeminiProvider itself,
-          // we clear the expired token and return null to signal re-authentication is needed
-          this.currentToken = null;
+        if (!this.currentToken) {
+          return null;
+        }
+
+        // Check if token is expired or about to expire (within 5 minutes)
+        const expiryTime = this.currentToken.expiry;
+        const isExpired = expiryTime && expiryTime < Date.now() + 5 * 60 * 1000;
+
+        if (isExpired) {
+          // Google OAuth doesn't support automatic refresh through our flow
+          // User needs to re-authenticate
           if (this.tokenStore) {
             try {
               await this.tokenStore.removeToken('gemini');
@@ -358,6 +537,7 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
       'refreshIfNeeded',
     );
   }
+
 
   async logout(): Promise<void> {
     await this.ensureInitialized();
