@@ -69,8 +69,41 @@ Objective: replace llxprt’s monolithic `packages/cli/src/ui/App.tsx` render lo
 
 3) **Port llxprt state into AppContainer**
    - Integrate llxprt hooks in AppContainer (replacing/upgrading upstream choices):
-     - Replace upstream `useModelCommand` with llxprt `useProviderDialog` + `useProviderModelDialog`; store dialog flags/selections in UIState; expose open/close/select actions in UIActions.
-     - Add tools dialog (`useToolsDialog`), load profile (`useLoadProfileDialog`), workspace migration (`useWorkspaceMigration`), todo panel (`useTodoContext`) and `TodoPausePreserver`.
+     - Replace upstream `useModelCommand` with llxprt `useProviderDialog` + `useProviderModelDialog`; store dialog flags/selections in UIState; expose open/close/select actions in UIActions. Example code block:
+       ```ts
+       const {
+         showDialog: isProviderDialogOpen,
+         openDialog: openProviderDialog,
+         handleSelect: handleProviderSelect,
+         closeDialog: exitProviderDialog,
+         providers: providerOptions,
+         currentProvider: selectedProvider,
+       } = useProviderDialog({
+         addMessage: (msg) =>
+           addItem(
+             { type: msg.type as MessageType, text: msg.content },
+             msg.timestamp.getTime(),
+           ),
+         appState,
+         config,
+       });
+       ```
+       Mirror this for `useProviderModelDialog`.
+     - Add tools dialog (`useToolsDialog`), load profile (`useLoadProfileDialog`), workspace migration (`useWorkspaceMigration`), todo panel (`useTodoContext`) and `TodoPausePreserver`. Example:
+       ```ts
+       const {
+         showDialog: isToolsDialogOpen,
+         openDialog: openToolsDialogRaw,
+         closeDialog: exitToolsDialog,
+         handleSelect: handleToolsSelect,
+         action: toolsDialogAction,
+         availableTools: toolsDialogTools,
+       } = useToolsDialog({ addMessage: addItem, appState, config });
+       const openToolsDialog = useCallback(
+         (action: 'enable' | 'disable') => openToolsDialogRaw(action),
+         [openToolsDialogRaw],
+       );
+       ```
      - Token metrics: copy `useEffect` from current App.tsx that polls history service (`historyTokenCleanupRef`, `lastHistoryServiceRef`, `updateHistoryTokenCount`) into AppContainer; wire into `useSessionStats`.
      - Memory refresh: drop `refreshServerHierarchicalMemory`; add llxprt `loadHierarchicalLlxprtMemory(...)` call and `config.setLlxprtMdFileCount`.
      - OAuth wiring: set `global.__oauth_add_item`, `globalOAuthUI.setAddItem(addItem)`; clear on unmount; keep `validateAuthMethod`.
@@ -84,11 +117,92 @@ Objective: replace llxprt’s monolithic `packages/cli/src/ui/App.tsx` render lo
 
 4) **Port actions into UIActions**
    - Add: provider/model dialog open/select/close; tools dialog actions; load profile/workspace migration actions; memory refresh action (llxprt path); slash command run; tool enable/disable actions; todo pause register; workspace trust accept/deny; IDE nudge completion; OAuth dialog open; auto-accept toggle.
+     ```ts
+     const uiActions: UIActions = {
+       ...,
+       openProviderDialog,
+       closeProviderDialog: exitProviderDialog,
+       handleProviderSelect,
+       openProviderModelDialog,
+       closeProviderModelDialog: exitProviderModelDialog,
+       handleProviderModelChange,
+       openToolsDialog,
+       closeToolsDialog: exitToolsDialog,
+       handleToolsSelect,
+       openLoadProfileDialog,
+       closeLoadProfileDialog: exitLoadProfileDialog,
+       handleProfileSelect,
+       handleWorkspaceMigrationSelect,
+       ...
+     };
+     ```
    - Auth actions: use llxprt `useAuthCommand` (external auth, OAuth UI); wire `handleAuthSelect`, `handleApiKeySubmit/Cancel` exactly as llxprt requires.
    - Keep upstream actions for theme/settings dialogs, quota prompts, banner visibility, embedded shell focus, escape prompt change.
 
 5) **Layout integration**
    - `DefaultAppLayout.tsx`: keep `ref={uiState.rootUiRef}`; width/height from `uiState`. Ensure `DialogManager` includes llxprt dialogs listed above. Ensure `Composer` uses llxprt prompt pipeline (input buffer, suggestions, slash commands, Vim/Kitty).
+     - Add llxprt dialogs to `DialogManager` (after existing upstream cases):
+       ```tsx
+       if (uiState.isLoadProfileDialogOpen) {
+         return (
+           <LoadProfileDialog
+             profiles={uiState.profiles}
+             onSelect={uiActions.handleProfileSelect}
+             onClose={uiActions.closeLoadProfileDialog}
+           />
+         );
+       }
+       if (uiState.isWorkspaceMigrationDialogOpen) {
+         return (
+           <WorkspaceMigrationDialog
+             onSelect={uiActions.handleWorkspaceMigrationSelect}
+             onClose={uiActions.closeWorkspaceMigrationDialog}
+           />
+         );
+       }
+       if (uiState.isToolsDialogOpen) {
+         return (
+           <ToolsDialog
+             action={uiState.toolsDialogAction}
+             availableTools={uiState.toolsDialogTools}
+             disabledTools={uiState.toolsDialogDisabledTools}
+             onSelect={uiActions.handleToolsSelect}
+             onClose={uiActions.closeToolsDialog}
+           />
+         );
+       }
+       if (uiState.isProviderDialogOpen) {
+         return (
+           <ProviderDialog
+             providers={uiState.providerOptions}
+             selectedProvider={uiState.selectedProvider}
+             onSelect={uiActions.handleProviderSelect}
+             onClose={uiActions.closeProviderDialog}
+           />
+         );
+       }
+       if (uiState.isProviderModelDialogOpen) {
+         return (
+           <ProviderModelDialog
+             models={uiState.providerModels}
+             onSelect={uiActions.handleProviderModelChange}
+             onClose={uiActions.closeProviderModelDialog}
+           />
+         );
+       }
+       ```
+     - `Composer.tsx`: integrate llxprt prompt rendering (InputPrompt, Footer, Shell indicator, etc.) by reading from `useUIState`. Example sections to port:
+       ```tsx
+       const uiState = useUIState();
+       const { buffer, streamingState, showEscapePrompt, shellModeActive } = uiState;
+       ...
+       <InputPrompt
+         buffer={buffer}
+         streamingState={streamingState}
+         showEscapePrompt={showEscapePrompt}
+         ...
+       />
+       ```
    - Choose width calc: either upstream `calculateMainAreaWidth` or llxprt `useResponsive`; remove the unused one; set `uiState.mainAreaWidth` accordingly.
    - Retain `useFlickerDetector` hook with `constrainHeight` default true (llxprt behavior).
 

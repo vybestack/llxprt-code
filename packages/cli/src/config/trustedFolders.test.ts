@@ -15,7 +15,7 @@ vi.mock('os', async (importOriginal) => {
   };
 });
 
-import { FatalConfigError } from '@vybestack/llxprt-code-core';
+import { FatalConfigError, getIdeTrust } from '@vybestack/llxprt-code-core';
 import {
   describe,
   it,
@@ -310,8 +310,6 @@ describe('isWorkspaceTrusted', () => {
   });
 });
 
-import { getIdeTrust } from '@vybestack/llxprt-code-core';
-
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
@@ -324,6 +322,10 @@ describe('isWorkspaceTrusted with IDE override', () => {
   const mockSettings: Settings = {
     folderTrust: true,
   } as Settings;
+
+  beforeEach(() => {
+    resetTrustedFoldersForTesting();
+  });
 
   it('should return true when ideTrust is true, ignoring config', () => {
     vi.mocked(getIdeTrust).mockReturnValue(true);
