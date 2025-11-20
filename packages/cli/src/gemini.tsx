@@ -607,6 +607,18 @@ export async function main() {
       : [];
     const sandboxConfig = config.getSandbox();
     if (sandboxConfig) {
+      // We intentionally omit the list of extensions here because extensions
+      // should not impact auth or setting up the sandbox.
+      // TODO(jacobr): refactor loadCliConfig so there is a minimal version
+      // that only initializes enough config to enable refreshAuth or find
+      // another way to decouple refreshAuth from requiring a config.
+      const partialConfig = await loadCliConfig(
+        settings.merged,
+        [],
+        sessionId,
+        argv,
+      );
+
       if (
         settings.merged.selectedAuthType &&
         !settings.merged.useExternalAuth
@@ -617,7 +629,7 @@ export async function main() {
           if (err) {
             throw new Error(err);
           }
-          await config.refreshAuth(settings.merged.selectedAuthType);
+          await partialConfig.refreshAuth(settings.merged.selectedAuthType);
 
           // Compression settings are already applied via ephemeral settings in Config
           // and will be read directly by geminiChat.ts during compression
@@ -659,7 +671,7 @@ export async function main() {
       await start_sandbox(
         sandboxConfig,
         sandboxMemoryArgs,
-        config,
+        partialConfig,
         sandboxArgs,
       );
       process.exit(0);
