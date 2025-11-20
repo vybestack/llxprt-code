@@ -53,6 +53,26 @@ Claude flagged that upstream implemented deferred initialization around commit #
 4. Resume cherry-picking with commit #150 onward, **skipping** upstream commit `7e170527` (already reimplemented) but **picking** dependent fixes such as #171 (`ce92ed3f`).
 5. When commit #171 is reached, cherry-pick it normally since our runtime now mirrors the upstream expectations.
 
+### Batch Breakdown
+To remove guesswork, the 59 “pick” commits from `upstream-v0.6.1-to-v0.7.0-cherrypicks.md` are pre-sliced into 13 batches. Work them in order; every entry shows the upstream numbering/hash and a short note is available in the pick list file.
+
+**Pre–deferred-init batches**
+- **Batch 01:** #1 `d2b8ff5d`, #3 `13a65ad9`, #5 `d54cdd88`, #6 `6756a8b8`, #13 `d746eb7b`
+- **Batch 02:** #17 `2d406ffc`, #31 `853ae56e`, #33 `2c754d71`, #34 `92c99d78`, #36 `db5b49b2`
+- **Batch 03:** #37 `899b6f72`, #38 `a34e3751`, #39 `1f31443e`, #41 `ec0acc48`, #44 `22b7d865`
+- **Batch 04:** #73 `e48f61bd`, #93 `2c4f61ec`, #95 `fa8cea17`, #96 `dd91b0a6`, #103 `3bf8fec2`
+- **Batch 05:** #104 `c8ad8310`, #106 `5be2a9d5`, #108 `532497b3`, #109 `c564464e`, #110 `37c53973`
+- **Batch 06:** #111 `0152759d`, #113 `44691a4c`, #115 `468db873`, #116 `2216856e`, #117 `375b8522`
+- **Batch 07:** #119 `a1dc7a8f`, #121 `b4455af3`, #122 `8fdb61aa`, #123 `d9828e25`, #124 `6869dbe6`
+- **Batch 08:** #126 `81d03cb5`, #128 `9abb165f`, #130 `34c14b7d`, #133 `6c559e23`, #136 `710e00e0`
+- **Batch 09:** #140 `9c4d1594`, #141 `525ced29`, #142 `d7a0dbc6`, #144 `4cdf9207`, #145 `570b0086`
+- **Batch 10:** #146 `47948e37`, #147 `712dc245`, #149 `40db0298` (only three commits; still run the full verification suite)
+
+**Post–deferred-init batches**
+- **Batch 11:** #151 `52183238`, #152 `c93eed63`, #155 `5151bedf`, #156 `d8393a06`, #160 `31c609da`
+- **Batch 12:** #169 `38e053b7`, #170 `c6f8ecc2`, #171 `ce92ed3f` *(sandbox fix that depends on our deferred-init work)*, #173 `2fbfeb39`, #174 `89aba7cb`
+- **Batch 13:** #176 `d39cd045` (solo batch; isolates the Zed integration fix and keeps 5-commit discipline intact)
+
 ## Tracking Table
 Update after each batch.
 
