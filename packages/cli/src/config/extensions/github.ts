@@ -192,11 +192,14 @@ export async function checkForExtensionUpdate(
     return ExtensionUpdateState.ERROR;
   }
 }
-
+export interface GitHubDownloadResult {
+  tagName: string;
+  type: 'git' | 'github-release';
+}
 export async function downloadFromGitHubRelease(
   installMetadata: ExtensionInstallMetadata,
   destination: string,
-): Promise<string> {
+): Promise<GitHubDownloadResult> {
   const { source, ref } = installMetadata;
   const { owner, repo } = parseGitHubRepoForReleases(source);
 
@@ -261,7 +264,10 @@ export async function downloadFromGitHubRelease(
     }
 
     await fs.promises.unlink(downloadedAssetPath);
-    return releaseData.tag_name;
+    return {
+      tagName: releaseData.tag_name,
+      type: 'github-release',
+    };
   } catch (error) {
     throw new Error(
       `Failed to download release from ${installMetadata.source}: ${getErrorMessage(error)}`,

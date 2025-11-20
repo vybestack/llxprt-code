@@ -458,7 +458,7 @@ describe('installExtension', () => {
     await expect(
       installExtension({ source: sourceExtDir, type: 'local' }),
     ).rejects.toThrow(
-      'Error: Extension "my-local-extension" is already installed. Please uninstall it first.',
+      'Extension "my-local-extension" is already installed. Please uninstall it first.',
     );
   });
 
