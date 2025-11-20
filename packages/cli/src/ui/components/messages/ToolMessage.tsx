@@ -246,8 +246,7 @@ const ToolStatusIndicator: React.FC<ToolStatusIndicatorProps> = ({
   status,
   name,
 }) => {
-  const isShell =
-    name === SHELL_COMMAND_NAME || name === SHELL_NAME || false;
+  const isShell = name === SHELL_COMMAND_NAME || name === SHELL_NAME || false;
   const warningColor = isShell ? Colors.Foreground : Colors.AccentYellow;
 
   return (
