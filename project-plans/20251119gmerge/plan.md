@@ -1,10 +1,10 @@
 # 20251119gmerge Cherry-pick Plan
 
 ## Goal
-Bring llxprt-code up to parity with google-gemini/gemini-cli through tag `v0.7.0`, applying all commits marked "pick" in `dev-docs/upstream-v0.6.1-to-v0.7.0-cherrypicks.md` (including message-bus prerequisites) while preserving llxprt customizations.
+Bring llxprt-code up to parity with google-gemini/gemini-cli through tag `v0.7.0`, applying all commits marked "pick" in `project-plans/20251119gmerge/upstream-v0.6.1-to-v0.7.0-cherrypicks.md` (including message-bus prerequisites) while preserving llxprt customizations.
 
 ## Source Material
-- Canonical pick/skip list: `dev-docs/upstream-v0.6.1-to-v0.7.0-cherrypicks.md`
+- Canonical pick/skip list: `project-plans/20251119gmerge/upstream-v0.6.1-to-v0.7.0-cherrypicks.md`
 - Message bus prerequisites (from upstream main):
   - `ba85aa49c` – Message bus foundation
   - `b8df8b2ab` – ASK_USER UI wiring
@@ -33,7 +33,7 @@ Bring llxprt-code up to parity with google-gemini/gemini-cli through tag `v0.7.0
          node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
          ```
          - Re-run any failing step after applying fixes until everything passes.
-      3. Update `dev-docs/upstream-v0.6.1-to-v0.7.0-cherrypicks.md` to mark the batch items as "landed" (e.g., checkmarks or status column).
+      3. Update `project-plans/20251119gmerge/upstream-v0.6.1-to-v0.7.0-cherrypicks.md` to mark the batch items as "landed" (e.g., checkmarks or status column).
       4. Document the batch in the table below (commit hashes, conflicts, fixes, verification results).
       5. Commit with a message like `chore: cherry-pick batch N (commits...)`.
 4. **Post-batch maintenance**:
@@ -70,7 +70,7 @@ Update after each batch.
 - Abort batch if needed: `git cherry-pick --abort`
 - Record progress: update this file and `odc.md`, then `git add project-plans/20251119gmerge/*.md`
 
-> **Note:** `project-plans/20251119gmerge/odc.md` mirrors the filtered pick/skip table from `dev-docs/upstream-v0.6.1-to-v0.7.0-cherrypicks.md`. That document already excludes commits we intentionally skipped for telemetry or release/workflow automation, so the ODC file is not the full upstream log.
+> **Note:** `project-plans/20251119gmerge/odc.md` mirrors the filtered pick/skip table from `project-plans/20251119gmerge/upstream-v0.6.1-to-v0.7.0-cherrypicks.md`. That document already excludes commits we intentionally skipped for telemetry or release/workflow automation, so the ODC file is not the full upstream log.
 
 ### Follow-up: CLI Deferred Initialization
 - Upstream commit `7e170527` cannot be cherry-picked verbatim because their bootstrap pipeline is Gemini-only.
