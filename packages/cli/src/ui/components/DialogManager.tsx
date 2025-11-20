@@ -301,6 +301,7 @@ export const DialogManager = ({
       <PermissionsModifyTrustDialog
         onExit={uiActions.closePermissionsDialog}
         addItem={uiActions.addItem}
+        onRestart={uiActions.handleSettingsRestart}
       />
     );
   }

@@ -20,11 +20,12 @@ import { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 interface PermissionsModifyTrustDialogProps {
   onExit: () => void;
   addItem: UseHistoryManagerReturn['addItem'];
+  onRestart?: () => void;
 }
 
 export const PermissionsModifyTrustDialog: React.FC<
   PermissionsModifyTrustDialogProps
-> = ({ onExit, addItem }) => {
+> = ({ onExit, addItem, onRestart }) => {
   const {
     currentTrustLevel,
     pendingTrustLevel,
@@ -123,7 +124,9 @@ export const PermissionsModifyTrustDialog: React.FC<
         onExit();
       }
       if (key.name === 'r' && showRestartPrompt) {
-        process.exit(0);
+        if (onRestart) {
+          onRestart();
+        }
       }
     },
     { isActive: true },

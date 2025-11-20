@@ -97,65 +97,6 @@ class AbortDuringConfirmationTool extends BaseDeclarativeTool<
   }
 }
 
-class AbortDuringConfirmationInvocation extends BaseToolInvocation<
-  Record<string, unknown>,
-  ToolResult
-> {
-  constructor(
-    private readonly abortController: AbortController,
-    private readonly abortError: Error,
-    params: Record<string, unknown>,
-  ) {
-    super(params);
-  }
-
-  override async shouldConfirmExecute(
-    _signal: AbortSignal,
-  ): Promise<ToolCallConfirmationDetails | false> {
-    this.abortController.abort();
-    throw this.abortError;
-  }
-
-  async execute(_abortSignal: AbortSignal): Promise<ToolResult> {
-    throw new Error('execute should not be called when confirmation fails');
-  }
-
-  getDescription(): string {
-    return 'Abort during confirmation invocation';
-  }
-}
-
-class AbortDuringConfirmationTool extends BaseDeclarativeTool<
-  Record<string, unknown>,
-  ToolResult
-> {
-  constructor(
-    private readonly abortController: AbortController,
-    private readonly abortError: Error,
-  ) {
-    super(
-      'abortDuringConfirmationTool',
-      'Abort During Confirmation Tool',
-      'A tool that aborts while confirming execution.',
-      Kind.Other,
-      {
-        type: 'object',
-        properties: {},
-      },
-    );
-  }
-
-  protected createInvocation(
-    params: Record<string, unknown>,
-  ): ToolInvocation<Record<string, unknown>, ToolResult> {
-    return new AbortDuringConfirmationInvocation(
-      this.abortController,
-      this.abortError,
-      params,
-    );
-  }
-}
-
 async function waitForStatus(
   onToolCallsUpdate: Mock,
   status: ToolCall['status'],
