@@ -88,8 +88,19 @@ Update after each batch.
 | Batch | Commits | Status | Verification Notes | Follow-ups |
 |-------|---------|--------|--------------------|------------|
 | 1 | d2b8ff5d, 13a65ad9, d54cdd88, 6756a8b8, d746eb7b | ✅ Completed | format:check → lint → typecheck → test → build → `start.js --profile-load synthetic` on 2025-11-20. | None |
-| 2 | 2d406ffc, 853ae56e, 2c754d71, 92c99d78, db5b49b2 | ✅ Completed | format:check → lint → typecheck → test → build → `start.js --profile-load synthetic` on 2025-11-20 (post-commit cleanup removed unused Composer experiment). | Composer/QueuedMessageDisplay artifacts removed since llxprt UI doesn’t use upstream AppContainer stack. |
-| ... |  |  |  |  |
+| 2 | 2d406ffc, 853ae56e, 2c754d71, 92c99d78, db5b49b2 | ✅ Completed | format:check → lint → typecheck → test → build → `start.js --profile-load synthetic` on 2025-11-20 (post-commit cleanup removed unused Composer experiment). | Composer/QueuedMessageDisplay artifacts removed since llxprt UI doesn't use upstream AppContainer stack. |
+| 3 | 899b6f72, ~~a34e3751~~, 1f31443e, ec0acc48, ~~22b7d865~~ | ✅ Completed | Skipped #38 (shell ANSI refactor) and #44 (auto-update extensions) due to complex conflicts. Remaining 3 landed cleanly. | Shell ANSI and extension auto-update deferred for future dedicated effort. |
+| 4 | ~~e48f61bd~~, 2c4f61ec, fa8cea17, dd91b0a6, 3bf8fec2 | ✅ Completed | #73 initially skipped (AppContainer missing), later landed post-migration as 942eaea5e. Custom commands in non-interactive mode, extension enablement fixes, license filenames added. | #73 landed after AppContainer migration. |
+| 5 | c8ad8310, 5be2a9d5, 532497b3, ~~c564464e~~, 37c53973 | ✅ Completed | wrap-ansi security pin, /chat share with function calls, comma-separated --allowed-tools. #109 skipped (UI architecture). | None |
+| 6 | 0152759d, ~~44691a4c~~, 468db873, ~~2216856e~~, ~~375b8522~~ | ✅ Completed | MCP trust filter landed. #113 skipped (llxprt has own Todo), #116 skipped (useSlashCompletion API mismatch), #117 skipped (terminal reconnect needs UI port). | Todo and terminal reconnect features already handled differently in llxprt. |
+| 7 | a1dc7a8f, b4455af3, 8fdb61aa, ~~d9828e25~~, ~~6869dbe6~~ | ✅ Completed | Comma-separated extensions, positional prompt fix, IDE discovery. #123 skipped (needs auto-update infra), #124 conflict-heavy. | Extension update infrastructure deferred. |
+| 8 | 81d03cb5, 9abb165f, ~~34c14b7d~~, ~~6c559e23~~, 710e00e0 | ✅ Completed | BaseSelectionList extraction, VSIX size optimization, GitHub release artifacts. #130 skipped (install metadata conflicts), #133 marked for reimplementation. | #133 permissions command to be reimplemented as llxprt feature. |
+| 9 | ~~9c4d1594~~, 525ced29, d7a0dbc6, ~~4cdf9207~~, ~~570b0086~~ | ✅ Completed | Archive quoting, flaky test fixes. #140 empty after resolution, #144 telemetry conflicts. #145 landed post-migration as 6e58e1aab. | #145 consent flow landed after AppContainer migration. |
+| 10 | 47948e37, 712dc245, 40db0298 | ✅ Completed | trustedFolders error handling, retry reduction (3→2), noninteractive CLI fix. | None |
+| Deferred-init | Custom reimplementation | ✅ Completed | Reimplemented deferred initialization for llxprt multi-provider architecture. Commits: acec2c8cc (implementation), a02eb6bf7 (AppContainer migration), baecad6b3 (reducer consolidation), 6c4f5dbe6 (flicker detector). | AppContainer/UIStateContext architecture now active. |
+| 11 | 52183238, c93eed63, d8393a06, 31c609da | ✅ Completed | useSelectionList bug fix, compression routing fix, GitHub extension URI fixes. Landed as 0dcb05888, a23d53108, 76bb5fe4f. | None |
+| 12 | 38e053b7, ~~c6f8ecc2~~, ce92ed3f, ~~2fbfeb39~~, 89aba7cb | ✅ Completed | Ctrl+C integration test, sandbox constructor fix, cancel edit tool fix. #170 skipped (exports don't exist), #173 already applied earlier (ee0628cb3). Landed as 68a9da865, 767024066, 7565cb2b7. | None |
+| 13 | ~~d39cd045~~ | ⏭️ Skipped | #176 Zed 'auto' model fix is Gemini-specific (auto-switches between gemini-2.5-pro and gemini-2.5-flash). Not applicable to llxprt multi-provider architecture. | Could reimplement provider-agnostic auto-selection if needed. |
 
 (Add rows as needed. Mark each batch with ✅ once merged locally.)
 
