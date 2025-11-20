@@ -286,6 +286,7 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.debugKeystrokeLogging.description).toBe(
         'Enable debug logging of keystrokes to the console.',
       );
+
     });
 
     it('has JSON schema definitions for every referenced ref', () => {
