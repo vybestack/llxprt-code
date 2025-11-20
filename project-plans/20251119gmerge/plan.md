@@ -73,6 +73,13 @@ To remove guesswork, the 59 “pick” commits from `upstream-v0.6.1-to-v0.7.0-c
 - **Batch 12:** #169 `38e053b7`, #170 `c6f8ecc2`, #171 `ce92ed3f` *(sandbox fix that depends on our deferred-init work)*, #173 `2fbfeb39`, #174 `89aba7cb`
 - **Batch 13:** #176 `d39cd045` (solo batch; isolates the Zed integration fix and keeps 5-commit discipline intact)
 
+### High-risk / Single-commit Micro-batches
+Some picks touch surfaces where llxprt diverges significantly from upstream. Run these as their own micro-batches (cherry-pick + verification) even though they appear inside the lists above:
+- **#133 `6c559e23` (permissions command)** – rewires trust settings UX, so confirm it respects llxprt’s multi-provider trust model before touching surrounding commits.
+- **#145 `570b0086` (extensions consent refactor)** – edits CLI consent prompts, GitHub release handling, and trusted folder UX; conflicts likely with our existing consent patches.
+- **#155 `5151bedf` (/model command)** – intersects our provider-switching logic; expect to adapt the command to llxprt’s multi-provider selection flow.
+- **#173 `2fbfeb39` (AbortSignal tool execution)** – modifies the tool runner pipeline and retry logic; verify compatibility with our tool batching before proceeding to #174+.
+
 ## Tracking Table
 Update after each batch.
 
