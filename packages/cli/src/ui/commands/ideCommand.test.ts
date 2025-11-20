@@ -205,7 +205,9 @@ describe('ideCommand', () => {
         '',
       );
 
-      expect(core.getIdeInstaller).toHaveBeenCalledWith('vscode');
+      expect(core.getIdeInstaller).toHaveBeenCalledWith(
+        IDE_DEFINITIONS.vscode,
+      );
       expect(mockInstall).toHaveBeenCalled();
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -235,7 +237,9 @@ describe('ideCommand', () => {
         '',
       );
 
-      expect(core.getIdeInstaller).toHaveBeenCalledWith('vscode');
+      expect(core.getIdeInstaller).toHaveBeenCalledWith(
+        IDE_DEFINITIONS.vscode,
+      );
       expect(mockInstall).toHaveBeenCalled();
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({

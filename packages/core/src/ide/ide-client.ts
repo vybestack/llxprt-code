@@ -6,11 +6,7 @@
 
 import * as fs from 'node:fs';
 import { isSubpath } from '../utils/paths.js';
-import {
-  detectIde,
-  IDE_DEFINITIONS,
-  type IdeInfo,
-} from '../ide/detect-ide.js';
+import { detectIde, IDE_DEFINITIONS, type IdeInfo } from '../ide/detect-ide.js';
 import {
   ideContext,
   IdeContextNotificationSchema,

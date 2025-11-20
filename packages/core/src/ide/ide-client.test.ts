@@ -18,8 +18,6 @@ import * as fs from 'node:fs';
 import { getIdeProcessInfo } from './process-utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-<<<<<<< HEAD
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { detectIde, IDE_DEFINITIONS } from './detect-ide.js';
 import * as os from 'node:os';
 import * as path from 'node:path';

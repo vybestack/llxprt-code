@@ -88,7 +88,7 @@ Update after each batch.
 | Batch | Commits | Status | Verification Notes | Follow-ups |
 |-------|---------|--------|--------------------|------------|
 | 1 | d2b8ff5d, 13a65ad9, d54cdd88, 6756a8b8, d746eb7b | ✅ Completed | format:check → lint → typecheck → test → build → `start.js --profile-load synthetic` on 2025-11-20. | None |
-| 2 | 2d406ffc, 853ae56e, 2c754d71, 92c99d78, db5b49b2 | ⧗ In Progress | Same verification stack rerun after landing 2c754d71 (with highlight + extensions test updates). | Cherry-pick #92c99d78 and #db5b49b2 next. |
+| 2 | 2d406ffc, 853ae56e, 2c754d71, 92c99d78, db5b49b2 | ✅ Completed | format:check → lint → typecheck → test → build → `start.js --profile-load synthetic` on 2025-11-20 (post-commit cleanup removed unused Composer experiment). | Composer/QueuedMessageDisplay artifacts removed since llxprt UI doesn’t use upstream AppContainer stack. |
 | ... |  |  |  |  |
 
 (Add rows as needed. Mark each batch with ✅ once merged locally.)
