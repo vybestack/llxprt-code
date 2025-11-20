@@ -16,9 +16,10 @@ interface DisableArgs {
 
 export async function handleDisable(args: DisableArgs) {
   try {
-    const scope = args.scope?.toLowerCase() === 'workspace'
-      ? SettingScope.Workspace
-      : SettingScope.User;
+    const scope =
+      args.scope?.toLowerCase() === 'workspace'
+        ? SettingScope.Workspace
+        : SettingScope.User;
     disableExtension(args.name, scope);
     console.log(
       `Extension "${args.name}" successfully disabled for scope "${scope}".`,

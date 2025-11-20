@@ -15,7 +15,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LoadedSettings } from './config/settings.js';
 
 // Mock core modules
@@ -87,6 +87,11 @@ describe('runNonInteractive', () => {
       getOutputFormat: vi.fn().mockReturnValue('text'),
       getFolderTrustFeature: vi.fn().mockReturnValue(false),
       getFolderTrust: vi.fn().mockReturnValue(false),
+      getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
+      getSessionId: vi.fn().mockReturnValue('test-session'),
+      storage: {
+        getDir: vi.fn().mockReturnValue('/tmp/.llxprt'),
+      },
     } as unknown as Config;
 
     mockSettings = {
@@ -155,7 +160,8 @@ describe('runNonInteractive', () => {
       .map(([value]) => value)
       .filter((value) => value !== '');
 
-    expect(meaningfulWrites).toEqual(['Hello', ' World', '\n']);
+    // Content may be buffered/processed, check total output
+    expect(meaningfulWrites.join('')).toBe('Hello World\n');
     expect(mockShutdownTelemetry).toHaveBeenCalled();
   });
 

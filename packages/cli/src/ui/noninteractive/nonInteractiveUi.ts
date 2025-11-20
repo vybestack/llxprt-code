@@ -13,12 +13,19 @@ import type { CommandContext } from '../commands/types.js';
  */
 export function createNonInteractiveUI(): CommandContext['ui'] {
   return {
-    addItem: (_item: Parameters<CommandContext['ui']['addItem']>[0], _timestamp: number) => 0,
+    addItem: (
+      _item: Parameters<CommandContext['ui']['addItem']>[0],
+      _timestamp: number,
+    ) => 0,
     clear: () => {},
     setDebugMessage: (_message: string) => {},
-    loadHistory: (_newHistory: Parameters<CommandContext['ui']['loadHistory']>[0]) => {},
+    loadHistory: (
+      _newHistory: Parameters<CommandContext['ui']['loadHistory']>[0],
+    ) => {},
     pendingItem: null,
-    setPendingItem: (_item: Parameters<CommandContext['ui']['setPendingItem']>[0]) => {},
+    setPendingItem: (
+      _item: Parameters<CommandContext['ui']['setPendingItem']>[0],
+    ) => {},
     toggleCorgiMode: () => {},
     toggleVimEnabled: async () => false,
     setLlxprtMdFileCount: (_count: number) => {},
