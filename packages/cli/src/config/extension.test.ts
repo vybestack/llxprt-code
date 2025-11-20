@@ -717,6 +717,12 @@ describe('performWorkspaceExtensionMigration', () => {
     });
 
     it('should filter trust out of mcp servers', () => {
+      const userExtensionsDir = path.join(
+        tempHomeDir,
+        LLXPRT_DIR,
+        'extensions',
+      );
+      fs.mkdirSync(userExtensionsDir, { recursive: true });
       createExtension({
         extensionsDir: userExtensionsDir,
         name: 'test-extension',
