@@ -205,6 +205,9 @@ Objective: replace llxprt’s monolithic `packages/cli/src/ui/App.tsx` render lo
        ```
    - Choose width calc: either upstream `calculateMainAreaWidth` or llxprt `useResponsive`; remove the unused one; set `uiState.mainAreaWidth` accordingly.
    - Retain `useFlickerDetector` hook with `constrainHeight` default true (llxprt behavior).
+   - `MainContent`: ensure it still renders llxprt history (`HistoryItemDisplay`, `ContextSummaryDisplay`, `TodoPanel`, etc.) but reads data from `useUIState` instead of props.
+   - `Notifications`: wire to llxprt console messages and warning banners from UIState.
+   - `ExitWarning`: ensure llxprt copy for Ctrl+C/D double-tap matches existing behavior (`Press Ctrl+C again to exit` message).
 
 6) **Core integration swaps**
    - Extension consent/update: hook into llxprt extension manager (requested consent dialog) instead of upstream `requestConsentInteractive`.
@@ -227,6 +230,12 @@ Objective: replace llxprt’s monolithic `packages/cli/src/ui/App.tsx` render lo
      - Token metrics: `tokensUpdated` event updates session stats.
    - Manual: reproduce #456 flicker (narrow terminal + dialogs/long output) and confirm no flicker (no `recordFlickerFrame`), UI stable.
    - Run AGENTS checklist: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run test`, `npm run build`, `node scripts/start.js --profile-load synthetic --prompt "just say hi"`.
+   - Add regression scenarios specifically for llxprt features:
+     - Multi-provider `/model` command opens llxprt dialog and allows switching providers/models.
+     - `/tools` slash commands still open llxprt Tools dialog.
+     - Todo panel toggles and TodoPausePreserver still work during streaming.
+     - Workspace migration dialog remains accessible.
+     - OAuth flows still display addItem messages.
 
 ## Acceptance criteria
 - AppContainer/UIStateContext fully replace monolithic `App.tsx` render flow.
