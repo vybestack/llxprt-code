@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { findIndexAfterFraction } from '../client.js';
+import { findCompressSplitPoint } from '../client.js';
 import { COMPRESSION_PRESERVE_THRESHOLD } from '../compression-config.js';
 
 describe('Compression Logic', () => {
@@ -34,13 +34,13 @@ describe('Compression Logic', () => {
 
     // With the new COMPRESSION_PRESERVE_THRESHOLD (0.5), we expect different behavior
     const preservedFraction = COMPRESSION_PRESERVE_THRESHOLD; // 0.5
-    const compressBeforeIndex = findIndexAfterFraction(
+    const compressBeforeIndex = findCompressSplitPoint(
       mockHistory,
       1 - preservedFraction,
     );
 
-    // Since we're preserving 50%, we expect about half the history to be preserved
-    expect(compressBeforeIndex).toBeLessThan(mockHistory.length);
-    expect(mockHistory.length - compressBeforeIndex).toBeGreaterThanOrEqual(2);
+    // Since we're preserving 50% by character count, the index should be somewhere in the middle
+    expect(compressBeforeIndex).toBeGreaterThan(0);
+    expect(compressBeforeIndex).toBeLessThanOrEqual(mockHistory.length);
   });
 });

@@ -56,6 +56,7 @@ const mockModelsModule = {
 vi.mock('../telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
+    addEvent: vi.fn(),
   },
 }));
 
@@ -404,24 +405,16 @@ describe('GeminiChat', () => {
     it('should update telemetry when usage metadata includes prompt tokens', async () => {
       const responseGenerator = (async function* () {
         yield {
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'response' }],
-                role: 'model',
-              },
-              finishReason: 'STOP',
-              index: 0,
-              safetyRatings: [],
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'response' }],
+          metadata: {
+            usage: {
+              promptTokens: 42,
+              completionTokens: 15,
+              totalTokens: 57,
             },
-          ],
-          text: () => 'response',
-          usageMetadata: {
-            promptTokenCount: 42,
-            candidatesTokenCount: 15,
-            totalTokenCount: 57,
           },
-        } as unknown as GenerateContentResponse;
+        };
       })();
       vi.mocked(mockProvider.generateChatCompletion).mockReturnValueOnce(
         responseGenerator,
@@ -446,19 +439,9 @@ describe('GeminiChat', () => {
     it('should not update telemetry when usage metadata is missing', async () => {
       const responseGenerator = (async function* () {
         yield {
-          candidates: [
-            {
-              content: {
-                parts: [{ text: 'response' }],
-                role: 'model',
-              },
-              finishReason: 'STOP',
-              index: 0,
-              safetyRatings: [],
-            },
-          ],
-          text: () => 'response',
-        } as unknown as GenerateContentResponse;
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'response' }],
+        };
       })();
       vi.mocked(mockProvider.generateChatCompletion).mockReturnValueOnce(
         responseGenerator,

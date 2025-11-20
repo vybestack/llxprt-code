@@ -42,7 +42,7 @@ export function detectIdeFromEnv(): IdeInfo {
   if (process.env['TERM_PRODUCT'] === 'Trae') {
     return IDE_DEFINITIONS.trae;
   }
-  if (process.env['MONOSPACE_ENV']) {
+  if (process.env['FIREBASE_DEPLOY_AGENT'] || process.env['MONOSPACE_ENV']) {
     return IDE_DEFINITIONS.firebasestudio;
   }
   return IDE_DEFINITIONS.vscode;

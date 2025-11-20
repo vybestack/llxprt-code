@@ -915,6 +915,9 @@ describe('Gemini Client (client.ts)', () => {
         { role: 'user', parts: [{ text: '...history...' }] },
       ]);
 
+      // Set the mock to return original token count before compression
+      mockGetTotalTokens.mockReturnValue(originalTokenCount);
+
       mockCountTokens
         .mockResolvedValueOnce({ totalTokens: originalTokenCount })
         .mockResolvedValueOnce({ totalTokens: newTokenCount });
