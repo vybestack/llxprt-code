@@ -585,7 +585,7 @@ describe('uninstallExtension', () => {
 
   it('should throw an error if the extension does not exist', async () => {
     await expect(uninstallExtension('nonexistent-extension')).rejects.toThrow(
-      'Error: Extension "nonexistent-extension" not found.',
+      'Extension "nonexistent-extension" not found. Run llxprt extensions list to see available extensions.',
     );
   });
 
@@ -788,6 +788,15 @@ function createExtension({
   addContextFile = false,
   contextFileName = undefined as string | undefined,
   mcpServers = {} as Record<string, MCPServerConfig>,
+  installMetadata,
+}: {
+  extensionsDir?: string;
+  name?: string;
+  version?: string;
+  addContextFile?: boolean;
+  contextFileName?: string;
+  mcpServers?: Record<string, MCPServerConfig>;
+  installMetadata?: { source: string; type: string };
 } = {}): string {
   const extDir = path.join(extensionsDir, name);
   fs.mkdirSync(extDir, { recursive: true });
@@ -795,6 +804,13 @@ function createExtension({
     path.join(extDir, EXTENSIONS_CONFIG_FILENAME),
     JSON.stringify({ name, version, contextFileName, mcpServers }),
   );
+
+  if (installMetadata) {
+    fs.writeFileSync(
+      path.join(extDir, INSTALL_METADATA_FILENAME),
+      JSON.stringify(installMetadata),
+    );
+  }
 
   if (addContextFile) {
     fs.writeFileSync(path.join(extDir, 'LLXPRT.md'), 'context');

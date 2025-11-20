@@ -22,6 +22,14 @@ export function parseInputForHighlighting(
   }
 
   const tokens: HighlightToken[] = [];
+  const pushToken = (token: HighlightToken) => {
+    const previous = tokens[tokens.length - 1];
+    if (previous && previous.type === token.type) {
+      previous.text += token.text;
+      return;
+    }
+    tokens.push(token);
+  };
   let lastIndex = 0;
   let match;
 
@@ -31,7 +39,7 @@ export function parseInputForHighlighting(
 
     // Add the text before the match as a default token
     if (matchIndex > lastIndex) {
-      tokens.push({
+      pushToken({
         text: text.slice(lastIndex, matchIndex),
         type: 'default',
       });
@@ -40,12 +48,12 @@ export function parseInputForHighlighting(
     // Add the matched token
     const type = fullMatch.startsWith('/') ? 'command' : 'file';
     if (type === 'command' && lineIndex !== 0) {
-      tokens.push({
+      pushToken({
         text: fullMatch,
         type: 'default',
       });
     } else {
-      tokens.push({
+      pushToken({
         text: fullMatch,
         type,
       });
@@ -56,7 +64,7 @@ export function parseInputForHighlighting(
 
   // Add any remaining text after the last match
   if (lastIndex < text.length) {
-    tokens.push({
+    pushToken({
       text: text.slice(lastIndex),
       type: 'default',
     });
