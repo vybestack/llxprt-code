@@ -4,8 +4,9 @@ import path from 'node:path';
 
 describe('App quittingMessages block', () => {
   it('defines showTodoPanelSetting before it is used', () => {
+    // The quitting messages block is now in DefaultAppLayout
     const appSource = readFileSync(
-      path.resolve(__dirname, './App.tsx'),
+      path.resolve(__dirname, './layouts/DefaultAppLayout.tsx'),
       'utf8',
     );
     const quittingBlockIndex = appSource.indexOf('if (quittingMessages)');

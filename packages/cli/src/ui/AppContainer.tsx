@@ -7,6 +7,7 @@
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   useRef,
@@ -98,6 +99,7 @@ import {
 import { useStaticHistoryRefresh } from './hooks/useStaticHistoryRefresh.js';
 import { useTodoContext } from './contexts/TodoContext.js';
 import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
+import { useFlickerDetector } from './hooks/useFlickerDetector.js';
 import { isWorkspaceTrusted } from '../config/trustedFolders.js';
 import { globalOAuthUI } from '../auth/global-oauth-ui.js';
 import { UIStateProvider, type UIState } from './contexts/UIStateContext.js';
@@ -1127,7 +1129,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mainControlsRef.current) {
       const fullFooterMeasurement = measureElement(mainControlsRef.current);
       setFooterHeight(fullFooterMeasurement.height);
@@ -1139,6 +1141,33 @@ export const AppContainer = (props: AppContainerProps) => {
     () => terminalHeight - footerHeight - staticExtraHeight,
     [terminalHeight, footerHeight],
   );
+
+  // Flicker detection - measures root UI element vs terminal height
+  // to detect overflow that could cause flickering (issue #456)
+  // This is for TELEMETRY ONLY - actual prevention is via availableTerminalHeight
+  useFlickerDetector(rootUiRef, terminalHeight, constrainHeight);
+
+  // Listen for Flicker events for additional corrective actions
+  useEffect(() => {
+    const handleFlicker = (data: {
+      contentHeight: number;
+      terminalHeight: number;
+      overflow: number;
+    }) => {
+      debug.log(
+        `Flicker event received: overflow=${data.overflow}, content=${data.contentHeight}, terminal=${data.terminalHeight}`,
+      );
+      // When flicker is detected, ensure constrainHeight is enabled
+      // This provides a feedback loop to keep the UI constrained
+      if (!constrainHeight) {
+        setConstrainHeight(true);
+      }
+    };
+    appEvents.on(AppEvent.Flicker, handleFlicker);
+    return () => {
+      appEvents.off(AppEvent.Flicker, handleFlicker);
+    };
+  }, [constrainHeight]);
 
   useEffect(() => {
     // skip refreshing Static during first mount
@@ -1352,6 +1381,9 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Placeholder text
     placeholder,
+
+    // Available terminal height for content (after footer measurement)
+    availableTerminalHeight,
   };
 
   // Build UIActions object

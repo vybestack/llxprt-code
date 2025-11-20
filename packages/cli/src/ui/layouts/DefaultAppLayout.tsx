@@ -95,7 +95,14 @@ export const DefaultAppLayout = ({
     vimMode,
     tokenMetrics,
     currentModel,
+    availableTerminalHeight: uiAvailableTerminalHeight,
   } = uiState;
+
+  // Use the UI state's availableTerminalHeight if constrainHeight is true
+  // Otherwise, fall back to the prop (which is the same calculation)
+  const effectiveAvailableHeight = constrainHeight
+    ? uiAvailableTerminalHeight
+    : availableTerminalHeight;
 
   const showTodoPanelSetting = settings.merged.showTodoPanel ?? true;
   const hideContextSummary = settings.merged.hideContextSummary ?? false;
@@ -132,7 +139,7 @@ export const DefaultAppLayout = ({
           <HistoryItemDisplay
             key={item.id}
             availableTerminalHeight={
-              constrainHeight ? availableTerminalHeight : undefined
+              constrainHeight ? effectiveAvailableHeight : undefined
             }
             terminalWidth={terminalWidth}
             item={item}
@@ -186,7 +193,7 @@ export const DefaultAppLayout = ({
               <HistoryItemDisplay
                 key={i}
                 availableTerminalHeight={
-                  constrainHeight ? availableTerminalHeight : undefined
+                  constrainHeight ? effectiveAvailableHeight : undefined
                 }
                 terminalWidth={mainAreaWidth}
                 item={{ ...item, id: 0 }}

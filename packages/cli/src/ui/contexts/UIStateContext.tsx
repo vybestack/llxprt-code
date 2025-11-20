@@ -158,6 +158,9 @@ export interface UIState {
 
   // Placeholder text
   placeholder: string;
+
+  // Available terminal height for content (after footer measurement)
+  availableTerminalHeight: number;
 }
 
 const UIStateContext = createContext<UIState | undefined>(undefined);
