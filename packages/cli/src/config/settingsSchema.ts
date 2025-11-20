@@ -373,34 +373,12 @@ export const SETTINGS_SCHEMA = {
 
   shouldUseNodePtyShell: {
     type: 'boolean',
-    label: 'Enable Interactive Shell',
+    label: 'Use node-pty for Shell Execution',
     category: 'Shell',
     requiresRestart: true,
     default: false,
     description:
-      'Use node-pty for shell command execution so interactive commands can run from the CLI.',
-    showInDialog: true,
-  },
-
-  shellPager: {
-    type: 'string',
-    label: 'Shell Output Pager',
-    category: 'Shell',
-    requiresRestart: false,
-    default: 'cat',
-    description:
-      'Pager command to use for shell output when the interactive shell is enabled.',
-    showInDialog: true,
-  },
-
-  shellShowColor: {
-    type: 'boolean',
-    label: 'Show Color in Shell Output',
-    category: 'Shell',
-    requiresRestart: false,
-    default: false,
-    description:
-      'Stream ANSI color output when the interactive shell is enabled.',
+      'Use node-pty for shell command execution. Fallback to child_process still applies.',
     showInDialog: true,
   },
 
@@ -610,16 +588,15 @@ export const SETTINGS_SCHEMA = {
           'Sandbox execution environment (can be a boolean or a path string).',
         showInDialog: false,
       },
-      enableInteractiveShell: {
+      usePty: {
         type: 'boolean',
-        label: 'Enable Interactive Shell',
+        label: 'Use node-pty for Shell Execution',
         category: 'Tools',
         requiresRestart: true,
         default: false,
         description:
-          'Use node-pty for shell command execution so interactive commands work inside the CLI.',
+          'Use node-pty for shell command execution. Fallback to child_process still applies.',
         showInDialog: true,
-      },
       },
       autoAccept: {
         type: 'boolean',
