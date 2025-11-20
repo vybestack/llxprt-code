@@ -244,7 +244,7 @@ export function loadExtension(context: LoadExtensionContext): Extension | null {
     };
   } catch (e) {
     console.error(
-      `Warning: error parsing extension config in ${configFilePath}: ${e}`,
+      `Warning: Skipping extension in ${effectiveExtensionPath}: ${getErrorMessage(e)}`,
     );
     return null;
   }

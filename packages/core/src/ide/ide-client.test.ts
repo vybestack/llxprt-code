@@ -90,6 +90,7 @@ describe('IdeClient', () => {
       const config = { port: '8080' };
       vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify(config));
 
+      IdeClient.resetInstance();
       const ideClient = await IdeClient.getInstance();
       await ideClient.connect();
 
@@ -131,6 +132,7 @@ describe('IdeClient', () => {
       vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify(config));
       process.env['LLXPRT_CODE_IDE_SERVER_PORT'] = '9090';
 
+      IdeClient.resetInstance();
       const ideClient = await IdeClient.getInstance();
       await ideClient.connect();
 
@@ -172,6 +174,7 @@ describe('IdeClient', () => {
         >
       ).mockResolvedValue([]);
 
+      IdeClient.resetInstance();
       const ideClient = await IdeClient.getInstance();
       await ideClient.connect();
 
