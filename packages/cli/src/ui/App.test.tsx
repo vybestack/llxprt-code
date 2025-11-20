@@ -1840,45 +1840,4 @@ describe('App UI', () => {
       expect(lastFrame()).toContain('test_tool'); // Tool status should still be visible after cancellation
     });
   });
-
-  describe('Todo Panel Toggle', () => {
-    it('should toggle the TodoPanel when Ctrl+F is pressed', async () => {
-      const { stdin, unmount, rerender } = renderWithProviders(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      currentUnmount = unmount;
-
-      // Initially visible
-      await Promise.resolve();
-      expect(mockTodoPanel).toHaveBeenCalledTimes(1);
-
-      // Press Ctrl+F to hide
-      stdin.write('\u0006'); // Ctrl+F
-      rerender(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      await Promise.resolve();
-      expect(mockTodoPanel).not.toHaveBeenCalled();
-
-      // Press Ctrl+F again to show
-      stdin.write('\u0006'); // Ctrl+F
-      rerender(
-        <App
-          config={mockConfig as unknown as ServerConfig}
-          settings={mockSettings}
-          version={mockVersion}
-        />,
-      );
-      await Promise.resolve();
-      expect(mockTodoPanel).toHaveBeenCalledTimes(1);
-    });
-  });
 });

@@ -156,7 +156,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
   // App level bindings
   [Command.SHOW_ERROR_DETAILS]: [{ key: 'o', ctrl: true }],
   [Command.TOGGLE_TOOL_DESCRIPTIONS]: [{ key: 't', ctrl: true }],
-  [Command.TOGGLE_TODO_DIALOG]: [{ key: 'f', ctrl: true }],
+  [Command.TOGGLE_TODO_DIALOG]: [{ key: 'q', ctrl: true }],
   [Command.TOGGLE_IDE_CONTEXT_DETAIL]: [{ key: 'g', ctrl: true }],
   [Command.QUIT]: [{ key: 'c', ctrl: true }],
   [Command.EXIT]: [{ key: 'd', ctrl: true }],
