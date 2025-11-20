@@ -967,14 +967,23 @@ const App = (props: AppInternalProps) => {
       const provider = (global as unknown as { __oauth_provider?: string })
         .__oauth_provider;
 
-      if (provider === 'anthropic') {
-        const oauthManager = runtime.getCliOAuthManager();
+      const oauthManager = runtime.getCliOAuthManager();
 
+      if (provider === 'anthropic') {
         if (oauthManager) {
           const anthropicProvider = oauthManager.getProvider('anthropic');
           if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
             (
               anthropicProvider as { submitAuthCode: (code: string) => void }
+            ).submitAuthCode(code);
+          }
+        }
+      } else if (provider === 'gemini') {
+        if (oauthManager) {
+          const geminiProvider = oauthManager.getProvider('gemini');
+          if (geminiProvider && 'submitAuthCode' in geminiProvider) {
+            (
+              geminiProvider as { submitAuthCode: (code: string) => void }
             ).submitAuthCode(code);
           }
         }

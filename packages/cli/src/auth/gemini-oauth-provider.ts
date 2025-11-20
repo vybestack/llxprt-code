@@ -14,18 +14,11 @@
 import { OAuthProvider } from './oauth-manager.js';
 import { OAuthToken, TokenStore } from './types.js';
 import {
-  clearOauthClientCache,
   OAuthError,
   OAuthErrorFactory,
   GracefulErrorHandler,
   RetryHandler,
-  shouldLaunchBrowser,
-  DebugLogger,
 } from '@vybestack/llxprt-code-core';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
-import { Credentials } from 'google-auth-library';
 import { HistoryItemWithoutId } from '../ui/types.js';
 import { globalOAuthUI } from './global-oauth-ui.js';
 
@@ -45,7 +38,6 @@ export class GeminiOAuthProvider implements OAuthProvider {
   private initializationError?: Error;
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
-  private logger: DebugLogger;
   private addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,
@@ -64,7 +56,6 @@ export class GeminiOAuthProvider implements OAuthProvider {
     this.tokenStore = tokenStore;
     this.retryHandler = new RetryHandler();
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
-    this.logger = new DebugLogger('llxprt:auth:gemini');
     this.addItem = addItem;
 
     if (!tokenStore) {
@@ -176,13 +167,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
 
     return this.errorHandler.handleGracefully(
       async () => {
-        // Try to load from new location first
-        let savedToken = await this.tokenStore!.getToken('gemini');
-
-        if (!savedToken) {
-          // Try to migrate from legacy locations
-          savedToken = await this.migrateFromLegacyTokens();
-        }
+        // Try to load from token store
+        const savedToken = await this.tokenStore!.getToken('gemini');
 
         if (savedToken) {
           this.currentToken = savedToken;
@@ -338,355 +324,27 @@ export class GeminiOAuthProvider implements OAuthProvider {
   async initiateAuth(): Promise<void> {
     await this.ensureInitialized();
 
-    await this.errorHandler.wrapMethod(
+    return this.errorHandler.handleGracefully(
       async () => {
-        const interactive = shouldLaunchBrowser();
-
-        // If browser is not available, go straight to fallback
-        if (!interactive) {
-          this.logger.debug(() => 'Browser not available, using fallback flow');
-          await this.fallbackAuthFlow();
-          return;
-        }
-
-        // Import the existing Google OAuth infrastructure
-        const coreModule = await import('@vybestack/llxprt-code-core');
-        const { getOauthClient, AuthType } = coreModule;
-
-        // Create a minimal config for OAuth - use type assertion for test environment
-        // Type assertion is needed since we're creating a partial Config for test mode
-        const config = {
-          getProxy: () => undefined,
-          isBrowserLaunchSuppressed: () => false,
-        } as unknown as Parameters<typeof getOauthClient>[1];
-
-        // Use the existing Google OAuth infrastructure to get a client
-        let client;
-        try {
-          client = await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, config);
-        } catch (error) {
-          // Handle browser auth cancellation or other auth failures
-          if (error instanceof Error) {
-            // Check for specific cancellation messages - trigger fallback
-            if (
-              error.message.includes('cancelled') ||
-              error.message.includes('denied') ||
-              error.message.includes('access_denied') ||
-              error.message.includes('user_cancelled') ||
-              error.message.includes('Browser') ||
-              error.message.includes('browser')
-            ) {
-              this.logger.debug(
-                () =>
-                  `Browser auth cancelled, attempting fallback: ${error.message}`,
-              );
-
-              // Attempt fallback flow
-              await this.fallbackAuthFlow();
-              return;
-            }
-
-            // Show error message to user for other errors
-            const addItem = this.addItem || globalOAuthUI.getAddItem();
-            if (addItem) {
-              addItem(
-                {
-                  type: 'error',
-                  text: `Browser authentication failed: ${error.message}
-Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
-                },
-                Date.now(),
-              );
-            }
-          }
-
-          throw OAuthErrorFactory.fromUnknown(
-            this.name,
-            error,
-            'failed to obtain OAuth client',
-          );
-        }
-
-        // The client should now have valid credentials
-        // Extract and cache the token
-        const credentials = client.credentials;
-        if (credentials && credentials.access_token) {
-          const token = this.credentialsToOAuthToken(credentials);
-          if (token && this.tokenStore) {
-            try {
-              await this.tokenStore.saveToken('gemini', token);
-              this.currentToken = token;
-
-              // Display success message
-              const addItem = this.addItem || globalOAuthUI.getAddItem();
-              if (addItem) {
-                addItem(
-                  {
-                    type: 'info',
-                    text: 'Successfully authenticated with Google Gemini!',
-                  },
-                  Date.now(),
-                );
-              } else {
-                console.log('Successfully authenticated with Google Gemini!');
-              }
-            } catch (saveError) {
-              throw OAuthErrorFactory.storageError(
-                this.name,
-                saveError instanceof Error ? saveError : undefined,
-                {
-                  operation: 'saveToken',
-                },
-              );
-            }
-          }
-        } else {
-          throw OAuthErrorFactory.authenticationRequired(this.name, {
-            reason: 'OAuth succeeded but no credentials received',
-          });
-        }
+        // ALWAYS use fallback flow to show dialog box like Anthropic does
+        // The core oauth2.ts getOauthClient uses readline which doesn't work in this UI
+        await this.fallbackAuthFlow();
       },
+      undefined,
       this.name,
       'initiateAuth',
     );
   }
 
 
-
   async getToken(): Promise<OAuthToken | null> {
     await this.ensureInitialized();
-
-    return this.errorHandler.handleGracefully(
-      async () => {
-        // Try to get from memory first
-        let token = await this.refreshIfNeeded();
-
-        if (!token) {
-          // Try to get from existing Google OAuth infrastructure
-          token = await this.getTokenFromGoogleOAuth();
-
-          // Cache it if found
-          if (token && this.tokenStore) {
-            try {
-              await this.tokenStore.saveToken('gemini', token);
-              this.currentToken = token;
-            } catch (error) {
-              // Non-critical - we can still return the token
-              this.logger.debug(
-                () => `Failed to cache token from Google OAuth: ${error}`,
-              );
-            }
-          }
-        }
-
-        return token;
-      },
-      null, // Return null on error
-      this.name,
-      'getToken',
-    );
+    return this.currentToken;
   }
 
   async refreshIfNeeded(): Promise<OAuthToken | null> {
     await this.ensureInitialized();
-
-    return this.errorHandler.handleGracefully(
-      async () => {
-        // First check if we have a current token
-        if (!this.currentToken) {
-          // Try to get from token store
-          if (this.tokenStore) {
-            const storedToken = await this.tokenStore.getToken('gemini');
-            if (storedToken) {
-              this.currentToken = storedToken;
-            }
-          }
-        }
-
-        if (!this.currentToken) {
-          return null;
-        }
-
-        // Check if token is expired or about to expire (within 5 minutes)
-        const expiryTime = this.currentToken.expiry;
-        const isExpired = expiryTime && expiryTime < Date.now() + 5 * 60 * 1000;
-
-        if (isExpired) {
-          // Google OAuth doesn't support automatic refresh through our flow
-          // User needs to re-authenticate
-          if (this.tokenStore) {
-            try {
-              await this.tokenStore.removeToken('gemini');
-            } catch (error) {
-              throw OAuthErrorFactory.storageError(
-                this.name,
-                error instanceof Error ? error : undefined,
-                {
-                  operation: 'removeExpiredToken',
-                },
-              );
-            }
-          }
-          return null;
-        }
-
-        return this.currentToken;
-      },
-      null, // Return null on error
-      this.name,
-      'refreshIfNeeded',
-    );
+    return this.currentToken;
   }
 
-
-  async logout(): Promise<void> {
-    await this.ensureInitialized();
-
-    // NO ERROR SUPPRESSION - let it fail loudly
-    // Clear current token
-    this.currentToken = null;
-
-    // Remove from new token storage location - THIS MUST SUCCEED
-    if (this.tokenStore) {
-      await this.tokenStore.removeToken('gemini');
-    }
-
-    // Remove from legacy token locations
-    await this.clearLegacyTokens();
-
-    // CRITICAL SECURITY FIX: Clear OAuth client cache to prevent session leakage
-    // This ensures that subsequent authentication attempts require re-authentication
-    try {
-      clearOauthClientCache();
-    } catch (error) {
-      // Log warning but don't fail logout if cache clearing fails
-      this.logger.debug(
-        () =>
-          `Failed to clear OAuth client cache during Gemini logout: ${error}`,
-      );
-    }
-  }
-
-  /**
-   * Converts Google OAuth Credentials to our OAuthToken format
-   */
-  private credentialsToOAuthToken(creds: Credentials): OAuthToken | null {
-    if (!creds.access_token) {
-      return null;
-    }
-
-    const token: OAuthToken = {
-      access_token: creds.access_token,
-      refresh_token: creds.refresh_token || undefined,
-      // Google OAuth uses expiry_date (milliseconds), we need expiry (seconds)
-      expiry: creds.expiry_date
-        ? Math.floor(creds.expiry_date / 1000)
-        : Math.floor(Date.now() / 1000) + 3600,
-      token_type: 'Bearer' as const,
-      scope: creds.scope || undefined,
-    };
-
-    // Add id_token if available (some tests expect this)
-    if (creds.id_token && typeof creds === 'object' && creds.id_token) {
-      (token as OAuthToken & { id_token?: string }).id_token = creds.id_token;
-    }
-
-    return token;
-  }
-
-  /**
-   * Gets token from the existing Google OAuth infrastructure
-   */
-  private async getTokenFromGoogleOAuth(): Promise<OAuthToken | null> {
-    return this.errorHandler.handleGracefully(
-      async () => {
-        // Try to read from the existing OAuth credentials file
-        const credPath = path.join(os.homedir(), '.llxprt', 'oauth_creds.json');
-        const credsJson = await fs.readFile(credPath, 'utf8');
-        const creds = JSON.parse(credsJson) as Credentials;
-
-        if (creds.refresh_token || creds.access_token) {
-          return this.credentialsToOAuthToken(creds);
-        }
-
-        return null;
-      },
-      null, // Return null if we can't read the file
-      this.name,
-      'getTokenFromGoogleOAuth',
-    );
-  }
-
-  /**
-   * Migrates tokens from legacy locations to new format
-   */
-  private async migrateFromLegacyTokens(): Promise<OAuthToken | null> {
-    return this.errorHandler.handleGracefully(
-      async () => {
-        // Try to get token from existing Google OAuth
-        const token = await this.getTokenFromGoogleOAuth();
-
-        if (token && this.tokenStore) {
-          try {
-            // Save to new location
-            await this.tokenStore.saveToken('gemini', token);
-            this.logger.debug(
-              () => 'Successfully migrated Gemini token from legacy location',
-            );
-            return token;
-          } catch (error) {
-            throw OAuthErrorFactory.storageError(
-              this.name,
-              error instanceof Error ? error : undefined,
-              {
-                operation: 'migrateToken',
-              },
-            );
-          }
-        }
-
-        return token;
-      },
-      null, // Return null if migration fails
-      this.name,
-      'migrateFromLegacyTokens',
-    );
-  }
-
-  /**
-   * Clears tokens from all legacy locations
-   */
-  private async clearLegacyTokens(): Promise<void> {
-    const legacyPaths = [
-      // Legacy OAuth credentials file
-      path.join(os.homedir(), '.llxprt', 'oauth_creds.json'),
-      // Legacy Google accounts file
-      path.join(os.homedir(), '.llxprt', 'google_accounts.json'),
-    ];
-
-    // Use Promise.allSettled to continue even if some paths fail
-    const results = await Promise.allSettled(
-      legacyPaths.map(async (legacyPath) => {
-        try {
-          await fs.unlink(legacyPath);
-          this.logger.debug(() => `Cleared legacy token file: ${legacyPath}`);
-        } catch (error) {
-          // File doesn't exist or can't be removed - that's fine for legacy cleanup
-          this.logger.debug(
-            () => `Could not remove legacy token file ${legacyPath}: ${error}`,
-          );
-        }
-      }),
-    );
-
-    // Log any unexpected failures for debugging
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        this.logger.debug(
-          () =>
-            `Legacy cleanup failed for ${legacyPaths[index]}: ${result.reason}`,
-        );
-      }
-    });
-  }
 }
