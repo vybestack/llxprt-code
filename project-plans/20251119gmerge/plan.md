@@ -69,7 +69,7 @@ To remove guesswork, the 59 “pick” commits from `upstream-v0.6.1-to-v0.7.0-c
 - **Batch 10:** #146 `47948e37`, #147 `712dc245`, #149 `40db0298` (only three commits; still run the full verification suite)
 
 **Post–deferred-init batches**
-- **Batch 11:** #151 `52183238`, #152 `c93eed63`, #155 `5151bedf`, #156 `d8393a06`, #160 `31c609da`
+- **Batch 11:** #151 `52183238`, #152 `c93eed63`, #156 `d8393a06`, #160 `31c609da` *(skip #155 `5151bedf` — llxprt already has a multi-provider `/model` slash command via `packages/cli/src/ui/commands/modelCommand.ts` and upstream’s Gemini-only implementation would regress us)*
 - **Batch 12:** #169 `38e053b7`, #170 `c6f8ecc2`, #171 `ce92ed3f` *(sandbox fix that depends on our deferred-init work)*, #173 `2fbfeb39`, #174 `89aba7cb`
 - **Batch 13:** #176 `d39cd045` (solo batch; isolates the Zed integration fix and keeps 5-commit discipline intact)
 
@@ -77,8 +77,10 @@ To remove guesswork, the 59 “pick” commits from `upstream-v0.6.1-to-v0.7.0-c
 Some picks touch surfaces where llxprt diverges significantly from upstream. Run these as their own micro-batches (cherry-pick + verification) even though they appear inside the lists above:
 - **#133 `6c559e23` (permissions command)** – rewires trust settings UX, so confirm it respects llxprt’s multi-provider trust model before touching surrounding commits.
 - **#145 `570b0086` (extensions consent refactor)** – edits CLI consent prompts, GitHub release handling, and trusted folder UX; conflicts likely with our existing consent patches.
-- **#155 `5151bedf` (/model command)** – intersects our provider-switching logic; expect to adapt the command to llxprt’s multi-provider selection flow.
 - **#173 `2fbfeb39` (AbortSignal tool execution)** – modifies the tool runner pipeline and retry logic; verify compatibility with our tool batching before proceeding to #174+.
+
+### Intentional Skips (post-review)
+- **#155 `5151bedf` (`/model` command)** – llxprt already implements `/model` as a slash command wired to the stateless runtime helpers (see `packages/cli/src/services/BuiltinCommandLoader.ts` and `packages/cli/src/ui/commands/modelCommand.ts`). Upstream’s patch is Gemini-only and would remove provider selection flexibility, so we keep our implementation and skip their commit.
 
 ## Tracking Table
 Update after each batch.
