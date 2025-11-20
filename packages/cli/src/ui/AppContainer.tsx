@@ -108,6 +108,7 @@ import {
 import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
+const debug = new DebugLogger('llxprt:ui:appcontainer');
 
 interface AppContainerProps {
   config: Config;
@@ -130,6 +131,7 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
 }
 
 export const AppContainer = (props: AppContainerProps) => {
+  debug.log('AppContainer architecture active (v2)');
   const {
     config,
     settings,
