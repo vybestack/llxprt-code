@@ -59,6 +59,7 @@ import {
   loadProfileByName,
 } from '../runtime/runtimeSettings.js';
 
+<<<<<<< HEAD
 type ToolRunResult = {
   parts: Part[];
   message?: string | null;
@@ -569,6 +570,7 @@ class Session {
       const functionCalls: FunctionCall[] = [];
 
       try {
+
         const responseStream = await chat.sendMessageStream(
           {
             message: nextMessage?.parts ?? [],
