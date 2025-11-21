@@ -51,7 +51,8 @@ export const ToolConfirmationMessage: React.FC<
 
   const handleConfirm = useCallback(
     (outcome: ToolConfirmationOutcome) => {
-      // Call onConfirm synchronously first
+      // Always call onConfirm - the message bus is not yet integrated at UI level
+      // Feature flag is reserved for future use when full message bus integration is complete
       onConfirm(outcome);
 
       // Handle IDE operations asynchronously without blocking

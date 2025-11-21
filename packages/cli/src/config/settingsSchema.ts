@@ -664,6 +664,16 @@ export const SETTINGS_SCHEMA = {
           'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
         showInDialog: true,
       },
+      enableMessageBusIntegration: {
+        type: 'boolean',
+        label: 'Enable Message Bus Integration',
+        category: 'Tools',
+        requiresRestart: false,
+        default: false,
+        description:
+          'Enable message bus integration for tool confirmations. When enabled, tool confirmation requests and responses are routed through the message bus instead of direct callbacks.',
+        showInDialog: false,
+      },
     },
   },
 

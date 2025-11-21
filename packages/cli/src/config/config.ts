@@ -32,6 +32,7 @@ import {
   MCPServerConfig,
   SettingsService,
   DebugLogger,
+  createPolicyEngineConfig,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
 
@@ -997,6 +998,14 @@ export async function loadCliConfig(
       ? argv.screenReader
       : (effectiveSettings.accessibility?.screenReader ?? false);
 
+  // Create policy engine config from legacy approval mode and allowed tools
+  const policyEngineConfig = await createPolicyEngineConfig({
+    getApprovalMode: () => approvalMode,
+    getAllowedTools: () =>
+      argv.allowedTools || settings.allowedTools || undefined,
+    getNonInteractive: () => !interactive,
+  });
+
   const config = new Config({
     sessionId,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
@@ -1082,6 +1091,7 @@ export async function loadCliConfig(
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
     useSmartEdit: argv.useSmartEdit ?? effectiveSettings.useSmartEdit,
+    policyEngineConfig,
   });
 
   const enhancedConfig = config;

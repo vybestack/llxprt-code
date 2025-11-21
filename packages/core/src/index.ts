@@ -13,6 +13,7 @@ export * from './config/subagentManager.js';
 export * from './policy/types.js';
 export * from './policy/policy-engine.js';
 export * from './policy/stable-stringify.js';
+export * from './policy/config.js';
 
 // Export message bus
 export * from './confirmation-bus/types.js';

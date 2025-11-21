@@ -1475,6 +1475,10 @@ export class Config {
     return this.useSmartEdit;
   }
 
+  getNonInteractive(): boolean {
+    return !this.interactive;
+  }
+
   async getGitService(): Promise<GitService> {
     if (!this.gitService) {
       this.gitService = new GitService(this.targetDir, this.storage);

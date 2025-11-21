@@ -12,6 +12,7 @@ import {
   ToolConfirmationOutcome,
   ToolResult,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { FunctionDeclaration } from '@google/genai';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -175,7 +176,15 @@ class MemoryToolInvocation extends BaseToolInvocation<
 > {
   private static readonly allowlist: Set<string> = new Set();
 
-  getDescription(): string {
+  constructor(params: SaveMemoryParams, messageBus?: MessageBus) {
+    super(params, messageBus);
+  }
+
+  override getToolName(): string {
+    return MemoryTool.Name;
+  }
+
+  override getDescription(): string {
     const memoryFilePath = getGlobalMemoryFilePath();
     return `in ${tildeifyPath(memoryFilePath)}`;
   }
@@ -288,13 +297,16 @@ export class MemoryTool
   implements ModifiableDeclarativeTool<SaveMemoryParams>
 {
   static readonly Name: string = memoryToolSchemaData.name!;
-  constructor() {
+  constructor(messageBus?: MessageBus) {
     super(
       MemoryTool.Name,
       'Save Memory',
       memoryToolDescription,
       Kind.Think,
       memoryToolSchemaData.parametersJsonSchema as Record<string, unknown>,
+      false, // output is not markdown
+      false, // output cannot be updated
+      messageBus,
     );
   }
 
@@ -308,8 +320,11 @@ export class MemoryTool
     return null;
   }
 
-  protected createInvocation(params: SaveMemoryParams) {
-    return new MemoryToolInvocation(params);
+  protected createInvocation(
+    params: SaveMemoryParams,
+    messageBus?: MessageBus,
+  ) {
+    return new MemoryToolInvocation(params, messageBus);
   }
 
   static async performAddMemoryEntry(

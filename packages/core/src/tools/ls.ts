@@ -16,6 +16,7 @@ import {
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
 
 /**
  * Parameters for the LS tool
@@ -279,7 +280,10 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
 export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
   static readonly Name = 'list_directory';
 
-  constructor(private config: Config) {
+  constructor(
+    private config: Config,
+    _messageBus?: MessageBus,
+  ) {
     super(
       LSTool.Name,
       'ReadFolder',
@@ -345,8 +349,9 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
     return null;
   }
 
-  protected createInvocation(
+  protected override createInvocation(
     params: LSToolParams,
+    _messageBus?: MessageBus,
   ): ToolInvocation<LSToolParams, ToolResult> {
     return new LSToolInvocation(this.config, params);
   }

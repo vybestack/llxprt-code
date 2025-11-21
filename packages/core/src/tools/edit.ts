@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as Diff from 'diff';
 import {
   BaseDeclarativeTool,
+  BaseToolInvocation,
   Kind,
   ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
@@ -17,6 +18,7 @@ import {
   ToolLocation,
   ToolResult,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { isNodeError } from '../utils/errors.js';
@@ -175,13 +177,23 @@ interface CalculatedEdit {
   filterResult?: { systemFeedback?: string };
 }
 
-class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
+class EditToolInvocation extends BaseToolInvocation<
+  EditToolParams,
+  ToolResult
+> {
   constructor(
     private readonly config: Config,
-    public params: EditToolParams,
-  ) {}
+    params: EditToolParams,
+    messageBus?: MessageBus,
+  ) {
+    super(params, messageBus);
+  }
 
-  toolLocations(): ToolLocation[] {
+  override getToolName(): string {
+    return EditTool.Name;
+  }
+
+  override toolLocations(): ToolLocation[] {
     return [{ path: this.params.file_path }];
   }
 
@@ -366,10 +378,22 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
   }
 
   /**
+   * Returns confirmation details for this edit operation.
+   * Called by getMessageBusDecision when message bus integration is enabled.
+   */
+  protected override getConfirmationDetails(): ToolCallConfirmationDetails | null {
+    // This is a synchronous method, so we can't calculate the edit here
+    // Instead, we'll need to handle confirmation in shouldConfirmExecute
+    // which is the legacy path that will be called when message bus is not available
+    // or when we need to show the diff to the user
+    return null;
+  }
+
+  /**
    * Handles the confirmation prompt for the Edit tool in the CLI.
    * It needs to calculate the diff to show the user.
    */
-  async shouldConfirmExecute(
+  override async shouldConfirmExecute(
     abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
     const approvalMode = this.config.getApprovalMode();
@@ -462,7 +486,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
     return confirmationDetails;
   }
 
-  getDescription(): string {
+  override getDescription(): string {
     const relativePath = makeRelative(
       this.params.file_path,
       this.config.getTargetDir(),
@@ -489,7 +513,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
    * @param params Parameters for the edit operation
    * @returns Result of the edit operation
    */
-  async execute(signal: AbortSignal): Promise<ToolResult> {
+  override async execute(signal: AbortSignal): Promise<ToolResult> {
     let editData: CalculatedEdit;
     try {
       editData = await this.calculateEdit(this.params, signal);
@@ -636,7 +660,10 @@ export class EditTool
   implements ModifiableDeclarativeTool<EditToolParams>
 {
   static readonly Name = 'replace';
-  constructor(private readonly config: Config) {
+  constructor(
+    private readonly config: Config,
+    messageBus?: MessageBus,
+  ) {
     super(
       EditTool.Name,
       'Edit',
@@ -679,6 +706,9 @@ Expectation for required parameters:
         required: ['file_path', 'old_string', 'new_string'],
         type: 'object',
       },
+      true,
+      false,
+      messageBus,
     );
   }
 
@@ -715,8 +745,9 @@ Expectation for required parameters:
 
   protected createInvocation(
     params: EditToolParams,
+    messageBus?: MessageBus,
   ): ToolInvocation<EditToolParams, ToolResult> {
-    return new EditToolInvocation(this.config, params);
+    return new EditToolInvocation(this.config, params, messageBus);
   }
 
   getModifyContext(_: AbortSignal): ModifyContext<EditToolParams> {

@@ -28,6 +28,7 @@ import { GeminiClient } from '../core/client.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { ToolErrorType } from './tool-error.js';
+import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 
 const rootDir = path.resolve(os.tmpdir(), 'gemini-cli-test-root');
 
@@ -91,6 +92,7 @@ describe('WriteFileTool', () => {
     // Setup GeminiClient mock
     mockGeminiClientInstance = new (vi.mocked(GeminiClient))(
       mockConfig,
+      {} as AgentRuntimeState,
     ) as Mocked<GeminiClient>;
     vi.mocked(GeminiClient).mockImplementation(() => mockGeminiClientInstance);
 

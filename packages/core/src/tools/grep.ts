@@ -27,6 +27,7 @@ import {
   limitOutputTokens,
   formatLimitedOutput,
 } from '../utils/toolOutputLimiter.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
 
 // --- Interfaces ---
 
@@ -753,7 +754,10 @@ class GrepToolInvocation extends BaseToolInvocation<
 export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
   static readonly Name = 'search_file_content'; // Keep static name
 
-  constructor(private readonly config: Config) {
+  constructor(
+    private readonly config: Config,
+    _messageBus?: MessageBus,
+  ) {
     super(
       GrepTool.Name,
       'SearchText',
@@ -865,8 +869,9 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
     return null; // Parameters are valid
   }
 
-  protected createInvocation(
+  protected override createInvocation(
     params: GrepToolParams,
+    _messageBus?: MessageBus,
   ): ToolInvocation<GrepToolParams, ToolResult> {
     return new GrepToolInvocation(this.config, params);
   }

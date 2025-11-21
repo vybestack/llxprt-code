@@ -23,6 +23,11 @@ import {
   AnyToolInvocation,
   ContextAwareTool,
 } from '../index.js';
+import { randomUUID } from 'node:crypto';
+import {
+  MessageBusType,
+  type ToolConfirmationResponse,
+} from '../confirmation-bus/types.js';
 
 interface QueuedRequest {
   request: ToolCallRequestInfo | ToolCallRequestInfo[];
@@ -373,6 +378,14 @@ export class CoreToolScheduler {
   private isFinalizingToolCalls = false;
   private isScheduling = false;
   private requestQueue: QueuedRequest[] = [];
+  private messageBusUnsubscribe?: () => void;
+  private pendingConfirmations: Map<
+    string,
+    {
+      resolve: (outcome: ToolConfirmationOutcome) => void;
+      signal: AbortSignal;
+    }
+  > = new Map();
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -382,6 +395,59 @@ export class CoreToolScheduler {
     this.onToolCallsUpdate = options.onToolCallsUpdate;
     this.getPreferredEditor = options.getPreferredEditor;
     this.onEditorClose = options.onEditorClose;
+
+    // Subscribe to message bus if feature flag is enabled
+    if (
+      typeof this.config.getEnableMessageBusIntegration === 'function' &&
+      this.config.getEnableMessageBusIntegration()
+    ) {
+      const messageBus = this.config.getMessageBus();
+      this.messageBusUnsubscribe =
+        messageBus.subscribe<ToolConfirmationResponse>(
+          MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+          this.handleMessageBusResponse.bind(this),
+        );
+    }
+  }
+
+  /**
+   * Handles message bus confirmation responses.
+   * Called when PolicyEngine or other components respond via message bus.
+   */
+  private handleMessageBusResponse(response: ToolConfirmationResponse): void {
+    const pending = this.pendingConfirmations.get(response.correlationId);
+    if (!pending) {
+      return; // Not our confirmation request
+    }
+
+    // Clean up pending confirmation
+    this.pendingConfirmations.delete(response.correlationId);
+
+    // If requiresUserConfirmation is true, fall back to legacy UI
+    if (response.requiresUserConfirmation) {
+      // Let the normal flow handle this with the existing UI
+      pending.resolve(ToolConfirmationOutcome.Cancel);
+      return;
+    }
+
+    // Otherwise, use the message bus decision
+    const outcome = response.confirmed
+      ? ToolConfirmationOutcome.ProceedOnce
+      : ToolConfirmationOutcome.Cancel;
+
+    pending.resolve(outcome);
+  }
+
+  /**
+   * Cleanup method to unsubscribe from message bus.
+   * Should be called when scheduler is no longer needed.
+   */
+  dispose(): void {
+    if (this.messageBusUnsubscribe) {
+      this.messageBusUnsubscribe();
+      this.messageBusUnsubscribe = undefined;
+    }
+    this.pendingConfirmations.clear();
   }
 
   private setStatusInternal(
@@ -924,6 +990,20 @@ export class CoreToolScheduler {
 
     if (toolCall && toolCall.status === 'awaiting_approval') {
       await originalOnConfirm(outcome);
+
+      // If message bus integration is enabled, publish confirmation response
+      if (
+        typeof this.config.getEnableMessageBusIntegration === 'function' &&
+        this.config.getEnableMessageBusIntegration()
+      ) {
+        const messageBus = this.config.getMessageBus();
+        const correlationId = randomUUID();
+        messageBus.respondToConfirmation(
+          correlationId,
+          outcome !== ToolConfirmationOutcome.Cancel,
+          false, // Already confirmed via UI, not requiring further confirmation
+        );
+      }
     }
 
     if (outcome === ToolConfirmationOutcome.ProceedAlways) {

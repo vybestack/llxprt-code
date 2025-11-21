@@ -13,6 +13,7 @@ import {
   ToolInvocation,
   ToolResult,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { ApprovalMode, Config } from '../config/config.js';
@@ -69,8 +70,13 @@ class WebFetchToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: WebFetchToolParams,
+    messageBus?: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
+  }
+
+  override getToolName(): string {
+    return WebFetchTool.Name;
   }
 
   private async executeFallback(_signal: AbortSignal): Promise<ToolResult> {
@@ -121,7 +127,7 @@ class WebFetchToolInvocation extends BaseToolInvocation<
     }
   }
 
-  getDescription(): string {
+  override getDescription(): string {
     const displayPrompt =
       this.params.prompt.length > 100
         ? this.params.prompt.substring(0, 97) + '...'
@@ -361,7 +367,10 @@ export class WebFetchTool extends BaseDeclarativeTool<
 > {
   static readonly Name: string = 'web_fetch';
 
-  constructor(private readonly config: Config) {
+  constructor(
+    private readonly config: Config,
+    messageBus?: MessageBus,
+  ) {
     super(
       WebFetchTool.Name,
       'WebFetch',
@@ -378,6 +387,9 @@ export class WebFetchTool extends BaseDeclarativeTool<
         required: ['prompt'],
         type: 'object',
       },
+      false, // output is not markdown
+      false, // output cannot be updated
+      messageBus,
     );
     const proxy = config.getProxy();
     if (proxy) {
@@ -402,7 +414,8 @@ export class WebFetchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: WebFetchToolParams,
+    messageBus?: MessageBus,
   ): ToolInvocation<WebFetchToolParams, ToolResult> {
-    return new WebFetchToolInvocation(this.config, params);
+    return new WebFetchToolInvocation(this.config, params, messageBus);
   }
 }

@@ -60,6 +60,7 @@ import {
   getSettingsService,
   DebugLogger,
   uiTelemetryService,
+  MessageBusType,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { validateAuthMethod } from '../config/auth.js';
@@ -172,6 +173,27 @@ export const AppContainer = (props: AppContainerProps) => {
     if (ideClient) {
       registerCleanup(() => ideClient.disconnect());
     }
+  }, [config]);
+
+  // Subscribe to message bus for tool confirmation requests
+  // Feature flag is reserved for future use when full message bus integration is complete
+  useEffect(() => {
+    if (!config.getEnableMessageBusIntegration()) return;
+
+    const messageBus = config.getMessageBus();
+    const unsubscribe = messageBus.subscribe(
+      MessageBusType.TOOL_CONFIRMATION_REQUEST,
+      (message) => {
+        // When message bus integration is enabled, handle confirmation requests here
+        // This is a placeholder for future implementation
+        debug.log(
+          'Received TOOL_CONFIRMATION_REQUEST from message bus',
+          message,
+        );
+      },
+    );
+
+    return unsubscribe;
   }, [config]);
   const shouldShowIdePrompt =
     currentIDE &&

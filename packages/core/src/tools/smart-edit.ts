@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import * as Diff from 'diff';
 import {
   BaseDeclarativeTool,
+  BaseToolInvocation,
   Kind,
   type ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
@@ -18,6 +19,7 @@ import {
   type ToolResult,
   type ToolResultDisplay,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { isNodeError } from '../utils/errors.js';
@@ -287,13 +289,23 @@ interface CalculatedEdit {
   originalLineEnding: '\r\n' | '\n';
 }
 
-class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
+class EditToolInvocation extends BaseToolInvocation<
+  EditToolParams,
+  ToolResult
+> {
   constructor(
     private readonly config: Config,
-    public params: EditToolParams,
-  ) {}
+    params: EditToolParams,
+    messageBus?: MessageBus,
+  ) {
+    super(params, messageBus);
+  }
 
-  toolLocations(): ToolLocation[] {
+  override getToolName(): string {
+    return SmartEditTool.Name;
+  }
+
+  override toolLocations(): ToolLocation[] {
     return [{ path: this.params.file_path }];
   }
 
@@ -496,7 +508,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
    * Handles the confirmation prompt for the Edit tool in the CLI.
    * It needs to calculate the diff to show the user.
    */
-  async shouldConfirmExecute(
+  override async shouldConfirmExecute(
     abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
     if (this.config.getApprovalMode() === ApprovalMode.AUTO_EDIT) {
@@ -564,7 +576,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
     return confirmationDetails;
   }
 
-  getDescription(): string {
+  override getDescription(): string {
     const relativePath = makeRelative(
       this.params.file_path,
       this.config.getTargetDir(),
@@ -713,7 +725,10 @@ export class SmartEditTool
 {
   static readonly Name = 'replace';
 
-  constructor(private readonly config: Config) {
+  constructor(
+    private readonly config: Config,
+    messageBus?: MessageBus,
+  ) {
     super(
       SmartEditTool.Name,
       'Edit',
@@ -770,6 +785,9 @@ A good instruction should concisely answer:
         required: ['file_path', 'instruction', 'old_string', 'new_string'],
         type: 'object',
       },
+      true, // output is markdown
+      false, // output cannot be updated
+      messageBus,
     );
   }
 
@@ -800,8 +818,9 @@ A good instruction should concisely answer:
 
   protected createInvocation(
     params: EditToolParams,
+    messageBus?: MessageBus,
   ): ToolInvocation<EditToolParams, ToolResult> {
-    return new EditToolInvocation(this.config, params);
+    return new EditToolInvocation(this.config, params, messageBus);
   }
 
   getModifyContext(_: AbortSignal): ModifyContext<EditToolParams> {

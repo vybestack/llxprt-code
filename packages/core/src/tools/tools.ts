@@ -9,6 +9,8 @@ import { ToolContext, ContextAwareTool } from './tool-context.js';
 import { ToolErrorType } from './tool-error.js';
 import { DiffUpdateResult } from '../ide/ideContext.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import { PolicyDecision } from '../policy/types.js';
 
 /**
  * Represents a validated and ready-to-execute tool call.
@@ -64,12 +66,97 @@ export abstract class BaseToolInvocation<
   TResult extends ToolResult,
 > implements ToolInvocation<TParams, TResult>
 {
-  constructor(readonly params: TParams) {}
+  constructor(
+    readonly params: TParams,
+    protected readonly messageBus?: MessageBus,
+  ) {}
 
   abstract getDescription(): string;
 
   toolLocations(): ToolLocation[] {
     return [];
+  }
+
+  /**
+   * Returns confirmation details for this tool invocation.
+   * Tools that require confirmation should override this method.
+   * @returns Confirmation details or null if no confirmation needed.
+   */
+  protected getConfirmationDetails(): ToolCallConfirmationDetails | null {
+    return null;
+  }
+
+  /**
+   * Requests confirmation through the message bus and policy engine.
+   * This integrates with the new policy-based confirmation flow.
+   * @param abortSignal Signal to abort the confirmation request
+   * @returns Decision from policy engine with requiresUserConfirmation flag
+   */
+  protected async getMessageBusDecision(abortSignal: AbortSignal): Promise<{
+    decision: PolicyDecision;
+    requiresUserConfirmation?: boolean;
+  }> {
+    if (!this.messageBus) {
+      // No message bus available - fallback to legacy flow
+      return {
+        decision: PolicyDecision.ASK_USER,
+        requiresUserConfirmation: true,
+      };
+    }
+
+    const confirmationDetails = this.getConfirmationDetails();
+    if (!confirmationDetails) {
+      // No confirmation needed
+      return { decision: PolicyDecision.ALLOW };
+    }
+
+    // Request confirmation through message bus
+    // The message bus will consult the policy engine and either:
+    // 1. Return ALLOW immediately if policy allows
+    // 2. Return DENY immediately if policy denies
+    // 3. Publish ASK_USER request and wait for user response
+    const toolCall = {
+      name: this.getToolName(),
+      args: this.params as Record<string, unknown>,
+    };
+
+    try {
+      const confirmed = await this.messageBus.requestConfirmation(
+        toolCall,
+        this.params as Record<string, unknown>,
+        this.getServerName(),
+      );
+
+      return {
+        decision: confirmed ? PolicyDecision.ALLOW : PolicyDecision.DENY,
+        requiresUserConfirmation: !confirmed,
+      };
+    } catch (error) {
+      if (abortSignal.aborted) {
+        throw error;
+      }
+      // On error, fall back to asking user
+      return {
+        decision: PolicyDecision.ASK_USER,
+        requiresUserConfirmation: true,
+      };
+    }
+  }
+
+  /**
+   * Returns the tool name for this invocation.
+   * Subclasses can override to provide a specific tool name.
+   */
+  protected getToolName(): string {
+    return 'unknown';
+  }
+
+  /**
+   * Returns the server name for MCP tools.
+   * Regular tools should return undefined.
+   */
+  protected getServerName(): string | undefined {
+    return undefined;
   }
 
   shouldConfirmExecute(
@@ -148,6 +235,8 @@ export abstract class DeclarativeTool<
   TResult extends ToolResult,
 > implements ToolBuilder<TParams, TResult>
 {
+  protected messageBus?: MessageBus;
+
   constructor(
     readonly name: string,
     readonly displayName: string,
@@ -156,7 +245,18 @@ export abstract class DeclarativeTool<
     readonly parameterSchema: unknown,
     readonly isOutputMarkdown: boolean = true,
     readonly canUpdateOutput: boolean = false,
-  ) {}
+    messageBus?: MessageBus,
+  ) {
+    this.messageBus = messageBus;
+  }
+
+  /**
+   * Sets the message bus for this tool.
+   * Called by ToolRegistry after tool construction.
+   */
+  setMessageBus(messageBus: MessageBus): void {
+    this.messageBus = messageBus;
+  }
 
   get schema(): FunctionDeclaration {
     // Strip requireOne from the schema before sending to the model
@@ -291,7 +391,7 @@ export abstract class BaseDeclarativeTool<
     if (validationError) {
       throw new Error(validationError);
     }
-    return this.createInvocation(params);
+    return this.createInvocation(params, this.messageBus);
   }
 
   override validateToolParams(params: TParams): string | null {
@@ -313,6 +413,7 @@ export abstract class BaseDeclarativeTool<
 
   protected abstract createInvocation(
     params: TParams,
+    messageBus?: MessageBus,
   ): ToolInvocation<TParams, TResult>;
 }
 
@@ -481,6 +582,7 @@ export interface ToolEditConfirmationDetails {
   newContent: string;
   isModifying?: boolean;
   ideConfirmation?: Promise<DiffUpdateResult>;
+  correlationId?: string;
 }
 
 export interface ToolConfirmationPayload {
@@ -495,6 +597,7 @@ export interface ToolExecuteConfirmationDetails {
   onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
   command: string;
   rootCommand: string;
+  correlationId?: string;
 }
 
 export interface ToolMcpConfirmationDetails {
@@ -504,6 +607,7 @@ export interface ToolMcpConfirmationDetails {
   toolName: string;
   toolDisplayName: string;
   onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
+  correlationId?: string;
 }
 
 export interface ToolInfoConfirmationDetails {
@@ -512,6 +616,7 @@ export interface ToolInfoConfirmationDetails {
   onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
   prompt: string;
   urls?: string[];
+  correlationId?: string;
 }
 
 export type ToolCallConfirmationDetails =
@@ -631,7 +736,7 @@ export abstract class BaseTool<
     if (validationError) {
       throw new Error(validationError);
     }
-    return new BaseToolLegacyInvocation(this, params);
+    return new BaseToolLegacyInvocation(this, params, this.messageBus);
   }
 }
 
@@ -645,12 +750,17 @@ class BaseToolLegacyInvocation<
   constructor(
     private readonly tool: BaseTool<TParams, TResult>,
     params: TParams,
+    messageBus?: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   getDescription(): string {
     return this.tool.getDescription(this.params);
+  }
+
+  override getToolName(): string {
+    return this.tool.name;
   }
 
   async execute(

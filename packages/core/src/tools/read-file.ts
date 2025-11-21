@@ -25,6 +25,7 @@ import {
   recordFileOperationMetric,
   FileOperation,
 } from '../telemetry/metrics.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
 
 /**
  * Parameters for the ReadFile tool
@@ -147,7 +148,10 @@ export class ReadFileTool extends BaseDeclarativeTool<
 > {
   static readonly Name: string = 'read_file';
 
-  constructor(private config: Config) {
+  constructor(
+    private config: Config,
+    _messageBus?: MessageBus,
+  ) {
     super(
       ReadFileTool.Name,
       'ReadFile',
@@ -216,8 +220,9 @@ export class ReadFileTool extends BaseDeclarativeTool<
     return null;
   }
 
-  protected createInvocation(
+  protected override createInvocation(
     params: ReadFileToolParams,
+    _messageBus?: MessageBus,
   ): ToolInvocation<ReadFileToolParams, ToolResult> {
     // Normalize parameters: if file_path is provided but not absolute_path, copy it over
     const normalizedParams = { ...params };
