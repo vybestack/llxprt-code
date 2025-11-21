@@ -466,7 +466,9 @@ export const ToolConfirmationMessage: React.FC<
 
       {/* Confirmation Question */}
       <Box marginBottom={1} flexShrink={0}>
-        <Text wrap="truncate">{question}</Text>
+        <Text wrap="truncate" color={Colors.AccentGreen}>
+          {question}
+        </Text>
       </Box>
 
       {/* Select Input for Options */}
