@@ -95,4 +95,26 @@ const promptManifestPath = join(
 if (existsSync(promptManifestPath)) {
   copyFileSync(promptManifestPath, join(bundleDir, 'default-prompts.json'));
 }
+
+// Copy provider alias config files preserving directory structure
+const aliasFiles = glob.sync('packages/cli/src/providers/aliases/*.config', {
+  cwd: root,
+});
+for (const file of aliasFiles) {
+  const sourcePath = join(root, file);
+  const targetPath = join(bundleDir, 'providers', 'aliases', basename(file));
+  const targetDir = dirname(targetPath);
+
+  // Create directory structure if it doesn't exist
+  if (!existsSync(targetDir)) {
+    mkdirSync(targetDir, { recursive: true });
+  }
+
+  copyFileSync(sourcePath, targetPath);
+
+  // Verify the file was copied
+  if (!existsSync(targetPath)) {
+    console.error(`  Failed to copy alias: ${basename(file)}`);
+  }
+}
 // Assets copied to bundle/

@@ -712,24 +712,24 @@ describe('parseInlineProfile() @plan:PLAN-20251118-ISSUE533.P07', () => {
   /**
    * @plan:PLAN-20251118-ISSUE533.P07
    * @requirement:REQ-PROF-002.3
-   * @scenario: Validate invalid provider value
-   * @given: JSON string with unsupported provider value
+   * @scenario: Accept custom/alias provider names
+   * @given: JSON string with custom provider name (e.g., alias like "Synthetic")
    * @when: parseInlineProfile() is called
-   * @then: Returns validation error in ProfileApplicationResult
+   * @then: Parses successfully - provider validation happens later during application
    */
-  it('should reject profile with invalid provider value', () => {
+  it('should accept custom provider names for aliases', () => {
     const jsonString = JSON.stringify({
-      provider: 'unsupported-provider',
-      model: 'some-model',
-      key: 'sk-test-key-invalid-provider',
+      provider: 'Synthetic',
+      model: 'hf:zai-org/GLM-4.6',
+      key: 'sk-test-key-custom-provider',
     });
 
     const result = parseInlineProfile(jsonString);
 
-    expect(result.providerName).toBe('');
-    expect(result.modelName).toBe('');
-    expect(result.error).toBeDefined();
-    expect(result.error).toContain('provider');
+    expect(result.error).toBeUndefined();
+    expect(result.providerName).toBe('Synthetic');
+    expect(result.modelName).toBe('hf:zai-org/GLM-4.6');
+    expect(result.warnings).toEqual([]);
   });
 
   /**

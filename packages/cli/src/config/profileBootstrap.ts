@@ -433,16 +433,12 @@ export function parseInlineProfile(
     };
   }
 
-  // Step 5: Validate provider value is one of the allowed providers
-  const allowedProviders = ['openai', 'anthropic', 'google', 'azure'];
-  if (!allowedProviders.includes(obj.provider)) {
-    return {
-      providerName: '',
-      modelName: '',
-      warnings: [],
-      error: `'provider' must be one of: ${allowedProviders.join(', ')} (got '${obj.provider}')`,
-    };
-  }
+  // Step 5: Provider value validation removed - accept any provider name
+  // Provider existence is validated later when the profile is applied via
+  // selectAvailableProvider() and setActiveProvider(). This allows:
+  // - Custom provider aliases (e.g., "Synthetic", "Fireworks", "OpenRouter")
+  // - Future providers without code changes
+  // - Proper fallback behavior with warnings if provider unavailable
 
   // Step 6: Optional validation - temperature range
   if (obj.temperature !== undefined) {
