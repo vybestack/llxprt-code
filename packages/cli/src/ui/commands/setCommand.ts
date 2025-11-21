@@ -18,6 +18,7 @@ import type {
   ValueArgument,
 } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import { ephemeralSettingHelp } from '../../settings/ephemeralSettings.js';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
 
@@ -26,51 +27,6 @@ import { getRuntimeApi } from '../contexts/RuntimeContext.js';
  * - /set modelparam <key> <value>
  * - /set <ephemeral-key> <value>
  */
-// Help text for ephemeral settings - these are session-only and saved only via profiles
-const ephemeralSettingHelp: Record<string, string> = {
-  'context-limit':
-    'Maximum number of tokens for the context window (e.g., 100000)',
-  'compression-threshold':
-    'Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)',
-  'base-url': 'Base URL for API requests',
-  'tool-format': 'Tool format override for the provider',
-  'api-version': 'API version to use',
-  'custom-headers': 'Custom HTTP headers as JSON object',
-  'stream-options':
-    'Stream options for OpenAI API (default: { include_usage: true })',
-  streaming:
-    'Enable or disable streaming responses (enabled/disabled, default: enabled)',
-  'shell-replacement':
-    'Allow command substitution ($(), <(), backticks) in shell commands (default: false)',
-  // Socket configuration for local AI servers (LM Studio, Ollama, etc.)
-  'socket-timeout':
-    'Request timeout in milliseconds for local AI servers (default: 60000)',
-  'socket-keepalive':
-    'Enable TCP keepalive for local AI server connections (true/false, default: true)',
-  'socket-nodelay':
-    'Enable TCP_NODELAY concept for local AI servers (true/false, default: true)',
-  // Tool output limit settings - apply to all tools that can return large outputs
-  'tool-output-max-items':
-    'Maximum number of items/files/matches returned by tools (default: 50)',
-  'tool-output-max-tokens': 'Maximum tokens in tool output (default: 50000)',
-  'tool-output-truncate-mode':
-    'How to handle exceeding limits: warn, truncate, or sample (default: warn)',
-  'tool-output-item-size-limit':
-    'Maximum size per item/file in bytes (default: 524288 = 512KB)',
-  // Final catch-all to prevent context overflow
-  'max-prompt-tokens':
-    'Maximum tokens allowed in any prompt sent to LLM (default: 200000)',
-  // Emoji filter settings
-  emojifilter: 'Emoji filter mode (allowed, auto, warn, error)',
-  // Retry settings
-  retries:
-    'Maximum number of retry attempts for API calls (default: varies by provider)',
-  retrywait:
-    'Initial delay in milliseconds between retry attempts (default: varies by provider)',
-  // Loop prevention settings
-  maxTurnsPerPrompt:
-    'Maximum number of turns allowed per prompt before stopping (default: 200, -1 for unlimited)',
-};
 
 /**
  * Schema-based completion for /set command, redesigned to match P09 test expectations.
@@ -206,6 +162,36 @@ const directSettingSpecs: SettingLiteralSpec[] = [
   {
     value: 'maxTurnsPerPrompt',
     hint: 'positive integer or -1 (unlimited)',
+  },
+  {
+    value: 'prompt-caching',
+    hint: 'off, 5m, or 1h',
+    description: 'caching mode',
+    options: [
+      { value: 'off', description: 'disabled' },
+      { value: '5m', description: '5 minutes' },
+      { value: '1h', description: '1 hour' },
+    ],
+  },
+  {
+    value: 'authOnly',
+    hint: 'true or false',
+    description: 'boolean value',
+    options: booleanOptions,
+  },
+  {
+    value: 'dumponerror',
+    hint: 'enabled or disabled',
+    description: 'dump mode',
+    options: streamingOptions,
+  },
+  {
+    value: 'retries',
+    hint: 'positive integer (e.g., 3)',
+  },
+  {
+    value: 'retrywait',
+    hint: 'positive integer in milliseconds (e.g., 1000)',
   },
 ];
 
@@ -810,6 +796,91 @@ export const setCommand: SlashCommand = {
       }
       // Override the parsed value with normalized lowercase version
       parsedValue = normalizedValue;
+    }
+
+    // Validate prompt-caching mode
+    if (key === 'prompt-caching') {
+      const validModes = ['off', '5m', '1h'];
+      if (
+        typeof parsedValue === 'string' &&
+        validModes.includes(parsedValue.toLowerCase())
+      ) {
+        parsedValue = parsedValue.toLowerCase();
+      } else {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Invalid ${key} mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
+        };
+      }
+    }
+
+    // Validate authOnly setting
+    if (key === 'authOnly') {
+      if (typeof parsedValue !== 'boolean') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `authOnly must be either 'true' or 'false'`,
+        };
+      }
+    }
+
+    // Validate dumponerror mode
+    if (key === 'dumponerror') {
+      const validModes = ['enabled', 'disabled'];
+      if (typeof parsedValue === 'boolean') {
+        parsedValue = parsedValue ? 'enabled' : 'disabled';
+      } else if (
+        typeof parsedValue === 'string' &&
+        validModes.includes(parsedValue.toLowerCase())
+      ) {
+        parsedValue = parsedValue.toLowerCase();
+      } else if (
+        typeof parsedValue === 'string' &&
+        ['true', 'false'].includes(parsedValue.toLowerCase())
+      ) {
+        parsedValue =
+          parsedValue.toLowerCase() === 'true' ? 'enabled' : 'disabled';
+      } else {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Invalid ${key} mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
+        };
+      }
+    }
+
+    // Validate retries setting
+    if (key === 'retries') {
+      const numValue = parsedValue as number;
+      if (
+        typeof numValue !== 'number' ||
+        numValue < 0 ||
+        !Number.isInteger(numValue)
+      ) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `${key} must be a non-negative integer (e.g., 3)`,
+        };
+      }
+    }
+
+    // Validate retrywait setting
+    if (key === 'retrywait') {
+      const numValue = parsedValue as number;
+      if (
+        typeof numValue !== 'number' ||
+        numValue <= 0 ||
+        !Number.isInteger(numValue)
+      ) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `${key} must be a positive integer in milliseconds (e.g., 1000)`,
+        };
+      }
     }
 
     // Get the config to apply settings

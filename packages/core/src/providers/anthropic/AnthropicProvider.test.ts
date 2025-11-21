@@ -13,7 +13,6 @@ import {
 } from '../../test-utils/providerCallOptions.js';
 import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
 import type { SettingsService } from '../../settings/SettingsService.js';
-import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import {
   clearActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
@@ -228,10 +227,15 @@ vi.mock('@anthropic-ai/sdk', () => ({
   })),
 }));
 
+interface MockAnthropicInstance {
+  messages: {
+    create: ReturnType<typeof vi.fn>;
+  };
+}
+
 describe('AnthropicProvider', () => {
   let provider: AnthropicProvider;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockAnthropicInstance: any;
+  let mockAnthropicInstance: MockAnthropicInstance;
   let runtimeContext: ProviderRuntimeContext;
   let settingsService: SettingsService;
 
@@ -421,6 +425,9 @@ describe('AnthropicProvider', () => {
     });
 
     it('should stream content from Anthropic API', async () => {
+      // Disable prompt caching for this test to get simpler system prompt
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
       // Mock streaming response
       const mockStream = {
         async *[Symbol.asyncIterator]() {
@@ -475,6 +482,9 @@ describe('AnthropicProvider', () => {
     });
 
     it('should emit tool_result blocks for tool responses with text content', async () => {
+      // Disable prompt caching for this test to get simpler system prompt
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
       const mockStream = {
         async *[Symbol.asyncIterator]() {
           yield {
@@ -576,6 +586,9 @@ describe('AnthropicProvider', () => {
     });
 
     it('should truncate oversized tool_result payloads and mark errors', async () => {
+      // Disable prompt caching for this test to get simpler system prompt
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
       const mockStream = {
         async *[Symbol.asyncIterator]() {
           yield {
@@ -661,6 +674,9 @@ describe('AnthropicProvider', () => {
     });
 
     it('should handle tool calls in the stream', async () => {
+      // Disable prompt caching for this test to get simpler system prompt
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
       const mockStream = {
         async *[Symbol.asyncIterator]() {
           yield {
@@ -815,10 +831,11 @@ describe('AnthropicProvider', () => {
 
       // Filter out usage chunks for verification
       const usageChunks = chunks.filter((c) => c.metadata?.usage);
-      expect(usageChunks).toHaveLength(1);
+      expect(usageChunks.length).toBeGreaterThan(0);
 
-      // Check usage from message_delta
-      expect(usageChunks[0].metadata?.usage).toEqual({
+      // Check usage from message_delta (the last usage chunk)
+      const lastUsageChunk = usageChunks[usageChunks.length - 1];
+      expect(lastUsageChunk.metadata?.usage).toMatchObject({
         promptTokens: 10,
         completionTokens: 5,
         totalTokens: 15,
@@ -874,6 +891,9 @@ describe('AnthropicProvider', () => {
     });
 
     it('should use ToolFormatter for tool conversion', async () => {
+      // Disable prompt caching for this test to get simpler system prompt
+      settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');
+
       const mockStream = {
         async *[Symbol.asyncIterator]() {
           yield {
@@ -1076,5 +1096,1402 @@ describe('AnthropicProvider', () => {
         expect(anthropicMessages).toHaveLength(3);
       },
     );
+  });
+
+  describe('Prompt Caching', () => {
+    beforeEach(() => {
+      // Ensure streaming is disabled for all caching tests to use non-streaming mocks
+      settingsService.setProviderSetting('anthropic', 'streaming', 'disabled');
+
+      // Create a new provider with proper config that includes getEphemeralSettings
+      provider = new AnthropicProvider('test-api-key', undefined, {
+        ...TEST_PROVIDER_CONFIG,
+        getEphemeralSettings: () => ({
+          ...settingsService.getAllGlobalSettings(),
+          ...settingsService.getProviderSettings('anthropic'),
+        }),
+      });
+
+      if (runtimeContext.config) {
+        runtimeContext.config.getEphemeralSettings = () => ({
+          ...settingsService.getAllGlobalSettings(),
+          ...settingsService.getProviderSettings(provider.name),
+        });
+      }
+    });
+
+    describe('Cache Control Structure', () => {
+      it('should not add cache_control when prompt-caching is off (default)', async () => {
+        // Explicitly set to off (note: default is now 1h, not off)
+        settingsService.setProviderSetting(
+          'anthropic',
+          'prompt-caching',
+          'off',
+        );
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(request.system).toBeDefined();
+
+        if (Array.isArray(request.system)) {
+          const systemBlocks = request.system as Array<{
+            type: string;
+            text: string;
+            cache_control?: unknown;
+          }>;
+          systemBlocks.forEach((block) => {
+            expect(block.cache_control).toBeUndefined();
+          });
+        }
+      });
+
+      it('should add cache_control with 5m TTL when prompt-caching is 5m', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 3200,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(Array.isArray(request.system)).toBe(true);
+
+        const systemBlocks = request.system as Array<{
+          type: string;
+          text: string;
+          cache_control?: { type: string; ttl?: string };
+        }>;
+        expect(systemBlocks.length).toBeGreaterThan(0);
+
+        const lastBlock = systemBlocks[systemBlocks.length - 1];
+        expect(lastBlock.cache_control).toEqual({
+          type: 'ephemeral',
+          ttl: '5m',
+        });
+      });
+
+      it('should add cache_control with 1h TTL when prompt-caching is 1h', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '1h');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 3200,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(Array.isArray(request.system)).toBe(true);
+
+        const systemBlocks = request.system as Array<{
+          type: string;
+          text: string;
+          cache_control?: { type: string; ttl?: string };
+        }>;
+        expect(systemBlocks.length).toBeGreaterThan(0);
+
+        const lastBlock = systemBlocks[systemBlocks.length - 1];
+        expect(lastBlock.cache_control).toEqual({
+          type: 'ephemeral',
+          ttl: '1h',
+        });
+      });
+
+      it('should add extended-cache-ttl beta header for 1h TTL', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '1h');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const call = mockMessagesCreate.mock.calls[0];
+        expect(call).toBeDefined();
+
+        const options = call?.[1];
+        expect(options).toBeDefined();
+        expect(options?.headers).toBeDefined();
+        expect(options?.headers?.['anthropic-beta']).toContain(
+          'extended-cache-ttl-2025-04-11',
+        );
+      });
+
+      it('should not add beta header for 5m TTL', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const call = mockMessagesCreate.mock.calls[0];
+        const options = call?.[1];
+
+        if (options?.headers?.['anthropic-beta']) {
+          expect(options.headers['anthropic-beta']).not.toContain(
+            'extended-cache-ttl-2025-04-11',
+          );
+        }
+      });
+    });
+
+    describe('Stable Tool Ordering', () => {
+      it('should sort tools alphabetically by name', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        const tools = [
+          {
+            functionDeclarations: [
+              {
+                name: 'zebra_tool',
+                description: 'Z tool',
+                parameters: { type: 'object', properties: {} },
+              },
+              {
+                name: 'alpha_tool',
+                description: 'A tool',
+                parameters: { type: 'object', properties: {} },
+              },
+              {
+                name: 'middle_tool',
+                description: 'M tool',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+          },
+        ];
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages, { tools }),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(request.tools).toBeDefined();
+
+        const toolNames = request.tools.map((t: { name: string }) => t.name);
+        expect(toolNames).toEqual(['alpha_tool', 'middle_tool', 'zebra_tool']);
+      });
+
+      it('should sort JSON schema keys alphabetically', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        const tools = [
+          {
+            functionDeclarations: [
+              {
+                name: 'test_tool',
+                description: 'Test',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    zebra: { type: 'string' },
+                    apple: { type: 'number' },
+                    middle: { type: 'boolean' },
+                  },
+                },
+              },
+            ],
+          },
+        ];
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages, { tools }),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(request.tools).toBeDefined();
+
+        const tool = request.tools[0];
+        const propertyKeys = Object.keys(tool.input_schema.properties);
+        expect(propertyKeys).toEqual(['apple', 'middle', 'zebra']);
+      });
+    });
+
+    describe('Cache Metrics Extraction', () => {
+      it('should extract cache metrics from non-streaming response', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 3200,
+            cache_creation_input_tokens: 0,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        const result = await generator.next();
+
+        expect(result.value).toBeDefined();
+        const content = result.value as IContent;
+        expect(content.metadata?.usage).toBeDefined();
+        expect(content.metadata?.usage?.cache_read_input_tokens).toBe(3200);
+        expect(content.metadata?.usage?.cache_creation_input_tokens).toBe(0);
+      });
+
+      it('should extract cache metrics from streaming response', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+        // Enable streaming for this test
+        settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
+
+        // Recreate provider with streaming enabled
+        provider = new AnthropicProvider('test-api-key', undefined, {
+          ...TEST_PROVIDER_CONFIG,
+          getEphemeralSettings: () => ({
+            ...settingsService.getAllGlobalSettings(),
+            ...settingsService.getProviderSettings('anthropic'),
+          }),
+        });
+
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'message_start',
+              message: {
+                usage: {
+                  input_tokens: 100,
+                  output_tokens: 0,
+                  cache_read_input_tokens: 3200,
+                  cache_creation_input_tokens: 0,
+                },
+              },
+            };
+            yield {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: 'Hello' },
+            };
+            yield {
+              type: 'message_delta',
+              usage: { input_tokens: 100, output_tokens: 5 },
+            };
+          },
+        };
+
+        mockMessagesCreate.mockResolvedValue(mockStream);
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Say hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+
+        const chunks = [];
+        for await (const chunk of generator) {
+          chunks.push(chunk);
+        }
+
+        const usageChunk = chunks.find(
+          (c) => c.metadata?.usage?.cache_read_input_tokens !== undefined,
+        );
+        expect(usageChunk).toBeDefined();
+        expect(usageChunk?.metadata?.usage?.cache_read_input_tokens).toBe(3200);
+        expect(usageChunk?.metadata?.usage?.cache_creation_input_tokens).toBe(
+          0,
+        );
+      });
+
+      it('should handle cache creation on first request', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 3200,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        const result = await generator.next();
+
+        const content = result.value as IContent;
+        expect(content.metadata?.usage?.cache_read_input_tokens).toBe(0);
+        expect(content.metadata?.usage?.cache_creation_input_tokens).toBe(3200);
+      });
+    });
+
+    describe('Cache Hit Rate Calculation', () => {
+      it('should calculate 0% hit rate on cache write (first request)', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 3200,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        const result = await generator.next();
+
+        const content = result.value as IContent;
+        const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
+        const input = content.metadata?.usage?.promptTokens ?? 0;
+        const hitRate = (cacheRead / (cacheRead + input)) * 100;
+
+        expect(hitRate).toBe(0);
+      });
+
+      it('should calculate high hit rate on cache read (subsequent requests)', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 3200,
+            cache_creation_input_tokens: 0,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        const result = await generator.next();
+
+        const content = result.value as IContent;
+        const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
+        const input = content.metadata?.usage?.promptTokens ?? 0;
+        const hitRate = (cacheRead / (cacheRead + input)) * 100;
+
+        expect(hitRate).toBeGreaterThan(90);
+        expect(cacheRead).toBe(3200);
+      });
+    });
+
+    describe('Rate Limit Tracking', () => {
+      it('should extract rate limit headers from non-streaming responses', async () => {
+        const mockResponse = {
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+
+        const mockHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '950',
+          'anthropic-ratelimit-requests-reset': '2025-11-21T12:00:00Z',
+          'anthropic-ratelimit-tokens-limit': '100000',
+          'anthropic-ratelimit-tokens-remaining': '95000',
+          'anthropic-ratelimit-tokens-reset': '2025-11-21T12:00:00Z',
+          'anthropic-ratelimit-input-tokens-limit': '50000',
+          'anthropic-ratelimit-input-tokens-remaining': '48000',
+        });
+
+        const mockWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: mockHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValue({
+          withResponse: mockWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const rateLimitInfo = provider.getRateLimitInfo();
+        expect(rateLimitInfo).toBeDefined();
+        expect(rateLimitInfo?.requestsLimit).toBe(1000);
+        expect(rateLimitInfo?.requestsRemaining).toBe(950);
+        expect(rateLimitInfo?.requestsReset).toEqual(
+          new Date('2025-11-21T12:00:00Z'),
+        );
+        expect(rateLimitInfo?.tokensLimit).toBe(100000);
+        expect(rateLimitInfo?.tokensRemaining).toBe(95000);
+        expect(rateLimitInfo?.tokensReset).toEqual(
+          new Date('2025-11-21T12:00:00Z'),
+        );
+        expect(rateLimitInfo?.inputTokensLimit).toBe(50000);
+        expect(rateLimitInfo?.inputTokensRemaining).toBe(48000);
+      });
+
+      it('should handle missing rate limit headers gracefully', async () => {
+        const mockResponse = {
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+
+        const mockHeaders = new Headers();
+
+        const mockWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: mockHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValue({
+          withResponse: mockWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const rateLimitInfo = provider.getRateLimitInfo();
+        expect(rateLimitInfo).toBeDefined();
+        expect(rateLimitInfo?.requestsLimit).toBeUndefined();
+        expect(rateLimitInfo?.requestsRemaining).toBeUndefined();
+        expect(rateLimitInfo?.tokensLimit).toBeUndefined();
+        expect(rateLimitInfo?.tokensRemaining).toBeUndefined();
+      });
+
+      it('should not extract headers in streaming mode', async () => {
+        // Disable streaming setting to enable actual streaming (confusing naming)
+        settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
+
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: 'Hello' },
+            };
+          },
+        };
+
+        mockMessagesCreate.mockResolvedValue(mockStream);
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Say hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+
+        await generator.next();
+
+        // Rate limit info should not be updated in streaming mode
+        const rateLimitInfo = provider.getRateLimitInfo();
+        // It will be undefined or unchanged from previous state
+        // We're testing that streaming doesn't crash trying to access headers
+        expect(rateLimitInfo).toBeUndefined();
+      });
+
+      it('should handle partial rate limit headers', async () => {
+        const mockResponse = {
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+
+        const mockHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '950',
+          // Missing reset time and all token-related headers
+        });
+
+        const mockWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: mockHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValue({
+          withResponse: mockWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const rateLimitInfo = provider.getRateLimitInfo();
+        expect(rateLimitInfo).toBeDefined();
+        expect(rateLimitInfo?.requestsLimit).toBe(1000);
+        expect(rateLimitInfo?.requestsRemaining).toBe(950);
+        expect(rateLimitInfo?.requestsReset).toBeUndefined();
+        expect(rateLimitInfo?.tokensLimit).toBeUndefined();
+        expect(rateLimitInfo?.tokensRemaining).toBeUndefined();
+      });
+
+      it('should handle invalid date format in reset headers', async () => {
+        const mockResponse = {
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+
+        const mockHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '950',
+          'anthropic-ratelimit-requests-reset': 'invalid-date',
+          'anthropic-ratelimit-tokens-limit': '100000',
+          'anthropic-ratelimit-tokens-remaining': '95000',
+          'anthropic-ratelimit-tokens-reset': 'also-invalid',
+        });
+
+        const mockWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: mockHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValue({
+          withResponse: mockWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const rateLimitInfo = provider.getRateLimitInfo();
+        expect(rateLimitInfo).toBeDefined();
+        expect(rateLimitInfo?.requestsLimit).toBe(1000);
+        expect(rateLimitInfo?.requestsRemaining).toBe(950);
+        // Reset dates should be undefined due to parse errors
+        expect(rateLimitInfo?.requestsReset).toBeUndefined();
+        expect(rateLimitInfo?.tokensLimit).toBe(100000);
+        expect(rateLimitInfo?.tokensRemaining).toBe(95000);
+        expect(rateLimitInfo?.tokensReset).toBeUndefined();
+      });
+    });
+
+    describe('Rate limit throttling', () => {
+      it('should wait when requests remaining is below threshold', async () => {
+        const mockResponse = {
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+
+        // First call establishes rate limit state
+        const firstHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '40', // 4% remaining
+          'anthropic-ratelimit-requests-reset': new Date(
+            Date.now() + 5000,
+          ).toISOString(),
+        });
+
+        const firstWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: firstHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: firstWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First request' }],
+          },
+        ];
+
+        // First request - establishes rate limit state
+        const generator1 = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator1.next();
+
+        // Second call should trigger throttling
+        const secondHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '39',
+          'anthropic-ratelimit-requests-reset': new Date(
+            Date.now() + 5000,
+          ).toISOString(),
+        });
+
+        const secondWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: secondHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: secondWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        // Mock Date.now for deterministic testing
+        const originalDateNow = Date.now;
+        const mockNow = Date.now();
+        vi.spyOn(Date, 'now').mockReturnValue(mockNow);
+
+        // Mock setTimeout to avoid actual waiting
+        vi.useFakeTimers();
+
+        const messages2: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Second request' }],
+          },
+        ];
+
+        const generator2Promise = (async () => {
+          const gen = provider.generateChatCompletion(
+            buildCallOptions(messages2),
+          );
+          await gen.next();
+        })();
+
+        // Fast-forward timers to simulate the wait
+        await vi.runAllTimersAsync();
+        await generator2Promise;
+
+        // Restore timers
+        vi.useRealTimers();
+        Date.now = originalDateNow;
+
+        // Verify the second request was made (after throttling)
+        expect(secondWithResponse).toHaveBeenCalled();
+      });
+
+      it('should wait when tokens remaining is below threshold', async () => {
+        const mockResponse = {
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+
+        // First call establishes rate limit state
+        const firstHeaders = new Headers({
+          'anthropic-ratelimit-tokens-limit': '100000',
+          'anthropic-ratelimit-tokens-remaining': '4000', // 4% remaining
+          'anthropic-ratelimit-tokens-reset': new Date(
+            Date.now() + 5000,
+          ).toISOString(),
+        });
+
+        const firstWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: firstHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: firstWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First request' }],
+          },
+        ];
+
+        // First request - establishes rate limit state
+        const generator1 = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator1.next();
+
+        // Second call should trigger throttling
+        const secondHeaders = new Headers({
+          'anthropic-ratelimit-tokens-limit': '100000',
+          'anthropic-ratelimit-tokens-remaining': '3900',
+          'anthropic-ratelimit-tokens-reset': new Date(
+            Date.now() + 5000,
+          ).toISOString(),
+        });
+
+        const secondWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: secondHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: secondWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        // Mock timers for deterministic testing
+        vi.useFakeTimers();
+
+        const messages2: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Second request' }],
+          },
+        ];
+
+        const generator2Promise = (async () => {
+          const gen = provider.generateChatCompletion(
+            buildCallOptions(messages2),
+          );
+          await gen.next();
+        })();
+
+        // Fast-forward timers
+        await vi.runAllTimersAsync();
+        await generator2Promise;
+
+        vi.useRealTimers();
+
+        // Verify the second request was made
+        expect(secondWithResponse).toHaveBeenCalled();
+      });
+
+      it(
+        'should not wait when throttling is disabled',
+        { timeout: 10000 },
+        async () => {
+          const mockResponse = {
+            content: [{ type: 'text', text: 'response' }],
+            usage: {
+              input_tokens: 100,
+              output_tokens: 50,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: 0,
+            },
+          };
+
+          // First call establishes rate limit state
+          const firstHeaders = new Headers({
+            'anthropic-ratelimit-requests-limit': '1000',
+            'anthropic-ratelimit-requests-remaining': '40', // 4% remaining
+            'anthropic-ratelimit-requests-reset': new Date(
+              Date.now() + 5000,
+            ).toISOString(),
+          });
+
+          const firstWithResponse = vi.fn().mockResolvedValue({
+            data: mockResponse,
+            response: { headers: firstHeaders },
+          });
+
+          mockMessagesCreate.mockReturnValueOnce({
+            withResponse: firstWithResponse,
+          } as unknown as Promise<Anthropic.Message>);
+
+          settingsService.setProviderSetting(
+            'anthropic',
+            'streaming',
+            'disabled',
+          );
+          settingsService.setProviderSetting(
+            'anthropic',
+            'rate-limit-throttle',
+            'off',
+          );
+
+          const messages: IContent[] = [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'First request' }],
+            },
+          ];
+
+          // First request - establishes rate limit state
+          const generator1 = provider.generateChatCompletion(
+            buildCallOptions(messages),
+          );
+          await generator1.next();
+
+          // Second call should NOT trigger throttling
+          const secondHeaders = new Headers({
+            'anthropic-ratelimit-requests-limit': '1000',
+            'anthropic-ratelimit-requests-remaining': '39',
+          });
+
+          const secondWithResponse = vi.fn().mockResolvedValue({
+            data: mockResponse,
+            response: { headers: secondHeaders },
+          });
+
+          mockMessagesCreate.mockReturnValueOnce({
+            withResponse: secondWithResponse,
+          } as unknown as Promise<Anthropic.Message>);
+
+          const messages2: IContent[] = [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Second request' }],
+            },
+          ];
+
+          // Throttling is disabled, so this should not wait
+          const generator2 = provider.generateChatCompletion(
+            buildCallOptions(messages2),
+          );
+          await generator2.next();
+
+          expect(secondWithResponse).toHaveBeenCalled();
+        },
+      );
+
+      it('should respect max wait time', async () => {
+        const mockResponse = {
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+
+        // First call establishes rate limit state with far future reset
+        const firstHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '40', // 4% remaining
+          'anthropic-ratelimit-requests-reset': new Date(
+            Date.now() + 300000, // 5 minutes
+          ).toISOString(),
+        });
+
+        const firstWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: firstHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: firstWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+        // Set max wait to 1 second
+        settingsService.setProviderSetting(
+          'anthropic',
+          'rate-limit-max-wait',
+          1000,
+        );
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First request' }],
+          },
+        ];
+
+        // First request - establishes rate limit state
+        const generator1 = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator1.next();
+
+        // Second call should cap wait time
+        const secondHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '39',
+        });
+
+        const secondWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: secondHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: secondWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        // Mock Date.now for deterministic testing
+        const originalDateNow = Date.now;
+        const mockNow = Date.now();
+        vi.spyOn(Date, 'now').mockReturnValue(mockNow);
+
+        // Mock setTimeout to avoid actual waiting
+        vi.useFakeTimers();
+
+        const messages2: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Second request' }],
+          },
+        ];
+
+        const generator2Promise = (async () => {
+          const gen = provider.generateChatCompletion(
+            buildCallOptions(messages2),
+          );
+          await gen.next();
+        })();
+
+        // Fast-forward timers to simulate the wait
+        await vi.runAllTimersAsync();
+        await generator2Promise;
+
+        // Restore timers
+        vi.useRealTimers();
+        Date.now = originalDateNow;
+
+        expect(secondWithResponse).toHaveBeenCalled();
+      });
+
+      it(
+        'should not wait when reset time is in the past',
+        { timeout: 15000 },
+        async () => {
+          const mockResponse = {
+            content: [{ type: 'text', text: 'response' }],
+            usage: {
+              input_tokens: 100,
+              output_tokens: 50,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: 0,
+            },
+          };
+
+          // First call establishes rate limit state with past reset
+          const firstHeaders = new Headers({
+            'anthropic-ratelimit-requests-limit': '1000',
+            'anthropic-ratelimit-requests-remaining': '40', // 4% remaining
+            'anthropic-ratelimit-requests-reset': new Date(
+              Date.now() - 5000, // 5 seconds ago
+            ).toISOString(),
+          });
+
+          const firstWithResponse = vi.fn().mockResolvedValue({
+            data: mockResponse,
+            response: { headers: firstHeaders },
+          });
+
+          mockMessagesCreate.mockReturnValueOnce({
+            withResponse: firstWithResponse,
+          } as unknown as Promise<Anthropic.Message>);
+
+          settingsService.setProviderSetting(
+            'anthropic',
+            'streaming',
+            'disabled',
+          );
+
+          const messages: IContent[] = [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'First request' }],
+            },
+          ];
+
+          // First request - establishes rate limit state
+          const generator1 = provider.generateChatCompletion(
+            buildCallOptions(messages),
+          );
+          await generator1.next();
+
+          // Second call should NOT wait (reset time in past)
+          const secondHeaders = new Headers({
+            'anthropic-ratelimit-requests-limit': '1000',
+            'anthropic-ratelimit-requests-remaining': '39',
+          });
+
+          const secondWithResponse = vi.fn().mockResolvedValue({
+            data: mockResponse,
+            response: { headers: secondHeaders },
+          });
+
+          mockMessagesCreate.mockReturnValueOnce({
+            withResponse: secondWithResponse,
+          } as unknown as Promise<Anthropic.Message>);
+
+          const messages2: IContent[] = [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Second request' }],
+            },
+          ];
+
+          // Reset time is in the past, so should not wait
+          const generator2 = provider.generateChatCompletion(
+            buildCallOptions(messages2),
+          );
+          await generator2.next();
+
+          expect(secondWithResponse).toHaveBeenCalled();
+        },
+      );
+
+      it('should use custom threshold percentage', async () => {
+        const mockResponse = {
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+
+        // First call establishes rate limit state
+        const firstHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '80', // 8% remaining
+          'anthropic-ratelimit-requests-reset': new Date(
+            Date.now() + 5000,
+          ).toISOString(),
+        });
+
+        const firstWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: firstHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: firstWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+        // Set threshold to 10%
+        settingsService.setProviderSetting(
+          'anthropic',
+          'rate-limit-throttle-threshold',
+          10,
+        );
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First request' }],
+          },
+        ];
+
+        // First request - establishes rate limit state
+        const generator1 = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator1.next();
+
+        // Second call should trigger throttling (8% < 10% threshold)
+        const secondHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '79',
+        });
+
+        const secondWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: secondHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: secondWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        const messages2: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Second request' }],
+          },
+        ];
+
+        // Use fake timers to simulate the throttle wait
+        vi.useFakeTimers();
+
+        const generator2Promise = (async () => {
+          const gen = provider.generateChatCompletion(
+            buildCallOptions(messages2),
+          );
+          await gen.next();
+        })();
+
+        // Advance timers to trigger the throttle
+        await vi.runAllTimersAsync();
+        await generator2Promise;
+
+        vi.useRealTimers();
+
+        expect(secondWithResponse).toHaveBeenCalled();
+      });
+
+      it('should not wait when no rate limit info exists', async () => {
+        // Mock streaming response - need to create a new generator for each call
+        mockMessagesCreate.mockImplementation(async function* () {
+          yield {
+            type: 'message_start',
+            message: {
+              usage: {
+                input_tokens: 100,
+                output_tokens: 0,
+              },
+            },
+          };
+          yield {
+            type: 'content_block_start',
+            content_block: { type: 'text', text: '' },
+          };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'response' },
+          };
+          yield { type: 'content_block_stop' };
+          yield {
+            type: 'message_delta',
+            usage: { input_tokens: 0, output_tokens: 50 },
+          };
+        });
+
+        settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Request' }],
+          },
+        ];
+
+        // No rate limit info exists yet - should not wait
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+
+        // Consume the generator
+        let result = await generator.next();
+        while (!result.done) {
+          result = await generator.next();
+        }
+
+        // Test passed if we got here without errors
+        expect(mockMessagesCreate).toHaveBeenCalled();
+      });
+    });
   });
 });

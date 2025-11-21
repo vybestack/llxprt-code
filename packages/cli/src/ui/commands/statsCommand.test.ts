@@ -75,4 +75,20 @@ describe('statsCommand', () => {
       expect.any(Number),
     );
   });
+
+  it('should display cache stats when using the "cache" subcommand', () => {
+    const cacheSubCommand = statsCommand.subCommands?.find(
+      (sc) => sc.name === 'cache',
+    );
+    if (!cacheSubCommand?.action) throw new Error('Subcommand has no action');
+
+    cacheSubCommand.action(mockContext, '');
+
+    expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+      {
+        type: MessageType.CACHE_STATS,
+      },
+      expect.any(Number),
+    );
+  });
 });

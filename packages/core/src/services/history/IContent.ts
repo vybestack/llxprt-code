@@ -78,6 +78,13 @@ export interface UsageStats {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+
+  /**
+   * Anthropic prompt caching metrics
+   * @see https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
+   */
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
 }
 
 /**
