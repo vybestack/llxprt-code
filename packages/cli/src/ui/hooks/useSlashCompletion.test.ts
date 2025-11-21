@@ -452,7 +452,7 @@ describe('useSlashCompletion', () => {
         ] as unknown as SlashCommand[];
         const { result } = renderHook(() =>
           useSlashCompletion(
-            useTextBufferForTest('/usag'), // part of the word "usage"
+            useTextBufferForTest('/usage'), // part of the word "usage"
             testDirs,
             testRootDir,
             slashCommands,
