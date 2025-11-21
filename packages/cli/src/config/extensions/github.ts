@@ -119,6 +119,24 @@ async function fetchReleaseFromGithub(
   return await fetchJson(url);
 }
 
+/**
+ * Checks if a GitHub repository has any releases available.
+ * @param owner The GitHub repository owner.
+ * @param repo The GitHub repository name.
+ * @returns True if releases exist, false otherwise.
+ */
+export async function checkGitHubReleasesExist(
+  owner: string,
+  repo: string,
+): Promise<boolean> {
+  try {
+    await fetchReleaseFromGithub(owner, repo);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function checkForExtensionUpdate(
   installMetadata: ExtensionInstallMetadata,
 ): Promise<ExtensionUpdateState> {

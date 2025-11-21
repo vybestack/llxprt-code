@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkForExtensionUpdate,
+  checkGitHubReleasesExist,
   cloneFromGit,
   findReleaseAsset,
   parseGitHubRepoForReleases,
@@ -288,6 +289,12 @@ describe('git extension helpers', () => {
       expect(() => parseGitHubRepoForReleases(source)).toThrow(
         'Invalid GitHub repository source: https://github.com/owner/repo/extra. Expected "owner/repo" or a github repo uri.',
       );
+    });
+  });
+
+  describe('checkGitHubReleasesExist', () => {
+    it('should be exported from module', () => {
+      expect(typeof checkGitHubReleasesExist).toBe('function');
     });
   });
 });

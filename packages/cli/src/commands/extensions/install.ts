@@ -9,10 +9,15 @@ import {
   installExtension,
   ExtensionInstallMetadata,
 } from '../../config/extension.js';
+import {
+  checkGitHubReleasesExist,
+  parseGitHubRepoForReleases,
+} from '../../config/extensions/github.js';
 
 interface InstallArgs {
   source?: string;
   path?: string;
+  ref?: string;
 }
 
 const ORG_REPO_REGEX = /^[a-zA-Z0-9-]+\/[\w.-]+$/;
@@ -22,7 +27,7 @@ export async function handleInstall(args: InstallArgs) {
     let installMetadata: ExtensionInstallMetadata;
 
     if (args.source) {
-      const { source } = args;
+      const { source, ref } = args;
       const isSsoSource = source.startsWith('sso://');
       if (
         source.startsWith('http://') ||
@@ -34,6 +39,9 @@ export async function handleInstall(args: InstallArgs) {
           source,
           type: 'git',
         };
+        if (ref) {
+          installMetadata.ref = ref;
+        }
         if (isSsoSource) {
           console.warn(
             'sso:// URLs require a git-remote-sso helper or protocol remapping. ' +
@@ -41,10 +49,32 @@ export async function handleInstall(args: InstallArgs) {
           );
         }
       } else if (ORG_REPO_REGEX.test(source)) {
-        installMetadata = {
-          source: `https://github.com/${source}.git`,
-          type: 'git',
-        };
+        // For org/repo format, try github-release first, fall back to git
+        const { owner, repo } = parseGitHubRepoForReleases(source);
+        let useGitHubRelease = false;
+
+        try {
+          useGitHubRelease = await checkGitHubReleasesExist(owner, repo);
+        } catch {
+          // Fall back to git clone if we can't check for releases
+          useGitHubRelease = false;
+        }
+
+        if (useGitHubRelease) {
+          installMetadata = {
+            source,
+            type: 'github-release',
+          };
+        } else {
+          installMetadata = {
+            source: `https://github.com/${source}.git`,
+            type: 'git',
+          };
+        }
+
+        if (ref) {
+          installMetadata.ref = ref;
+        }
       } else {
         throw new Error(
           `The source "${source}" is not a valid URL or "org/repo" format.`,
@@ -84,6 +114,11 @@ export const installCommand: CommandModule = {
         describe: 'Path to a local extension directory.',
         type: 'string',
       })
+      .option('ref', {
+        describe:
+          'Git branch/tag or GitHub release tag to install from (default: latest).',
+        type: 'string',
+      })
       .conflicts('source', 'path')
       .check((argv) => {
         if (!argv.source && !argv.path) {
@@ -95,6 +130,7 @@ export const installCommand: CommandModule = {
     await handleInstall({
       source: argv['source'] as string | undefined,
       path: argv['path'] as string | undefined,
+      ref: argv['ref'] as string | undefined,
     });
   },
 };

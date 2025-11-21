@@ -9,9 +9,21 @@ import { handleInstall, installCommand } from './install.js';
 import yargs from 'yargs';
 
 const mockInstallExtension = vi.hoisted(() => vi.fn());
+const mockCheckGitHubReleasesExist = vi.hoisted(() => vi.fn());
+const mockParseGitHubRepoForReleases = vi.hoisted(() =>
+  vi.fn().mockImplementation((source: string) => {
+    const parts = source.split('/');
+    return { owner: parts[0], repo: parts[1] };
+  }),
+);
 
 vi.mock('../../config/extension.js', () => ({
   installExtension: mockInstallExtension,
+}));
+
+vi.mock('../../config/extensions/github.js', () => ({
+  checkGitHubReleasesExist: mockCheckGitHubReleasesExist,
+  parseGitHubRepoForReleases: mockParseGitHubRepoForReleases,
 }));
 
 describe('extensions install command', () => {
@@ -47,18 +59,48 @@ describe('handleInstall', () => {
       .spyOn(process, 'exit')
       .mockImplementation(() => undefined as never);
     mockInstallExtension.mockReset();
+    mockCheckGitHubReleasesExist.mockReset();
+    // Restore the default implementation for parseGitHubRepoForReleases
+    mockParseGitHubRepoForReleases.mockReset();
+    mockParseGitHubRepoForReleases.mockImplementation((source: string) => {
+      const parts = source.split('/');
+      return { owner: parts[0], repo: parts[1] };
+    });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    mockInstallExtension.mockReset();
   });
 
-  it('installs an extension from an org/repo source', async () => {
+  it('installs an extension from org/repo using github-release when releases exist', async () => {
+    mockCheckGitHubReleasesExist.mockResolvedValue(true);
     mockInstallExtension.mockResolvedValue('test-extension');
 
     await handleInstall({ source: 'test-org/test-repo' });
 
+    expect(mockCheckGitHubReleasesExist).toHaveBeenCalledWith(
+      'test-org',
+      'test-repo',
+    );
+    expect(mockInstallExtension).toHaveBeenCalledWith({
+      source: 'test-org/test-repo',
+      type: 'github-release',
+    });
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      'Extension "test-extension" installed successfully and enabled.',
+    );
+  });
+
+  it('installs an extension from org/repo using git when no releases exist', async () => {
+    mockCheckGitHubReleasesExist.mockResolvedValue(false);
+    mockInstallExtension.mockResolvedValue('test-extension');
+
+    await handleInstall({ source: 'test-org/test-repo' });
+
+    expect(mockCheckGitHubReleasesExist).toHaveBeenCalledWith(
+      'test-org',
+      'test-repo',
+    );
     expect(mockInstallExtension).toHaveBeenCalledWith({
       source: 'https://github.com/test-org/test-repo.git',
       type: 'git',
@@ -66,6 +108,58 @@ describe('handleInstall', () => {
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "test-extension" installed successfully and enabled.',
     );
+  });
+
+  it('installs an extension from org/repo using git when release check fails', async () => {
+    mockCheckGitHubReleasesExist.mockRejectedValue(new Error('Network error'));
+    mockInstallExtension.mockResolvedValue('test-extension');
+
+    await handleInstall({ source: 'test-org/test-repo' });
+
+    expect(mockCheckGitHubReleasesExist).toHaveBeenCalledWith(
+      'test-org',
+      'test-repo',
+    );
+    expect(mockInstallExtension).toHaveBeenCalledWith({
+      source: 'https://github.com/test-org/test-repo.git',
+      type: 'git',
+    });
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      'Extension "test-extension" installed successfully and enabled.',
+    );
+  });
+
+  it('installs an extension from org/repo with --ref as github-release', async () => {
+    mockCheckGitHubReleasesExist.mockResolvedValue(true);
+    mockInstallExtension.mockResolvedValue('test-extension');
+
+    await handleInstall({ source: 'test-org/test-repo', ref: 'v1.0.0' });
+
+    expect(mockCheckGitHubReleasesExist).toHaveBeenCalledWith(
+      'test-org',
+      'test-repo',
+    );
+    expect(mockInstallExtension).toHaveBeenCalledWith({
+      source: 'test-org/test-repo',
+      type: 'github-release',
+      ref: 'v1.0.0',
+    });
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      'Extension "test-extension" installed successfully and enabled.',
+    );
+  });
+
+  it('installs an extension from org/repo with --ref falling back to git', async () => {
+    mockCheckGitHubReleasesExist.mockResolvedValue(false);
+    mockInstallExtension.mockResolvedValue('test-extension');
+
+    await handleInstall({ source: 'test-org/test-repo', ref: 'my-branch' });
+
+    expect(mockInstallExtension).toHaveBeenCalledWith({
+      source: 'https://github.com/test-org/test-repo.git',
+      type: 'git',
+      ref: 'my-branch',
+    });
   });
 
   it('installs an extension from a http source', async () => {
