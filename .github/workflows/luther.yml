@@ -481,7 +481,7 @@ jobs:
             echo "Running LLxprt for attempt ${attempt}"
             llxprt_log="${attempt_dir}/llxprt.log"
             set +e
-            llxprt \
+            cat "$prompt_file" | llxprt \
               --provider "${LLXPRT_DEFAULT_PROVIDER}" \
               --model "${LLXPRT_DEFAULT_MODEL}" \
               --yolo \
@@ -491,8 +491,8 @@ jobs:
               --set context-limit=121000 \
               --set base-url="${OPENAI_BASE_URL}" \
               --set shell-replacement=true \
-              --prompt "$(cat "$prompt_file")" 2>&1 | tee "$llxprt_log"
-            llxprt_exit="${PIPESTATUS[0]}"
+              --prompt - 2>&1 | tee "$llxprt_log"
+            llxprt_exit="${PIPESTATUS[1]}"
             set -e
 
             if [[ "$llxprt_exit" -ne 0 ]]; then
