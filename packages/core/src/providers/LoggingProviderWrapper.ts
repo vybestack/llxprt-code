@@ -659,7 +659,7 @@ export class LoggingProviderWrapper implements IProvider {
       });
     } catch (error) {
       // Log error but don't fail the request
-      console.warn('Failed to log conversation request:', error);
+      this.debug.warn(() => `Failed to log conversation request: ${error}`);
     }
   }
 
@@ -867,7 +867,7 @@ export class LoggingProviderWrapper implements IProvider {
         error: error ? String(error) : undefined,
       });
     } catch (logError) {
-      console.warn('Failed to log conversation response:', logError);
+      this.debug.warn(() => `Failed to log conversation response: ${logError}`);
     }
   }
 
@@ -1051,11 +1051,12 @@ export class LoggingProviderWrapper implements IProvider {
         );
         providerManager.accumulateSessionTokens(this.wrapped.name, usage);
       } catch (error) {
-        console.warn('Failed to accumulate session tokens:', error);
+        this.debug.warn(() => `Failed to accumulate session tokens: ${error}`);
       }
     } else {
-      console.warn(
-        `[TokenTracking] No provider manager found in config - tokens not accumulated for ${this.wrapped.name}`,
+      this.debug.warn(
+        () =>
+          `[TokenTracking] No provider manager found in config - tokens not accumulated for ${this.wrapped.name}`,
       );
     }
   }
@@ -1122,7 +1123,7 @@ export class LoggingProviderWrapper implements IProvider {
         gitStats,
       });
     } catch (logError) {
-      console.warn('Failed to log tool call:', logError);
+      this.debug.warn(() => `Failed to log tool call: ${logError}`);
     }
   }
 

@@ -1,6 +1,7 @@
 # Cache Stats Debug Analysis
 
 ## Issue
+
 Issue #528: `/stats cache` shows "No cache data available" despite caching being implemented.
 
 ## Investigation Summary
@@ -46,39 +47,47 @@ The cache statistics flow works as follows:
 To identify where cache metrics are being lost, I added debug logging at key points:
 
 1. **AnthropicProvider** (lines 1292-1295, 1448-1451):
+
    ```typescript
    cacheLogger.debug(
-     () => `[AnthropicProvider streaming/non-streaming] Emitting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`
+     () =>
+       `[AnthropicProvider streaming/non-streaming] Emitting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
    );
    ```
 
 2. **LoggingProviderWrapper.extractTokenCountsFromTokenUsage** (lines 897-900):
+
    ```typescript
    this.debug.debug(
-     () => `[extractTokenCountsFromTokenUsage] Extracting from UsageStats: cacheReads=${cacheReads}, cacheWrites=${cacheWrites}, raw values: cache_read=${tokenUsage.cache_read_input_tokens}, cache_creation=${tokenUsage.cache_creation_input_tokens}`
+     () =>
+       `[extractTokenCountsFromTokenUsage] Extracting from UsageStats: cacheReads=${cacheReads}, cacheWrites=${cacheWrites}, raw values: cache_read=${tokenUsage.cache_read_input_tokens}, cache_creation=${tokenUsage.cache_creation_input_tokens}`,
    );
    ```
 
 3. **LoggingProviderWrapper.accumulateTokenUsage** (lines 1039-1042, 1048-1051):
+
    ```typescript
    this.debug.debug(
-     () => `[accumulateTokenUsage] Mapped tokenCounts to usage: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`
+     () =>
+       `[accumulateTokenUsage] Mapped tokenCounts to usage: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`,
    );
    this.debug.debug(
-     () => `[TokenTracking] Accumulating tokens for provider ${this.wrapped.name}, cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`
+     () =>
+       `[TokenTracking] Accumulating tokens for provider ${this.wrapped.name}, cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`,
    );
    ```
 
 4. **ProviderManager.accumulateSessionTokens** (lines 1015-1017):
    ```typescript
    console.log(
-     `[ProviderManager.accumulateSessionTokens] Called with: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}, cacheReads===undefined: ${usage.cacheReads === undefined}, cacheWrites===undefined: ${usage.cacheWrites === undefined}`
+     `[ProviderManager.accumulateSessionTokens] Called with: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}, cacheReads===undefined: ${usage.cacheReads === undefined}, cacheWrites===undefined: ${usage.cacheWrites === undefined}`,
    );
    ```
 
 ### How to Test
 
 1. Enable debug logging:
+
    ```bash
    export DEBUG="llxprt:*"
    ```
@@ -99,6 +108,7 @@ The debug logs will reveal exactly where in the flow cache metrics are being los
 ## Expected Behavior
 
 When Anthropic returns cache metrics:
+
 - `cache_read_input_tokens` > 0 when cache is hit (prompt reused)
 - `cache_creation_input_tokens` > 0 when cache is created (first time seeing prompt)
 

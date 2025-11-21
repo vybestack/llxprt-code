@@ -44,6 +44,20 @@ import {
 } from '../../utils/retry.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
+/**
+ * Rate limit information from Anthropic API response headers
+ */
+export interface AnthropicRateLimitInfo {
+  requestsLimit?: number;
+  requestsRemaining?: number;
+  requestsReset?: Date;
+  tokensLimit?: number;
+  tokensRemaining?: number;
+  tokensReset?: Date;
+  inputTokensLimit?: number;
+  inputTokensRemaining?: number;
+}
+
 export class AnthropicProvider extends BaseProvider {
   // @plan PLAN-20251023-STATELESS-HARDENING.P08
   // All properties are stateless - no runtime/client caches or constructor-captured config
@@ -64,6 +78,9 @@ export class AnthropicProvider extends BaseProvider {
     { pattern: /claude-.*3.*opus/i, tokens: 4096 },
     { pattern: /claude-.*3.*haiku/i, tokens: 4096 },
   ];
+
+  // Rate limit state tracking - updated on each API response
+  private lastRateLimitInfo?: AnthropicRateLimitInfo;
 
   constructor(
     apiKey?: string,
@@ -123,6 +140,10 @@ export class AnthropicProvider extends BaseProvider {
 
   private getCacheLogger() {
     return new DebugLogger('llxprt:anthropic:cache');
+  }
+
+  private getRateLimitLogger() {
+    return new DebugLogger('llxprt:anthropic:ratelimit');
   }
 
   private instantiateClient(authToken: string, baseURL?: string): Anthropic {
@@ -1253,12 +1274,103 @@ export class AnthropicProvider extends BaseProvider {
           );
 
     const { maxAttempts, initialDelayMs } = this.getRetryConfig();
-    const response = await retryWithBackoff(apiCall, {
-      maxAttempts,
-      initialDelayMs,
-      shouldRetry: this.shouldRetryAnthropicResponse.bind(this),
-      trackThrottleWaitTime: this.throttleTracker,
-    });
+
+    // Proactively throttle if approaching rate limits
+    await this.waitForRateLimitIfNeeded(configEphemeralSettings);
+
+    // For non-streaming, use withResponse() to access headers
+    // For streaming, we can't access headers easily, so we skip rate limit extraction
+    const rateLimitLogger = this.getRateLimitLogger();
+
+    let responseHeaders: Headers | undefined;
+    let response:
+      | Anthropic.Message
+      | AsyncIterable<Anthropic.MessageStreamEvent>;
+
+    if (streamingEnabled) {
+      // Streaming mode - can't easily access headers
+      response = await retryWithBackoff(apiCall, {
+        maxAttempts,
+        initialDelayMs,
+        shouldRetry: this.shouldRetryAnthropicResponse.bind(this),
+        trackThrottleWaitTime: this.throttleTracker,
+      });
+      rateLimitLogger.debug(
+        () => 'Streaming mode - rate limit headers not extracted',
+      );
+    } else {
+      // Non-streaming mode - use withResponse() to get headers
+      const apiCallWithResponse = async () => {
+        const promise = apiCall();
+        // The promise has a withResponse() method we can call
+        if (
+          promise &&
+          typeof promise === 'object' &&
+          'withResponse' in promise
+        ) {
+          return (
+            promise as {
+              withResponse: () => Promise<{
+                data: Anthropic.Message;
+                response: Response;
+              }>;
+            }
+          ).withResponse();
+        }
+        // Fallback if withResponse is not available
+        return { data: await promise, response: undefined };
+      };
+
+      const result = await retryWithBackoff(apiCallWithResponse, {
+        maxAttempts,
+        initialDelayMs,
+        shouldRetry: this.shouldRetryAnthropicResponse.bind(this),
+        trackThrottleWaitTime: this.throttleTracker,
+      });
+
+      response = result.data;
+      if (result.response) {
+        responseHeaders = result.response.headers;
+
+        // Extract and process rate limit headers
+        const rateLimitInfo = this.extractRateLimitHeaders(responseHeaders);
+        this.lastRateLimitInfo = rateLimitInfo;
+
+        rateLimitLogger.debug(() => {
+          const parts: string[] = [];
+          if (
+            rateLimitInfo.requestsRemaining !== undefined &&
+            rateLimitInfo.requestsLimit !== undefined
+          ) {
+            parts.push(
+              `requests=${rateLimitInfo.requestsRemaining}/${rateLimitInfo.requestsLimit}`,
+            );
+          }
+          if (
+            rateLimitInfo.tokensRemaining !== undefined &&
+            rateLimitInfo.tokensLimit !== undefined
+          ) {
+            parts.push(
+              `tokens=${rateLimitInfo.tokensRemaining}/${rateLimitInfo.tokensLimit}`,
+            );
+          }
+          if (
+            rateLimitInfo.inputTokensRemaining !== undefined &&
+            rateLimitInfo.inputTokensLimit !== undefined
+          ) {
+            parts.push(
+              `input_tokens=${rateLimitInfo.inputTokensRemaining}/${rateLimitInfo.inputTokensLimit}`,
+            );
+          }
+          return parts.length > 0
+            ? `Rate limits: ${parts.join(', ')}`
+            : 'Rate limits: no data';
+        });
+
+        // Check and warn if approaching limits
+        this.checkRateLimits(rateLimitInfo);
+      }
+    }
 
     if (streamingEnabled) {
       // Handle streaming response - response is already a Stream when streaming is enabled
@@ -1384,18 +1496,33 @@ export class AnthropicProvider extends BaseProvider {
             currentToolCall = undefined;
           }
         } else if (chunk.type === 'message_delta' && chunk.usage) {
-          // Emit usage metadata
-          this.getStreamingLogger().debug(() => `Received usage metadata`);
+          // Emit usage metadata including cache fields
+          const usage = chunk.usage as {
+            input_tokens: number;
+            output_tokens: number;
+            cache_read_input_tokens?: number;
+            cache_creation_input_tokens?: number;
+          };
+
+          const cacheRead = usage.cache_read_input_tokens ?? 0;
+          const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+
+          this.getStreamingLogger().debug(
+            () =>
+              `Received usage metadata from message_delta: promptTokens=${usage.input_tokens || 0}, completionTokens=${usage.output_tokens || 0}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}`,
+          );
+
           yield {
             speaker: 'ai',
             blocks: [],
             metadata: {
               usage: {
-                promptTokens: chunk.usage.input_tokens || 0,
-                completionTokens: chunk.usage.output_tokens || 0,
+                promptTokens: usage.input_tokens || 0,
+                completionTokens: usage.output_tokens || 0,
                 totalTokens:
-                  (chunk.usage.input_tokens || 0) +
-                  (chunk.usage.output_tokens || 0),
+                  (usage.input_tokens || 0) + (usage.output_tokens || 0),
+                cache_read_input_tokens: cacheRead,
+                cache_creation_input_tokens: cacheCreation,
               },
             },
           } as IContent;
@@ -1519,5 +1646,272 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     return false;
+  }
+
+  /**
+   * Extract rate limit information from response headers
+   */
+  private extractRateLimitHeaders(headers: Headers): AnthropicRateLimitInfo {
+    const rateLimitLogger = this.getRateLimitLogger();
+    const info: AnthropicRateLimitInfo = {};
+
+    // Extract requests rate limit info
+    const requestsLimit = headers.get('anthropic-ratelimit-requests-limit');
+    const requestsRemaining = headers.get(
+      'anthropic-ratelimit-requests-remaining',
+    );
+    const requestsReset = headers.get('anthropic-ratelimit-requests-reset');
+
+    if (requestsLimit) {
+      info.requestsLimit = parseInt(requestsLimit, 10);
+    }
+    if (requestsRemaining) {
+      info.requestsRemaining = parseInt(requestsRemaining, 10);
+    }
+    if (requestsReset) {
+      try {
+        const date = new Date(requestsReset);
+        // Only set if the date is valid
+        if (!isNaN(date.getTime())) {
+          info.requestsReset = date;
+        }
+      } catch (_error) {
+        rateLimitLogger.debug(
+          () => `Failed to parse requests reset date: ${requestsReset}`,
+        );
+      }
+    }
+
+    // Extract tokens rate limit info
+    const tokensLimit = headers.get('anthropic-ratelimit-tokens-limit');
+    const tokensRemaining = headers.get('anthropic-ratelimit-tokens-remaining');
+    const tokensReset = headers.get('anthropic-ratelimit-tokens-reset');
+
+    if (tokensLimit) {
+      info.tokensLimit = parseInt(tokensLimit, 10);
+    }
+    if (tokensRemaining) {
+      info.tokensRemaining = parseInt(tokensRemaining, 10);
+    }
+    if (tokensReset) {
+      try {
+        const date = new Date(tokensReset);
+        // Only set if the date is valid
+        if (!isNaN(date.getTime())) {
+          info.tokensReset = date;
+        }
+      } catch (_error) {
+        rateLimitLogger.debug(
+          () => `Failed to parse tokens reset date: ${tokensReset}`,
+        );
+      }
+    }
+
+    // Extract input tokens rate limit info
+    const inputTokensLimit = headers.get(
+      'anthropic-ratelimit-input-tokens-limit',
+    );
+    const inputTokensRemaining = headers.get(
+      'anthropic-ratelimit-input-tokens-remaining',
+    );
+
+    if (inputTokensLimit) {
+      info.inputTokensLimit = parseInt(inputTokensLimit, 10);
+    }
+    if (inputTokensRemaining) {
+      info.inputTokensRemaining = parseInt(inputTokensRemaining, 10);
+    }
+
+    return info;
+  }
+
+  /**
+   * Check rate limits and log warnings if approaching limits
+   */
+  private checkRateLimits(info: AnthropicRateLimitInfo): void {
+    const rateLimitLogger = this.getRateLimitLogger();
+
+    // Check requests rate limit (warn at 10% remaining)
+    if (
+      info.requestsLimit !== undefined &&
+      info.requestsRemaining !== undefined
+    ) {
+      const percentage = (info.requestsRemaining / info.requestsLimit) * 100;
+      if (percentage < 10) {
+        const resetTime = info.requestsReset
+          ? ` (resets at ${info.requestsReset.toISOString()})`
+          : '';
+        rateLimitLogger.debug(
+          () =>
+            `WARNING: Approaching requests rate limit - ${info.requestsRemaining}/${info.requestsLimit} remaining (${percentage.toFixed(1)}%)${resetTime}`,
+        );
+      }
+    }
+
+    // Check tokens rate limit (warn at 10% remaining)
+    if (info.tokensLimit !== undefined && info.tokensRemaining !== undefined) {
+      const percentage = (info.tokensRemaining / info.tokensLimit) * 100;
+      if (percentage < 10) {
+        const resetTime = info.tokensReset
+          ? ` (resets at ${info.tokensReset.toISOString()})`
+          : '';
+        rateLimitLogger.debug(
+          () =>
+            `WARNING: Approaching tokens rate limit - ${info.tokensRemaining}/${info.tokensLimit} remaining (${percentage.toFixed(1)}%)${resetTime}`,
+        );
+      }
+    }
+
+    // Check input tokens rate limit (warn at 10% remaining)
+    if (
+      info.inputTokensLimit !== undefined &&
+      info.inputTokensRemaining !== undefined
+    ) {
+      const percentage =
+        (info.inputTokensRemaining / info.inputTokensLimit) * 100;
+      if (percentage < 10) {
+        rateLimitLogger.debug(
+          () =>
+            `WARNING: Approaching input tokens rate limit - ${info.inputTokensRemaining}/${info.inputTokensLimit} remaining (${percentage.toFixed(1)}%)`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Get current rate limit information
+   * Returns the last known rate limit state from the most recent API call
+   */
+  getRateLimitInfo(): AnthropicRateLimitInfo | undefined {
+    return this.lastRateLimitInfo;
+  }
+
+  /**
+   * Wait for rate limit reset if needed based on current rate limit state
+   * This proactively throttles requests before they're made to prevent hitting rate limits
+   * @private
+   */
+  private async waitForRateLimitIfNeeded(
+    ephemeralSettings: Record<string, unknown>,
+  ): Promise<void> {
+    const rateLimitLogger = this.getRateLimitLogger();
+    const info = this.lastRateLimitInfo;
+
+    // No rate limit data yet - skip throttling
+    if (!info) {
+      return;
+    }
+
+    // Check if throttling is enabled (default: on)
+    const throttleEnabled =
+      (ephemeralSettings['rate-limit-throttle'] as string | undefined) ?? 'on';
+    if (throttleEnabled === 'off') {
+      return;
+    }
+
+    // Get threshold percentage (default: 5%)
+    const thresholdPercentage =
+      (ephemeralSettings['rate-limit-throttle-threshold'] as
+        | number
+        | undefined) ?? 5;
+
+    // Get max wait time (default: 60 seconds)
+    const maxWaitMs =
+      (ephemeralSettings['rate-limit-max-wait'] as number | undefined) ?? 60000;
+
+    const now = Date.now();
+
+    // Check requests remaining
+    if (
+      info.requestsRemaining !== undefined &&
+      info.requestsLimit !== undefined &&
+      info.requestsReset
+    ) {
+      const percentage = (info.requestsRemaining / info.requestsLimit) * 100;
+
+      if (percentage < thresholdPercentage) {
+        const resetTime = info.requestsReset.getTime();
+        const waitMs = resetTime - now;
+
+        // Only wait if reset time is in the future
+        if (waitMs > 0) {
+          const actualWaitMs = Math.min(waitMs, maxWaitMs);
+
+          rateLimitLogger.debug(
+            () =>
+              `Rate limit throttle: requests at ${percentage.toFixed(1)}% (${info.requestsRemaining}/${info.requestsLimit}), waiting ${actualWaitMs}ms until reset`,
+          );
+
+          if (waitMs > maxWaitMs) {
+            rateLimitLogger.debug(
+              () =>
+                `Rate limit reset in ${waitMs}ms exceeds max wait of ${maxWaitMs}ms, capping wait time`,
+            );
+          }
+
+          await this.sleep(actualWaitMs);
+          return;
+        }
+      }
+    }
+
+    // Check tokens remaining
+    if (
+      info.tokensRemaining !== undefined &&
+      info.tokensLimit !== undefined &&
+      info.tokensReset
+    ) {
+      const percentage = (info.tokensRemaining / info.tokensLimit) * 100;
+
+      if (percentage < thresholdPercentage) {
+        const resetTime = info.tokensReset.getTime();
+        const waitMs = resetTime - now;
+
+        // Only wait if reset time is in the future
+        if (waitMs > 0) {
+          const actualWaitMs = Math.min(waitMs, maxWaitMs);
+
+          rateLimitLogger.debug(
+            () =>
+              `Rate limit throttle: tokens at ${percentage.toFixed(1)}% (${info.tokensRemaining}/${info.tokensLimit}), waiting ${actualWaitMs}ms until reset`,
+          );
+
+          if (waitMs > maxWaitMs) {
+            rateLimitLogger.debug(
+              () =>
+                `Rate limit reset in ${waitMs}ms exceeds max wait of ${maxWaitMs}ms, capping wait time`,
+            );
+          }
+
+          await this.sleep(actualWaitMs);
+          return;
+        }
+      }
+    }
+
+    // Check input tokens remaining
+    if (
+      info.inputTokensRemaining !== undefined &&
+      info.inputTokensLimit !== undefined
+    ) {
+      const percentage =
+        (info.inputTokensRemaining / info.inputTokensLimit) * 100;
+
+      if (percentage < thresholdPercentage) {
+        // For input tokens, we don't have a reset time, so we can only log a warning
+        rateLimitLogger.debug(
+          () =>
+            `Rate limit warning: input tokens at ${percentage.toFixed(1)}% (${info.inputTokensRemaining}/${info.inputTokensLimit}), no reset time available`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Sleep for the specified number of milliseconds
+   * @private
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

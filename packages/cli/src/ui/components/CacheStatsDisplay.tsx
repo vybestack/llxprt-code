@@ -52,7 +52,6 @@ export const CacheStatsDisplay: React.FC = () => {
 
   // Get cache statistics from ProviderManager
   const cacheStats = providerManager.getCacheStatistics();
-  console.log('[CacheStatsDisplay] Retrieved cache stats:', cacheStats);
 
   const totalCacheReads = cacheStats.totalCacheReads;
   const totalCacheWrites = cacheStats.totalCacheWrites;
@@ -95,7 +94,7 @@ export const CacheStatsDisplay: React.FC = () => {
       paddingX={2}
     >
       <Text bold color={Colors.AccentPurple}>
-        Cache Stats For Nerds
+        Cache Stats
       </Text>
       <Box height={1} />
 
@@ -110,12 +109,18 @@ export const CacheStatsDisplay: React.FC = () => {
       />
       <StatRow
         title="Total Cache Writes (tokens)"
-        value={totalCacheWrites.toLocaleString()}
+        value={
+          <Text color={Colors.Foreground}>
+            {totalCacheWrites.toLocaleString()}
+          </Text>
+        }
       />
       <StatRow
         title="Cache Hit Rate"
         value={
-          <Text color={cacheHitRate > 0 ? Colors.AccentGreen : undefined}>
+          <Text
+            color={cacheHitRate > 0 ? Colors.AccentGreen : Colors.Foreground}
+          >
             {cacheHitRate.toFixed(1)}%
           </Text>
         }
@@ -146,7 +151,11 @@ export const CacheStatsDisplay: React.FC = () => {
       {/* Request Stats */}
       <StatRow
         title="Requests with Cache Hits"
-        value={requestsWithCacheHits.toLocaleString()}
+        value={
+          <Text color={Colors.Foreground}>
+            {requestsWithCacheHits.toLocaleString()}
+          </Text>
+        }
       />
     </Box>
   );

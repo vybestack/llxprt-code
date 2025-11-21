@@ -49,6 +49,12 @@ export const ephemeralSettingHelp: Record<string, string> = {
     'Dump API request body to ~/.llxprt/dumps/ on errors (enabled/disabled, default: disabled)',
   'prompt-caching':
     'Enable Anthropic prompt caching (off, 5m, 1h - default: off, Anthropic only)',
+  'rate-limit-throttle':
+    'Enable proactive rate limit throttling (on/off, default: on, Anthropic only)',
+  'rate-limit-throttle-threshold':
+    'Percentage threshold for rate limit throttling (1-100, default: 5, Anthropic only)',
+  'rate-limit-max-wait':
+    'Maximum wait time in milliseconds for rate limit throttling (default: 60000, Anthropic only)',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
@@ -244,6 +250,54 @@ export function parseEphemeralSettingValue(
       return {
         success: false,
         message: `Invalid ${key} mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
+      };
+    }
+  }
+
+  if (key === 'rate-limit-throttle') {
+    const validModes = ['on', 'off'];
+    if (typeof parsedValue === 'boolean') {
+      parsedValue = parsedValue ? 'on' : 'off';
+    } else if (
+      typeof parsedValue === 'string' &&
+      validModes.includes(parsedValue.toLowerCase())
+    ) {
+      parsedValue = parsedValue.toLowerCase();
+    } else {
+      return {
+        success: false,
+        message: `Invalid ${key} mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
+      };
+    }
+  }
+
+  if (key === 'rate-limit-throttle-threshold') {
+    const numValue = parsedValue as number;
+    if (
+      typeof numValue !== 'number' ||
+      numValue < 1 ||
+      numValue > 100 ||
+      !Number.isInteger(numValue)
+    ) {
+      return {
+        success: false,
+        message:
+          'rate-limit-throttle-threshold must be an integer between 1 and 100',
+      };
+    }
+  }
+
+  if (key === 'rate-limit-max-wait') {
+    const numValue = parsedValue as number;
+    if (
+      typeof numValue !== 'number' ||
+      numValue <= 0 ||
+      !Number.isInteger(numValue)
+    ) {
+      return {
+        success: false,
+        message:
+          'rate-limit-max-wait must be a positive integer in milliseconds',
       };
     }
   }
