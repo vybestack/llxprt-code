@@ -2,10 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { MessageBus } from './message-bus.js';
 import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision, type PolicyEngineConfig } from '../policy/types.js';
-import {
-  MessageBusType,
-  type ToolConfirmationRequest,
-} from './types.js';
+import { MessageBusType, type ToolConfirmationRequest } from './types.js';
 import type { FunctionCall } from '@google/genai';
 
 describe('MessageBus', () => {
