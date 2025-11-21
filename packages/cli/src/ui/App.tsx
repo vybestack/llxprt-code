@@ -607,7 +607,7 @@ const App = (props: AppInternalProps) => {
       if ((global as Record<string, unknown>).__oauth_needs_code) {
         // Clear the flag
         (global as Record<string, unknown>).__oauth_needs_code = false;
-        // Open the OAuth code dialog
+        // Open the OAuth code dialog even while auth is in progress
         appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
       }
     }, 100); // Check every 100ms
@@ -1526,6 +1526,17 @@ const App = (props: AppInternalProps) => {
                 onRestartRequest={handleSettingsRestart}
               />
             </Box>
+          ) : appState.openDialogs.oauthCode ? (
+            <Box flexDirection="column">
+              <OAuthCodeDialog
+                provider={
+                  ((global as Record<string, unknown>)
+                    .__oauth_provider as string) || 'anthropic'
+                }
+                onClose={handleOAuthCodeDialogClose}
+                onSubmit={handleOAuthCodeSubmit}
+              />
+            </Box>
           ) : isAuthenticating ? (
             <>
               <AuthInProgress onTimeout={handleAuthTimeout} />
@@ -1550,17 +1561,6 @@ const App = (props: AppInternalProps) => {
                 onSelect={handleAuthSelect}
                 settings={settings}
                 initialErrorMessage={authError}
-              />
-            </Box>
-          ) : appState.openDialogs.oauthCode ? (
-            <Box flexDirection="column">
-              <OAuthCodeDialog
-                provider={
-                  ((global as Record<string, unknown>)
-                    .__oauth_provider as string) || 'anthropic'
-                }
-                onClose={handleOAuthCodeDialogClose}
-                onSubmit={handleOAuthCodeSubmit}
               />
             </Box>
           ) : isEditorDialogOpen ? (
