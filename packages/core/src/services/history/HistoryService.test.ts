@@ -895,5 +895,52 @@ describe('HistoryService - Behavioral Tests', () => {
         expect(tokens).toBeGreaterThan(0);
       });
     });
+
+    describe('dispose', () => {
+      it('clears internal state, listeners, and caches', async () => {
+        const tokensUpdated = vi.fn();
+        service.on('tokensUpdated', tokensUpdated);
+        service.setBaseTokenOffset(42);
+
+        service.add(
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'hello' }],
+          },
+          'gpt-4',
+        );
+
+        // Simulate queued work and tokenizer cache entries
+        (service as unknown as { isCompressing: boolean }).isCompressing = true;
+        (
+          service as unknown as { pendingOperations: Array<() => void> }
+        ).pendingOperations.push(() => {});
+        (
+          service as unknown as { tokenizerCache: Map<string, unknown> }
+        ).tokenizerCache.set('gpt-4', {} as unknown);
+
+        await service.waitForTokenUpdates();
+
+        service.dispose();
+
+        expect(service.getAll()).toHaveLength(0);
+        expect(service.getTotalTokens()).toBe(0);
+        expect(service.listenerCount('tokensUpdated')).toBe(0);
+        expect(
+          (service as unknown as { tokenizerCache: Map<string, unknown> })
+            .tokenizerCache.size,
+        ).toBe(0);
+        expect(
+          (service as unknown as { pendingOperations: Array<() => void> })
+            .pendingOperations.length,
+        ).toBe(0);
+        expect(
+          (service as unknown as { baseTokenOffset: number }).baseTokenOffset,
+        ).toBe(0);
+        expect(
+          (service as unknown as { isCompressing: boolean }).isCompressing,
+        ).toBe(false);
+      });
+    });
   });
 });

@@ -317,6 +317,29 @@ jobs:
 
           echo "should_continue=true" >> "$GITHUB_OUTPUT"
 
+      - name: Configure git and working branch
+        if: steps.claim_issue.outputs.should_continue == 'true'
+        env:
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+          SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
+          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
+        run: |
+          set -euo pipefail
+          git config user.name "Luther[bot]"
+          git config user.email "luther-bot@vybestack.dev"
+          if [[ "${SELECTION_MODE}" == 'remediation' ]]; then
+            pr_number="${PR_NUMBER:-}"
+            if [[ -n "$pr_number" ]]; then
+              git fetch origin "pull/${pr_number}/head:${ISSUE_BRANCH}" --depth=1
+            else
+              git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}" --depth=1
+            fi
+            git checkout "$ISSUE_BRANCH"
+          else
+            git fetch origin main --depth=1
+            git checkout -B "$ISSUE_BRANCH" origin/main
+          fi
+
       - name: Set up Node.js
         if: steps.claim_issue.outputs.should_continue == 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # ratchet:actions/setup-node@v4.4.0
@@ -340,29 +363,6 @@ jobs:
       - name: Install LLxprt CLI nightly
         if: steps.claim_issue.outputs.should_continue == 'true'
         run: npm install -g @vybestack/llxprt-code@nightly
-
-      - name: Configure git and working branch
-        if: steps.claim_issue.outputs.should_continue == 'true'
-        env:
-          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
-          SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
-          PR_NUMBER: ${{ steps.select_issue.outputs.pr_number }}
-        run: |
-          set -euo pipefail
-          git config user.name "Luther[bot]"
-          git config user.email "luther-bot@vybestack.dev"
-          if [[ "${SELECTION_MODE}" == 'remediation' ]]; then
-            pr_number="${PR_NUMBER:-}"
-            if [[ -n "$pr_number" ]]; then
-              git fetch origin "pull/${pr_number}/head:${ISSUE_BRANCH}" --depth=1
-            else
-              git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}" --depth=1
-            fi
-            git checkout "$ISSUE_BRANCH"
-          else
-            git fetch origin main --depth=1
-            git checkout -B "$ISSUE_BRANCH" origin/main
-          fi
 
       - name: Run Luther attempts
         id: run_attempts
