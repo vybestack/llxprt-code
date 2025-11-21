@@ -395,8 +395,7 @@ jobs:
             --set modelparam.max_tokens=10000 \
             --set context-limit=121000 \
             --set base-url="${OPENAI_BASE_URL}" \
-            --set shell-replacement=true \
-            --prompt - | tee "${llxprt_log}"
+            --set shell-replacement=true | tee "${llxprt_log}"
           llxprt_status=${PIPESTATUS[1]}
           set -e
           if [[ ${llxprt_status} -ne 0 ]]; then

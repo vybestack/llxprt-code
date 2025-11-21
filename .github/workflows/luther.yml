@@ -490,8 +490,7 @@ jobs:
               --set modelparam.max_tokens=10000 \
               --set context-limit=121000 \
               --set base-url="${OPENAI_BASE_URL}" \
-              --set shell-replacement=true \
-              --prompt - 2>&1 | tee "$llxprt_log"
+              --set shell-replacement=true 2>&1 | tee "$llxprt_log"
             llxprt_exit="${PIPESTATUS[1]}"
             set -e
 
