@@ -47,6 +47,8 @@ export const ephemeralSettingHelp: Record<string, string> = {
     'Force providers to use OAuth authentication only, ignoring API keys and environment variables',
   dumponerror:
     'Dump API request body to ~/.llxprt/dumps/ on errors (enabled/disabled, default: disabled)',
+  'prompt-caching':
+    'Enable Anthropic prompt caching (off, 5m, 1h - default: off, Anthropic only)',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
@@ -223,6 +225,21 @@ export function parseEphemeralSettingValue(
     ) {
       parsedValue =
         parsedValue.toLowerCase() === 'true' ? 'enabled' : 'disabled';
+    } else {
+      return {
+        success: false,
+        message: `Invalid ${key} mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
+      };
+    }
+  }
+
+  if (key === 'prompt-caching') {
+    const validModes = ['off', '5m', '1h'];
+    if (
+      typeof parsedValue === 'string' &&
+      validModes.includes(parsedValue.toLowerCase())
+    ) {
+      parsedValue = parsedValue.toLowerCase();
     } else {
       return {
         success: false,

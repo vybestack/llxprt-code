@@ -54,6 +54,13 @@ export interface ProviderSettings {
     | 'deepseek'
     | 'gemma'
     | 'llama';
+  /**
+   * Anthropic prompt caching configuration
+   * - 'off': No caching (default)
+   * - '5m': 5-minute cache TTL
+   * - '1h': 1-hour cache TTL (requires extended-cache-ttl beta header)
+   */
+  'prompt-caching'?: 'off' | '5m' | '1h';
   [key: string]: unknown;
 }
 

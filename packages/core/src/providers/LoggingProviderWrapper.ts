@@ -888,13 +888,25 @@ export class LoggingProviderWrapper implements IProvider {
     cached_content_token_count: number;
     thoughts_token_count: number;
     tool_token_count: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
   } {
+    const cacheReads = Number(tokenUsage.cache_read_input_tokens) || 0;
+    const cacheWrites = Number(tokenUsage.cache_creation_input_tokens) || 0;
+
+    this.debug.debug(
+      () =>
+        `[extractTokenCountsFromTokenUsage] Extracting from UsageStats: cacheReads=${cacheReads}, cacheWrites=${cacheWrites}, raw values: cache_read=${tokenUsage.cache_read_input_tokens}, cache_creation=${tokenUsage.cache_creation_input_tokens}`,
+    );
+
     return {
       input_token_count: Number(tokenUsage.promptTokens) || 0,
       output_token_count: Number(tokenUsage.completionTokens) || 0,
       cached_content_token_count: 0, // Not available in basic UsageStats
       thoughts_token_count: 0, // Not available in basic UsageStats
       tool_token_count: 0, // Not available in basic UsageStats
+      cache_read_input_tokens: cacheReads,
+      cache_creation_input_tokens: cacheWrites,
     };
   }
 
@@ -907,6 +919,8 @@ export class LoggingProviderWrapper implements IProvider {
     cached_content_token_count: number;
     thoughts_token_count: number;
     tool_token_count: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
   } {
     // Initialize token counts as zeros
     let input_token_count = 0;
@@ -914,6 +928,8 @@ export class LoggingProviderWrapper implements IProvider {
     let cached_content_token_count = 0;
     let thoughts_token_count = 0;
     let tool_token_count = 0;
+    let cache_read_input_tokens = 0;
+    let cache_creation_input_tokens = 0;
 
     try {
       // Check if response is a string and try to parse it as JSON
@@ -927,6 +943,10 @@ export class LoggingProviderWrapper implements IProvider {
             Number(parsed.usage.cached_content_tokens) || 0;
           thoughts_token_count = Number(parsed.usage.thoughts_tokens) || 0;
           tool_token_count = Number(parsed.usage.tool_tokens) || 0;
+          cache_read_input_tokens =
+            Number(parsed.usage.cache_read_input_tokens) || 0;
+          cache_creation_input_tokens =
+            Number(parsed.usage.cache_creation_input_tokens) || 0;
         }
       } else if (response && typeof response === 'object') {
         // Extract token usage from response object
@@ -938,6 +958,9 @@ export class LoggingProviderWrapper implements IProvider {
           cached_content_token_count = Number(usage.cached_content_tokens) || 0;
           thoughts_token_count = Number(usage.thoughts_tokens) || 0;
           tool_token_count = Number(usage.tool_tokens) || 0;
+          cache_read_input_tokens = Number(usage.cache_read_input_tokens) || 0;
+          cache_creation_input_tokens =
+            Number(usage.cache_creation_input_tokens) || 0;
         }
 
         // Check for anthropic-style headers
@@ -970,6 +993,8 @@ export class LoggingProviderWrapper implements IProvider {
         cached_content_token_count: Math.max(0, cached_content_token_count),
         thoughts_token_count: Math.max(0, thoughts_token_count),
         tool_token_count: Math.max(0, tool_token_count),
+        cache_read_input_tokens: Math.max(0, cache_read_input_tokens),
+        cache_creation_input_tokens: Math.max(0, cache_creation_input_tokens),
       };
     } catch (_error) {
       // Return zero counts if extraction fails
@@ -979,6 +1004,8 @@ export class LoggingProviderWrapper implements IProvider {
         cached_content_token_count: 0,
         thoughts_token_count: 0,
         tool_token_count: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
       };
     }
   }
@@ -993,6 +1020,8 @@ export class LoggingProviderWrapper implements IProvider {
       cached_content_token_count: number;
       thoughts_token_count: number;
       tool_token_count: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
     },
     config: Config | undefined,
   ): void {
@@ -1003,14 +1032,22 @@ export class LoggingProviderWrapper implements IProvider {
       cache: tokenCounts.cached_content_token_count || 0,
       thought: tokenCounts.thoughts_token_count || 0,
       tool: tokenCounts.tool_token_count || 0,
+      cacheReads: tokenCounts.cache_read_input_tokens || 0,
+      cacheWrites: tokenCounts.cache_creation_input_tokens || 0,
     };
+
+    this.debug.debug(
+      () =>
+        `[accumulateTokenUsage] Mapped tokenCounts to usage: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`,
+    );
 
     // Call accumulateSessionTokens if providerManager is available
     const providerManager = config?.getProviderManager();
     if (providerManager) {
       try {
-        console.debug(
-          `[TokenTracking] Accumulating ${usage.input + usage.output + usage.cache + usage.tool + usage.thought} tokens for provider ${this.wrapped.name}`,
+        this.debug.debug(
+          () =>
+            `[TokenTracking] Accumulating ${usage.input + usage.output + usage.cache + usage.tool + usage.thought} tokens for provider ${this.wrapped.name}, cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`,
         );
         providerManager.accumulateSessionTokens(this.wrapped.name, usage);
       } catch (error) {

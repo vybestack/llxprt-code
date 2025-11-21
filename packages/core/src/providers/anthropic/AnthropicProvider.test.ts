@@ -815,10 +815,11 @@ describe('AnthropicProvider', () => {
 
       // Filter out usage chunks for verification
       const usageChunks = chunks.filter((c) => c.metadata?.usage);
-      expect(usageChunks).toHaveLength(1);
+      expect(usageChunks.length).toBeGreaterThan(0);
 
-      // Check usage from message_delta
-      expect(usageChunks[0].metadata?.usage).toEqual({
+      // Check usage from message_delta (the last usage chunk)
+      const lastUsageChunk = usageChunks[usageChunks.length - 1];
+      expect(lastUsageChunk.metadata?.usage).toMatchObject({
         promptTokens: 10,
         completionTokens: 5,
         totalTokens: 15,
@@ -1076,5 +1077,520 @@ describe('AnthropicProvider', () => {
         expect(anthropicMessages).toHaveLength(3);
       },
     );
+  });
+
+  describe('Prompt Caching', () => {
+    beforeEach(() => {
+      // Ensure streaming is disabled for all caching tests to use non-streaming mocks
+      settingsService.setProviderSetting('anthropic', 'streaming', 'disabled');
+
+      // Create a new provider with proper config that includes getEphemeralSettings
+      provider = new AnthropicProvider('test-api-key', undefined, {
+        ...TEST_PROVIDER_CONFIG,
+        getEphemeralSettings: () => ({
+          ...settingsService.getAllGlobalSettings(),
+          ...settingsService.getProviderSettings('anthropic'),
+        }),
+      });
+
+      if (runtimeContext.config) {
+        runtimeContext.config.getEphemeralSettings = () => ({
+          ...settingsService.getAllGlobalSettings(),
+          ...settingsService.getProviderSettings(provider.name),
+        });
+      }
+    });
+
+    describe('Cache Control Structure', () => {
+      it('should not add cache_control when prompt-caching is off (default)', async () => {
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(request.system).toBeDefined();
+
+        if (Array.isArray(request.system)) {
+          const systemBlocks = request.system as Array<{
+            type: string;
+            text: string;
+            cache_control?: unknown;
+          }>;
+          systemBlocks.forEach((block) => {
+            expect(block.cache_control).toBeUndefined();
+          });
+        }
+      });
+
+      it('should add cache_control with 5m TTL when prompt-caching is 5m', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 3200,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(Array.isArray(request.system)).toBe(true);
+
+        const systemBlocks = request.system as Array<{
+          type: string;
+          text: string;
+          cache_control?: { type: string; ttl?: string };
+        }>;
+        expect(systemBlocks.length).toBeGreaterThan(0);
+
+        const lastBlock = systemBlocks[systemBlocks.length - 1];
+        expect(lastBlock.cache_control).toEqual({
+          type: 'ephemeral',
+          ttl: '5m',
+        });
+      });
+
+      it('should add cache_control with 1h TTL when prompt-caching is 1h', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '1h');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 3200,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(Array.isArray(request.system)).toBe(true);
+
+        const systemBlocks = request.system as Array<{
+          type: string;
+          text: string;
+          cache_control?: { type: string; ttl?: string };
+        }>;
+        expect(systemBlocks.length).toBeGreaterThan(0);
+
+        const lastBlock = systemBlocks[systemBlocks.length - 1];
+        expect(lastBlock.cache_control).toEqual({
+          type: 'ephemeral',
+          ttl: '1h',
+        });
+      });
+
+      it('should add extended-cache-ttl beta header for 1h TTL', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '1h');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const call = mockMessagesCreate.mock.calls[0];
+        expect(call).toBeDefined();
+
+        const options = call?.[1];
+        expect(options).toBeDefined();
+        expect(options?.headers).toBeDefined();
+        expect(options?.headers?.['anthropic-beta']).toContain(
+          'extended-cache-ttl-2025-04-11',
+        );
+      });
+
+      it('should not add beta header for 5m TTL', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator.next();
+
+        const call = mockMessagesCreate.mock.calls[0];
+        const options = call?.[1];
+
+        if (options?.headers?.['anthropic-beta']) {
+          expect(options.headers['anthropic-beta']).not.toContain(
+            'extended-cache-ttl-2025-04-11',
+          );
+        }
+      });
+    });
+
+    describe('Stable Tool Ordering', () => {
+      it('should sort tools alphabetically by name', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        const tools = [
+          {
+            functionDeclarations: [
+              {
+                name: 'zebra_tool',
+                description: 'Z tool',
+                parameters: { type: 'object', properties: {} },
+              },
+              {
+                name: 'alpha_tool',
+                description: 'A tool',
+                parameters: { type: 'object', properties: {} },
+              },
+              {
+                name: 'middle_tool',
+                description: 'M tool',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+          },
+        ];
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages, { tools }),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(request.tools).toBeDefined();
+
+        const toolNames = request.tools.map((t: { name: string }) => t.name);
+        expect(toolNames).toEqual(['alpha_tool', 'middle_tool', 'zebra_tool']);
+      });
+
+      it('should sort JSON schema keys alphabetically', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+          },
+        });
+
+        const tools = [
+          {
+            functionDeclarations: [
+              {
+                name: 'test_tool',
+                description: 'Test',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    zebra: { type: 'string' },
+                    apple: { type: 'number' },
+                    middle: { type: 'boolean' },
+                  },
+                },
+              },
+            ],
+          },
+        ];
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages, { tools }),
+        );
+        await generator.next();
+
+        const request = mockMessagesCreate.mock.calls[0][0];
+        expect(request.tools).toBeDefined();
+
+        const tool = request.tools[0];
+        const propertyKeys = Object.keys(tool.input_schema.properties);
+        expect(propertyKeys).toEqual(['apple', 'middle', 'zebra']);
+      });
+    });
+
+    describe('Cache Metrics Extraction', () => {
+      it('should extract cache metrics from non-streaming response', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 3200,
+            cache_creation_input_tokens: 0,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        const result = await generator.next();
+
+        expect(result.value).toBeDefined();
+        const content = result.value as IContent;
+        expect(content.metadata?.usage).toBeDefined();
+        expect(content.metadata?.usage?.cache_read_input_tokens).toBe(3200);
+        expect(content.metadata?.usage?.cache_creation_input_tokens).toBe(0);
+      });
+
+      it('should extract cache metrics from streaming response', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+        // Enable streaming for this test
+        settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
+
+        // Recreate provider with streaming enabled
+        provider = new AnthropicProvider('test-api-key', undefined, {
+          ...TEST_PROVIDER_CONFIG,
+          getEphemeralSettings: () => ({
+            ...settingsService.getAllGlobalSettings(),
+            ...settingsService.getProviderSettings('anthropic'),
+          }),
+        });
+
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'message_start',
+              message: {
+                usage: {
+                  input_tokens: 100,
+                  output_tokens: 0,
+                  cache_read_input_tokens: 3200,
+                  cache_creation_input_tokens: 0,
+                },
+              },
+            };
+            yield {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: 'Hello' },
+            };
+            yield {
+              type: 'message_delta',
+              usage: { input_tokens: 100, output_tokens: 5 },
+            };
+          },
+        };
+
+        mockMessagesCreate.mockResolvedValue(mockStream);
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Say hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+
+        const chunks = [];
+        for await (const chunk of generator) {
+          chunks.push(chunk);
+        }
+
+        const usageChunk = chunks.find(
+          (c) => c.metadata?.usage?.cache_read_input_tokens !== undefined,
+        );
+        expect(usageChunk).toBeDefined();
+        expect(usageChunk?.metadata?.usage?.cache_read_input_tokens).toBe(3200);
+        expect(usageChunk?.metadata?.usage?.cache_creation_input_tokens).toBe(
+          0,
+        );
+      });
+
+      it('should handle cache creation on first request', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 3200,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        const result = await generator.next();
+
+        const content = result.value as IContent;
+        expect(content.metadata?.usage?.cache_read_input_tokens).toBe(0);
+        expect(content.metadata?.usage?.cache_creation_input_tokens).toBe(3200);
+      });
+    });
+
+    describe('Cache Hit Rate Calculation', () => {
+      it('should calculate 0% hit rate on cache write (first request)', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 3200,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        const result = await generator.next();
+
+        const content = result.value as IContent;
+        const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
+        const input = content.metadata?.usage?.promptTokens ?? 0;
+        const hitRate = (cacheRead / (cacheRead + input)) * 100;
+
+        expect(hitRate).toBe(0);
+      });
+
+      it('should calculate high hit rate on cache read (subsequent requests)', async () => {
+        settingsService.setProviderSetting('anthropic', 'prompt-caching', '5m');
+
+        mockMessagesCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 3200,
+            cache_creation_input_tokens: 0,
+          },
+        });
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        const result = await generator.next();
+
+        const content = result.value as IContent;
+        const cacheRead = content.metadata?.usage?.cache_read_input_tokens ?? 0;
+        const input = content.metadata?.usage?.promptTokens ?? 0;
+        const hitRate = (cacheRead / (cacheRead + input)) * 100;
+
+        expect(hitRate).toBeGreaterThan(90);
+        expect(cacheRead).toBe(3200);
+      });
+    });
   });
 });

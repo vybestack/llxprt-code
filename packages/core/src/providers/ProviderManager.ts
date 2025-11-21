@@ -69,6 +69,14 @@ interface ProviderManagerInit {
   settingsService?: SettingsService;
 }
 
+export interface CacheStatistics {
+  totalCacheReads: number;
+  totalCacheWrites: number;
+  requestsWithCacheHits: number;
+  requestsWithCacheWrites: number;
+  hitRate: number;
+}
+
 export class ProviderManager implements IProviderManager {
   private providers: Map<string, IProvider>;
   private serverToolsProvider: IProvider | null;
@@ -95,6 +103,13 @@ export class ProviderManager implements IProviderManager {
     tool: 0,
     thought: 0,
     total: 0,
+  };
+  private cacheStats: CacheStatistics = {
+    totalCacheReads: 0,
+    totalCacheWrites: 0,
+    requestsWithCacheHits: 0,
+    requestsWithCacheWrites: 0,
+    hitRate: 0,
   };
 
   constructor(init?: ProviderManagerInit | ProviderRuntimeContext) {
@@ -993,8 +1008,14 @@ export class ProviderManager implements IProviderManager {
       cache: number;
       tool: number;
       thought: number;
+      cacheReads?: number;
+      cacheWrites?: number;
     },
   ): void {
+    console.log(
+      `[ProviderManager.accumulateSessionTokens] Called with: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}, cacheReads===undefined: ${usage.cacheReads === undefined}, cacheWrites===undefined: ${usage.cacheWrites === undefined}`,
+    );
+
     // Only accumulate non-negative values
     this.sessionTokenUsage.input += Math.max(0, usage.input || 0);
     this.sessionTokenUsage.output += Math.max(0, usage.output || 0);
@@ -1007,6 +1028,21 @@ export class ProviderManager implements IProviderManager {
       Math.max(0, usage.cache || 0) +
       Math.max(0, usage.tool || 0) +
       Math.max(0, usage.thought || 0);
+
+    // Track cache reads/writes if provided
+    if (usage.cacheReads !== undefined || usage.cacheWrites !== undefined) {
+      console.log(
+        `[ProviderManager.accumulateSessionTokens] Received cache usage: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}`,
+      );
+      this.trackCacheUsage(
+        Math.max(0, usage.cacheReads || 0),
+        Math.max(0, usage.cacheWrites || 0),
+      );
+    } else {
+      console.log(
+        `[ProviderManager.accumulateSessionTokens] No cache usage in this request`,
+      );
+    }
   }
 
   /**
@@ -1043,6 +1079,46 @@ export class ProviderManager implements IProviderManager {
       thought: this.sessionTokenUsage.thought || 0,
       total: this.sessionTokenUsage.total || 0,
     };
+  }
+
+  /**
+   * Track cache read/write statistics from a request
+   */
+  trackCacheUsage(cacheReads: number, cacheWrites: number): void {
+    console.log(
+      `[ProviderManager.trackCacheUsage] Called with cacheReads=${cacheReads}, cacheWrites=${cacheWrites}`,
+    );
+    if (cacheReads > 0) {
+      this.cacheStats.totalCacheReads += cacheReads;
+      this.cacheStats.requestsWithCacheHits++;
+      console.log(
+        `[ProviderManager.trackCacheUsage] Updated totalCacheReads to ${this.cacheStats.totalCacheReads}`,
+      );
+    }
+    if (cacheWrites > 0) {
+      this.cacheStats.totalCacheWrites += cacheWrites;
+      this.cacheStats.requestsWithCacheWrites++;
+      console.log(
+        `[ProviderManager.trackCacheUsage] Updated totalCacheWrites to ${this.cacheStats.totalCacheWrites}`,
+      );
+    }
+
+    // Recalculate hit rate
+    const totalPromptTokens = this.sessionTokenUsage.input;
+    if (totalPromptTokens > 0) {
+      this.cacheStats.hitRate =
+        (this.cacheStats.totalCacheReads / totalPromptTokens) * 100;
+      console.log(
+        `[ProviderManager.trackCacheUsage] Updated hitRate to ${this.cacheStats.hitRate}%`,
+      );
+    }
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStatistics(): CacheStatistics {
+    return { ...this.cacheStats };
   }
 
   /**

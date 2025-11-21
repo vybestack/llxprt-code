@@ -121,6 +121,10 @@ export class AnthropicProvider extends BaseProvider {
     return new DebugLogger('llxprt:anthropic:errors');
   }
 
+  private getCacheLogger() {
+    return new DebugLogger('llxprt:anthropic:cache');
+  }
+
   private instantiateClient(authToken: string, baseURL?: string): Anthropic {
     const isOAuthToken = authToken.startsWith('sk-ant-oat');
     const clientConfig: Record<string, unknown> = {
@@ -673,6 +677,41 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
+   * Sort object keys alphabetically for stable JSON serialization
+   * This prevents cache invalidation due to key order changes
+   */
+  private sortObjectKeys<T extends Record<string, unknown>>(obj: T): T {
+    const sorted = Object.keys(obj)
+      .sort()
+      .reduce(
+        (acc, key) => {
+          acc[key] = obj[key];
+          return acc;
+        },
+        {} as Record<string, unknown>,
+      );
+    return sorted as T;
+  }
+
+  /**
+   * Merge beta headers, ensuring no duplicates
+   */
+  private mergeBetaHeaders(
+    existing: string | undefined,
+    addition: string,
+  ): string {
+    if (!existing) return addition;
+    const parts = new Set(
+      existing
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+    parts.add(addition);
+    return Array.from(parts).join(', ');
+  }
+
+  /**
    * @plan PLAN-20251023-STATELESS-HARDENING.P08
    * @requirement REQ-SP4-002, REQ-SP4-003
    * @project-plans/20251023stateless4/analysis/pseudocode/provider-cache-elimination.md line 11
@@ -985,7 +1024,7 @@ export class AnthropicProvider extends BaseProvider {
     const needsQwenParameterProcessing = detectedFormat === 'qwen';
 
     // Convert Gemini format tools to anthropic format (always for Anthropic API)
-    const anthropicTools = callFormatter.convertGeminiToFormat(
+    let anthropicTools = callFormatter.convertGeminiToFormat(
       tools,
       'anthropic', // Always use anthropic format for the API structure
     ) as
@@ -999,6 +1038,25 @@ export class AnthropicProvider extends BaseProvider {
           };
         }>
       | undefined;
+
+    // Stabilize tool ordering and JSON schema keys to prevent cache invalidation
+    if (anthropicTools && anthropicTools.length > 0) {
+      anthropicTools = [...anthropicTools]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((tool) => {
+          const schema = tool.input_schema;
+          if (schema.properties) {
+            return {
+              ...tool,
+              input_schema: {
+                ...schema,
+                properties: this.sortObjectKeys(schema.properties),
+              },
+            };
+          }
+          return tool;
+        });
+    }
 
     const toolNamesForPrompt =
       tools === undefined
@@ -1036,6 +1094,25 @@ export class AnthropicProvider extends BaseProvider {
         | Record<string, unknown>
         | undefined) || {};
 
+    // Get caching setting from ephemeral settings (session override) or provider settings
+    const providerSettings =
+      this.resolveSettingsService().getProviderSettings(this.name) ?? {};
+    const cachingSetting =
+      (configEphemeralSettings['prompt-caching'] as
+        | 'off'
+        | '5m'
+        | '1h'
+        | undefined) ??
+      (providerSettings['prompt-caching'] as 'off' | '5m' | '1h' | undefined) ??
+      '1h';
+    const wantCaching = cachingSetting !== 'off';
+    const ttl = cachingSetting === '1h' ? '1h' : '5m';
+
+    const cacheLogger = this.getCacheLogger();
+    if (wantCaching) {
+      cacheLogger.debug(() => `Prompt caching enabled with TTL: ${ttl}`);
+    }
+
     // For OAuth mode, inject core system prompt as the first human message
     if (isOAuth) {
       const corePrompt = await getCoreSystemPromptAsync(
@@ -1044,13 +1121,33 @@ export class AnthropicProvider extends BaseProvider {
         toolNamesForPrompt,
       );
       if (corePrompt) {
-        anthropicMessages.unshift({
-          role: 'user',
-          content: `<system>\n${corePrompt}\n</system>\n\nUser provided conversation begins here:`,
-        });
+        if (wantCaching) {
+          anthropicMessages.unshift({
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `<system>\n${corePrompt}\n</system>\n\nUser provided conversation begins here:`,
+                cache_control: { type: 'ephemeral', ttl } as {
+                  type: 'ephemeral';
+                  ttl?: '5m' | '1h';
+                },
+              } as { type: 'text'; text: string; cache_control?: unknown },
+            ],
+          });
+          cacheLogger.debug(
+            () => 'Added cache_control to OAuth system message',
+          );
+        } else {
+          anthropicMessages.unshift({
+            role: 'user',
+            content: `<system>\n${corePrompt}\n</system>\n\nUser provided conversation begins here:`,
+          });
+        }
       }
     }
 
+    // Build system field with caching support
     const systemPrompt = !isOAuth
       ? await getCoreSystemPromptAsync(
           userMemory,
@@ -1058,19 +1155,40 @@ export class AnthropicProvider extends BaseProvider {
           toolNamesForPrompt,
         )
       : undefined;
+
+    let systemField: Record<string, unknown> = {};
+    if (isOAuth) {
+      systemField = {
+        system: "You are Claude Code, Anthropic's official CLI for Claude.",
+      };
+    } else if (systemPrompt) {
+      if (wantCaching) {
+        // Use array format with cache_control breakpoint
+        systemField = {
+          system: [
+            {
+              type: 'text',
+              text: systemPrompt,
+              cache_control: { type: 'ephemeral', ttl },
+            },
+          ],
+        };
+        cacheLogger.debug(
+          () => `Added cache_control to system prompt (${ttl})`,
+        );
+      } else {
+        // Use string format (no caching)
+        systemField = { system: systemPrompt };
+      }
+    }
+
     const requestBody = {
       model: currentModel,
       messages: anthropicMessages,
       max_tokens: this.getMaxTokensForModel(currentModel),
       stream: streamingEnabled,
       ...requestOverrides, // Use derived ephemeral overrides instead of memoized instance state
-      ...(isOAuth
-        ? {
-            system: "You are Claude Code, Anthropic's official CLI for Claude.",
-          }
-        : systemPrompt
-          ? { system: systemPrompt }
-          : {}),
+      ...systemField,
       ...(anthropicTools && anthropicTools.length > 0
         ? { tools: anthropicTools }
         : {}),
@@ -1090,9 +1208,42 @@ export class AnthropicProvider extends BaseProvider {
     }
 
     // Make the API call with retry logic
-    const customHeaders = this.getCustomHeaders();
+    let customHeaders = this.getCustomHeaders() || {};
+
+    // For OAuth, always include the oauth beta header in customHeaders
+    // to ensure it's not overridden by cache headers
+    if (isOAuth) {
+      const existingBeta = customHeaders['anthropic-beta'] as
+        | string
+        | undefined;
+      customHeaders = {
+        ...customHeaders,
+        'anthropic-beta': this.mergeBetaHeaders(
+          existingBeta,
+          'oauth-2025-04-20',
+        ),
+      };
+    }
+
+    // Add extended-cache-ttl beta header for 1h caching
+    if (wantCaching && ttl === '1h') {
+      const existingBeta = customHeaders['anthropic-beta'] as
+        | string
+        | undefined;
+      customHeaders = {
+        ...customHeaders,
+        'anthropic-beta': this.mergeBetaHeaders(
+          existingBeta,
+          'extended-cache-ttl-2025-04-11',
+        ),
+      };
+      cacheLogger.debug(
+        () => 'Added extended-cache-ttl-2025-04-11 beta header for 1h caching',
+      );
+    }
+
     const apiCall = () =>
-      customHeaders
+      Object.keys(customHeaders).length > 0
         ? client.messages.create(
             requestBody as Parameters<typeof client.messages.create>[0],
             { headers: customHeaders },
@@ -1120,7 +1271,56 @@ export class AnthropicProvider extends BaseProvider {
       this.getStreamingLogger().debug(() => 'Processing streaming response');
 
       for await (const chunk of stream) {
-        if (chunk.type === 'content_block_start') {
+        if (chunk.type === 'message_start') {
+          // Extract cache metrics from message_start event
+          const usage = (
+            chunk as unknown as {
+              message?: {
+                usage?: {
+                  input_tokens?: number;
+                  output_tokens?: number;
+                  cache_read_input_tokens?: number;
+                  cache_creation_input_tokens?: number;
+                };
+              };
+            }
+          ).message?.usage;
+          if (usage) {
+            const cacheRead = usage.cache_read_input_tokens ?? 0;
+            const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+
+            cacheLogger.debug(
+              () =>
+                `[AnthropicProvider streaming] Emitting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
+            );
+
+            if (cacheRead > 0 || cacheCreation > 0) {
+              cacheLogger.debug(() => {
+                const hitRate =
+                  cacheRead + (usage.input_tokens ?? 0) > 0
+                    ? (cacheRead / (cacheRead + (usage.input_tokens ?? 0))) *
+                      100
+                    : 0;
+                return `Cache metrics: read=${cacheRead}, creation=${cacheCreation}, hit_rate=${hitRate.toFixed(1)}%`;
+              });
+            }
+
+            yield {
+              speaker: 'ai',
+              blocks: [],
+              metadata: {
+                usage: {
+                  promptTokens: usage.input_tokens ?? 0,
+                  completionTokens: usage.output_tokens ?? 0,
+                  totalTokens:
+                    (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+                  cache_read_input_tokens: cacheRead,
+                  cache_creation_input_tokens: cacheCreation,
+                },
+              },
+            } as IContent;
+          }
+        } else if (chunk.type === 'content_block_start') {
           if (chunk.content_block.type === 'tool_use') {
             const toolBlock = chunk.content_block as ToolUseBlock;
             this.getStreamingLogger().debug(
@@ -1235,12 +1435,38 @@ export class AnthropicProvider extends BaseProvider {
 
       // Add usage metadata if present
       if (message.usage) {
+        const usage = message.usage as {
+          input_tokens: number;
+          output_tokens: number;
+          cache_read_input_tokens?: number;
+          cache_creation_input_tokens?: number;
+        };
+
+        const cacheRead = usage.cache_read_input_tokens ?? 0;
+        const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+
+        cacheLogger.debug(
+          () =>
+            `[AnthropicProvider non-streaming] Setting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
+        );
+
+        if (cacheRead > 0 || cacheCreation > 0) {
+          cacheLogger.debug(() => {
+            const hitRate =
+              cacheRead + usage.input_tokens > 0
+                ? (cacheRead / (cacheRead + usage.input_tokens)) * 100
+                : 0;
+            return `Cache metrics: read=${cacheRead}, creation=${cacheCreation}, hit_rate=${hitRate.toFixed(1)}%`;
+          });
+        }
+
         result.metadata = {
           usage: {
-            promptTokens: message.usage.input_tokens,
-            completionTokens: message.usage.output_tokens,
-            totalTokens:
-              message.usage.input_tokens + message.usage.output_tokens,
+            promptTokens: usage.input_tokens,
+            completionTokens: usage.output_tokens,
+            totalTokens: usage.input_tokens + usage.output_tokens,
+            cache_read_input_tokens: cacheRead,
+            cache_creation_input_tokens: cacheCreation,
           },
         };
       }
@@ -1260,6 +1486,22 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   private shouldRetryAnthropicResponse(error: unknown): boolean {
+    // Check for Anthropic-specific error types (overloaded_error)
+    if (error && typeof error === 'object') {
+      const errorObj = error as {
+        error?: { type?: string; message?: string };
+        type?: string;
+      };
+      const errorType = errorObj.error?.type || errorObj.type;
+
+      if (errorType === 'overloaded_error') {
+        this.getLogger().debug(
+          () => 'Will retry Anthropic request due to overloaded_error',
+        );
+        return true;
+      }
+    }
+
     const status = getErrorStatus(error);
     if (status === 429 || (status && status >= 500 && status < 600)) {
       this.getLogger().debug(

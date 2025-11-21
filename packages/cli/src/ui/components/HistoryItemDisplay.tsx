@@ -20,6 +20,7 @@ import { AboutBox } from './AboutBox.js';
 import { StatsDisplay } from './StatsDisplay.js';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
 import { ToolStatsDisplay } from './ToolStatsDisplay.js';
+import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
 import { Help } from './Help.js';
 import { Config } from '@vybestack/llxprt-code-core';
@@ -91,6 +92,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
     {item.type === 'stats' && <StatsDisplay duration={item.duration} />}
     {item.type === 'model_stats' && <ModelStatsDisplay />}
     {item.type === 'tool_stats' && <ToolStatsDisplay />}
+    {item.type === 'cache_stats' && <CacheStatsDisplay />}
     {item.type === 'quit' && <SessionSummaryDisplay duration={item.duration} />}
     {item.type === 'tool_group' && (
       <ToolGroupMessage
