@@ -39,7 +39,6 @@ jobs:
       LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
       LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
       KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
-      CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
       LUTHER_MAX_ATTEMPTS: 3
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       LLXPRT_DEBUG: ${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}
@@ -477,14 +476,14 @@ jobs:
             llxprt_log="${attempt_dir}/llxprt.log"
             set +e
             llxprt \
-              --provider openai \
-              --model zai-glm-4.6 \
+              --provider "${LLXPRT_DEFAULT_PROVIDER}" \
+              --model "${LLXPRT_DEFAULT_MODEL}" \
               --yolo \
-              --key "${CEREBRAS_API_KEY}" \
+              --key "${OPENAI_API_KEY}" \
               --set modelparam.temperature=1 \
               --set modelparam.max_tokens=10000 \
               --set context-limit=121000 \
-              --set base-url=https://api.cerebras.ai/v1 \
+              --set base-url="${OPENAI_BASE_URL}" \
               --set shell-replacement=true \
               --prompt "$(cat "$prompt_file")" 2>&1 | tee "$llxprt_log"
             llxprt_exit="${PIPESTATUS[0]}"
