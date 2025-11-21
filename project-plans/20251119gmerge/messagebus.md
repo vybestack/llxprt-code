@@ -2,6 +2,19 @@
 
 ## 1. Upstream Commit Details
 
+### Important Note on Commit Availability
+
+The commits listed below (`ba85aa49c`, `b8df8b2ab`, etc.) are from upstream's **main branch**, not the v0.6.1→v0.7.0 tag range. They were not included in the original cherry-pick assessment because that assessment only covered commits between release tags.
+
+**Action Required:** These commits must be fetched separately from `upstream/main` or reimplemented custom for llxprt's architecture. Direct cherry-picking is not recommended due to the significant architectural differences in:
+- Multi-provider model routing
+- AppContainer state management
+- Extension system differences
+
+**Recommended Approach:** Reimplement based on upstream patterns but adapted for llxprt's architecture, using this plan as the specification.
+
+---
+
 ### Commit ba85aa49c - Tool Confirmation Message Bus foundation
 **Files Created/Modified:**
 - `packages/core/src/confirmation-bus/index.ts` (8 lines) - exports
@@ -345,6 +358,33 @@ getEnableMessageBusIntegration(): boolean {
 5. **MCP integration** - mcp-tool, tool-registry
 6. **Discovered tools** - tool-registry DiscoveredTool class
 
+### Phase C.6: UI Integration (0.5 days)
+
+1. Update `ToolCallConfirmationDetails` interface with `correlationId` field
+2. Modify `ToolConfirmationMessage.tsx` to publish via message bus when feature flag enabled
+3. Add message bus subscription to AppContainer for `TOOL_CONFIRMATION_REQUEST` events
+4. Wire IDE confirmation pathway through message bus (wrap existing promise pattern)
+5. Add integration tests for UI ↔ bus ↔ scheduler flow:
+   - Test confirmation request flows from scheduler to UI
+   - Test confirmation response flows from UI back to scheduler
+   - Test correlation ID matching
+   - Test backward compatibility with feature flag off
+
+### Phase C.7: Legacy Migration (0.5 days)
+
+1. Implement `migrateLegacyApprovalMode()` in `packages/core/src/policy/config.ts`
+2. Bridge `--allowed-tools` CLI flag to priority 2.3 policy rules
+3. Bridge `--exclude-tools` CLI flag to priority 2.4 policy rules (if exists)
+4. Add feature flag guards to CoreToolScheduler:
+   - Check `config.getEnableMessageBusIntegration()` before using message bus
+   - Fall back to legacy `shouldConfirmExecute()` pattern when disabled
+5. Write migration tests:
+   - YOLO mode → wildcard allow-all at 1.999
+   - AUTO_EDIT mode → write tools allow at 1.015
+   - --allowed-tools → priority 2.3 rules
+   - Priority precedence tests (higher priority wins)
+6. Update any tools that directly call `config.getApprovalMode()` to use new path
+
 ---
 
 ## 6. New Section - Multi-Provider Considerations
@@ -372,6 +412,183 @@ priority = 150
 ### Provider Hints in Tools
 
 Tools that are provider-specific should still work with the policy engine since rules match by tool name, not provider. The policy engine doesn't need to know about providers.
+
+---
+
+## 6.5. UI Consumption Integration
+
+This section details how the React UI layer integrates with the message bus for tool confirmations.
+
+### AppContainer Subscription Pattern
+
+The AppContainer component must subscribe to message bus events to receive tool confirmation requests and publish user responses:
+
+```typescript
+// In AppContainer.tsx
+import { useEffect, useState } from 'react';
+import type { ToolCallConfirmationDetails } from '../types.js';
+import { MessageBusType, type ToolConfirmationRequest } from '@anthropic/core';
+
+export function AppContainer({ config }: AppContainerProps) {
+  const [confirmationRequest, setConfirmationRequest] = useState<{
+    correlationId: string;
+    toolCall: ToolCallConfirmationDetails;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!config.getEnableMessageBusIntegration()) return;
+
+    const messageBus = config.getMessageBus();
+    const unsubscribe = messageBus.subscribe(
+      MessageBusType.TOOL_CONFIRMATION_REQUEST,
+      (message: ToolConfirmationRequest) => {
+        // Bridge to existing UI state
+        setConfirmationRequest({
+          correlationId: message.correlationId,
+          toolCall: {
+            correlationId: message.correlationId,
+            toolName: message.toolCall.name,
+            args: message.toolCall.args,
+            // ... map to existing ToolCallConfirmationDetails
+          },
+        });
+      },
+    );
+    return unsubscribe;
+  }, [config]);
+
+  // When user confirms:
+  const handleConfirm = (outcome: ToolConfirmationOutcome) => {
+    if (!confirmationRequest) return;
+
+    const messageBus = config.getMessageBus();
+    messageBus.publish({
+      type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+      correlationId: confirmationRequest.correlationId,
+      confirmed: outcome !== ToolConfirmationOutcome.Cancel,
+    });
+
+    setConfirmationRequest(null);
+  };
+
+  // ... rest of component
+}
+```
+
+### ToolConfirmationMessage Changes
+
+The `ToolConfirmationMessage.tsx` component must be updated to publish to the message bus instead of calling direct callbacks:
+
+**Before (direct callback):**
+```typescript
+const handleProceed = () => {
+  onConfirm(ToolConfirmationOutcome.Proceed);
+};
+```
+
+**After (message bus publish):**
+```typescript
+const handleProceed = () => {
+  if (config.getEnableMessageBusIntegration()) {
+    const messageBus = config.getMessageBus();
+    messageBus.publish({
+      type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+      correlationId: confirmationDetails.correlationId,
+      confirmed: true,
+    });
+  } else {
+    // Legacy path
+    onConfirm(ToolConfirmationOutcome.Proceed);
+  }
+};
+```
+
+### Correlation ID Pattern
+
+The `correlationId` links UI responses back to pending tool calls in the CoreToolScheduler:
+
+**Interface Update:**
+```typescript
+// In packages/core/src/types.ts or similar
+export interface ToolCallConfirmationDetails {
+  correlationId: string;  // NEW - required field
+  toolName: string;
+  args: Record<string, unknown>;
+  type: 'info' | 'edit';
+  message?: string;
+  diff?: DiffContent;
+  // ... existing fields
+}
+```
+
+**Generation in CoreToolScheduler:**
+```typescript
+import { randomUUID } from 'node:crypto';
+
+// In CoreToolScheduler._schedule() when creating confirmation:
+const correlationId = randomUUID();
+const confirmationDetails: ToolCallConfirmationDetails = {
+  correlationId,
+  toolName: tool.name,
+  args: toolCall.args,
+  // ... rest of details
+};
+
+// Store pending promise keyed by correlationId
+this.pendingConfirmations.set(correlationId, {
+  resolve: (confirmed: boolean) => { /* ... */ },
+  reject: (error: Error) => { /* ... */ },
+});
+```
+
+### IDE Confirmation Pathway
+
+The IDE confirmation pathway (when using the extension/IDE integration) must also publish to the message bus:
+
+```typescript
+// In IDE confirmation handler
+async function handleIdeConfirmation(
+  toolCall: ToolCallConfirmationDetails,
+  config: Config,
+): Promise<boolean> {
+  // Keep existing ideConfirmation promise pattern
+  const confirmed = await ideConfirmationPromise(toolCall);
+
+  // But also publish to message bus for observability
+  if (config.getEnableMessageBusIntegration()) {
+    const messageBus = config.getMessageBus();
+    messageBus.publish({
+      type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+      correlationId: toolCall.correlationId,
+      confirmed,
+    });
+  }
+
+  return confirmed;
+}
+```
+
+### Backward Compatibility
+
+All message bus code paths are guarded by the feature flag:
+
+```typescript
+// Pattern used throughout:
+if (config.getEnableMessageBusIntegration()) {
+  // New message bus flow
+  const messageBus = config.getMessageBus();
+  // ... use message bus
+} else {
+  // Existing direct callback flow
+  // ... use legacy pattern
+}
+```
+
+**Key Points:**
+- When `enableMessageBusIntegration` is false (default), all existing code paths work unchanged
+- No breaking changes to existing UI components
+- Gradual migration path - components can be updated one at a time
+- Both paths must produce equivalent behavior for testing
 
 ---
 
@@ -423,6 +640,240 @@ Tier 1 (Default): 1.xxx  - Built-in default policies
   1.05  - Read-only tools
   1.015 - AUTO_EDIT mode overrides
   1.01  - Write tools ASK_USER
+```
+
+---
+
+## 7.5. Approval Mode Migration Strategy
+
+This section details how existing ApprovalMode and --allowed-tools patterns map to the new policy engine.
+
+### Legacy Mode Mapping
+
+The existing `ApprovalMode` enum values map to policy rules as follows:
+
+| ApprovalMode | Policy Rule | Priority | Description |
+|--------------|-------------|----------|-------------|
+| `YOLO` | Allow all tools | 1.999 | Wildcard allow-all rule |
+| `AUTO_EDIT` | Allow write tools | 1.015 | Allow edit, write-file, shell |
+| `DEFAULT` | Standard stack | N/A | Normal policy evaluation applies |
+
+**ApprovalMode.YOLO → Priority 1.999 allow-all:**
+```typescript
+{
+  toolName: undefined,  // wildcard - matches all tools
+  decision: PolicyDecision.ALLOW,
+  priority: 1.999,
+}
+```
+
+**ApprovalMode.AUTO_EDIT → Priority 1.015 write tools allow:**
+```typescript
+// Rules for each write tool
+[
+  { toolName: 'edit', decision: PolicyDecision.ALLOW, priority: 1.015 },
+  { toolName: 'smart_edit', decision: PolicyDecision.ALLOW, priority: 1.015 },
+  { toolName: 'write_file', decision: PolicyDecision.ALLOW, priority: 1.015 },
+  { toolName: 'shell', decision: PolicyDecision.ALLOW, priority: 1.015 },
+]
+```
+
+### --allowed-tools Migration
+
+Each tool specified via the `--allowed-tools` CLI flag becomes a priority 2.3 ALLOW rule:
+
+```typescript
+// For each tool in config.getAllowedTools():
+{
+  toolName: "toolName",
+  decision: PolicyDecision.ALLOW,
+  priority: 2.3,
+}
+```
+
+**Example:**
+```bash
+llxprt --allowed-tools edit,shell,glob
+```
+
+Becomes:
+```typescript
+[
+  { toolName: 'edit', decision: PolicyDecision.ALLOW, priority: 2.3 },
+  { toolName: 'shell', decision: PolicyDecision.ALLOW, priority: 2.3 },
+  { toolName: 'glob', decision: PolicyDecision.ALLOW, priority: 2.3 },
+]
+```
+
+### Rollout Phases
+
+**Phase 1: Parallel Operation (Initial Release)**
+- Both systems run simultaneously
+- Feature flag `enableMessageBusIntegration` controls which path is active
+- When flag is ON: message bus handles confirmations
+- When flag is OFF: legacy ApprovalMode checks apply
+- Full backward compatibility maintained
+
+**Phase 2: Deprecation (After 2 Stable Releases)**
+- Deprecation warnings on direct `config.getApprovalMode()` calls in tools
+- Tools should use `getMessageBusDecision()` instead
+- Document migration path for any external tools
+
+**Phase 3: Removal (After 4 Stable Releases)**
+- Remove legacy code paths
+- ApprovalMode enum kept for CLI parsing compatibility
+- All tool approval flows through policy engine
+
+### Config Bridge Code
+
+The bridge code in `packages/core/src/policy/config.ts` converts legacy settings to policy rules:
+
+```typescript
+import { PolicyDecision, type PolicyRule } from './types.js';
+import { ApprovalMode } from '../config/config.js';
+import type { Config } from '../config/config.js';
+
+/**
+ * Converts legacy ApprovalMode and --allowed-tools to policy rules.
+ * Called during PolicyEngine initialization.
+ */
+export function migrateLegacyApprovalMode(config: Config): PolicyRule[] {
+  const rules: PolicyRule[] = [];
+
+  // Map ApprovalMode
+  const approvalMode = config.getApprovalMode();
+  if (approvalMode === ApprovalMode.YOLO) {
+    rules.push({
+      toolName: undefined, // wildcard - matches all tools
+      decision: PolicyDecision.ALLOW,
+      priority: 1.999,
+    });
+  } else if (approvalMode === ApprovalMode.AUTO_EDIT) {
+    // Allow write tools at priority 1.015
+    const writeTools = ['edit', 'smart_edit', 'write_file', 'shell', 'memory'];
+    for (const tool of writeTools) {
+      rules.push({
+        toolName: tool,
+        decision: PolicyDecision.ALLOW,
+        priority: 1.015,
+      });
+    }
+  }
+  // ApprovalMode.DEFAULT doesn't add any rules - standard policy stack applies
+
+  // Map --allowed-tools
+  const allowedTools = config.getAllowedTools();
+  for (const tool of allowedTools) {
+    rules.push({
+      toolName: tool,
+      decision: PolicyDecision.ALLOW,
+      priority: 2.3,
+    });
+  }
+
+  // Map --exclude-tools (if we have this flag)
+  const excludedTools = config.getExcludedTools?.() ?? [];
+  for (const tool of excludedTools) {
+    rules.push({
+      toolName: tool,
+      decision: PolicyDecision.DENY,
+      priority: 2.4,
+    });
+  }
+
+  return rules;
+}
+
+/**
+ * Creates the full PolicyEngineConfig by merging:
+ * 1. Default TOML policy files
+ * 2. Legacy ApprovalMode migration
+ * 3. User-defined TOML policies
+ * 4. Runtime rules (Always Allow selections)
+ */
+export async function createPolicyEngineConfig(
+  config: Config,
+): Promise<PolicyEngineConfig> {
+  const rules: PolicyRule[] = [];
+
+  // Load default policies from TOML
+  const defaultRules = await loadDefaultPolicies();
+  rules.push(...defaultRules);
+
+  // Migrate legacy settings
+  const legacyRules = migrateLegacyApprovalMode(config);
+  rules.push(...legacyRules);
+
+  // Load user-defined policies (if any)
+  const userPolicyPath = config.getUserPolicyPath();
+  if (userPolicyPath) {
+    const userRules = await loadPolicyFromToml(userPolicyPath);
+    rules.push(...userRules);
+  }
+
+  return {
+    rules,
+    defaultDecision: PolicyDecision.ASK_USER,
+    nonInteractive: config.getNonInteractive(),
+  };
+}
+```
+
+### Test Coverage for Migration
+
+Required tests for the migration bridge:
+
+```typescript
+describe('migrateLegacyApprovalMode', () => {
+  it('converts YOLO to wildcard allow-all at priority 1.999', () => {
+    const config = createMockConfig({ approvalMode: ApprovalMode.YOLO });
+    const rules = migrateLegacyApprovalMode(config);
+
+    expect(rules).toContainEqual({
+      toolName: undefined,
+      decision: PolicyDecision.ALLOW,
+      priority: 1.999,
+    });
+  });
+
+  it('converts AUTO_EDIT to write tool rules at priority 1.015', () => {
+    const config = createMockConfig({ approvalMode: ApprovalMode.AUTO_EDIT });
+    const rules = migrateLegacyApprovalMode(config);
+
+    expect(rules).toContainEqual({
+      toolName: 'edit',
+      decision: PolicyDecision.ALLOW,
+      priority: 1.015,
+    });
+  });
+
+  it('converts --allowed-tools to rules at priority 2.3', () => {
+    const config = createMockConfig({
+      allowedTools: ['edit', 'shell'],
+    });
+    const rules = migrateLegacyApprovalMode(config);
+
+    expect(rules).toHaveLength(2);
+    expect(rules[0]).toEqual({
+      toolName: 'edit',
+      decision: PolicyDecision.ALLOW,
+      priority: 2.3,
+    });
+  });
+
+  it('--allowed-tools overrides AUTO_EDIT (priority 2.3 > 1.015)', async () => {
+    const config = createMockConfig({
+      approvalMode: ApprovalMode.AUTO_EDIT,
+      allowedTools: ['glob'], // read-only tool, not in AUTO_EDIT set
+    });
+
+    const engineConfig = await createPolicyEngineConfig(config);
+    const engine = new PolicyEngine(engineConfig);
+
+    // glob should be allowed due to --allowed-tools
+    expect(engine.evaluate('glob', {})).toBe(PolicyDecision.ALLOW);
+  });
+});
 ```
 
 ---
@@ -536,14 +987,311 @@ if (this.config.getEnableMessageBusIntegration()) {
 
 ---
 
+## 9.5. /policies Command Integration
+
+This section details the implementation of the `/policies` slash command for inspecting active policy rules.
+
+### Command Implementation
+
+**File: `packages/cli/src/ui/commands/policiesCommand.ts`**
+
+```typescript
+import type { Command } from './types.js';
+import type { Config } from '@anthropic/core';
+import { PolicyDecision } from '@anthropic/core';
+
+export const policiesCommand: Command = {
+  name: 'policies',
+  description: 'Display active policy rules and their priorities',
+  execute: async (config: Config): Promise<string> => {
+    const policyEngine = config.getPolicyEngine();
+    const rules = policyEngine.getRules();
+
+    if (rules.length === 0) {
+      return 'No policy rules configured.';
+    }
+
+    // Sort by priority (highest first)
+    const sortedRules = [...rules].sort((a, b) =>
+      (b.priority ?? 0) - (a.priority ?? 0)
+    );
+
+    const lines: string[] = ['Active Policy Rules:', ''];
+
+    for (const rule of sortedRules) {
+      const toolName = rule.toolName ?? '*';
+      const decision = rule.decision;
+      const priority = rule.priority ?? 0;
+      const argsPattern = rule.argsPattern
+        ? ` (args: ${rule.argsPattern.source})`
+        : '';
+
+      const decisionColor = decision === PolicyDecision.ALLOW
+        ? 'green'
+        : decision === PolicyDecision.DENY
+          ? 'red'
+          : 'yellow';
+
+      lines.push(
+        `  ${priority.toFixed(3).padStart(7)} │ ${toolName.padEnd(25)} │ ${decision}${argsPattern}`
+      );
+    }
+
+    lines.push('');
+    lines.push(`Default decision: ${policyEngine.getDefaultDecision()}`);
+    lines.push(`Non-interactive mode: ${config.getNonInteractive()}`);
+
+    return lines.join('\n');
+  },
+};
+```
+
+### AppContainer Registration
+
+Register the command in AppContainer's command map:
+
+```typescript
+// In packages/cli/src/ui/AppContainer.tsx
+import { policiesCommand } from './commands/policiesCommand.js';
+
+// In command registration:
+const commands: Map<string, Command> = new Map([
+  ['help', helpCommand],
+  ['clear', clearCommand],
+  ['policies', policiesCommand],  // NEW
+  // ... other commands
+]);
+
+// Handler:
+const handleSlashCommand = async (input: string): Promise<void> => {
+  const [commandName, ...args] = input.slice(1).split(' ');
+  const command = commands.get(commandName);
+
+  if (command) {
+    const result = await command.execute(config, args);
+    addMessage({ type: 'system', content: result });
+  } else {
+    addMessage({ type: 'error', content: `Unknown command: ${commandName}` });
+  }
+};
+```
+
+**Availability:**
+- Available in both interactive (REPL) and non-interactive modes
+- Non-interactive: `llxprt --command "/policies"`
+
+### Async Policy Loading
+
+The `loadCliConfig()` function must become async to load TOML policies:
+
+**Before:**
+```typescript
+// packages/cli/src/config/cliConfig.ts
+export function loadCliConfig(options: CliOptions): CliConfig {
+  // ...
+  const policyEngineConfig = createPolicyEngineConfig(baseConfig);
+  // ...
+}
+```
+
+**After:**
+```typescript
+// packages/cli/src/config/cliConfig.ts
+export async function loadCliConfig(options: CliOptions): Promise<CliConfig> {
+  // ...
+  const policyEngineConfig = await createPolicyEngineConfig(baseConfig);
+  // ...
+}
+```
+
+**Callsite updates required:**
+- `packages/cli/src/gemini.tsx` - main entry point
+- `packages/cli/src/index.ts` - CLI bootstrap
+- Any test files that call `loadCliConfig()`
+
+### Error Handling for Malformed TOML
+
+The policy loader must handle malformed TOML gracefully:
+
+```typescript
+// In packages/core/src/policy/toml-loader.ts
+export async function loadPolicyFromToml(path: string): Promise<PolicyRule[]> {
+  try {
+    const content = await fs.readFile(path, 'utf-8');
+    const parsed = toml.parse(content);
+
+    // Validate with Zod schema
+    const validated = PolicyFileSchema.parse(parsed);
+
+    return transformToRules(validated);
+  } catch (error) {
+    if (error instanceof toml.TomlError) {
+      throw new PolicyLoadError(
+        `Invalid TOML syntax in ${path}: ${error.message}`,
+        { cause: error }
+      );
+    }
+    if (error instanceof z.ZodError) {
+      throw new PolicyLoadError(
+        `Invalid policy schema in ${path}: ${error.errors.map(e => e.message).join(', ')}`,
+        { cause: error }
+      );
+    }
+    throw error;
+  }
+}
+
+export class PolicyLoadError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'PolicyLoadError';
+  }
+}
+```
+
+### Settings Validation
+
+Add the new settings key to the schema:
+
+```typescript
+// In packages/cli/src/config/settings-schema.ts
+export const settingsSchema = z.object({
+  // ... existing settings
+  tools: z.object({
+    enableMessageBusIntegration: z.boolean().default(false),
+    // ... other tool settings
+  }).optional(),
+});
+```
+
+**Settings file example:**
+```json
+{
+  "tools": {
+    "enableMessageBusIntegration": true
+  }
+}
+```
+
+### Output Format Example
+
+```
+> /policies
+
+Active Policy Rules:
+
+  2.950 │ *                         │ allow    (Always Allow - runtime)
+  2.400 │ shell                     │ deny     (--exclude-tools)
+  2.300 │ edit                      │ allow    (--allowed-tools)
+  2.300 │ shell                     │ allow    (--allowed-tools)
+  2.200 │ my-server__*              │ allow    (MCP trust=true)
+  1.999 │ *                         │ allow    (YOLO mode)
+  1.050 │ glob                      │ allow    (read-only default)
+  1.050 │ grep                      │ allow    (read-only default)
+  1.010 │ edit                      │ ask_user (write default)
+
+Default decision: ask_user
+Non-interactive mode: false
+```
+
+### Test Coverage
+
+```typescript
+describe('policiesCommand', () => {
+  it('displays rules sorted by priority', async () => {
+    const config = createMockConfig({
+      policyEngineConfig: {
+        rules: [
+          { toolName: 'edit', decision: PolicyDecision.ALLOW, priority: 1.01 },
+          { toolName: 'glob', decision: PolicyDecision.ALLOW, priority: 1.05 },
+        ],
+      },
+    });
+
+    const result = await policiesCommand.execute(config);
+
+    expect(result).toContain('1.050');
+    expect(result).toContain('1.010');
+    // Higher priority (1.05) should appear before lower (1.01)
+    expect(result.indexOf('glob')).toBeLessThan(result.indexOf('edit'));
+  });
+
+  it('handles empty rules gracefully', async () => {
+    const config = createMockConfig({
+      policyEngineConfig: { rules: [] },
+    });
+
+    const result = await policiesCommand.execute(config);
+
+    expect(result).toBe('No policy rules configured.');
+  });
+});
+```
+
+---
+
 ## 10. Deliverables Summary
+
+### Core Deliverables
 
 1. **New modules**: confirmation-bus, policy (with TOML policies)
 2. **Updated tools**: All 16 tools with message bus integration
 3. **Config integration**: PolicyEngine and MessageBus in Config
 4. **CLI wiring**: Policy loader, updater, debug logging
 5. **Feature flag**: Disabled by default for safe rollout
-6. **Tests**: ~2000 lines of new test coverage
+6. **Tests**: ~2500 lines of new test coverage
 7. **Documentation**: Policy configuration guide
 
-**Total estimate: 4.5-5 engineering days**
+### Additional Deliverables (from Codex Review)
+
+8. **UI consumption layer**: AppContainer message bus subscriptions for tool confirmations
+9. **Correlation ID pattern**: Links UI responses back to pending tool calls via `randomUUID()`
+10. **Legacy ApprovalMode migration bridge**: Converts YOLO/AUTO_EDIT/--allowed-tools to policy rules
+11. **/policies command**: New slash command for inspecting active policy rules with AppContainer registration
+12. **Async policy loading**: `loadCliConfig()` becomes async to support TOML loading
+13. **Settings validation**: New `tools.enableMessageBusIntegration` key in settings schema
+
+### Updated Timeline
+
+| Phase | Description | Original | Revised | Delta |
+|-------|-------------|----------|---------|-------|
+| A | Core Infrastructure | 1.5 days | 1.5 days | 0 |
+| B | CLI Policy Configuration | 1.0 days | 1.0 days | 0 |
+| C | Tool & Scheduler Integration | 2.0 days | 2.0 days | 0 |
+| C.6 | UI Integration | - | 0.5 days | +0.5 |
+| C.7 | Legacy Migration | - | 0.5 days | +0.5 |
+| D | Testing & Documentation | 0.5 days | 1.0 days | +0.5 |
+
+**Original estimate: 4.5-5 engineering days**
+**Revised estimate: 6-6.5 engineering days**
+
+### Rationale for Timeline Increase
+
+1. **UI Integration (+0.5 days)**: The AppContainer subscription pattern, correlation ID implementation, and integration tests for UI↔bus↔scheduler flow require careful implementation to maintain backward compatibility.
+
+2. **Legacy Migration (+0.5 days)**: The `migrateLegacyApprovalMode()` bridge and comprehensive migration tests need thorough coverage to ensure existing CLI flags continue working correctly.
+
+3. **Testing Expansion (+0.5 days)**: Additional integration tests for:
+   - UI confirmation flow end-to-end
+   - Legacy mode priority precedence
+   - /policies command output format
+   - Async config loading error handling
+
+### Risk Assessment
+
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| UI state management complexity | HIGH | Feature flag allows immediate rollback |
+| Correlation ID race conditions | MEDIUM | Use Map with cleanup timeouts |
+| Async config breaks existing tests | HIGH | Update all test fixtures systematically |
+| Legacy migration edge cases | MEDIUM | Comprehensive test coverage |
+
+### Definition of Done
+
+- [ ] All existing tests pass (no regressions)
+- [ ] New tests achieve >90% coverage of new code
+- [ ] Feature flag defaults to OFF
+- [ ] /policies command works in interactive and non-interactive modes
+- [ ] Legacy ApprovalMode/--allowed-tools produce equivalent behavior
+- [ ] Documentation updated with policy configuration examples
+- [ ] No lint errors or TypeScript warnings

@@ -9,6 +9,15 @@ export * from './config/config.js';
 export * from './config/profileManager.js';
 export * from './config/subagentManager.js';
 
+// Export policy engine
+export * from './policy/types.js';
+export * from './policy/policy-engine.js';
+export * from './policy/stable-stringify.js';
+
+// Export message bus
+export * from './confirmation-bus/types.js';
+export * from './confirmation-bus/message-bus.js';
+
 // Export services
 export * from './services/git-stats-service.js';
 
