@@ -635,6 +635,18 @@ jobs:
 
           echo "pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
 
+      - name: Request CodeRabbit review
+        if: steps.commit_push.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRET }}
+          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+        run: |
+          set -euo pipefail
+          pr_number="$(gh pr view "$ISSUE_BRANCH" --json number -q .number 2>/dev/null || true)"
+          if [[ -n "$pr_number" ]]; then
+            gh pr comment "$pr_number" --body "@coderabbit review"
+          fi
+
       - name: Label pull request status
         if: steps.commit_push.outputs.has_changes == 'true'
         env:
