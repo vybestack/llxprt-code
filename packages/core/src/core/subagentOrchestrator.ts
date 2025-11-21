@@ -147,8 +147,16 @@ export class SubagentOrchestrator {
       runtime: runtimeResult,
       dispose: async () => {
         const history = runtimeResult.history ?? scope.runtimeContext.history;
-        if (history && typeof history.clear === 'function') {
-          history.clear();
+        if (history) {
+          const disposable = (history as { dispose?: () => void }).dispose;
+          if (typeof disposable === 'function') {
+            disposable();
+          } else if (typeof history.clear === 'function') {
+            history.clear();
+            (
+              history as { removeAllListeners?: () => void }
+            ).removeAllListeners?.();
+          }
         }
       },
     };

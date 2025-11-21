@@ -459,6 +459,25 @@ export class HistoryService
   }
 
   /**
+   * Release all listeners and internal buffers to allow GC
+   */
+  dispose(): void {
+    try {
+      this.removeAllListeners();
+    } catch {
+      // Best-effort; listener removal is not critical
+    }
+
+    this.history = [];
+    this.totalTokens = 0;
+    this.baseTokenOffset = 0;
+    this.isCompressing = false;
+    this.pendingOperations = [];
+    this.tokenizerCache.clear();
+    this.tokenizerLock = Promise.resolve();
+  }
+
+  /**
    * Clear all history
    */
   clear(): void {
