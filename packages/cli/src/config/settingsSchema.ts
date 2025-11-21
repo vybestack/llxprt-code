@@ -604,16 +604,6 @@ export const SETTINGS_SCHEMA = {
           'Sandbox execution environment (can be a boolean or a path string).',
         showInDialog: false,
       },
-      usePty: {
-        type: 'boolean',
-        label: 'Use node-pty for Shell Execution',
-        category: 'Tools',
-        requiresRestart: true,
-        default: false,
-        description:
-          'Use node-pty for shell command execution. Fallback to child_process still applies.',
-        showInDialog: false,
-      },
       autoAccept: {
         type: 'boolean',
         label: 'Auto Accept',

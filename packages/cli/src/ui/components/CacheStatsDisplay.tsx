@@ -6,19 +6,12 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
+import type { CacheStatistics } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 const METRIC_COL_WIDTH = 35;
 const VALUE_COL_WIDTH = 20;
-
-export interface CacheStatistics {
-  totalCacheReads: number;
-  totalCacheWrites: number;
-  requestsWithCacheHits: number;
-  requestsWithCacheWrites: number;
-  hitRate: number;
-}
 
 interface StatRowProps {
   title: string;

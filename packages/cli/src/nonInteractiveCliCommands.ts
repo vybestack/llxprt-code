@@ -9,6 +9,7 @@ import { parseSlashCommand } from './utils/commands.js';
 import {
   FatalInputError,
   Logger,
+  Storage,
   uiTelemetryService,
   type Config,
 } from '@vybestack/llxprt-code-core';
@@ -30,7 +31,7 @@ import type { SessionStatsState } from './ui/contexts/SessionContext.js';
 export const handleSlashCommand = async (
   rawQuery: string,
   abortController: AbortController,
-  config: Config,
+  config: Config | null,
   settings: LoadedSettings,
 ): Promise<PartListUnion | undefined> => {
   const trimmed = rawQuery.trim();
@@ -52,7 +53,7 @@ export const handleSlashCommand = async (
     if (commandToExecute.action) {
       // Not used by custom commands but may be in the future.
       const sessionStats: SessionStatsState = {
-        sessionId: config?.getSessionId(),
+        sessionId: config?.getSessionId() || 'unknown',
         sessionStartTime: new Date(),
         metrics: uiTelemetryService.getMetrics(),
         lastPromptTokenCount: 0,
@@ -60,7 +61,11 @@ export const handleSlashCommand = async (
         promptCount: 1,
       };
 
-      const logger = new Logger(config?.getSessionId() || '', config?.storage);
+      const loggerStorage = config?.storage ?? new Storage(process.cwd());
+      const logger = new Logger(
+        config?.getSessionId() || '',
+        loggerStorage,
+      );
 
       const context: CommandContext = {
         services: {

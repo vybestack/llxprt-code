@@ -6,9 +6,9 @@
 
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { CacheStatistics } from '@vybestack/llxprt-code-core';
 import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import * as RuntimeContext from '../contexts/RuntimeContext.js';
-import type { CacheStatistics } from './CacheStatsDisplay.js';
 
 // Mock the RuntimeContext to provide controlled data for testing
 vi.mock('../contexts/RuntimeContext.js', async (importOriginal) => {

@@ -270,15 +270,17 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
   - **Description:** Enable recursive file search functionality.
   - **Default:** `true`
 
+#### `shell`
+
+- **`shouldUseNodePtyShell`** (boolean):
+
+  Allow fully interactive shell commands by running tools through `node-pty`. This is the same as the **Enable Interactive Shell (node-pty)** toggle in the `/settings` dialog. Defaults to `false`. Legacy settings written as `tools.shell.enableInteractiveShell` or `tools.usePty` are migrated automatically.
+
 #### `tools`
 
 - **`tools.sandbox`** (boolean or string):
   - **Description:** Sandbox execution environment (can be a boolean or a path string).
   - **Default:** `undefined`
-
-- **`tools.shell.enableInteractiveShell`** (boolean):
-
-  Use `node-pty` for an interactive shell experience. Fallback to `child_process` still applies. Defaults to `false`.
 
 - **`tools.core`** (array of strings):
   - **Description:** Paths to core tool definitions.

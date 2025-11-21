@@ -263,6 +263,46 @@ function mergeSettings(
   return merged;
 }
 
+function migrateLegacyInteractiveShellSetting(settings: Settings): void {
+  if (!settings || typeof settings !== 'object') {
+    return;
+  }
+
+  const tools = settings.tools;
+  if (!tools || typeof tools !== 'object') {
+    return;
+  }
+
+  const toolSettings = tools as Record<string, unknown>;
+  let legacyValue: boolean | undefined;
+
+  const legacyUsePty = toolSettings['usePty'];
+  if (typeof legacyUsePty === 'boolean') {
+    legacyValue = legacyUsePty;
+    delete toolSettings['usePty'];
+  }
+
+  const legacyShell = toolSettings['shell'];
+  if (legacyShell && typeof legacyShell === 'object') {
+    const shellSettings = legacyShell as Record<string, unknown>;
+    const shellFlag = shellSettings['enableInteractiveShell'];
+    if (typeof shellFlag === 'boolean') {
+      legacyValue = shellFlag;
+      delete shellSettings['enableInteractiveShell'];
+      if (Object.keys(shellSettings).length === 0) {
+        delete toolSettings['shell'];
+      }
+    }
+  }
+
+  if (
+    legacyValue !== undefined &&
+    typeof settings.shouldUseNodePtyShell !== 'boolean'
+  ) {
+    settings.shouldUseNodePtyShell = legacyValue;
+  }
+}
+
 export class LoadedSettings {
   constructor(
     system: SettingsFile,
@@ -626,6 +666,15 @@ export function loadSettings(
     throw new FatalConfigError(
       `${errorMessages.join('\n')}\nPlease fix the configuration file(s) and try again.`,
     );
+  }
+
+  for (const scopeSettings of [
+    systemSettings,
+    systemDefaultSettings,
+    userSettings,
+    workspaceSettings,
+  ]) {
+    migrateLegacyInteractiveShellSetting(scopeSettings);
   }
 
   return new LoadedSettings(

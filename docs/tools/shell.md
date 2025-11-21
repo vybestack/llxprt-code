@@ -4,7 +4,7 @@ This document describes the `run_shell_command` tool for the LLxprt Code.
 
 ## Description
 
-Use `run_shell_command` to interact with the underlying system, run scripts, or perform command-line operations. When `tools.shell.enableInteractiveShell` is `true`, fully interactive programs (such as `vim` or `git rebase -i`) are supported; otherwise the command runs non-interactively.
+Use `run_shell_command` to interact with the underlying system, run scripts, or perform command-line operations. When `shouldUseNodePtyShell` is `true` (the **Enable Interactive Shell (node-pty)** toggle in `/settings`), fully interactive programs (such as `vim` or `git rebase -i`) are supported; otherwise the command runs non-interactively. Legacy settings that use `tools.shell.enableInteractiveShell` continue to work and are migrated automatically.
 
 On Windows commands run via `cmd.exe /c`. On macOS/Linux they run via `bash -c`.
 
@@ -61,15 +61,11 @@ You can tune the `run_shell_command` tool by editing `settings.json` or by using
 
 ### Enabling Interactive Commands
 
-Set `tools.shell.enableInteractiveShell` to `true` to run commands inside a `node-pty` session (needed for editors, TUIs, etc.). If `node-pty` cannot be loaded, the CLI automatically falls back to the non-interactive `child_process` implementation.
+Set `shouldUseNodePtyShell` to `true` (or flip **Settings → Shell → Enable Interactive Shell (node-pty)**) to run commands inside a `node-pty` session (needed for editors, TUIs, etc.). If `node-pty` cannot be loaded, the CLI automatically falls back to the non-interactive `child_process` implementation. Legacy `tools.shell.enableInteractiveShell` entries in existing settings files are still honored.
 
 ```json
 {
-  "tools": {
-    "shell": {
-      "enableInteractiveShell": true
-    }
-  }
+  "shouldUseNodePtyShell": true
 }
 ```
 
