@@ -1326,7 +1326,6 @@ const App = (props: AppInternalProps) => {
     geminiClient,
   ]);
 
-  const showTodoPanelSetting = showTodoPanel;
   const hideContextSummary = settings.merged.hideContextSummary ?? false;
 
   if (quittingMessages) {
@@ -1343,7 +1342,7 @@ const App = (props: AppInternalProps) => {
             isPending={false}
             config={config}
             slashCommands={slashCommands}
-            showTodoPanel={showTodoPanelSetting}
+            showTodoPanel={showTodoPanel}
           />
         ))}
       </Box>
@@ -1405,7 +1404,7 @@ const App = (props: AppInternalProps) => {
                 isPending={false}
                 config={config}
                 slashCommands={slashCommands}
-                showTodoPanel={showTodoPanelSetting}
+                showTodoPanel={showTodoPanel}
               />
             )),
           ]}
@@ -1428,7 +1427,7 @@ const App = (props: AppInternalProps) => {
                 config={config}
                 isFocused={!isEditorDialogOpen}
                 slashCommands={slashCommands}
-                showTodoPanel={showTodoPanelSetting}
+                showTodoPanel={showTodoPanel}
               />
             ))}
             <ShowMoreLines constrainHeight={constrainHeight} />
@@ -1455,7 +1454,7 @@ const App = (props: AppInternalProps) => {
           )}
 
           {/* TodoPanel outside the scrollable area */}
-          {showTodoPanelSetting && <TodoPanel width={inputWidth} />}
+          {showTodoPanel && <TodoPanel width={inputWidth} />}
 
           {showWorkspaceMigrationDialog ? (
             <WorkspaceMigrationDialog
