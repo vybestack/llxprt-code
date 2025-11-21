@@ -74,6 +74,7 @@ Slash commands provide meta-level control over the CLI itself.
     - **`schema`**:
       - **Description:** Show the full JSON schema for the tool's configured parameters.
   - **Keyboard Shortcut:** Press **Ctrl+T** at any time to toggle between showing and hiding tool descriptions.
+  - **Keyboard Shortcut:** Press **Ctrl+Q** to toggle the Todo dialog visibility.
 
 - **`/memory`**
   - **Description:** Manage the AI's instructional context (hierarchical memory loaded from `LLXPRT.md` files).

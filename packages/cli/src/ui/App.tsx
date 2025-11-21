@@ -440,6 +440,9 @@ const App = (props: AppInternalProps) => {
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
     useState<boolean>(false);
+  const [showTodoPanel, setShowTodoPanel] = useState<boolean>(
+    () => settings.merged.showTodoPanel ?? true,
+  );
 
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
   const [quittingMessages, setQuittingMessages] = useState<
@@ -471,6 +474,11 @@ const App = (props: AppInternalProps) => {
     setIdeContextState(ideContext.getIdeContext());
     return unsubscribe;
   }, []);
+
+  // Update todo panel visibility when settings change.
+  useEffect(() => {
+    setShowTodoPanel(settings.merged.showTodoPanel ?? true);
+  }, [settings.merged.showTodoPanel]);
 
   // Update currentModel when settings change - get it from the SAME place as diagnostics
   useEffect(() => {
@@ -1143,6 +1151,8 @@ const App = (props: AppInternalProps) => {
         if (Object.keys(mcpServers || {}).length > 0) {
           handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
         }
+      } else if (keyMatchers[Command.TOGGLE_TODO_DIALOG](key)) {
+        setShowTodoPanel((prev) => !prev);
       } else if (
         keyMatchers[Command.TOGGLE_IDE_CONTEXT_DETAIL](key) &&
         config.getIdeMode() &&
@@ -1325,7 +1335,6 @@ const App = (props: AppInternalProps) => {
     geminiClient,
   ]);
 
-  const showTodoPanelSetting = settings.merged.showTodoPanel ?? true;
   const hideContextSummary = settings.merged.hideContextSummary ?? false;
 
   if (quittingMessages) {
@@ -1342,7 +1351,7 @@ const App = (props: AppInternalProps) => {
             isPending={false}
             config={config}
             slashCommands={slashCommands}
-            showTodoPanel={showTodoPanelSetting}
+            showTodoPanel={showTodoPanel}
           />
         ))}
       </Box>
@@ -1404,7 +1413,7 @@ const App = (props: AppInternalProps) => {
                 isPending={false}
                 config={config}
                 slashCommands={slashCommands}
-                showTodoPanel={showTodoPanelSetting}
+                showTodoPanel={showTodoPanel}
               />
             )),
           ]}
@@ -1427,7 +1436,7 @@ const App = (props: AppInternalProps) => {
                 config={config}
                 isFocused={!isEditorDialogOpen}
                 slashCommands={slashCommands}
-                showTodoPanel={showTodoPanelSetting}
+                showTodoPanel={showTodoPanel}
               />
             ))}
             <ShowMoreLines constrainHeight={constrainHeight} />
@@ -1454,7 +1463,7 @@ const App = (props: AppInternalProps) => {
           )}
 
           {/* TodoPanel outside the scrollable area */}
-          {showTodoPanelSetting && <TodoPanel width={inputWidth} />}
+          {showTodoPanel && <TodoPanel width={inputWidth} />}
 
           {showWorkspaceMigrationDialog ? (
             <WorkspaceMigrationDialog
