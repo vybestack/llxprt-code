@@ -61,6 +61,7 @@ import {
   DebugLogger,
   uiTelemetryService,
   MessageBusType,
+  type ToolConfirmationRequest,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { validateAuthMethod } from '../config/auth.js';
@@ -176,19 +177,37 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [config]);
 
   // Subscribe to message bus for tool confirmation requests
-  // Feature flag is reserved for future use when full message bus integration is complete
   useEffect(() => {
     if (!config.getEnableMessageBusIntegration()) return;
 
     const messageBus = config.getMessageBus();
-    const unsubscribe = messageBus.subscribe(
+    const unsubscribe = messageBus.subscribe<ToolConfirmationRequest>(
       MessageBusType.TOOL_CONFIRMATION_REQUEST,
       (message) => {
-        // When message bus integration is enabled, handle confirmation requests here
-        // This is a placeholder for future implementation
         debug.log(
           'Received TOOL_CONFIRMATION_REQUEST from message bus',
           message,
+        );
+
+        // Bridge message bus event to existing UI confirmation state
+        // This allows the UI to display the confirmation request and collect user input
+        // The user's response will be published back to the message bus
+        const toolCall = message.toolCall;
+        const correlationId = message.correlationId;
+        const toolName = toolCall.name || 'unknown tool';
+
+        // TODO: This is a placeholder implementation
+        // Full implementation would need to integrate with the existing tool confirmation
+        // UI flow (ToolConfirmationMessage) by creating ToolCallConfirmationDetails
+        // and setting it in the UI state so the user can see the full tool details
+        // and make an informed decision.
+        //
+        // For now, we log that we received the request.
+        // The actual confirmation flow will happen through the existing
+        // onConfirm callbacks in tool execution, which already publish
+        // to the message bus when the feature flag is enabled.
+        debug.log(
+          `Received confirmation request for ${toolName} with correlationId=${correlationId}`,
         );
       },
     );

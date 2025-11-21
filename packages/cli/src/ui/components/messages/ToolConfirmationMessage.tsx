@@ -15,6 +15,7 @@ import {
   ToolExecuteConfirmationDetails,
   ToolMcpConfirmationDetails,
   Config,
+  MessageBusType,
 } from '@vybestack/llxprt-code-core';
 import {
   RadioButtonSelect,
@@ -51,8 +52,25 @@ export const ToolConfirmationMessage: React.FC<
 
   const handleConfirm = useCallback(
     (outcome: ToolConfirmationOutcome) => {
-      // Always call onConfirm - the message bus is not yet integrated at UI level
-      // Feature flag is reserved for future use when full message bus integration is complete
+      // Check if message bus integration is enabled and we have a correlationId
+      const enableMessageBus = config.getEnableMessageBusIntegration();
+      const correlationId = confirmationDetails.correlationId;
+
+      if (enableMessageBus && correlationId) {
+        // Message bus integration is enabled - publish response to message bus
+        const messageBus = config.getMessageBus();
+        const confirmed = outcome !== ToolConfirmationOutcome.Cancel;
+
+        messageBus.publish({
+          type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+          correlationId,
+          confirmed,
+          requiresUserConfirmation: false,
+        });
+      }
+
+      // Always call onConfirm for backward compatibility
+      // This ensures legacy flow still works
       onConfirm(outcome);
 
       // Handle IDE operations asynchronously without blocking
