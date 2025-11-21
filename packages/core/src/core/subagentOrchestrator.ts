@@ -46,6 +46,12 @@ type RuntimeLoader = (
 
 type ScopeFactory = typeof SubAgentScope.create;
 
+const createAbortError = (message: string): Error => {
+  const error = new Error(message);
+  error.name = 'AbortError';
+  return error;
+};
+
 export interface SubagentLaunchRequest {
   name: string;
   runConfig?: RunConfig;
@@ -97,10 +103,22 @@ export class SubagentOrchestrator {
    * Launches a subagent by name, returning the created {@link SubAgentScope}
    * and associated agent metadata.
    */
-  async launch(request: SubagentLaunchRequest): Promise<SubagentLaunchResult> {
+  async launch(
+    request: SubagentLaunchRequest,
+    signal?: AbortSignal,
+  ): Promise<SubagentLaunchResult> {
+    this.throwIfAborted(signal, 'Subagent launch aborted before start.');
     const subagent = await this.loadSubagentConfig(request.name);
+    this.throwIfAborted(
+      signal,
+      'Subagent launch aborted while loading config.',
+    );
     const profile = await this.options.profileManager.loadProfile(
       subagent.profile,
+    );
+    this.throwIfAborted(
+      signal,
+      'Subagent launch aborted while loading profile.',
     );
 
     const promptConfig = this.buildPromptConfig(
@@ -109,14 +127,25 @@ export class SubagentOrchestrator {
     );
     const modelConfig = this.buildModelConfig(profile);
     const runConfig = this.buildRunConfig(profile, request.runConfig);
+    this.throwIfAborted(
+      signal,
+      'Subagent launch aborted before runtime assembly.',
+    );
 
     const agentRuntimeId = this.createRuntimeId(subagent.name);
-    const runtimeResult = await this.createRuntimeBundle({
-      subagent,
-      profile,
-      modelConfig,
-      agentRuntimeId,
-    });
+    const runtimeResult = await this.createRuntimeBundle(
+      {
+        subagent,
+        profile,
+        modelConfig,
+        agentRuntimeId,
+      },
+      signal,
+    );
+    this.throwIfAborted(
+      signal,
+      'Subagent launch aborted after runtime assembly completed.',
+    );
 
     const scope = await this.scopeFactory(
       subagent.name,
@@ -131,7 +160,9 @@ export class SubagentOrchestrator {
         environmentContextLoader: async (_runtime) =>
           getEnvironmentContext(this.options.foregroundConfig),
       },
+      signal,
     );
+    this.throwIfAborted(signal, 'Subagent launch aborted before completion.');
 
     const agentId =
       typeof scope.getAgentId === 'function'
@@ -152,6 +183,12 @@ export class SubagentOrchestrator {
         }
       },
     };
+  }
+
+  private throwIfAborted(signal: AbortSignal | undefined, message: string) {
+    if (signal?.aborted) {
+      throw createAbortError(message);
+    }
   }
 
   private async loadSubagentConfig(name: string): Promise<SubagentConfig> {
@@ -522,14 +559,21 @@ export class SubagentOrchestrator {
     });
   }
 
-  private async createRuntimeBundle(params: {
-    subagent: SubagentConfig;
-    profile: Profile;
-    modelConfig: ModelConfig;
-    agentRuntimeId: string;
-  }): Promise<AgentRuntimeLoaderResult> {
+  private async createRuntimeBundle(
+    params: {
+      subagent: SubagentConfig;
+      profile: Profile;
+      modelConfig: ModelConfig;
+      agentRuntimeId: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<AgentRuntimeLoaderResult> {
     const { profile, modelConfig, agentRuntimeId, subagent } = params;
 
+    this.throwIfAborted(
+      signal,
+      'Subagent launch aborted before runtime state.',
+    );
     const runtimeState = this.createRuntimeState(
       profile,
       modelConfig,
@@ -577,6 +621,7 @@ export class SubagentOrchestrator {
         toolRegistry,
         providerManager,
       },
+      signal,
     };
 
     return this.runtimeLoader(loaderOptions);

@@ -343,6 +343,49 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
     expect(runConfigArg.max_turns).toBe(200);
   });
+
+  it('honors an already-aborted signal before beginning launch work', async () => {
+    const subagentConfig: SubagentConfig = {
+      name: 'cancel-helper',
+      profile: 'cancel-profile',
+      systemPrompt: 'Do nothing',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const subagentManager = {
+      loadSubagent,
+    } as unknown as SubagentManager;
+    const loadProfile = vi.fn().mockResolvedValue(baseProfile);
+    const profileManager = {
+      loadProfile,
+    } as unknown as ProfileManager;
+    const { factory } = createScopeFactory();
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager,
+      profileManager,
+      foregroundConfig,
+      scopeFactory: factory,
+      runtimeLoader,
+    });
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      orchestrator.launch(
+        { name: subagentConfig.name, runConfig: defaultRunConfig },
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(loadSubagent).not.toHaveBeenCalled();
+    expect(runtimeLoader).not.toHaveBeenCalled();
+    expect(factory).not.toHaveBeenCalled();
+  });
 });
 
 describe('SubagentOrchestrator - Runtime Assembly', () => {
