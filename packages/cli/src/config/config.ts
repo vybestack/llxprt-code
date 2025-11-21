@@ -475,6 +475,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       type: 'string',
       description: 'Load a saved profile configuration on startup',
     })
+    .option('profile', {
+      type: 'string',
+      description:
+        'Inline JSON profile configuration (alternative to --profile-load for CI/CD)',
+    })
     .option('load-memory-from-include-directories', {
       type: 'boolean',
       description:
@@ -497,6 +502,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       if (argv.prompt && argv.promptInteractive) {
         throw new Error(
           'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
+        );
+      }
+      if (argv.profile && argv.profileLoad) {
+        throw new Error(
+          'Cannot use both --profile and --profile-load. Use one at a time.',
         );
       }
       return true;
@@ -631,7 +641,66 @@ export async function loadCliConfig(
 
   const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
 
-  // Handle --load flag early to apply profile settings
+  /**
+   * Helper function to prepare profile data for application
+   * Extracts common logic used by both --profile and --profile-load
+   * @plan:PLAN-20251118-ISSUE533.P13
+   */
+  function prepareProfileForApplication(
+    profile: Profile,
+    profileSource: string, // 'inline' or profile name
+    argv: CliArgs,
+    baseSettings: Settings,
+  ): {
+    profileProvider: string | undefined;
+    profileModel: string | undefined;
+    profileModelParams: Record<string, unknown> | undefined;
+    profileBaseUrl: string | undefined;
+    effectiveSettings: Settings;
+  } {
+    // Extract profile values, respecting --provider override
+    const profileProvider =
+      argv.provider !== undefined ? undefined : profile.provider;
+    const profileModel =
+      argv.provider !== undefined ? undefined : profile.model;
+    const profileModelParams = profile.modelParams;
+    const profileBaseUrl =
+      typeof profile.ephemeralSettings?.['base-url'] === 'string'
+        ? profile.ephemeralSettings['base-url']
+        : undefined;
+
+    // Log profile loading
+    const loadSummary = `Loaded ${profileSource === 'inline' ? 'inline profile from --profile' : `profile ${profileSource}`}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`;
+    logger.debug(() => loadSummary);
+
+    // Merge ephemeral settings into settings object
+    let effectiveSettings = baseSettings;
+    if (argv.provider === undefined && profile.ephemeralSettings) {
+      effectiveSettings = {
+        ...baseSettings,
+        ...profile.ephemeralSettings,
+      } as Settings;
+      logger.debug(
+        () =>
+          `Merged ephemeral settings from ${profileSource === 'inline' ? 'inline profile' : `profile '${profileSource}'`}`,
+      );
+    } else if (argv.provider !== undefined) {
+      logger.debug(
+        () =>
+          `Skipping profile ephemeral settings because --provider was explicitly specified`,
+      );
+    }
+
+    return {
+      profileProvider,
+      profileModel,
+      profileModelParams,
+      profileBaseUrl,
+      effectiveSettings,
+    };
+  }
+
+  // Handle --profile (inline JSON) or --profile-load (file-based) early to apply profile settings
   let effectiveSettings = settings;
   let profileModel: string | undefined;
   let profileProvider: string | undefined;
@@ -639,6 +708,33 @@ export async function loadCliConfig(
   let profileBaseUrl: string | undefined;
   let loadedProfile: Profile | null = null;
   const profileWarnings: string[] = [];
+
+  // @plan:PLAN-20251118-ISSUE533.P13 - Handle inline profile from --profile flag
+  // Check for both null and undefined since tests may not set this field
+  if (bootstrapArgs.profileJson != null) {
+    try {
+      const profile = JSON.parse(bootstrapArgs.profileJson) as Profile;
+      loadedProfile = profile;
+
+      const prepared = prepareProfileForApplication(
+        profile,
+        'inline',
+        argv,
+        settings,
+      );
+      profileProvider = prepared.profileProvider;
+      profileModel = prepared.profileModel;
+      profileModelParams = prepared.profileModelParams;
+      profileBaseUrl = prepared.profileBaseUrl;
+      effectiveSettings = prepared.effectiveSettings;
+    } catch (err) {
+      // Profile parsing/validation errors are thrown during parseBootstrapArgs
+      // If we get here, JSON.parse failed which shouldn't happen since it was already validated
+      throw new Error(
+        `Failed to parse inline profile: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 
   const normaliseProfileName = (
     value: string | null | undefined,
@@ -652,16 +748,19 @@ export async function loadCliConfig(
 
   // Check for profile to load - either from CLI arg, env var, or default profile setting
   // BUT skip default profile if --provider is explicitly specified
+  // AND skip all file-based profiles entirely when an inline profile (--profile) is provided.
   const profileToLoad =
-    normaliseProfileName(bootstrapArgs.profileName) ??
-    normaliseProfileName(process.env.LLXPRT_PROFILE) ??
-    (argv.provider === undefined
-      ? normaliseProfileName(
-          typeof settings.defaultProfile === 'string'
-            ? settings.defaultProfile
-            : undefined,
-        )
-      : undefined);
+    bootstrapArgs.profileJson != null
+      ? undefined
+      : (normaliseProfileName(bootstrapArgs.profileName) ??
+        normaliseProfileName(process.env.LLXPRT_PROFILE) ??
+        (argv.provider === undefined
+          ? normaliseProfileName(
+              typeof settings.defaultProfile === 'string'
+                ? settings.defaultProfile
+                : undefined,
+            )
+          : undefined));
 
   if (profileToLoad) {
     try {
@@ -669,22 +768,19 @@ export async function loadCliConfig(
       const profile = await profileManager.loadProfile(profileToLoad);
       loadedProfile = profile;
 
-      // Store profile values to apply after Config creation
-      // Only use profile provider/model if --provider is not explicitly specified
-      // Check for undefined specifically to avoid issues with empty strings
-      profileProvider =
-        argv.provider !== undefined ? undefined : profile.provider;
-      profileModel = argv.provider !== undefined ? undefined : profile.model;
-      profileModelParams = profile.modelParams;
-      profileBaseUrl =
-        typeof profile.ephemeralSettings?.['base-url'] === 'string'
-          ? profile.ephemeralSettings['base-url']
-          : undefined;
+      const prepared = prepareProfileForApplication(
+        profile,
+        profileToLoad,
+        argv,
+        settings,
+      );
+      profileProvider = prepared.profileProvider;
+      profileModel = prepared.profileModel;
+      profileModelParams = prepared.profileModelParams;
+      profileBaseUrl = prepared.profileBaseUrl;
+      effectiveSettings = prepared.effectiveSettings;
 
-      const loadSummary = `Loaded profile ${profileToLoad}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`;
-      logger.debug(() => loadSummary);
-
-      // Check debug mode for logging
+      // Additional console.debug logging for file-based profiles (for backward compatibility)
       const tempDebugMode =
         argv.debug ||
         [process.env.DEBUG, process.env.DEBUG_MODE].some(
@@ -692,32 +788,15 @@ export async function loadCliConfig(
         ) ||
         false;
 
-      // Merge ephemeral settings into the settings object
-      // But skip ALL ephemeral settings if --provider is explicitly specified
-      // since profiles are provider-specific configurations
-      if (argv.provider !== undefined) {
-        // When --provider is specified, don't load ANY profile ephemeral settings
-        // to avoid conflicts with the explicitly chosen provider
-        effectiveSettings = settings;
-
-        if (tempDebugMode) {
-          const skipMessage =
-            'Skipping profile ephemeral settings because --provider was specified';
-          logger.debug(skipMessage);
-          console.debug(`[DEBUG] ${skipMessage}`);
-        }
-      } else {
-        effectiveSettings = {
-          ...settings,
-          ...profile.ephemeralSettings,
-        } as Settings;
-      }
-
       if (tempDebugMode) {
-        console.debug(loadSummary);
-        const detailedSummary = `Loaded profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`;
-        logger.debug(detailedSummary);
-        console.debug(detailedSummary);
+        console.debug(
+          `Loaded profile '${profileToLoad}': provider=${profile.provider}, model=${profile.model}`,
+        );
+        if (profileProvider && profileModel) {
+          console.debug(
+            `Applied profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
+          );
+        }
       }
     } catch (error) {
       const failureSummary = `Failed to load profile '${profileToLoad}': ${error instanceof Error ? error.message : String(error)}`;
@@ -1153,9 +1232,14 @@ export async function loadCliConfig(
       () =>
         `[bootstrap] Applied CLI auth -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
     );
-  } else if (loadedProfile && profileToLoad && argv.provider === undefined) {
+  } else if (
+    loadedProfile &&
+    (profileToLoad || bootstrapArgs.profileJson !== null) &&
+    argv.provider === undefined
+  ) {
+    // @plan:PLAN-20251118-ISSUE533.P13 - Apply inline or file-based profile through runtime
     appliedProfileResult = await applyProfileSnapshot(loadedProfile, {
-      profileName: profileToLoad,
+      profileName: profileToLoad || 'inline-profile',
     });
 
     profileProvider = appliedProfileResult.providerName;
@@ -1168,7 +1252,7 @@ export async function loadCliConfig(
     }
     logger.debug(
       () =>
-        `[bootstrap] Applied profile '${profileToLoad}' -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
+        `[bootstrap] Applied profile '${profileToLoad || 'inline'}' -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,
     );
   } else if (profileToLoad && argv.provider !== undefined) {
     logger.debug(
@@ -1345,9 +1429,14 @@ export async function loadCliConfig(
     settingsService.set('emojifilter', effectiveSettings.emojifilter);
   }
 
-  // Apply ephemeral settings from profile if loaded
+  // Apply ephemeral settings from profile if loaded (either --profile-load or --profile)
   // BUT skip ALL profile ephemeral settings if --provider was explicitly specified
-  if (profileToLoad && effectiveSettings && argv.provider === undefined) {
+  // @plan:PLAN-20251118-ISSUE533.P13 - Also apply for inline profiles
+  if (
+    (profileToLoad || bootstrapArgs.profileJson !== null) &&
+    effectiveSettings &&
+    argv.provider === undefined
+  ) {
     // Extract ephemeral settings that were merged from the profile
     const ephemeralKeys = [
       'auth-key',
