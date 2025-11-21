@@ -1291,6 +1291,8 @@ export class SubAgentScope {
         typeof this.config.getApprovalMode === 'function'
           ? this.config.getApprovalMode()
           : ApprovalMode.DEFAULT,
+      getMessageBus: () => this.config.getMessageBus(),
+      getPolicyEngine: () => this.config.getPolicyEngine(),
     } as unknown as Config;
   }
 
