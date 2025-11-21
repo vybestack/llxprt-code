@@ -219,9 +219,46 @@ class TaskToolInvocation extends BaseToolInvocation<
     let launchResult:
       | Awaited<ReturnType<SubagentOrchestrator['launch']>>
       | undefined;
+    let aborted = false;
+    const abortHandler = () => {
+      if (aborted) {
+        return;
+      }
+      aborted = true;
+      taskLogger.warn(
+        () => `Cancellation requested for subagent '${launchRequest.name}'`,
+      );
+      try {
+        const candidate = launchResult?.scope as
+          | { cancel?: (reason?: string) => void }
+          | undefined;
+        candidate?.cancel?.('User aborted task execution.');
+      } catch (error) {
+        taskLogger.warn(
+          () =>
+            `Error while cancelling subagent '${launchRequest.name}': ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    };
+    const removeAbortHandler = () => {
+      signal.removeEventListener('abort', abortHandler);
+    };
+    signal.addEventListener('abort', abortHandler, { once: true });
+    if (signal.aborted) {
+      abortHandler();
+      removeAbortHandler();
+      return this.createCancelledResult(
+        'Task execution aborted before launch.',
+      );
+    }
+
     try {
-      launchResult = await orchestrator.launch(launchRequest);
+      launchResult = await orchestrator.launch(launchRequest, signal);
     } catch (error) {
+      removeAbortHandler();
+      if (this.isAbortError(error) || aborted || signal.aborted) {
+        return this.createCancelledResult('Task aborted during launch.');
+      }
       taskLogger.warn(
         () =>
           `Launch failure for '${launchRequest.name}': ${error instanceof Error ? error.message : String(error)}`,
@@ -238,44 +275,23 @@ class TaskToolInvocation extends BaseToolInvocation<
     );
     const contextState = this.buildContextState();
 
-    let aborted = false;
-    const abortHandler = () => {
-      if (aborted) {
-        return;
-      }
-      aborted = true;
-      taskLogger.warn(
-        () => `Cancellation requested for subagent '${launchRequest.name}'`,
-      );
-      try {
-        if (
-          typeof (scope as { cancel?: (reason?: string) => void }).cancel ===
-          'function'
-        ) {
-          (scope as { cancel?: (reason?: string) => void }).cancel?.(
-            'User aborted task execution.',
-          );
-        }
-      } catch (error) {
-        taskLogger.warn(
-          () =>
-            `Error while cancelling subagent '${launchRequest.name}': ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    };
-    signal.addEventListener('abort', abortHandler);
-    if (signal.aborted) {
-      abortHandler();
-    }
-
     const teardown = async () => {
-      signal.removeEventListener('abort', abortHandler);
+      removeAbortHandler();
       try {
         await dispose();
       } catch {
         // Swallow dispose errors to avoid masking primary error.
       }
     };
+
+    if (signal.aborted || aborted) {
+      await teardown();
+      return this.createCancelledResult(
+        'Task aborted during launch.',
+        agentId,
+        scope.output,
+      );
+    }
 
     if (updateOutput) {
       const existingHandler = scope.onMessage;
@@ -352,6 +368,13 @@ class TaskToolInvocation extends BaseToolInvocation<
       );
       return result;
     }
+  }
+
+  private isAbortError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+    return (error as { name?: string }).name === 'AbortError';
   }
 
   private buildContextState(): ContextState {

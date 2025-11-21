@@ -88,6 +88,7 @@ describe('TaskTool', () => {
         toolConfig: { tools: ['read_file', 'write_file'] },
         outputConfig: { outputs: { summary: 'Outcome summary' } },
       }),
+      signal,
     );
     expect(scope.runInteractive).toHaveBeenCalledTimes(1);
     expect(scope.runNonInteractive).not.toHaveBeenCalled();
@@ -288,6 +289,66 @@ describe('TaskTool', () => {
       agentId: 'agent-99',
       error: 'crashed',
     });
+  });
+
+  it('returns a cancelled result when aborted during orchestrator launch', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const scope = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.ERROR,
+      },
+      runInteractive: vi.fn(),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockImplementation(
+      async (_request: unknown, signal?: AbortSignal) =>
+        new Promise((resolve, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => {
+              const error = new Error('launch aborted');
+              error.name = 'AbortError';
+              reject(error);
+            },
+            { once: true },
+          );
+          setTimeout(
+            () =>
+              resolve({
+                agentId: 'agent-launch',
+                scope,
+                dispose,
+                prompt: {} as unknown,
+                profile: {} as unknown,
+                config: {} as unknown,
+                runtime: {} as unknown,
+              }),
+            25,
+          );
+        }),
+    );
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+    });
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Do work',
+    });
+
+    const abortController = new AbortController();
+    const execution = invocation.execute(abortController.signal, undefined);
+    abortController.abort();
+    const result = await execution;
+
+    expect(launch).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'helper' }),
+      abortController.signal,
+    );
+    expect(result.metadata?.cancelled).toBe(true);
+    expect(result.returnDisplay).toMatch(/abort/i);
   });
 
   it('validates required parameters', () => {

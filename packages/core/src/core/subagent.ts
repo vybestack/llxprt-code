@@ -412,6 +412,8 @@ export class SubAgentScope {
   private readonly logger = new DebugLogger('llxprt:subagent');
   private readonly textToolParser = new GemmaToolCallParser();
   private activeAbortController: AbortController | null = null;
+  private readonly parentAbortSignal?: AbortSignal;
+  private parentAbortCleanup?: () => void;
 
   /** Optional callback for streaming text messages during execution */
   onMessage?: (message: string) => void;
@@ -447,9 +449,11 @@ export class SubAgentScope {
     private readonly config: Config,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
+    parentAbortSignal?: AbortSignal,
   ) {
     const randomPart = Math.random().toString(36).slice(2, 8);
     this.subagentId = `${this.name}-${randomPart}`;
+    this.parentAbortSignal = parentAbortSignal;
   }
 
   /**
@@ -488,6 +492,7 @@ export class SubAgentScope {
     toolConfig?: ToolConfig,
     outputConfig?: OutputConfig,
     overrides: SubAgentRuntimeOverrides = {},
+    parentSignal?: AbortSignal,
   ): Promise<SubAgentScope> {
     const runtimeBundle = overrides.runtimeBundle;
     if (!runtimeBundle) {
@@ -544,7 +549,28 @@ export class SubAgentScope {
       foregroundConfig,
       toolConfig,
       outputConfig,
+      parentSignal,
     );
+  }
+
+  private bindParentSignal(abortController: AbortController): void {
+    if (!this.parentAbortSignal) {
+      return;
+    }
+    if (this.parentAbortCleanup) {
+      this.parentAbortCleanup();
+    }
+    const relayAbort = () => abortController.abort();
+    if (this.parentAbortSignal.aborted) {
+      relayAbort();
+      return;
+    }
+    this.parentAbortSignal.addEventListener('abort', relayAbort, {
+      once: true,
+    });
+    this.parentAbortCleanup = () => {
+      this.parentAbortSignal?.removeEventListener('abort', relayAbort);
+    };
   }
 
   private buildInitialMessages(context: ContextState): Content[] {
@@ -583,6 +609,7 @@ export class SubAgentScope {
 
     const abortController = new AbortController();
     this.activeAbortController = abortController;
+    this.bindParentSignal(abortController);
 
     const functionDeclarations = this.buildRuntimeFunctionDeclarations();
     if (this.outputConfig && this.outputConfig.outputs) {
@@ -823,6 +850,8 @@ export class SubAgentScope {
       this.finalizeOutput();
       throw error;
     } finally {
+      this.parentAbortCleanup?.();
+      this.parentAbortCleanup = undefined;
       this.activeAbortController = null;
     }
   }
@@ -848,6 +877,7 @@ export class SubAgentScope {
 
     const abortController = new AbortController();
     this.activeAbortController = abortController;
+    this.bindParentSignal(abortController);
 
     const toolsList: FunctionDeclaration[] =
       this.buildRuntimeFunctionDeclarations();
@@ -1086,6 +1116,8 @@ export class SubAgentScope {
       this.finalizeOutput();
       throw error;
     } finally {
+      this.parentAbortCleanup?.();
+      this.parentAbortCleanup = undefined;
       this.activeAbortController = null;
     }
   }
