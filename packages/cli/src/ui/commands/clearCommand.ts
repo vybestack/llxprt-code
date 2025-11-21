@@ -38,8 +38,7 @@ export const clearCommand: SlashCommand = {
       context.ui.setDebugMessage('Clearing terminal.');
     }
 
-    // Reset both telemetry token count and session history token count
-    uiTelemetryService.resetLastPromptTokenCount();
+    uiTelemetryService.setLastPromptTokenCount(0);
     context.ui.updateHistoryTokenCount(0);
     context.ui.clear();
   },

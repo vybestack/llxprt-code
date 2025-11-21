@@ -6,6 +6,7 @@
 
 import { GroundingMetadata } from '@google/genai';
 import { BaseToolInvocation, ToolResult } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { Config } from '../config/config.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
@@ -63,11 +64,16 @@ export class WebSearchToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: WebSearchToolParams,
+    messageBus?: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
-  getDescription(): string {
+  override getToolName(): string {
+    return 'google_web_search';
+  }
+
+  override getDescription(): string {
     return `Searching the web for: "${this.params.query}"`;
   }
 

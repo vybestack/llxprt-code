@@ -1,0 +1,69 @@
+# Default write tool policy
+# Priority band: 1.01 (Tier 1 - Default)
+# These tools require user confirmation by default
+
+[[rule]]
+toolName = "edit"
+decision = "ask_user"
+priority = 1.01
+
+[[rule]]
+toolName = "smart_edit"
+decision = "ask_user"
+priority = 1.01
+
+[[rule]]
+toolName = "write_file"
+decision = "ask_user"
+priority = 1.01
+
+[[rule]]
+toolName = "shell"
+decision = "ask_user"
+priority = 1.01
+
+[[rule]]
+toolName = "memory"
+decision = "ask_user"
+priority = 1.01
+
+[[rule]]
+toolName = "web_fetch"
+decision = "ask_user"
+priority = 1.01
+
+[[rule]]
+toolName = "mcp_tool"
+decision = "ask_user"
+priority = 1.01
+
+# Shell commands with dangerous patterns are denied
+[[rule]]
+toolName = "shell"
+argsPattern = "rm\\s+-rf\\s+/"
+decision = "deny"
+priority = 2.0
+
+[[rule]]
+toolName = "shell"
+argsPattern = "chmod\\s+777"
+decision = "deny"
+priority = 2.0
+
+[[rule]]
+toolName = "shell"
+argsPattern = "dd\\s+if="
+decision = "deny"
+priority = 2.0
+
+[[rule]]
+toolName = "shell"
+argsPattern = "mkfs\\."
+decision = "deny"
+priority = 2.0
+
+[[rule]]
+toolName = "shell"
+argsPattern = ":(){ :|:& };:"
+decision = "deny"
+priority = 2.0

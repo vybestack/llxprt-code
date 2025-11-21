@@ -20,6 +20,7 @@ export {
   openBrowserSecurely,
   shouldLaunchBrowser,
 } from './src/utils/secure-browser-launcher.js';
+export { IDE_DEFINITIONS, detectIdeFromEnv } from './src/ide/detect-ide.js';
 
 // Re-export settings system for explicit access
 export { SettingsService } from './src/settings/SettingsService.js';

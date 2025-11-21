@@ -93,7 +93,7 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
     const confirmationDetails: ToolMcpConfirmationDetails = {
       type: 'mcp',
       title: 'Confirm MCP Tool Execution',
-      serverName: this.serverName,
+      serverName: this.serverName, // Include serverName for spoofing prevention
       toolName: this.serverToolName, // Display original tool name in confirmation
       toolDisplayName: this.displayName, // Display global registry name exposed to model and user
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
@@ -195,6 +195,14 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
 
   getDescription(): string {
     return safeJsonStringify(this.params);
+  }
+
+  override getToolName(): string {
+    return `${this.serverName}__${this.serverToolName}`;
+  }
+
+  protected override getServerName(): string | undefined {
+    return this.serverName;
   }
 }
 

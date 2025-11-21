@@ -21,6 +21,7 @@ import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import { Config } from '../config/config.js';
 import { getRipgrepPath } from '../utils/ripgrepPathResolver.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
 
 const DEFAULT_TOTAL_MAX_MATCHES = 20000;
 
@@ -401,7 +402,10 @@ export class RipGrepTool extends BaseDeclarativeTool<
 > {
   static readonly Name = 'search_file_content';
 
-  constructor(private readonly config: Config) {
+  constructor(
+    private readonly config: Config,
+    _messageBus?: MessageBus,
+  ) {
     super(
       RipGrepTool.Name,
       'SearchText',
@@ -498,8 +502,9 @@ export class RipGrepTool extends BaseDeclarativeTool<
     return null; // Parameters are valid
   }
 
-  protected createInvocation(
+  protected override createInvocation(
     params: RipGrepToolParams,
+    _messageBus?: MessageBus,
   ): ToolInvocation<RipGrepToolParams, ToolResult> {
     return new GrepToolInvocation(this.config, params);
   }

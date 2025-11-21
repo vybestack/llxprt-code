@@ -5,6 +5,7 @@
  */
 
 import { BaseDeclarativeTool, Kind, ToolInvocation } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { Config } from '../config/config.js';
 import {
   WebSearchToolInvocation,
@@ -27,7 +28,10 @@ export class WebSearchTool extends BaseDeclarativeTool<
 > {
   static readonly Name: string = 'google_web_search';
 
-  constructor(private readonly config: Config) {
+  constructor(
+    private readonly config: Config,
+    messageBus?: MessageBus,
+  ) {
     super(
       WebSearchTool.Name,
       'GoogleSearch',
@@ -43,6 +47,9 @@ export class WebSearchTool extends BaseDeclarativeTool<
         },
         required: ['query'],
       },
+      false, // output is not markdown
+      false, // output cannot be updated
+      messageBus,
     );
   }
 
@@ -62,7 +69,8 @@ export class WebSearchTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: WebSearchToolParams,
+    messageBus?: MessageBus,
   ): ToolInvocation<WebSearchToolParams, WebSearchToolResult> {
-    return new WebSearchToolInvocation(this.config, params);
+    return new WebSearchToolInvocation(this.config, params, messageBus);
   }
 }

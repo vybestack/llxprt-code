@@ -48,6 +48,8 @@ import { debugCommand } from '../ui/commands/debugCommands.js';
 import { logoutCommand } from '../ui/commands/logoutCommand.js';
 import { statusCommand } from '../ui/commands/statusCommand.js';
 import { subagentCommand } from '../ui/commands/subagentCommand.js';
+import { permissionsCommand } from '../ui/commands/permissionsCommand.js';
+import { policiesCommand } from '../ui/commands/policiesCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -117,6 +119,8 @@ export class BuiltinCommandLoader implements ICommandLoader {
       logoutCommand,
       statusCommand,
       subagentCommand,
+      permissionsCommand,
+      policiesCommand,
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);

@@ -458,7 +458,7 @@ describe('installExtension', () => {
     await expect(
       installExtension({ source: sourceExtDir, type: 'local' }),
     ).rejects.toThrow(
-      'Error: Extension "my-local-extension" is already installed. Please uninstall it first.',
+      'Extension "my-local-extension" is already installed. Please uninstall it first.',
     );
   });
 
@@ -585,7 +585,43 @@ describe('uninstallExtension', () => {
 
   it('should throw an error if the extension does not exist', async () => {
     await expect(uninstallExtension('nonexistent-extension')).rejects.toThrow(
-      'Error: Extension "nonexistent-extension" not found.',
+      'Extension "nonexistent-extension" not found. Run llxprt extensions list to see available extensions.',
+    );
+  });
+
+  it('should uninstall an extension using its source metadata', async () => {
+    const gitUrl = 'https://example.com/extensions/repo.git';
+    const extensionDir = createExtension({
+      extensionsDir: userExtensionsDir,
+      name: 'git-extension',
+      version: '1.0.0',
+      installMetadata: {
+        source: gitUrl,
+        type: 'git',
+      },
+    });
+
+    await uninstallExtension(gitUrl);
+
+    expect(fs.existsSync(extensionDir)).toBe(false);
+    expect(
+      loadExtensions(tempHomeDir).some(
+        (ext) => ext.config.name === 'git-extension',
+      ),
+    ).toBe(false);
+  });
+
+  it('should fail to uninstall by source when metadata is missing', async () => {
+    createExtension({
+      extensionsDir: userExtensionsDir,
+      name: 'no-metadata-extension',
+      version: '1.0.0',
+    });
+
+    await expect(
+      uninstallExtension('https://example.com/extensions/no-metadata'),
+    ).rejects.toThrow(
+      'Extension "https://example.com/extensions/no-metadata" not found. Run llxprt extensions list to see available extensions.',
     );
   });
 });
@@ -679,6 +715,32 @@ describe('performWorkspaceExtensionMigration', () => {
 
       expect(extensions).toEqual([]);
     });
+
+    it('should filter trust out of mcp servers', () => {
+      const userExtensionsDir = path.join(
+        tempHomeDir,
+        LLXPRT_DIR,
+        'extensions',
+      );
+      fs.mkdirSync(userExtensionsDir, { recursive: true });
+      createExtension({
+        extensionsDir: userExtensionsDir,
+        name: 'test-extension',
+        version: '1.0.0',
+        mcpServers: {
+          'test-server': {
+            command: 'node',
+            args: ['server.js'],
+            trust: true,
+          },
+        },
+      });
+
+      const extensions = loadExtensions();
+      expect(extensions).toHaveLength(1);
+      const loadedConfig = extensions[0].config;
+      expect(loadedConfig.mcpServers?.['test-server'].trust).toBeUndefined();
+    });
   });
 
   it('should install the extensions in the user directory', async () => {
@@ -752,6 +814,15 @@ function createExtension({
   addContextFile = false,
   contextFileName = undefined as string | undefined,
   mcpServers = {} as Record<string, MCPServerConfig>,
+  installMetadata,
+}: {
+  extensionsDir?: string;
+  name?: string;
+  version?: string;
+  addContextFile?: boolean;
+  contextFileName?: string;
+  mcpServers?: Record<string, MCPServerConfig>;
+  installMetadata?: { source: string; type: string };
 } = {}): string {
   const extDir = path.join(extensionsDir, name);
   fs.mkdirSync(extDir, { recursive: true });
@@ -759,6 +830,13 @@ function createExtension({
     path.join(extDir, EXTENSIONS_CONFIG_FILENAME),
     JSON.stringify({ name, version, contextFileName, mcpServers }),
   );
+
+  if (installMetadata) {
+    fs.writeFileSync(
+      path.join(extDir, INSTALL_METADATA_FILENAME),
+      JSON.stringify(installMetadata),
+    );
+  }
 
   if (addContextFile) {
     fs.writeFileSync(path.join(extDir, 'LLXPRT.md'), 'context');

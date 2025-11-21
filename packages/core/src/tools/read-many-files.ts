@@ -30,6 +30,7 @@ import {
 } from '../telemetry/metrics.js';
 import { stat } from 'fs/promises';
 import { ToolErrorType } from './tool-error.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
 
 // Simple token estimation - roughly 4 characters per token
 function estimateTokens(text: string): number {
@@ -593,7 +594,10 @@ export class ReadManyFilesTool extends BaseDeclarativeTool<
 > {
   static readonly Name: string = 'read_many_files';
 
-  constructor(private config: Config) {
+  constructor(
+    private config: Config,
+    _messageBus?: MessageBus,
+  ) {
     const parameterSchema = {
       type: 'object',
       properties: {
@@ -684,8 +688,9 @@ IMPORTANT LIMITS:
     );
   }
 
-  protected createInvocation(
+  protected override createInvocation(
     params: ReadManyFilesParams,
+    _messageBus?: MessageBus,
   ): ToolInvocation<ReadManyFilesParams, ToolResult> {
     return new ReadManyFilesToolInvocation(this.config, params);
   }

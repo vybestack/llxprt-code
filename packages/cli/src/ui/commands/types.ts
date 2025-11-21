@@ -129,7 +129,8 @@ export interface OpenDialogActionReturn {
     | 'providerModel'
     | 'tools'
     | 'logging'
-    | 'settings';
+    | 'settings'
+    | 'permissions';
   dialogData?: unknown;
 }
 

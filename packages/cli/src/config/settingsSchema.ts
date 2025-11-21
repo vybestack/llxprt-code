@@ -40,6 +40,22 @@ export type MemoryImportFormat = 'tree' | 'flat';
 export type DnsResolutionOrder = 'ipv4first' | 'verbatim';
 export type ToolCallProcessingMode = 'legacy' | 'pipeline';
 
+const DEFAULT_EXTENSION_AUTO_UPDATE = {
+  enabled: true,
+  checkIntervalHours: 24,
+  installMode: 'immediate' as const,
+  notificationLevel: 'toast' as const,
+  perExtension: {} as Record<
+    string,
+    {
+      enabled?: boolean;
+      installMode?: 'immediate' | 'on-restart' | 'manual';
+      notificationLevel?: 'silent' | 'toast' | 'dialog';
+      checkIntervalHours?: number;
+    }
+  >,
+};
+
 /**
  * The canonical schema for all settings.
  * The structure of this object defines the structure of the `Settings` type.
@@ -373,12 +389,12 @@ export const SETTINGS_SCHEMA = {
 
   shouldUseNodePtyShell: {
     type: 'boolean',
-    label: 'Use node-pty for Shell Execution',
+    label: 'Enable Interactive Shell (node-pty)',
     category: 'Shell',
     requiresRestart: true,
     default: false,
     description:
-      'Use node-pty for shell command execution. Fallback to child_process still applies.',
+      'Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty. Falls back to child_process when disabled.',
     showInDialog: true,
   },
 
@@ -588,16 +604,6 @@ export const SETTINGS_SCHEMA = {
           'Sandbox execution environment (can be a boolean or a path string).',
         showInDialog: false,
       },
-      usePty: {
-        type: 'boolean',
-        label: 'Use node-pty for Shell Execution',
-        category: 'Tools',
-        requiresRestart: true,
-        default: false,
-        description:
-          'Use node-pty for shell command execution. Fallback to child_process still applies.',
-        showInDialog: true,
-      },
       autoAccept: {
         type: 'boolean',
         label: 'Auto Accept',
@@ -663,6 +669,16 @@ export const SETTINGS_SCHEMA = {
         description:
           'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
         showInDialog: true,
+      },
+      policyPath: {
+        type: 'string',
+        label: 'Policy File Path',
+        category: 'Tools',
+        requiresRestart: false,
+        default: undefined as string | undefined,
+        description:
+          'Absolute path to a TOML policy file that augments the built-in policy rules.',
+        showInDialog: false,
       },
     },
   },
@@ -928,7 +944,11 @@ export const SETTINGS_SCHEMA = {
     label: 'Extensions',
     category: 'Extensions',
     requiresRestart: true,
-    default: {},
+    default: {
+      disabled: [] as string[],
+      workspacesWithMigrationNudge: [] as string[],
+      autoUpdate: DEFAULT_EXTENSION_AUTO_UPDATE,
+    },
     description: 'Settings for extensions.',
     showInDialog: false,
     properties: {
@@ -950,6 +970,70 @@ export const SETTINGS_SCHEMA = {
         description:
           'List of workspaces for which the migration nudge has been shown.',
         showInDialog: false,
+      },
+      autoUpdate: {
+        type: 'object',
+        label: 'Extension Auto-Update',
+        category: 'Extensions',
+        requiresRestart: false,
+        default: DEFAULT_EXTENSION_AUTO_UPDATE,
+        description:
+          'Configure how llxprt-code checks for and applies extension updates.',
+        showInDialog: false,
+        properties: {
+          enabled: {
+            type: 'boolean',
+            label: 'Enable Auto-Update',
+            category: 'Extensions',
+            requiresRestart: false,
+            default: true,
+            description:
+              'Automatically check for updates to globally installed extensions.',
+            showInDialog: false,
+          },
+          checkIntervalHours: {
+            type: 'number',
+            label: 'Auto-Update Interval (hours)',
+            category: 'Extensions',
+            requiresRestart: false,
+            default: 24,
+            description:
+              'How often llxprt-code should check for extension updates.',
+            showInDialog: false,
+          },
+          installMode: {
+            type: 'enum',
+            label: 'Install Mode',
+            category: 'Extensions',
+            requiresRestart: false,
+            default: 'immediate' as const,
+            description:
+              'Choose whether updates apply immediately, on restart, or manually.',
+            showInDialog: false,
+            options: ['immediate', 'on-restart', 'manual'] as const,
+          },
+          notificationLevel: {
+            type: 'enum',
+            label: 'Notification Level',
+            category: 'Extensions',
+            requiresRestart: false,
+            default: 'toast' as const,
+            description:
+              'Controls how aggressively update notifications are surfaced.',
+            showInDialog: false,
+            options: ['toast', 'dialog', 'silent'] as const,
+          },
+          perExtension: {
+            type: 'object',
+            label: 'Per Extension Overrides',
+            category: 'Extensions',
+            requiresRestart: false,
+            default: DEFAULT_EXTENSION_AUTO_UPDATE.perExtension,
+            description:
+              'Override auto-update behavior for individual extensions (by extension name).',
+            showInDialog: false,
+          },
+        },
       },
     },
   },

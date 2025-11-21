@@ -42,6 +42,7 @@ import {
 import { HistoryService } from '../services/history/HistoryService.js';
 import * as providerRuntime from '../runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
 
 // Mocks
 const mockModelsModule = {
@@ -51,6 +52,13 @@ const mockModelsModule = {
   embedContent: vi.fn(),
   batchEmbedContents: vi.fn(),
 } as unknown as Models;
+
+vi.mock('../telemetry/uiTelemetry.js', () => ({
+  uiTelemetryService: {
+    setLastPromptTokenCount: vi.fn(),
+    addEvent: vi.fn(),
+  },
+}));
 
 describe('GeminiChat', () => {
   let chat: GeminiChat;
@@ -79,6 +87,7 @@ describe('GeminiChat', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(uiTelemetryService.setLastPromptTokenCount).mockClear();
 
     mockProvider = {
       name: 'test-provider',
@@ -345,6 +354,11 @@ describe('GeminiChat', () => {
             },
           ],
           text: () => 'response',
+          usageMetadata: {
+            promptTokenCount: 42,
+            candidatesTokenCount: 15,
+            totalTokenCount: 57,
+          },
         } as unknown as GenerateContentResponse;
       })();
       // responseGenerator is for documentation only
@@ -386,6 +400,62 @@ describe('GeminiChat', () => {
           source: 'GeminiChat.generateRequest',
         }),
       );
+    });
+
+    it('should update telemetry when usage metadata includes prompt tokens', async () => {
+      const responseGenerator = (async function* () {
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'response' }],
+          metadata: {
+            usage: {
+              promptTokens: 42,
+              completionTokens: 15,
+              totalTokens: 57,
+            },
+          },
+        };
+      })();
+      vi.mocked(mockProvider.generateChatCompletion).mockReturnValueOnce(
+        responseGenerator,
+      );
+
+      const stream = await chat.sendMessageStream(
+        { message: 'hello' },
+        'prompt-id-1',
+      );
+      for await (const _ of stream) {
+        // consume stream
+      }
+
+      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledWith(
+        42,
+      );
+      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+
+    it('should not update telemetry when usage metadata is missing', async () => {
+      const responseGenerator = (async function* () {
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'response' }],
+        };
+      })();
+      vi.mocked(mockProvider.generateChatCompletion).mockReturnValueOnce(
+        responseGenerator,
+      );
+
+      const stream = await chat.sendMessageStream(
+        { message: 'hello' },
+        'prompt-id-2',
+      );
+      for await (const _ of stream) {
+        // consume stream
+      }
+
+      expect(uiTelemetryService.setLastPromptTokenCount).not.toHaveBeenCalled();
     });
   });
 
@@ -992,7 +1062,7 @@ describe('GeminiChat', () => {
       // !hasToolCall && ((!hasFinishReason && !hasTextResponse) || !responseText)
       // Let's modify the test to actually hit the error condition
 
-      // Following the system design理念: system handles edge cases gracefully
+      // Following the system design: system handles edge cases gracefully
       const streamWithoutFinishReason = (async function* () {
         yield {
           speaker: 'ai',

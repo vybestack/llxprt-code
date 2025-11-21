@@ -64,6 +64,7 @@ import {
   type ComplexityAnalysisResult,
 } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
+import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
 import { TodoStore } from '../tools/todo-store.js';
 import type { Todo } from '../tools/todo-schemas.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
@@ -99,32 +100,43 @@ function extractJsonFromMarkdown(text: string): string {
  *
  * Exported for testing purposes.
  */
-export function findIndexAfterFraction(
-  history: Content[],
+export function findCompressSplitPoint(
+  contents: Content[],
   fraction: number,
 ): number {
   if (fraction <= 0 || fraction >= 1) {
     throw new Error('Fraction must be between 0 and 1');
   }
 
-  const contentLengths = history.map(
-    (content) => JSON.stringify(content).length,
-  );
+  const charCounts = contents.map((content) => JSON.stringify(content).length);
+  const totalCharCount = charCounts.reduce((sum, length) => sum + length, 0);
+  const targetCharCount = totalCharCount * fraction;
 
-  const totalCharacters = contentLengths.reduce(
-    (sum, length) => sum + length,
-    0,
-  );
-  const targetCharacters = totalCharacters * fraction;
-
-  let charactersSoFar = 0;
-  for (let i = 0; i < contentLengths.length; i++) {
-    charactersSoFar += contentLengths[i];
-    if (charactersSoFar >= targetCharacters) {
-      return i;
+  let lastSplitPoint = 0;
+  let cumulativeCharCount = 0;
+  for (let i = 0; i < contents.length; i++) {
+    cumulativeCharCount += charCounts[i];
+    const content = contents[i];
+    const hasFunctionResponse = content.parts?.some(
+      (part) => !!part.functionResponse,
+    );
+    if (content.role === 'user' && !hasFunctionResponse) {
+      if (cumulativeCharCount >= targetCharCount) {
+        return i;
+      }
+      lastSplitPoint = i;
     }
   }
-  return contentLengths.length;
+
+  const lastContent = contents[contents.length - 1];
+  if (
+    lastContent?.role === 'model' &&
+    !lastContent?.parts?.some((part) => part.functionCall)
+  ) {
+    return contents.length;
+  }
+
+  return lastSplitPoint;
 }
 
 export class GeminiClient {
@@ -1750,7 +1762,7 @@ export class GeminiClient {
       }
     }
 
-    let compressBeforeIndex = findIndexAfterFraction(
+    let compressBeforeIndex = findCompressSplitPoint(
       curatedHistory,
       1 - COMPRESSION_PRESERVE_THRESHOLD,
     );
@@ -1812,6 +1824,8 @@ export class GeminiClient {
           CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
       };
     }
+
+    uiTelemetryService.setLastPromptTokenCount(newTokenCount);
 
     // TODO: Add proper telemetry logging once available
     console.debug(

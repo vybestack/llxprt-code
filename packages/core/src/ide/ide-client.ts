@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs';
 import { isSubpath } from '../utils/paths.js';
-import { detectIde, DetectedIde, getIdeInfo } from '../ide/detect-ide.js';
+import { detectIde, IDE_DEFINITIONS, type IdeInfo } from '../ide/detect-ide.js';
 import {
   ideContext,
   IdeContextNotificationSchema,
@@ -36,8 +36,8 @@ type StdioConfig = {
 
 type ConnectionConfig = {
   port?: string;
-  stdio?: StdioConfig;
   authToken?: string;
+  stdio?: StdioConfig;
 };
 
 export type IDEConnectionState = {
@@ -72,9 +72,11 @@ export class IdeClient {
     details:
       'IDE integration is currently disabled. To enable it, run /ide enable.',
   };
-  private currentIde: DetectedIde | undefined;
-  private currentIdeDisplayName: string | undefined;
+  private currentIde: IdeInfo | undefined;
   private ideProcessInfo: { pid: number; command: string } | undefined;
+  private connectionConfig:
+    | (ConnectionConfig & { workspacePath?: string; ideInfo?: IdeInfo })
+    | undefined;
   private authToken: string | undefined;
   private diffResponses = new Map<string, (result: DiffUpdateResult) => void>();
   private statusListeners = new Set<(state: IDEConnectionState) => void>();
@@ -86,12 +88,11 @@ export class IdeClient {
     if (!IdeClient.instance) {
       const client = new IdeClient();
       client.ideProcessInfo = await getIdeProcessInfo();
-      client.currentIde = detectIde(client.ideProcessInfo);
-      if (client.currentIde) {
-        client.currentIdeDisplayName = getIdeInfo(
-          client.currentIde,
-        ).displayName;
-      }
+      client.connectionConfig = await client.getConnectionConfigFromFile();
+      client.currentIde = detectIde(
+        client.ideProcessInfo,
+        client.connectionConfig?.ideInfo,
+      );
       IdeClient.instance = client;
     }
     return IdeClient.instance;
@@ -118,13 +119,13 @@ export class IdeClient {
   }
 
   async connect(): Promise<void> {
-    if (!this.currentIde || !this.currentIdeDisplayName) {
+    if (!this.currentIde) {
       this.setState(
         IDEConnectionStatus.Disconnected,
         `IDE integration is not supported in your current environment. To use this feature, run LLxprt Code in one of these supported IDEs: ${Object.values(
-          DetectedIde,
+          IDE_DEFINITIONS,
         )
-          .map((ide) => getIdeInfo(ide).displayName)
+          .map((ide) => ide.displayName)
           .join(', ')}`,
         false,
       );
@@ -133,15 +134,16 @@ export class IdeClient {
 
     this.setState(IDEConnectionStatus.Connecting);
 
-    const connectionConfig = await this.getConnectionConfigFromFile();
-    this.authToken = connectionConfig?.authToken;
+    // Use the connectionConfig that was fetched during getInstance()
+    if (this.connectionConfig?.authToken) {
+      this.authToken = this.connectionConfig.authToken;
+    }
     const workspacePath =
-      connectionConfig?.workspacePath ??
+      this.connectionConfig?.workspacePath ??
       process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'];
 
     const { isValid, error } = IdeClient.validateWorkspacePath(
       workspacePath,
-      this.currentIdeDisplayName,
       process.cwd(),
     );
 
@@ -150,7 +152,7 @@ export class IdeClient {
       return;
     }
 
-    const portFromFile = connectionConfig?.port;
+    const portFromFile = this.connectionConfig?.port;
     if (portFromFile) {
       const connected = await this.establishConnection(portFromFile);
       if (connected) {
@@ -168,7 +170,7 @@ export class IdeClient {
 
     this.setState(
       IDEConnectionStatus.Disconnected,
-      `Failed to connect to IDE companion extension in ${this.currentIdeDisplayName}. Please ensure the extension is running. To install the extension, run /ide install.`,
+      `Failed to connect to IDE companion extension in ${this.currentIde.displayName}. Please ensure the extension is running. To install the extension, run /ide install.`,
       true,
     );
   }
@@ -266,7 +268,7 @@ export class IdeClient {
     this.client?.close();
   }
 
-  getCurrentIde(): DetectedIde | undefined {
+  getCurrentIde(): IdeInfo | undefined {
     return this.currentIde;
   }
 
@@ -275,7 +277,7 @@ export class IdeClient {
   }
 
   getDetectedIdeDisplayName(): string | undefined {
-    return this.currentIdeDisplayName;
+    return this.currentIde?.displayName;
   }
 
   private setState(
@@ -312,20 +314,19 @@ export class IdeClient {
 
   static validateWorkspacePath(
     ideWorkspacePath: string | undefined,
-    currentIdeDisplayName: string | undefined,
     cwd: string,
   ): { isValid: boolean; error?: string } {
     if (ideWorkspacePath === undefined) {
       return {
         isValid: false,
-        error: `Failed to connect to IDE companion extension in ${currentIdeDisplayName}. Please ensure the extension is running. To install the extension, run /ide install.`,
+        error: `Failed to connect to IDE companion extension. Please ensure the extension is running. To install the extension, run /ide install.`,
       };
     }
 
     if (ideWorkspacePath === '') {
       return {
         isValid: false,
-        error: `To use this feature, please open a workspace folder in ${currentIdeDisplayName} and try again.`,
+        error: `To use this feature, please open a workspace folder in your IDE and try again.`,
       };
     }
 
@@ -339,7 +340,7 @@ export class IdeClient {
     if (!isWithinWorkspace) {
       return {
         isValid: false,
-        error: `Directory mismatch. LLxprt Code is running in a different location than the open workspace in ${currentIdeDisplayName}. Please run the CLI from one of the following directories: ${ideWorkspacePaths.join(
+        error: `Directory mismatch. LLxprt Code is running in a different location than the open workspace in the IDE. Please run the CLI from one of the following directories: ${ideWorkspacePaths.join(
           ', ',
         )}`,
       };
@@ -356,7 +357,8 @@ export class IdeClient {
   }
 
   private async getConnectionConfigFromFile(): Promise<
-    (ConnectionConfig & { workspacePath?: string }) | undefined
+    | (ConnectionConfig & { workspacePath?: string; ideInfo?: IdeInfo })
+    | undefined
   > {
     if (!this.ideProcessInfo) {
       return {};
@@ -367,11 +369,12 @@ export class IdeClient {
         `llxprt-ide-server-${this.ideProcessInfo.pid}.json`,
       );
       const portFileContents = await fs.promises.readFile(portFile, 'utf8');
-      const ideInfo = JSON.parse(portFileContents);
+      const configData = JSON.parse(portFileContents);
       return {
-        port: ideInfo?.port?.toString(),
-        workspacePath: ideInfo?.workspacePath,
-        authToken: ideInfo?.authToken,
+        port: configData?.port?.toString(),
+        workspacePath: configData?.workspacePath,
+        authToken: configData?.authToken,
+        ideInfo: configData?.ideInfo,
       };
     } catch (_) {
       return {};

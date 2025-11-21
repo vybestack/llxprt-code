@@ -15,7 +15,7 @@ import {
   DEFAULT_AGENT_ID,
   formatTodoListForDisplay,
 } from '@vybestack/llxprt-code-core';
-import { SHELL_COMMAND_NAME } from '../../constants.js';
+import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
 import { useTodoContext } from '../../contexts/TodoContext.js';
 import { useToolCallContext } from '../../contexts/ToolCallContext.js';
 
@@ -157,10 +157,13 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
     (t) => t.status === ToolCallStatus.Success,
   );
   const isShellCommand = filteredToolCalls.some(
-    (t) => t.name === SHELL_COMMAND_NAME,
+    (t) => t.name === SHELL_COMMAND_NAME || t.name === SHELL_NAME,
   );
-  const borderColor =
-    hasPending || isShellCommand ? Colors.AccentYellow : Colors.Gray;
+  const borderColor = isShellCommand
+    ? Colors.Foreground
+    : hasPending
+      ? Colors.AccentYellow
+      : Colors.Gray;
 
   const staticHeight = /* border */ 2 + /* marginBottom */ 1;
   // This is a bit of a magic number, but it accounts for the border and

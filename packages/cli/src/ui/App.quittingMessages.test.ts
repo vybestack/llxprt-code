@@ -3,16 +3,17 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 describe('App quittingMessages block', () => {
-  it('defines showTodoPanel before it is used', () => {
+  it('defines showTodoPanelSetting before it is used', () => {
+    // The quitting messages block is now in DefaultAppLayout
     const appSource = readFileSync(
-      path.resolve(__dirname, './App.tsx'),
+      path.resolve(__dirname, './layouts/DefaultAppLayout.tsx'),
       'utf8',
     );
     const quittingBlockIndex = appSource.indexOf('if (quittingMessages)');
     expect(quittingBlockIndex).toBeGreaterThan(0);
 
     const showTodoDeclarationIndex = appSource.lastIndexOf(
-      'const [showTodoPanel',
+      'const showTodoPanelSetting',
       quittingBlockIndex,
     );
     expect(showTodoDeclarationIndex).toBeGreaterThanOrEqual(0);

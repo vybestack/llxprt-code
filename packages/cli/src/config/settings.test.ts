@@ -1784,6 +1784,87 @@ describe('Settings Loading and Merging', () => {
         });
       });
     });
+
+    it('migrates legacy tools.usePty to shouldUseNodePtyShell', () => {
+      const expectedUserSettingsPath = USER_SETTINGS_PATH;
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === expectedUserSettingsPath,
+      );
+      const userSettingsContent = {
+        tools: {
+          usePty: true,
+        },
+      };
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === expectedUserSettingsPath) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.user.settings.shouldUseNodePtyShell).toBe(true);
+      expect(settings.merged.shouldUseNodePtyShell).toBe(true);
+    });
+
+    it('migrates legacy tools.shell.enableInteractiveShell to shouldUseNodePtyShell', () => {
+      const expectedUserSettingsPath = USER_SETTINGS_PATH;
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === expectedUserSettingsPath,
+      );
+      const userSettingsContent = {
+        tools: {
+          shell: {
+            enableInteractiveShell: true,
+          },
+        },
+      };
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === expectedUserSettingsPath) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.user.settings.shouldUseNodePtyShell).toBe(true);
+      expect(settings.merged.shouldUseNodePtyShell).toBe(true);
+    });
+
+    it('retains explicit shouldUseNodePtyShell when legacy values are present', () => {
+      const expectedUserSettingsPath = USER_SETTINGS_PATH;
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === expectedUserSettingsPath,
+      );
+      const userSettingsContent = {
+        shouldUseNodePtyShell: false,
+        tools: {
+          usePty: true,
+          shell: {
+            enableInteractiveShell: true,
+          },
+        },
+      };
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === expectedUserSettingsPath) {
+            return JSON.stringify(userSettingsContent);
+          }
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.user.settings.shouldUseNodePtyShell).toBe(false);
+      expect(settings.merged.shouldUseNodePtyShell).toBe(false);
+    });
   });
 
   describe('LoadedSettings class', () => {

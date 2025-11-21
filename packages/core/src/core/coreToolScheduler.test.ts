@@ -33,6 +33,36 @@ import { MockTool } from '../test-utils/mock-tool.js';
 import { MockModifiableTool } from '../test-utils/tools.js';
 import { Part, PartListUnion } from '@google/genai';
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
+import { PolicyDecision } from '../policy/types.js';
+import {
+  MessageBusType,
+  type ToolConfirmationResponse,
+} from '../confirmation-bus/types.js';
+import { ToolErrorType } from '../tools/tool-error.js';
+
+// Test constants for tool output truncation
+const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 30000;
+const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 100;
+
+// Helper function to create a mock MessageBus
+function createMockMessageBus() {
+  return {
+    subscribe: vi.fn().mockReturnValue(() => {}),
+    publish: vi.fn(),
+    respondToConfirmation: vi.fn(),
+    requestConfirmation: vi.fn().mockResolvedValue(true),
+    removeAllListeners: vi.fn(),
+    listenerCount: vi.fn().mockReturnValue(0),
+  };
+}
+
+// Helper function to create a mock PolicyEngine
+function createMockPolicyEngine() {
+  return {
+    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
+    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
+  };
+}
 
 class AbortDuringConfirmationInvocation extends BaseToolInvocation<
   Record<string, unknown>,
@@ -136,6 +166,11 @@ describe('CoreToolScheduler', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi
+      .fn()
+      .mockReturnValue(PolicyDecision.ASK_USER);
+
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getUsageStatisticsEnabled: () => true,
@@ -148,6 +183,8 @@ describe('CoreToolScheduler', () => {
         authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -177,6 +214,261 @@ describe('CoreToolScheduler', () => {
     expect(completedCalls[0].status).toBe('cancelled');
   });
 
+  it('should skip confirmation when policy allows execution', async () => {
+    const mockTool = new MockTool();
+    mockTool.shouldConfirm = true;
+    const declarativeTool = mockTool;
+    const mockToolRegistry = {
+      getTool: () => declarativeTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {},
+      registerTool: () => {},
+      getToolByName: () => declarativeTool,
+      getToolByDisplayName: () => declarativeTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+    } as unknown as ToolRegistry;
+
+    const onAllToolCallsComplete = vi.fn();
+    const onToolCallsUpdate = vi.fn();
+
+    const mockMessageBus = createMockMessageBus();
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi.fn().mockReturnValue(PolicyDecision.ALLOW);
+
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getEphemeralSettings: () => ({}),
+      getAllowedTools: () => [],
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+      getToolRegistry: () => mockToolRegistry,
+      getMessageBus: () => mockMessageBus,
+      getPolicyEngine: () => mockPolicyEngine,
+    } as unknown as Config;
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      toolRegistry: mockToolRegistry,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    await scheduler.schedule(
+      [
+        {
+          callId: 'allow-1',
+          name: 'mockTool',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'prompt-allow',
+        },
+      ],
+      new AbortController().signal,
+    );
+
+    expect(mockPolicyEngine.evaluate).toHaveBeenCalled();
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
+    const completedCallsAllow = onAllToolCallsComplete.mock
+      .calls[0][0] as ToolCall[];
+    expect(completedCallsAllow[0].status).toBe('success');
+    expect(mockMessageBus.publish).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
+      }),
+    );
+  });
+
+  it('should reject tool execution when policy denies it', async () => {
+    const mockTool = new MockTool();
+    mockTool.shouldConfirm = true;
+    const declarativeTool = mockTool;
+    const mockToolRegistry = {
+      getTool: () => declarativeTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {},
+      registerTool: () => {},
+      getToolByName: () => declarativeTool,
+      getToolByDisplayName: () => declarativeTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+    } as unknown as ToolRegistry;
+
+    const onAllToolCallsComplete = vi.fn();
+    const onToolCallsUpdate = vi.fn();
+
+    const mockMessageBus = createMockMessageBus();
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi.fn().mockReturnValue(PolicyDecision.DENY);
+
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getEphemeralSettings: () => ({}),
+      getAllowedTools: () => [],
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+      getToolRegistry: () => mockToolRegistry,
+      getMessageBus: () => mockMessageBus,
+      getPolicyEngine: () => mockPolicyEngine,
+    } as unknown as Config;
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      toolRegistry: mockToolRegistry,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    await scheduler.schedule(
+      [
+        {
+          callId: 'deny-1',
+          name: 'mockTool',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'prompt-deny',
+        },
+      ],
+      new AbortController().signal,
+    );
+
+    expect(onAllToolCallsComplete).toHaveBeenCalled();
+    const completedCallsDeny = onAllToolCallsComplete.mock
+      .calls[0][0] as ToolCall[];
+    expect(completedCallsDeny[0].status).toBe('error');
+    expect(completedCallsDeny[0].response?.errorType).toBe(
+      ToolErrorType.POLICY_VIOLATION,
+    );
+    expect(mockMessageBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageBusType.TOOL_POLICY_REJECTION,
+      }),
+    );
+  });
+
+  it('should publish confirmation requests when policy asks the user', async () => {
+    const mockTool = new MockTool();
+    mockTool.shouldConfirm = true;
+    const declarativeTool = mockTool;
+    const mockToolRegistry = {
+      getTool: () => declarativeTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {},
+      registerTool: () => {},
+      getToolByName: () => declarativeTool,
+      getToolByDisplayName: () => declarativeTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+    } as unknown as ToolRegistry;
+
+    const onAllToolCallsComplete = vi.fn();
+    const onToolCallsUpdate = vi.fn();
+
+    const mockMessageBus = createMockMessageBus();
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi
+      .fn()
+      .mockReturnValue(PolicyDecision.ASK_USER);
+    let busHandler: ((message: ToolConfirmationResponse) => void) | undefined;
+    (mockMessageBus.subscribe as Mock).mockImplementation(
+      (type: MessageBusType, handler: unknown) => {
+        if (type === MessageBusType.TOOL_CONFIRMATION_RESPONSE) {
+          busHandler = handler as (message: ToolConfirmationResponse) => void;
+        }
+        return () => {};
+      },
+    );
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => true,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+      getEphemeralSettings: () => ({}),
+      getAllowedTools: () => [],
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+        authType: 'oauth-personal',
+      }),
+      getToolRegistry: () => mockToolRegistry,
+      getMessageBus: () => mockMessageBus,
+      getPolicyEngine: () => mockPolicyEngine,
+    } as unknown as Config;
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      toolRegistry: mockToolRegistry,
+      onAllToolCallsComplete,
+      onToolCallsUpdate,
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    await scheduler.schedule(
+      [
+        {
+          callId: 'ask-1',
+          name: 'mockTool',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'prompt-ask',
+        },
+      ],
+      new AbortController().signal,
+    );
+
+    const latestUpdate = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
+    const waitingCall = latestUpdate[0] as WaitingToolCall;
+    expect(waitingCall.status).toBe('awaiting_approval');
+    expect(waitingCall.confirmationDetails.correlationId).toBeDefined();
+    const correlationId = waitingCall.confirmationDetails
+      .correlationId as string;
+
+    expect(mockMessageBus.publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
+        correlationId,
+      }),
+    );
+
+    expect(busHandler).toBeDefined();
+    busHandler?.({
+      type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+      correlationId,
+      outcome: ToolConfirmationOutcome.ProceedOnce,
+    });
+
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+      const completedCallsAsk = onAllToolCallsComplete.mock.calls.at(
+        -1,
+      )?.[0] as ToolCall[];
+      expect(completedCallsAsk?.[0]?.status).toBe('success');
+    });
+  });
+
   it('should mark tool call as cancelled when abort happens during confirmation error', async () => {
     const abortController = new AbortController();
     const abortError = new Error('Abort requested during confirmation');
@@ -202,6 +494,11 @@ describe('CoreToolScheduler', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi
+      .fn()
+      .mockReturnValue(PolicyDecision.ASK_USER);
+
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getUsageStatisticsEnabled: () => true,
@@ -213,7 +510,22 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
         authType: 'oauth-personal',
       }),
+      getShellExecutionConfig: () => ({
+        terminalWidth: 90,
+        terminalHeight: 30,
+      }),
+      storage: {
+        getProjectTempDir: () => '/tmp',
+      },
+      getTruncateToolOutputThreshold: () =>
+        DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+      getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
       getToolRegistry: () => mockToolRegistry,
+      getUseSmartEdit: () => false,
+      getUseModelRouter: () => false,
+      getGeminiClient: () => null,
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -268,6 +580,11 @@ describe('CoreToolScheduler', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi
+      .fn()
+      .mockReturnValue(PolicyDecision.ASK_USER);
+
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getUsageStatisticsEnabled: () => true,
@@ -279,6 +596,8 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
         authType: 'oauth-personal',
       }),
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -346,6 +665,8 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
         authType: 'oauth-personal',
       }),
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -402,6 +723,11 @@ describe('CoreToolScheduler', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi
+      .fn()
+      .mockReturnValue(PolicyDecision.ASK_USER);
+
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getUsageStatisticsEnabled: () => true,
@@ -413,6 +739,8 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
         authType: 'oauth-personal',
       }),
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -448,12 +776,14 @@ describe('CoreToolScheduler', () => {
   describe('getToolSuggestion', () => {
     it('should suggest the top N closest tool names for a typo', () => {
       // Create mocked tool registry
-      const mockConfig = {
-        getToolRegistry: () => mockToolRegistry,
-      } as unknown as Config;
       const mockToolRegistry = {
         getAllToolNames: () => ['list_files', 'read_file', 'write_file'],
       } as unknown as ToolRegistry;
+      const mockConfig = {
+        getToolRegistry: () => mockToolRegistry,
+        getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+        getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
+      } as unknown as Config;
 
       // Create scheduler
       const scheduler = new CoreToolScheduler({
@@ -503,6 +833,11 @@ describe('CoreToolScheduler with payload', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi
+      .fn()
+      .mockReturnValue(PolicyDecision.ASK_USER);
+
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getUsageStatisticsEnabled: () => true,
@@ -515,6 +850,8 @@ describe('CoreToolScheduler with payload', () => {
         authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -862,6 +1199,11 @@ describe('CoreToolScheduler edit cancellation', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi
+      .fn()
+      .mockReturnValue(PolicyDecision.ASK_USER);
+
     const mockConfig = {
       getSessionId: () => 'test-session-id',
       getUsageStatisticsEnabled: () => true,
@@ -874,6 +1216,8 @@ describe('CoreToolScheduler edit cancellation', () => {
         authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -1137,6 +1481,11 @@ describe('CoreToolScheduler YOLO mode', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
+    const mockPolicyEngine = createMockPolicyEngine();
+    mockPolicyEngine.evaluate = vi
+      .fn()
+      .mockReturnValue(PolicyDecision.ASK_USER);
+
     // Configure the scheduler for YOLO mode.
     const mockConfig = {
       getSessionId: () => 'test-session-id',
@@ -1150,6 +1499,8 @@ describe('CoreToolScheduler YOLO mode', () => {
         authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -1664,6 +2015,8 @@ it('injects agentId into ContextAwareTool context', async () => {
     getToolsByServer: () => [],
   };
 
+  const mockPolicyEngine = createMockPolicyEngine();
+
   const mockConfig = {
     getSessionId: () => 'session-123',
     getUsageStatisticsEnabled: () => true,
@@ -1675,6 +2028,8 @@ it('injects agentId into ContextAwareTool context', async () => {
       model: 'test-model',
       authType: 'oauth-personal',
     }),
+    getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+    getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
   } as unknown as Config;
 
   const scheduler = new CoreToolScheduler({

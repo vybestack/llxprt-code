@@ -156,7 +156,7 @@ describe('UiTelemetryService', () => {
     expect(spy).toHaveBeenCalledOnce();
     const { metrics, lastPromptTokenCount } = spy.mock.calls[0][0];
     expect(metrics).toBeDefined();
-    expect(lastPromptTokenCount).toBe(10);
+    expect(lastPromptTokenCount).toBe(0);
   });
 
   describe('API Response Event Processing', () => {
@@ -191,7 +191,7 @@ describe('UiTelemetryService', () => {
           tool: 3,
         },
       });
-      expect(service.getLastPromptTokenCount()).toBe(10);
+      expect(service.getLastPromptTokenCount()).toBe(0);
     });
 
     it('should aggregate multiple ApiResponseEvents for the same model', () => {
@@ -241,7 +241,7 @@ describe('UiTelemetryService', () => {
           tool: 9,
         },
       });
-      expect(service.getLastPromptTokenCount()).toBe(15);
+      expect(service.getLastPromptTokenCount()).toBe(0);
     });
 
     it('should handle ApiResponseEvents for different models', () => {
@@ -280,7 +280,7 @@ describe('UiTelemetryService', () => {
       expect(metrics.models['gemini-2.5-flash']).toBeDefined();
       expect(metrics.models['gemini-2.5-pro'].api.totalRequests).toBe(1);
       expect(metrics.models['gemini-2.5-flash'].api.totalRequests).toBe(1);
-      expect(service.getLastPromptTokenCount()).toBe(100);
+      expect(service.getLastPromptTokenCount()).toBe(0);
     });
   });
 
@@ -541,115 +541,33 @@ describe('UiTelemetryService', () => {
     });
   });
 
-  describe('resetLastPromptTokenCount', () => {
-    it('should reset the last prompt token count to 0', () => {
-      // First, set up some initial token count
-      const event = {
-        'event.name': EVENT_API_RESPONSE,
-        model: 'gemini-2.5-pro',
-        duration_ms: 500,
-        input_token_count: 100,
-        output_token_count: 200,
-        total_token_count: 300,
-        cached_content_token_count: 50,
-        thoughts_token_count: 20,
-        tool_token_count: 30,
-      } as ApiResponseEvent & { 'event.name': typeof EVENT_API_RESPONSE };
-
-      service.addEvent(event);
-      expect(service.getLastPromptTokenCount()).toBe(100);
-
-      // Now reset the token count
-      service.resetLastPromptTokenCount();
-      expect(service.getLastPromptTokenCount()).toBe(0);
+  describe('setLastPromptTokenCount', () => {
+    it('should update the last prompt token count to the provided value', () => {
+      service.setLastPromptTokenCount(321);
+      expect(service.getLastPromptTokenCount()).toBe(321);
     });
 
-    it('should emit an update event when resetLastPromptTokenCount is called', () => {
+    it('should emit an update event when called', () => {
       const spy = vi.fn();
       service.on('update', spy);
 
-      // Set up initial token count
-      const event = {
-        'event.name': EVENT_API_RESPONSE,
-        model: 'gemini-2.5-pro',
-        duration_ms: 500,
-        input_token_count: 100,
-        output_token_count: 200,
-        total_token_count: 300,
-        cached_content_token_count: 50,
-        thoughts_token_count: 20,
-        tool_token_count: 30,
-      } as ApiResponseEvent & { 'event.name': typeof EVENT_API_RESPONSE };
-
-      service.addEvent(event);
-      spy.mockClear(); // Clear the spy to focus on the reset call
-
-      service.resetLastPromptTokenCount();
+      service.setLastPromptTokenCount(50);
 
       expect(spy).toHaveBeenCalledOnce();
       const { metrics, lastPromptTokenCount } = spy.mock.calls[0][0];
       expect(metrics).toBeDefined();
-      expect(lastPromptTokenCount).toBe(0);
+      expect(lastPromptTokenCount).toBe(50);
     });
 
-    it('should not affect other metrics when resetLastPromptTokenCount is called', () => {
-      // Set up initial state with some metrics
-      const event = {
-        'event.name': EVENT_API_RESPONSE,
-        model: 'gemini-2.5-pro',
-        duration_ms: 500,
-        input_token_count: 100,
-        output_token_count: 200,
-        total_token_count: 300,
-        cached_content_token_count: 50,
-        thoughts_token_count: 20,
-        tool_token_count: 30,
-      } as ApiResponseEvent & { 'event.name': typeof EVENT_API_RESPONSE };
-
-      service.addEvent(event);
-
+    it('should not affect other metrics', () => {
       const metricsBefore = service.getMetrics();
 
-      service.resetLastPromptTokenCount();
+      service.setLastPromptTokenCount(75);
 
       const metricsAfter = service.getMetrics();
 
-      // Metrics should be unchanged
       expect(metricsAfter).toEqual(metricsBefore);
-
-      // Only the last prompt token count should be reset
-      expect(service.getLastPromptTokenCount()).toBe(0);
-    });
-
-    it('should work correctly when called multiple times', () => {
-      const spy = vi.fn();
-      service.on('update', spy);
-
-      // Set up initial token count
-      const event = {
-        'event.name': EVENT_API_RESPONSE,
-        model: 'gemini-2.5-pro',
-        duration_ms: 500,
-        input_token_count: 100,
-        output_token_count: 200,
-        total_token_count: 300,
-        cached_content_token_count: 50,
-        thoughts_token_count: 20,
-        tool_token_count: 30,
-      } as ApiResponseEvent & { 'event.name': typeof EVENT_API_RESPONSE };
-
-      service.addEvent(event);
-      expect(service.getLastPromptTokenCount()).toBe(100);
-
-      // Reset once
-      service.resetLastPromptTokenCount();
-      expect(service.getLastPromptTokenCount()).toBe(0);
-
-      // Reset again - should still be 0 and still emit event
-      spy.mockClear();
-      service.resetLastPromptTokenCount();
-      expect(service.getLastPromptTokenCount()).toBe(0);
-      expect(spy).toHaveBeenCalledOnce();
+      expect(service.getLastPromptTokenCount()).toBe(75);
     });
   });
 
