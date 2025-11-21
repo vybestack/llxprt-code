@@ -1204,14 +1204,17 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // debounce so it doesn't fire up too often during resize
     const handler = setTimeout(() => {
-      setStaticNeedsRefresh(false);
-      refreshStatic();
+      if (streamingState === StreamingState.Idle) {
+        refreshStatic();
+      } else {
+        setStaticNeedsRefresh(true);
+      }
     }, 300);
 
     return () => {
       clearTimeout(handler);
     };
-  }, [terminalWidth, terminalHeight, refreshStatic]);
+  }, [terminalWidth, terminalHeight, refreshStatic, streamingState]);
 
   useEffect(() => {
     if (streamingState === StreamingState.Idle && _staticNeedsRefresh) {

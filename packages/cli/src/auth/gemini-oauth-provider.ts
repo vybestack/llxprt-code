@@ -50,6 +50,8 @@ export class GeminiOAuthProvider implements OAuthProvider {
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,
   ) => number;
+  private authCodeResolver?: (code: string) => void;
+  private authCodeRejecter?: (error: Error) => void;
 
   constructor(
     tokenStore?: TokenStore,
@@ -84,6 +86,43 @@ export class GeminiOAuthProvider implements OAuthProvider {
     ) => number,
   ): void {
     this.addItem = addItem;
+  }
+
+  /**
+   * Wait for authorization code from UI dialog
+   */
+  waitForAuthCode(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      this.authCodeResolver = resolve;
+      this.authCodeRejecter = reject;
+    });
+  }
+
+  /**
+   * Submit authorization code from UI dialog
+   */
+  submitAuthCode(code: string): void {
+    if (this.authCodeResolver) {
+      this.authCodeResolver(code);
+      this.authCodeResolver = undefined;
+      this.authCodeRejecter = undefined;
+    }
+  }
+
+  /**
+   * Cancel OAuth flow
+   */
+  cancelAuth(): void {
+    if (this.authCodeRejecter) {
+      const error = OAuthErrorFactory.fromUnknown(
+        this.name,
+        new Error('OAuth authentication was cancelled by user'),
+        'user cancellation',
+      );
+      this.authCodeRejecter(error);
+      this.authCodeResolver = undefined;
+      this.authCodeRejecter = undefined;
+    }
   }
 
   /**
@@ -159,124 +198,131 @@ export class GeminiOAuthProvider implements OAuthProvider {
 
     return this.errorHandler.wrapMethod(
       async () => {
-        // Import the existing Google OAuth infrastructure
-        const coreModule = await import('@vybestack/llxprt-code-core');
-        const { getOauthClient, AuthType } = coreModule;
-
-        // Create a minimal config for OAuth - use type assertion for test environment
-        // Type assertion is needed since we're creating a partial Config for test mode
-        const config = {
-          getProxy: () => undefined,
-          isBrowserLaunchSuppressed: () => !shouldLaunchBrowser(),
-        } as unknown as Parameters<typeof getOauthClient>[1];
-
-        // Use the existing Google OAuth infrastructure to get a client
-        let client;
+        const cleanupAuthHooks = this.installAuthCodeHooks();
         try {
-          client = await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, config);
-        } catch (error) {
-          // Handle browser auth cancellation or other auth failures
-          if (error instanceof Error) {
-            // Show error message to user if addItem is available
-            const addItem = this.addItem || globalOAuthUI.getAddItem();
-            if (addItem) {
-              addItem(
-                {
-                  type: 'error',
-                  text: `Browser authentication failed: ${error.message}
+          // Import the existing Google OAuth infrastructure
+          const coreModule = await import('@vybestack/llxprt-code-core');
+          const { getOauthClient, AuthType } = coreModule;
+
+          // Create a minimal config for OAuth - use type assertion for test environment
+          // Type assertion is needed since we're creating a partial Config for test mode
+          const config = {
+            getProxy: () => undefined,
+            isBrowserLaunchSuppressed: () => !shouldLaunchBrowser(),
+          } as unknown as Parameters<typeof getOauthClient>[1];
+
+          // Use the existing Google OAuth infrastructure to get a client
+          let client;
+          try {
+            client = await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, config);
+          } catch (error) {
+            // Handle browser auth cancellation or other auth failures
+            if (error instanceof Error) {
+              // Show error message to user if addItem is available
+              const addItem = this.addItem || globalOAuthUI.getAddItem();
+              if (addItem) {
+                addItem(
+                  {
+                    type: 'error',
+                    text: `Browser authentication failed: ${error.message}
 Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
-                },
-                Date.now(),
-              );
-            }
-
-            // Check for specific cancellation messages
-            if (
-              error.message.includes('cancelled') ||
-              error.message.includes('denied') ||
-              error.message.includes('access_denied') ||
-              error.message.includes('user_cancelled')
-            ) {
-              // CRITICAL FIX: Trigger fallback flow instead of failing
-              this.logger.debug(
-                () =>
-                  `Browser auth cancelled, triggering fallback: ${error.message}`,
-              );
-
-              // Show fallback instructions to user
-              const fallbackMessage = `Browser authentication was cancelled or failed.\nFallback options:\n1. Use API key: /keyfile <path-to-your-gemini-key>\n2. Set environment: export GEMINI_API_KEY=<your-key>\n3. Try OAuth again: /auth gemini enable`;
-
-              const addItem = this.addItem || globalOAuthUI.getAddItem();
-              if (addItem) {
-                addItem(
-                  {
-                    type: 'info',
-                    text: fallbackMessage,
                   },
                   Date.now(),
                 );
-              } else {
-                console.log('\\n' + '─'.repeat(60));
-                console.log('Browser authentication was cancelled or failed.');
-                console.log('Fallback options:');
-                console.log(
-                  '1. Use API key: /keyfile <path-to-your-gemini-key>',
-                );
-                console.log(
-                  '2. Set environment: export GEMINI_API_KEY=<your-key>',
-                );
-                console.log('3. Try OAuth again: /auth gemini enable');
-                console.log('─'.repeat(60));
               }
 
-              // Throw a user-friendly error that doesn't hang the system
-              throw OAuthErrorFactory.authenticationRequired(this.name, {
-                reason:
-                  'Browser authentication was cancelled or failed. Please use one of the fallback options shown above, or check the URL in your history.',
-              });
+              // Check for specific cancellation messages
+              if (
+                error.message.includes('cancelled') ||
+                error.message.includes('denied') ||
+                error.message.includes('access_denied') ||
+                error.message.includes('user_cancelled')
+              ) {
+                // CRITICAL FIX: Trigger fallback flow instead of failing
+                this.logger.debug(
+                  () =>
+                    `Browser auth cancelled, triggering fallback: ${error.message}`,
+                );
+
+                // Show fallback instructions to user
+                const fallbackMessage = `Browser authentication was cancelled or failed.\nFallback options:\n1. Use API key: /keyfile <path-to-your-gemini-key>\n2. Set environment: export GEMINI_API_KEY=<your-key>\n3. Try OAuth again: /auth gemini enable`;
+
+                const addItem = this.addItem || globalOAuthUI.getAddItem();
+                if (addItem) {
+                  addItem(
+                    {
+                      type: 'info',
+                      text: fallbackMessage,
+                    },
+                    Date.now(),
+                  );
+                } else {
+                  console.log('\n' + '─'.repeat(60));
+                  console.log(
+                    'Browser authentication was cancelled or failed.',
+                  );
+                  console.log('Fallback options:');
+                  console.log(
+                    '1. Use API key: /keyfile <path-to-your-gemini-key>',
+                  );
+                  console.log(
+                    '2. Set environment: export GEMINI_API_KEY=<your-key>',
+                  );
+                  console.log('3. Try OAuth again: /auth gemini enable');
+                  console.log('─'.repeat(60));
+                }
+
+                // Throw a user-friendly error that doesn't hang the system
+                throw OAuthErrorFactory.authenticationRequired(this.name, {
+                  reason:
+                    'Browser authentication was cancelled or failed. Please use one of the fallback options shown above, or check the URL in your history.',
+                });
+              }
             }
+            // Re-throw other authentication errors
+            throw error;
           }
-          // Re-throw other authentication errors
-          throw error;
-        }
 
-        // The client should now have valid credentials
-        // Extract and cache the token
-        const credentials = client.credentials;
-        if (credentials && credentials.access_token) {
-          const token = this.credentialsToOAuthToken(credentials);
-          if (token && this.tokenStore) {
-            try {
-              await this.tokenStore.saveToken('gemini', token);
-              this.currentToken = token;
+          // The client should now have valid credentials
+          // Extract and cache the token
+          const credentials = client.credentials;
+          if (credentials && credentials.access_token) {
+            const token = this.credentialsToOAuthToken(credentials);
+            if (token && this.tokenStore) {
+              try {
+                await this.tokenStore.saveToken('gemini', token);
+                this.currentToken = token;
 
-              // Display success message
-              const addItem = this.addItem || globalOAuthUI.getAddItem();
-              if (addItem) {
-                addItem(
+                // Display success message
+                const addItem = this.addItem || globalOAuthUI.getAddItem();
+                if (addItem) {
+                  addItem(
+                    {
+                      type: 'info',
+                      text: 'Successfully authenticated with Google Gemini!',
+                    },
+                    Date.now(),
+                  );
+                } else {
+                  console.log('Successfully authenticated with Google Gemini!');
+                }
+              } catch (saveError) {
+                throw OAuthErrorFactory.storageError(
+                  this.name,
+                  saveError instanceof Error ? saveError : undefined,
                   {
-                    type: 'info',
-                    text: 'Successfully authenticated with Google Gemini!',
+                    operation: 'saveToken',
                   },
-                  Date.now(),
                 );
-              } else {
-                console.log('Successfully authenticated with Google Gemini!');
               }
-            } catch (saveError) {
-              throw OAuthErrorFactory.storageError(
-                this.name,
-                saveError instanceof Error ? saveError : undefined,
-                {
-                  operation: 'saveToken',
-                },
-              );
             }
+          } else {
+            throw OAuthErrorFactory.authenticationRequired(this.name, {
+              reason: 'No valid credentials received from Google OAuth',
+            });
           }
-        } else {
-          throw OAuthErrorFactory.authenticationRequired(this.name, {
-            reason: 'No valid credentials received from Google OAuth',
-          });
+        } finally {
+          cleanupAuthHooks();
         }
       },
       this.name,
@@ -508,5 +554,30 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
         );
       }
     });
+  }
+
+  /**
+   * Install auth-code hooks so oauth2.ts can ask the UI for the code instead of readline
+   */
+  private installAuthCodeHooks(): () => void {
+    const globalObj = global as Record<string, unknown>;
+    const previousWaitForCode = globalObj.__oauth_wait_for_code;
+    const previousProvider = globalObj.__oauth_provider;
+    globalObj.__oauth_wait_for_code = () => this.waitForAuthCode();
+    globalObj.__oauth_provider = this.name;
+
+    return () => {
+      if (previousWaitForCode !== undefined) {
+        globalObj.__oauth_wait_for_code = previousWaitForCode;
+      } else {
+        delete globalObj.__oauth_wait_for_code;
+      }
+
+      if (previousProvider !== undefined) {
+        globalObj.__oauth_provider = previousProvider;
+      } else {
+        delete globalObj.__oauth_provider;
+      }
+    };
   }
 }

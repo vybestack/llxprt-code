@@ -6,7 +6,7 @@
 
 import { useReducer } from 'react';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from '../config/settings.js';
+import type { LoadedSettings } from '../config/settings.js';
 import { KeypressProvider } from './contexts/KeypressContext.js';
 import { SessionStatsProvider } from './contexts/SessionContext.js';
 import { VimModeProvider } from './contexts/VimModeContext.js';

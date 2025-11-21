@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="148" failures="0" errors="0" time="18.93350825">
+    <testsuite name="src/integration-tests/base-url-behavior.integration.test.ts" timestamp="2025-11-21T00:00:40.712Z" hostname="Andrews-MacBook-Pro-2.local" tests="5" failures="0" errors="0" skipped="5" time="0">
+        <testcase classname="src/integration-tests/base-url-behavior.integration.test.ts" name="Base URL Runtime Helper Integration &gt; applies custom base URL via runtime helper" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/base-url-behavior.integration.test.ts" name="Base URL Runtime Helper Integration &gt; clears base URL when helper receives empty or &quot;none&quot; values" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/base-url-behavior.integration.test.ts" name="Base URL Runtime Helper Integration &gt; stores base URL even when provider lacks direct override hook" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/base-url-behavior.integration.test.ts" name="Base URL Runtime Helper Integration &gt; clears previous provider base URL when switching providers" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/base-url-behavior.integration.test.ts" name="Base URL Runtime Helper Integration &gt; preserves profile base URL when loading via ProfileManager" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/cli-args.integration.test.ts" timestamp="2025-11-21T00:00:40.712Z" hostname="Andrews-MacBook-Pro-2.local" tests="26" failures="0" errors="0" skipped="15" time="18.93350825">
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; Basic Profile Loading &gt; should load a profile and apply its settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; Basic Profile Loading &gt; should handle non-existent profile gracefully" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; Basic Profile Loading &gt; should handle invalid profile format" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; CLI Argument Precedence &gt; should allow --provider to override profile provider" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; CLI Argument Precedence &gt; should allow --model to override profile model" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; CLI Argument Precedence &gt; should allow --key to override profile auth" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; CLI Argument Precedence &gt; should override profile keyfile with CLI keyfile" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; CLI Argument Precedence &gt; should process --set arguments at startup and override profile settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; CLI Argument Precedence &gt; should apply CLI args after profile load but before provider switch" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; Profile with Auth Credentials &gt; should load profile with embedded auth info" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; Profile with Model Parameters &gt; should apply model parameters from profile" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; Multiple Profiles &gt; should load the correct profile when multiple exist" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; CI Environment &gt; should not open browser windows in CI environment" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; Error Cases &gt; should handle missing profile version" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile-load Integration Tests &gt; Error Cases &gt; should handle unsupported profile version" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 1: Basic CLI Integration &gt; should accept --profile flag" time="2.192084167">
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 1: Basic CLI Integration &gt; should apply overrides with --profile" time="2.190167041">
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 1: Basic CLI Integration &gt; should reject invalid JSON in --profile" time="1.144918917">
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 2: Mutual Exclusivity Enforcement &gt; should reject both --profile and --profile-load" time="0.65237375">
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 2: Mutual Exclusivity Enforcement &gt; should provide helpful mutual exclusivity error" time="0.649808916">
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 3: Environment Integration &gt; should read profile from environment variable" time="2.599686542">
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 3: Environment Integration &gt; should prioritize --profile over environment" time="2.516729333">
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 3: Environment Integration &gt; should reject invalid JSON in environment variable" time="1.544472625">
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 4: Post-Initialization Profile Handling &gt; should not warn about profile reapplication for inline profiles" time="2.021343167">
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 5: Security and Limits &gt; should reject oversized profile" time="1.18571075">
+        </testcase>
+        <testcase classname="src/integration-tests/cli-args.integration.test.ts" name="CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12 &gt; Group 5: Security and Limits &gt; should reject profile with dangerous fields" time="2.235366">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/compression-settings-apply.integration.test.ts" timestamp="2025-11-21T00:00:40.714Z" hostname="Andrews-MacBook-Pro-2.local" tests="8" failures="0" errors="0" skipped="8" time="0">
+        <testcase classname="src/integration-tests/compression-settings-apply.integration.test.ts" name="Compression Settings Apply Integration Tests &gt; Setting compression-threshold and context-limit via ephemeral settings &gt; should store compression settings in ephemeral settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/compression-settings-apply.integration.test.ts" name="Compression Settings Apply Integration Tests &gt; Setting compression-threshold and context-limit via ephemeral settings &gt; should apply only compression-threshold when context-limit is not set" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/compression-settings-apply.integration.test.ts" name="Compression Settings Apply Integration Tests &gt; Setting compression-threshold and context-limit via ephemeral settings &gt; should apply only context-limit when compression-threshold is not set" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/compression-settings-apply.integration.test.ts" name="Compression Settings Apply Integration Tests &gt; Setting compression-threshold and context-limit via ephemeral settings &gt; should handle clearing compression settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/compression-settings-apply.integration.test.ts" name="Compression Settings Apply Integration Tests &gt; Setting compression-threshold and context-limit via ephemeral settings &gt; should validate compression-threshold range" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/compression-settings-apply.integration.test.ts" name="Compression Settings Apply Integration Tests &gt; Setting compression-threshold and context-limit via ephemeral settings &gt; should validate context-limit is positive" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/compression-settings-apply.integration.test.ts" name="Compression Settings Apply Integration Tests &gt; Profiles with compression settings &gt; should save and load compression settings in profiles" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/compression-settings-apply.integration.test.ts" name="Compression Settings Apply Integration Tests &gt; Profiles with compression settings &gt; should handle profiles with partial compression settings" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/ephemeral-settings.integration.test.ts" timestamp="2025-11-21T00:00:40.718Z" hostname="Andrews-MacBook-Pro-2.local" tests="11" failures="0" errors="0" skipped="11" time="0">
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Ephemeral Settings Persistence &gt; should store ephemeral settings in current Config instance" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Compression Settings Application &gt; should apply compression settings to GeminiClient" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Custom Headers Application &gt; should make custom headers available for API requests" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Streaming Settings Application &gt; should default to streaming enabled when not set" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Streaming Settings Application &gt; should allow explicit streaming control via ephemeral settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Streaming Settings Application &gt; should validate streaming mode values" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Ephemeral Settings in Profiles &gt; should save ephemeral settings to a profile and restore them" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Ephemeral Settings in Profiles &gt; should handle profiles with partial ephemeral settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Ephemeral Settings Edge Cases &gt; should handle setting and unsetting ephemeral values" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Ephemeral Settings Edge Cases &gt; should handle complex ephemeral setting values" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/ephemeral-settings.integration.test.ts" name="Ephemeral Settings Integration Tests &gt; Ephemeral Settings Edge Cases &gt; should return a copy of ephemeral settings to prevent external modification" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/model-params-isolation.integration.test.ts" timestamp="2025-11-21T00:00:40.719Z" hostname="Andrews-MacBook-Pro-2.local" tests="4" failures="0" errors="0" skipped="4" time="0">
+        <testcase classname="src/integration-tests/model-params-isolation.integration.test.ts" name="Runtime model parameter isolation &gt; keeps model parameters scoped to the active provider" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/model-params-isolation.integration.test.ts" name="Runtime model parameter isolation &gt; builds runtime profile snapshots with provider-scoped params" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/model-params-isolation.integration.test.ts" name="Runtime model parameter isolation &gt; applies profile snapshots and refreshes runtime state" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/model-params-isolation.integration.test.ts" name="Runtime model parameter isolation &gt; clears individual model params via helper" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/modelParams.integration.test.ts" timestamp="2025-11-21T00:00:40.719Z" hostname="Andrews-MacBook-Pro-2.local" tests="4" failures="0" errors="0" skipped="4" time="0">
+        <testcase classname="src/integration-tests/modelParams.integration.test.ts" name="CLI model parameter command integration &gt; sets provider-scoped model params via /set modelparam" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/modelParams.integration.test.ts" name="CLI model parameter command integration &gt; clears model params using /set unset modelparam" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/modelParams.integration.test.ts" name="CLI model parameter command integration &gt; produces runtime profile snapshots that include current model params" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/modelParams.integration.test.ts" name="CLI model parameter command integration &gt; supports clearing params directly through helper" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/oauth-timing.integration.test.ts" timestamp="2025-11-21T00:00:40.719Z" hostname="Andrews-MacBook-Pro-2.local" tests="17" failures="0" errors="0" skipped="17" time="0">
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Profile Loading - OAuth Timing &gt; should NOT trigger OAuth when loading profile with keyfile" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Profile Loading - OAuth Timing &gt; should NOT trigger OAuth when loading profile with API key" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Profile Loading - OAuth Timing &gt; should NOT trigger OAuth when loading profile without auth" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Auth Precedence Resolution - includeOAuth Flag &gt; should NOT trigger OAuth when includeOAuth is false (default)" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Auth Precedence Resolution - includeOAuth Flag &gt; should trigger OAuth ONLY when includeOAuth is true" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Auth Precedence - OAuth Should Be Last Resort &gt; should use API key instead of OAuth when both available" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Auth Precedence - OAuth Should Be Last Resort &gt; should use keyfile instead of OAuth when both available" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Auth Precedence - OAuth Should Be Last Resort &gt; should use environment variable instead of OAuth when both available" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; OAuth Disabled State &gt; should NOT trigger OAuth when OAuth is disabled" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; authOnly Mode &gt; should skip non-OAuth auth when authOnly is enabled" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Configuration Commands - Should NOT Trigger OAuth &gt; should NOT trigger OAuth when setting provider OAuth enabled flag" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Configuration Commands - Should NOT Trigger OAuth &gt; should NOT trigger OAuth when setting provider OAuth disabled flag" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Configuration Commands - Should NOT Trigger OAuth &gt; should NOT trigger OAuth when setting keyfile path" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Configuration Commands - Should NOT Trigger OAuth &gt; should NOT trigger OAuth when clearing auth token" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Multiple Provider Scenarios &gt; should maintain separate OAuth state per provider" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Safety Verification - Config Time vs Prompt Time &gt; should demonstrate config-time safety (includeOAuth=false by default)" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/oauth-timing.integration.test.ts" name="OAuth Timing Integration Tests &gt; Safety Verification - Config Time vs Prompt Time &gt; should demonstrate prompt-time OAuth trigger (includeOAuth=true)" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/profile-keyfile.integration.test.ts" timestamp="2025-11-21T00:00:40.721Z" hostname="Andrews-MacBook-Pro-2.local" tests="12" failures="0" errors="0" skipped="12" time="0">
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Basic Keyfile Functionality &gt; should create keyfile with proper permissions and load API key from it" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Basic Keyfile Functionality &gt; should handle multiple keyfiles for different providers" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Keyfile Path Handling &gt; should handle relative and absolute keyfile paths" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Error Handling &gt; should handle missing keyfile gracefully" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Error Handling &gt; should handle keyfile with wrong permissions" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Error Handling &gt; should handle keyfile with invalid content" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Precedence and Conflicts &gt; should handle profile with both auth-key and auth-keyfile" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Precedence and Conflicts &gt; should update keyfile path when profile is modified" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Keyfile Reading Simulation &gt; should simulate the actual keyfile reading logic from gemini.tsx" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Keyfile Reading Simulation &gt; should handle keyfile with tilde expansion" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Complex Scenarios &gt; should handle profile switching with different keyfiles" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-keyfile.integration.test.ts" name="Profile with Keyfile Integration Tests &gt; Complex Scenarios &gt; should handle keyfile in nested directory structure" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/profile-system.integration.test.ts" timestamp="2025-11-21T00:00:40.722Z" hostname="Andrews-MacBook-Pro-2.local" tests="14" failures="0" errors="0" skipped="14" time="0">
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Basic Save/Load Operations &gt; should save a profile to disk and load it back" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Basic Save/Load Operations &gt; should save multiple profiles and list them all" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; JSON File Structure &gt; should save profiles with proper JSON formatting" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Edge Cases and Error Handling &gt; should throw error when loading non-existent profile" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Edge Cases and Error Handling &gt; should throw error when loading profile with invalid JSON" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Edge Cases and Error Handling &gt; should throw error when loading profile with missing required fields" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Edge Cases and Error Handling &gt; should throw error when loading profile with unsupported version" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Edge Cases and Error Handling &gt; should handle empty profile list gracefully" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Edge Cases and Error Handling &gt; should create profiles directory if it does not exist" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Edge Cases and Error Handling &gt; should overwrite existing profile when saving with same name" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Complex Profile Configurations &gt; should handle profiles with auth-keyfile references" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Complex Profile Configurations &gt; should handle profiles with all possible settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Complex Profile Configurations &gt; should handle profiles with minimal settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/profile-system.integration.test.ts" name="Profile Save/Load Cycle Integration Tests &gt; Profile Names and Special Characters &gt; should handle profile names with special characters" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/provider-multi-runtime.integration.test.ts" timestamp="2025-11-21T00:00:40.722Z" hostname="Andrews-MacBook-Pro-2.local" tests="2" failures="0" errors="0" skipped="2" time="0">
+        <testcase classname="src/integration-tests/provider-multi-runtime.integration.test.ts" name="provider multi-runtime guardrails &gt; restores runtime-scoped provider manager isolation @plan:PLAN-20251018-STATELESSPROVIDER2.P02 @requirement:REQ-SP2-002" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/provider-multi-runtime.integration.test.ts" name="provider multi-runtime guardrails &gt; keeps provider mutations scoped to active runtime @plan:PLAN-20251018-STATELESSPROVIDER2.P02 @requirement:REQ-SP2-002" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/provider-switching.integration.test.ts" timestamp="2025-11-21T00:00:40.723Z" hostname="Andrews-MacBook-Pro-2.local" tests="5" failures="0" errors="0" skipped="5" time="0">
+        <testcase classname="src/integration-tests/provider-switching.integration.test.ts" name="Runtime Provider Switching Integration &gt; clears previous provider API key and auth state" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/provider-switching.integration.test.ts" name="Runtime Provider Switching Integration &gt; resets provider model parameters when switching" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/provider-switching.integration.test.ts" name="Runtime Provider Switching Integration &gt; does not clear server tools provider state when switching active provider" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/provider-switching.integration.test.ts" name="Runtime Provider Switching Integration &gt; is idempotent when switching to the same provider" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/provider-switching.integration.test.ts" name="Runtime Provider Switching Integration &gt; clears legacy base URL and resets model when switching back to provider" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/retry-settings.integration.test.ts" timestamp="2025-11-21T00:00:40.723Z" hostname="Andrews-MacBook-Pro-2.local" tests="4" failures="0" errors="0" skipped="4" time="0">
+        <testcase classname="src/integration-tests/retry-settings.integration.test.ts" name="retry settings integration tests &gt; should set retries as ephemeral setting" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/retry-settings.integration.test.ts" name="retry settings integration tests &gt; should set retrywait as ephemeral setting" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/retry-settings.integration.test.ts" name="retry settings integration tests &gt; should validate retries setting" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/retry-settings.integration.test.ts" name="retry settings integration tests &gt; should validate retrywait setting" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/security.integration.test.ts" timestamp="2025-11-21T00:00:40.723Z" hostname="Andrews-MacBook-Pro-2.local" tests="15" failures="0" errors="0" skipped="15" time="0">
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; API keys should NEVER persist to settings.json &gt; should not write API keys to settings.json when set via ephemeral settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; API keys should NEVER persist to settings.json &gt; should not persist providerApiKeys to settings.json" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; API keys should NEVER persist to settings.json &gt; should not write base URLs with embedded credentials to settings.json" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; Provider isolation &gt; should maintain provider isolation for API keys" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; Provider isolation &gt; should isolate provider settings when dumping to disk" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; Keyfile security &gt; should create keyfiles with restrictive permissions (600)" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; Keyfile security &gt; should handle keyfiles with wrong permissions" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; Keyfile security &gt; should fail to read inaccessible keyfiles" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; Keyfile security &gt; should store keyfile paths but not contents in settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; API key storage locations &gt; should only store API keys in ephemeral settings (runtime only)" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; API key storage locations &gt; should store API keys in profile files when explicitly saved" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; API key storage locations &gt; should never store API keys in global settings" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; Settings validation and sanitization &gt; should handle environment variable expansion safely" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; Settings validation and sanitization &gt; should validate keyfile paths exist and are readable" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/security.integration.test.ts" name="API Key Security Integration Tests &gt; Profile security &gt; should isolate sensitive data in profiles" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/todo-continuation.integration.test.ts" timestamp="2025-11-21T00:00:40.725Z" hostname="Andrews-MacBook-Pro-2.local" tests="20" failures="0" errors="0" skipped="20" time="0">
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Configuration Persistence &gt; @requirement REQ-004 should persist todo-continuation setting in Config" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Configuration Persistence &gt; @requirement REQ-004 should not persist across Config instances by default" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Configuration Persistence &gt; @requirement REQ-004 should handle all ephemeral setting data types" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; TodoStore Integration &gt; @requirement REQ-001 should read and write todos through TodoStore" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; TodoStore Integration &gt; @requirement REQ-001 should handle empty todo lists" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; TodoStore Integration &gt; @requirement REQ-001 should update existing todos" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; TodoStore Integration &gt; @requirement REQ-001 should isolate todos by session ID" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; GeminiClient Integration &gt; @requirement REQ-002 should create GeminiClient with correct configuration" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; GeminiClient Integration &gt; @requirement REQ-002 should support ephemeral messaging interface" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; GeminiClient Integration &gt; @requirement REQ-002 should handle YOLO vs DEFAULT approval modes" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Todo Events Integration &gt; @requirement REQ-003 should emit and handle todo update events" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Todo Events Integration &gt; @requirement REQ-003 should handle multiple event listeners" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Todo Events Integration &gt; @requirement REQ-003 should properly unregister event listeners" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Real Component Data Flow &gt; @requirement REQ-001, REQ-002, REQ-003, REQ-004 should demonstrate end-to-end data flow" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Real Component Data Flow &gt; @requirement REQ-001, REQ-003 should handle todo state transitions through events" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Real Component Data Flow &gt; @requirement REQ-002 should validate ephemeral settings persistence patterns" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Real Component Data Flow &gt; @requirement REQ-004 should demonstrate configuration edge cases" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Real Component Data Flow &gt; @requirement REQ-001, REQ-002, REQ-003 should validate data and handle edge cases" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Performance and Scale Testing &gt; @requirement REQ-001 should handle large numbers of todos efficiently" time="0">
+            <skipped/>
+        </testcase>
+        <testcase classname="src/integration-tests/todo-continuation.integration.test.ts" name="Todo Continuation Integration Tests &gt; Performance and Scale Testing &gt; @requirement REQ-003 should handle rapid event emissions" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/integration-tests/tools-governance.integration.test.ts" timestamp="2025-11-21T00:00:40.730Z" hostname="Andrews-MacBook-Pro-2.local" tests="1" failures="0" errors="0" skipped="1" time="0">
+        <testcase classname="src/integration-tests/tools-governance.integration.test.ts" name="tools governance integration &gt; reflects saved tool restrictions when listing tools" time="0">
+            <skipped/>
+        </testcase>
+    </testsuite>
+</testsuites>

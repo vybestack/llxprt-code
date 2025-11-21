@@ -343,6 +343,49 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     expect(runConfigArg.max_time_minutes).toBe(Number.POSITIVE_INFINITY);
     expect(runConfigArg.max_turns).toBe(200);
   });
+
+  it('honors an already-aborted signal before beginning launch work', async () => {
+    const subagentConfig: SubagentConfig = {
+      name: 'cancel-helper',
+      profile: 'cancel-profile',
+      systemPrompt: 'Do nothing',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const subagentManager = {
+      loadSubagent,
+    } as unknown as SubagentManager;
+    const loadProfile = vi.fn().mockResolvedValue(baseProfile);
+    const profileManager = {
+      loadProfile,
+    } as unknown as ProfileManager;
+    const { factory } = createScopeFactory();
+    const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager,
+      profileManager,
+      foregroundConfig,
+      scopeFactory: factory,
+      runtimeLoader,
+    });
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      orchestrator.launch(
+        { name: subagentConfig.name, runConfig: defaultRunConfig },
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(loadSubagent).not.toHaveBeenCalled();
+    expect(runtimeLoader).not.toHaveBeenCalled();
+    expect(factory).not.toHaveBeenCalled();
+  });
 });
 
 describe('SubagentOrchestrator - Runtime Assembly', () => {
@@ -576,5 +619,43 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     expect(firstBundle.history.clear).toHaveBeenCalled();
     expect(secondBundle.history.clear).toHaveBeenCalled();
+  });
+
+  it('prefers history.dispose over clear during teardown', async () => {
+    const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
+    const loadProfile = vi.fn().mockResolvedValue(profile);
+
+    const bundle = createRuntimeBundle('dispose');
+    const disposeSpy = vi.fn();
+    const clearSpy = vi.fn();
+
+    bundle.history = { dispose: disposeSpy, clear: clearSpy } as unknown as {
+      dispose: () => void;
+      clear: () => void;
+    };
+    bundle.runtimeContext.history = bundle.history;
+
+    const runtimeLoader = vi.fn().mockResolvedValue(bundle);
+
+    const orchestrator = new SubagentOrchestrator({
+      subagentManager: { loadSubagent } as unknown as SubagentManager,
+      profileManager: { loadProfile } as unknown as ProfileManager,
+      foregroundConfig: makeForegroundConfig(),
+      scopeFactory: vi.fn<typeof SubAgentScope.create>().mockResolvedValue({
+        runtimeContext: bundle.runtimeContext,
+        getAgentId: () => 'planner-dispose',
+      } as unknown as SubAgentScopeInstance),
+      runtimeLoader,
+    });
+
+    const run = await orchestrator.launch({
+      name: subagentConfig.name,
+      runConfig,
+    });
+
+    await run.dispose?.();
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(clearSpy).not.toHaveBeenCalled();
   });
 });

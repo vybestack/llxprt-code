@@ -14,14 +14,15 @@ import {
 } from './BaseSelectionList.js';
 import { useSelectionList } from '../../hooks/useSelectionList.js';
 import { Text } from 'ink';
-import type { theme } from '../../semantic-colors.js';
+
+type Theme = typeof import('../../semantic-colors.js').theme;
 
 vi.mock('../../hooks/useSelectionList.js');
 
 const mockTheme = {
   text: { primary: 'COLOR_PRIMARY', secondary: 'COLOR_SECONDARY' },
   status: { success: 'COLOR_SUCCESS' },
-} as typeof theme;
+} as Theme;
 
 vi.mock('../../semantic-colors.js', () => ({
   theme: {

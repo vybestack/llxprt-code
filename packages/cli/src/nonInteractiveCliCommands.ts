@@ -46,7 +46,7 @@ export const handleSlashCommand = async (
   );
   const commands = commandService.getCommands();
 
-  const { commandToExecute, args } = parseSlashCommand(rawQuery, commands);
+  const { commandToExecute, args } = parseSlashCommand(trimmed, commands);
 
   if (commandToExecute) {
     if (commandToExecute.action) {

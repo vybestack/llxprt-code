@@ -16,7 +16,7 @@ import {
 export const statsCommand: SlashCommand = {
   name: 'stats',
   altNames: ['usage'],
-  description: 'check session stats. Usage: /stats [model|tools]',
+  description: 'check session stats. Usage: /stats [model|tools|cache]',
   kind: CommandKind.BUILT_IN,
   action: (context: CommandContext) => {
     const now = new Date();
@@ -62,6 +62,19 @@ export const statsCommand: SlashCommand = {
         context.ui.addItem(
           {
             type: MessageType.TOOL_STATS,
+          },
+          Date.now(),
+        );
+      },
+    },
+    {
+      name: 'cache',
+      description: 'Show cache usage statistics (Anthropic only).',
+      kind: CommandKind.BUILT_IN,
+      action: (context: CommandContext) => {
+        context.ui.addItem(
+          {
+            type: MessageType.CACHE_STATS,
           },
           Date.now(),
         );

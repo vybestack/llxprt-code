@@ -256,20 +256,19 @@ export async function main() {
     mkdirSync(llxprtDir, { recursive: true });
   }
 
-  // DEFERRED INITIALIZATION: Check for memory relaunch BEFORE loading any config
-  // This avoids wasting time on initialization that would be discarded during relaunch
-  const debugMode = isDebugMode();
-  const memoryArgs = shouldRelaunchForMemory(debugMode);
-
-  if (memoryArgs.length > 0 && !process.env.SANDBOX) {
-    // Need to relaunch with more memory - do this BEFORE loading settings/config
-    const exitCode = await relaunchAppInChildProcess(memoryArgs);
-    process.exit(exitCode);
-  }
-
-  // Now safe to do heavy initialization since we know this is the final process
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
+
+  if (settings.merged.autoConfigureMaxOldSpaceSize && !process.env.SANDBOX) {
+    // Only relaunch with a larger heap when the autosizing setting is enabled.
+    const debugMode = isDebugMode();
+    const memoryArgs = shouldRelaunchForMemory(debugMode);
+    if (memoryArgs.length > 0) {
+      const exitCode = await relaunchAppInChildProcess(memoryArgs);
+      process.exit(exitCode);
+    }
+  }
+
   const argv = await parseArguments(settings.merged);
 
   const hasPipedInput = !process.stdin.isTTY && !argv.experimentalAcp;
@@ -332,7 +331,7 @@ export async function main() {
     extensions,
     sessionId,
     argv,
-    process.cwd(),
+    workspaceRoot,
     { settingsService: runtimeSettingsService },
   );
   setCliRuntimeContext(runtimeSettingsService, config, {
@@ -617,6 +616,8 @@ export async function main() {
         [],
         sessionId,
         argv,
+        workspaceRoot,
+        { settingsService: runtimeSettingsService },
       );
 
       if (

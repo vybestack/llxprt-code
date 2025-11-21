@@ -13,6 +13,7 @@ This document lists the available keyboard shortcuts in LLxprt Code.
 | `Ctrl+O` | Toggle the display of the debug console.                                                                              |
 | `Ctrl+S` | Allows long responses to print fully, disabling truncation. Use your terminal's scrollback to view the entire output. |
 | `Ctrl+T` | Toggle the display of tool descriptions.                                                                              |
+| `Ctrl+Q` | Toggle the Todo dialog visibility.                                                                                    |
 | `Ctrl+Y` | Toggle auto-approval (YOLO mode) for all tool calls.                                                                  |
 
 ## Input Prompt

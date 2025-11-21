@@ -334,29 +334,30 @@ export const DefaultAppLayout = ({
               paddingX={1}
               marginBottom={1}
             >
-              {history.find(
-                (item) =>
-                  item.type === 'error' && item.text?.includes(initError),
-              )?.text ? (
-                <Text color={Colors.AccentRed}>
-                  {
-                    history.find(
-                      (item) =>
-                        item.type === 'error' && item.text?.includes(initError),
-                    )?.text
-                  }
-                </Text>
-              ) : (
-                <>
-                  <Text color={Colors.AccentRed}>
-                    Initialization Error: {initError}
-                  </Text>
-                  <Text color={Colors.AccentRed}>
-                    {' '}
-                    Please check API key and configuration.
-                  </Text>
-                </>
-              )}
+              {(() => {
+                const matchingHistoryError = history.find(
+                  (item) =>
+                    item.type === 'error' && item.text?.includes(initError),
+                );
+                if (matchingHistoryError?.text) {
+                  return (
+                    <Text color={Colors.AccentRed}>
+                      {matchingHistoryError.text}
+                    </Text>
+                  );
+                }
+                return (
+                  <>
+                    <Text color={Colors.AccentRed}>
+                      Initialization Error: {initError}
+                    </Text>
+                    <Text color={Colors.AccentRed}>
+                      {' '}
+                      Please check API key and configuration.
+                    </Text>
+                  </>
+                );
+              })()}
             </Box>
           )}
           {!settings.merged.hideFooter && (

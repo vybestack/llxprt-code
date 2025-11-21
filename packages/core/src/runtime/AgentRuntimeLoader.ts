@@ -51,6 +51,7 @@ export interface AgentRuntimeLoaderOverrides {
 export interface AgentRuntimeLoaderOptions {
   profile: AgentRuntimeProfileSnapshot;
   overrides?: AgentRuntimeLoaderOverrides;
+  signal?: AbortSignal;
 }
 
 export interface AgentRuntimeLoaderResult {
@@ -177,9 +178,15 @@ function createFilteredToolRegistryView(
 export async function loadAgentRuntime(
   options: AgentRuntimeLoaderOptions,
 ): Promise<AgentRuntimeLoaderResult> {
-  const { profile, overrides = {} } = options;
+  const { profile, overrides = {}, signal } = options;
   if (!profile) {
     throw new Error('AgentRuntimeLoader requires a profile option.');
+  }
+
+  if (signal?.aborted) {
+    const error = new Error('Runtime load aborted');
+    error.name = 'AbortError';
+    throw error;
   }
 
   const history = overrides.historyService ?? new HistoryService();

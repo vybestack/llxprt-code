@@ -389,12 +389,12 @@ export const SETTINGS_SCHEMA = {
 
   shouldUseNodePtyShell: {
     type: 'boolean',
-    label: 'Use node-pty for Shell Execution',
+    label: 'Enable Interactive Shell (node-pty)',
     category: 'Shell',
     requiresRestart: true,
     default: false,
     description:
-      'Use node-pty for shell command execution. Fallback to child_process still applies.',
+      'Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty. Falls back to child_process when disabled.',
     showInDialog: true,
   },
 
@@ -612,7 +612,7 @@ export const SETTINGS_SCHEMA = {
         default: false,
         description:
           'Use node-pty for shell command execution. Fallback to child_process still applies.',
-        showInDialog: true,
+        showInDialog: false,
       },
       autoAccept: {
         type: 'boolean',

@@ -195,6 +195,7 @@ function selectionListReducer<T>(
       return {
         ...state,
         items,
+        initialIndex,
         activeIndex: targetIndex,
         pendingHighlight: false,
       };

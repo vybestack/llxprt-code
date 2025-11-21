@@ -97,6 +97,11 @@ export function BaseSelectionList<T, TItem = Record<string, unknown>>({
       {visibleItems.map((item, index) => {
         const itemIndex = scrollOffset + index;
         const isSelected = activeIndex === itemIndex;
+        const keyValue = item.value;
+        const stableKey =
+          typeof keyValue === 'string' || typeof keyValue === 'number'
+            ? String(keyValue)
+            : `item-${itemIndex}`;
 
         // Determine colors based on selection and disabled state
         let titleColor = theme.text.primary;
@@ -123,7 +128,7 @@ export function BaseSelectionList<T, TItem = Record<string, unknown>>({
         )}.`;
 
         return (
-          <Box key={itemIndex} alignItems="flex-start">
+          <Box key={stableKey} alignItems="flex-start">
             {/* Radio button indicator */}
             <Box minWidth={2} flexShrink={0}>
               <Text
@@ -140,7 +145,7 @@ export function BaseSelectionList<T, TItem = Record<string, unknown>>({
                 marginRight={1}
                 flexShrink={0}
                 minWidth={itemNumberText.length}
-                aria-state={{ checked: isSelected }}
+                aria-checked={isSelected}
               >
                 <Text color={numberColor}>{itemNumberText}</Text>
               </Box>

@@ -82,7 +82,7 @@ describe('setCommand runtime integration', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter, retries, retrywait, maxTurnsPerPrompt',
+        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter, retries, retrywait, maxTurnsPerPrompt, authOnly, dumponerror, prompt-caching, rate-limit-throttle, rate-limit-throttle-threshold, rate-limit-max-wait',
     });
   });
 

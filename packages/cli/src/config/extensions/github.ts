@@ -363,7 +363,13 @@ async function downloadFile(url: string, dest: string): Promise<void> {
     https
       .get(url, { headers }, (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
-          downloadFile(res.headers.location!, dest).then(resolve).catch(reject);
+          const location = res.headers.location;
+          if (!location) {
+            reject(new Error('Redirect response missing location header'));
+            return;
+          }
+          const resolvedUrl = new URL(location, url).toString();
+          downloadFile(resolvedUrl, dest).then(resolve).catch(reject);
           return;
         }
         if (res.statusCode !== 200) {

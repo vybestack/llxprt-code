@@ -125,7 +125,7 @@ export interface UIActions {
   handleEscapePromptChange: (show: boolean) => void;
 
   // Cancel ongoing request
-  cancelOngoingRequest: (() => void) | undefined;
+  cancelOngoingRequest?: () => void;
 }
 
 const UIActionsContext = createContext<UIActions | undefined>(undefined);
