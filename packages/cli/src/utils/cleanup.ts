@@ -30,6 +30,16 @@ export async function runExitCleanup() {
   cleanupFunctions.length = 0; // Clear the array
 }
 
+/**
+ * Reset cleanup state for testing purposes only.
+ * DO NOT use this in production code.
+ * @internal
+ */
+export function __resetCleanupStateForTesting() {
+  cleanupFunctions.length = 0;
+  cleanupInProgress = false;
+}
+
 export async function cleanupCheckpoints() {
   const storage = new Storage(process.cwd());
   const tempDir = storage.getProjectTempDir();

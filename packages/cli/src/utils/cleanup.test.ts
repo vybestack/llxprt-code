@@ -4,65 +4,107 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'vitest';
-import { registerCleanup, runExitCleanup } from './cleanup';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  __resetCleanupStateForTesting,
+  registerCleanup,
+  runExitCleanup,
+} from './cleanup';
 
 describe('cleanup', () => {
-  const originalCleanupFunctions = global['cleanupFunctions'];
-
   beforeEach(() => {
-    // Isolate cleanup functions for each test
-    global['cleanupFunctions'] = [];
+    // Reset cleanup state between tests
+    __resetCleanupStateForTesting();
   });
 
-  afterAll(() => {
-    // Restore original cleanup functions
-    global['cleanupFunctions'] = originalCleanupFunctions;
-  });
-
-  it('should run a registered synchronous function', async () => {
-    const cleanupFn = vi.fn();
-    registerCleanup(cleanupFn);
+  it('should execute registered synchronous cleanup function', async () => {
+    let cleaned = false;
+    registerCleanup(() => {
+      cleaned = true;
+    });
 
     await runExitCleanup();
 
-    expect(cleanupFn).toHaveBeenCalledTimes(1);
+    expect(cleaned).toBe(true);
   });
 
-  it('should run a registered asynchronous function', async () => {
-    const cleanupFn = vi.fn().mockResolvedValue(undefined);
-    registerCleanup(cleanupFn);
+  it('should execute registered asynchronous cleanup function', async () => {
+    let cleaned = false;
+    registerCleanup(async () => {
+      cleaned = true;
+    });
 
     await runExitCleanup();
 
-    expect(cleanupFn).toHaveBeenCalledTimes(1);
+    expect(cleaned).toBe(true);
   });
 
-  it('should run multiple registered functions', async () => {
-    const syncFn = vi.fn();
-    const asyncFn = vi.fn().mockResolvedValue(undefined);
+  it('should execute multiple registered functions in order', async () => {
+    const executionOrder: number[] = [];
 
-    registerCleanup(syncFn);
-    registerCleanup(asyncFn);
+    registerCleanup(() => {
+      executionOrder.push(1);
+    });
+    registerCleanup(async () => {
+      executionOrder.push(2);
+    });
 
     await runExitCleanup();
 
-    expect(syncFn).toHaveBeenCalledTimes(1);
-    expect(asyncFn).toHaveBeenCalledTimes(1);
+    expect(executionOrder).toEqual([1, 2]);
   });
 
-  it('should continue running cleanup functions even if one throws an error', async () => {
-    const errorFn = vi.fn(() => {
+  it('should continue executing cleanup functions even if one throws an error', async () => {
+    let firstRan = false;
+    let secondRan = false;
+
+    registerCleanup(() => {
+      firstRan = true;
       throw new Error('Test Error');
     });
-    const successFn = vi.fn();
-
-    registerCleanup(errorFn);
-    registerCleanup(successFn);
+    registerCleanup(() => {
+      secondRan = true;
+    });
 
     await runExitCleanup();
 
-    expect(errorFn).toHaveBeenCalledTimes(1);
-    expect(successFn).toHaveBeenCalledTimes(1);
+    expect(firstRan).toBe(true);
+    expect(secondRan).toBe(true);
+  });
+
+  it('should not execute cleanup functions more than once when called concurrently', async () => {
+    let callCount = 0;
+    registerCleanup(() => {
+      callCount++;
+    });
+
+    // Call runExitCleanup multiple times concurrently
+    await Promise.all([runExitCleanup(), runExitCleanup(), runExitCleanup()]);
+
+    // Should only execute once due to reentrancy guard
+    expect(callCount).toBe(1);
+  });
+
+  it('should clear registered cleanup functions after execution', async () => {
+    let firstCleanupCount = 0;
+    registerCleanup(() => {
+      firstCleanupCount++;
+    });
+
+    await runExitCleanup();
+    expect(firstCleanupCount).toBe(1);
+
+    // Register new cleanup after first run
+    let secondCleanupCount = 0;
+    registerCleanup(() => {
+      secondCleanupCount++;
+    });
+
+    // This won't run because cleanupInProgress flag is still true
+    // This is the expected behavior - cleanup should only run once per process
+    await runExitCleanup();
+
+    expect(firstCleanupCount).toBe(1); // Should not run again
+    expect(secondCleanupCount).toBe(0); // Should not run due to guard
   });
 });
