@@ -33,6 +33,7 @@ vi.mock('ink', async (importOriginal) => {
 
 class MockStdin extends EventEmitter {
   isTTY = true;
+  isRaw = false;
   setRawMode = vi.fn();
   override on = this.addListener;
   override removeListener = super.removeListener;
@@ -1654,5 +1655,185 @@ describe('Kitty Sequence Parsing', () => {
       }),
     );
     vi.useRealTimers();
+  });
+
+  describe('Suspend and Resume (tmux detach/reattach)', () => {
+    it('should re-enable raw mode on SIGCONT when raw mode was managed', async () => {
+      const keyHandler = vi.fn();
+
+      // Start with stdin not in raw mode
+      stdin.isRaw = false;
+
+      const { result } = renderHook(() => useKeypressContext(), { wrapper });
+
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      // Verify raw mode was enabled initially
+      expect(mockSetRawMode).toHaveBeenCalledWith(true);
+      mockSetRawMode.mockClear();
+
+      // Simulate tmux detach resetting the PTY to cooked mode
+      stdin.isRaw = false;
+
+      // Emit SIGCONT to simulate tmux reattach
+      act(() => {
+        process.emit('SIGCONT');
+      });
+
+      // Should re-enable raw mode and resume stdin
+      expect(stdin.resume).toHaveBeenCalled();
+      expect(mockSetRawMode).toHaveBeenCalledWith(true);
+    });
+
+    it('should not re-enable raw mode on SIGCONT when raw mode was not managed', async () => {
+      const keyHandler = vi.fn();
+
+      // Start with stdin already in raw mode
+      stdin.isRaw = true;
+
+      const { result } = renderHook(() => useKeypressContext(), { wrapper });
+
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      // Should not have called setRawMode since it was already raw
+      expect(mockSetRawMode).not.toHaveBeenCalled();
+      mockSetRawMode.mockClear();
+
+      // Emit SIGCONT
+      act(() => {
+        process.emit('SIGCONT');
+      });
+
+      // Should not call setRawMode since we didn't manage it initially
+      expect(mockSetRawMode).not.toHaveBeenCalled();
+    });
+
+    it('should re-send terminal sequences on SIGCONT', async () => {
+      const writeSpy = vi.spyOn(process.stdout, 'write');
+      stdin.isRaw = false;
+
+      const { result } = renderHook(() => useKeypressContext(), { wrapper });
+
+      act(() => {
+        result.current.subscribe(vi.fn());
+      });
+
+      writeSpy.mockClear();
+
+      // Emit SIGCONT
+      act(() => {
+        process.emit('SIGCONT');
+      });
+
+      // Should re-send bracketed paste and focus tracking sequences
+      expect(writeSpy).toHaveBeenCalledWith('\x1b[?2004h'); // Bracketed paste enable
+      expect(writeSpy).toHaveBeenCalledWith('\x1b[?1004h'); // Focus tracking enable
+
+      writeSpy.mockRestore();
+    });
+
+    it('should handle Ctrl+Z by suspending cleanly', async () => {
+      const keyHandler = vi.fn();
+      const writeSpy = vi.spyOn(process.stdout, 'write');
+      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+      stdin.isRaw = false;
+
+      const { result } = renderHook(() => useKeypressContext(), { wrapper });
+
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      mockSetRawMode.mockClear();
+      writeSpy.mockClear();
+
+      // Send Ctrl+Z
+      act(() => {
+        stdin.pressKey({
+          name: 'z',
+          ctrl: true,
+          meta: false,
+          shift: false,
+          sequence: '\x1A',
+          paste: false,
+        });
+      });
+
+      // Should disable raw mode
+      expect(mockSetRawMode).toHaveBeenCalledWith(false);
+
+      // Should show cursor and disable bracketed paste
+      expect(writeSpy).toHaveBeenCalledWith('\x1b[?25h'); // Show cursor
+      expect(writeSpy).toHaveBeenCalledWith('\x1b[?2004l'); // Disable bracketed paste
+      expect(writeSpy).toHaveBeenCalledWith('\x1b[?1004l'); // Disable focus tracking
+
+      // Should send SIGTSTP (not SIGSTOP)
+      expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGTSTP');
+
+      writeSpy.mockRestore();
+      killSpy.mockRestore();
+    });
+
+    it('should not handle Ctrl+Z when meta key is also pressed', async () => {
+      const keyHandler = vi.fn();
+      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+      stdin.isRaw = false;
+
+      const { result } = renderHook(() => useKeypressContext(), { wrapper });
+
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      // Send Ctrl+Meta+Z (should not suspend)
+      act(() => {
+        stdin.pressKey({
+          name: 'z',
+          ctrl: true,
+          meta: true,
+          shift: false,
+          sequence: '\x1B\x1A',
+          paste: false,
+        });
+      });
+
+      // Should not send SIGTSTP
+      expect(killSpy).not.toHaveBeenCalled();
+
+      // Should broadcast the key normally
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'z',
+          ctrl: true,
+          meta: true,
+        }),
+      );
+
+      killSpy.mockRestore();
+    });
+
+    it('should clean up SIGCONT listener on unmount', async () => {
+      const removeListenerSpy = vi.spyOn(process, 'removeListener');
+      stdin.isRaw = false;
+
+      const { unmount } = renderHook(() => useKeypressContext(), { wrapper });
+
+      // Unmount the component
+      unmount();
+
+      // Should remove the SIGCONT listener
+      expect(removeListenerSpy).toHaveBeenCalledWith(
+        'SIGCONT',
+        expect.any(Function),
+      );
+
+      removeListenerSpy.mockRestore();
+    });
   });
 });

@@ -25,13 +25,16 @@ import {
   SETTINGS_SCHEMA,
 } from './settingsSchema.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
+import {
+  SETTINGS_DIRECTORY_NAME,
+  USER_SETTINGS_DIR,
+  USER_SETTINGS_PATH,
+} from './paths.js';
+
+export { USER_SETTINGS_PATH, USER_SETTINGS_DIR, SETTINGS_DIRECTORY_NAME };
 
 export type { Settings, MemoryImportFormat };
 
-export const SETTINGS_DIRECTORY_NAME = '.llxprt';
-
-export const USER_SETTINGS_PATH = Storage.getGlobalSettingsPath();
-export const USER_SETTINGS_DIR = path.dirname(USER_SETTINGS_PATH);
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
 // Currently unused - reserved for future migration implementation
@@ -182,10 +185,6 @@ function mergeSettings(
 ): Settings {
   const safeWorkspace = isTrusted ? workspace : ({} as Settings);
 
-  // folderTrust is not supported at workspace level.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { folderTrust, ...safeWorkspaceWithoutFolderTrust } = safeWorkspace;
-
   // Get defaults from schema
   const schemaDefaults = getSchemaDefaults();
 
@@ -203,7 +202,7 @@ function mergeSettings(
     ...schemaDefaults,
     ...systemDefaults,
     ...user,
-    ...safeWorkspaceWithoutFolderTrust,
+    ...safeWorkspace,
     ...system,
     customThemes: {
       ...(systemDefaults.customThemes || {}),

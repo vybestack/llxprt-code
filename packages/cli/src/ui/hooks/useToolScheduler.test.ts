@@ -25,9 +25,9 @@ import {
   ApprovalMode,
   AnyDeclarativeTool,
   AnyToolInvocation,
-  MockTool,
   CompletedToolCall,
 } from '@vybestack/llxprt-code-core';
+import { MockTool } from '@vybestack/llxprt-code-core/src/test-utils/mock-tool.js';
 import type { HistoryItemWithoutId, HistoryItemToolGroup } from '../types.js';
 import { ToolCallStatus } from '../types.js';
 
@@ -36,7 +36,6 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
-    MockTool: actual.MockTool, // Explicitly export MockTool
     ToolRegistry: vi.fn(),
     Config: vi.fn(),
   };
@@ -63,7 +62,6 @@ const mockConfig = {
 const mockTool = new MockTool({
   name: 'mockTool',
   displayName: 'Mock Tool',
-  execute: vi.fn(),
   shouldConfirmExecute: vi.fn(),
 });
 const mockToolWithLiveOutput = new MockTool({
@@ -73,14 +71,12 @@ const mockToolWithLiveOutput = new MockTool({
   params: {},
   isOutputMarkdown: true,
   canUpdateOutput: true,
-  execute: vi.fn(),
   shouldConfirmExecute: vi.fn(),
 });
 let mockOnUserConfirmForToolConfirmation: Mock;
 const mockToolRequiresConfirmation = new MockTool({
   name: 'mockToolRequiresConfirmation',
   displayName: 'Mock Tool Requires Confirmation',
-  execute: vi.fn(),
   shouldConfirmExecute: vi.fn(),
 });
 
@@ -92,7 +88,7 @@ describe('useReactToolScheduler in YOLO Mode', () => {
     onComplete = vi.fn();
     setPendingHistoryItem = vi.fn();
     mockToolRegistry.getTool.mockClear();
-    (mockToolRequiresConfirmation.execute as Mock).mockClear();
+    mockToolRequiresConfirmation.executeFn.mockClear();
     (mockToolRequiresConfirmation.shouldConfirmExecute as Mock).mockClear();
 
     // IMPORTANT: Enable YOLO mode for this test suite
@@ -122,7 +118,7 @@ describe('useReactToolScheduler in YOLO Mode', () => {
   it('should skip confirmation and execute tool directly when yoloMode is true', async () => {
     mockToolRegistry.getTool.mockReturnValue(mockToolRequiresConfirmation);
     const expectedOutput = 'YOLO Confirmed output';
-    (mockToolRequiresConfirmation.execute as Mock).mockResolvedValue({
+    mockToolRequiresConfirmation.executeFn.mockResolvedValue({
       llmContent: expectedOutput,
       returnDisplay: 'YOLO Formatted tool output',
     } as ToolResult);
@@ -151,7 +147,7 @@ describe('useReactToolScheduler in YOLO Mode', () => {
     });
 
     // Check that execute WAS called
-    expect(mockToolRequiresConfirmation.execute).toHaveBeenCalledWith(
+    expect(mockToolRequiresConfirmation.executeFn).toHaveBeenCalledWith(
       request.args,
       expect.any(AbortSignal),
       undefined /*updateOutputFn*/,
@@ -200,7 +196,7 @@ describe('useReactToolScheduler agentId propagation', () => {
     onComplete = vi.fn();
     setPendingHistoryItem = vi.fn();
     mockToolRegistry.getTool.mockClear();
-    (mockTool.execute as Mock).mockReset();
+    mockTool.executeFn.mockReset();
     vi.useFakeTimers();
   });
 
@@ -222,7 +218,7 @@ describe('useReactToolScheduler agentId propagation', () => {
 
   it('defaults agentId to primary when schedule is invoked without one', async () => {
     mockToolRegistry.getTool.mockReturnValue(mockTool);
-    (mockTool.execute as Mock).mockResolvedValue({
+    mockTool.executeFn.mockResolvedValue({
       llmContent: 'default output',
       returnDisplay: 'default output',
     } as ToolResult);
@@ -296,11 +292,11 @@ describe('useReactToolScheduler', () => {
     });
 
     mockToolRegistry.getTool.mockClear();
-    (mockTool.execute as Mock).mockClear();
+    mockTool.executeFn.mockClear();
     (mockTool.shouldConfirmExecute as Mock).mockClear();
-    (mockToolWithLiveOutput.execute as Mock).mockClear();
+    mockToolWithLiveOutput.executeFn.mockClear();
     (mockToolWithLiveOutput.shouldConfirmExecute as Mock).mockClear();
-    (mockToolRequiresConfirmation.execute as Mock).mockClear();
+    mockToolRequiresConfirmation.executeFn.mockClear();
     (mockToolRequiresConfirmation.shouldConfirmExecute as Mock).mockClear();
 
     mockOnUserConfirmForToolConfirmation = vi.fn();
@@ -343,7 +339,7 @@ describe('useReactToolScheduler', () => {
 
   it('should schedule and execute a tool call successfully', async () => {
     mockToolRegistry.getTool.mockReturnValue(mockTool);
-    (mockTool.execute as Mock).mockResolvedValue({
+    mockTool.executeFn.mockResolvedValue({
       llmContent: 'Tool output',
       returnDisplay: 'Formatted tool output',
     } as ToolResult);
@@ -370,7 +366,7 @@ describe('useReactToolScheduler', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(mockTool.execute).toHaveBeenCalledWith(
+    expect(mockTool.executeFn).toHaveBeenCalledWith(
       request.args,
       expect.any(AbortSignal),
       undefined /*updateOutputFn*/,
@@ -469,7 +465,7 @@ describe('useReactToolScheduler', () => {
     mockToolRegistry.getTool.mockReturnValue(mockTool);
     (mockTool.shouldConfirmExecute as Mock).mockResolvedValue(null);
     const execError = new Error('Execution failed');
-    (mockTool.execute as Mock).mockRejectedValue(execError);
+    mockTool.executeFn.mockRejectedValue(execError);
 
     const { result } = renderScheduler();
     const schedule = result.current[1];
@@ -504,7 +500,7 @@ describe('useReactToolScheduler', () => {
   it.skip('should handle tool requiring confirmation - approved', async () => {
     mockToolRegistry.getTool.mockReturnValue(mockToolRequiresConfirmation);
     const expectedOutput = 'Confirmed output';
-    (mockToolRequiresConfirmation.execute as Mock).mockResolvedValue({
+    mockToolRequiresConfirmation.executeFn.mockResolvedValue({
       llmContent: expectedOutput,
       returnDisplay: 'Confirmed display',
     } as ToolResult);
@@ -544,7 +540,7 @@ describe('useReactToolScheduler', () => {
     expect(mockOnUserConfirmForToolConfirmation).toHaveBeenCalledWith(
       ToolConfirmationOutcome.ProceedOnce,
     );
-    expect(mockToolRequiresConfirmation.execute).toHaveBeenCalled();
+    expect(mockToolRequiresConfirmation.executeFn).toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith([
       expect.objectContaining({
         status: 'success',
@@ -623,7 +619,7 @@ describe('useReactToolScheduler', () => {
       resolveExecutePromise = resolve;
     });
 
-    (mockToolWithLiveOutput.execute as Mock).mockImplementation(
+    mockToolWithLiveOutput.executeFn.mockImplementation(
       async (
         _args: Record<string, unknown>,
         _signal: AbortSignal,
@@ -821,7 +817,7 @@ describe('useReactToolScheduler', () => {
         50,
       ),
     );
-    (mockTool.execute as Mock).mockReturnValue(longExecutePromise);
+    mockTool.executeFn.mockReturnValue(longExecutePromise);
     (mockTool.shouldConfirmExecute as Mock).mockResolvedValue(null);
 
     const { result } = renderScheduler();

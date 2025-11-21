@@ -146,6 +146,7 @@ import {
   toTokenMetricsSnapshot,
   type TokenMetricsSnapshot,
 } from './utils/tokenMetricsTracker.js';
+import { useStaticHistoryRefresh } from './hooks/useStaticHistoryRefresh.js';
 
 // Todo UI imports
 import { TodoPanel } from './components/TodoPanel.js';
@@ -414,6 +415,7 @@ const App = (props: AppInternalProps) => {
     stdout.write(ansiEscapes.clearTerminal);
     setStaticKey((prev) => prev + 1);
   }, [setStaticKey, stdout]);
+  useStaticHistoryRefresh(history, refreshStatic);
 
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');

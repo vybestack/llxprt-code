@@ -33,6 +33,7 @@ vi.mock('node:fs', async (importOriginal) => {
     ...(actual as object),
     promises: {
       readFile: vi.fn(),
+      readdir: vi.fn(),
     },
     realpathSync: (p: string) => p,
     existsSync: () => false,
@@ -164,6 +165,36 @@ describe('IdeClient', () => {
       );
       expect(ideClient.getConnectionStatus().details).toContain(
         'Failed to connect',
+      );
+    });
+  });
+
+  describe('authentication', () => {
+    it('passes through auth token from config file when connecting', async () => {
+      const authToken = 'test-auth-token';
+      const config = { port: '8080', authToken };
+      vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify(config));
+      (
+        vi.mocked(fs.promises.readdir) as Mock<
+          (path: fs.PathLike) => Promise<string[]>
+        >
+      ).mockResolvedValue([]);
+
+      const ideClient = await IdeClient.getInstance();
+      await ideClient.connect();
+
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        new URL('http://localhost:8080/mcp'),
+        expect.objectContaining({
+          requestInit: {
+            headers: {
+              Authorization: `Bearer ${authToken}`,
+            },
+          },
+        }),
+      );
+      expect(ideClient.getConnectionStatus().status).toBe(
+        IDEConnectionStatus.Connected,
       );
     });
   });

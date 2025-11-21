@@ -14,6 +14,7 @@ import {
   BaseToolInvocation,
   Kind,
 } from '../tools/tools.js';
+import { vi } from 'vitest';
 
 interface MockToolOptions {
   name: string;
@@ -48,7 +49,7 @@ class MockToolInvocation extends BaseToolInvocation<
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
-    return this.tool.execute(this.params, signal, updateOutput);
+    return this.tool.executeFn(this.params, signal, updateOutput);
   }
 
   override shouldConfirmExecute(
@@ -65,45 +66,70 @@ class MockToolInvocation extends BaseToolInvocation<
 /**
  * A highly configurable mock tool for testing purposes.
  */
+type ExecuteFn = (
+  params: { [key: string]: unknown },
+  signal: AbortSignal,
+  updateOutput?: (output: string) => void,
+) => Promise<ToolResult>;
+
+type ExecuteMock = ReturnType<typeof vi.fn<ExecuteFn>>;
+
+function createExecuteFn(impl: ExecuteFn, _fallbackName: string): ExecuteMock {
+  return vi.fn(impl);
+}
+
 export class MockTool extends BaseDeclarativeTool<
   { [key: string]: unknown },
   ToolResult
 > {
+  shouldConfirm = false;
+  executeFn: ExecuteMock;
   shouldConfirmExecute: (
     params: { [key: string]: unknown },
     signal: AbortSignal,
   ) => Promise<ToolCallConfirmationDetails | false>;
-  execute: (
-    params: { [key: string]: unknown },
-    signal: AbortSignal,
-    updateOutput?: (output: string) => void,
-  ) => Promise<ToolResult>;
 
-  constructor(options: MockToolOptions) {
+  constructor(optionsOrName: MockToolOptions | string = { name: 'mock-tool' }) {
+    const options: MockToolOptions =
+      typeof optionsOrName === 'string'
+        ? { name: optionsOrName }
+        : optionsOrName;
     super(
       options.name,
       options.displayName ?? options.name,
       options.description ?? options.name,
       Kind.Other,
-      options.params,
+      options.params ??
+        ({
+          type: 'object',
+          properties: { param: { type: 'string' } },
+        } as object),
       options.isOutputMarkdown ?? false,
       options.canUpdateOutput ?? false,
     );
 
+    const defaultExecute: ExecuteFn = async () => ({
+      llmContent: `Tool ${this.name} executed successfully.`,
+      returnDisplay: `Tool ${this.name} executed successfully.`,
+    });
+    const executeImpl = options.execute ?? defaultExecute;
+    this.executeFn = createExecuteFn(executeImpl, options.name);
     if (options.shouldConfirmExecute) {
-      this.shouldConfirmExecute = options.shouldConfirmExecute;
+      this.shouldConfirmExecute = (params, signal) =>
+        options.shouldConfirmExecute!(params, signal);
     } else {
-      this.shouldConfirmExecute = () => Promise.resolve(false);
-    }
-
-    if (options.execute) {
-      this.execute = options.execute;
-    } else {
-      this.execute = () =>
-        Promise.resolve({
-          llmContent: `Tool ${this.name} executed successfully.`,
-          returnDisplay: `Tool ${this.name} executed successfully.`,
-        });
+      this.shouldConfirmExecute = async () => {
+        if (!this.shouldConfirm) {
+          return false;
+        }
+        return {
+          type: 'exec',
+          title: `Confirm ${this.displayName}`,
+          command: this.name,
+          rootCommand: this.name,
+          onConfirm: async () => {},
+        };
+      };
     }
   }
 

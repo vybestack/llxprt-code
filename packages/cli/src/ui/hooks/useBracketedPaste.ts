@@ -5,9 +5,10 @@
  */
 
 import { useEffect } from 'react';
-
-const ENABLE_BRACKETED_PASTE = '\x1b[?2004h';
-const DISABLE_BRACKETED_PASTE = '\x1b[?2004l';
+import {
+  ENABLE_BRACKETED_PASTE,
+  DISABLE_BRACKETED_PASTE,
+} from '../utils/terminalSequences.js';
 
 /**
  * Enables and disables bracketed paste mode in the terminal.

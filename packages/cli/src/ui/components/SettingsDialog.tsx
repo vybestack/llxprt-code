@@ -126,13 +126,11 @@ export function SettingsDialog({
     setModifiedSettings(newModified);
     setRestartRequiredSettings(newRestartRequired);
     setShowRestartPrompt(newRestartRequired.size > 0);
-  }, [
-    selectedScope,
-    settings,
-    globalPendingChanges,
-    _restartRequiredSettings,
-    modifiedSettings,
-  ]);
+    // Note: _restartRequiredSettings and modifiedSettings are intentionally excluded
+    // from dependencies because they are outputs of this effect, not inputs.
+    // Including them would create an infinite loop (issue #607).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedScope, settings, globalPendingChanges]);
 
   const generateSettingsItems = () => {
     const settingKeys = getDialogSettingKeys();

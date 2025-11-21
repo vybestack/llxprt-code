@@ -25,6 +25,7 @@ export interface MCPOAuthConfig {
   audiences?: string[];
   redirectUri?: string;
   tokenParamName?: string; // For SSE connections, specifies the query parameter name for the token
+  registrationUrl?: string;
 }
 
 /**
@@ -639,6 +640,7 @@ export class MCPOAuthProvider {
             authorizationUrl: discoveredConfig.authorizationUrl,
             tokenUrl: discoveredConfig.tokenUrl,
             scopes: discoveredConfig.scopes || config.scopes || [],
+            registrationUrl: discoveredConfig.registrationUrl,
             // Preserve existing client credentials
             clientId: config.clientId,
             clientSecret: config.clientSecret,
@@ -653,40 +655,38 @@ export class MCPOAuthProvider {
 
     // If no client ID is provided, try dynamic client registration
     if (!config.clientId) {
-      // Extract server URL from authorization URL
-      if (!config.authorizationUrl) {
-        throw new Error(
-          'Cannot perform dynamic registration without authorization URL',
-        );
-      }
+      let registrationUrl = config.registrationUrl;
 
-      const authUrl = new URL(config.authorizationUrl);
-      const serverUrl = `${authUrl.protocol}//${authUrl.host}`;
+      // If no registration URL was previously discovered, try to discover it
+      if (!registrationUrl) {
+        // Extract server URL from authorization URL
+        if (!config.authorizationUrl) {
+          throw new Error(
+            'Cannot perform dynamic registration without authorization URL',
+          );
+        }
 
-      console.log(
-        'No client ID provided, attempting dynamic client registration...',
-      );
+        const authUrl = new URL(config.authorizationUrl);
+        const serverUrl = `${authUrl.protocol}//${authUrl.host}`;
 
-      // Get the authorization server metadata for registration
-      const authServerMetadataUrl = new URL(
-        '/.well-known/oauth-authorization-server',
-        serverUrl,
-      ).toString();
+        console.debug('→ Attempting dynamic client registration...');
 
-      const authServerMetadata =
-        await OAuthUtils.fetchAuthorizationServerMetadata(
-          authServerMetadataUrl,
-        );
-      if (!authServerMetadata) {
-        throw new Error(
-          'Failed to fetch authorization server metadata for client registration',
-        );
+        // Get the authorization server metadata for registration
+        const authServerMetadata =
+          await OAuthUtils.discoverAuthorizationServerMetadata(serverUrl);
+
+        if (!authServerMetadata) {
+          throw new Error(
+            'Failed to fetch authorization server metadata for client registration',
+          );
+        }
+        registrationUrl = authServerMetadata.registration_endpoint;
       }
 
       // Register client if registration endpoint is available
-      if (authServerMetadata.registration_endpoint) {
+      if (registrationUrl) {
         const clientRegistration = await this.registerClient(
-          authServerMetadata.registration_endpoint,
+          registrationUrl,
           config,
         );
 
@@ -787,9 +787,11 @@ export class MCPOAuthProvider {
       token.expiresAt = Date.now() + tokenResponse.expires_in * 1000;
     }
 
+    const tokenStorage = new MCPOAuthTokenStorage();
+
     // Save token
     try {
-      await MCPOAuthTokenStorage.saveToken(
+      await tokenStorage.saveToken(
         serverName,
         token,
         config.clientId,
@@ -799,7 +801,7 @@ export class MCPOAuthProvider {
       console.log('Authentication successful! Token saved.');
 
       // Verify token was saved
-      const savedToken = await MCPOAuthTokenStorage.getToken(serverName);
+      const savedToken = await tokenStorage.getCredentials(serverName);
       if (savedToken && savedToken.token && savedToken.token.accessToken) {
         const tokenPreview =
           savedToken.token.accessToken.length > 20
@@ -831,7 +833,8 @@ export class MCPOAuthProvider {
     config: MCPOAuthConfig,
   ): Promise<string | null> {
     console.debug(`Getting valid token for server: ${serverName}`);
-    const credentials = await MCPOAuthTokenStorage.getToken(serverName);
+    const tokenStorage = new MCPOAuthTokenStorage();
+    const credentials = await tokenStorage.getCredentials(serverName);
 
     if (!credentials) {
       console.debug(`No credentials found for server: ${serverName}`);
@@ -873,7 +876,7 @@ export class MCPOAuthProvider {
           newToken.expiresAt = Date.now() + newTokenResponse.expires_in * 1000;
         }
 
-        await MCPOAuthTokenStorage.saveToken(
+        await tokenStorage.saveToken(
           serverName,
           newToken,
           config.clientId,
@@ -885,7 +888,7 @@ export class MCPOAuthProvider {
       } catch (error) {
         console.error(`Failed to refresh token: ${getErrorMessage(error)}`);
         // Remove invalid token
-        await MCPOAuthTokenStorage.removeToken(serverName);
+        await tokenStorage.deleteCredentials(serverName);
       }
     }
 

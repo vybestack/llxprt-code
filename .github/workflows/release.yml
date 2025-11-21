@@ -16,7 +16,9 @@ on:
         type: string
         default: 'main'
       dry_run:
-        description: 'Run a dry-run of the release process; no branches, npm packages or GitHub releases will be created.'
+        description: >-
+          Run a dry-run of the release process; no branches, npm packages or GitHub
+          releases will be created.
         required: true
         type: boolean
         default: true
@@ -31,21 +33,26 @@ on:
         type: boolean
         default: false
       force_skip_tests:
-        description: 'Select to skip the "Run Tests" step in testing. Prod releases should run tests'
+        description: >-
+          Select to skip the "Run Tests" step in testing. Prod releases should run tests
         required: false
         type: boolean
         default: false
       publish_vscode_only:
-        description: 'Only build and publish the VS Code extension (skips npm packages, container images, and GitHub release).'
+        description: >-
+          Only build and publish the VS Code extension (skips npm packages, container images,
+          and GitHub release).
         required: false
         type: boolean
         default: false
       skip_vscode_publish:
-        description: 'Skip building and publishing the VS Code extension.'
+        description: >-
+          Skip building and publishing the VS Code extension.
         required: false
         type: boolean
-        default: false
-      # Remove API provider inputs - these will come from repository secrets/variables
+        default:
+          false
+          # Remove API provider inputs - these will come from repository secrets/variables
 
 jobs:
   release:
@@ -67,7 +74,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        uses: 'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683' # v4
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -200,7 +207,14 @@ jobs:
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' }}
         run: |
           git add package.json package-lock.json packages/*/package.json || true
-          git commit -m "chore(release): ${{ steps.version.outputs.RELEASE_TAG }}"
+          # Check if there are changes to commit
+          if git diff --cached --quiet; then
+            echo "No version changes detected - packages already at version ${{ steps.version.outputs.RELEASE_VERSION }}"
+            # Still create an empty commit to maintain workflow consistency
+            git commit --allow-empty -m "chore(release): ${{ steps.version.outputs.RELEASE_TAG }} (no version changes)"
+          else
+            git commit -m "chore(release): ${{ steps.version.outputs.RELEASE_TAG }}"
+          fi
           if [[ "${{ steps.vars.outputs.is_dry_run }}" == "false" ]]; then
             echo "Pushing release branch to remote..."
             git push --set-upstream origin ${{ steps.release_branch.outputs.BRANCH_NAME }} --follow-tags --force
