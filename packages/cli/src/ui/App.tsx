@@ -607,7 +607,7 @@ const App = (props: AppInternalProps) => {
       if ((global as Record<string, unknown>).__oauth_needs_code) {
         // Clear the flag
         (global as Record<string, unknown>).__oauth_needs_code = false;
-        // Open the OAuth code dialog
+        // Open the OAuth code dialog even while auth is in progress
         appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
       }
     }, 100); // Check every 100ms
@@ -967,14 +967,23 @@ const App = (props: AppInternalProps) => {
       const provider = (global as unknown as { __oauth_provider?: string })
         .__oauth_provider;
 
-      if (provider === 'anthropic') {
-        const oauthManager = runtime.getCliOAuthManager();
+      const oauthManager = runtime.getCliOAuthManager();
 
+      if (provider === 'anthropic') {
         if (oauthManager) {
           const anthropicProvider = oauthManager.getProvider('anthropic');
           if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
             (
               anthropicProvider as { submitAuthCode: (code: string) => void }
+            ).submitAuthCode(code);
+          }
+        }
+      } else if (provider === 'gemini') {
+        if (oauthManager) {
+          const geminiProvider = oauthManager.getProvider('gemini');
+          if (geminiProvider && 'submitAuthCode' in geminiProvider) {
+            (
+              geminiProvider as { submitAuthCode: (code: string) => void }
             ).submitAuthCode(code);
           }
         }
@@ -1517,6 +1526,17 @@ const App = (props: AppInternalProps) => {
                 onRestartRequest={handleSettingsRestart}
               />
             </Box>
+          ) : appState.openDialogs.oauthCode ? (
+            <Box flexDirection="column">
+              <OAuthCodeDialog
+                provider={
+                  ((global as Record<string, unknown>)
+                    .__oauth_provider as string) || 'anthropic'
+                }
+                onClose={handleOAuthCodeDialogClose}
+                onSubmit={handleOAuthCodeSubmit}
+              />
+            </Box>
           ) : isAuthenticating ? (
             <>
               <AuthInProgress onTimeout={handleAuthTimeout} />
@@ -1541,17 +1561,6 @@ const App = (props: AppInternalProps) => {
                 onSelect={handleAuthSelect}
                 settings={settings}
                 initialErrorMessage={authError}
-              />
-            </Box>
-          ) : appState.openDialogs.oauthCode ? (
-            <Box flexDirection="column">
-              <OAuthCodeDialog
-                provider={
-                  ((global as Record<string, unknown>)
-                    .__oauth_provider as string) || 'anthropic'
-                }
-                onClose={handleOAuthCodeDialogClose}
-                onSubmit={handleOAuthCodeSubmit}
               />
             </Box>
           ) : isEditorDialogOpen ? (

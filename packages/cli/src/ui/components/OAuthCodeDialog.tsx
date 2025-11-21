@@ -85,7 +85,8 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
       if (key.paste && key.sequence) {
         // The sequence already has the paste content without escape codes
         // Just filter to only allow valid OAuth code characters
-        const cleanInput = key.sequence.replace(/[^a-zA-Z0-9\-_#]/g, '');
+        // Allow slash because Google auth codes often contain it (e.g., 4/XXXX...)
+        const cleanInput = key.sequence.replace(/[^a-zA-Z0-9/_#-]/g, '');
         if (cleanInput) {
           // Replace the entire code with the pasted content (don't append)
           setCode(cleanInput);

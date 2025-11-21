@@ -92,6 +92,9 @@ describe('OAuth2', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    delete (global as Record<string, unknown>).__oauth_wait_for_code;
+    delete (global as Record<string, unknown>).__oauth_needs_code;
+    delete (global as Record<string, unknown>).__oauth_provider;
   });
 
   async function triggerOAuthCallback(query: string): Promise<void> {
@@ -186,6 +189,65 @@ describe('OAuth2', () => {
       redirect_uri: 'https://codeassist.google.com/authcode',
     });
     expect(mockSetCredentials).toHaveBeenCalledWith(mockTokens);
+  });
+
+  it('should use UI auth code hook when available', async () => {
+    const mockConfigWithNoBrowser = {
+      getNoBrowser: () => true,
+      getProxy: () => 'http://test.proxy.com:8080',
+      isBrowserLaunchSuppressed: () => true,
+    } as unknown as Config;
+
+    const mockCodeVerifier = {
+      codeChallenge: 'test-challenge',
+      codeVerifier: 'test-verifier',
+    };
+    const mockAuthUrl = 'https://example.com/auth-user-code';
+    const mockCode = 'ui-hook-code';
+    const mockTokens = {
+      access_token: 'test-access-token-user-code',
+      refresh_token: 'test-refresh-token-user-code',
+    };
+
+    const mockGenerateAuthUrl = vi.fn().mockReturnValue(mockAuthUrl);
+    const mockGetToken = vi.fn().mockResolvedValue({ tokens: mockTokens });
+    const mockSetCredentials = vi.fn();
+    const mockGenerateCodeVerifierAsync = vi
+      .fn()
+      .mockResolvedValue(mockCodeVerifier);
+
+    const mockOAuth2Client = {
+      generateAuthUrl: mockGenerateAuthUrl,
+      getToken: mockGetToken,
+      setCredentials: mockSetCredentials,
+      generateCodeVerifierAsync: mockGenerateCodeVerifierAsync,
+      on: vi.fn(),
+    } as unknown as OAuth2Client;
+    (OAuth2Client as unknown as Mock).mockImplementation(
+      () => mockOAuth2Client,
+    );
+
+    const waitForCode = vi.fn().mockResolvedValue(mockCode);
+    (global as Record<string, unknown>).__oauth_wait_for_code = waitForCode;
+    (global as Record<string, unknown>).__oauth_provider = 'previous-provider';
+
+    const result = await performLogin(
+      AuthType.LOGIN_WITH_GOOGLE,
+      mockConfigWithNoBrowser,
+    );
+
+    expect(result).toBe(true);
+    expect(waitForCode).toHaveBeenCalledTimes(1);
+    expect(readline.createInterface).not.toHaveBeenCalled();
+    expect((global as Record<string, unknown>).__oauth_provider).toBe(
+      'previous-provider',
+    );
+    expect((global as Record<string, unknown>).__oauth_needs_code).toBeFalsy();
+    expect(mockGetToken).toHaveBeenCalledWith({
+      code: mockCode,
+      codeVerifier: mockCodeVerifier.codeVerifier,
+      redirect_uri: 'https://codeassist.google.com/authcode',
+    });
   });
 
   it('should perform login with web browser', async () => {
