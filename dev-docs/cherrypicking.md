@@ -53,7 +53,7 @@ git cherry-pick <commit-hash>
 - UI/UX enhancements
 - **IDE integration features** - llxprt has full IDE support, always cherry-pick IDE improvements
 - Security fixes and permission improvements
-- MCP (Model Context Protocol) improvements
+- MCP (Model Context Protocol) improvements — when cherry-picking new MCP capabilities (e.g., service-account impersonation), follow up with the matching documentation commits so the feature ships with docs; skip doc-only MCP commits if the underlying functionality is still missing
 
 #### What to Skip:
 

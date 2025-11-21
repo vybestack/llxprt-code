@@ -12,7 +12,7 @@ import * as https from 'node:https';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
-import { EXTENSIONS_CONFIG_FILENAME, loadExtension } from '../extension.js';
+import { EXTENSIONS_CONFIG_FILENAME } from '../extension.js';
 import { quote } from 'shell-quote';
 
 export enum ExtensionUpdateState {
