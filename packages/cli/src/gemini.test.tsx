@@ -16,9 +16,12 @@ import {
   // SettingsFile, // Currently unused
   loadSettings,
 } from './config/settings.js';
+import { loadCliConfig } from './config/config.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { FatalConfigError } from '@vybestack/llxprt-code-core';
+import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
+import { relaunchAppInChildProcess } from './utils/relaunch.js';
 
 // Custom error to identify mock process.exit calls
 class MockProcessExitError extends Error {
@@ -81,6 +84,20 @@ vi.mock('./utils/events.js', async (importOriginal) => {
 vi.mock('./utils/sandbox.js', () => ({
   sandbox_command: vi.fn(() => ''), // Default to no sandbox command
   start_sandbox: vi.fn(() => Promise.resolve()), // Mock as an async function that resolves
+}));
+
+// Mock bootstrap utilities for deferred init tests
+vi.mock('./utils/bootstrap.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils/bootstrap.js')>();
+  return {
+    ...actual,
+    shouldRelaunchForMemory: vi.fn(() => []),
+    isDebugMode: vi.fn(() => false),
+  };
+});
+
+vi.mock('./utils/relaunch.js', () => ({
+  relaunchAppInChildProcess: vi.fn().mockResolvedValue(0),
 }));
 
 describe('gemini.tsx main function', () => {
@@ -178,6 +195,131 @@ describe('gemini.tsx main function', () => {
 
     // Avoid the process.exit error from being thrown.
     processExitSpy.mockRestore();
+  });
+});
+
+describe('gemini.tsx deferred initialization', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = { ...originalEnv };
+    delete process.env.SANDBOX;
+    delete process.env.LLXPRT_CODE_NO_RELAUNCH;
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it('should check for memory relaunch BEFORE loading settings when relaunch needed', async () => {
+    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
+    const relaunchMock = vi.mocked(relaunchAppInChildProcess);
+    const loadSettingsMock = vi.mocked(loadSettings);
+    const loadCliConfigMock = vi.mocked(loadCliConfig);
+
+    // Simulate need for relaunch
+    shouldRelaunchMock.mockReturnValue(['--max-old-space-size=4096']);
+    relaunchMock.mockResolvedValue(0);
+
+    const processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('PROCESS_EXIT');
+    });
+
+    try {
+      await main();
+    } catch (e) {
+      // Expected to throw from process.exit mock
+      expect((e as Error).message).toBe('PROCESS_EXIT');
+    }
+
+    // Verify relaunch check happened
+    expect(shouldRelaunchMock).toHaveBeenCalled();
+    expect(relaunchMock).toHaveBeenCalledWith(['--max-old-space-size=4096']);
+
+    // Verify loadSettings and loadCliConfig were NOT called
+    expect(loadSettingsMock).not.toHaveBeenCalled();
+    expect(loadCliConfigMock).not.toHaveBeenCalled();
+
+    processExitSpy.mockRestore();
+  });
+
+  it('should NOT relaunch when already in sandbox environment', async () => {
+    process.env.SANDBOX = 'true';
+
+    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
+    const relaunchMock = vi.mocked(relaunchAppInChildProcess);
+    const loadSettingsMock = vi.mocked(loadSettings);
+
+    // Even if memory check says relaunch needed
+    shouldRelaunchMock.mockReturnValue(['--max-old-space-size=4096']);
+
+    // Mock settings to prevent further execution
+    loadSettingsMock.mockImplementation(() => {
+      throw new Error('SETTINGS_LOADED');
+    });
+
+    try {
+      await main();
+    } catch (e) {
+      // Should reach settings loading, not relaunch
+      expect((e as Error).message).toBe('SETTINGS_LOADED');
+    }
+
+    // Relaunch should NOT happen in sandbox
+    expect(relaunchMock).not.toHaveBeenCalled();
+    // Settings should be loaded
+    expect(loadSettingsMock).toHaveBeenCalled();
+  });
+
+  it('should proceed with normal initialization when no relaunch needed', async () => {
+    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
+    const relaunchMock = vi.mocked(relaunchAppInChildProcess);
+    const loadSettingsMock = vi.mocked(loadSettings);
+
+    // No relaunch needed
+    shouldRelaunchMock.mockReturnValue([]);
+
+    // Mock settings to prevent further execution
+    loadSettingsMock.mockImplementation(() => {
+      throw new Error('SETTINGS_LOADED');
+    });
+
+    try {
+      await main();
+    } catch (e) {
+      expect((e as Error).message).toBe('SETTINGS_LOADED');
+    }
+
+    // Verify no relaunch occurred
+    expect(relaunchMock).not.toHaveBeenCalled();
+    // Settings should be loaded
+    expect(loadSettingsMock).toHaveBeenCalled();
+  });
+
+  it('should use isDebugMode for early debug detection', async () => {
+    const isDebugModeMock = vi.mocked(isDebugMode);
+    const shouldRelaunchMock = vi.mocked(shouldRelaunchForMemory);
+    const loadSettingsMock = vi.mocked(loadSettings);
+
+    isDebugModeMock.mockReturnValue(true);
+    shouldRelaunchMock.mockReturnValue([]);
+
+    // Mock settings to prevent further execution
+    loadSettingsMock.mockImplementation(() => {
+      throw new Error('SETTINGS_LOADED');
+    });
+
+    try {
+      await main();
+    } catch (_e) {
+      // Expected
+    }
+
+    // Debug mode should be detected
+    expect(isDebugModeMock).toHaveBeenCalled();
+    // And passed to shouldRelaunchForMemory
+    expect(shouldRelaunchMock).toHaveBeenCalledWith(true);
   });
 });
 

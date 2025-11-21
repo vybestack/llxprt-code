@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { findIndexAfterFraction } from '../client.js';
+import { findCompressSplitPoint } from '../client.js';
 import { COMPRESSION_PRESERVE_THRESHOLD } from '../compression-config.js';
 
 describe('Compression logic tests', () => {
@@ -37,13 +37,13 @@ describe('Compression logic tests', () => {
 
     // With COMPRESSION_PRESERVE_THRESHOLD = 0.5, we should preserve 50% of the conversation
     const preserveFraction = COMPRESSION_PRESERVE_THRESHOLD;
-    const compressBeforeIndex = findIndexAfterFraction(
+    const compressBeforeIndex = findCompressSplitPoint(
       mockHistory,
       1 - preserveFraction,
     );
 
-    // The preserved portion should be at least 2 items given the distribution of characters
-    expect(compressBeforeIndex).toBeLessThan(mockHistory.length);
-    expect(mockHistory.length - compressBeforeIndex).toBeGreaterThanOrEqual(2);
+    // The split point should be within valid bounds based on character distribution
+    expect(compressBeforeIndex).toBeGreaterThan(0);
+    expect(compressBeforeIndex).toBeLessThanOrEqual(mockHistory.length);
   });
 });

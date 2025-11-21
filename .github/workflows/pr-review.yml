@@ -1,0 +1,467 @@
+name: 'LLxprt PR Review'
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - edited
+
+concurrency:
+  group: 'llxprt-pr-review-${{ github.event.pull_request.number }}'
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+  actions: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
+  REPO: '${{ github.repository }}'
+
+jobs:
+  review:
+    name: 'Run LLxprt review'
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 60
+    env:
+      PR_NUMBER: '${{ github.event.pull_request.number }}'
+      GH_TOKEN: '${{ github.token }}'
+      GITHUB_TOKEN: '${{ github.token }}'
+      OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+      OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+      LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+      LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+      LLXPRT_DEBUG: "${{ vars.DEBUG_NAMESPACES || 'llxprt:*' }}"
+      DEBUG_OUTPUT: 'stderr'
+    steps:
+      - name: 'Checkout base revision'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          ref: '${{ github.event.pull_request.base.sha }}'
+          fetch-depth: 0
+
+      - name: 'Prepare review workspace'
+        run: |
+          set -euo pipefail
+          mkdir -p review/issues
+          : > review/comment.md
+
+      - name: 'Fetch pull request head'
+        id: 'fetch_head'
+        env:
+          HEAD_REF_VALUE: '${{ github.event.pull_request.head.ref }}'
+          HEAD_REPO_VALUE: '${{ github.event.pull_request.head.repo.full_name }}'
+        run: |
+          set -euo pipefail
+          pr_ref="refs/pr/${PR_NUMBER}"
+          head_repo="${HEAD_REPO_VALUE:-${REPO}}"
+          head_ref="${HEAD_REF_VALUE:-}"
+          if [[ -z "$head_ref" ]]; then
+            echo "Head ref is unavailable for PR ${PR_NUMBER}; aborting." >&2
+            exit 1
+          fi
+
+          if [[ "${head_repo}" == "${REPO}" ]]; then
+            git fetch --no-tags --prune --depth=1 origin "${head_ref}:${pr_ref}"
+          else
+            git remote add pr "https://x-access-token:${GITHUB_TOKEN}@github.com/${head_repo}.git"
+            git fetch --no-tags --prune --depth=1 pr "${head_ref}:${pr_ref}"
+          fi
+
+          base_sha='${{ github.event.pull_request.base.sha }}'
+          head_sha="$(git rev-parse "${pr_ref}")"
+          {
+            echo "PR_HEAD_REF=${pr_ref}"
+            echo "PR_HEAD_SHA=${head_sha}"
+            echo "BASE_SHA=${base_sha}"
+          } >> "$GITHUB_ENV"
+          {
+            echo "head_sha=${head_sha}"
+            echo "base_sha=${base_sha}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 'Collect PR metadata and ensure linked issue'
+        id: 'issue_gate'
+        run: |
+          set -euo pipefail
+          pr_json='review/pr.json'
+          gh pr view "${PR_NUMBER}" \
+            --json number,title,url,body,isDraft,closingIssuesReferences,additions,deletions,changedFiles,commits,author,headRefName,baseRefName,labels \
+            > "${pr_json}"
+
+          jq -r '
+            [
+              (.closingIssuesReferences // [] | map(.number | tostring)),
+              ((.body // "") | [match("#([0-9]+)"; "g") | .captures[0].string] // [])
+            ]
+            | add
+            | unique
+            | .[]
+          ' "${pr_json}" > review/issue_numbers.txt
+
+          jq -r '
+            def has_label($name):
+              ((.labels // []) | map(.name) | index($name)) != null;
+            def as_bool($value): if $value then "true" else "false" end;
+            [
+              "IS_LUTHER_PR=" + as_bool(
+                ((.headRefName // "") | tostring | startswith("luther-")) or
+                ((.author // {}) | .login == "app/github-actions") or
+                has_label("Luther Done")
+              ),
+              "HAS_LUTHER_REMEDIATE=" + as_bool(has_label("luther remediate")),
+              "HAS_LUTHER_EXHAUSTED=" + as_bool(has_label("luther exhausted"))
+            ] | .[]
+          ' "${pr_json}" >> "$GITHUB_ENV"
+
+          issues_file='review/issue_numbers.txt'
+          if [[ ! -s "${issues_file}" ]]; then
+            {
+              echo "<!-- llxprt-pr-review -->"
+              echo "## ⚠️ LLxprt PR Review blocked"
+              echo
+              echo "- No linked issues were detected in this PR's description."
+              echo "- Please reference an existing issue with text such as \`Fixes #123\` so the automated review knows what problem to evaluate."
+              echo "- The PR has been returned to draft to prevent accidental merges without an issue."
+            } > review/comment.md
+            if [[ "$(jq -r '.isDraft' "${pr_json}")" != "true" ]]; then
+              gh pr ready "${PR_NUMBER}" --undo >/dev/null 2>&1 || true
+            fi
+            echo "should_review=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          mapfile -t issue_numbers < "${issues_file}"
+          if [[ "${#issue_numbers[@]}" -eq 0 ]]; then
+            echo "should_review=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for issue in "${issue_numbers[@]}"; do
+            gh issue view "${issue}" \
+              --json number,title,url,body,state,labels \
+              > "review/issues/${issue}.json"
+          done
+
+          issues_csv="$(IFS=, ; echo "${issue_numbers[*]}")"
+          echo "ISSUE_NUMBERS=${issues_csv}" >> "$GITHUB_ENV"
+          echo "should_review=true" >> "$GITHUB_OUTPUT"
+
+      - name: 'Detect documentation-only change'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: |
+          set -euo pipefail
+          diff_list="review/changed-list.txt"
+          git diff --name-only "${BASE_SHA}" "${PR_HEAD_SHA}" > "${diff_list}"
+          docs_only=true
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              docs/*|README.md|README.*|*.md|*.mdx|*.rst|*.txt|*.adoc)
+                ;;
+              *)
+                docs_only=false
+                break
+                ;;
+            esac
+          done < "${diff_list}"
+          echo "DOCS_ONLY=${docs_only}" >> "$GITHUB_ENV"
+
+      - name: 'Install LLxprt CLI nightly'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: npm install -g @vybestack/llxprt-code@nightly
+
+      - name: 'Capture LLxprt Code CI status'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        id: 'ci_wait'
+        run: |
+          set -euo pipefail
+          ci_status="pending"
+          ci_conclusion="pending"
+          ci_url="N/A"
+          runs_json="$(gh api -X GET "/repos/${REPO}/actions/workflows/ci.yml/runs" \
+            -F event="pull_request" \
+            -F head_sha="${PR_HEAD_SHA}" \
+            -F per_page=50)"
+          run_record="$(jq -c '.workflow_runs | sort_by(.run_number) | last // {}' <<<"${runs_json}")"
+          ci_id="$(jq -r '.id // ""' <<<"${run_record}")"
+          if [[ -n "${ci_id}" && "${ci_id}" != "null" ]]; then
+            ci_status="$(jq -r '.status // "unknown"' <<<"${run_record}")"
+            ci_conclusion="$(jq -r '.conclusion // "pending"' <<<"${run_record}")"
+            ci_url="$(jq -r '.html_url // "N/A"' <<<"${run_record}")"
+            echo "LLxprt Code CI run ${ci_id} status=${ci_status}, conclusion=${ci_conclusion}."
+            if [[ "${ci_status}" != "completed" ]]; then
+              echo "CI run is still ${ci_status}; continuing review without waiting for completion."
+            fi
+          else
+            echo "No LLxprt Code CI run has started yet for head SHA ${PR_HEAD_SHA}; continuing review with status pending."
+          fi
+          {
+            echo "CI_STATUS=${ci_status}"
+            echo "CI_CONCLUSION=${ci_conclusion:-unknown}"
+            echo "CI_RUN_URL=${ci_url:-N/A}"
+          } >> "$GITHUB_ENV"
+          {
+            echo "ci_status=${ci_status}"
+            echo "ci_conclusion=${ci_conclusion:-unknown}"
+            echo "ci_url=${ci_url:-N/A}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 'Capture coverage summary comment'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: |
+          set -euo pipefail
+          coverage_file='review/coverage-comment.txt'
+          gh api --paginate "repos/${REPO}/issues/${PR_NUMBER}/comments" \
+            --jq '.[] | select(.body | contains("<!-- code-coverage-summary -->")) | .body' \
+            > "${coverage_file}" || true
+          if [[ -s "${coverage_file}" ]]; then
+            tail -n 1 "${coverage_file}" > review/coverage-latest.txt
+          else
+            : > review/coverage-latest.txt
+          fi
+
+      - name: 'Generate diff artifacts'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: |
+          set -euo pipefail
+          git diff --stat "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diffstat.txt
+          git diff --name-status "${BASE_SHA}" "${PR_HEAD_SHA}" > review/changed-files.txt
+          git diff --numstat "${BASE_SHA}" "${PR_HEAD_SHA}" > review/numstat.txt
+          git diff -U3 "${BASE_SHA}" "${PR_HEAD_SHA}" > review/diff.patch
+          head -n 4000 review/diff.patch > review/diff-truncated.patch
+          grep -Ei '(/tests?/|__tests__|\\.spec\\.|\\.test\\.)' review/changed-files.txt > review/test-files.txt || true
+
+      - name: 'Build LLxprt prompt'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2016,SC2026
+          node --eval '
+          const fs = require("fs");
+          const path = require("path");
+
+          const pr = JSON.parse(fs.readFileSync("review/pr.json", "utf8"));
+          const issuesDir = "review/issues";
+          let issues = [];
+          if (fs.existsSync(issuesDir)) {
+            issues = fs
+              .readdirSync(issuesDir)
+              .filter((file) => file.endsWith(".json"))
+              .map((file) =>
+                JSON.parse(fs.readFileSync(path.join(issuesDir, file), "utf8")),
+              )
+              .sort((a, b) => Number(a.number) - Number(b.number));
+          }
+
+          const clean = (text, limit) => {
+            if (!text) return "";
+            const trimmed = text.trim();
+            return trimmed.length > limit ? `${trimmed.slice(0, limit)}…` : trimmed;
+          };
+
+          const readIfExists = (filePath, fallback) =>
+            fs.existsSync(filePath) && fs.statSync(filePath).size
+              ? fs.readFileSync(filePath, "utf8")
+              : fallback;
+
+          const coverageSection = readIfExists(
+            "review/coverage-latest.txt",
+            "No coverage summary comment was found on this PR yet.",
+          );
+          const diffstat = readIfExists("review/diffstat.txt", "");
+          const filesList = readIfExists("review/changed-files.txt", "");
+          const testFiles = readIfExists(
+            "review/test-files.txt",
+            "No explicit test files were touched.",
+          );
+          const diffPatch = readIfExists("review/diff-truncated.patch", "");
+
+          const issueSection = issues.length
+            ? issues
+                .map((issue) => {
+                  const summary = clean(issue.body || "", 800);
+                  return `- #${issue.number} ${issue.title}
+            - URL: ${issue.url}
+            - State: ${issue.state}
+            - Summary: ${summary}`;
+                })
+                .join("\n")
+            : "No issues were expanded (this should not happen).";
+
+          const prBody =
+            clean(pr.body || "", 2000) || "No PR description provided.";
+
+          const prompt = `You are LLxprt, an autonomous code reviewer for the LLxprt Code repository.
+          Focus strictly on code introduced in this pull request. Ignore pre-existing code unless it directly interacts with the changes shown.
+
+          Repository: ${process.env.REPO}
+          PR #${pr.number}: ${pr.title}
+          Author: ${(pr.author && pr.author.login) || "unknown"}
+          Base -> Head: ${pr.baseRefName} -> ${pr.headRefName}
+          Additions: ${pr.additions}  Deletions: ${pr.deletions}  Files changed: ${
+            pr.changedFiles
+          }  Commits: ${pr.commits}
+          CI “LLxprt Code CI”: status=${process.env.CI_STATUS || "unknown"} conclusion=${
+            process.env.CI_CONCLUSION || "unknown"
+          } (${process.env.CI_RUN_URL || "N/A"})
+
+          ## Linked issues
+          ${issueSection}
+
+          ## PR description
+          ${prBody}
+
+          ## Existing coverage comment
+          ${coverageSection}
+
+          ## Changed files (git diff --stat)
+          ${diffstat}
+
+          ## File change list (name + status)
+          ${filesList}
+
+          ## Test-focused files touched
+          ${testFiles}
+
+          ## Patch (first 4000 lines)
+          ${diffPatch}
+
+          ## Doc-only change
+          ${process.env.DOCS_ONLY || 'unknown'}
+
+          ### Review requirements
+          1. Verify the implementation actually resolves the linked issue(s). Explicitly tie file-level evidence back to the issue requirements.
+          2. Identify likely side effects introduced by the diff (config changes, shared modules, performance impacts, etc.) and call them out.
+          3. Evaluate code quality: correctness, error handling, data validation, race conditions, accessibility, and maintainability.
+          4. Evaluate automated tests:
+             - Determine whether tests were added/updated for the new behavior.
+             - Flag “mock theater” tests (mocks that only assert implementation details without executing new logic).
+             - State whether coverage likely increased, decreased, or stayed flat. Use the diff + test changes + coverage summary to justify the direction even if approximate.
+          5. Stay within the diff—do not reference untouched files except when describing dependencies directly affected.
+          6. If this is not a documentation-only change and you cannot cite meaningful automated tests (integration or otherwise) that cover the new behavior, treat the PR as unsafe and plan to return it for remediation.
+
+          ### Output format
+          Produce a single markdown comment exactly in this structure and nothing else:
+
+          <!-- llxprt-pr-review -->
+          ## LLxprt PR Review – PR #${pr.number}
+
+          **Issue Alignment**
+          - …
+
+          **Side Effects**
+          - …
+
+          **Code Quality**
+          - …
+
+          **Tests & Coverage**
+          - Coverage impact: (increase|decrease|unchanged|unknown) – short justification referencing changed files/tests.
+          - Additional bullets on test gaps or strengths (mention if tests feel like “mock theater”).
+
+          **Verdict**
+          - Default to \`⚠️ Needs Work\` unless you can cite specific evidence (code + tests) that risk is low; only start with \`✅ Ready\` when requirements are fully satisfied, the change is truly documentation-only, or adequate automated coverage exists.
+
+          If information is missing, state assumptions explicitly. Keep the overall length under 350 words.
+          `;
+
+          fs.writeFileSync("review/prompt.md", prompt);
+          '
+
+      - name: 'Run LLxprt review'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        id: 'llxprt'
+        run: |
+          set -euo pipefail
+          prompt_file="review/prompt.md"
+          llxprt_log="review/llxprt.log"
+          set +e
+          cat "${prompt_file}" | llxprt \
+            --provider "${LLXPRT_DEFAULT_PROVIDER}" \
+            --model "${LLXPRT_DEFAULT_MODEL}" \
+            --yolo \
+            --key "${OPENAI_API_KEY}" \
+            --set modelparam.temperature=1 \
+            --set modelparam.max_tokens=10000 \
+            --set context-limit=121000 \
+            --set base-url="${OPENAI_BASE_URL}" \
+            --set shell-replacement=true | tee "${llxprt_log}"
+          llxprt_status=${PIPESTATUS[1]}
+          set -e
+          if [[ ${llxprt_status} -ne 0 ]]; then
+            {
+              echo "<!-- llxprt-pr-review -->"
+              echo "## ⚠️ LLxprt PR Review infrastructure failure"
+              echo
+              echo "The automated reviewer failed with exit code ${llxprt_status}. Please inspect the workflow logs (LLxprt section) and re-run once resolved."
+            } > review/comment.md
+            exit "${llxprt_status}"
+          fi
+          cp "${llxprt_log}" review/comment.md
+
+      - name: 'Evaluate LLxprt verdict'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        id: 'verdict'
+        run: |
+          set -euo pipefail
+          verdict="unknown"
+          if [[ -f review/comment.md ]]; then
+            if grep -qi 'Needs Work' review/comment.md; then
+              verdict="needs_work"
+            elif grep -qi 'Ready' review/comment.md; then
+              verdict="ready"
+            fi
+          fi
+          echo "verdict=${verdict}" >> "$GITHUB_OUTPUT"
+
+      - name: 'Post LLxprt review comment'
+        if: always()
+        uses: 'thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b' # v3.0.1
+        with:
+          file-path: 'review/comment.md'
+          comment-tag: 'llxprt-pr-review'
+          github-token: '${{ github.token }}'
+
+      - name: 'Apply review actions'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        env:
+          IS_LUTHER_PR: '${{ env.IS_LUTHER_PR }}'
+          HAS_LUTHER_EXHAUSTED: '${{ env.HAS_LUTHER_EXHAUSTED }}'
+          PR_NUMBER: '${{ env.PR_NUMBER }}'
+        run: |
+          set -euo pipefail
+          verdict="${{ steps.verdict.outputs.verdict }}"
+          if [[ "${verdict}" == "needs_work" ]]; then
+            gh pr ready "${PR_NUMBER}" --undo >/dev/null 2>&1 || true
+            if [[ "${IS_LUTHER_PR}" == "true" && "${HAS_LUTHER_EXHAUSTED}" != "true" ]]; then
+              gh pr edit "${PR_NUMBER}" --add-label "luther remediate" >/dev/null 2>&1 || true
+            fi
+          elif [[ "${verdict}" == "ready" && "${IS_LUTHER_PR}" == "true" ]]; then
+            gh pr edit "${PR_NUMBER}" --remove-label "luther remediate" >/dev/null 2>&1 || true
+          fi
+
+      - name: 'Record LLxprt verdict outcome'
+        if: steps.issue_gate.outputs.should_review == 'true'
+        run: |
+          set -euo pipefail
+          verdict="${{ steps.verdict.outputs.verdict }}"
+          if [[ "${verdict}" == "needs_work" || "${verdict}" == "unknown" ]]; then
+            echo "::notice title=LLxprt Review::Verdict ${verdict:-unknown}. See comment for remediation details."
+          else
+            echo "LLxprt review verdict: ${verdict:-unknown}"
+          fi
+
+      - name: 'Report missing issue reference'
+        if: steps.issue_gate.outputs.should_review != 'true'
+        run: |
+          echo "::warning title=LLxprt Review::No linked issue detected; posted guidance comment but leaving workflow successful."

@@ -7,6 +7,8 @@
 /// <reference types="vitest/globals" />
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { loadCliConfig } from './config.js';
+import { Settings } from './settings.js';
 
 function createMockSettingsService() {
   const providerStore = new Map<string, Record<string, unknown>>();
@@ -397,8 +399,6 @@ vi.mock('yargs/yargs', () => ({
 vi.mock('node-gyp-build', () => ({}));
 
 import { ProfileManager } from '@vybestack/llxprt-code-core';
-import { loadCliConfig } from './config.js';
-import { Settings } from './settings.js';
 import { Extension } from './extension.js';
 
 const MockedProfileManager = vi.mocked(ProfileManager);

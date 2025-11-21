@@ -9,13 +9,26 @@ import type {
   TaskStatusUpdateEvent,
   SendStreamingMessageSuccessResponse,
 } from '@a2a-js/sdk';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { ApprovalMode, PolicyDecision } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { expect, vi } from 'vitest';
 
 export function createMockConfig(
   overrides: Partial<Config> = {},
 ): Partial<Config> {
+  const defaultMessageBus = {
+    subscribe: vi.fn().mockReturnValue(() => {}),
+    publish: vi.fn(),
+    respondToConfirmation: vi.fn(),
+    requestConfirmation: vi.fn().mockResolvedValue(true),
+    removeAllListeners: vi.fn(),
+    listenerCount: vi.fn().mockReturnValue(0),
+  };
+
+  const defaultPolicyEngine = {
+    evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK_USER),
+  };
+
   const mockConfig = {
     getToolRegistry: vi.fn().mockReturnValue({
       getTool: vi.fn(),
@@ -41,6 +54,8 @@ export function createMockConfig(
     getHistory: vi.fn().mockReturnValue([]),
     getEmbeddingModel: vi.fn().mockReturnValue('text-embedding-004'),
     getSessionId: vi.fn().mockReturnValue('test-session-id'),
+    getMessageBus: vi.fn().mockReturnValue(defaultMessageBus),
+    getPolicyEngine: vi.fn().mockReturnValue(defaultPolicyEngine),
     ...overrides,
   };
   return mockConfig;

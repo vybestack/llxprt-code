@@ -18,6 +18,7 @@ import { recursivelyHydrateStrings } from './extensions/variables.js';
 import { SettingScope, loadSettings } from './settings.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
+import { downloadFromGitHubRelease } from './extensions/github.js';
 import type { LoadExtensionContext } from './extensions/variableSchema.js';
 
 export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
@@ -42,7 +43,8 @@ export interface ExtensionConfig {
 
 export interface ExtensionInstallMetadata {
   source: string;
-  type: 'git' | 'local' | 'link';
+  type: 'git' | 'local' | 'link' | 'github-release';
+  ref?: string;
 }
 
 export interface ExtensionUpdateInfo {
@@ -220,6 +222,15 @@ export function loadExtension(context: LoadExtensionContext): Extension | null {
 
     config = resolveEnvVarsInObject(config);
 
+    if (config.mcpServers) {
+      config.mcpServers = Object.fromEntries(
+        Object.entries(config.mcpServers).map(([key, value]) => [
+          key,
+          filterMcpConfig(value),
+        ]),
+      );
+    }
+
     const contextFiles = getContextFileNames(config)
       .map((contextFileName) =>
         path.join(effectiveExtensionPath, contextFileName),
@@ -234,13 +245,19 @@ export function loadExtension(context: LoadExtensionContext): Extension | null {
     };
   } catch (e) {
     console.error(
-      `Warning: error parsing extension config in ${configFilePath}: ${e}`,
+      `Warning: Skipping extension in ${effectiveExtensionPath}: ${getErrorMessage(e)}`,
     );
     return null;
   }
 }
 
-function loadInstallMetadata(
+function filterMcpConfig(original: MCPServerConfig): MCPServerConfig {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { trust, ...rest } = original;
+  return Object.freeze(rest);
+}
+
+export function loadInstallMetadata(
   extensionDir: string,
 ): ExtensionInstallMetadata | undefined {
   const metadataFilePath = path.join(extensionDir, INSTALL_METADATA_FILENAME);
@@ -337,6 +354,26 @@ async function cloneFromGit(
   }
 }
 
+/**
+ * Asks users a prompt and awaits for a y/n response
+ * @param prompt A yes/no prompt to ask the user
+ * @returns Whether or not the user answers 'y' (yes). Defaults to 'yes' on enter.
+ */
+async function promptForContinuation(prompt: string): Promise<boolean> {
+  const readline = await import('node:readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(['y', ''].includes(answer.trim().toLowerCase()));
+    });
+  });
+}
+
 export async function installExtension(
   installMetadata: ExtensionInstallMetadata,
   cwd: string = process.cwd(),
@@ -370,6 +407,12 @@ export async function installExtension(
     tempDir = await ExtensionStorage.createTmpDir();
     await cloneFromGit(installMetadata.source, tempDir);
     localSourcePath = tempDir;
+  } else if (installMetadata.type === 'github-release') {
+    tempDir = await ExtensionStorage.createTmpDir();
+    const result = await downloadFromGitHubRelease(installMetadata, tempDir);
+    // Update the ref in metadata to the actual tag that was downloaded
+    installMetadata.ref = result.tagName;
+    localSourcePath = tempDir;
   } else if (
     installMetadata.type === 'local' ||
     installMetadata.type === 'link'
@@ -402,13 +445,17 @@ export async function installExtension(
       )
     ) {
       throw new Error(
-        `Error: Extension "${newExtensionName}" is already installed. Please uninstall it first.`,
+        `Extension "${newExtensionName}" is already installed. Please uninstall it first.`,
       );
     }
 
     await fs.promises.mkdir(destinationPath, { recursive: true });
 
-    if (installMetadata.type === 'local' || installMetadata.type === 'git') {
+    if (
+      installMetadata.type === 'local' ||
+      installMetadata.type === 'git' ||
+      installMetadata.type === 'github-release'
+    ) {
       await copyExtension(localSourcePath, destinationPath);
     }
 
@@ -422,6 +469,48 @@ export async function installExtension(
   }
 
   return newExtensionName;
+}
+
+/**
+ * Requests user consent before installing an extension with MCP servers or other features.
+ * Shows warnings about what the extension will do and prompts for confirmation.
+ * @param extensionConfig The extension configuration to show consent information for.
+ */
+export async function requestConsent(extensionConfig: ExtensionConfig) {
+  const output: string[] = [];
+  const mcpServerEntries = Object.entries(extensionConfig.mcpServers || {});
+  output.push('Extensions may introduce unexpected behavior.');
+  output.push(
+    'Ensure you have investigated the extension source and trust the author.',
+  );
+
+  if (mcpServerEntries.length) {
+    output.push('This extension will run the following MCP servers:');
+    for (const [key, mcpServer] of mcpServerEntries) {
+      const isLocal = !!mcpServer.command;
+      const source =
+        mcpServer.httpUrl ??
+        `${mcpServer.command || ''}${mcpServer.args ? ' ' + mcpServer.args.join(' ') : ''}`;
+      output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
+    }
+  }
+  if (extensionConfig.contextFileName) {
+    output.push(
+      `This extension will append info to your LLXPRT.md context using ${extensionConfig.contextFileName}`,
+    );
+  }
+  if (extensionConfig.excludeTools) {
+    output.push(
+      `This extension will exclude the following core tools: ${extensionConfig.excludeTools}`,
+    );
+  }
+  console.info(output.join('\n'));
+  const shouldContinue = await promptForContinuation(
+    'Do you want to continue? [Y/n]: ',
+  );
+  if (!shouldContinue) {
+    throw new Error('Installation cancelled by user.');
+  }
 }
 
 async function loadExtensionConfig(
@@ -450,17 +539,25 @@ async function loadExtensionConfig(
 }
 
 export async function uninstallExtension(
-  extensionName: string,
+  extensionIdentifier: string,
   cwd: string = process.cwd(),
 ): Promise<void> {
   const installedExtensions = loadUserExtensions(cwd);
-  if (
-    !installedExtensions.some(
-      (installed) => installed.config.name === extensionName,
-    )
-  ) {
-    throw new Error(`Error: Extension "${extensionName}" not found.`);
+  const normalizedIdentifier = extensionIdentifier.toLowerCase();
+  const extensionName = installedExtensions.find((installed) => {
+    if (installed.config.name.toLowerCase() === normalizedIdentifier) {
+      return true;
+    }
+    const source = installed.installMetadata?.source?.toLowerCase();
+    return source === normalizedIdentifier;
+  })?.config.name;
+
+  if (!extensionName) {
+    throw new Error(
+      `Extension "${extensionIdentifier}" not found. Run llxprt extensions list to see available extensions.`,
+    );
   }
+
   const storage = new ExtensionStorage(extensionName);
   return await fs.promises.rm(storage.getExtensionDir(), {
     recursive: true,

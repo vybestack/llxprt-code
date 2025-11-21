@@ -354,7 +354,9 @@ describe('ToolRegistry', () => {
 
       await toolRegistry.discoverAllTools();
 
-      const discoveredTool = toolRegistry.getTool('tool-with-bad-format');
+      const discoveredTool = toolRegistry.getTool(
+        'discovered_tool_tool-with-bad-format',
+      );
       expect(discoveredTool).toBeDefined();
 
       const registeredParams = (discoveredTool as DiscoveredTool).schema
@@ -409,7 +411,9 @@ describe('ToolRegistry', () => {
       });
 
       await toolRegistry.discoverAllTools();
-      const discoveredTool = toolRegistry.getTool('failing-tool');
+      const discoveredTool = toolRegistry.getTool(
+        'discovered_tool_failing-tool',
+      );
       expect(discoveredTool).toBeDefined();
 
       // --- Execution Mock ---

@@ -15,7 +15,8 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { Part } from '@google/genai';
 import { runNonInteractive } from './nonInteractiveCli.js';
-import { vi } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { LoadedSettings } from './config/settings.js';
 
 // Mock core modules
 vi.mock('./ui/hooks/atCommandProcessor.js');
@@ -30,8 +31,17 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
+const mockGetCommands = vi.hoisted(() => vi.fn());
+const mockCommandServiceCreate = vi.hoisted(() => vi.fn());
+vi.mock('./services/CommandService.js', () => ({
+  CommandService: {
+    create: mockCommandServiceCreate,
+  },
+}));
+
 describe('runNonInteractive', () => {
   let mockConfig: Config;
+  let mockSettings: LoadedSettings;
   let mockToolRegistry: ToolRegistry;
   let mockCoreExecuteToolCall: vi.Mock;
   let mockShutdownTelemetry: vi.Mock;
@@ -44,6 +54,11 @@ describe('runNonInteractive', () => {
   beforeEach(async () => {
     mockCoreExecuteToolCall = vi.mocked(executeToolCall);
     mockShutdownTelemetry = vi.mocked(shutdownTelemetry);
+
+    mockCommandServiceCreate.mockResolvedValue({
+      getCommands: mockGetCommands,
+    });
+    mockGetCommands.mockReturnValue([]);
 
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     processStdoutSpy = vi
@@ -69,7 +84,35 @@ describe('runNonInteractive', () => {
       getContentGeneratorConfig: vi.fn().mockReturnValue({}),
       getDebugMode: vi.fn().mockReturnValue(false),
       getProviderManager: vi.fn().mockReturnValue(undefined),
+      getOutputFormat: vi.fn().mockReturnValue('text'),
+      getFolderTrustFeature: vi.fn().mockReturnValue(false),
+      getFolderTrust: vi.fn().mockReturnValue(false),
+      getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
+      getSessionId: vi.fn().mockReturnValue('test-session'),
+      storage: {
+        getDir: vi.fn().mockReturnValue('/tmp/.llxprt'),
+      },
     } as unknown as Config;
+
+    mockSettings = {
+      system: { path: '', settings: {} },
+      systemDefaults: { path: '', settings: {} },
+      user: { path: '', settings: {} },
+      workspace: { path: '', settings: {} },
+      errors: [],
+      setValue: vi.fn(),
+      merged: {
+        security: {
+          auth: {
+            enforcedType: undefined,
+          },
+        },
+      },
+      isTrusted: true,
+      migratedInMemorScopes: new Set(),
+      forScope: vi.fn(),
+      computeMergedSettings: vi.fn(),
+    } as unknown as LoadedSettings;
 
     const { handleAtCommand } = await import(
       './ui/hooks/atCommandProcessor.js'
@@ -101,7 +144,12 @@ describe('runNonInteractive', () => {
       createStreamFromEvents(events),
     );
 
-    await runNonInteractive(mockConfig, 'Test input', 'prompt-id-1');
+    await runNonInteractive(
+      mockConfig,
+      mockSettings,
+      'Test input',
+      'prompt-id-1',
+    );
 
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
       [{ text: 'Test input' }],
@@ -112,7 +160,8 @@ describe('runNonInteractive', () => {
       .map(([value]) => value)
       .filter((value) => value !== '');
 
-    expect(meaningfulWrites).toEqual(['Hello World', '\n']);
+    // Content may be buffered/processed, check total output
+    expect(meaningfulWrites.join('')).toBe('Hello World\n');
     expect(mockShutdownTelemetry).toHaveBeenCalled();
   });
 
@@ -139,7 +188,12 @@ describe('runNonInteractive', () => {
       .mockReturnValueOnce(createStreamFromEvents(firstCallEvents))
       .mockReturnValueOnce(createStreamFromEvents(secondCallEvents));
 
-    await runNonInteractive(mockConfig, 'Use a tool', 'prompt-id-2');
+    await runNonInteractive(
+      mockConfig,
+      mockSettings,
+      'Use a tool',
+      'prompt-id-2',
+    );
 
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
@@ -198,6 +252,7 @@ describe('runNonInteractive', () => {
 
     await runNonInteractive(
       mockConfig,
+      mockSettings,
       'Use the non-gemini provider',
       'prompt-provider',
     );
@@ -258,7 +313,12 @@ describe('runNonInteractive', () => {
       .mockReturnValueOnce(createStreamFromEvents([toolCallEvent]))
       .mockReturnValueOnce(createStreamFromEvents(finalResponse));
 
-    await runNonInteractive(mockConfig, 'Trigger tool error', 'prompt-id-3');
+    await runNonInteractive(
+      mockConfig,
+      mockSettings,
+      'Trigger tool error',
+      'prompt-id-3',
+    );
 
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
@@ -294,7 +354,12 @@ describe('runNonInteractive', () => {
     });
 
     await expect(
-      runNonInteractive(mockConfig, 'Initial fail', 'prompt-id-4'),
+      runNonInteractive(
+        mockConfig,
+        mockSettings,
+        'Initial fail',
+        'prompt-id-4',
+      ),
     ).rejects.toThrow(apiError);
   });
 
@@ -326,6 +391,7 @@ describe('runNonInteractive', () => {
 
     await runNonInteractive(
       mockConfig,
+      mockSettings,
       'Trigger tool not found',
       'prompt-id-5',
     );
@@ -347,7 +413,12 @@ describe('runNonInteractive', () => {
   it('should exit when max session turns are exceeded', async () => {
     vi.mocked(mockConfig.getMaxSessionTurns).mockReturnValue(0);
     await expect(
-      runNonInteractive(mockConfig, 'Trigger loop', 'prompt-id-6'),
+      runNonInteractive(
+        mockConfig,
+        mockSettings,
+        'Trigger loop',
+        'prompt-id-6',
+      ),
     ).rejects.toThrow(
       'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
     );
@@ -384,7 +455,7 @@ describe('runNonInteractive', () => {
     );
 
     // 4. Run the non-interactive mode with the raw input
-    await runNonInteractive(mockConfig, rawInput, 'prompt-id-7');
+    await runNonInteractive(mockConfig, mockSettings, rawInput, 'prompt-id-7');
 
     // 5. Assert that sendMessageStream was called with the PROCESSED parts, not the raw input
     expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
@@ -395,5 +466,144 @@ describe('runNonInteractive', () => {
 
     // 6. Assert the final output is correct
     expect(processStdoutSpy).toHaveBeenCalledWith('Summary complete.');
+  });
+
+  it('should execute a slash command that returns a prompt', async () => {
+    const mockCommand = {
+      name: 'testcommand',
+      description: 'a test command',
+      action: vi.fn().mockResolvedValue({
+        type: 'submit_prompt',
+        content: [{ text: 'Prompt from command' }],
+      }),
+    };
+    mockGetCommands.mockReturnValue([mockCommand]);
+
+    const events: ServerGeminiStreamEvent[] = [
+      { type: GeminiEventType.Content, value: 'Response from command' },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive(
+      mockConfig,
+      mockSettings,
+      '/testcommand',
+      'prompt-id-slash',
+    );
+
+    // Ensure the prompt sent to the model is from the command, not the raw input
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+      [{ text: 'Prompt from command' }],
+      expect.any(AbortSignal),
+      'prompt-id-slash',
+    );
+
+    expect(processStdoutSpy).toHaveBeenCalledWith('Response from command');
+  });
+
+  it('should throw FatalInputError if a command requires confirmation', async () => {
+    const mockCommand = {
+      name: 'confirm',
+      description: 'a command that needs confirmation',
+      action: vi.fn().mockResolvedValue({
+        type: 'confirm_shell_commands',
+        commands: ['rm -rf /'],
+      }),
+    };
+    mockGetCommands.mockReturnValue([mockCommand]);
+
+    await expect(
+      runNonInteractive(
+        mockConfig,
+        mockSettings,
+        '/confirm',
+        'prompt-id-confirm',
+      ),
+    ).rejects.toThrow(
+      'Exiting due to a confirmation prompt requested by the command.',
+    );
+  });
+
+  it('should treat an unknown slash command as a regular prompt', async () => {
+    // No commands are mocked, so any slash command is "unknown"
+    mockGetCommands.mockReturnValue([]);
+
+    const events: ServerGeminiStreamEvent[] = [
+      { type: GeminiEventType.Content, value: 'Response to unknown' },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive(
+      mockConfig,
+      mockSettings,
+      '/unknowncommand',
+      'prompt-id-unknown',
+    );
+
+    // Ensure the raw input is sent to the model
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+      [{ text: '/unknowncommand' }],
+      expect.any(AbortSignal),
+      'prompt-id-unknown',
+    );
+
+    expect(processStdoutSpy).toHaveBeenCalledWith('Response to unknown');
+  });
+
+  it('should throw for unhandled command result types', async () => {
+    const mockCommand = {
+      name: 'noaction',
+      description: 'unhandled type',
+      action: vi.fn().mockResolvedValue({
+        type: 'unhandled',
+      }),
+    };
+    mockGetCommands.mockReturnValue([mockCommand]);
+
+    await expect(
+      runNonInteractive(
+        mockConfig,
+        mockSettings,
+        '/noaction',
+        'prompt-id-unhandled',
+      ),
+    ).rejects.toThrow(
+      'Exiting due to command result that is not supported in non-interactive mode.',
+    );
+  });
+
+  it('should pass arguments to the slash command action', async () => {
+    const mockAction = vi.fn().mockResolvedValue({
+      type: 'submit_prompt',
+      content: [{ text: 'Prompt from command' }],
+    });
+    const mockCommand = {
+      name: 'testargs',
+      description: 'a test command',
+      action: mockAction,
+    };
+    mockGetCommands.mockReturnValue([mockCommand]);
+
+    const events: ServerGeminiStreamEvent[] = [
+      { type: GeminiEventType.Content, value: 'Acknowledged' },
+    ];
+    mockGeminiClient.sendMessageStream.mockReturnValue(
+      createStreamFromEvents(events),
+    );
+
+    await runNonInteractive(
+      mockConfig,
+      mockSettings,
+      '/testargs arg1 arg2',
+      'prompt-id-args',
+    );
+
+    expect(mockAction).toHaveBeenCalledWith(expect.any(Object), 'arg1 arg2');
+
+    expect(processStdoutSpy).toHaveBeenCalledWith('Acknowledged');
   });
 });

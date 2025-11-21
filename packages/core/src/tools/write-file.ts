@@ -20,6 +20,7 @@ import {
   ToolLocation,
   ToolInvocation,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
@@ -148,8 +149,13 @@ class WriteFileToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly config: Config,
     params: WriteFileToolParams,
+    messageBus?: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
+  }
+
+  override getToolName(): string {
+    return WriteFileTool.Name;
   }
 
   private getFilePath(): string {
@@ -161,7 +167,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     return [{ path: this.getFilePath() }];
   }
 
-  getDescription(): string {
+  override getDescription(): string {
     const filePath = this.getFilePath();
     if (!filePath || !this.params.content) {
       return `Model did not provide valid parameters for write file tool`;
@@ -499,7 +505,10 @@ export class WriteFileTool
 {
   static readonly Name: string = 'write_file';
 
-  constructor(private readonly config: Config) {
+  constructor(
+    private readonly config: Config,
+    messageBus?: MessageBus,
+  ) {
     super(
       WriteFileTool.Name,
       'WriteFile',
@@ -527,6 +536,9 @@ export class WriteFileTool
         required: ['content'], // Content is always required, path validation in validateToolParamValues
         type: 'object',
       },
+      true, // output is markdown
+      false, // output cannot be updated
+      messageBus,
     );
   }
 
@@ -570,13 +582,18 @@ export class WriteFileTool
 
   protected createInvocation(
     params: WriteFileToolParams,
+    messageBus?: MessageBus,
   ): ToolInvocation<WriteFileToolParams, ToolResult> {
     // Normalize parameters: if absolute_path is provided but not file_path, copy it over
     const normalizedParams = { ...params };
     if (!normalizedParams.file_path && normalizedParams.absolute_path) {
       normalizedParams.file_path = normalizedParams.absolute_path;
     }
-    return new WriteFileToolInvocation(this.config, normalizedParams);
+    return new WriteFileToolInvocation(
+      this.config,
+      normalizedParams,
+      messageBus,
+    );
   }
 
   getModifyContext(

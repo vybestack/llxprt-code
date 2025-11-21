@@ -89,6 +89,9 @@ import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { Storage } from './storage.js';
 import { FileExclusions } from '../utils/ignorePatterns.js';
 import type { EventEmitter } from 'node:events';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { PolicyEngine } from '../policy/policy-engine.js';
+import type { PolicyEngineConfig } from '../policy/types.js';
 
 // Import privacy-related types
 export interface RedactionConfig {
@@ -297,6 +300,7 @@ export interface ConfigParameters {
   eventEmitter?: EventEmitter;
   useSmartEdit?: boolean;
   settingsService?: SettingsService;
+  policyEngineConfig?: PolicyEngineConfig;
 }
 
 export class Config {
@@ -421,6 +425,8 @@ export class Config {
   private readonly fileExclusions: FileExclusions;
   private readonly eventEmitter?: EventEmitter;
   private readonly useSmartEdit: boolean;
+  private readonly messageBus: MessageBus;
+  private readonly policyEngine: PolicyEngine;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -550,6 +556,10 @@ export class Config {
     this.enablePromptCompletion = params.enablePromptCompletion ?? false;
     this.fileExclusions = new FileExclusions(this);
     this.eventEmitter = params.eventEmitter;
+
+    // Initialize policy engine and message bus
+    this.policyEngine = new PolicyEngine(params.policyEngineConfig);
+    this.messageBus = new MessageBus(this.policyEngine, this.debugMode);
 
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
 
@@ -908,6 +918,14 @@ export class Config {
       );
     }
     this.approvalMode = mode;
+  }
+
+  getMessageBus(): MessageBus {
+    return this.messageBus;
+  }
+
+  getPolicyEngine(): PolicyEngine {
+    return this.policyEngine;
   }
 
   getShowMemoryUsage(): boolean {
@@ -1447,6 +1465,10 @@ export class Config {
 
   getUseSmartEdit(): boolean {
     return this.useSmartEdit;
+  }
+
+  getNonInteractive(): boolean {
+    return !this.interactive;
   }
 
   async getGitService(): Promise<GitService> {

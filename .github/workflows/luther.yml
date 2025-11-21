@@ -327,13 +327,19 @@ jobs:
           git config user.name "Luther[bot]"
           git config user.email "luther-bot@vybestack.dev"
           if [[ "${SELECTION_MODE}" == 'remediation' ]]; then
+            echo "Remediation mode: checking out existing branch ${ISSUE_BRANCH}"
             pr_number="${PR_NUMBER:-}"
             if [[ -n "$pr_number" ]]; then
+              echo "Fetching PR #${pr_number} head into branch ${ISSUE_BRANCH}"
               git fetch origin "pull/${pr_number}/head:${ISSUE_BRANCH}" --depth=1
             else
+              echo "Fetching branch ${ISSUE_BRANCH} from origin"
               git fetch origin "${ISSUE_BRANCH}:${ISSUE_BRANCH}" --depth=1
             fi
             git checkout "$ISSUE_BRANCH"
+            # Ensure the branch tracks the remote properly for push
+            git branch --set-upstream-to="origin/${ISSUE_BRANCH}" "${ISSUE_BRANCH}" || true
+            echo "Current branch: $(git branch --show-current)"
           else
             git fetch origin main --depth=1
             git checkout -B "$ISSUE_BRANCH" origin/main
@@ -475,7 +481,7 @@ jobs:
             echo "Running LLxprt for attempt ${attempt}"
             llxprt_log="${attempt_dir}/llxprt.log"
             set +e
-            llxprt \
+            cat "$prompt_file" | llxprt \
               --provider "${LLXPRT_DEFAULT_PROVIDER}" \
               --model "${LLXPRT_DEFAULT_MODEL}" \
               --yolo \
@@ -484,9 +490,8 @@ jobs:
               --set modelparam.max_tokens=10000 \
               --set context-limit=121000 \
               --set base-url="${OPENAI_BASE_URL}" \
-              --set shell-replacement=true \
-              --prompt "$(cat "$prompt_file")" 2>&1 | tee "$llxprt_log"
-            llxprt_exit="${PIPESTATUS[0]}"
+              --set shell-replacement=true 2>&1 | tee "$llxprt_log"
+            llxprt_exit="${PIPESTATUS[1]}"
             set -e
 
             if [[ "$llxprt_exit" -ne 0 ]]; then
@@ -605,6 +610,7 @@ jobs:
         id: pr
         if: steps.commit_push.outputs.has_changes == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GH_SECRET }}
           ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
           ISSUE_TITLE: ${{ steps.issue_data.outputs.title }}
           ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
@@ -613,6 +619,9 @@ jobs:
           SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
         run: |
           set -euo pipefail
+          echo "Selection mode: ${SELECTION_MODE}"
+          echo "Branch name: ${ISSUE_BRANCH}"
+
           pr_title="Luther: ${ISSUE_TITLE}"
           pr_body=$(cat <<EOF
           ## Summary
@@ -624,28 +633,39 @@ jobs:
           )
 
           pr_url=""
+          pr_number=""
+
+          echo "Checking if PR exists for branch ${ISSUE_BRANCH}..."
           if gh pr view "$ISSUE_BRANCH" >/dev/null 2>&1; then
+            echo "✓ Found existing PR for branch ${ISSUE_BRANCH}"
             if [[ "${SELECTION_MODE}" != 'remediation' ]]; then
+              echo "Updating PR title and body (non-remediation mode)"
               gh pr edit "$ISSUE_BRANCH" --title "$pr_title" --body "$pr_body"
+            else
+              echo "Skipping PR update (remediation mode - preserving original PR description)"
             fi
             pr_url="$(gh pr view "$ISSUE_BRANCH" --json url -q .url)"
+            pr_number="$(gh pr view "$ISSUE_BRANCH" --json number -q .number)"
+            echo "Found existing PR #${pr_number} for branch ${ISSUE_BRANCH}"
           else
+            echo "✗ No existing PR found for branch ${ISSUE_BRANCH}, creating new one"
             pr_url="$(gh pr create --head "$ISSUE_BRANCH" --base main --title "$pr_title" --body "$pr_body")"
+            pr_number="$(gh pr view "$ISSUE_BRANCH" --json number -q .number)"
+            echo "Created new PR #${pr_number} for branch ${ISSUE_BRANCH}"
           fi
 
           echo "pr_url=${pr_url}" >> "$GITHUB_OUTPUT"
+          echo "pr_number=${pr_number}" >> "$GITHUB_OUTPUT"
 
       - name: Request CodeRabbit review
-        if: steps.commit_push.outputs.has_changes == 'true'
+        if: steps.commit_push.outputs.has_changes == 'true' && steps.pr.outputs.pr_number != ''
         env:
           GH_TOKEN: ${{ secrets.GH_SECRET }}
-          ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
           set -euo pipefail
-          pr_number="$(gh pr view "$ISSUE_BRANCH" --json number -q .number 2>/dev/null || true)"
-          if [[ -n "$pr_number" ]]; then
-            gh pr comment "$pr_number" --body "@coderabbit review"
-          fi
+          echo "Posting CodeRabbit review request to PR #${PR_NUMBER}"
+          gh pr comment "${PR_NUMBER}" --body "@coderabbit review"
 
       - name: Label pull request status
         if: steps.commit_push.outputs.has_changes == 'true'

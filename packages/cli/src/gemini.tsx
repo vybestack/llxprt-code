@@ -44,11 +44,10 @@ import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
 import { loadCliConfig, parseArguments } from './config/config.js';
 import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
-import v8 from 'node:v8';
-import os from 'node:os';
 import dns from 'node:dns';
-import { spawn } from 'node:child_process';
 import { start_sandbox } from './utils/sandbox.js';
+import { shouldRelaunchForMemory, isDebugMode } from './utils/bootstrap.js';
+import { relaunchAppInChildProcess } from './utils/relaunch.js';
 import chalk from 'chalk';
 import {
   DnsResolutionOrder,
@@ -116,50 +115,6 @@ export function validateDnsResolutionOrder(
     `Invalid value for dnsResolutionOrder in settings: "${order}". Using default "${defaultValue}".`,
   );
   return defaultValue;
-}
-
-function getNodeMemoryArgs(config: Config): string[] {
-  const totalMemoryMB = os.totalmem() / (1024 * 1024);
-  const heapStats = v8.getHeapStatistics();
-  const currentMaxOldSpaceSizeMb = Math.floor(
-    heapStats.heap_size_limit / 1024 / 1024,
-  );
-
-  // Set target to 50% of total memory
-  const targetMaxOldSpaceSizeInMB = Math.floor(totalMemoryMB * 0.5);
-  if (config.getDebugMode()) {
-    console.debug(
-      `Current heap size ${currentMaxOldSpaceSizeMb.toFixed(2)} MB`,
-    );
-  }
-
-  if (process.env.LLXPRT_CODE_NO_RELAUNCH) {
-    return [];
-  }
-
-  if (targetMaxOldSpaceSizeInMB > currentMaxOldSpaceSizeMb) {
-    if (config.getDebugMode()) {
-      console.debug(
-        `Need to relaunch with more memory: ${targetMaxOldSpaceSizeInMB.toFixed(2)} MB`,
-      );
-    }
-    return [`--max-old-space-size=${targetMaxOldSpaceSizeInMB}`];
-  }
-
-  return [];
-}
-
-async function relaunchWithAdditionalArgs(additionalArgs: string[]) {
-  const nodeArgs = [...additionalArgs, ...process.argv.slice(1)];
-  const newEnv = { ...process.env, LLXPRT_CODE_NO_RELAUNCH: 'true' };
-
-  const child = spawn(process.execPath, nodeArgs, {
-    stdio: 'inherit',
-    env: newEnv,
-  });
-
-  await new Promise((resolve) => child.on('close', resolve));
-  process.exit(0);
 }
 
 const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
@@ -300,8 +255,20 @@ export async function main() {
   if (!existsSync(llxprtDir)) {
     mkdirSync(llxprtDir, { recursive: true });
   }
+
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
+
+  if (settings.merged.autoConfigureMaxOldSpaceSize && !process.env.SANDBOX) {
+    // Only relaunch with a larger heap when the autosizing setting is enabled.
+    const debugMode = isDebugMode();
+    const memoryArgs = shouldRelaunchForMemory(debugMode);
+    if (memoryArgs.length > 0) {
+      const exitCode = await relaunchAppInChildProcess(memoryArgs);
+      process.exit(exitCode);
+    }
+  }
+
   const argv = await parseArguments(settings.merged);
 
   const hasPipedInput = !process.stdin.isTTY && !argv.experimentalAcp;
@@ -364,7 +331,7 @@ export async function main() {
     extensions,
     sessionId,
     argv,
-    process.cwd(),
+    workspaceRoot,
     { settingsService: runtimeSettingsService },
   );
   setCliRuntimeContext(runtimeSettingsService, config, {
@@ -636,11 +603,27 @@ export async function main() {
 
   // hop into sandbox if we are outside and sandboxing is enabled
   if (!process.env.SANDBOX) {
-    const memoryArgs = settings.merged.autoConfigureMaxOldSpaceSize
-      ? getNodeMemoryArgs(config)
+    // Memory relaunch was already handled at the top of main() before config loading
+    // Now only handle sandbox entry, which needs memory args passed to the sandbox process
+    const sandboxMemoryArgs = settings.merged.autoConfigureMaxOldSpaceSize
+      ? shouldRelaunchForMemory(config.getDebugMode())
       : [];
     const sandboxConfig = config.getSandbox();
     if (sandboxConfig) {
+      // We intentionally omit the list of extensions here because extensions
+      // should not impact auth or setting up the sandbox.
+      // TODO(jacobr): refactor loadCliConfig so there is a minimal version
+      // that only initializes enough config to enable refreshAuth or find
+      // another way to decouple refreshAuth from requiring a config.
+      const partialConfig = await loadCliConfig(
+        settings.merged,
+        [],
+        sessionId,
+        argv,
+        workspaceRoot,
+        { settingsService: runtimeSettingsService },
+      );
+
       if (
         settings.merged.selectedAuthType &&
         !settings.merged.useExternalAuth
@@ -651,7 +634,7 @@ export async function main() {
           if (err) {
             throw new Error(err);
           }
-          await config.refreshAuth(settings.merged.selectedAuthType);
+          await partialConfig.refreshAuth(settings.merged.selectedAuthType);
 
           // Compression settings are already applied via ephemeral settings in Config
           // and will be read directly by geminiChat.ts during compression
@@ -690,16 +673,15 @@ export async function main() {
 
       const sandboxArgs = injectStdinIntoArgs(process.argv, stdinData);
 
-      await start_sandbox(sandboxConfig, memoryArgs, config, sandboxArgs);
+      await start_sandbox(
+        sandboxConfig,
+        sandboxMemoryArgs,
+        partialConfig,
+        sandboxArgs,
+      );
       process.exit(0);
-    } else {
-      // Not in a sandbox and not entering one, so relaunch with additional
-      // arguments to control memory usage if needed.
-      if (memoryArgs.length > 0) {
-        await relaunchWithAdditionalArgs(memoryArgs);
-        process.exit(0);
-      }
     }
+    // Note: Non-sandbox memory relaunch is now handled at the top of main()
   }
 
   if (
@@ -770,7 +752,7 @@ export async function main() {
   );
 
   try {
-    await runNonInteractive(nonInteractiveConfig, input, prompt_id);
+    await runNonInteractive(nonInteractiveConfig, settings, input, prompt_id);
   } catch (error) {
     const printableError =
       error instanceof Error ? (error.stack ?? error.message) : String(error);

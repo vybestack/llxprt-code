@@ -1,0 +1,9 @@
+# Default policy for discovered tools (MCP, extensions, etc.)
+# Priority band: 1.01 (Tier 1 - Default)
+# Discovered tools require user confirmation unless explicitly trusted
+
+[[rule]]
+# Match all discovered tools (tools with discovered_tool_ prefix will be added by ToolRegistry)
+toolName = "discovered_tool_"
+decision = "ask_user"
+priority = 1.01

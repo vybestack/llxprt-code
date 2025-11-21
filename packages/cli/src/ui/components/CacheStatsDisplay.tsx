@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
+import type { CacheStatistics } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
@@ -51,7 +52,27 @@ export const CacheStatsDisplay: React.FC = () => {
   }
 
   // Get cache statistics from ProviderManager
-  const cacheStats = providerManager.getCacheStatistics();
+  const cacheStats =
+    (
+      providerManager as {
+        getCacheStatistics?: () => CacheStatistics;
+      }
+    ).getCacheStatistics?.() ?? null;
+
+  if (!cacheStats) {
+    return (
+      <Box
+        borderStyle="round"
+        borderColor={Colors.Gray}
+        paddingY={1}
+        paddingX={2}
+      >
+        <Text color={Colors.Foreground}>
+          Cache statistics are not available for the current provider.
+        </Text>
+      </Box>
+    );
+  }
 
   const totalCacheReads = cacheStats.totalCacheReads;
   const totalCacheWrites = cacheStats.totalCacheWrites;

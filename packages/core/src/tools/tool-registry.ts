@@ -25,6 +25,7 @@ import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { DebugLogger } from '../debug/index.js';
 import { normalizeToolName } from './toolNameUtils.js';
 import type { EventEmitter } from 'node:events';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 type ToolParams = Record<string, unknown>;
 
 export class DiscoveredTool extends BaseTool<ToolParams, ToolResult> {
@@ -64,7 +65,7 @@ Signal: Signal number or \`(none)\` if no signal was received.
   }
 
   override build(params: ToolParams): DiscoveredToolInvocation {
-    return new DiscoveredToolInvocation(this, params);
+    return new DiscoveredToolInvocation(this, params, this.messageBus);
   }
 
   async execute(
@@ -155,8 +156,9 @@ class DiscoveredToolInvocation extends BaseToolInvocation<
   constructor(
     private readonly tool: DiscoveredTool,
     params: ToolParams,
+    messageBus?: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
   getDescription(): string {
@@ -189,6 +191,17 @@ export class ToolRegistry {
       this.config.getWorkspaceContext(),
       eventEmitter,
     );
+  }
+
+  /**
+   * Sets the message bus for the registry and all registered tools.
+   * Message bus wiring now happens unconditionally via Config, so this is kept
+   * only for API completeness/future overrides.
+   */
+  setMessageBus(): void {
+    // Message bus is accessed from config, so this method is currently a no-op.
+    // Tools access the message bus via config.getMessageBus() when needed.
+    // This method exists for API completeness and future extensibility.
   }
 
   private getToolGovernance(): {
@@ -495,7 +508,7 @@ export class ToolRegistry {
         this.registerToolIntoMap(
           new DiscoveredTool(
             this.config,
-            func.name,
+            `discovered_tool_${func.name}`,
             func.description ?? '',
             parameters as Record<string, unknown>,
           ),
@@ -627,6 +640,14 @@ export class ToolRegistry {
     tool: AnyDeclarativeTool,
     targetMap: Map<string, AnyDeclarativeTool>,
   ): void {
+    if (
+      typeof (tool as { setMessageBus?: (bus: MessageBus) => void })
+        .setMessageBus === 'function'
+    ) {
+      (tool as { setMessageBus: (bus: MessageBus) => void }).setMessageBus(
+        this.config.getMessageBus(),
+      );
+    }
     // Normalize the tool name for consistent storage and lookup
     const normalizedName = normalizeToolName(tool.name) || tool.name;
 

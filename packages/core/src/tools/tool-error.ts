@@ -15,6 +15,7 @@ export enum ToolErrorType {
   TOOL_NOT_REGISTERED = 'tool_not_registered',
   EXECUTION_FAILED = 'execution_failed',
   TOOL_DISABLED = 'tool_disabled',
+  POLICY_VIOLATION = 'policy_violation',
 
   // File System Errors
   FILE_NOT_FOUND = 'file_not_found',

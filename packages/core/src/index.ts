@@ -9,6 +9,16 @@ export * from './config/config.js';
 export * from './config/profileManager.js';
 export * from './config/subagentManager.js';
 
+// Export policy engine
+export * from './policy/types.js';
+export * from './policy/policy-engine.js';
+export * from './policy/stable-stringify.js';
+export * from './policy/config.js';
+
+// Export message bus
+export * from './confirmation-bus/types.js';
+export * from './confirmation-bus/message-bus.js';
+
 // Export services
 export * from './services/git-stats-service.js';
 
@@ -88,7 +98,11 @@ export * from './services/fileSystemService.js';
 export * from './ide/ide-client.js';
 export * from './ide/ideContext.js';
 export * from './ide/ide-installer.js';
-export { getIdeInfo, DetectedIde, IdeInfo } from './ide/detect-ide.js';
+export {
+  IDE_DEFINITIONS,
+  detectIdeFromEnv,
+  type IdeInfo,
+} from './ide/detect-ide.js';
 export * from './ide/constants.js';
 
 // Export Shell Execution Service

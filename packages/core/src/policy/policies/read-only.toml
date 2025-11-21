@@ -1,0 +1,68 @@
+# Default read-only tool policy
+# Priority band: 1.05 (Tier 1 - Default)
+# These tools are considered safe for auto-approval
+
+[[rule]]
+toolName = "glob"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "grep"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "ls"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "read_file"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "read_many_files"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "ripgrep"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "web_search"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "task"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "write_todos"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "list_subagents"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "notebook_edit"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "slash_command"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "skill"
+decision = "allow"
+priority = 1.05

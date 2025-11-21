@@ -544,10 +544,7 @@ describe('Shell Tool Filtering Behavior', () => {
       }),
     } as unknown as Config;
 
-    shellTool = new ShellTool(
-      mockConfig as unknown as Config,
-      new Set(['echo']),
-    );
+    shellTool = new ShellTool(mockConfig as unknown as Config);
   });
 
   describe('head_lines filtering', () => {

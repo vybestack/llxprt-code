@@ -17,6 +17,7 @@ import {
 import { shortenPath, makeRelative } from '../utils/paths.js';
 import { Config } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
 
 // Subset of 'Path' interface provided by 'glob' that we can implement for testing
 export interface GlobPath {
@@ -288,7 +289,10 @@ class GlobToolInvocation extends BaseToolInvocation<
 export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
   static readonly Name = 'glob';
 
-  constructor(private config: Config) {
+  constructor(
+    private config: Config,
+    _messageBus?: MessageBus,
+  ) {
     super(
       GlobTool.Name,
       'FindFiles',
@@ -363,8 +367,9 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
     return null;
   }
 
-  protected createInvocation(
+  protected override createInvocation(
     params: GlobToolParams,
+    _messageBus?: MessageBus,
   ): ToolInvocation<GlobToolParams, ToolResult> {
     return new GlobToolInvocation(this.config, params);
   }

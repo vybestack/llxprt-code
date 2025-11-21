@@ -1,0 +1,8 @@
+# YOLO mode policy - allow everything
+# Priority band: 1.999 (Tier 1 - Default, just below user settings)
+# WARNING: This disables all safety checks. Use only in trusted environments.
+
+[[rule]]
+# No toolName specified = wildcard (matches all tools)
+decision = "allow"
+priority = 1.999

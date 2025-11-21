@@ -32,6 +32,7 @@ import {
   MCPServerConfig,
   SettingsService,
   DebugLogger,
+  createPolicyEngineConfig,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
 
@@ -250,11 +251,19 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           type: 'array',
           string: true,
           description: 'Allowed MCP server names',
+          coerce: (mcpServerNames: string[]) =>
+            // Handle comma-separated values
+            mcpServerNames.flatMap((mcpServerName) =>
+              mcpServerName.split(',').map((m) => m.trim()),
+            ),
         })
         .option('allowed-tools', {
           type: 'array',
           string: true,
           description: 'Tools that are allowed to run without confirmation',
+          coerce: (tools: string[]) =>
+            // Handle comma-separated values
+            tools.flatMap((tool) => tool.split(',').map((t) => t.trim())),
         })
         .option('extensions', {
           alias: 'e',
@@ -262,6 +271,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           string: true,
           description:
             'A list of extensions to use. If not provided, all extensions are used.',
+          coerce: (extensions: string[]) =>
+            // Handle comma-separated values
+            extensions.flatMap((extension) =>
+              extension.split(',').map((e) => e.trim()),
+            ),
         })
         .option('list-extensions', {
           alias: 'l',
@@ -285,7 +299,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         .option('screen-reader', {
           type: 'boolean',
           description: 'Enable screen reader mode for accessibility.',
-          default: false,
         })
         .option('session-summary', {
           type: 'string',
@@ -952,8 +965,11 @@ export async function loadCliConfig(
     approvalMode = ApprovalMode.DEFAULT;
   }
 
+  // Fix: If promptWords are provided, always use non-interactive mode
+  const hasPromptWords = argv.promptWords && argv.promptWords.length > 0;
   const interactive =
-    !!argv.promptInteractive || (process.stdin.isTTY && question.length === 0);
+    !!argv.promptInteractive ||
+    (process.stdin.isTTY && !hasPromptWords && !argv.prompt);
   // In non-interactive mode, exclude tools that require a prompt.
   const extraExcludes: string[] = [];
   if (!interactive && !argv.experimentalAcp) {
@@ -1061,6 +1077,20 @@ export async function loadCliConfig(
       ? argv.screenReader
       : (effectiveSettings.accessibility?.screenReader ?? false);
 
+  const policyPathSetting = effectiveSettings.tools?.policyPath;
+  const resolvedPolicyPath = policyPathSetting
+    ? resolvePath(policyPathSetting)
+    : undefined;
+
+  // Create policy engine config from legacy approval mode and allowed tools
+  const policyEngineConfig = await createPolicyEngineConfig({
+    getApprovalMode: () => approvalMode,
+    getAllowedTools: () =>
+      argv.allowedTools || settings.allowedTools || undefined,
+    getNonInteractive: () => !interactive,
+    getUserPolicyPath: () => resolvedPolicyPath,
+  });
+
   const config = new Config({
     sessionId,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
@@ -1146,6 +1176,7 @@ export async function loadCliConfig(
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
     useSmartEdit: argv.useSmartEdit ?? effectiveSettings.useSmartEdit,
+    policyEngineConfig,
   });
 
   const enhancedConfig = config;

@@ -21,6 +21,7 @@ import {
   ToolCallConfirmationDetails,
   Kind,
 } from './tools.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
   limitOutputTokens,
@@ -86,11 +87,16 @@ class ShellToolInvocation extends BaseToolInvocation<
     private readonly config: Config,
     params: ShellToolParams,
     private readonly allowlist: Set<string>,
+    messageBus?: MessageBus,
   ) {
-    super(params);
+    super(params, messageBus);
   }
 
-  getDescription(): string {
+  override getToolName(): string {
+    return ShellTool.Name;
+  }
+
+  override getDescription(): string {
     let description = `${this.params.command}`;
     // append optional [in directory]
     // note description is needed even if validation fails due to absolute path
@@ -551,7 +557,10 @@ export class ShellTool extends BaseDeclarativeTool<
   static Name: string = 'run_shell_command';
   private allowlist: Set<string> = new Set();
 
-  constructor(private readonly config: Config) {
+  constructor(
+    private readonly config: Config,
+    messageBus?: MessageBus,
+  ) {
     super(
       ShellTool.Name,
       'Shell',
@@ -579,6 +588,7 @@ export class ShellTool extends BaseDeclarativeTool<
       },
       false, // output is not markdown
       true, // output can be updated
+      messageBus,
     );
   }
 
@@ -623,7 +633,13 @@ export class ShellTool extends BaseDeclarativeTool<
 
   protected createInvocation(
     params: ShellToolParams,
+    messageBus?: MessageBus,
   ): ToolInvocation<ShellToolParams, ToolResult> {
-    return new ShellToolInvocation(this.config, params, this.allowlist);
+    return new ShellToolInvocation(
+      this.config,
+      params,
+      this.allowlist,
+      messageBus,
+    );
   }
 }
