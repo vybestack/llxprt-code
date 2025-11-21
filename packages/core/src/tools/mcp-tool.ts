@@ -196,6 +196,14 @@ class DiscoveredMCPToolInvocation extends BaseToolInvocation<
   getDescription(): string {
     return safeJsonStringify(this.params);
   }
+
+  override getToolName(): string {
+    return `${this.serverName}__${this.serverToolName}`;
+  }
+
+  protected override getServerName(): string | undefined {
+    return this.serverName;
+  }
 }
 
 export class DiscoveredMCPTool extends BaseDeclarativeTool<

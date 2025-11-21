@@ -29,7 +29,6 @@ export const PermissionsModifyTrustDialog: React.FC<
   const {
     currentTrustLevel,
     pendingTrustLevel,
-    setPendingTrustLevel,
     commitTrustLevel,
     isIdeTrusted,
     isParentTrusted,
@@ -90,11 +89,17 @@ export const PermissionsModifyTrustDialog: React.FC<
 
   const handleSelect = useCallback(
     (level: TrustLevel) => {
-      setPendingTrustLevel(level);
-      commitTrustLevel();
+      commitTrustLevel(level);
 
       // Check if we need to show restart prompt
       if (level !== currentTrustLevel) {
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: `Trust level for ${workingDirectory} set to ${getTrustLevelDisplay(level)}.`,
+          } as HistoryItemWithoutId,
+          Date.now(),
+        );
         setShowRestartPrompt(true);
       } else {
         // No change needed, just exit
@@ -109,24 +114,26 @@ export const PermissionsModifyTrustDialog: React.FC<
       }
     },
     [
-      setPendingTrustLevel,
       commitTrustLevel,
       currentTrustLevel,
       addItem,
       workingDirectory,
       onExit,
+      getTrustLevelDisplay,
     ],
   );
 
   useKeypress(
     (key) => {
-      if (key.name === 'escape' && !showRestartPrompt) {
-        onExit();
+      if (key.name === 'escape') {
+        if (showRestartPrompt) {
+          onExit();
+        } else {
+          onExit();
+        }
       }
       if (key.name === 'r' && showRestartPrompt) {
-        if (onRestart) {
-          onRestart();
-        }
+        onRestart?.();
       }
     },
     { isActive: true },

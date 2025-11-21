@@ -379,13 +379,12 @@ class EditToolInvocation extends BaseToolInvocation<
 
   /**
    * Returns confirmation details for this edit operation.
-   * Called by getMessageBusDecision when message bus integration is enabled.
+   * Called by getMessageBusDecision before surfacing operations to the policy engine/message bus.
    */
   protected override getConfirmationDetails(): ToolCallConfirmationDetails | null {
     // This is a synchronous method, so we can't calculate the edit here
-    // Instead, we'll need to handle confirmation in shouldConfirmExecute
-    // which is the legacy path that will be called when message bus is not available
-    // or when we need to show the diff to the user
+    // Instead, we'll need to handle confirmation in shouldConfirmExecute, which
+    // is invoked when the scheduler needs the diff payload for ASK_USER flows.
     return null;
   }
 

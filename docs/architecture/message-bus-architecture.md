@@ -101,7 +101,12 @@ isNonInteractive(): boolean
 publish(message: MessageBusMessage): void
 subscribe<T>(type: MessageBusType, handler: MessageHandler<T>): () => void
 requestConfirmation(toolCall: FunctionCall, args: Record<string, unknown>, serverName?: string): Promise<boolean>
-respondToConfirmation(correlationId: string, confirmed: boolean, requiresUserConfirmation?: boolean): void
+respondToConfirmation(
+  correlationId: string,
+  outcome: ToolConfirmationOutcome,
+  payload?: ToolConfirmationPayload,
+  requiresUserConfirmation?: boolean,
+): void
 ```
 
 **Message Flow:**
@@ -118,7 +123,7 @@ return  publish    publish TOOL_CONFIRMATION_REQUEST
 true    REJECTION      ↓
         return     Wait for TOOL_CONFIRMATION_RESPONSE
         false          ↓
-                   return confirmed
+                   return outcome
 ```
 
 ### ToolRegistry
@@ -149,30 +154,7 @@ registerMCPTool(serverName: string, tool: MCPToolDefinition): void
 - Schedules tool execution from model requests
 - Subscribes to message bus for confirmation events
 - Manages pending confirmations via correlation IDs
-- Handles both legacy and message bus paths based on feature flag
-
-**Feature Flag Logic:**
-
-```typescript
-if (config.getEnableMessageBusIntegration()) {
-  // New path: use message bus
-  const messageBus = config.getMessageBus();
-  const approved = await messageBus.requestConfirmation(
-    toolCall,
-    args,
-    serverName,
-  );
-  if (approved) {
-    // Execute tool
-  }
-} else {
-  // Legacy path: use shouldConfirmExecute()
-  const shouldConfirm = tool.shouldConfirmExecute(config);
-  if (shouldConfirm) {
-    // Show UI dialog directly
-  }
-}
-```
+- Evaluates policy decisions before invoking legacy confirmation flows
 
 ### TOML Policy Loader
 
@@ -284,7 +266,7 @@ MessageBus matches correlationId
     ↓
 Unsubscribe & resolve promise
     ↓
-return confirmed (true/false)
+return outcome (ToolConfirmationOutcome)
     ↓
 Tool Executes or Blocked
 ```
@@ -309,9 +291,9 @@ return false (treat as denied)
 Tool Blocked
 ```
 
-## Feature Flag Behavior
+## Confirmation Flow Reference
 
-### When `enableMessageBusIntegration: false` (Default)
+### Legacy Confirmation Path (Historical)
 
 **Legacy Path:**
 
@@ -328,53 +310,29 @@ If false:
   - Tool executes immediately
 ```
 
-**Characteristics:**
+This describes the original synchronous UX. Parts of it (like diff generation) remain in use after policy evaluation to preserve IDE features.
 
-- No message bus involvement
-- No policy engine evaluation
-- Direct UI callbacks
-- Backward compatible with all existing code
+### Unified Message Bus Flow
 
-### When `enableMessageBusIntegration: true`
-
-**New Path:**
+Message bus routing is always active:
 
 ```
 Tool Request
     ↓
-CoreToolScheduler uses MessageBus.requestConfirmation()
-    ↓
 PolicyEngine evaluates rules
     ↓
-Message bus pub/sub for confirmations
+Message bus publishes TOOL_CONFIRMATION_REQUEST (if needed)
     ↓
-Tool executes based on policy decision
+UI or automations respond via TOOL_CONFIRMATION_RESPONSE
+    ↓
+Tool executes based on policy decision/outcome
 ```
 
-**Characteristics:**
+All tools now run through the policy engine regardless of approval mode, with legacy confirmation hooks layered on after policy evaluation to preserve UX features such as IDE diffs.
 
-- All tools go through policy engine
-- UI subscribes to message bus events
-- Correlation IDs link requests/responses
-- Legacy ApprovalMode settings migrated to policy rules
+## Compatibility Notes
 
-## Backward Compatibility Approach
-
-### Dual Path Strategy
-
-The system maintains **two complete code paths** during transition:
-
-1. **Legacy path** - Used when feature flag is OFF
-   - `shouldConfirmExecute()` method
-   - Direct UI callbacks
-   - ApprovalMode enum checks
-   - No policy engine involvement
-
-2. **New path** - Used when feature flag is ON
-   - Message bus requests
-   - Policy engine evaluation
-   - Event-driven confirmations
-   - ApprovalMode migrated to policies
+Earlier builds relied on a feature flag to opt into the message bus path. That flag has been removed—message bus integration is always enabled and ApprovalMode/allowed-tools settings are converted into policy rules automatically.
 
 ### Migration Bridge
 
@@ -391,13 +349,12 @@ This converts:
 - `--allowed-tools` → Individual ALLOW rules at priority 2.3
 - `--exclude-tools` → Individual DENY rules at priority 2.4
 
-### No Breaking Changes
+### Runtime Considerations
 
-- Feature flag defaults to OFF
-- All existing tools work unchanged when flag is OFF
-- UI components have guarded code paths
-- Config API additive only (new getters, no modifications)
-- TOML policies stored separately from settings.json
+- Message bus integration is always enabled
+- Legacy UI components still receive confirmation details for IDE workflows
+- Config API exposes `getMessageBus()`/`getPolicyEngine()` everywhere
+- TOML policies are stored separately from settings.json
 
 ## Integration Points
 
@@ -414,7 +371,6 @@ class Config {
 
   getMessageBus(): MessageBus;
   getPolicyEngine(): PolicyEngine;
-  getEnableMessageBusIntegration(): boolean;
 }
 ```
 
@@ -478,8 +434,6 @@ function createPolicyUpdater(config: Config): void {
 
 ```typescript
 useEffect(() => {
-  if (!config.getEnableMessageBusIntegration()) return;
-
   const messageBus = config.getMessageBus();
 
   const unsubscribe = messageBus.subscribe(
@@ -506,6 +460,7 @@ const handleConfirm = (outcome: ToolConfirmationOutcome) => {
   messageBus.publish({
     type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
     correlationId: confirmationRequest.correlationId,
+    outcome,
     confirmed: outcome === ToolConfirmationOutcome.Proceed,
   });
 };

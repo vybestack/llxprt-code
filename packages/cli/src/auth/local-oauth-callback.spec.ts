@@ -1,6 +1,32 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import http from 'node:http';
+import net from 'node:net';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
+
+const findAvailablePort = async (): Promise<number> =>
+  await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', (error) => {
+      server.close();
+      reject(error);
+    });
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address && typeof address === 'object') {
+        const port = address.port;
+        server.close((closeError) => {
+          if (closeError) {
+            reject(closeError);
+            return;
+          }
+          resolve(port);
+        });
+      } else {
+        server.close();
+        reject(new Error('Unable to allocate a port'));
+      }
+    });
+  });
 
 describe('startLocalOAuthCallback', () => {
   afterEach(() => {
@@ -8,9 +34,10 @@ describe('startLocalOAuthCallback', () => {
   });
 
   it('captures authorization code from localhost redirect', async () => {
+    const port = await findAvailablePort();
     const server = await startLocalOAuthCallback({
       state: 'state-123',
-      portRange: [8765, 8765],
+      portRange: [port, port],
       timeoutMs: 500,
     });
 
@@ -47,9 +74,10 @@ describe('startLocalOAuthCallback', () => {
   it('rejects when callback does not arrive within timeout', async () => {
     vi.useFakeTimers();
 
+    const port = await findAvailablePort();
     const server = await startLocalOAuthCallback({
       state: 'timeout-state',
-      portRange: [8770, 8770],
+      portRange: [port, port],
       timeoutMs: 100,
     });
 

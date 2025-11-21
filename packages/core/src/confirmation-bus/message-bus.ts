@@ -8,6 +8,10 @@ import {
   type MessageBusMessage,
   type ToolConfirmationResponse,
 } from './types.js';
+import {
+  ToolConfirmationOutcome,
+  ToolConfirmationPayload,
+} from '../tools/tool-confirmation-types.js';
 
 type MessageHandler<T extends MessageBusMessage = MessageBusMessage> = (
   message: T,
@@ -124,7 +128,13 @@ export class MessageBus {
           if (response.correlationId === correlationId) {
             clearTimeout(timeout);
             unsubscribe();
-            resolve(response.confirmed);
+            const resolvedConfirmation =
+              response.confirmed ??
+              (response.outcome !== undefined
+                ? response.outcome !== ToolConfirmationOutcome.Cancel &&
+                  response.outcome !== ToolConfirmationOutcome.ModifyWithEditor
+                : false);
+            resolve(resolvedConfirmation);
           }
         },
       );
@@ -143,17 +153,24 @@ export class MessageBus {
    * Responds to a confirmation request.
    *
    * @param correlationId - The correlation ID from the request
-   * @param confirmed - Whether the user confirmed or denied
+   * @param outcome - The ToolConfirmationOutcome to apply
+   * @param payload - Optional payload for inline modifications
    * @param requiresUserConfirmation - Whether legacy UI should be used
    */
   respondToConfirmation(
     correlationId: string,
-    confirmed: boolean,
+    outcome: ToolConfirmationOutcome,
+    payload?: ToolConfirmationPayload,
     requiresUserConfirmation?: boolean,
   ): void {
+    const confirmed =
+      outcome !== ToolConfirmationOutcome.Cancel &&
+      outcome !== ToolConfirmationOutcome.ModifyWithEditor;
     this.publish({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
       correlationId,
+      outcome,
+      payload,
       confirmed,
       requiresUserConfirmation,
     });

@@ -4,6 +4,7 @@ import { PolicyEngine } from '../policy/policy-engine.js';
 import { PolicyDecision, type PolicyEngineConfig } from '../policy/types.js';
 import { MessageBusType, type ToolConfirmationRequest } from './types.js';
 import type { FunctionCall } from '@google/genai';
+import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
 
 describe('MessageBus', () => {
   let messageBus: MessageBus;
@@ -204,7 +205,10 @@ describe('MessageBus', () => {
 
         // Respond to unblock the promise
         const request = handler.mock.calls[0][0] as ToolConfirmationRequest;
-        messageBus.respondToConfirmation(request.correlationId, true);
+        messageBus.respondToConfirmation(
+          request.correlationId,
+          ToolConfirmationOutcome.ProceedOnce,
+        );
 
         const result = await confirmationPromise;
         expect(result).toBe(true);
@@ -229,7 +233,10 @@ describe('MessageBus', () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         const request = handler.mock.calls[0][0] as ToolConfirmationRequest;
-        messageBus.respondToConfirmation(request.correlationId, true);
+        messageBus.respondToConfirmation(
+          request.correlationId,
+          ToolConfirmationOutcome.ProceedOnce,
+        );
 
         const result = await confirmationPromise;
         expect(result).toBe(true);
@@ -254,7 +261,10 @@ describe('MessageBus', () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         const request = handler.mock.calls[0][0] as ToolConfirmationRequest;
-        messageBus.respondToConfirmation(request.correlationId, false);
+        messageBus.respondToConfirmation(
+          request.correlationId,
+          ToolConfirmationOutcome.Cancel,
+        );
 
         const result = await confirmationPromise;
         expect(result).toBe(false);
@@ -279,14 +289,20 @@ describe('MessageBus', () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         // Respond with wrong correlation ID
-        messageBus.respondToConfirmation('wrong-id', true);
+        messageBus.respondToConfirmation(
+          'wrong-id',
+          ToolConfirmationOutcome.ProceedOnce,
+        );
 
         // Should not resolve yet
         await new Promise((resolve) => setTimeout(resolve, 10));
 
         // Now respond with correct ID
         const request = handler.mock.calls[0][0] as ToolConfirmationRequest;
-        messageBus.respondToConfirmation(request.correlationId, true);
+        messageBus.respondToConfirmation(
+          request.correlationId,
+          ToolConfirmationOutcome.ProceedOnce,
+        );
 
         const result = await confirmationPromise;
         expect(result).toBe(true);
@@ -368,12 +384,16 @@ describe('MessageBus', () => {
       const handler = vi.fn();
       messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_RESPONSE, handler);
 
-      messageBus.respondToConfirmation('test-id', true);
+      messageBus.respondToConfirmation(
+        'test-id',
+        ToolConfirmationOutcome.ProceedOnce,
+      );
 
       expect(handler).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
           correlationId: 'test-id',
+          outcome: ToolConfirmationOutcome.ProceedOnce,
           confirmed: true,
         }),
       );
@@ -383,12 +403,18 @@ describe('MessageBus', () => {
       const handler = vi.fn();
       messageBus.subscribe(MessageBusType.TOOL_CONFIRMATION_RESPONSE, handler);
 
-      messageBus.respondToConfirmation('test-id', true, true);
+      messageBus.respondToConfirmation(
+        'test-id',
+        ToolConfirmationOutcome.ProceedAlways,
+        undefined,
+        true,
+      );
 
       expect(handler).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
           correlationId: 'test-id',
+          outcome: ToolConfirmationOutcome.ProceedAlways,
           confirmed: true,
           requiresUserConfirmation: true,
         }),

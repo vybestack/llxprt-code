@@ -998,12 +998,18 @@ export async function loadCliConfig(
       ? argv.screenReader
       : (effectiveSettings.accessibility?.screenReader ?? false);
 
+  const policyPathSetting = effectiveSettings.tools?.policyPath;
+  const resolvedPolicyPath = policyPathSetting
+    ? resolvePath(policyPathSetting)
+    : undefined;
+
   // Create policy engine config from legacy approval mode and allowed tools
   const policyEngineConfig = await createPolicyEngineConfig({
     getApprovalMode: () => approvalMode,
     getAllowedTools: () =>
       argv.allowedTools || settings.allowedTools || undefined,
     getNonInteractive: () => !interactive,
+    getUserPolicyPath: () => resolvedPolicyPath,
   });
 
   const config = new Config({

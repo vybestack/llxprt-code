@@ -43,7 +43,6 @@ export const ToolConfirmationMessage: React.FC<
   availableTerminalHeight,
   terminalWidth,
 }) => {
-  const { onConfirm } = confirmationDetails;
   const childWidth = terminalWidth - 2; // 2 for padding
   const { breakpoint } = useResponsive();
 
@@ -52,24 +51,26 @@ export const ToolConfirmationMessage: React.FC<
 
   const handleConfirm = useCallback(
     (outcome: ToolConfirmationOutcome) => {
-      // Publish response to message bus if we have a correlationId
       const correlationId = confirmationDetails.correlationId;
-
-      if (correlationId) {
-        // Publish response to message bus
-        const messageBus = config.getMessageBus();
-        const confirmed = outcome !== ToolConfirmationOutcome.Cancel;
-
-        messageBus.publish({
-          type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-          correlationId,
-          confirmed,
-          requiresUserConfirmation: false,
-        });
+      if (!correlationId) {
+        console.error(
+          'Tool confirmation missing correlationId; falling back to direct confirmation callback.',
+        );
+        void confirmationDetails.onConfirm(outcome);
+        return;
       }
 
-      // Always call onConfirm
-      onConfirm(outcome);
+      const messageBus = config.getMessageBus();
+
+      messageBus.publish({
+        type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+        correlationId,
+        outcome,
+        confirmed:
+          outcome !== ToolConfirmationOutcome.Cancel &&
+          outcome !== ToolConfirmationOutcome.ModifyWithEditor,
+        requiresUserConfirmation: false,
+      });
 
       // Handle IDE operations asynchronously without blocking
       if (confirmationDetails.type === 'edit') {
@@ -90,7 +91,7 @@ export const ToolConfirmationMessage: React.FC<
         }
       }
     },
-    [confirmationDetails, config, onConfirm],
+    [confirmationDetails, config],
   );
 
   const isTrustedFolder = config.isTrustedFolder();

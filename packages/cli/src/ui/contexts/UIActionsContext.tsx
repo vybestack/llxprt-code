@@ -82,6 +82,7 @@ export interface UIActions {
   handleFolderTrustSelect: (choice: FolderTrustChoice) => void;
 
   // Permissions dialog
+  openPermissionsDialog: () => void;
   closePermissionsDialog: () => void;
 
   // Workspace migration dialog

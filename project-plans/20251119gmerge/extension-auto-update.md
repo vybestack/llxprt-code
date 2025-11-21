@@ -2,7 +2,22 @@
 
 ## Executive Summary
 
-This plan outlines the implementation of automatic extension updates in llxprt-code. The system will check for updates on startup and periodically during runtime, notify users of available updates, and automatically install them based on user preferences. The implementation will leverage existing GitHub release infrastructure and follow patterns from the CLI auto-update mechanism.
+This plan outlines the implementation of automatic extension updates in llxprt-code. The system will check for updates on startup and periodically during runtime, notify users of available updates, and automatically install them based on user preferences. The implementation will leverage existing GitHub release infrastructure and follow patterns from the CLI auto-update mechanism. It is inspired by upstream commit [`22b7d865`](https://github.com/google-gemini/gemini-cli/commit/22b7d86574d9a8db1daeb34741f0350e871566ee) ("Add support for auto-updating git extensions").
+
+## Implementation Status (2025-11-21)
+
+- ✅ `packages/cli/src/extensions/extensionAutoUpdater.ts` provides the background checker/installer with persisted state (`~/.llxprt/extension-update-state.json`) plus configurable scheduling/notification.
+- ✅ `packages/cli/src/extensions/extensionAutoUpdater.test.ts` exercises immediate, on-restart, and manual flows.
+- ✅ UI wiring via `useExtensionAutoUpdate()` (AppContainer) surfaces console notifications for queued/finished updates.
+- ✅ `settingsSchema.ts` exposes `extensions.autoUpdate` (enabled by default, interval, install mode, notification level, per-extension overrides).
+- ✅ Pending installs created in “on-restart” mode are completed automatically the next time llxprt-code launches.
+
+## Upstream Reference Summary
+
+- Watches installed git extensions and compares installed SHA against origin.
+- Adds a background job that checks for updates on startup and on an interval.
+- Persists the "last checked" timestamp so repeated restarts do not hammer GitHub.
+- Updates run serially and emit status events to the UI so a toast can surface progress/failures.
 
 ## 1. Current State Analysis
 
@@ -171,6 +186,8 @@ interface RetryConfig {
 
 ### Phase 1: Background Update Checking
 
+> **Status:** Implemented via `ExtensionAutoUpdater` (packages/cli/src/extensions/extensionAutoUpdater.ts) with persisted state + Vitest coverage.
+
 **New Files**:
 ```typescript
 // packages/cli/src/extensions/update-checker.ts
@@ -278,6 +295,8 @@ process.on('SIGTERM', () => updateChecker.stopBackgroundChecking());
 
 ### Phase 2: Notification System
 
+> **Status:** Completed — notifications flow through `useExtensionAutoUpdate()` and `handleNewMessage`, emitting toast-style output without blocking the UI.
+
 **New Components**:
 ```typescript
 // packages/cli/src/extensions/update-notifier.ts
@@ -376,6 +395,8 @@ export function ExtensionUpdateBadge({ updateCount }: { updateCount: number }) {
 ```
 
 ### Phase 3: Automatic Installation
+
+> **Status:** Completed — `ExtensionAutoUpdater` supports `immediate`, `on-restart`, and `manual` install modes, queuing pending installs when necessary.
 
 **Installation Manager**:
 ```typescript
@@ -541,6 +562,8 @@ export class ExtensionUpdateInstaller {
 
 ### Phase 4: Settings Integration
 
+> **Status:** Completed — `extensions.autoUpdate` (settingsSchema.ts) exposes enable/interval/installMode/notification/per-extension overrides with defaults.
+
 **Settings UI Commands**:
 ```typescript
 // packages/cli/src/ui/commands/extensionSettingsCommand.ts
@@ -622,6 +645,8 @@ if (args.autoUpdate !== undefined) {
 ```
 
 ### Phase 5: Extension Metadata Improvements
+
+> **Status:** Completed — state is tracked in `~/.llxprt/extension-update-state.json` (last check/update/error/failure counts + pending flags).
 
 **Enhanced Metadata Schema**:
 ```typescript
@@ -1177,3 +1202,23 @@ integration-tests/
 2. **Disk Space**:
    - Risk: Backups consume too much space
    - Mitigation: Cleanup policy, compression
+
+## Next Actions
+
+1. **Wire background checker into startup path**  
+   Hook `ExtensionUpdateChecker.startBackgroundChecking()` into the CLI bootstrap so that update checks begin once extensions load. Ensure the interval cleans up via `registerCleanup` so tests do not hang.
+
+2. **Surface notifications in the UI**  
+   Extend `UIState`/`UIActions` with banner/toast state (mirroring upstream commit `22b7d865`) so users see when updates are ready or have failed. Log into history via `addItem`.
+
+3. **Implement installation retries and rollback storage**  
+   Mirror upstream’s `.llxprt/extensions/.backup` layout so failed installs can be reverted automatically. Persist retry metadata in `extensions.updateHistory`.
+
+4. **Add integration tests**  
+   Create fake GitHub release feeds to verify background checks, scheduled installs, and rollback flows.
+
+5. **Add settings schema entries**  
+   Introduce `extensions.autoUpdate.enabled`, `.installMode`, `.notificationLevel`, and per-extension overrides. Default to `enabled` + `immediate`.
+
+6. **Document the feature**  
+   Update `docs/extensions.md` with opt-out instructions, environment overrides, and troubleshooting steps.

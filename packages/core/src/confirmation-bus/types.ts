@@ -1,4 +1,8 @@
 import type { FunctionCall } from '@google/genai';
+import type {
+  ToolConfirmationOutcome,
+  ToolConfirmationPayload,
+} from '../tools/tool-confirmation-types.js';
 
 export enum MessageBusType {
   TOOL_CONFIRMATION_REQUEST = 'tool-confirmation-request',
@@ -19,7 +23,20 @@ export interface ToolConfirmationRequest {
 export interface ToolConfirmationResponse {
   type: MessageBusType.TOOL_CONFIRMATION_RESPONSE;
   correlationId: string;
-  confirmed: boolean;
+  /**
+   * Complete enum outcome preferred for consumers. When omitted, fall back to
+   * the legacy `confirmed` boolean semantics.
+   */
+  outcome?: ToolConfirmationOutcome;
+  /**
+   * Optional payload used by inline modify flows.
+   */
+  payload?: ToolConfirmationPayload;
+  /**
+   * Legacy flag maintained for compatibility. New publishers should send a
+   * concrete outcome instead.
+   */
+  confirmed?: boolean;
   requiresUserConfirmation?: boolean; // When true, use legacy UI
 }
 
@@ -28,6 +45,7 @@ export interface ToolPolicyRejection {
   toolCall: FunctionCall;
   correlationId: string;
   reason: string;
+  serverName?: string;
 }
 
 export interface ToolExecutionSuccess {

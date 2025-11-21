@@ -1,0 +1,411 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import {
+  ExtensionUpdateState,
+  checkForExtensionUpdate,
+} from '../config/extensions/github.js';
+import {
+  type Extension,
+  type ExtensionUpdateInfo,
+  type ExtensionInstallMetadata,
+  loadUserExtensions,
+  updateExtension,
+} from '../config/extension.js';
+import { Storage, getErrorMessage } from '@vybestack/llxprt-code-core';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+const HOUR_IN_MS = 60 * 60 * 1000;
+const STATE_FILENAME = 'extension-update-state.json';
+
+export type ExtensionAutoUpdateInstallMode =
+  | 'immediate'
+  | 'on-restart'
+  | 'manual';
+export type ExtensionAutoUpdateNotificationLevel =
+  | 'silent'
+  | 'toast'
+  | 'dialog';
+
+export interface ExtensionAutoUpdateSettings {
+  enabled?: boolean;
+  checkIntervalHours?: number;
+  installMode?: ExtensionAutoUpdateInstallMode;
+  notificationLevel?: ExtensionAutoUpdateNotificationLevel;
+  perExtension?: Record<string, ExtensionAutoUpdatePerExtensionSetting>;
+}
+
+export interface ExtensionAutoUpdatePerExtensionSetting {
+  enabled?: boolean;
+  installMode?: ExtensionAutoUpdateInstallMode;
+  notificationLevel?: ExtensionAutoUpdateNotificationLevel;
+  checkIntervalHours?: number;
+}
+
+interface EffectiveExtensionAutoUpdateSettings {
+  enabled: boolean;
+  checkIntervalHours: number;
+  installMode: ExtensionAutoUpdateInstallMode;
+  notificationLevel: ExtensionAutoUpdateNotificationLevel;
+  perExtension: Record<string, ExtensionAutoUpdatePerExtensionSetting>;
+}
+
+export interface ExtensionUpdateHistoryEntry {
+  lastCheck?: number;
+  lastUpdate?: number;
+  lastError?: string;
+  failureCount?: number;
+  pendingInstall?: boolean;
+  state?: ExtensionUpdateState;
+}
+
+type ExtensionUpdateStateFile = Record<string, ExtensionUpdateHistoryEntry>;
+
+export interface ExtensionAutoUpdateStateStore {
+  read(): Promise<ExtensionUpdateStateFile>;
+  write(state: ExtensionUpdateStateFile): Promise<void>;
+}
+
+function clampIntervalHours(value: number | undefined): number {
+  if (!value || Number.isNaN(value)) {
+    return 24;
+  }
+  return Math.max(1, value);
+}
+
+function resolveSettings(
+  raw?: ExtensionAutoUpdateSettings,
+): EffectiveExtensionAutoUpdateSettings {
+  return {
+    enabled: raw?.enabled ?? true,
+    checkIntervalHours: clampIntervalHours(raw?.checkIntervalHours ?? 24),
+    installMode: raw?.installMode ?? 'immediate',
+    notificationLevel: raw?.notificationLevel ?? 'toast',
+    perExtension: raw?.perExtension ?? {},
+  };
+}
+
+function createFileStateStore(): ExtensionAutoUpdateStateStore {
+  const dir = Storage.getGlobalLlxprtDir();
+  const filePath = path.join(dir, STATE_FILENAME);
+
+  return {
+    async read() {
+      try {
+        await fs.promises.mkdir(dir, { recursive: true });
+        const data = await fs.promises.readFile(filePath, 'utf-8');
+        return JSON.parse(data) as ExtensionUpdateStateFile;
+      } catch (error) {
+        if (
+          error &&
+          typeof error === 'object' &&
+          'code' in error &&
+          error.code === 'ENOENT'
+        ) {
+          return {};
+        }
+        console.warn(
+          '[extensions] Failed to read extension auto-update state:',
+          getErrorMessage(error),
+        );
+        return {};
+      }
+    },
+    async write(state: ExtensionUpdateStateFile) {
+      try {
+        await fs.promises.mkdir(dir, { recursive: true });
+        await fs.promises.writeFile(
+          filePath,
+          JSON.stringify(state, null, 2),
+          'utf-8',
+        );
+      } catch (error) {
+        console.warn(
+          '[extensions] Failed to persist extension auto-update state:',
+          getErrorMessage(error),
+        );
+      }
+    },
+  };
+}
+
+interface ExtensionAutoUpdaterOptions {
+  settings?: ExtensionAutoUpdateSettings;
+  workspaceDir?: string;
+  notify?: (message: string, level: 'info' | 'warn' | 'error') => void;
+  stateStore?: ExtensionAutoUpdateStateStore;
+  extensionLoader?: () => Promise<Extension[]>;
+  updateExecutor?: (
+    extension: Extension,
+    cwd: string,
+  ) => Promise<ExtensionUpdateInfo>;
+  updateChecker?: (
+    metadata: ExtensionInstallMetadata,
+  ) => Promise<ExtensionUpdateState>;
+  now?: () => number;
+}
+
+interface EffectivePerExtensionSettings {
+  enabled: boolean;
+  checkIntervalHours: number;
+  installMode: ExtensionAutoUpdateInstallMode;
+  notificationLevel: ExtensionAutoUpdateNotificationLevel;
+}
+
+export class ExtensionAutoUpdater {
+  private readonly settings: EffectiveExtensionAutoUpdateSettings;
+  private readonly workspaceDir: string;
+  private readonly notify?: ExtensionAutoUpdaterOptions['notify'];
+  private readonly stateStore: ExtensionAutoUpdateStateStore;
+  private readonly extensionLoader: () => Promise<Extension[]>;
+  private readonly updateExecutor: (
+    extension: Extension,
+    cwd: string,
+  ) => Promise<ExtensionUpdateInfo>;
+  private readonly updateChecker: (
+    metadata: ExtensionInstallMetadata,
+  ) => Promise<ExtensionUpdateState>;
+  private readonly now: () => number;
+  private intervalHandle: NodeJS.Timeout | null = null;
+  private isChecking = false;
+  private disposed = false;
+
+  constructor(options: ExtensionAutoUpdaterOptions = {}) {
+    this.settings = resolveSettings(options.settings);
+    this.workspaceDir = options.workspaceDir ?? process.cwd();
+    this.notify = options.notify;
+    this.stateStore = options.stateStore ?? createFileStateStore();
+    this.extensionLoader =
+      options.extensionLoader ??
+      (async () => loadUserExtensions(this.workspaceDir));
+    this.updateExecutor = options.updateExecutor ?? updateExtension;
+    this.updateChecker = options.updateChecker ?? checkForExtensionUpdate;
+    this.now = options.now ?? Date.now;
+  }
+
+  /**
+   * Starts the background auto-update loop.
+   * Returns a cleanup function that stops scheduling additional checks.
+   */
+  start(): () => void {
+    if (!this.settings.enabled || this.disposed) {
+      return () => {};
+    }
+
+    void this.runCycle();
+    const intervalMs = this.settings.checkIntervalHours * HOUR_IN_MS;
+    this.intervalHandle = setInterval(() => {
+      void this.runCycle();
+    }, intervalMs);
+
+    return () => this.stop();
+  }
+
+  stop(): void {
+    if (this.intervalHandle) {
+      clearInterval(this.intervalHandle);
+      this.intervalHandle = null;
+    }
+    this.disposed = true;
+  }
+
+  async checkNow(): Promise<void> {
+    await this.runCycle();
+  }
+
+  private async runCycle(): Promise<void> {
+    if (!this.settings.enabled || this.disposed || this.isChecking) {
+      return;
+    }
+    this.isChecking = true;
+    try {
+      const [state, extensions] = await Promise.all([
+        this.stateStore.read(),
+        this.extensionLoader(),
+      ]);
+      const extensionsByName = new Map(
+        extensions.map((extension) => [extension.config.name, extension]),
+      );
+
+      await this.applyPendingInstalls(state, extensionsByName);
+
+      for (const extension of extensions) {
+        await this.processExtension(extension, state);
+      }
+
+      await this.stateStore.write(state);
+    } finally {
+      this.isChecking = false;
+    }
+  }
+
+  private getEffectiveSettingsForExtension(
+    extensionName: string,
+  ): EffectivePerExtensionSettings {
+    const override = this.settings.perExtension[extensionName];
+    return {
+      enabled: override?.enabled ?? this.settings.enabled,
+      installMode: override?.installMode ?? this.settings.installMode,
+      notificationLevel:
+        override?.notificationLevel ?? this.settings.notificationLevel,
+      checkIntervalHours: clampIntervalHours(
+        override?.checkIntervalHours ?? this.settings.checkIntervalHours,
+      ),
+    };
+  }
+
+  private async applyPendingInstalls(
+    state: ExtensionUpdateStateFile,
+    extensionsByName: Map<string, Extension>,
+  ): Promise<void> {
+    for (const [name, entry] of Object.entries(state)) {
+      if (!entry.pendingInstall) {
+        continue;
+      }
+      const extension = extensionsByName.get(name);
+      if (!extension || !extension.installMetadata) {
+        entry.pendingInstall = false;
+        entry.lastError = `Extension "${name}" is no longer installed.`;
+        entry.state = ExtensionUpdateState.ERROR;
+        continue;
+      }
+      const settings = this.getEffectiveSettingsForExtension(name);
+      await this.performUpdate(extension, entry, settings);
+    }
+  }
+
+  private async processExtension(
+    extension: Extension,
+    state: ExtensionUpdateStateFile,
+  ): Promise<void> {
+    if (!extension.installMetadata) {
+      return;
+    }
+
+    const settings = this.getEffectiveSettingsForExtension(
+      extension.config.name,
+    );
+    if (!settings.enabled) {
+      return;
+    }
+
+    const entry =
+      state[extension.config.name] ?? (state[extension.config.name] = {});
+    const now = this.now();
+    const intervalMs = settings.checkIntervalHours * HOUR_IN_MS;
+    if (entry.lastCheck && now - entry.lastCheck < intervalMs) {
+      return;
+    }
+    entry.lastCheck = now;
+    entry.state = ExtensionUpdateState.CHECKING_FOR_UPDATES;
+
+    try {
+      const updateState = await this.updateChecker(extension.installMetadata);
+      entry.state = updateState;
+      entry.lastError = undefined;
+      if (updateState === ExtensionUpdateState.UPDATE_AVAILABLE) {
+        await this.handleUpdateAvailable(extension, entry, settings);
+      } else if (
+        updateState === ExtensionUpdateState.UP_TO_DATE ||
+        updateState === ExtensionUpdateState.NOT_UPDATABLE
+      ) {
+        entry.failureCount = 0;
+      }
+    } catch (error) {
+      entry.lastError = getErrorMessage(error);
+      entry.failureCount = (entry.failureCount ?? 0) + 1;
+      entry.state = ExtensionUpdateState.ERROR;
+      this.notifyWithLevel(
+        'error',
+        `Failed to check extension "${extension.config.name}" for updates: ${entry.lastError}`,
+        settings.notificationLevel,
+      );
+    }
+  }
+
+  private async handleUpdateAvailable(
+    extension: Extension,
+    entry: ExtensionUpdateHistoryEntry,
+    settings: EffectivePerExtensionSettings,
+  ): Promise<void> {
+    switch (settings.installMode) {
+      case 'immediate':
+        await this.performUpdate(extension, entry, settings);
+        break;
+      case 'on-restart':
+        entry.pendingInstall = true;
+        this.notifyWithLevel(
+          'info',
+          `Extension "${extension.config.name}" update queued; it will install on the next restart.`,
+          settings.notificationLevel,
+        );
+        break;
+      case 'manual':
+      default:
+        this.notifyWithLevel(
+          'info',
+          `Update available for extension "${extension.config.name}". Run "llxprt extensions update ${extension.config.name}" to install.`,
+          settings.notificationLevel,
+        );
+        break;
+    }
+  }
+
+  private async performUpdate(
+    extension: Extension,
+    entry: ExtensionUpdateHistoryEntry,
+    settings: EffectivePerExtensionSettings,
+  ): Promise<void> {
+    try {
+      entry.state = ExtensionUpdateState.UPDATING;
+      const info = await this.updateExecutor(extension, this.workspaceDir);
+      entry.lastUpdate = this.now();
+      entry.pendingInstall = false;
+      entry.state = ExtensionUpdateState.UPDATED_NEEDS_RESTART;
+      entry.failureCount = 0;
+      entry.lastError = undefined;
+      this.notifyWithLevel(
+        'info',
+        `Extension "${info.name}" updated to ${info.updatedVersion}. Restart llxprt-code to load the new version.`,
+        settings.notificationLevel,
+      );
+    } catch (error) {
+      entry.lastError = getErrorMessage(error);
+      entry.failureCount = (entry.failureCount ?? 0) + 1;
+      entry.state = ExtensionUpdateState.ERROR;
+      this.notifyWithLevel(
+        'error',
+        `Failed to update extension "${extension.config.name}": ${entry.lastError}`,
+        settings.notificationLevel,
+      );
+    }
+  }
+
+  private notifyWithLevel(
+    level: 'info' | 'warn' | 'error',
+    message: string,
+    notificationLevel: ExtensionAutoUpdateNotificationLevel,
+  ): void {
+    if (notificationLevel === 'silent' && level !== 'error') {
+      return;
+    }
+
+    if (this.notify) {
+      this.notify(message, level);
+      return;
+    }
+
+    const prefix = '[extensions]';
+    if (level === 'error') {
+      console.error(prefix, message);
+    } else if (level === 'warn') {
+      console.warn(prefix, message);
+    } else {
+      console.log(prefix, message);
+    }
+  }
+}

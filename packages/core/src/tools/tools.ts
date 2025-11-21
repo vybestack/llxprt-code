@@ -11,6 +11,15 @@ import { DiffUpdateResult } from '../ide/ideContext.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyDecision } from '../policy/types.js';
+import {
+  ToolConfirmationOutcome,
+  ToolConfirmationPayload,
+} from './tool-confirmation-types.js';
+
+export {
+  ToolConfirmationOutcome,
+  ToolConfirmationPayload,
+} from './tool-confirmation-types.js';
 
 /**
  * Represents a validated and ready-to-execute tool call.
@@ -96,51 +105,15 @@ export abstract class BaseToolInvocation<
     decision: PolicyDecision;
     requiresUserConfirmation?: boolean;
   }> {
-    if (!this.messageBus) {
-      // No message bus available - fallback to legacy flow
-      return {
-        decision: PolicyDecision.ASK_USER,
-        requiresUserConfirmation: true,
-      };
+    // Default implementation defers to legacy confirmation flow.
+    // Concrete tools can override for custom behavior.
+    if (abortSignal.aborted) {
+      throw new Error('Operation aborted');
     }
-
-    const confirmationDetails = this.getConfirmationDetails();
-    if (!confirmationDetails) {
-      // No confirmation needed
-      return { decision: PolicyDecision.ALLOW };
-    }
-
-    // Request confirmation through message bus
-    // The message bus will consult the policy engine and either:
-    // 1. Return ALLOW immediately if policy allows
-    // 2. Return DENY immediately if policy denies
-    // 3. Publish ASK_USER request and wait for user response
-    const toolCall = {
-      name: this.getToolName(),
-      args: this.params as Record<string, unknown>,
+    return {
+      decision: PolicyDecision.ASK_USER,
+      requiresUserConfirmation: true,
     };
-
-    try {
-      const confirmed = await this.messageBus.requestConfirmation(
-        toolCall,
-        this.params as Record<string, unknown>,
-        this.getServerName(),
-      );
-
-      return {
-        decision: confirmed ? PolicyDecision.ALLOW : PolicyDecision.DENY,
-        requiresUserConfirmation: !confirmed,
-      };
-    } catch (error) {
-      if (abortSignal.aborted) {
-        throw error;
-      }
-      // On error, fall back to asking user
-      return {
-        decision: PolicyDecision.ASK_USER,
-        requiresUserConfirmation: true,
-      };
-    }
   }
 
   /**
@@ -157,6 +130,21 @@ export abstract class BaseToolInvocation<
    */
   protected getServerName(): string | undefined {
     return undefined;
+  }
+
+  /**
+   * Returns metadata used by the policy engine/message bus.
+   */
+  getPolicyContext(): {
+    toolName: string;
+    args: Record<string, unknown>;
+    serverName?: string;
+  } {
+    return {
+      toolName: this.getToolName(),
+      args: this.params as Record<string, unknown>,
+      serverName: this.getServerName(),
+    };
   }
 
   shouldConfirmExecute(
@@ -585,12 +573,6 @@ export interface ToolEditConfirmationDetails {
   correlationId?: string;
 }
 
-export interface ToolConfirmationPayload {
-  // used to override `modifiedProposedContent` for modifiable tools in the
-  // inline modify flow
-  newContent: string;
-}
-
 export interface ToolExecuteConfirmationDetails {
   type: 'exec';
   title: string;
@@ -624,15 +606,6 @@ export type ToolCallConfirmationDetails =
   | ToolExecuteConfirmationDetails
   | ToolMcpConfirmationDetails
   | ToolInfoConfirmationDetails;
-
-export enum ToolConfirmationOutcome {
-  ProceedOnce = 'proceed_once',
-  ProceedAlways = 'proceed_always',
-  ProceedAlwaysServer = 'proceed_always_server',
-  ProceedAlwaysTool = 'proceed_always_tool',
-  ModifyWithEditor = 'modify_with_editor',
-  Cancel = 'cancel',
-}
 
 export enum Kind {
   Read = 'read',

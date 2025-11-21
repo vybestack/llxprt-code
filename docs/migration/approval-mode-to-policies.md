@@ -23,7 +23,7 @@ The policy engine offers several advantages over ApprovalMode:
 - `--allowed-tools` still allows specific tools
 - Settings.json `approvalMode` field still works
 
-When message bus integration is disabled (the default), the legacy system continues to operate exactly as before.
+The message bus and policy engine now power every confirmation. Legacy settings are converted into equivalent policy rules automatically, so behavior remains consistent without any toggles.
 
 ## How Legacy Settings Map to Policies
 
@@ -61,7 +61,7 @@ priority = 1.01
 # ... other write tools
 ```
 
-**Migration:** No action needed. Enable message bus integration to use policy engine with default behavior.
+**Migration:** No action needed — this is now the default behavior because the policy engine/message bus path is always active.
 
 ### ApprovalMode.AUTO_EDIT
 
@@ -99,8 +99,8 @@ priority = 1.015
 **Migration:**
 
 1. Remove `approvalMode: "auto_edit"` from settings
-2. Create custom policy file with write tools allowed at priority 2.5+
-3. Enable message bus integration
+2. Create a custom policy file with write tools allowed at priority 2.5+
+3. Restart llxprt-code (or reload settings) so the new policy file is picked up
 
 ### ApprovalMode.YOLO
 
@@ -118,8 +118,8 @@ priority = 1.999
 **Migration:**
 
 1. Remove `approvalMode: "yolo"` from settings
-2. Create custom policy file with wildcard allow at priority 2.5+ (if desired)
-3. Enable message bus integration
+2. Create a custom policy file with wildcard allow at priority 2.5+ (if desired)
+3. Restart llxprt-code to ensure the new policy stack loads
 
 **Security Note:** YOLO mode disables all safety checks. Consider using selective allow rules instead.
 
@@ -181,21 +181,7 @@ priority = 1.999
 
 ## Step-by-Step Migration
 
-### Step 1: Enable Message Bus Integration
-
-Add to `~/.llxprt/settings.json`:
-
-```json
-{
-  "tools": {
-    "enableMessageBusIntegration": true
-  }
-}
-```
-
-This enables the policy engine while keeping your existing settings.
-
-### Step 2: Test with Default Policies
+### Step 1: Test with Default Policies
 
 Restart llxprt-code and verify behavior:
 
@@ -272,7 +258,6 @@ Add to `~/.llxprt/settings.json`:
 ```json
 {
   "tools": {
-    "enableMessageBusIntegration": true,
     "policyPath": "/Users/yourname/.llxprt/my-policy.toml"
   }
 }
@@ -301,7 +286,6 @@ Once satisfied with policy-based configuration, you can remove legacy settings:
 
   // Keep these:
   "tools": {
-    "enableMessageBusIntegration": true,
     "policyPath": "/Users/yourname/.llxprt/my-policy.toml"
   }
 }
@@ -364,7 +348,6 @@ priority = 2.5
 ```json
 {
   "tools": {
-    "enableMessageBusIntegration": true,
     "policyPath": "/Users/yourname/.llxprt/dev-policy.toml"
   }
 }
@@ -430,7 +413,6 @@ priority = 2.5
 ```json
 {
   "tools": {
-    "enableMessageBusIntegration": true,
     "policyPath": "/Users/yourname/.llxprt/secure-policy.toml"
   }
 }
@@ -538,14 +520,11 @@ You can run both systems simultaneously during migration:
 
 ```json
 {
-  "approvalMode": "auto_edit", // Keep legacy
-  "tools": {
-    "enableMessageBusIntegration": true // Enable new
-  }
+  "approvalMode": "auto_edit" // Keep legacy
 }
 ```
 
-- Legacy settings migrated to policy rules automatically
+- Legacy settings are still migrated to policy rules automatically
 - No breaking changes
 - Test new system alongside legacy
 
@@ -555,7 +534,6 @@ You can run both systems simultaneously during migration:
 {
   "approvalMode": "auto_edit", // Keep legacy
   "tools": {
-    "enableMessageBusIntegration": true,
     "policyPath": "/path/to/my-policy.toml" // Add custom
   }
 }
@@ -569,7 +547,6 @@ You can run both systems simultaneously during migration:
 ```json
 {
   "tools": {
-    "enableMessageBusIntegration": true,
     "policyPath": "/path/to/my-policy.toml" // Only new system
   }
 }
@@ -586,11 +563,10 @@ You can run both systems simultaneously during migration:
 
 **Solutions:**
 
-1. Check that `enableMessageBusIntegration: true` is set
-2. Restart llxprt-code after changing settings
-3. Verify policies loaded: `llxprt --command "/policies"`
-4. Check priority - your rules must be higher than defaults (use 2.5+)
-5. Ensure policy file path is absolute
+1. Restart llxprt-code after changing settings
+2. Verify policies loaded: `llxprt --command "/policies"`
+3. Check priority - your rules must be higher than defaults (use 2.5+)
+4. Ensure policy file path is absolute
 
 ### Issue: TOML Parse Errors
 
@@ -624,7 +600,7 @@ You can run both systems simultaneously during migration:
 
 **Solutions:**
 
-1. Verify message bus integration is enabled
+1. Ensure you're running a build that includes the policy engine/message bus stack (20251119gmerge or later)
 2. Check for custom policies with higher priority overriding flags
 3. Use `/policies` to see how flags translated to rules
 4. Remember: CLI flags have priority 2.3, user policies at 2.5+ override them
@@ -745,7 +721,6 @@ llxprt --profile secure
 ## Migration Checklist
 
 - [ ] Backup existing settings.json
-- [ ] Enable message bus integration
 - [ ] Test with default policies
 - [ ] Run `/policies` to verify rules
 - [ ] Create custom policy file (if needed)
@@ -759,32 +734,7 @@ llxprt --profile secure
 
 ## Rollback Plan
 
-If you need to revert to legacy system:
-
-1. Disable message bus integration:
-
-```json
-{
-  "tools": {
-    "enableMessageBusIntegration": false // Disable
-  }
-}
-```
-
-2. Restore legacy settings:
-
-```json
-{
-  "approvalMode": "auto_edit", // Restore
-  "tools": {
-    "enableMessageBusIntegration": false
-  }
-}
-```
-
-3. Restart llxprt-code
-
-The legacy system will resume exactly as before. Your policy files remain for future use.
+If you need to revert to the previous behavior, remove custom policy files/paths and rely on `approvalMode` plus `--allowed-tools` flags. Message bus integration remains enabled, but without custom policies the behavior mirrors the legacy flow.
 
 ## Next Steps
 

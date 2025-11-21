@@ -268,7 +268,9 @@ export interface ToolConfirmationRequest {
 export interface ToolConfirmationResponse {
   type: MessageBusType.TOOL_CONFIRMATION_RESPONSE;
   correlationId: string;
-  confirmed: boolean;
+  outcome: ToolConfirmationOutcome;
+  payload?: ToolConfirmationPayload;
+  confirmed?: boolean; // legacy helper
   requiresUserConfirmation?: boolean;  // When true, use legacy UI
 }
 
@@ -306,19 +308,16 @@ import type { PolicyEngineConfig } from '../policy/types.js';
 policyEngineConfig?: PolicyEngineConfig;
 
 // In Config class:
-private readonly messageBus: MessageBus;
-private readonly policyEngine: PolicyEngine;
+  private readonly messageBus: MessageBus;
+  private readonly policyEngine: PolicyEngine;
 
-// In constructor:
-this.policyEngine = new PolicyEngine(params.policyEngineConfig);
-this.messageBus = new MessageBus(this.policyEngine, this.debugMode);
+  // In constructor:
+  this.policyEngine = new PolicyEngine(params.policyEngineConfig);
+  this.messageBus = new MessageBus(this.policyEngine, this.debugMode);
 
-// Add getters:
-getMessageBus(): MessageBus { return this.messageBus; }
-getPolicyEngine(): PolicyEngine { return this.policyEngine; }
-getEnableMessageBusIntegration(): boolean {
-  return this.ephemeralSettings?.['tools.enableMessageBusIntegration'] ?? false;
-}
+  // Add getters:
+  getMessageBus(): MessageBus { return this.messageBus; }
+  getPolicyEngine(): PolicyEngine { return this.policyEngine; }
 ```
 
 ---
@@ -361,23 +360,21 @@ getEnableMessageBusIntegration(): boolean {
 ### Phase C.6: UI Integration (0.5 days)
 
 1. Update `ToolCallConfirmationDetails` interface with `correlationId` field
-2. Modify `ToolConfirmationMessage.tsx` to publish via message bus when feature flag enabled
+2. Modify `ToolConfirmationMessage.tsx` to publish confirmation responses directly on the message bus
 3. Add message bus subscription to AppContainer for `TOOL_CONFIRMATION_REQUEST` events
 4. Wire IDE confirmation pathway through message bus (wrap existing promise pattern)
 5. Add integration tests for UI ↔ bus ↔ scheduler flow:
    - Test confirmation request flows from scheduler to UI
    - Test confirmation response flows from UI back to scheduler
    - Test correlation ID matching
-   - Test backward compatibility with feature flag off
+   - Test policy bridging when ApprovalMode/CLI flags introduce additional rules
 
 ### Phase C.7: Legacy Migration (0.5 days)
 
 1. Implement `migrateLegacyApprovalMode()` in `packages/core/src/policy/config.ts`
 2. Bridge `--allowed-tools` CLI flag to priority 2.3 policy rules
 3. Bridge `--exclude-tools` CLI flag to priority 2.4 policy rules (if exists)
-4. Add feature flag guards to CoreToolScheduler:
-   - Check `config.getEnableMessageBusIntegration()` before using message bus
-   - Fall back to legacy `shouldConfirmExecute()` pattern when disabled
+4. Remove the legacy `shouldConfirmExecute()`-only pathway from CoreToolScheduler so every confirmation flows through the policy engine + message bus stack
 5. Write migration tests:
    - YOLO mode → wildcard allow-all at 1.999
    - AUTO_EDIT mode → write tools allow at 1.015
@@ -436,8 +433,6 @@ export function AppContainer({ config }: AppContainerProps) {
   } | null>(null);
 
   useEffect(() => {
-    if (!config.getEnableMessageBusIntegration()) return;
-
     const messageBus = config.getMessageBus();
     const unsubscribe = messageBus.subscribe(
       MessageBusType.TOOL_CONFIRMATION_REQUEST,
@@ -489,17 +484,12 @@ const handleProceed = () => {
 **After (message bus publish):**
 ```typescript
 const handleProceed = () => {
-  if (config.getEnableMessageBusIntegration()) {
-    const messageBus = config.getMessageBus();
-    messageBus.publish({
-      type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      correlationId: confirmationDetails.correlationId,
-      confirmed: true,
-    });
-  } else {
-    // Legacy path
-    onConfirm(ToolConfirmationOutcome.Proceed);
-  }
+  const messageBus = config.getMessageBus();
+  messageBus.publish({
+    type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+    correlationId: confirmationDetails.correlationId,
+    confirmed: true,
+  });
 };
 ```
 
@@ -554,15 +544,13 @@ async function handleIdeConfirmation(
   // Keep existing ideConfirmation promise pattern
   const confirmed = await ideConfirmationPromise(toolCall);
 
-  // But also publish to message bus for observability
-  if (config.getEnableMessageBusIntegration()) {
-    const messageBus = config.getMessageBus();
-    messageBus.publish({
-      type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-      correlationId: toolCall.correlationId,
-      confirmed,
-    });
-  }
+  // Also publish to the message bus for observability
+  const messageBus = config.getMessageBus();
+  messageBus.publish({
+    type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+    correlationId: toolCall.correlationId,
+    confirmed,
+  });
 
   return confirmed;
 }
@@ -570,25 +558,13 @@ async function handleIdeConfirmation(
 
 ### Backward Compatibility
 
-All message bus code paths are guarded by the feature flag:
-
-```typescript
-// Pattern used throughout:
-if (config.getEnableMessageBusIntegration()) {
-  // New message bus flow
-  const messageBus = config.getMessageBus();
-  // ... use message bus
-} else {
-  // Existing direct callback flow
-  // ... use legacy pattern
-}
-```
+Legacy knobs (ApprovalMode, `--allowed-tools`, trust settings) are still supported, but they now express themselves as policy rules that feed the message bus pipeline. There is no setting or flag to bypass the bus.
 
 **Key Points:**
-- When `enableMessageBusIntegration` is false (default), all existing code paths work unchanged
-- No breaking changes to existing UI components
-- Gradual migration path - components can be updated one at a time
-- Both paths must produce equivalent behavior for testing
+- Message bus integration is the only confirmation path. Every tool execution runs through the policy engine, which either allows, denies, or emits an `ASK_USER` decision that surfaces as a `TOOL_CONFIRMATION_REQUEST`.
+- UI components must publish `TOOL_CONFIRMATION_RESPONSE` messages with full outcomes instead of invoking `onConfirm` directly.
+- Programmatic clients (e.g., Zed, a2a-server) may call `onConfirm` for headless confirmations, but they also publish bus responses for observability and parity with the UI.
+- Tests must assert on message bus traffic because that is the source of truth for confirmation flow. Legacy-only mocks should be deleted in favor of policy/message bus fixtures.
 
 ---
 
@@ -707,22 +683,17 @@ Becomes:
 
 ### Rollout Phases
 
-**Phase 1: Parallel Operation (Initial Release)**
-- Both systems run simultaneously
-- Feature flag `enableMessageBusIntegration` controls which path is active
-- When flag is ON: message bus handles confirmations
-- When flag is OFF: legacy ApprovalMode checks apply
-- Full backward compatibility maintained
+**Phase 1: Unified Operation (Complete)**
+- Message bus confirmations are always enabled. UI components publish `TOOL_CONFIRMATION_RESPONSE` messages instead of calling `onConfirm` directly.
+- Programmatic clients (Zed, a2a-server) can still invoke `onConfirm`, but they also publish bus responses for observability.
 
-**Phase 2: Deprecation (After 2 Stable Releases)**
-- Deprecation warnings on direct `config.getApprovalMode()` calls in tools
-- Tools should use `getMessageBusDecision()` instead
-- Document migration path for any external tools
+**Phase 2: Hardening**
+- Deprecate any documentation or settings that reference the removed feature flag.
+- Ensure tool-facing APIs (`getMessageBusDecision`) are the only path evaluated in scheduler state machines.
 
-**Phase 3: Removal (After 4 Stable Releases)**
-- Remove legacy code paths
-- ApprovalMode enum kept for CLI parsing compatibility
-- All tool approval flows through policy engine
+**Phase 3: Cleanup**
+- ApprovalMode enum remains for CLI compatibility, but all approvals flow exclusively through the policy engine and message bus.
+- Remove any remaining tests that rely on the legacy flag.
 
 ### Config Bridge Code
 
@@ -880,32 +851,19 @@ describe('migrateLegacyApprovalMode', () => {
 
 ## 8. New Section - Risk Mitigation
 
-### Feature Flag Approach
+### Rollout Considerations
 
-**Enable incrementally via settings:**
-```json
-{
-  "tools": {
-    "enableMessageBusIntegration": false  // Default off until stable
-  }
-}
-```
+The message bus is always enabled, so safety relies on exhaustive automated coverage and synthetic profile smoke tests rather than a feature flag.
 
-**Code guards:**
-```typescript
-if (this.config.getEnableMessageBusIntegration()) {
-  const messageBus = this.config.getMessageBus();
-  // ... use message bus
-} else {
-  // ... existing behavior
-}
-```
+- **Synthetic prompts**: `scripts/start.js --profile-load synthetic` exercises policy prompts and confirmation dialogs every run.
+- **Debug logging**: The confirmation bus includes verbose instrumentation (`llxprt:tool-registry`, `llxprt:policies`) so regressions surface immediately.
+- **Runtime fallbacks**: If we discover a severe regression, the rollback procedure is to revert the message bus commits—not flip a flag.
 
 ### Rollback Plan
 
 1. **Phase A rollback** - Remove new modules from exports, keep files for future
-2. **Phase C rollback** - Guard all tool changes behind feature flag
-3. **Phase D rollback** - UI components can be hidden via feature flag
+2. **Phase C rollback** - Revert tool/scheduler commits that wired in the message bus
+3. **Phase D rollback** - Temporarily disable the confirmation UI components by reverting `AppContainer` and dialog commits
 
 ### Breaking Change Considerations
 
@@ -944,7 +902,7 @@ if (this.config.getEnableMessageBusIntegration()) {
 
 **Day 2 Morning:**
 9. Extend Config class with PolicyEngine and MessageBus
-10. Add `getEnableMessageBusIntegration()` feature flag
+10. Remove legacy toggles so the Config always instantiates the message bus/policy engine
 11. Write config integration tests
 
 ### Phase B - CLI Policy Configuration (1 day)
@@ -1151,27 +1109,7 @@ export class PolicyLoadError extends Error {
 
 ### Settings Validation
 
-Add the new settings key to the schema:
-
-```typescript
-// In packages/cli/src/config/settings-schema.ts
-export const settingsSchema = z.object({
-  // ... existing settings
-  tools: z.object({
-    enableMessageBusIntegration: z.boolean().default(false),
-    // ... other tool settings
-  }).optional(),
-});
-```
-
-**Settings file example:**
-```json
-{
-  "tools": {
-    "enableMessageBusIntegration": true
-  }
-}
-```
+No additional settings keys are required because the message bus is always enabled.
 
 ### Output Format Example
 
@@ -1238,7 +1176,7 @@ describe('policiesCommand', () => {
 2. **Updated tools**: All 16 tools with message bus integration
 3. **Config integration**: PolicyEngine and MessageBus in Config
 4. **CLI wiring**: Policy loader, updater, debug logging
-5. **Feature flag**: Disabled by default for safe rollout
+5. **Always-on architecture**: Legacy approval-only path removed; policy engine + message bus now gate every tool call
 6. **Tests**: ~2500 lines of new test coverage
 7. **Documentation**: Policy configuration guide
 
@@ -1249,7 +1187,7 @@ describe('policiesCommand', () => {
 10. **Legacy ApprovalMode migration bridge**: Converts YOLO/AUTO_EDIT/--allowed-tools to policy rules
 11. **/policies command**: New slash command for inspecting active policy rules with AppContainer registration
 12. **Async policy loading**: `loadCliConfig()` becomes async to support TOML loading
-13. **Settings validation**: New `tools.enableMessageBusIntegration` key in settings schema
+13. **Settings validation**: `settingsSchema` now enforces the structure for `policyFiles`, trust rules, and CLI bridges without any toggle keys
 
 ### Updated Timeline
 
@@ -1281,7 +1219,7 @@ describe('policiesCommand', () => {
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| UI state management complexity | HIGH | Feature flag allows immediate rollback |
+| UI state management complexity | HIGH | Synthetic-profile smoke tests and AppContainer integration coverage gate releases |
 | Correlation ID race conditions | MEDIUM | Use Map with cleanup timeouts |
 | Async config breaks existing tests | HIGH | Update all test fixtures systematically |
 | Legacy migration edge cases | MEDIUM | Comprehensive test coverage |
@@ -1290,7 +1228,7 @@ describe('policiesCommand', () => {
 
 - [ ] All existing tests pass (no regressions)
 - [ ] New tests achieve >90% coverage of new code
-- [ ] Feature flag defaults to OFF
+- [ ] Message bus + policy engine verified as the sole confirmation pathway (no legacy bypasses)
 - [ ] /policies command works in interactive and non-interactive modes
 - [ ] Legacy ApprovalMode/--allowed-tools produce equivalent behavior
 - [ ] Documentation updated with policy configuration examples

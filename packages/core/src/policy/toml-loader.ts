@@ -13,6 +13,7 @@
 import * as toml from '@iarna/toml';
 import { z } from 'zod';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { PolicyDecision, type PolicyRule } from './types.js';
 
 /**
@@ -191,11 +192,21 @@ export async function loadDefaultPolicies(): Promise<PolicyRule[]> {
     // Note: yolo.toml and discovered.toml are loaded conditionally
   ];
 
-  const policiesDir = new URL('../policy/policies/', import.meta.url).pathname;
+  const policiesDirUrl = new URL('./policies/', import.meta.url);
+  let policiesDir = decodeURIComponent(policiesDirUrl.pathname);
+
+  if (policiesDir.startsWith('/@fs/')) {
+    policiesDir = `/${policiesDir.slice('/@fs/'.length)}`;
+  }
+
+  if (process.platform === 'win32' && policiesDir.match(/^\/[A-Za-z]:\//)) {
+    policiesDir = policiesDir.slice(1);
+  }
+
   const rules: PolicyRule[] = [];
 
   for (const file of policyFiles) {
-    const path = `${policiesDir}${file}`;
+    const path = join(policiesDir, file);
     try {
       const fileRules = await loadPolicyFromToml(path);
       rules.push(...fileRules);

@@ -17,6 +17,8 @@ This document analyzes Gemini-specific features that were skipped during the 202
 - Already supports multi-provider authentication and model selection
 - Uses runtime settings to switch providers and models
 
+**Status:** ⏳ Not started — requires a provider-agnostic routing heuristic before we can re-enable an `auto` mode.
+
 ### 2. Extension Auto-Update Infrastructure (Commit #44: `22b7d865`)
 
 **What it does:** Automatically updates git-based extensions when newer versions are available.
@@ -27,6 +29,8 @@ This document analyzes Gemini-specific features that were skipped during the 202
 - Manual extension updates via `llxprt extension update` command
 - Extension installation metadata tracking exists
 - No automatic update checking mechanism
+
+**Status:** ✅ Completed — `ExtensionAutoUpdater` (packages/cli/src/extensions/extensionAutoUpdater.ts) plus the `useExtensionAutoUpdate` UI hook now implement background checks, notifications, and install modes per the updated plan (`project-plans/20251119gmerge/extension-auto-update.md`).
 
 ### 3. /model Command Interactive Selection (Commit #155: `5151bedf`)
 
@@ -39,6 +43,8 @@ This document analyzes Gemini-specific features that were skipped during the 202
 - Supports switching models within the active provider
 - No automatic model selection based on task context
 
+**Status:** ✅ Completed — multi-provider `/model` slash command shipped prior to gmerge.
+
 ### 4. Permissions Command UI (Commit #133: `6c559e23`)
 
 **What it does:** Adds a `/permissions` command with an interactive dialog to modify trust settings.
@@ -48,6 +54,8 @@ This document analyzes Gemini-specific features that were skipped during the 202
 **Current llxprt state:**
 - Basic `/permissions` command exists but only opens a dialog placeholder
 - Trust system is fully functional but lacks interactive modification UI
+
+**Status:** ✅ Completed — `/permissions` now opens the `PermissionsModifyTrustDialog`, commits trust levels, and surfaces restart instructions.
 
 ### 5. Policy Engine Configuration (Commit #42: `afba59a9`)
 
@@ -60,6 +68,8 @@ This document analyzes Gemini-specific features that were skipped during the 202
 - Trust-based permission system exists
 - Tool confirmation happens at execution time
 
+**Status:** ✅ Completed — policy engine and message bus integration landed; all confirmations now flow through the policy stack.
+
 ### 6. Model Router (Commit #175: `fd2bc71e`)
 
 **What it does:** Enables automatic model routing based on request characteristics.
@@ -69,6 +79,8 @@ This document analyzes Gemini-specific features that were skipped during the 202
 **Current llxprt state:**
 - Manual provider and model selection
 - No automatic routing based on task type
+
+**Status:** ⏳ Not started — awaiting the intelligent model selection work outlined below.
 
 ### 7. Todo Tool (Commit #113: `44691a4c`)
 
@@ -80,6 +92,8 @@ This document analyzes Gemini-specific features that were skipped during the 202
 - Full-featured todo system already exists
 - More advanced than upstream implementation
 
+**Status:** ✅ Not needed — llxprt's Todo implementation already surpasses the skipped upstream feature.
+
 ### 8. Terminal Reconnect (Commit #117: `375b8522`)
 
 **What it does:** Allows users to re-enter disconnected terminal sessions.
@@ -89,6 +103,8 @@ This document analyzes Gemini-specific features that were skipped during the 202
 **Current llxprt state:**
 - Terminal sessions exist but no reconnection capability
 - Would need porting to llxprt's UI architecture
+
+**Status:** ⏳ Not started — will require follow-up after AppContainer migration stabilizes.
 
 ## Provider-Agnostic Design Proposals
 

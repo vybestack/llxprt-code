@@ -118,6 +118,7 @@ export const DefaultAppLayout = ({
     uiState.shouldShowIdePrompt ||
     uiState.showIdeRestartPrompt ||
     uiState.isFolderTrustDialogOpen ||
+    uiState.isPermissionsDialogOpen ||
     uiState.shellConfirmationRequest ||
     uiState.confirmationRequest ||
     uiState.isThemeDialogOpen ||

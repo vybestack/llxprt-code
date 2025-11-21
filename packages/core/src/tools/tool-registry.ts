@@ -195,7 +195,8 @@ export class ToolRegistry {
 
   /**
    * Sets the message bus for the registry and all registered tools.
-   * This must be called after construction if message bus integration is enabled.
+   * Message bus wiring now happens unconditionally via Config, so this is kept
+   * only for API completeness/future overrides.
    */
   setMessageBus(): void {
     // Message bus is accessed from config, so this method is currently a no-op.
@@ -639,6 +640,14 @@ export class ToolRegistry {
     tool: AnyDeclarativeTool,
     targetMap: Map<string, AnyDeclarativeTool>,
   ): void {
+    if (
+      typeof (tool as { setMessageBus?: (bus: MessageBus) => void })
+        .setMessageBus === 'function'
+    ) {
+      (tool as { setMessageBus: (bus: MessageBus) => void }).setMessageBus(
+        this.config.getMessageBus(),
+      );
+    }
     // Normalize the tool name for consistent storage and lookup
     const normalizedName = normalizeToolName(tool.name) || tool.name;
 

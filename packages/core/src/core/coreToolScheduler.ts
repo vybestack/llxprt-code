@@ -22,12 +22,14 @@ import {
   AnyDeclarativeTool,
   AnyToolInvocation,
   ContextAwareTool,
+  BaseToolInvocation,
 } from '../index.js';
 import { randomUUID } from 'node:crypto';
 import {
   MessageBusType,
   type ToolConfirmationResponse,
 } from '../confirmation-bus/types.js';
+import { PolicyDecision } from '../policy/types.js';
 
 interface QueuedRequest {
   request: ToolCallRequestInfo | ToolCallRequestInfo[];
@@ -36,7 +38,7 @@ interface QueuedRequest {
   reject: (reason?: Error) => void;
 }
 import { DEFAULT_AGENT_ID } from './turn.js';
-import { Part, PartListUnion } from '@google/genai';
+import { Part, PartListUnion, FunctionCall } from '@google/genai';
 import { getResponseTextFromParts } from '../utils/generateContentResponseUtilities.js';
 import {
   isModifiableDeclarativeTool,
@@ -116,6 +118,12 @@ export type WaitingToolCall = {
   confirmationDetails: ToolCallConfirmationDetails;
   startTime?: number;
   outcome?: ToolConfirmationOutcome;
+};
+
+type PolicyContext = {
+  toolName: string;
+  args: Record<string, unknown>;
+  serverName?: string;
 };
 
 export type Status = ToolCall['status'];
@@ -379,13 +387,7 @@ export class CoreToolScheduler {
   private isScheduling = false;
   private requestQueue: QueuedRequest[] = [];
   private messageBusUnsubscribe?: () => void;
-  private pendingConfirmations: Map<
-    string,
-    {
-      resolve: (outcome: ToolConfirmationOutcome) => void;
-      signal: AbortSignal;
-    }
-  > = new Map();
+  private pendingConfirmations: Map<string, string> = new Map();
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -396,7 +398,6 @@ export class CoreToolScheduler {
     this.getPreferredEditor = options.getPreferredEditor;
     this.onEditorClose = options.onEditorClose;
 
-    // Subscribe to message bus
     const messageBus = this.config.getMessageBus();
     this.messageBusUnsubscribe = messageBus.subscribe<ToolConfirmationResponse>(
       MessageBusType.TOOL_CONFIRMATION_RESPONSE,
@@ -409,27 +410,38 @@ export class CoreToolScheduler {
    * Called when PolicyEngine or other components respond via message bus.
    */
   private handleMessageBusResponse(response: ToolConfirmationResponse): void {
-    const pending = this.pendingConfirmations.get(response.correlationId);
-    if (!pending) {
+    const callId = this.pendingConfirmations.get(response.correlationId);
+    if (!callId) {
       return; // Not our confirmation request
     }
 
-    // Clean up pending confirmation
-    this.pendingConfirmations.delete(response.correlationId);
+    const waitingToolCall = this.toolCalls.find(
+      (call) =>
+        call.request.callId === callId && call.status === 'awaiting_approval',
+    ) as WaitingToolCall | undefined;
 
-    // If requiresUserConfirmation is true, fall back to legacy UI
-    if (response.requiresUserConfirmation) {
-      // Let the normal flow handle this with the existing UI
-      pending.resolve(ToolConfirmationOutcome.Cancel);
+    if (!waitingToolCall) {
+      this.pendingConfirmations.delete(response.correlationId);
       return;
     }
 
-    // Otherwise, use the message bus decision
-    const outcome = response.confirmed
-      ? ToolConfirmationOutcome.ProceedOnce
-      : ToolConfirmationOutcome.Cancel;
+    const derivedOutcome =
+      response.outcome ??
+      (response.confirmed !== undefined
+        ? response.confirmed
+          ? ToolConfirmationOutcome.ProceedOnce
+          : ToolConfirmationOutcome.Cancel
+        : ToolConfirmationOutcome.Cancel);
 
-    pending.resolve(outcome);
+    const abortController = new AbortController();
+    void this.handleConfirmationResponse(
+      callId,
+      waitingToolCall.confirmationDetails.onConfirm,
+      derivedOutcome,
+      abortController.signal,
+      response.payload,
+      true,
+    );
   }
 
   /**
@@ -875,15 +887,24 @@ export class CoreToolScheduler {
             continue;
           }
 
+          const evaluation = this.evaluatePolicyDecision(invocation, reqInfo);
+          const policyContext = evaluation.context;
+
+          if (evaluation.decision === PolicyDecision.ALLOW) {
+            this.approveToolCall(reqInfo.callId);
+            continue;
+          }
+
+          if (evaluation.decision === PolicyDecision.DENY) {
+            this.handlePolicyDenial(reqInfo, evaluation.context);
+            continue;
+          }
+
           const confirmationDetails =
             await invocation.shouldConfirmExecute(signal);
 
           if (!confirmationDetails) {
-            this.setToolCallOutcome(
-              reqInfo.callId,
-              ToolConfirmationOutcome.ProceedAlways,
-            );
-            this.setStatusInternal(reqInfo.callId, 'scheduled');
+            this.approveToolCall(reqInfo.callId);
             continue;
           }
 
@@ -892,11 +913,7 @@ export class CoreToolScheduler {
             this.config.getApprovalMode() === ApprovalMode.YOLO ||
             doesToolInvocationMatch(toolCall.tool, invocation, allowedTools)
           ) {
-            this.setToolCallOutcome(
-              reqInfo.callId,
-              ToolConfirmationOutcome.ProceedAlways,
-            );
-            this.setStatusInternal(reqInfo.callId, 'scheduled');
+            this.approveToolCall(reqInfo.callId);
           } else {
             // Allow IDE to resolve confirmation
             if (
@@ -935,8 +952,20 @@ export class CoreToolScheduler {
                   outcome,
                   signal,
                   payload,
+                  false,
                 ),
             };
+
+            const correlationId = randomUUID();
+            wrappedConfirmationDetails.correlationId = correlationId;
+            this.pendingConfirmations.set(correlationId, reqInfo.callId);
+
+            const context =
+              policyContext ??
+              this.getPolicyContextFromInvocation(invocation, reqInfo);
+
+            this.publishConfirmationRequest(correlationId, context);
+
             this.setStatusInternal(
               reqInfo.callId,
               'awaiting_approval',
@@ -977,23 +1006,18 @@ export class CoreToolScheduler {
     outcome: ToolConfirmationOutcome,
     signal: AbortSignal,
     payload?: ToolConfirmationPayload,
+    skipBusPublish = false,
   ): Promise<void> {
     const toolCall = this.toolCalls.find(
       (c) => c.request.callId === callId && c.status === 'awaiting_approval',
     );
 
+    let waitingToolCall: WaitingToolCall | undefined;
     if (toolCall && toolCall.status === 'awaiting_approval') {
-      await originalOnConfirm(outcome);
-
-      // Publish confirmation response to message bus
-      const messageBus = this.config.getMessageBus();
-      const correlationId = randomUUID();
-      messageBus.respondToConfirmation(
-        correlationId,
-        outcome !== ToolConfirmationOutcome.Cancel,
-        false, // Already confirmed via UI, not requiring further confirmation
-      );
+      waitingToolCall = toolCall as WaitingToolCall;
     }
+
+    await originalOnConfirm(outcome);
 
     if (outcome === ToolConfirmationOutcome.ProceedAlways) {
       await this.autoApproveCompatiblePendingTools(signal, callId);
@@ -1007,8 +1031,10 @@ export class CoreToolScheduler {
         'cancelled',
         'User did not allow tool call',
       );
-    } else if (outcome === ToolConfirmationOutcome.ModifyWithEditor) {
-      const waitingToolCall = toolCall as WaitingToolCall;
+    } else if (
+      outcome === ToolConfirmationOutcome.ModifyWithEditor &&
+      waitingToolCall
+    ) {
       if (isModifiableDeclarativeTool(waitingToolCall.tool)) {
         const modifyContext = waitingToolCall.tool.getModifyContext(signal);
         const editorType = this.getPreferredEditor();
@@ -1038,17 +1064,104 @@ export class CoreToolScheduler {
         } as ToolCallConfirmationDetails);
       }
     } else {
-      // If the client provided new content, apply it before scheduling.
-      if (payload?.newContent && toolCall) {
-        await this._applyInlineModify(
-          toolCall as WaitingToolCall,
-          payload,
-          signal,
-        );
+      if (payload?.newContent && waitingToolCall) {
+        await this._applyInlineModify(waitingToolCall, payload, signal);
       }
       this.setStatusInternal(callId, 'scheduled');
     }
     this.attemptExecutionOfScheduledCalls(signal);
+
+    const correlationId = waitingToolCall?.confirmationDetails?.correlationId;
+    if (correlationId) {
+      this.pendingConfirmations.delete(correlationId);
+      if (!skipBusPublish) {
+        const confirmed =
+          outcome !== ToolConfirmationOutcome.Cancel &&
+          outcome !== ToolConfirmationOutcome.ModifyWithEditor;
+        this.config.getMessageBus().publish({
+          type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+          correlationId,
+          outcome,
+          payload,
+          confirmed,
+          requiresUserConfirmation: false,
+        });
+      }
+    }
+  }
+
+  private approveToolCall(callId: string): void {
+    this.setToolCallOutcome(callId, ToolConfirmationOutcome.ProceedAlways);
+    this.setStatusInternal(callId, 'scheduled');
+  }
+
+  private getPolicyContextFromInvocation(
+    invocation: AnyToolInvocation,
+    request: ToolCallRequestInfo,
+  ): PolicyContext {
+    if (invocation instanceof BaseToolInvocation) {
+      return invocation.getPolicyContext();
+    }
+    return {
+      toolName: request.name,
+      args: request.args,
+    };
+  }
+
+  private evaluatePolicyDecision(
+    invocation: AnyToolInvocation,
+    request: ToolCallRequestInfo,
+  ): { decision: PolicyDecision; context: PolicyContext } {
+    const context = this.getPolicyContextFromInvocation(invocation, request);
+    const policyEngine = this.config.getPolicyEngine();
+    const decision = policyEngine.evaluate(
+      context.toolName,
+      context.args,
+      context.serverName,
+    );
+    return { decision, context };
+  }
+
+  private handlePolicyDenial(
+    request: ToolCallRequestInfo,
+    context: PolicyContext,
+  ): void {
+    const message = `Policy denied execution of tool "${context.toolName}".`;
+    const error = new Error(message);
+    const response = createErrorResponse(
+      request,
+      error,
+      ToolErrorType.POLICY_VIOLATION,
+    );
+    this.setStatusInternal(request.callId, 'error', response);
+
+    const toolCall: FunctionCall = {
+      name: context.toolName,
+      args: context.args,
+    };
+    this.config.getMessageBus().publish({
+      type: MessageBusType.TOOL_POLICY_REJECTION,
+      toolCall,
+      correlationId: randomUUID(),
+      reason: message,
+      serverName: context.serverName,
+    });
+  }
+
+  private publishConfirmationRequest(
+    correlationId: string,
+    context: PolicyContext,
+  ): void {
+    const toolCall: FunctionCall = {
+      name: context.toolName,
+      args: context.args,
+    };
+    this.config.getMessageBus().publish({
+      type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
+      toolCall,
+      correlationId,
+      serverName: context.serverName,
+    });
   }
 
   /**

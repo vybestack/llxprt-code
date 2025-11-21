@@ -376,7 +376,6 @@ Add to `~/.llxprt/settings.json`:
 ```json
 {
   "tools": {
-    "enableMessageBusIntegration": true,
     "policyPath": "/absolute/path/to/my-policy.toml"
   }
 }
@@ -397,7 +396,6 @@ If rules don't appear in `/policies`:
 - Check TOML syntax (use online validator)
 - Verify file path is absolute and correct
 - Check llxprt-code startup logs for errors
-- Ensure `enableMessageBusIntegration: true` is set
 
 ## Legacy --allowed-tools Migration
 

@@ -20,6 +20,7 @@ import {
 } from '../policy/toml-loader.js';
 import { PolicyDecision, type PolicyEngineConfig } from '../policy/types.js';
 import { MessageBusType, type ToolConfirmationRequest } from './types.js';
+import { ToolConfirmationOutcome } from '../tools/tool-confirmation-types.js';
 
 describe('Message Bus Integration Tests', () => {
   let testDir: string;
@@ -166,7 +167,10 @@ priority = 1.5
         .calls[0][0] as ToolConfirmationRequest;
 
       // Simulate user approval
-      messageBus.respondToConfirmation(request.correlationId, true);
+      messageBus.respondToConfirmation(
+        request.correlationId,
+        ToolConfirmationOutcome.ProceedOnce,
+      );
 
       const result = await confirmationPromise;
       expect(result).toBe(true);
@@ -196,13 +200,19 @@ priority = 1.5
         .calls[0][0] as ToolConfirmationRequest;
 
       // Send wrong correlation ID first - should not resolve
-      messageBus.respondToConfirmation('wrong-id', false);
+      messageBus.respondToConfirmation(
+        'wrong-id',
+        ToolConfirmationOutcome.Cancel,
+      );
 
       // Wait a bit to ensure wrong ID doesn't resolve
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Send correct correlation ID
-      messageBus.respondToConfirmation(request.correlationId, true);
+      messageBus.respondToConfirmation(
+        request.correlationId,
+        ToolConfirmationOutcome.ProceedOnce,
+      );
 
       const result = await confirmationPromise;
       expect(result).toBe(true);
@@ -295,12 +305,18 @@ priority = 1.5
         responseHandler,
       );
 
-      messageBus.respondToConfirmation('test-id', true, true);
+      messageBus.respondToConfirmation(
+        'test-id',
+        ToolConfirmationOutcome.ProceedAlways,
+        undefined,
+        true,
+      );
 
       expect(responseHandler).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
           correlationId: 'test-id',
+          outcome: ToolConfirmationOutcome.ProceedAlways,
           confirmed: true,
           requiresUserConfirmation: true,
         }),
@@ -453,7 +469,10 @@ priority = 1.01
 
       const request = requestHandler.mock
         .calls[0][0] as ToolConfirmationRequest;
-      messageBus.respondToConfirmation(request.correlationId, true);
+      messageBus.respondToConfirmation(
+        request.correlationId,
+        ToolConfirmationOutcome.ProceedOnce,
+      );
 
       const editResult = await editPromise;
       expect(editResult).toBe(true);
@@ -490,9 +509,18 @@ priority = 1.01
       expect(requests).toHaveLength(3);
 
       // Respond to each in different order
-      messageBus.respondToConfirmation(requests[1].correlationId, true);
-      messageBus.respondToConfirmation(requests[2].correlationId, false);
-      messageBus.respondToConfirmation(requests[0].correlationId, true);
+      messageBus.respondToConfirmation(
+        requests[1].correlationId,
+        ToolConfirmationOutcome.ProceedOnce,
+      );
+      messageBus.respondToConfirmation(
+        requests[2].correlationId,
+        ToolConfirmationOutcome.Cancel,
+      );
+      messageBus.respondToConfirmation(
+        requests[0].correlationId,
+        ToolConfirmationOutcome.ProceedOnce,
+      );
 
       const results = await Promise.all([promise1, promise2, promise3]);
 
@@ -579,7 +607,10 @@ priority = 1.01
       expect(request2.correlationId).toBe(request3.correlationId);
 
       // Respond to unblock
-      messageBus.respondToConfirmation(request1.correlationId, true);
+      messageBus.respondToConfirmation(
+        request1.correlationId,
+        ToolConfirmationOutcome.ProceedOnce,
+      );
       await confirmationPromise;
 
       messageBus.removeAllListeners();

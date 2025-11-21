@@ -45,47 +45,19 @@ The message bus and policy engine offer several advantages:
 5. **Extensibility**: MCP server trust settings integrate seamlessly with policies
 6. **Observability**: Message bus events provide insight into tool execution flow
 
-## Enabling Message Bus Integration
+## Message Bus Integration
 
-The message bus and policy engine are **disabled by default** to ensure backward compatibility. To enable:
-
-### Via Settings File
-
-Add to your `~/.llxprt/settings.json`:
-
-```json
-{
-  "tools": {
-    "enableMessageBusIntegration": true
-  }
-}
-```
-
-### Via Profile
-
-Add to a profile configuration:
-
-```json
-{
-  "profiles": {
-    "development": {
-      "tools.enableMessageBusIntegration": true
-    }
-  }
-}
-```
-
-After enabling, restart llxprt-code for the change to take effect.
+Message bus routing and the policy engine are now always enabled in llxprt-code. No additional settings or profile changes are required.
 
 ## How It Works
 
-### Without Message Bus (Legacy)
+### Legacy Path (Historical Reference)
 
 ```
 Tool Request → shouldConfirmExecute() → UI Dialog → Execute
 ```
 
-### With Message Bus (New)
+### Current Flow
 
 ```
 Tool Request → Policy Engine → ALLOW/DENY/ASK_USER
@@ -183,14 +155,14 @@ Legacy approval modes map to policy rules:
 - `--allowed-tools`: Each tool becomes an ALLOW rule at priority 2.3
 - `--yolo`: Adds wildcard ALLOW rule at priority 1.999
 
-When message bus integration is disabled (default), the legacy approval mode system continues to work exactly as before.
+Legacy approval settings are now expressed as policy rules that flow through the message bus; there is no toggle to bypass the new architecture.
 
 ## Troubleshooting
 
 ### Policy Not Taking Effect
 
-1. Check that message bus integration is enabled in settings
-2. Verify settings were saved and llxprt-code was restarted
+1. Verify your policy file path (`settings.policyFiles`) is correct and readable
+2. Restart llxprt-code (or reload settings) after edits
 3. Use `/policies` to inspect active rules and priorities
 4. Ensure your custom policy has higher priority than defaults
 

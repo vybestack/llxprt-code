@@ -22,7 +22,7 @@ export interface UsePermissionsModifyTrustReturn {
   /** Set a pending trust level change */
   setPendingTrustLevel: (level: TrustLevel) => void;
   /** Commit the pending trust level change */
-  commitTrustLevel: () => void;
+  commitTrustLevel: (level?: TrustLevel) => void;
   /** Whether the workspace is trusted through IDE */
   isIdeTrusted: boolean;
   /** Whether the workspace is trusted through parent folder */
@@ -92,16 +92,23 @@ export function usePermissionsModifyTrust(): UsePermissionsModifyTrustReturn {
 
   const [pendingTrustLevel, setPendingTrustLevel] = useState<
     TrustLevel | undefined
-  >(undefined);
+  >(currentTrustLevel);
 
   const [hasCommitted, setHasCommitted] = useState(false);
 
-  const commitTrustLevel = useCallback(() => {
-    if (pendingTrustLevel) {
-      trustedFolders.setValue(cwd, pendingTrustLevel);
+  const commitTrustLevel = useCallback(
+    (level?: TrustLevel) => {
+      const nextLevel = level ?? pendingTrustLevel;
+      if (!nextLevel) {
+        return;
+      }
+
+      setPendingTrustLevel(nextLevel);
+      trustedFolders.setValue(cwd, nextLevel);
       setHasCommitted(true);
-    }
-  }, [pendingTrustLevel, trustedFolders, cwd]);
+    },
+    [pendingTrustLevel, trustedFolders, cwd],
+  );
 
   // Determine if restart is required after committing
   const requiresRestart = useMemo(() => {
