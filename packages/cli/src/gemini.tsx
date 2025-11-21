@@ -386,11 +386,15 @@ export async function main() {
     process.stdin.setRawMode(true);
 
     // This cleanup isn't strictly needed but may help in certain situations.
-    process.on('SIGTERM', () => {
+    process.on('SIGTERM', async () => {
       process.stdin.setRawMode(wasRaw);
+      await runExitCleanup();
+      process.exit(0);
     });
-    process.on('SIGINT', () => {
+    process.on('SIGINT', async () => {
       process.stdin.setRawMode(wasRaw);
+      await runExitCleanup();
+      process.exit(130); // Standard exit code for SIGINT
     });
 
     // Detect and enable Kitty keyboard protocol once at startup.
