@@ -161,5 +161,24 @@ describe('ToolConfirmationMessage', () => {
         expect(lastFrame()).not.toContain(alwaysAllowText);
       });
     });
+
+    it('should render confirmation question with accent green color', () => {
+      const mockConfig = {
+        isTrustedFolder: () => true,
+        getIdeMode: () => false,
+      } as unknown as Config;
+
+      const { lastFrame } = renderWithProviders(
+        <ToolConfirmationMessage
+          confirmationDetails={execConfirmationDetails}
+          config={mockConfig}
+          availableTerminalHeight={30}
+          terminalWidth={80}
+        />,
+      );
+
+      // The confirmation question should be colored with AccentGreen
+      expect(lastFrame()).toContain('Allow execution of:');
+    });
   });
 });
