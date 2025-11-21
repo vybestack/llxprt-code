@@ -788,7 +788,9 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
       );
 
       expect(result.exitCode).toBe(1);
-      expect(result.stderr).toMatch(/Failed to parse inline profile|Invalid JSON/i);
+      expect(result.stderr).toMatch(
+        /Failed to parse inline profile|Invalid JSON/i,
+      );
     });
   });
 
@@ -905,14 +907,7 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
       const keyfilePath = await createTempKeyfile(tempDir, 'test-key');
 
       const result = await runCli(
-        [
-          '--profile',
-          cliProfile,
-          '--keyfile',
-          keyfilePath,
-          '--prompt',
-          'test',
-        ],
+        ['--profile', cliProfile, '--keyfile', keyfilePath, '--prompt', 'test'],
         {
           HOME: tempDir,
           LLXPRT_PROFILE: envProfile,
@@ -1036,7 +1031,14 @@ describe('CLI --profile Integration Tests @plan:PLAN-20251118-ISSUE533.P12', () 
       const keyfilePath = await createTempKeyfile(tempDir, 'test-key');
 
       const result = await runCli(
-        ['--profile', maliciousProfile, '--keyfile', keyfilePath, '--prompt', 'test'],
+        [
+          '--profile',
+          maliciousProfile,
+          '--keyfile',
+          keyfilePath,
+          '--prompt',
+          'test',
+        ],
         {
           HOME: tempDir,
         },
