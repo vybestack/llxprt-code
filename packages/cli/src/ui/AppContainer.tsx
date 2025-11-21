@@ -176,10 +176,15 @@ export const AppContainer = (props: AppContainerProps) => {
     }
   }, [config]);
 
-  // Subscribe to message bus for tool confirmation requests
-  useEffect(() => {
-    if (!config.getEnableMessageBusIntegration()) return;
+  // Track message bus confirmation requests separately from slash command confirmations
+  const [messageBusConfirmation, setMessageBusConfirmation] = useState<{
+    prompt: React.ReactNode;
+    onConfirm: (confirmed: boolean) => void;
+  } | null>(null);
 
+  // Subscribe to message bus for tool confirmation requests
+  // This integrates message bus confirmations with the existing UI confirmation flow
+  useEffect(() => {
     const messageBus = config.getMessageBus();
     const unsubscribe = messageBus.subscribe<ToolConfirmationRequest>(
       MessageBusType.TOOL_CONFIRMATION_REQUEST,
@@ -189,25 +194,62 @@ export const AppContainer = (props: AppContainerProps) => {
           message,
         );
 
-        // Bridge message bus event to existing UI confirmation state
-        // This allows the UI to display the confirmation request and collect user input
-        // The user's response will be published back to the message bus
+        // The message bus publishes confirmation requests that need to be displayed
+        // in the UI. We extract the tool details and create a confirmation prompt
+        // that will be shown via the existing confirmationRequest dialog flow.
         const toolCall = message.toolCall;
         const correlationId = message.correlationId;
         const toolName = toolCall.name || 'unknown tool';
 
-        // TODO: This is a placeholder implementation
-        // Full implementation would need to integrate with the existing tool confirmation
-        // UI flow (ToolConfirmationMessage) by creating ToolCallConfirmationDetails
-        // and setting it in the UI state so the user can see the full tool details
-        // and make an informed decision.
-        //
-        // For now, we log that we received the request.
-        // The actual confirmation flow will happen through the existing
-        // onConfirm callbacks in tool execution, which already publish
-        // to the message bus when the feature flag is enabled.
+        // Extract parameters from the function call
+        const args = toolCall.args as Record<string, unknown> | undefined;
+
+        // Create a simple confirmation prompt based on tool type
+        let promptText = `Allow execution of ${toolName}?`;
+
+        // Enhance prompt with specific details based on tool type
+        if (toolName === 'Bash' && args?.command) {
+          promptText = `Allow execution of: ${String(args.command)}?`;
+        } else if (toolName === 'Edit' && args?.file_path) {
+          promptText = `Allow edit to file: ${String(args.file_path)}?`;
+        } else if (toolName === 'Write' && args?.file_path) {
+          promptText = `Allow write to file: ${String(args.file_path)}?`;
+        } else if (toolName === 'WebFetch' && args?.url) {
+          promptText = `Allow fetching URL: ${String(args.url)}?`;
+        } else if (args) {
+          // Generic prompt with args summary
+          const argsSummary = Object.keys(args).slice(0, 3).join(', ');
+          if (argsSummary) {
+            promptText = `Allow execution of ${toolName} with ${argsSummary}?`;
+          }
+        }
+
+        // Create confirmation handler that publishes response back to message bus
+        const handleConfirm = (confirmed: boolean) => {
+          debug.log(
+            `Publishing TOOL_CONFIRMATION_RESPONSE: correlationId=${correlationId}, confirmed=${confirmed}`,
+          );
+
+          // Publish response to message bus so CoreToolScheduler can proceed
+          messageBus.publish({
+            type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+            correlationId,
+            confirmed,
+            requiresUserConfirmation: false,
+          });
+
+          // Clear the confirmation request from UI state
+          setMessageBusConfirmation(null);
+        };
+
+        // Set the confirmation request in UI state
+        setMessageBusConfirmation({
+          prompt: promptText,
+          onConfirm: handleConfirm,
+        });
+
         debug.log(
-          `Received confirmation request for ${toolName} with correlationId=${correlationId}`,
+          `Created message bus confirmation UI for ${toolName} with correlationId=${correlationId}`,
         );
       },
     );
@@ -1365,8 +1407,9 @@ export const AppContainer = (props: AppContainerProps) => {
     workspaceExtensions,
 
     // Confirmation requests
+    // Message bus confirmations take precedence over slash command confirmations
     shellConfirmationRequest,
-    confirmationRequest,
+    confirmationRequest: messageBusConfirmation || confirmationRequest,
 
     // Exit/warning states
     ctrlCPressedOnce,

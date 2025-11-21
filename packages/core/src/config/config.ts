@@ -928,14 +928,6 @@ export class Config {
     return this.policyEngine;
   }
 
-  getEnableMessageBusIntegration(): boolean {
-    return (
-      (this.settingsService.getAllGlobalSettings()[
-        'tools.enableMessageBusIntegration'
-      ] as boolean | undefined) ?? false
-    );
-  }
-
   getShowMemoryUsage(): boolean {
     return this.showMemoryUsage;
   }

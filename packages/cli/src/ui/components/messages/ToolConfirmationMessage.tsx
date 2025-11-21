@@ -52,12 +52,11 @@ export const ToolConfirmationMessage: React.FC<
 
   const handleConfirm = useCallback(
     (outcome: ToolConfirmationOutcome) => {
-      // Check if message bus integration is enabled and we have a correlationId
-      const enableMessageBus = config.getEnableMessageBusIntegration();
+      // Publish response to message bus if we have a correlationId
       const correlationId = confirmationDetails.correlationId;
 
-      if (enableMessageBus && correlationId) {
-        // Message bus integration is enabled - publish response to message bus
+      if (correlationId) {
+        // Publish response to message bus
         const messageBus = config.getMessageBus();
         const confirmed = outcome !== ToolConfirmationOutcome.Cancel;
 
@@ -69,8 +68,7 @@ export const ToolConfirmationMessage: React.FC<
         });
       }
 
-      // Always call onConfirm for backward compatibility
-      // This ensures legacy flow still works
+      // Always call onConfirm
       onConfirm(outcome);
 
       // Handle IDE operations asynchronously without blocking

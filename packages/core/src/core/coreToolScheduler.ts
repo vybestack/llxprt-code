@@ -396,18 +396,12 @@ export class CoreToolScheduler {
     this.getPreferredEditor = options.getPreferredEditor;
     this.onEditorClose = options.onEditorClose;
 
-    // Subscribe to message bus if feature flag is enabled
-    if (
-      typeof this.config.getEnableMessageBusIntegration === 'function' &&
-      this.config.getEnableMessageBusIntegration()
-    ) {
-      const messageBus = this.config.getMessageBus();
-      this.messageBusUnsubscribe =
-        messageBus.subscribe<ToolConfirmationResponse>(
-          MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-          this.handleMessageBusResponse.bind(this),
-        );
-    }
+    // Subscribe to message bus
+    const messageBus = this.config.getMessageBus();
+    this.messageBusUnsubscribe = messageBus.subscribe<ToolConfirmationResponse>(
+      MessageBusType.TOOL_CONFIRMATION_RESPONSE,
+      this.handleMessageBusResponse.bind(this),
+    );
   }
 
   /**
@@ -991,19 +985,14 @@ export class CoreToolScheduler {
     if (toolCall && toolCall.status === 'awaiting_approval') {
       await originalOnConfirm(outcome);
 
-      // If message bus integration is enabled, publish confirmation response
-      if (
-        typeof this.config.getEnableMessageBusIntegration === 'function' &&
-        this.config.getEnableMessageBusIntegration()
-      ) {
-        const messageBus = this.config.getMessageBus();
-        const correlationId = randomUUID();
-        messageBus.respondToConfirmation(
-          correlationId,
-          outcome !== ToolConfirmationOutcome.Cancel,
-          false, // Already confirmed via UI, not requiring further confirmation
-        );
-      }
+      // Publish confirmation response to message bus
+      const messageBus = this.config.getMessageBus();
+      const correlationId = randomUUID();
+      messageBus.respondToConfirmation(
+        correlationId,
+        outcome !== ToolConfirmationOutcome.Cancel,
+        false, // Already confirmed via UI, not requiring further confirmation
+      );
     }
 
     if (outcome === ToolConfirmationOutcome.ProceedAlways) {

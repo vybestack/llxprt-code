@@ -33,10 +33,31 @@ import { MockTool } from '../test-utils/mock-tool.js';
 import { MockModifiableTool } from '../test-utils/tools.js';
 import { Part, PartListUnion } from '@google/genai';
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
+import { PolicyDecision } from '../policy/types.js';
 
 // Test constants for tool output truncation
 const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 30000;
 const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 100;
+
+// Helper function to create a mock MessageBus
+function createMockMessageBus() {
+  return {
+    subscribe: vi.fn().mockReturnValue(() => {}),
+    publish: vi.fn(),
+    respondToConfirmation: vi.fn(),
+    requestConfirmation: vi.fn().mockResolvedValue(true),
+    removeAllListeners: vi.fn(),
+    listenerCount: vi.fn().mockReturnValue(0),
+  };
+}
+
+// Helper function to create a mock PolicyEngine
+function createMockPolicyEngine() {
+  return {
+    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
+    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
+  };
+}
 
 class AbortDuringConfirmationInvocation extends BaseToolInvocation<
   Record<string, unknown>,
@@ -152,6 +173,8 @@ describe('CoreToolScheduler', () => {
         authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -231,6 +254,8 @@ describe('CoreToolScheduler', () => {
       getUseSmartEdit: () => false,
       getUseModelRouter: () => false,
       getGeminiClient: () => null,
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -296,6 +321,8 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
         authType: 'oauth-personal',
       }),
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -363,6 +390,8 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
         authType: 'oauth-personal',
       }),
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -430,6 +459,8 @@ describe('CoreToolScheduler', () => {
         model: 'test-model',
         authType: 'oauth-personal',
       }),
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -465,12 +496,14 @@ describe('CoreToolScheduler', () => {
   describe('getToolSuggestion', () => {
     it('should suggest the top N closest tool names for a typo', () => {
       // Create mocked tool registry
-      const mockConfig = {
-        getToolRegistry: () => mockToolRegistry,
-      } as unknown as Config;
       const mockToolRegistry = {
         getAllToolNames: () => ['list_files', 'read_file', 'write_file'],
       } as unknown as ToolRegistry;
+      const mockConfig = {
+        getToolRegistry: () => mockToolRegistry,
+        getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+        getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
+      } as unknown as Config;
 
       // Create scheduler
       const scheduler = new CoreToolScheduler({
@@ -532,6 +565,8 @@ describe('CoreToolScheduler with payload', () => {
         authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -891,6 +926,8 @@ describe('CoreToolScheduler edit cancellation', () => {
         authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -1167,6 +1204,8 @@ describe('CoreToolScheduler YOLO mode', () => {
         authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
+      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -1692,6 +1731,8 @@ it('injects agentId into ContextAwareTool context', async () => {
       model: 'test-model',
       authType: 'oauth-personal',
     }),
+    getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+    getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
   } as unknown as Config;
 
   const scheduler = new CoreToolScheduler({
