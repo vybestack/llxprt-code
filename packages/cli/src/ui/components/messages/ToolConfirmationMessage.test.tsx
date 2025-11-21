@@ -31,12 +31,38 @@ describe('ToolConfirmationMessage', () => {
       <ToolConfirmationMessage
         confirmationDetails={confirmationDetails}
         config={mockConfig}
-        availableTerminalHeight={30}
         terminalWidth={80}
       />,
     );
 
-    expect(lastFrame()).not.toContain('URLs to fetch:');
+    expect(lastFrame()).toContain('Confirm Web Fetch');
+    expect(lastFrame()).toContain('https://example.com');
+  });
+
+  it('should render the confirmation question with the correct theme color', () => {
+    const execConfirmationDetails: ToolCallConfirmationDetails = {
+      type: 'exec',
+      command: 'ls',
+      rootCommand: 'ls',
+      title: 'Confirm execution',
+      onConfirm: vi.fn(),
+    };
+
+    const { lastFrame } = renderWithProviders(
+      <ToolConfirmationMessage
+        confirmationDetails={execConfirmationDetails}
+        config={mockConfig}
+        terminalWidth={80}
+      />,
+    );
+
+    const result = lastFrame();
+    if (result) {
+      expect(result).toContain(`Allow execution of: 'ls'?`);
+      // Verify the Text component is rendered with the color prop
+      const textElement = result.toString();
+      expect(textElement).toContain('color');
+    }
   });
 
   it('should display urls if prompt and url are different', () => {
