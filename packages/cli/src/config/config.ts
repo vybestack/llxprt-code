@@ -710,7 +710,8 @@ export async function loadCliConfig(
   const profileWarnings: string[] = [];
 
   // @plan:PLAN-20251118-ISSUE533.P13 - Handle inline profile from --profile flag
-  if (bootstrapArgs.profileJson !== null) {
+  // Check for both null and undefined since tests may not set this field
+  if (bootstrapArgs.profileJson != null) {
     try {
       const profile = JSON.parse(bootstrapArgs.profileJson) as Profile;
       loadedProfile = profile;
@@ -747,16 +748,19 @@ export async function loadCliConfig(
 
   // Check for profile to load - either from CLI arg, env var, or default profile setting
   // BUT skip default profile if --provider is explicitly specified
+  // AND skip all file-based profiles entirely when an inline profile (--profile) is provided.
   const profileToLoad =
-    normaliseProfileName(bootstrapArgs.profileName) ??
-    normaliseProfileName(process.env.LLXPRT_PROFILE) ??
-    (argv.provider === undefined
-      ? normaliseProfileName(
-          typeof settings.defaultProfile === 'string'
-            ? settings.defaultProfile
-            : undefined,
-        )
-      : undefined);
+    bootstrapArgs.profileJson != null
+      ? undefined
+      : normaliseProfileName(bootstrapArgs.profileName) ??
+        normaliseProfileName(process.env.LLXPRT_PROFILE) ??
+        (argv.provider === undefined
+          ? normaliseProfileName(
+              typeof settings.defaultProfile === 'string'
+                ? settings.defaultProfile
+                : undefined,
+            )
+          : undefined);
 
   if (profileToLoad) {
     try {

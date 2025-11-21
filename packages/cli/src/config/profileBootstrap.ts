@@ -487,10 +487,25 @@ export function parseInlineProfile(
     };
   }
 
-  // Step 9: Return successful result
+  // Step 9: Validate and extract baseUrl if present
+  let baseUrl: string | undefined;
+  if (obj.baseUrl !== undefined) {
+    if (typeof obj.baseUrl !== 'string' || obj.baseUrl.trim() === '') {
+      return {
+        providerName: '',
+        modelName: '',
+        warnings: [],
+        error: "'baseUrl' must be a non-empty string when provided",
+      };
+    }
+    baseUrl = obj.baseUrl;
+  }
+
+  // Step 10: Return successful result
   return {
     providerName: obj.provider,
     modelName: obj.model,
+    baseUrl,
     warnings: [],
   };
 }
