@@ -752,7 +752,7 @@ export async function loadCliConfig(
   const profileToLoad =
     bootstrapArgs.profileJson != null
       ? undefined
-      : normaliseProfileName(bootstrapArgs.profileName) ??
+      : (normaliseProfileName(bootstrapArgs.profileName) ??
         normaliseProfileName(process.env.LLXPRT_PROFILE) ??
         (argv.provider === undefined
           ? normaliseProfileName(
@@ -760,7 +760,7 @@ export async function loadCliConfig(
                 ? settings.defaultProfile
                 : undefined,
             )
-          : undefined);
+          : undefined));
 
   if (profileToLoad) {
     try {
