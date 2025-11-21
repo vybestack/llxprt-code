@@ -331,16 +331,55 @@ ${authUrl}`,
     );
   }
 
-  const code = await new Promise<string>((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
+  let code: string | undefined;
+
+  const waitForAuthCode = (global as Record<string, unknown>)
+    .__oauth_wait_for_code as (() => Promise<string>) | undefined;
+
+  if (typeof waitForAuthCode === 'function') {
+    const globalObj = global as Record<string, unknown>;
+    const previousProvider = globalObj.__oauth_provider;
+    globalObj.__oauth_provider = 'gemini';
+    globalObj.__oauth_needs_code = true;
+
+    const timeoutMs = 5 * 60 * 1000; // 5 minutes
+    try {
+      code = await Promise.race([
+        waitForAuthCode(),
+        new Promise<string>((_, reject) =>
+          setTimeout(
+            () =>
+              reject(
+                new FatalAuthenticationError(
+                  'Authentication timed out after 5 minutes. Please try again.',
+                ),
+              ),
+            timeoutMs,
+          ),
+        ),
+      ]);
+    } finally {
+      globalObj.__oauth_needs_code = false;
+      if (previousProvider !== undefined) {
+        globalObj.__oauth_provider = previousProvider;
+      } else {
+        delete globalObj.__oauth_provider;
+      }
+    }
+  }
+
+  if (!code) {
+    code = await new Promise<string>((resolve) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+      rl.question('Enter the authorization code: ', (authCode) => {
+        rl.close();
+        resolve(authCode.trim());
+      });
     });
-    rl.question('Enter the authorization code: ', (code) => {
-      rl.close();
-      resolve(code.trim());
-    });
-  });
+  }
 
   if (!code) {
     console.error('Authorization code is required.');

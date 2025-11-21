@@ -39,8 +39,8 @@ describe('GeminiOAuthProvider - Fallback Dialog', () => {
   afterEach(() => {
     vi.clearAllMocks();
     // Clean up global flags
-    delete (global as any).__oauth_provider;
-    delete (global as any).__oauth_needs_code;
+    delete (global as { __oauth_provider?: unknown }).__oauth_provider;
+    delete (global as { __oauth_needs_code?: unknown }).__oauth_needs_code;
   });
 
   describe('Fallback methods availability', () => {
