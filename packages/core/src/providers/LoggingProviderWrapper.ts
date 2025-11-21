@@ -891,8 +891,14 @@ export class LoggingProviderWrapper implements IProvider {
     cache_read_input_tokens: number;
     cache_creation_input_tokens: number;
   } {
-    const cacheReads = Number(tokenUsage.cache_read_input_tokens) || 0;
-    const cacheWrites = Number(tokenUsage.cache_creation_input_tokens) || 0;
+    const cacheReads = Math.max(
+      0,
+      Number(tokenUsage.cache_read_input_tokens) || 0,
+    );
+    const cacheWrites = Math.max(
+      0,
+      Number(tokenUsage.cache_creation_input_tokens) || 0,
+    );
 
     this.debug.debug(
       () =>

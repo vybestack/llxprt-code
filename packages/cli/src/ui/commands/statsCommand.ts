@@ -16,7 +16,7 @@ import {
 export const statsCommand: SlashCommand = {
   name: 'stats',
   altNames: ['usage'],
-  description: 'check session stats. Usage: /stats [model|tools]',
+  description: 'check session stats. Usage: /stats [model|tools|cache]',
   kind: CommandKind.BUILT_IN,
   action: (context: CommandContext) => {
     const now = new Date();

@@ -79,8 +79,9 @@ To identify where cache metrics are being lost, I added debug logging at key poi
 
 4. **ProviderManager.accumulateSessionTokens** (lines 1015-1017):
    ```typescript
-   console.log(
-     `[ProviderManager.accumulateSessionTokens] Called with: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}, cacheReads===undefined: ${usage.cacheReads === undefined}, cacheWrites===undefined: ${usage.cacheWrites === undefined}`,
+   logger.debug(
+     () =>
+       `[ProviderManager.accumulateSessionTokens] Called with: cacheReads=${usage.cacheReads}, cacheWrites=${usage.cacheWrites}, cacheReads===undefined: ${usage.cacheReads === undefined}, cacheWrites===undefined: ${usage.cacheWrites === undefined}`,
    );
    ```
 
@@ -128,9 +129,9 @@ The debug logging will identify which of these is occurring.
 
 ## Files Modified
 
-- `/Users/acoliver/projects/llxprt-code-branches/llxprt-code-1/packages/core/src/providers/anthropic/AnthropicProvider.ts`
-- `/Users/acoliver/projects/llxprt-code-branches/llxprt-code-1/packages/core/src/providers/LoggingProviderWrapper.ts`
-- `/Users/acoliver/projects/llxprt-code-branches/llxprt-code-1/packages/core/src/providers/ProviderManager.ts`
+- `packages/core/src/providers/anthropic/AnthropicProvider.ts`
+- `packages/core/src/providers/LoggingProviderWrapper.ts`
+- `packages/core/src/providers/ProviderManager.ts`
 
 ## Next Steps
 
