@@ -290,6 +290,51 @@ llxprt --keyfile ~/.keys/anthropic.key
 llxprt --provider anthropic --model claude-3-5-sonnet-20240620
 ```
 
+### Inline Profiles for CI/CD
+
+For GitHub Actions and other CI/CD environments where filesystem access is limited or inconvenient, use the `--profile` flag to pass profile configuration as an inline JSON string:
+
+```bash
+# Basic inline profile
+llxprt --profile '{"provider":"openai","model":"gpt-4","key":"sk-xxx"}' --prompt "Hello"
+
+# From environment variable (recommended for CI/CD)
+PROFILE_JSON='{"provider":"anthropic","model":"claude-sonnet-4","key":"sk-ant-xxx"}'
+llxprt --profile "$PROFILE_JSON" --prompt "Review code"
+
+# With CLI overrides (CLI flags take precedence)
+llxprt --profile '{"provider":"openai","model":"gpt-3.5-turbo"}' --model gpt-4
+```
+
+**GitHub Actions Example:**
+
+```yaml
+name: AI Code Review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run AI Review
+        env:
+          PROFILE: '{"provider":"anthropic","model":"claude-sonnet-4","key":"${{ secrets.ANTHROPIC_KEY }}"}'
+        run: |
+          llxprt --profile "$PROFILE" --prompt "Review this PR for security issues"
+```
+
+**Important Notes:**
+
+- `--profile` and `--profile-load` are mutually exclusive (cannot use both)
+- Inline profiles support all the same fields as file-based profiles
+- CLI arguments (`--model`, `--provider`, `--key`) override profile values
+- Maximum JSON size: 10KB
+- Shell escaping varies by platform:
+  - Bash/Zsh: Use single quotes `'{"provider":"openai"}'`
+  - PowerShell: Use single quotes or escape double quotes
+  - GitHub Actions YAML: Use environment variables to avoid escaping issues
+
 ### Authentication Best Practices
 
 1. **Use Keyfiles** instead of embedding keys:
