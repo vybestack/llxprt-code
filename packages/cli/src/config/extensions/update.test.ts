@@ -89,10 +89,7 @@ describe('update tests', () => {
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });
-    vi.mocked(isWorkspaceTrusted).mockReturnValue({
-      isTrusted: true,
-      source: 'file',
-    });
+    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
     vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
     Object.values(mockGit).forEach((fn) => fn.mockReset());
   });
@@ -142,7 +139,6 @@ describe('update tests', () => {
       const updateInfo = await updateExtension(
         extension,
         tempHomeDir,
-        async (_) => true,
         ExtensionUpdateState.UPDATE_AVAILABLE,
         () => {},
       );
@@ -200,7 +196,6 @@ describe('update tests', () => {
       await updateExtension(
         extension,
         tempHomeDir,
-        async (_) => true,
         ExtensionUpdateState.UPDATE_AVAILABLE,
         setExtensionUpdateState,
       );
@@ -243,7 +238,6 @@ describe('update tests', () => {
         updateExtension(
           extension,
           tempHomeDir,
-          async (_) => true,
           ExtensionUpdateState.UPDATE_AVAILABLE,
           setExtensionUpdateState,
         ),
@@ -380,7 +374,6 @@ describe('update tests', () => {
             extensionState = newState;
           }
         },
-        tempWorkspaceDir,
       );
       const result = results.get('local-extension');
       expect(result).toBe(ExtensionUpdateState.UP_TO_DATE);
@@ -421,7 +414,6 @@ describe('update tests', () => {
             extensionState = newState;
           }
         },
-        tempWorkspaceDir,
       );
       const result = results.get('local-extension');
       expect(result).toBe(ExtensionUpdateState.UPDATE_AVAILABLE);

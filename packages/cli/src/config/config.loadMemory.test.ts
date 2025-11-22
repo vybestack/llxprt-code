@@ -321,9 +321,13 @@ describe('loadCliConfig memory discovery', () => {
       set: undefined,
     };
 
+    const { ExtensionEnablementManager, ExtensionStorage } = await import(
+      './extension.js'
+    );
     const config = await loadCliConfig(
       settings,
       [],
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
       'test-session',
       argv,
       workspaceDir,

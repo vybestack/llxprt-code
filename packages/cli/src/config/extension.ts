@@ -21,7 +21,9 @@ import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import { downloadFromGitHubRelease } from './extensions/github.js';
 import type { LoadExtensionContext } from './extensions/variableSchema.js';
 import chalk from 'chalk';
+import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
+export { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
 
 export const EXTENSIONS_CONFIG_FILENAME = 'llxprt-extension.json';
@@ -125,7 +127,6 @@ export function loadExtensions(
   workspaceDir: string = process.cwd(),
 ): Extension[] {
   const settings = loadSettings(workspaceDir).merged;
-  const disabledExtensions = settings.extensions?.disabled ?? [];
   const allExtensions = [...loadUserExtensions(workspaceDir)];
 
   if ((isWorkspaceTrusted(settings) ?? true) && !settings.extensionManagement) {
