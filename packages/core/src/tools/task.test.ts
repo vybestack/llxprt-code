@@ -92,7 +92,7 @@ describe('TaskTool', () => {
     );
     expect(scope.runInteractive).toHaveBeenCalledTimes(1);
     expect(scope.runNonInteractive).not.toHaveBeenCalled();
-    expect(updateOutput).toHaveBeenCalledWith('[agent-42] progress update');
+    expect(updateOutput).toHaveBeenCalledWith('[agent-42] progress update\n');
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(result.metadata).toEqual({
       agentId: 'agent-42',

@@ -296,14 +296,8 @@ class TaskToolInvocation extends BaseToolInvocation<
     if (updateOutput) {
       const existingHandler = scope.onMessage;
       scope.onMessage = (message: string) => {
-        // Ensure each streamed chunk renders on its own line in TTY/CLI UI
-        // by normalizing line endings and appending a newline if missing
         if (message?.trim()) {
-          const normalizedMessage = message.replace(/[\r\n?|\r]/g, '\n');
-          const messageWithNewline = normalizedMessage.endsWith('\n')
-            ? normalizedMessage
-            : normalizedMessage + '\n';
-          updateOutput(`[${agentId}] ${messageWithNewline}`);
+          updateOutput(`[${agentId}] ${message}`);
         }
         existingHandler?.(message);
       };
