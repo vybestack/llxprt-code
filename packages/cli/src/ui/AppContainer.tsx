@@ -33,6 +33,7 @@ import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
+import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
 import { loadHierarchicalLlxprtMemory } from '../config/config.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
@@ -52,12 +53,13 @@ import process from 'node:process';
 import {
   getErrorMessage,
   type Config,
-  getAllLlxprtMdFilenames,
+  // getAllLlxprtMdFilenames, // TODO: Restore context files
   isEditorAvailable,
   EditorType,
   type IdeContext,
   ideContext,
   type IModel,
+  // type IdeInfo, // TODO: Fix IDE integration
   getSettingsService,
   DebugLogger,
   uiTelemetryService,
@@ -76,7 +78,7 @@ import { useKeypress, Key } from './hooks/useKeypress.js';
 import { keyMatchers, Command } from './keyMatchers.js';
 import * as fs from 'fs';
 import { type AppState, type AppAction } from './reducers/appReducer.js';
-import { UpdateObject } from './utils/updateCheck.js';
+// import { UpdateObject } from './utils/updateCheck.js'; // TODO: Implement update checking
 import ansiEscapes from 'ansi-escapes';
 import { useSettingsCommand } from './hooks/useSettingsCommand.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
@@ -132,8 +134,8 @@ export const AppContainer = (props: AppContainerProps) => {
   const {
     config,
     settings,
-    startupWarnings = [],
-    version,
+    // startupWarnings = [], // TODO: Display startup warnings in UI
+    // version, // TODO: Use for version display
     appState,
     appDispatch,
   } = props;
@@ -141,9 +143,9 @@ export const AppContainer = (props: AppContainerProps) => {
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
   useBracketedPaste();
-  const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
+  // const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null); // TODO: Implement update checking
   const { stdout } = useStdout();
-  const nightly = version.includes('nightly');
+  // const nightly = version.includes('nightly'); // TODO: Use for nightly-specific features
   const historyLimits = useMemo(
     () => ({
       maxItems:
@@ -182,7 +184,9 @@ export const AppContainer = (props: AppContainerProps) => {
     !idePromptAnswered;
 
   useEffect(() => {
-    const cleanup = setUpdateHandler(addItem, setUpdateInfo);
+    const cleanup = setUpdateHandler(addItem, () => {
+      /* TODO: Implement update notification */
+    });
 
     // Attach addItem to OAuth providers for displaying auth URLs
     if (addItem) {
@@ -387,12 +391,25 @@ export const AppContainer = (props: AppContainerProps) => {
     setIsPermissionsDialogOpen(false);
   }, []);
 
+  // TODO: Implement logging dialog
+  const openLoggingDialog = useCallback(() => {
+    debug.log('Logging dialog not yet implemented');
+  }, []);
+
   const {
     showWorkspaceMigrationDialog,
     workspaceExtensions,
     onWorkspaceMigrationDialogOpen,
     onWorkspaceMigrationDialogClose,
   } = useWorkspaceMigration(settings);
+
+  const extensions = config.getExtensions();
+  const {
+    extensionsUpdateState,
+    setExtensionsUpdateState,
+    confirmUpdateExtensionRequests,
+    addConfirmUpdateExtensionRequest,
+  } = useExtensionUpdates(extensions, addItem, config.getWorkingDir());
 
   useEffect(() => {
     const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
@@ -817,6 +834,43 @@ export const AppContainer = (props: AppContainerProps) => {
     toggleVimEnabled,
   } = useVimMode();
 
+  const slashCommandProcessorActions = useMemo(
+    () => ({
+      openAuthDialog,
+      openThemeDialog,
+      openEditorDialog,
+      openPrivacyNotice,
+      openSettingsDialog,
+      openLoggingDialog,
+      openProviderModelDialog,
+      openPermissionsDialog,
+      openProviderDialog,
+      openLoadProfileDialog,
+      quit: setQuittingMessages,
+      setDebugMessage,
+      toggleCorgiMode,
+      setExtensionsUpdateState,
+      addConfirmUpdateExtensionRequest,
+    }),
+    [
+      openAuthDialog,
+      openThemeDialog,
+      openEditorDialog,
+      openPrivacyNotice,
+      openSettingsDialog,
+      openLoggingDialog,
+      openProviderModelDialog,
+      openPermissionsDialog,
+      openProviderDialog,
+      openLoadProfileDialog,
+      setQuittingMessages,
+      setDebugMessage,
+      toggleCorgiMode,
+      setExtensionsUpdateState,
+      addConfirmUpdateExtensionRequest,
+    ],
+  );
+
   const {
     handleSlashCommand,
     slashCommands,
@@ -831,22 +885,12 @@ export const AppContainer = (props: AppContainerProps) => {
     clearItems,
     loadHistory,
     refreshStatic,
-    setDebugMessage,
-    openThemeDialog,
-    openAuthDialog,
-    openEditorDialog,
-    openProviderDialog,
-    openProviderModelDialog,
-    openLoadProfileDialog,
-    openToolsDialog,
-    toggleCorgiMode,
-    setQuittingMessages,
-    openPrivacyNotice,
-    openSettingsDialog,
     toggleVimEnabled,
     setIsProcessing,
     setLlxprtMdFileCount,
-    openPermissionsDialog,
+    slashCommandProcessorActions,
+    extensionsUpdateState,
+    true, // isConfigInitialized
   );
 
   // Memoize viewport to ensure it updates when inputWidth changes
@@ -1232,13 +1276,14 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const branchName = useGitBranchName(config.getTargetDir());
 
-  const contextFileNames = useMemo(() => {
-    const fromSettings = settings.merged.contextFileName;
-    if (fromSettings) {
-      return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
-    }
-    return getAllLlxprtMdFilenames();
-  }, [settings.merged.contextFileName]);
+  // TODO: Use contextFileNames for context management
+  // const contextFileNames = useMemo(() => {
+  //   const fromSettings = settings.merged.contextFileName;
+  //   if (fromSettings) {
+  //     return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
+  //   }
+  //   return getAllLlxprtMdFilenames();
+  // }, [settings.merged.contextFileName]);
 
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
   const geminiClient = config.getGeminiClient();
@@ -1289,6 +1334,10 @@ export const AppContainer = (props: AppContainerProps) => {
 
   // Build UIState object
   const uiState: UIState = {
+    // Core app context
+    config,
+    settings,
+
     // Terminal dimensions
     terminalWidth,
     terminalHeight,
@@ -1336,6 +1385,7 @@ export const AppContainer = (props: AppContainerProps) => {
     // Confirmation requests
     shellConfirmationRequest,
     confirmationRequest,
+    confirmUpdateExtensionRequests,
 
     // Exit/warning states
     ctrlCPressedOnce,
@@ -1391,7 +1441,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // IDE prompt
     shouldShowIdePrompt: !!shouldShowIdePrompt,
-    currentIDE: currentIDE?.displayName,
+    currentIDE,
 
     // Trust
     isRestarting,
@@ -1522,17 +1572,7 @@ export const AppContainer = (props: AppContainerProps) => {
   return (
     <UIStateProvider value={uiState}>
       <UIActionsProvider value={uiActions}>
-        <DefaultAppLayout
-          config={config}
-          settings={settings}
-          startupWarnings={startupWarnings}
-          version={version}
-          nightly={nightly}
-          mainControlsRef={mainControlsRef}
-          availableTerminalHeight={availableTerminalHeight}
-          contextFileNames={contextFileNames}
-          updateInfo={updateInfo}
-        />
+        <DefaultAppLayout />
       </UIActionsProvider>
     </UIStateProvider>
   );

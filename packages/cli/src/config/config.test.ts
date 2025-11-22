@@ -14,6 +14,9 @@ import {
   DEFAULT_GEMINI_MODEL,
   DEFAULT_GEMINI_MODEL_AUTO,
   OutputFormat,
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+  clearActiveProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { loadCliConfig, parseArguments, type CliArgs } from './config.js';
 import type { Settings } from './settings.js';
@@ -336,12 +339,14 @@ describe('loadCliConfig', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should set showMemoryUsage to true when --show-memory-usage flag is present', async () => {
@@ -550,12 +555,14 @@ describe('loadCliConfig telemetry', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should set telemetry to false by default when no flag or setting is present', async () => {
@@ -954,11 +961,13 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
     // Other common mocks would be reset here.
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should pass extension context file paths to loadServerHierarchicalMemory', async () => {
@@ -1099,10 +1108,12 @@ describe('mergeExcludeTools', () => {
 
   beforeEach(() => {
     process.stdin.isTTY = true;
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.stdin.isTTY = originalIsTTY;
+    clearActiveProviderRuntimeContext();
   });
 
   it('should merge excludeTools from settings and extensions', async () => {
@@ -1342,10 +1353,12 @@ describe('Approval mode tool exclusion logic', () => {
   beforeEach(() => {
     process.stdin.isTTY = false; // Ensure non-interactive mode
     vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.stdin.isTTY = originalIsTTY;
+    clearActiveProviderRuntimeContext();
   });
 
   it('should exclude all interactive tools in non-interactive mode with default approval mode', async () => {
@@ -1585,12 +1598,14 @@ describe('loadCliConfig with allowed-mcp-server-names', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   const baseSettings: Settings = {
@@ -2093,12 +2108,14 @@ describe('loadCliConfig folderTrust', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should be false when folderTrust is false', async () => {
@@ -2175,12 +2192,14 @@ describe('loadCliConfig with includeDirectories', () => {
     vi.spyOn(process, 'cwd').mockReturnValue(
       path.resolve(path.sep, 'home', 'user', 'project'),
     );
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should combine and resolve paths from settings and CLI arguments', async () => {
@@ -2235,12 +2254,14 @@ describe('loadCliConfig chatCompression', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should pass chatCompression settings to the core config', async () => {
@@ -2293,12 +2314,14 @@ describe('loadCliConfig useRipgrep', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should be true by default when useRipgrep is not set in settings', async () => {
@@ -2413,12 +2436,14 @@ describe('screenReader configuration', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should use screenReader value from settings if CLI flag is not present (settings true)', async () => {
@@ -2506,6 +2531,7 @@ describe('loadCliConfig tool exclusions', () => {
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
     vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
@@ -2513,6 +2539,7 @@ describe('loadCliConfig tool exclusions', () => {
     process.stdin.isTTY = originalIsTTY;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should not exclude interactive tools in interactive mode without YOLO', async () => {
@@ -2601,6 +2628,7 @@ describe('loadCliConfig interactive', () => {
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
@@ -2608,6 +2636,7 @@ describe('loadCliConfig interactive', () => {
     process.stdin.isTTY = originalIsTTY;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should be interactive if isTTY and no prompt', async () => {
@@ -2746,12 +2775,14 @@ describe('loadCliConfig approval mode', () => {
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js']; // Reset argv for each test
     vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   it('should default to DEFAULT approval mode when no flags are set', async () => {
@@ -2969,12 +3000,14 @@ describe('loadCliConfig fileFiltering', () => {
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js']; // Reset argv for each test
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
   afterEach(() => {
     process.argv = originalArgv;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    clearActiveProviderRuntimeContext();
   });
 
   const testCases: Array<{

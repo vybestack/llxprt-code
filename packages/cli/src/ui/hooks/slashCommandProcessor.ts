@@ -20,8 +20,7 @@ import {
   GitService,
   Logger,
   logSlashCommand,
-  makeSlashCommandEvent,
-  SlashCommandStatus,
+  SlashCommandEvent,
   ToolConfirmationOutcome,
   Storage,
   IdeClient,
@@ -50,6 +49,11 @@ interface SlashCommandProcessorActions {
   openEditorDialog: () => void;
   openPrivacyNotice: () => void;
   openSettingsDialog: () => void;
+  openLoggingDialog: () => void;
+  openProviderModelDialog: () => void;
+  openPermissionsDialog: () => void;
+  openProviderDialog: () => void;
+  openLoadProfileDialog: () => void;
   quit: (messages: HistoryItem[]) => void;
   setDebugMessage: (message: string) => void;
   toggleCorgiMode: () => void;
@@ -71,7 +75,7 @@ export const useSlashCommandProcessor = (
   refreshStatic: () => void,
   toggleVimEnabled: () => Promise<boolean>,
   setIsProcessing: (isProcessing: boolean) => void,
-  setGeminiMdFileCount: (count: number) => void,
+  setLlxprtMdFileCount: (count: number) => void,
   actions: SlashCommandProcessorActions,
   extensionsUpdateState: Map<string, ExtensionUpdateState>,
   isConfigInitialized: boolean,
@@ -141,7 +145,11 @@ export const useSlashCommandProcessor = (
           modelVersion: message.modelVersion,
           selectedAuthType: message.selectedAuthType,
           gcpProject: message.gcpProject,
+          keyfile: message.keyfile || '',
+          key: message.key || '',
           ideClient: message.ideClient,
+          provider: message.provider || 'Unknown',
+          baseURL: message.baseURL || '',
         };
       } else if (message.type === MessageType.HELP) {
         historyItemContent = {
@@ -171,10 +179,29 @@ export const useSlashCommandProcessor = (
           type: 'compression',
           compression: message.compression,
         };
-      } else {
+      } else if (message.type === MessageType.CACHE_STATS) {
+        historyItemContent = {
+          type: 'cache_stats',
+        };
+      } else if (
+        message.type === MessageType.INFO ||
+        message.type === MessageType.ERROR ||
+        message.type === MessageType.USER ||
+        message.type === MessageType.WARNING
+      ) {
         historyItemContent = {
           type: message.type,
-          text: message.content,
+          text: message.content || '',
+        };
+      } else if (message.type === MessageType.GEMINI) {
+        historyItemContent = {
+          type: 'cache_stats',
+        };
+      } else {
+        // Fallback for unknown types - treat as info message
+        historyItemContent = {
+          type: MessageType.INFO,
+          text: message.content || '',
         };
       }
       addItem(historyItemContent, message.timestamp.getTime());
@@ -202,7 +229,9 @@ export const useSlashCommandProcessor = (
         setPendingItem,
         toggleCorgiMode: actions.toggleCorgiMode,
         toggleVimEnabled,
-        setGeminiMdFileCount,
+        setGeminiMdFileCount: setLlxprtMdFileCount,
+        setLlxprtMdFileCount,
+        updateHistoryTokenCount: session.updateHistoryTokenCount,
         reloadCommands,
         extensionsUpdateState,
         setExtensionsUpdateState: actions.setExtensionsUpdateState,
@@ -224,12 +253,13 @@ export const useSlashCommandProcessor = (
       clearItems,
       refreshStatic,
       session.stats,
+      session.updateHistoryTokenCount,
       actions,
       pendingItem,
       setPendingItem,
       toggleVimEnabled,
       sessionShellAllowlist,
-      setGeminiMdFileCount,
+      setLlxprtMdFileCount,
       reloadCommands,
       extensionsUpdateState,
     ],
@@ -300,16 +330,10 @@ export const useSlashCommandProcessor = (
       addItem({ type: MessageType.USER, text: trimmed }, userMessageTimestamp);
 
       let hasError = false;
-      const {
-        commandToExecute,
-        args,
-        canonicalPath: resolvedCommandPath,
-      } = parseSlashCommand(trimmed, commands);
+      const { commandToExecute, args } = parseSlashCommand(trimmed, commands);
 
-      const subcommand =
-        resolvedCommandPath.length > 1
-          ? resolvedCommandPath.slice(1).join(' ')
-          : undefined;
+      // Extract subcommand from args if present
+      const subcommand = args.trim() !== '' ? args.trim() : undefined;
 
       try {
         if (commandToExecute) {
@@ -377,6 +401,21 @@ export const useSlashCommandProcessor = (
                     case 'settings':
                       actions.openSettingsDialog();
                       return { type: 'handled' };
+                    case 'logging':
+                      actions.openLoggingDialog();
+                      return { type: 'handled' };
+                    case 'providerModel':
+                      actions.openProviderModelDialog();
+                      return { type: 'handled' };
+                    case 'permissions':
+                      actions.openPermissionsDialog();
+                      return { type: 'handled' };
+                    case 'provider':
+                      actions.openProviderDialog();
+                      return { type: 'handled' };
+                    case 'loadProfile':
+                      actions.openLoadProfileDialog();
+                      return { type: 'handled' };
                     case 'help':
                       return { type: 'handled' };
                     default: {
@@ -388,7 +427,6 @@ export const useSlashCommandProcessor = (
                   }
                 case 'load_history': {
                   config?.getGeminiClient()?.setHistory(result.clientHistory);
-                  config?.getGeminiClient()?.stripThoughtsFromHistory();
                   fullCommandContext.ui.clear();
                   result.history.forEach((item, index) => {
                     fullCommandContext.ui.addItem(item, index);
@@ -399,11 +437,36 @@ export const useSlashCommandProcessor = (
                   actions.quit(result.messages);
                   return { type: 'handled' };
 
-                case 'submit_prompt':
+                case 'submit_prompt': {
+                  // Convert PartListUnion to string
+                  let contentString: string;
+                  if (typeof result.content === 'string') {
+                    contentString = result.content;
+                  } else if (Array.isArray(result.content)) {
+                    // Extract text from parts array
+                    contentString = result.content
+                      .map((part) => {
+                        if (typeof part === 'string') {
+                          return part;
+                        }
+                        if (
+                          typeof part === 'object' &&
+                          part !== null &&
+                          'text' in part
+                        ) {
+                          return (part as { text?: string }).text || '';
+                        }
+                        return '';
+                      })
+                      .join('');
+                  } else {
+                    contentString = '';
+                  }
                   return {
                     type: 'submit_prompt',
-                    content: result.content,
+                    content: contentString,
                   };
+                }
                 case 'confirm_shell_commands': {
                   const { outcome, approvedCommands } = await new Promise<{
                     outcome: ToolConfirmationOutcome;
@@ -506,12 +569,11 @@ export const useSlashCommandProcessor = (
         return { type: 'handled' };
       } catch (e: unknown) {
         hasError = true;
-        if (config) {
-          const event = makeSlashCommandEvent({
-            command: resolvedCommandPath[0],
+        if (config && commandToExecute) {
+          const event = new SlashCommandEvent(
+            commandToExecute.name,
             subcommand,
-            status: SlashCommandStatus.ERROR,
-          });
+          );
           logSlashCommand(config, event);
         }
         addItem(
@@ -523,12 +585,11 @@ export const useSlashCommandProcessor = (
         );
         return { type: 'handled' };
       } finally {
-        if (config && resolvedCommandPath[0] && !hasError) {
-          const event = makeSlashCommandEvent({
-            command: resolvedCommandPath[0],
+        if (config && commandToExecute && !hasError) {
+          const event = new SlashCommandEvent(
+            commandToExecute.name,
             subcommand,
-            status: SlashCommandStatus.SUCCESS,
-          });
+          );
           logSlashCommand(config, event);
         }
         setIsProcessing(false);

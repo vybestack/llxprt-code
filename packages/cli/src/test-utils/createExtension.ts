@@ -32,7 +32,7 @@ export function createExtension({
   );
 
   if (addContextFile) {
-    fs.writeFileSync(path.join(extDir, 'GEMINI.md'), 'context');
+    fs.writeFileSync(path.join(extDir, 'LLXPRT.md'), 'context');
   }
 
   if (contextFileName) {

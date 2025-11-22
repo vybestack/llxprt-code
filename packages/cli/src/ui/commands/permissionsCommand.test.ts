@@ -35,9 +35,13 @@ describe('permissionsCommand', () => {
         loadHistory: () => {},
         toggleCorgiMode: () => {},
         toggleVimEnabled: async () => false,
+        setGeminiMdFileCount: () => {},
         setLlxprtMdFileCount: () => {},
         updateHistoryTokenCount: () => {},
         reloadCommands: () => {},
+        extensionsUpdateState: new Map(),
+        setExtensionsUpdateState: () => {},
+        addConfirmUpdateExtensionRequest: () => {},
       },
       session: {
         stats: {} as never,
