@@ -619,6 +619,7 @@ jobs:
           SELECTION_MODE: ${{ steps.select_issue.outputs.selection_mode }}
         run: |
           set -euo pipefail
+          unset GITHUB_TOKEN  # Use GH_TOKEN (personal token) instead
           echo "Selection mode: ${SELECTION_MODE}"
           echo "Branch name: ${ISSUE_BRANCH}"
 
@@ -664,6 +665,7 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
           set -euo pipefail
+          unset GITHUB_TOKEN  # Use GH_TOKEN (personal token) so CodeRabbit responds
           echo "Posting CodeRabbit review request to PR #${PR_NUMBER}"
           gh pr comment "${PR_NUMBER}" --body "@coderabbit review"
 
