@@ -221,6 +221,13 @@ export function loadExtension(context: LoadExtensionContext): Extension | null {
       return null;
     }
 
+    try {
+      validateName(config.name);
+    } catch (e) {
+      console.error(getErrorMessage(e));
+      return null;
+    }
+
     config = resolveEnvVarsInObject(config);
 
     if (config.mcpServers) {
@@ -477,6 +484,14 @@ export async function installExtension(
  * Shows warnings about what the extension will do and prompts for confirmation.
  * @param extensionConfig The extension configuration to show consent information for.
  */
+export function validateName(name: string): void {
+  if (!/^[a-zA-Z0-9-]+$/.test(name)) {
+    throw new Error(
+      `Invalid extension name: "${name}". Only letters (a-z, A-Z), numbers (0-9), and dashes (-) are allowed.`,
+    );
+  }
+}
+
 export async function requestConsent(extensionConfig: ExtensionConfig) {
   const output: string[] = [];
   const mcpServerEntries = Object.entries(extensionConfig.mcpServers || {});
@@ -533,8 +548,13 @@ async function loadExtensionConfig(
     if (!config.name || !config.version) {
       return null;
     }
+    validateName(config.name);
     return config;
-  } catch (_) {
+  } catch (e) {
+    // Re-throw validation errors so installExtension() can report them
+    if (e instanceof Error && e.message.includes('Invalid extension name')) {
+      throw e;
+    }
     return null;
   }
 }

@@ -340,6 +340,27 @@ describe('loadExtensions', () => {
     expect(serverConfig.env!.MISSING_VAR).toBe('$UNDEFINED_ENV_VAR');
     expect(serverConfig.env!.MISSING_VAR_BRACES).toBe('${ALSO_UNDEFINED}');
   });
+
+  it('should return null for extensions with invalid names', () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const badExtDir = createExtension({
+      extensionsDir: workspaceExtensionsDir,
+      name: 'bad_name',
+      version: '1.0.0',
+    });
+
+    const extension = loadExtension({
+      extensionDir: badExtDir,
+      workspaceDir: tempWorkspaceDir,
+    });
+
+    expect(extension).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid extension name: "bad_name"'),
+    );
+    consoleSpy.mockRestore();
+  });
 });
 
 describe('annotateActiveExtensions', () => {
@@ -528,6 +549,18 @@ describe('installExtension', () => {
       type: 'link',
     });
     fs.rmSync(targetExtDir, { recursive: true, force: true });
+  });
+
+  it('should throw an error for invalid extension names', async () => {
+    const sourceExtDir = createExtension({
+      extensionsDir: tempHomeDir,
+      name: 'bad_name',
+      version: '1.0.0',
+    });
+
+    await expect(
+      installExtension({ source: sourceExtDir, type: 'local' }),
+    ).rejects.toThrow('Invalid extension name: "bad_name"');
   });
 });
 

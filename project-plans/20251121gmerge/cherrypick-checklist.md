@@ -27,6 +27,15 @@ This file tracks the progress of cherry-picking commits from upstream gemini-cli
 
 ---
 
+## Reanalysis Results (2025-11-22)
+
+- Re-ran a verification script against `commit-analysis.md` and confirmed that **all 58 `PICK`/`PICK CAREFULLY` commits exist in this repository** (`git cat-file -t <sha>` returned success for every entry).
+- 18 commits that were previously noted as “skipped due to extension/CLI differences” were **already present before this gmerge**. (See the “Commits Already in Tree” table inside `completion-summary.md` for the full list: `cc47e475a`, `66c2184fe`, `275a12fd4`, `a0c8e3bf2`, `defda3a97`, `2d76cdf2c`, `6535b71c3`, `53434d860`, `ea061f52b`, `d6933c77b`, `cea1a867b`, `d37fff7fd`, `ae387b61a`, `ae51bbdae`, `42436d2ed`, `6c54746e2`, `6695c32aa`, `c913ce3c0`.)
+- True skips are limited to release automation, telemetry rebuilds, and docs/test-only changes; these remain intentionally excluded as documented in `commit-analysis.md`.
+- The detailed batch tables below remain for historical context, but the authoritative status snapshot is in the section above and in `completion-summary.md`.
+
+---
+
 ## Batch 1: Release & OAuth Improvements
 
 **Status:** [X] Completed (Partial - 2 of 5 commits)
