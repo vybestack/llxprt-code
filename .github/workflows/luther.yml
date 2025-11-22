@@ -409,7 +409,7 @@ jobs:
           issue_comments_text="$(format_comments "${ISSUE_COMMENTS_PATH:-}")"
           pr_comments_text="$(format_comments "${PR_COMMENTS_PATH:-}")"
           qa_names=("format" "lint" "typecheck" "test" "build")
-          qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test:ci" "npm run build")
+          qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test" "npm run build")
 
           max_attempts="${LUTHER_MAX_ATTEMPTS:-3}"
           success_attempt=""
@@ -460,8 +460,10 @@ jobs:
               echo "- Limit work to resolving this issue; avoid touching unrelated areas."
               echo "- Leave git commits/pushes to the workflow; keep changes in the working tree."
               echo "- Reference the issue as #${ISSUE_NUMBER} inside any summaries you produce."
-              echo "- After making changes, run (locally) the same QA commands that the workflow will run:"
+              echo "- CRITICAL: After making changes, you MUST run these QA commands FROM THE REPOSITORY ROOT:"
               echo "  npm run format && npm run lint && npm run typecheck && npm run test && npm run build"
+              echo "- CRITICAL: Verify that ALL commands complete successfully with exit code 0 before claiming success."
+              echo "- CRITICAL: If any command fails, fix the issue and re-run ALL commands again."
               echo "- Do not use web-search or web-fetch tools; stay within the repository context."
               echo "- Do not spawn subagents (e.g., /task or named profiles like 'joethecoder'); complete the work yourself in this session."
               echo "- Do not rely on local-only profiles or secrets that are unavailable in CI; assume only the data in this repository is accessible."
