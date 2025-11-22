@@ -287,5 +287,4 @@ describe('run_shell_command', () => {
     validateModelOutput(result, fileName, 'Platform-specific listing test');
     expect(result).toContain(fileName);
   });
->>>>>>> e8a065cb9 (Make --allowed-tools work in non-interactive mode (#9114))
 });
