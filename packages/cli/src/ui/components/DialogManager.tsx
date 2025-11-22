@@ -15,6 +15,10 @@ import { SettingsDialog } from './SettingsDialog.js';
 // import { AuthInProgress } from '../auth/AuthInProgress.js'; // TODO: Not yet ported from upstream
 // import { AuthDialog } from '../auth/AuthDialog.js'; // TODO: Not yet ported from upstream
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
+import { ProviderDialog } from './ProviderDialog.js';
+import { ProviderModelDialog } from './ProviderModelDialog.js';
+import { LoadProfileDialog } from './LoadProfileDialog.js';
+import { ToolsDialog } from './ToolsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
 import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
 // import { ProQuotaDialog } from './ProQuotaDialog.js'; // TODO: Not yet ported from upstream
@@ -190,6 +194,54 @@ export const DialogManager = ({
           onSelect={uiActions.handleEditorSelect}
           settings={settings}
           onExit={uiActions.exitEditorDialog}
+        />
+      </Box>
+    );
+  }
+  if (uiState.isProviderDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <ProviderDialog
+          providers={uiState.providerOptions}
+          currentProvider={uiState.selectedProvider}
+          onSelect={uiActions.handleProviderSelect}
+          onClose={uiActions.exitProviderDialog}
+        />
+      </Box>
+    );
+  }
+  if (uiState.isProviderModelDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <ProviderModelDialog
+          models={uiState.providerModels}
+          currentModel={uiState.currentModel}
+          onSelect={uiActions.handleProviderModelChange}
+          onClose={uiActions.exitProviderModelDialog}
+        />
+      </Box>
+    );
+  }
+  if (uiState.isLoadProfileDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <LoadProfileDialog
+          profiles={uiState.profiles}
+          onSelect={uiActions.handleProfileSelect}
+          onClose={uiActions.exitLoadProfileDialog}
+        />
+      </Box>
+    );
+  }
+  if (uiState.isToolsDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <ToolsDialog
+          tools={uiState.toolsDialogTools}
+          action={uiState.toolsDialogAction}
+          disabledTools={uiState.toolsDialogDisabledTools}
+          onSelect={uiActions.handleToolsSelect}
+          onClose={uiActions.exitToolsDialog}
         />
       </Box>
     );
