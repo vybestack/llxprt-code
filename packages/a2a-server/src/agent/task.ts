@@ -17,7 +17,6 @@ import {
   createAgentRuntimeState,
   AuthType,
   DEFAULT_AGENT_ID,
-  safeLiteralReplace,
 } from '@vybestack/llxprt-code-core';
 import type {
   ToolConfirmationPayload,
@@ -30,7 +29,6 @@ import type {
   Config,
   UserTierId,
   AnyDeclarativeTool,
-  AnsiOutput,
 } from '@vybestack/llxprt-code-core';
 import type { RequestContext } from '@a2a-js/sdk/server';
 import { type ExecutionEventBus } from '@a2a-js/sdk/server';
