@@ -38,6 +38,14 @@ export function saveSingleSetting(
   loadedSettings: LoadedSettings,
   scope: SettingScope,
 ): void {
+  // Skip saving coreToolSettings as it's UI-only
+  if (
+    settingKey === 'coreToolSettings' ||
+    settingKey.startsWith('coreToolSettings.')
+  ) {
+    return;
+  }
+
   const pathParts = settingKey.split('.');
 
   if (pathParts.length === 1) {

@@ -156,6 +156,7 @@ export const DialogManager = ({
           settings={settings}
           onSelect={uiActions.closeSettingsDialog}
           onRestartRequest={uiActions.handleSettingsRestart}
+          config={config}
         />
       </Box>
     );
