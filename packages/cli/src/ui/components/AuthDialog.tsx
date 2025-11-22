@@ -59,18 +59,22 @@ export function AuthDialog({
 
   const items = [
     {
+      key: 'oauth_gemini',
       label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}`,
       value: 'oauth_gemini',
     },
     {
+      key: 'oauth_qwen',
       label: `Qwen (OAuth) ${enabledProviders.has('oauth_qwen') ? '[ON]' : '[OFF]'}`,
       value: 'oauth_qwen',
     },
     {
+      key: 'oauth_anthropic',
       label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}`,
       value: 'oauth_anthropic',
     },
     {
+      key: 'close',
       label: 'Close',
       value: 'close',
     },

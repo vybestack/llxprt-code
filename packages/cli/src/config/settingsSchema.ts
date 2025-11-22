@@ -509,8 +509,7 @@ export const SETTINGS_SCHEMA = {
     category: 'UI',
     requiresRestart: false,
     default: false,
-    description:
-      'Show LLxprt status and thoughts in the terminal window title',
+    description: 'Show LLxprt status and thoughts in the terminal window title',
     showInDialog: true,
   },
   // Footer configuration settings - adapted to llxprt's flat structure

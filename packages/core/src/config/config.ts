@@ -316,6 +316,9 @@ export interface ConfigParameters {
   useSmartEdit?: boolean;
   settingsService?: SettingsService;
   policyEngineConfig?: PolicyEngineConfig;
+  truncateToolOutputThreshold?: number;
+  truncateToolOutputLines?: number;
+  enableToolOutputTruncation?: boolean;
 }
 
 export class Config {
@@ -442,6 +445,9 @@ export class Config {
   private readonly useSmartEdit: boolean;
   private readonly messageBus: MessageBus;
   private readonly policyEngine: PolicyEngine;
+  truncateToolOutputThreshold: number;
+  truncateToolOutputLines: number;
+  enableToolOutputTruncation: boolean;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;

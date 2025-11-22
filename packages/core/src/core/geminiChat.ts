@@ -834,7 +834,7 @@ export class GeminiChat {
       };
 
       response = await retryWithBackoff(apiCall, {
-        shouldRetry: (error: unknown) => {
+        shouldRetryOnError: (error: unknown) => {
           // Check for known error messages and codes.
           if (error instanceof ApiError && error.message) {
             if (error.status === 400) return false;
@@ -1249,7 +1249,7 @@ export class GeminiChat {
           return directResponse;
         },
         {
-          shouldRetry: (error: unknown) => {
+          shouldRetryOnError: (error: unknown) => {
             if (error instanceof ApiError && error.message) {
               if (error.status === 400) return false;
               if (isSchemaDepthError(error.message)) return false;

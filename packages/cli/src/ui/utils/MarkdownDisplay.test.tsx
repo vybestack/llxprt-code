@@ -188,7 +188,7 @@ Another paragraph.
       { path: '', settings: {} },
       {
         path: '',
-        settings: { ui: { showLineNumbers: false } },
+        settings: { showLineNumbers: false },
       },
       { path: '', settings: {} },
       true,

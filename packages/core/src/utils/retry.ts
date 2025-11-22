@@ -6,11 +6,6 @@
  */
 
 import type { GenerateContentResponse } from '@google/genai';
-import { AuthType } from '../core/contentGenerator.js';
-import {
-  isProQuotaExceededError,
-  isGenericQuotaExceededError,
-} from './quotaErrorDetection.js';
 import { DebugLogger } from '../debug/index.js';
 
 export interface HttpError extends Error {
@@ -274,19 +269,13 @@ export async function retryWithBackoff<T>(
     ? Object.fromEntries(Object.entries(options).filter(([_, v]) => v != null))
     : {};
 
-<<<<<<< HEAD
-  const { maxAttempts, initialDelayMs, maxDelayMs, shouldRetry } = {
-=======
   const {
     maxAttempts,
     initialDelayMs,
     maxDelayMs,
-    onPersistent429,
-    authType,
     shouldRetryOnError,
     shouldRetryOnContent,
   } = {
->>>>>>> ac4a79223 (feat(core): Add content-based retries for JSON generation (#9264))
     ...DEFAULT_RETRY_OPTIONS,
     ...cleanOptions,
   };

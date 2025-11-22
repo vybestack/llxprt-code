@@ -1160,7 +1160,6 @@ export const AppContainer = (props: AppContainerProps) => {
     [confirmationRequest],
   );
 
-<<<<<<< HEAD
   const mainControlsRef = useRef<DOMElement>(null);
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
@@ -1236,17 +1235,16 @@ export const AppContainer = (props: AppContainerProps) => {
   // Update terminal title with LLxprt status and thoughts
   useEffect(() => {
     // Respect both showStatusInTitle and hideWindowTitle settings (using flat structure)
-    if (
-      !settings.merged.showStatusInTitle ||
-      settings.merged.hideWindowTitle
-    )
+    if (!settings.merged.showStatusInTitle || settings.merged.hideWindowTitle)
       return;
 
     let title;
     if (streamingState === StreamingState.Idle) {
       title = originalTitleRef.current;
     } else {
-      const statusText = thought?.subject?.replace(/[\r\n]+/g, ' ').substring(0, 80);
+      const statusText = thought?.subject
+        ?.replace(/[\r\n]+/g, ' ')
+        .substring(0, 80);
       title = statusText || originalTitleRef.current;
     }
 
