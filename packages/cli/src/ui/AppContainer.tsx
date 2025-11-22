@@ -134,8 +134,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const {
     config,
     settings,
-    // startupWarnings = [], // TODO: Display startup warnings in UI
-    // version, // TODO: Use for version display
+    startupWarnings = [],
     appState,
     appDispatch,
   } = props;
@@ -145,7 +144,7 @@ export const AppContainer = (props: AppContainerProps) => {
   useBracketedPaste();
   // const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null); // TODO: Implement update checking
   const { stdout } = useStdout();
-  // const nightly = version.includes('nightly'); // TODO: Use for nightly-specific features
+  const nightly = props.version.includes('nightly'); // TODO: Use for nightly-specific features
   const historyLimits = useMemo(
     () => ({
       maxItems:
@@ -1277,13 +1276,13 @@ export const AppContainer = (props: AppContainerProps) => {
   const branchName = useGitBranchName(config.getTargetDir());
 
   // TODO: Use contextFileNames for context management
-  // const contextFileNames = useMemo(() => {
-  //   const fromSettings = settings.merged.contextFileName;
-  //   if (fromSettings) {
-  //     return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
-  //   }
-  //   return getAllLlxprtMdFilenames();
-  // }, [settings.merged.contextFileName]);
+  const contextFileNames = useMemo(() => {
+    const fromSettings = settings.merged.contextFileName;
+    if (fromSettings) {
+      return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
+    }
+    return [];
+  }, [settings.merged.contextFileName]);
 
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
   const geminiClient = config.getGeminiClient();
@@ -1572,7 +1571,17 @@ export const AppContainer = (props: AppContainerProps) => {
   return (
     <UIStateProvider value={uiState}>
       <UIActionsProvider value={uiActions}>
-        <DefaultAppLayout />
+        <DefaultAppLayout
+          config={config}
+          settings={settings}
+          startupWarnings={startupWarnings}
+          version={props.version}
+          nightly={nightly}
+          mainControlsRef={mainControlsRef}
+          availableTerminalHeight={availableTerminalHeight}
+          contextFileNames={contextFileNames}
+          updateInfo={null}
+        />
       </UIActionsProvider>
     </UIStateProvider>
   );
