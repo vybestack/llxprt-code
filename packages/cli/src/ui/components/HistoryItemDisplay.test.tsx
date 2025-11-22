@@ -146,6 +146,7 @@ describe('<HistoryItemDisplay />', () => {
         item={historyItem}
         terminalWidth={80}
         isPending={false}
+        config={mockConfig}
       />,
     );
 
@@ -182,6 +183,7 @@ describe('<HistoryItemDisplay />', () => {
         item={historyItem}
         terminalWidth={80}
         isPending={false}
+        config={mockConfig}
       />,
     );
 
