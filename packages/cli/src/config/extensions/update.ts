@@ -156,16 +156,13 @@ export async function checkForAllExtensionUpdates(
         });
         continue;
       }
-      await checkForExtensionUpdate(
-        extension,
-        (updatedState) => {
-          setExtensionsUpdateState((prev) => {
-            newStates = new Map(prev);
-            newStates.set(extension.name, updatedState);
-            return newStates;
-          });
-        },
-      );
+      await checkForExtensionUpdate(extension, (updatedState) => {
+        setExtensionsUpdateState((prev) => {
+          newStates = new Map(prev);
+          newStates.set(extension.name, updatedState);
+          return newStates;
+        });
+      });
     }
   }
   return newStates;

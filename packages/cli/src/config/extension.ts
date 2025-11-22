@@ -22,7 +22,6 @@ import { downloadFromGitHubRelease } from './extensions/github.js';
 import type { LoadExtensionContext } from './extensions/variableSchema.js';
 import chalk from 'chalk';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
-import type { UseHistoryManagerReturn } from '../ui/hooks/useHistoryManager.js';
 import type { ConfirmationRequest } from '../ui/types.js';
 
 export { ExtensionEnablementManager } from './extensions/extensionEnablement.js';

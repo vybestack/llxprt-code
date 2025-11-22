@@ -75,7 +75,9 @@ describe('ExtensionAutoUpdater', () => {
   it('performs immediate updates when available', async () => {
     const extension = createExtension('sample');
     const loader = vi.fn(async () => [extension]);
-    const checker = vi.fn(async () => ExtensionUpdateState.UPDATE_AVAILABLE);
+    const checker = vi.fn(async (_ext, setUpdateState) => {
+      setUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+    });
     const updateExecutor = vi.fn(async () => ({
       name: extension.config.name,
       originalVersion: '1.0.0',
@@ -108,10 +110,15 @@ describe('ExtensionAutoUpdater', () => {
   it('queues updates for restart mode and installs on the next run', async () => {
     const extension = createExtension('queue');
     const loader = vi.fn(async () => [extension]);
-    const checker = vi
-      .fn()
-      .mockResolvedValueOnce(ExtensionUpdateState.UPDATE_AVAILABLE)
-      .mockResolvedValue(ExtensionUpdateState.UP_TO_DATE);
+    let callCount = 0;
+    const checker = vi.fn(async (_ext, setUpdateState) => {
+      callCount++;
+      if (callCount === 1) {
+        setUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+      } else {
+        setUpdateState(ExtensionUpdateState.UP_TO_DATE);
+      }
+    });
     const updateExecutor = vi.fn(async () => ({
       name: extension.config.name,
       originalVersion: '1.0.0',
@@ -144,7 +151,9 @@ describe('ExtensionAutoUpdater', () => {
   it('emits notifications for manual mode without auto-installing', async () => {
     const extension = createExtension('manual');
     const loader = vi.fn(async () => [extension]);
-    const checker = vi.fn(async () => ExtensionUpdateState.UPDATE_AVAILABLE);
+    const checker = vi.fn(async (_ext, setUpdateState) => {
+      setUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+    });
     const updateExecutor = vi.fn();
     const store = createMemoryStateStore();
     const messages: Array<{ level: string; message: string }> = [];

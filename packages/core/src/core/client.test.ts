@@ -27,7 +27,6 @@ import {
   Content,
   EmbedContentResponse,
   GenerateContentResponse,
-  GenerateContentParameters,
   GoogleGenAI,
   Part,
   PartListUnion,

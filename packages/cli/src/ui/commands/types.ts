@@ -11,7 +11,7 @@ import type {
   HistoryItem,
   ConfirmationRequest,
 } from '../types.js';
-import type { Config, GitService, Logger, ProfileManager, SubagentManager } from '@vybestack/llxprt-code-core';
+import type { Config, GitService, Logger } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';

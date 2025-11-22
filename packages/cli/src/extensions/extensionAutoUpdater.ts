@@ -8,15 +8,16 @@ import {
   ExtensionUpdateState,
   checkForExtensionUpdate,
 } from '../config/extensions/github.js';
-import {
-  type Extension,
-  loadUserExtensions,
-} from '../config/extension.js';
+import { type Extension, loadUserExtensions } from '../config/extension.js';
 import {
   updateExtension,
   type ExtensionUpdateInfo,
 } from '../config/extensions/update.js';
-import { Storage, getErrorMessage, type GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import {
+  Storage,
+  getErrorMessage,
+  type GeminiCLIExtension,
+} from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -189,7 +190,16 @@ export class ExtensionAutoUpdater {
     this.extensionLoader =
       options.extensionLoader ??
       (async () => loadUserExtensions(this.workspaceDir));
-    this.updateExecutor = options.updateExecutor ?? updateExtension;
+    this.updateExecutor =
+      options.updateExecutor ??
+      ((extension, cwd, currentState, setExtensionUpdateState) =>
+        updateExtension(
+          extension,
+          cwd,
+          async () => true, // Auto-approve in background mode
+          currentState,
+          setExtensionUpdateState,
+        ));
     this.updateChecker = options.updateChecker ?? checkForExtensionUpdate;
     this.now = options.now ?? Date.now;
   }
