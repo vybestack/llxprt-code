@@ -214,6 +214,7 @@ describe('<HistoryItemDisplay />', () => {
         isPending={false}
         terminalWidth={80}
         availableTerminalHeight={10}
+        config={mockConfig}
       />,
     );
 
@@ -233,6 +234,7 @@ describe('<HistoryItemDisplay />', () => {
         terminalWidth={80}
         availableTerminalHeight={10}
         availableTerminalHeightGemini={Number.MAX_SAFE_INTEGER}
+        config={mockConfig}
       />,
     );
 
@@ -251,6 +253,7 @@ describe('<HistoryItemDisplay />', () => {
         isPending={false}
         terminalWidth={80}
         availableTerminalHeight={10}
+        config={mockConfig}
       />,
     );
 
@@ -270,6 +273,7 @@ describe('<HistoryItemDisplay />', () => {
         terminalWidth={80}
         availableTerminalHeight={10}
         availableTerminalHeightGemini={Number.MAX_SAFE_INTEGER}
+        config={mockConfig}
       />,
     );
 

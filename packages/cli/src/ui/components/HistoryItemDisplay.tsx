@@ -53,9 +53,9 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   isFocused = true,
   slashCommands = [],
   showTodoPanel = true,
-  activeShellPtyId,
-  embeddedShellFocused,
-  availableTerminalHeightGemini,
+  activeShellPtyId: _activeShellPtyId,
+  embeddedShellFocused: _embeddedShellFocused,
+  availableTerminalHeightGemini: _availableTerminalHeightGemini,
 }) => {
   const itemForDisplay = useMemo(() => escapeAnsiCtrlCodes(item), [item]);
 
@@ -73,7 +73,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
           text={itemForDisplay.text}
           isPending={isPending}
           availableTerminalHeight={
-            availableTerminalHeightGemini ?? availableTerminalHeight
+            _availableTerminalHeightGemini ?? availableTerminalHeight
           }
           terminalWidth={terminalWidth}
           model={itemForDisplay.model}
@@ -84,7 +84,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
           text={itemForDisplay.text}
           isPending={isPending}
           availableTerminalHeight={
-            availableTerminalHeightGemini ?? availableTerminalHeight
+            _availableTerminalHeightGemini ?? availableTerminalHeight
           }
           terminalWidth={terminalWidth}
         />

@@ -840,12 +840,15 @@ describe('Gemini Client (client.ts)', () => {
       );
     });
 
-    it('updates telemetry when compression inflates the token count', async () => {
+    it('does NOT update telemetry when compression inflates the token count', async () => {
       vi.mocked(tokenLimit).mockReturnValue(1000);
       mockCountTokens.mockResolvedValue({
         totalTokens: 999,
       });
       mockGetTotalTokens.mockReturnValue(1000);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        1000,
+      );
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: '...history...' }] },
       ]);
@@ -872,12 +875,8 @@ describe('Gemini Client (client.ts)', () => {
         newTokenCount: inflatedTokenCount,
         originalTokenCount: 1000,
       });
-      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledWith(
-        inflatedTokenCount,
-      );
-      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledTimes(
-        1,
-      );
+      // Compression failed, so telemetry should NOT be updated
+      expect(uiTelemetryService.setLastPromptTokenCount).not.toHaveBeenCalled();
     });
 
     it('should not trigger summarization if token count is below threshold', async () => {

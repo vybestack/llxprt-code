@@ -184,16 +184,14 @@ Another paragraph.
   it('hides line numbers in code blocks when showLineNumbers is false', () => {
     const text = '```javascript\nconst x = 1;\n```'.replace(/\n/g, EOL);
     const settings = new LoadedSettings(
-      { path: '', settings: {}, originalSettings: {} },
-      { path: '', settings: {}, originalSettings: {} },
+      { path: '', settings: {} },
+      { path: '', settings: {} },
       {
         path: '',
         settings: { ui: { showLineNumbers: false } },
-        originalSettings: { ui: { showLineNumbers: false } },
       },
-      { path: '', settings: {}, originalSettings: {} },
+      { path: '', settings: {} },
       true,
-      new Set(),
     );
 
     const { lastFrame } = renderWithProviders(
