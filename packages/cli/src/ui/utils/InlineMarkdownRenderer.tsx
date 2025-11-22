@@ -110,10 +110,11 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
         if (linkMatch) {
           const linkText = linkMatch[1];
           const url = linkMatch[2];
+          // Create OSC 8 hyperlink for clickable terminal links
+          const osc8Link = `\u001b]8;;${url}\u001b\\${linkText}\u001b]8;;\u001b\\`;
           renderedNode = (
             <Text key={key}>
-              {linkText}
-              <Text color={Colors.AccentBlue}> ({url})</Text>
+              <Text color={Colors.AccentBlue}>{osc8Link}</Text>
             </Text>
           );
         }
@@ -132,9 +133,11 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
           </Text>
         );
       } else if (fullMatch.match(/^https?:\/\//)) {
+        // Create OSC 8 hyperlink for clickable terminal links on plain URLs
+        const osc8Link = `\u001b]8;;${fullMatch}\u001b\\${fullMatch}\u001b]8;;\u001b\\`;
         renderedNode = (
           <Text key={key} color={Colors.AccentBlue}>
-            {fullMatch}
+            {osc8Link}
           </Text>
         );
       }
