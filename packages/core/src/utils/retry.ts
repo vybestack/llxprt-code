@@ -262,14 +262,7 @@ export async function retryWithBackoff<T>(
     ? Object.fromEntries(Object.entries(options).filter(([_, v]) => v != null))
     : {};
 
-  const {
-    maxAttempts,
-    initialDelayMs,
-    maxDelayMs,
-    onPersistent429,
-    authType,
-    shouldRetry,
-  } = {
+  const { maxAttempts, initialDelayMs, maxDelayMs, shouldRetry } = {
     ...DEFAULT_RETRY_OPTIONS,
     ...cleanOptions,
   };

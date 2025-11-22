@@ -17,7 +17,6 @@ import {
   GenerateContentResponseUsageMetadata,
   Tool,
   PartListUnion,
-  FinishReason,
   ApiError,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
