@@ -613,7 +613,7 @@ jobs:
         if: steps.commit_push.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_SECRET }}
-          GITHUB_TOKEN: ''  # Override job-level GITHUB_TOKEN to force gh to use GH_TOKEN
+          GITHUB_TOKEN: '' # Override job-level GITHUB_TOKEN to force gh to use GH_TOKEN
           ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
           ISSUE_TITLE: ${{ steps.issue_data.outputs.title }}
           ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
@@ -664,7 +664,7 @@ jobs:
         if: steps.commit_push.outputs.has_changes == 'true' && steps.pr.outputs.pr_number != ''
         env:
           GH_TOKEN: ${{ secrets.GH_SECRET }}
-          GITHUB_TOKEN: ''  # Override job-level GITHUB_TOKEN to force gh to use GH_TOKEN
+          GITHUB_TOKEN: '' # Override job-level GITHUB_TOKEN to force gh to use GH_TOKEN
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
           set -euo pipefail

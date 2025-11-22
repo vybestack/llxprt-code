@@ -316,6 +316,7 @@ jobs:
       - name: 'Collect provider error reports'
         if: failure()
         id: 'collect_provider_errors'
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p provider-errors
