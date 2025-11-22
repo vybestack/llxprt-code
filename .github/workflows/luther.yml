@@ -512,9 +512,9 @@ jobs:
                 cmd="${qa_commands[$idx]}"
                 name="${qa_names[$idx]}"
                 log_file="${attempt_dir}/${name//[: ]/_}.log"
-                echo "Attempt ${attempt}: running ${cmd}"
+                echo "Attempt ${attempt}: running ${cmd} in ${GITHUB_WORKSPACE}"
                 set +e
-                bash -lc "$cmd" >"$log_file" 2>&1
+                bash -c "cd \"${GITHUB_WORKSPACE}\" && pwd && $cmd" >"$log_file" 2>&1
                 cmd_exit=$?
                 set -e
                 if [[ "$cmd_exit" -ne 0 ]]; then
