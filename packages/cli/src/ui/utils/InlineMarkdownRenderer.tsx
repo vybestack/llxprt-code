@@ -133,7 +133,7 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
         );
       } else if (fullMatch.match(/^https?:\/\//)) {
         renderedNode = (
-          <Text key={key} color={Colors.AccentBlue}>
+          <Text key={key} color={Colors.AccentBlue} underline>
             {fullMatch}
           </Text>
         );
