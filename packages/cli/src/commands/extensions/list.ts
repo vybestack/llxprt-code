@@ -33,7 +33,7 @@ export async function handleList() {
         .join('\n\n'),
     );
   } catch (error) {
-    console.error((error as Error).message);
+    console.error(getErrorMessage(error));
     process.exit(1);
   }
 }
