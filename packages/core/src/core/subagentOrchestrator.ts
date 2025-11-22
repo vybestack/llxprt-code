@@ -177,6 +177,12 @@ export class SubagentOrchestrator {
       config: subagent,
       runtime: runtimeResult,
       dispose: async () => {
+        // 1. Dispose the scope first to clean up abort controllers and event listeners
+        if (typeof scope.dispose === 'function') {
+          scope.dispose();
+        }
+
+        // 2. Then clean up the history service
         const history = runtimeResult.history ?? scope.runtimeContext.history;
         if (history) {
           const disposable = (history as { dispose?: () => void }).dispose;
