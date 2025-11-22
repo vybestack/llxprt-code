@@ -136,7 +136,6 @@ describe('update tests', () => {
           })!,
         ],
         [],
-        process.cwd(),
       )[0];
       const updateInfo = await updateExtension(
         extension,
@@ -193,7 +192,6 @@ describe('update tests', () => {
           })!,
         ],
         [],
-        process.cwd(),
       )[0];
       await updateExtension(
         extension,
@@ -234,7 +232,6 @@ describe('update tests', () => {
           })!,
         ],
         [],
-        process.cwd(),
       )[0];
       await expect(
         updateExtension(
@@ -273,7 +270,6 @@ describe('update tests', () => {
           })!,
         ],
         [],
-        process.cwd(),
       )[0];
 
       mockGit.getRemotes.mockResolvedValue([
@@ -316,7 +312,6 @@ describe('update tests', () => {
           })!,
         ],
         [],
-        process.cwd(),
       )[0];
 
       mockGit.getRemotes.mockResolvedValue([
@@ -356,7 +351,6 @@ describe('update tests', () => {
           })!,
         ],
         [],
-        process.cwd(),
       )[0];
       let extensionState = new Map();
       const results = await checkForAllExtensionUpdates(
@@ -392,7 +386,6 @@ describe('update tests', () => {
           })!,
         ],
         [],
-        process.cwd(),
       )[0];
 
       mockGit.getRemotes.mockRejectedValue(new Error('Git error'));

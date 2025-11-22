@@ -15,7 +15,6 @@ import {
 } from './github.js';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import type * as os from 'node:os';
-import type { ExtensionInstallMetadata } from '../extension.js';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 
 const mockPlatform = vi.hoisted(() => vi.fn());

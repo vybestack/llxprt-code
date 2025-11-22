@@ -29,7 +29,12 @@ const updateOutput = (info: ExtensionUpdateInfo) =>
 
 export async function handleUpdate(args: UpdateArgs) {
   const workingDir = process.cwd();
-  const extensions = annotateActiveExtensions(loadExtensions(workingDir), workingDir);
+  const loadedExtensions = loadExtensions(workingDir);
+  // Mark all extensions as active for CLI update command
+  const extensions = annotateActiveExtensions(
+    loadedExtensions,
+    loadedExtensions.map((ext) => ext.config.name),
+  );
 
   if (args.all) {
     try {

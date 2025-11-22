@@ -105,8 +105,6 @@ import {
   type UIActions,
 } from './contexts/UIActionsContext.js';
 import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
-import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
-import { FocusContext } from './contexts/FocusContext.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
@@ -146,15 +144,6 @@ export const AppContainer = (props: AppContainerProps) => {
   const { isNarrow } = useResponsive();
   useBracketedPaste();
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
-
-  const extensions = config.getExtensions();
-  const { extensionsUpdateState, setExtensionsUpdateState } =
-    useExtensionUpdates(
-      extensions,
-      historyManager.addItem,
-      config.getWorkingDir(),
-    );
-
   const { stdout } = useStdout();
   const nightly = version.includes('nightly');
   const historyLimits = useMemo(
@@ -1296,213 +1285,281 @@ export const AppContainer = (props: AppContainerProps) => {
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
   const geminiClient = config.getGeminiClient();
 
-  const pendingHistoryItems = useMemo(
-    () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
-    [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
-  );
+  useEffect(() => {
+    if (
+      initialPrompt &&
+      !initialPromptSubmitted.current &&
+      !isAuthenticating &&
+      !isAuthDialogOpen &&
+      !isThemeDialogOpen &&
+      !isEditorDialogOpen &&
+      !isProviderDialogOpen &&
+      !isProviderModelDialogOpen &&
+      !isToolsDialogOpen &&
+      !showPrivacyNotice &&
+      geminiClient
+    ) {
+      submitQuery(initialPrompt);
+      initialPromptSubmitted.current = true;
+    }
+  }, [
+    initialPrompt,
+    submitQuery,
+    isAuthenticating,
+    isAuthDialogOpen,
+    isThemeDialogOpen,
+    isEditorDialogOpen,
+    isProviderDialogOpen,
+    isProviderModelDialogOpen,
+    isToolsDialogOpen,
+    showPrivacyNotice,
+    geminiClient,
+  ]);
 
-  const uiState: UIState = useMemo(
-    () => ({
-      history: historyManager.history,
-      isThemeDialogOpen,
-      themeError,
-      isAuthenticating,
-      isConfigInitialized,
-      authError,
-      isAuthDialogOpen,
-      editorError,
-      isEditorDialogOpen,
-      showPrivacyNotice,
-      corgiMode,
-      debugMessage,
-      quittingMessages,
-      isSettingsDialogOpen,
-      slashCommands,
-      pendingSlashCommandHistoryItems,
-      commandContext,
-      shellConfirmationRequest,
-      confirmationRequest,
-      loopDetectionConfirmationRequest,
-      geminiMdFileCount,
-      streamingState,
-      initError,
-      pendingGeminiHistoryItems,
-      thought,
-      shellModeActive,
-      userMessages,
-      buffer,
-      inputWidth,
-      suggestionsWidth,
-      isInputActive,
-      shouldShowIdePrompt,
-      isFolderTrustDialogOpen: isFolderTrustDialogOpen ?? false,
-      isTrustedFolder,
-      constrainHeight,
-      showErrorDetails,
-      filteredConsoleMessages,
-      ideContextState,
-      showToolDescriptions,
-      ctrlCPressedOnce,
-      ctrlDPressedOnce,
-      showEscapePrompt,
-      isFocused,
-      elapsedTime,
-      currentLoadingPhrase,
-      historyRemountKey,
-      messageQueue,
-      showAutoAcceptIndicator,
-      showWorkspaceMigrationDialog,
-      workspaceExtensions,
-      currentModel,
-      userTier,
-      proQuotaRequest,
-      contextFileNames,
-      errorCount,
-      availableTerminalHeight,
-      mainAreaWidth,
-      staticAreaMaxItemHeight,
-      staticExtraHeight,
-      dialogsVisible,
-      pendingHistoryItems,
-      nightly,
-      branchName,
-      sessionStats,
-      terminalWidth,
-      terminalHeight,
-      mainControlsRef,
-      currentIDE,
-      updateInfo,
-      showIdeRestartPrompt,
-      isRestarting,
-      extensionsUpdateState,
-      activePtyId,
-      shellFocused,
-    }),
-    [
-      historyManager.history,
-      isThemeDialogOpen,
-      themeError,
-      isAuthenticating,
-      isConfigInitialized,
-      authError,
-      isAuthDialogOpen,
-      editorError,
-      isEditorDialogOpen,
-      showPrivacyNotice,
-      corgiMode,
-      debugMessage,
-      quittingMessages,
-      isSettingsDialogOpen,
-      slashCommands,
-      pendingSlashCommandHistoryItems,
-      commandContext,
-      shellConfirmationRequest,
-      confirmationRequest,
-      loopDetectionConfirmationRequest,
-      geminiMdFileCount,
-      streamingState,
-      initError,
-      pendingGeminiHistoryItems,
-      thought,
-      shellModeActive,
-      userMessages,
-      buffer,
-      inputWidth,
-      suggestionsWidth,
-      isInputActive,
-      shouldShowIdePrompt,
-      isFolderTrustDialogOpen,
-      isTrustedFolder,
-      constrainHeight,
-      showErrorDetails,
-      filteredConsoleMessages,
-      ideContextState,
-      showToolDescriptions,
-      ctrlCPressedOnce,
-      ctrlDPressedOnce,
-      showEscapePrompt,
-      isFocused,
-      elapsedTime,
-      currentLoadingPhrase,
-      historyRemountKey,
-      messageQueue,
-      showAutoAcceptIndicator,
-      showWorkspaceMigrationDialog,
-      workspaceExtensions,
-      userTier,
-      proQuotaRequest,
-      contextFileNames,
-      errorCount,
-      availableTerminalHeight,
-      mainAreaWidth,
-      staticAreaMaxItemHeight,
-      staticExtraHeight,
-      dialogsVisible,
-      pendingHistoryItems,
-      nightly,
-      branchName,
-      sessionStats,
-      terminalWidth,
-      terminalHeight,
-      mainControlsRef,
-      currentIDE,
-      updateInfo,
-      showIdeRestartPrompt,
-      isRestarting,
-      currentModel,
-      extensionsUpdateState,
-      activePtyId,
-      shellFocused,
-    ],
-  );
+  const mainAreaWidth = Math.floor(terminalWidth * 0.9);
 
-  const uiActions: UIActions = useMemo(
-    () => ({
-      handleThemeSelect,
-      handleThemeHighlight,
-      handleAuthSelect,
-      setAuthState,
-      onAuthError,
-      handleEditorSelect,
-      exitEditorDialog,
-      exitPrivacyNotice: () => setShowPrivacyNotice(false),
-      closeSettingsDialog,
-      setShellModeActive,
-      vimHandleInput,
-      handleIdePromptComplete,
-      handleFolderTrustSelect,
-      setConstrainHeight,
-      onEscapePromptChange: handleEscapePromptChange,
-      refreshStatic,
-      handleFinalSubmit,
-      handleClearScreen,
-      onWorkspaceMigrationDialogOpen,
-      onWorkspaceMigrationDialogClose,
-      handleProQuotaChoice,
-    }),
-    [
-      handleThemeSelect,
-      handleThemeHighlight,
-      handleAuthSelect,
-      setAuthState,
-      onAuthError,
-      handleEditorSelect,
-      exitEditorDialog,
-      closeSettingsDialog,
-      setShellModeActive,
-      vimHandleInput,
-      handleIdePromptComplete,
-      handleFolderTrustSelect,
-      setConstrainHeight,
-      handleEscapePromptChange,
-      refreshStatic,
-      handleFinalSubmit,
-      handleClearScreen,
-      onWorkspaceMigrationDialogOpen,
-      onWorkspaceMigrationDialogClose,
-      handleProQuotaChoice,
-    ],
-  );
+  // Detect PowerShell for file reference syntax tip
+  const isPowerShell =
+    process.env.PSModulePath !== undefined ||
+    process.env.PSVERSION !== undefined;
+
+  const placeholder = vimModeEnabled
+    ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
+    : isPowerShell
+      ? '  Type your message, @path/to/file or +path/to/file'
+      : '  Type your message or @path/to/file';
+
+  // Build UIState object
+  const uiState: UIState = {
+    // Terminal dimensions
+    terminalWidth,
+    terminalHeight,
+    mainAreaWidth,
+    inputWidth,
+    suggestionsWidth,
+
+    // History and streaming
+    history,
+    pendingHistoryItems,
+    streamingState,
+    thought,
+
+    // Input buffer
+    buffer,
+    shellModeActive,
+
+    // Dialog states
+    isThemeDialogOpen,
+    isSettingsDialogOpen,
+    isAuthDialogOpen,
+    isAuthenticating,
+    isEditorDialogOpen,
+    isProviderDialogOpen,
+    isProviderModelDialogOpen,
+    isLoadProfileDialogOpen,
+    isToolsDialogOpen,
+    isFolderTrustDialogOpen,
+    showWorkspaceMigrationDialog,
+    showPrivacyNotice,
+    isOAuthCodeDialogOpen: appState.openDialogs.oauthCode,
+    isPermissionsDialogOpen,
+
+    // Dialog data
+    providerOptions,
+    selectedProvider,
+    providerModels,
+    currentModel,
+    profiles,
+    toolsDialogAction,
+    toolsDialogTools,
+    toolsDialogDisabledTools,
+    workspaceExtensions,
+
+    // Confirmation requests
+    shellConfirmationRequest,
+    confirmationRequest,
+
+    // Exit/warning states
+    ctrlCPressedOnce,
+    ctrlDPressedOnce,
+    showEscapePrompt,
+    showIdeRestartPrompt,
+    quittingMessages,
+
+    // Display options
+    constrainHeight,
+    showErrorDetails,
+    showToolDescriptions,
+    isNarrow,
+    vimModeEnabled,
+    vimMode,
+
+    // Context and status
+    ideContextState,
+    llxprtMdFileCount,
+    branchName,
+    errorCount,
+
+    // Console and messages
+    consoleMessages: filteredConsoleMessages,
+
+    // Loading and status
+    elapsedTime,
+    currentLoadingPhrase,
+    showAutoAcceptIndicator,
+
+    // Token metrics
+    tokenMetrics,
+    historyTokenCount: sessionStats.historyTokenCount,
+
+    // Error states
+    initError,
+    authError,
+    themeError,
+    editorError,
+
+    // Processing states
+    isProcessing,
+    isInputActive,
+    isFocused,
+
+    // Refs for flicker detection
+    rootUiRef,
+    pendingHistoryItemRef,
+
+    // Slash commands
+    slashCommands,
+    commandContext,
+
+    // IDE prompt
+    shouldShowIdePrompt: !!shouldShowIdePrompt,
+    currentIDE: currentIDE?.displayName,
+
+    // Trust
+    isRestarting,
+    isTrustedFolder: config.isTrustedFolder(),
+
+    // Input history
+    inputHistory: inputHistoryStore.inputHistory,
+
+    // Static key for refreshing
+    staticKey,
+
+    // Debug
+    debugMessage,
+
+    // Footer height
+    footerHeight,
+
+    // Placeholder text
+    placeholder,
+
+    // Available terminal height for content (after footer measurement)
+    availableTerminalHeight,
+  };
+
+  // Build UIActions object
+  const uiActions: UIActions = {
+    // History actions
+    addItem,
+    clearItems,
+    loadHistory,
+    refreshStatic,
+
+    // Input actions
+    handleUserInputSubmit,
+    handleClearScreen,
+
+    // Theme dialog
+    openThemeDialog,
+    handleThemeSelect,
+    handleThemeHighlight,
+
+    // Settings dialog
+    openSettingsDialog,
+    closeSettingsDialog,
+    handleSettingsRestart,
+
+    // Auth dialog
+    openAuthDialog,
+    handleAuthSelect,
+    cancelAuthentication,
+    handleAuthTimeout,
+
+    // Editor dialog
+    openEditorDialog,
+    handleEditorSelect,
+    exitEditorDialog,
+
+    // Provider dialog
+    openProviderDialog,
+    handleProviderSelect,
+    exitProviderDialog,
+
+    // Provider model dialog
+    openProviderModelDialog,
+    handleProviderModelChange,
+    exitProviderModelDialog,
+
+    // Load profile dialog
+    openLoadProfileDialog,
+    handleProfileSelect,
+    exitLoadProfileDialog,
+
+    // Tools dialog
+    openToolsDialog,
+    handleToolsSelect,
+    exitToolsDialog,
+
+    // Folder trust dialog
+    handleFolderTrustSelect,
+
+    // Permissions dialog
+    openPermissionsDialog,
+    closePermissionsDialog,
+
+    // Workspace migration dialog
+    onWorkspaceMigrationDialogOpen,
+    onWorkspaceMigrationDialogClose,
+
+    // Privacy notice
+    openPrivacyNotice,
+    handlePrivacyNoticeExit,
+
+    // OAuth code dialog
+    handleOAuthCodeDialogClose,
+    handleOAuthCodeSubmit,
+
+    // Confirmation handlers
+    handleConfirmationSelect,
+
+    // IDE prompt
+    handleIdePromptComplete,
+
+    // Vim
+    vimHandleInput,
+    toggleVimEnabled,
+
+    // Slash commands
+    handleSlashCommand,
+
+    // Memory
+    performMemoryRefresh,
+
+    // Display toggles
+    setShowErrorDetails,
+    setShowToolDescriptions,
+    setConstrainHeight,
+
+    // Shell mode
+    setShellModeActive,
+
+    // Escape prompt
+    handleEscapePromptChange,
+
+    // Cancel ongoing request
+    cancelOngoingRequest,
+  };
 
   return (
     <UIStateProvider value={uiState}>

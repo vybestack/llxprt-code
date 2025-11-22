@@ -174,6 +174,7 @@ export interface GeminiCLIExtension {
   version: string;
   isActive: boolean;
   path: string;
+  installMetadata?: ExtensionInstallMetadata;
 }
 
 export interface ExtensionInstallMetadata {

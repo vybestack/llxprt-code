@@ -16,6 +16,9 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { EXTENSIONS_CONFIG_FILENAME } from '../extension.js';
 
+// Re-export ExtensionUpdateState for use by other modules
+export { ExtensionUpdateState };
+
 function getGitHubToken(): string | undefined {
   return process.env['GITHUB_TOKEN'];
 }
