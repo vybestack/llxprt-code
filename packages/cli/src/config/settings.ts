@@ -129,6 +129,7 @@ export function getSystemDefaultsPath(): string {
 
 export type { DnsResolutionOrder } from './settingsSchema.js';
 export type { ToolCallProcessingMode } from './settingsSchema.js';
+export type { ToolEnabledState } from './settingsSchema.js';
 
 export enum SettingScope {
   User = 'User',
@@ -169,7 +170,10 @@ function getSchemaDefaults(): Partial<Settings> {
   // Extract defaults from the schema
   for (const [key, schemaEntry] of Object.entries(SETTINGS_SCHEMA)) {
     if ('default' in schemaEntry && schemaEntry.default !== undefined) {
-      (defaults as Record<string, unknown>)[key] = schemaEntry.default;
+      // Skip coreToolSettings default to allow proper merging
+      if (key !== 'coreToolSettings') {
+        (defaults as Record<string, unknown>)[key] = schemaEntry.default;
+      }
     }
   }
 
@@ -196,7 +200,7 @@ function mergeSettings(
   // 4. Workspace Settings
   // 5. System Settings (as overrides)
   //
-  // For properties that are arrays (e.g., includeDirectories), the arrays
+  // For properties that are arrays (e.g., includeDirectories), arrays
   // are concatenated. For objects (e.g., customThemes), they are merged.
   const merged = {
     ...schemaDefaults,
@@ -250,6 +254,10 @@ function mergeSettings(
         ]),
       ],
     },
+    // coreToolSettings is UI-only and should not be merged from settings files
+    // It only exists in memory for the UI and manipulates excludeTools/allowedTools
+    // But it should have schema defaults for proper UI display
+    coreToolSettings: schemaDefaults.coreToolSettings || {},
   };
 
   const prioritizedTheme =

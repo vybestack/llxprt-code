@@ -30,6 +30,7 @@ export interface SettingDefinition {
   properties?: SettingsSchema;
   showInDialog?: boolean;
   options?: readonly string[];
+  subSettings?: SettingsSchema;
 }
 
 export interface SettingsSchema {
@@ -39,6 +40,7 @@ export interface SettingsSchema {
 export type MemoryImportFormat = 'tree' | 'flat';
 export type DnsResolutionOrder = 'ipv4first' | 'verbatim';
 export type ToolCallProcessingMode = 'legacy' | 'pipeline';
+export type ToolEnabledState = 'enabled' | 'disabled';
 
 const DEFAULT_EXTENSION_AUTO_UPDATE = {
   enabled: true,
@@ -454,6 +456,16 @@ export const SETTINGS_SCHEMA = {
     description: 'Tool names to exclude from discovery.',
     showInDialog: false,
   },
+  coreToolSettings: {
+    type: 'object',
+    label: 'Tool Management',
+    category: 'Advanced',
+    requiresRestart: true,
+    default: {} as Record<string, boolean>,
+    description: 'Manage core tool availability',
+    showInDialog: true,
+    subSettings: {}, // Will be populated dynamically based on loaded tools
+  },
   toolDiscoveryCommand: {
     type: 'string',
     label: 'Tool Discovery Command',
@@ -483,6 +495,7 @@ export const SETTINGS_SCHEMA = {
     showInDialog: true,
     options: ['legacy', 'pipeline'],
   },
+
   mcpServerCommand: {
     type: 'string',
     label: 'MCP Server Command',
