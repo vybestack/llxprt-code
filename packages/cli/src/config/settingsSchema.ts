@@ -19,19 +19,63 @@ import {
   DEFAULT_HISTORY_MAX_ITEMS,
 } from '../constants/historyLimits.js';
 
+export type SettingsType =
+  | 'boolean'
+  | 'string'
+  | 'number'
+  | 'array'
+  | 'object'
+  | 'enum';
+
+export type SettingsValue =
+  | boolean
+  | string
+  | number
+  | string[]
+  | object
+  | undefined;
+
+/**
+ * Setting datatypes that "toggle" through a fixed list of options
+ * (e.g. an enum or true/false) rather than allowing for free form input
+ * (like a number or string).
+ */
+export const TOGGLE_TYPES: ReadonlySet<SettingsType | undefined> = new Set([
+  'boolean',
+  'enum',
+]);
+
+export interface SettingEnumOption {
+  value: string | number;
+  label: string;
+}
+
+export enum MergeStrategy {
+  // Replace the old value with the new value. This is the default.
+  REPLACE = 'replace',
+  // Concatenate arrays.
+  CONCAT = 'concat',
+  // Merge arrays, ensuring unique values.
+  UNION = 'union',
+  // Shallow merge objects.
+  SHALLOW_MERGE = 'shallow_merge',
+}
+
 export interface SettingDefinition {
-  type: 'boolean' | 'string' | 'number' | 'array' | 'object' | 'enum';
+  type: SettingsType;
   label: string;
   category: string;
   requiresRestart: boolean;
-  default: boolean | string | number | string[] | object | undefined;
+  default: SettingsValue;
   description?: string;
   parentKey?: string;
   childKey?: string;
   key?: string;
   properties?: SettingsSchema;
   showInDialog?: boolean;
-  options?: readonly string[];
+  mergeStrategy?: MergeStrategy;
+  /** Enum type options  */
+  options?: readonly SettingEnumOption[];
 }
 
 export interface SettingsSchema {
@@ -483,7 +527,10 @@ export const SETTINGS_SCHEMA = {
     description:
       'Mode for processing tool calls. Pipeline mode is optimized, legacy mode uses older implementation.',
     showInDialog: true,
-    options: ['legacy', 'pipeline'],
+    options: [
+      { value: 'legacy', label: 'Legacy' },
+      { value: 'pipeline', label: 'Pipeline' },
+    ] as const,
   },
   mcpServerCommand: {
     type: 'string',
@@ -1049,7 +1096,11 @@ export const SETTINGS_SCHEMA = {
             description:
               'Choose whether updates apply immediately, on restart, or manually.',
             showInDialog: false,
-            options: ['immediate', 'on-restart', 'manual'] as const,
+            options: [
+              { value: 'immediate', label: 'Immediate' },
+              { value: 'on-restart', label: 'On Restart' },
+              { value: 'manual', label: 'Manual' },
+            ] as const,
           },
           notificationLevel: {
             type: 'enum',
@@ -1060,7 +1111,11 @@ export const SETTINGS_SCHEMA = {
             description:
               'Controls how aggressively update notifications are surfaced.',
             showInDialog: false,
-            options: ['toast', 'dialog', 'silent'] as const,
+            options: [
+              { value: 'toast', label: 'Toast' },
+              { value: 'dialog', label: 'Dialog' },
+              { value: 'silent', label: 'Silent' },
+            ] as const,
           },
           perExtension: {
             type: 'object',
