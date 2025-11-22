@@ -27,6 +27,7 @@ export * from './types/modelParams.js';
 
 // Export Core Logic
 export * from './core/client.js';
+export * from './core/baseLlmClient.js';
 export * from './core/contentGenerator.js';
 export * from './core/loggingContentGenerator.js';
 export * from './core/geminiChat.js';

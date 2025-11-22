@@ -523,54 +523,43 @@ describe('Gemini Client (client.ts)', () => {
       // Mock lazyInitialize to prevent it from overriding our mock
       client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
 
-      // Track the arguments manually
-      let capturedRequest: GenerateContentParameters | undefined;
-      let capturedPromptId: string | undefined;
-
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: vi.fn(
-          async (request: GenerateContentParameters, promptId: string) => {
-            capturedRequest = request;
-            capturedPromptId = promptId;
-            return {
-              candidates: [
-                {
-                  content: {
-                    parts: [{ text: '{"key": "value"}' }],
-                  },
-                },
-              ],
-            } as GenerateContentResponse;
-          },
-        ),
+        generateContent: vi.fn().mockResolvedValue({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: '{"key": "value"}' }],
+              },
+            },
+          ],
+        } as GenerateContentResponse),
         generateContentStream: vi.fn(),
         embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      try {
-        await client.generateJson(contents, schema, abortSignal, 'test-model');
-      } catch (error) {
-        console.error('Error in generateJson:', error);
-        throw error;
-      }
-
-      // Check the captured arguments
-      expect(capturedRequest).toBeDefined();
-      expect(capturedPromptId).toBe('test-session-id');
-      expect(capturedRequest).toMatchObject({
-        model: 'test-model', // Now using the passed model parameter
-        config: {
-          abortSignal,
-          systemInstruction: 'Test system instruction',
-          temperature: 0,
-          topP: 1,
-          responseJsonSchema: schema,
-          responseMimeType: 'application/json',
-        },
+      const result = await client.generateJson(
         contents,
-      });
+        schema,
+        abortSignal,
+        'test-model',
+      );
+
+      // Check that generateJson returns the correct result
+      expect(result).toEqual({ key: 'value' });
+
+      // Verify generateContent was called (now via BaseLLMClient)
+      expect(mockGenerator.generateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'test-model',
+          config: expect.objectContaining({
+            responseJsonSchema: schema,
+            responseMimeType: 'application/json',
+          }),
+        }),
+        'test-session-id',
+      );
     });
 
     it('should allow overriding model and config', async () => {
@@ -585,31 +574,21 @@ describe('Gemini Client (client.ts)', () => {
       // Mock lazyInitialize to prevent it from overriding our mock
       client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
 
-      // Track the arguments manually
-      let capturedRequest: GenerateContentParameters | undefined;
-      let capturedPromptId: string | undefined;
-
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: vi.fn(
-          async (request: GenerateContentParameters, promptId: string) => {
-            capturedRequest = request;
-            capturedPromptId = promptId;
-            return {
-              candidates: [
-                {
-                  content: {
-                    parts: [{ text: '{"key": "value"}' }],
-                  },
-                },
-              ],
-            } as GenerateContentResponse;
-          },
-        ),
+        generateContent: vi.fn().mockResolvedValue({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: '{"key": "value"}' }],
+              },
+            },
+          ],
+        } as GenerateContentResponse),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      await client.generateJson(
+      const result = await client.generateJson(
         contents,
         schema,
         abortSignal,
@@ -617,22 +596,21 @@ describe('Gemini Client (client.ts)', () => {
         customConfig,
       );
 
-      // Check the captured arguments
-      expect(capturedRequest).toBeDefined();
-      expect(capturedPromptId).toBe('test-session-id');
-      expect(capturedRequest).toMatchObject({
-        model: customModel,
-        config: {
-          abortSignal,
-          systemInstruction: 'Test system instruction',
-          temperature: 0.9,
-          topP: 1, // from default
-          topK: 20,
-          responseJsonSchema: schema,
-          responseMimeType: 'application/json',
-        },
-        contents,
-      });
+      // Check that generateJson returns the correct result
+      expect(result).toEqual({ key: 'value' });
+
+      // Verify generateContent was called with custom config (now via BaseLLMClient)
+      expect(mockGenerator.generateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: customModel,
+          config: expect.objectContaining({
+            temperature: 0.9,
+            responseJsonSchema: schema,
+            responseMimeType: 'application/json',
+          }),
+        }),
+        'test-session-id',
+      );
     });
 
     it('should not change models when consecutive 429 errors occur', async () => {
