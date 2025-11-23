@@ -8,10 +8,7 @@ import { Colors } from '../colors.js';
 import { ContextSummaryDisplay } from './ContextSummaryDisplay.js';
 import { AutoAcceptIndicator } from './AutoAcceptIndicator.js';
 import { ShellModeIndicator } from './ShellModeIndicator.js';
-import { DetailedMessagesDisplay } from './DetailedMessagesDisplay.js';
-import { ShowMoreLines } from './ShowMoreLines.js';
 import { Footer } from './Footer.js';
-import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { MAX_DISPLAYED_QUEUED_MESSAGES } from '../constants/uiConstants.js';
 import process from 'node:process';
 
@@ -46,18 +43,12 @@ export const Composer = ({ config, settings }: ComposerProps) => {
     ideContextState,
     llxprtMdFileCount,
     showToolDescriptions,
-    showErrorDetails,
-    consoleMessages,
-    constrainHeight,
     isInputActive,
     userMessages,
 
     isNarrow,
+    contextFileNames,
   } = uiState;
-
-  // Mocking contextFileNames for now as it wasn't in the original snippet but used in JSX
-  const contextFileNames: string[] = [];
-  const debugConsoleMaxHeight = 10; // Default or import?
 
   const vimEnabled = vimModeEnabled;
 
@@ -106,6 +97,8 @@ export const Composer = ({ config, settings }: ComposerProps) => {
             <Text color={Colors.Gray}>Press Esc again to clear.</Text>
           ) : (
             !settings.merged.ui?.hideContextSummary && (
+              // Render ContextSummaryDisplay here when input IS active.
+              // DefaultAppLayout handles it when input is NOT active.
               <ContextSummaryDisplay
                 ideContext={ideContextState}
                 llxprtMdFileCount={llxprtMdFileCount}
@@ -125,19 +118,6 @@ export const Composer = ({ config, settings }: ComposerProps) => {
           {shellModeActive && <ShellModeIndicator />}
         </Box>
       </Box>
-
-      {showErrorDetails && (
-        <OverflowProvider>
-          <Box flexDirection="column">
-            <DetailedMessagesDisplay
-              messages={consoleMessages}
-              maxHeight={constrainHeight ? debugConsoleMaxHeight : undefined}
-              width={inputWidth}
-            />
-            <ShowMoreLines constrainHeight={constrainHeight} />
-          </Box>
-        </OverflowProvider>
-      )}
 
       {isInputActive && (
         <InputPrompt

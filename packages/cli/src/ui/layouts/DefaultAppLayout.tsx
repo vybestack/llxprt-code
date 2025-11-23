@@ -223,6 +223,8 @@ export const DefaultAppLayout = ({
                     ) : showEscapePrompt ? (
                       <Text color={Colors.Gray}>Press Esc again to clear.</Text>
                     ) : !hideContextSummary ? (
+                      // Render ContextSummaryDisplay here when input is NOT active (idle/streaming).
+                      // When input IS active, Composer renders it to ensure it stays above the input.
                       <ContextSummaryDisplay
                         ideContext={ideContextState}
                         llxprtMdFileCount={llxprtMdFileCount}

@@ -16,6 +16,7 @@ import { type DOMElement, measureElement, useStdin, useStdout } from 'ink';
 import {
   MessageType,
   ToolCallStatus,
+  StreamingState,
   type HistoryItemWithoutId,
   type HistoryItem,
 } from './types.js';
@@ -135,6 +136,17 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
   });
 }
 
+/**
+ * The main container component for the CLI application.
+ * It orchestrates the entire UI state, including:
+ * - Layout management (responsive resizing)
+ * - Tool execution and scheduling
+ * - History management and rendering
+ * - User input handling (shell and chat)
+ * - Integration with core services (Config, Settings, IDE)
+ *
+ * This component implements the "Hybrid UI Architecture" to solve rendering stability issues.
+ */
 export const AppContainer = (props: AppContainerProps) => {
   debug.log('AppContainer architecture active (v2)');
   const {
@@ -841,29 +853,6 @@ export const AppContainer = (props: AppContainerProps) => {
     registerTodoPause,
   );
 
-  cancelHandlerRef.current = useCallback(() => {
-    const pendingHistoryItems = [
-      ...pendingSlashCommandHistoryItems,
-      ...pendingGeminiHistoryItems,
-    ];
-    if (isToolExecuting(pendingHistoryItems)) {
-      buffer.setText(''); // Just clear the prompt
-      return;
-    }
-
-    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
-    const textToSet = lastUserMessage || '';
-
-    if (textToSet) {
-      buffer.setText(textToSet);
-    }
-  }, [
-    buffer,
-    inputHistoryStore.inputHistory,
-    pendingSlashCommandHistoryItems,
-    pendingGeminiHistoryItems,
-  ]);
-
   const handleFinalSubmit = useCallback(
     (submittedValue: string) => {
       const trimmedValue = submittedValue.trim();
@@ -891,7 +880,10 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
 
-  const isInputActive = !initError && !isProcessing;
+  const isInputActive =
+    !initError &&
+    !isProcessing &&
+    streamingState !== StreamingState.WaitingForConfirmation;
 
   // Compute available terminal height based on controls measurement
   // Using useLayoutEffect for proper layout timing (from Phase 03 analysis)

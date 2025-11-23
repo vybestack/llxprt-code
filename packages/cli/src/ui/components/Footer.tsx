@@ -289,11 +289,11 @@ export const Footer: React.FC = React.memo(() => {
               {nightly ? (
                 <Gradient colors={Colors.GradientColors}>
                   <Text>
-                    (
-                    {branchName.length > maxBranchLength
-                      ? truncateMiddle(branchName, maxBranchLength)
-                      : branchName}
-                    *)
+                    {`(${
+                      branchName.length > maxBranchLength
+                        ? truncateMiddle(branchName, maxBranchLength)
+                        : branchName
+                    }*)`}
                   </Text>
                 </Gradient>
               ) : (
