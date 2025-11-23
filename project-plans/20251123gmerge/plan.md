@@ -1,7 +1,7 @@
 # Cherry-Pick Implementation Plan: gemini-cli v0.8.2 → v0.9.0
 
 **Created:** 2025-11-23
-**Branch:** 20251123-gmerge
+**Branch:** 20251123gmerge
 **Total Commits:** 36 (34 PICK + 2 PICK CAREFULLY)
 
 ## Overview
@@ -10,22 +10,22 @@ This plan details the step-by-step process for cherry-picking 36 commits from ge
 
 ## Pre-Execution Checklist
 
-- [ ] Create branch: `git checkout -b 20251123-gmerge`
+- [ ] Create branch: `git checkout -b 20251123gmerge`
 - [ ] Verify upstream remote: `git remote -v | grep upstream`
 - [ ] Fetch latest: `git fetch upstream`
 - [ ] Confirm starting point: `git log --oneline -1`
 
-**CRITICAL: ALL WORK MUST BE DONE ON THE `20251123-gmerge` BRANCH**
+**CRITICAL: ALL WORK MUST BE DONE ON THE `20251123gmerge` BRANCH**
 - ⚠️ **NEVER switch branches during this process**
-- ⚠️ All cherry-picks, commits, and merges must be on `20251123-gmerge`
+- ⚠️ All cherry-picks, commits, and merges must be on `20251123gmerge`
 - ⚠️ Verify branch before each batch: `git branch --show-current`
-- ⚠️ If you accidentally switch branches, immediately switch back: `git checkout 20251123-gmerge`
+- ⚠️ If you accidentally switch branches, immediately switch back: `git checkout 20251123gmerge`
 
 ## Execution Strategy
 
 ### Batch Processing Rules
 
-1. **Branch requirement:** ALL work on `20251123-gmerge` branch (never switch!)
+1. **Branch requirement:** ALL work on `20251123gmerge` branch (never switch!)
 2. **Regular batches:** Cherry-pick 5 commits at once
 3. **PICK CAREFULLY batches:** Single commit per batch (for careful testing)
 4. **Verification frequency:** After every **second** batch (or after PICK CAREFULLY)
@@ -78,7 +78,7 @@ EOF
 
 ## Batch 1: UI Fixes (Oct 1) - 5 commits
 
-**⚠️ VERIFY BRANCH:** `git branch --show-current` should show `20251123-gmerge`
+**⚠️ VERIFY BRANCH:** `git branch --show-current` should show `20251123gmerge`
 
 **Commits (chronological order):**
 1. `6eca199c` - Cleanup useSelectionList and fix infinite loop
@@ -512,7 +512,7 @@ EOF
 
 ### 4. Push Branch
 ```bash
-git push origin 20251123-gmerge
+git push origin 20251123gmerge
 ```
 
 ### 5. Create Pull Request
