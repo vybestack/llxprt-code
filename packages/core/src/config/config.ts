@@ -57,10 +57,7 @@ import {
   logCliConfiguration,
   StartSessionEvent,
 } from '../telemetry/index.js';
-import {
-  DEFAULT_GEMINI_EMBEDDING_MODEL,
-  DEFAULT_GEMINI_FLASH_MODEL,
-} from './models.js';
+import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import { MCPOAuthConfig } from '../mcp/oauth-provider.js';
@@ -329,7 +326,7 @@ export class Config {
   private readonly settingsService: SettingsService;
   private fileSystemService: FileSystemService;
   private contentGeneratorConfig!: ContentGeneratorConfig;
-  private readonly embeddingModel: string;
+  private readonly embeddingModel: string | undefined;
   private readonly sandbox: SandboxConfig | undefined;
   private readonly targetDir: string;
   private workspaceContext: WorkspaceContext;
@@ -500,8 +497,8 @@ export class Config {
     }
 
     this.sessionId = params.sessionId;
-    this.embeddingModel =
-      params.embeddingModel ?? DEFAULT_GEMINI_EMBEDDING_MODEL;
+    // Embedding models not currently configured for llxprt-code
+    this.embeddingModel = params.embeddingModel;
     this.fileSystemService = new StandardFileSystemService();
     this.sandbox = params.sandbox;
     this.targetDir = path.resolve(params.targetDir);
@@ -853,7 +850,7 @@ export class Config {
     return this.maxSessionTurns;
   }
 
-  getEmbeddingModel(): string {
+  getEmbeddingModel(): string | undefined {
     return this.embeddingModel;
   }
 

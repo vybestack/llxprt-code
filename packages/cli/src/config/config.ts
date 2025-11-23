@@ -18,7 +18,6 @@ import {
   setLlxprtMdFilename as setServerGeminiMdFilename,
   getCurrentLlxprtMdFilename,
   ApprovalMode,
-  DEFAULT_GEMINI_EMBEDDING_MODEL,
   DEFAULT_GEMINI_MODEL,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   FileDiscoveryService,
@@ -1139,7 +1138,7 @@ export async function loadCliConfig(
 
   const config = new Config({
     sessionId,
-    embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
+    embeddingModel: undefined, // No embedding model configured for llxprt-code
     sandbox: sandboxConfig,
     targetDir: cwd,
     includeDirectories,
