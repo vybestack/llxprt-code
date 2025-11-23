@@ -164,12 +164,6 @@ rpc.on('tools/call', async (params) => {
   }
   throw new Error('Unknown tool: ' + params.name);
 });
-
-// Send initialization notification
-rpc.send({
-  jsonrpc: '2.0',
-  method: 'initialized'
-});
 `;
 
   const rig = new TestRig();
