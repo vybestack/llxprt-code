@@ -8,7 +8,7 @@
  * Linear interpolation between two values.
  * @param start - The start value
  * @param end - The end value
- * @param t - The interpolation factor (0-1)
+ * @param t - The interpolation factor (automatically clamped to 0-1)
  * @returns The interpolated value
  */
 export const lerp = (start: number, end: number, t: number): number =>

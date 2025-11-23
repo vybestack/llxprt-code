@@ -64,7 +64,10 @@ export type ShellOutputEvent =
   | {
       /** The event contains a chunk of output data. */
       type: 'data';
-      /** The decoded string chunk. */
+      /**
+       * The decoded string chunk (in plain mode) or structured AnsiOutput object
+       * (in color/structured mode).
+       */
       chunk: string | AnsiOutput;
     }
   | {
@@ -155,6 +158,7 @@ export class ShellExecutionService {
       cwd,
       onOutputEvent,
       abortSignal,
+      shellExecutionConfig,
     );
   }
 
@@ -163,6 +167,7 @@ export class ShellExecutionService {
     cwd: string,
     onOutputEvent: (event: ShellOutputEvent) => void,
     abortSignal: AbortSignal,
+    shellExecutionConfig?: ShellExecutionConfig,
   ): ShellExecutionHandle {
     try {
       const isWindows = os.platform() === 'win32';
@@ -171,7 +176,7 @@ export class ShellExecutionService {
         ...process.env,
         LLXPRT_CODE: '1',
         TERM: 'xterm-256color',
-        PAGER: 'cat',
+        PAGER: shellExecutionConfig?.pager ?? 'cat',
       };
       delete envVars.GEMINI_CLI;
       delete (envVars as Record<string, unknown>)['gemini_cli'];

@@ -234,6 +234,8 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
               )}
             {typeof resultDisplay !== 'string' &&
               !('fileDiff' in resultDisplay) && (
+                // Safe cast: resultDisplay is guaranteed to be AnsiOutput when
+                // it's non-string and lacks fileDiff (enforced by tool execution layer)
                 <AnsiOutputText
                   data={resultDisplay as AnsiOutput}
                   availableTerminalHeight={availableHeight}

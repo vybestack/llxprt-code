@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Box, type DOMElement, Static, Text } from 'ink';
+import { Box, type DOMElement, Text } from 'ink';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { StreamingState } from '../types.js';
@@ -18,8 +18,7 @@ import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { Colors } from '../colors.js';
 
 // Components
-import { Header } from '../components/Header.js';
-import { Tips } from '../components/Tips.js';
+import { MainContent } from '../components/MainContent.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
 import { UpdateNotification } from '../components/UpdateNotification.js';
@@ -49,8 +48,8 @@ export const DefaultAppLayout = ({
   config,
   settings,
   startupWarnings,
-  version,
-  nightly,
+  version: _version,
+  nightly: _nightly,
   mainControlsRef,
   availableTerminalHeight,
   contextFileNames,
@@ -66,7 +65,6 @@ export const DefaultAppLayout = ({
     mainAreaWidth,
     inputWidth,
     history,
-    pendingHistoryItems,
     streamingState,
     quittingMessages,
     constrainHeight,
@@ -74,7 +72,6 @@ export const DefaultAppLayout = ({
     showToolDescriptions,
     consoleMessages,
     slashCommands,
-    staticKey,
     isInputActive,
     ctrlCPressedOnce,
     ctrlDPressedOnce,
@@ -87,14 +84,6 @@ export const DefaultAppLayout = ({
     shellModeActive,
     thought,
     initError,
-    branchName,
-    debugMessage,
-    errorCount,
-    historyTokenCount,
-    vimModeEnabled,
-    vimMode,
-    tokenMetrics,
-    currentModel,
     availableTerminalHeight: uiAvailableTerminalHeight,
   } = uiState;
 
@@ -110,7 +99,6 @@ export const DefaultAppLayout = ({
 
   const staticExtraHeight = 3;
   const debugConsoleMaxHeight = Math.floor(Math.max(terminalHeight * 0.2, 5));
-  const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
 
   // Check if any dialog is visible
   const dialogsVisible =
@@ -157,59 +145,7 @@ export const DefaultAppLayout = ({
   return (
     <StreamingContext.Provider value={streamingState}>
       <Box flexDirection="column" width="90%" ref={uiState.rootUiRef}>
-        <Static
-          key={staticKey}
-          items={[
-            <Box flexDirection="column" key="header">
-              {!(
-                settings.merged.ui?.hideBanner || config.getScreenReader()
-              ) && (
-                <Header
-                  terminalWidth={terminalWidth}
-                  version={version}
-                  nightly={nightly}
-                />
-              )}
-              {!(settings.merged.ui?.hideTips || config.getScreenReader()) && (
-                <Tips config={config} />
-              )}
-            </Box>,
-            ...history.map((h) => (
-              <HistoryItemDisplay
-                terminalWidth={mainAreaWidth}
-                availableTerminalHeight={staticAreaMaxItemHeight}
-                key={h.id}
-                item={h}
-                isPending={false}
-                config={config}
-                slashCommands={slashCommands}
-                showTodoPanel={showTodoPanelSetting}
-              />
-            )),
-          ]}
-        >
-          {(item) => item}
-        </Static>
-        <OverflowProvider>
-          <Box ref={uiState.pendingHistoryItemRef} flexDirection="column">
-            {pendingHistoryItems.map((item, i) => (
-              <HistoryItemDisplay
-                key={i}
-                availableTerminalHeight={
-                  constrainHeight ? effectiveAvailableHeight : undefined
-                }
-                terminalWidth={mainAreaWidth}
-                item={{ ...item, id: 0 }}
-                isPending={true}
-                config={config}
-                isFocused={!uiState.isEditorDialogOpen}
-                slashCommands={slashCommands}
-                showTodoPanel={showTodoPanelSetting}
-              />
-            ))}
-            <ShowMoreLines constrainHeight={constrainHeight} />
-          </Box>
-        </OverflowProvider>
+        <MainContent />
 
         <Box flexDirection="column" ref={mainControlsRef}>
           {updateInfo && <UpdateNotification message={updateInfo.message} />}
@@ -261,54 +197,56 @@ export const DefaultAppLayout = ({
                 }
                 elapsedTime={elapsedTime}
               />
-              <Box
-                marginTop={1}
-                display="flex"
-                justifyContent={
-                  hideContextSummary ? 'flex-start' : 'space-between'
-                }
-                width="100%"
-              >
-                <Box>
-                  {process.env.GEMINI_SYSTEM_MD && (
-                    <Text color={Colors.AccentRed}>
-                      |&#x2310;&#x25A0;_&#x25A0;|{' '}
-                    </Text>
-                  )}
-                  {ctrlCPressedOnce ? (
-                    <Text color={Colors.AccentYellow}>
-                      Press Ctrl+C again to exit.
-                    </Text>
-                  ) : ctrlDPressedOnce ? (
-                    <Text color={Colors.AccentYellow}>
-                      Press Ctrl+D again to exit.
-                    </Text>
-                  ) : showEscapePrompt ? (
-                    <Text color={Colors.Gray}>Press Esc again to clear.</Text>
-                  ) : !hideContextSummary ? (
-                    <ContextSummaryDisplay
-                      ideContext={ideContextState}
-                      llxprtMdFileCount={llxprtMdFileCount}
-                      contextFileNames={contextFileNames}
-                      mcpServers={config.getMcpServers()}
-                      blockedMcpServers={config.getBlockedMcpServers()}
-                      showToolDescriptions={showToolDescriptions}
-                    />
-                  ) : null}
-                </Box>
+              {!isInputActive && (
                 <Box
-                  paddingTop={isNarrow ? 1 : 0}
-                  marginLeft={hideContextSummary ? 1 : 2}
+                  marginTop={1}
+                  display="flex"
+                  justifyContent={
+                    hideContextSummary ? 'flex-start' : 'space-between'
+                  }
+                  width="100%"
                 >
-                  {showAutoAcceptIndicator !== ApprovalMode.DEFAULT &&
-                    !shellModeActive && (
-                      <AutoAcceptIndicator
-                        approvalMode={showAutoAcceptIndicator}
-                      />
+                  <Box>
+                    {process.env.GEMINI_SYSTEM_MD && (
+                      <Text color={Colors.AccentRed}>
+                        |&#x2310;&#x25A0;_&#x25A0;|{' '}
+                      </Text>
                     )}
-                  {shellModeActive && <ShellModeIndicator />}
+                    {ctrlCPressedOnce ? (
+                      <Text color={Colors.AccentYellow}>
+                        Press Ctrl+C again to exit.
+                      </Text>
+                    ) : ctrlDPressedOnce ? (
+                      <Text color={Colors.AccentYellow}>
+                        Press Ctrl+D again to exit.
+                      </Text>
+                    ) : showEscapePrompt ? (
+                      <Text color={Colors.Gray}>Press Esc again to clear.</Text>
+                    ) : !hideContextSummary ? (
+                      <ContextSummaryDisplay
+                        ideContext={ideContextState}
+                        llxprtMdFileCount={llxprtMdFileCount}
+                        contextFileNames={contextFileNames}
+                        mcpServers={config.getMcpServers()}
+                        blockedMcpServers={config.getBlockedMcpServers()}
+                        showToolDescriptions={showToolDescriptions}
+                      />
+                    ) : null}
+                  </Box>
+                  <Box
+                    paddingTop={isNarrow ? 1 : 0}
+                    marginLeft={hideContextSummary ? 1 : 2}
+                  >
+                    {showAutoAcceptIndicator !== ApprovalMode.DEFAULT &&
+                      !shellModeActive && (
+                        <AutoAcceptIndicator
+                          approvalMode={showAutoAcceptIndicator}
+                        />
+                      )}
+                    {shellModeActive && <ShellModeIndicator />}
+                  </Box>
                 </Box>
-              </Box>
+              )}
               {showErrorDetails && (
                 <OverflowProvider>
                   <Box flexDirection="column">
@@ -362,37 +300,8 @@ export const DefaultAppLayout = ({
               })()}
             </Box>
           )}
-          {!settings.merged.ui?.hideFooter && (
-            <Footer
-              model={currentModel}
-              targetDir={config.getTargetDir()}
-              debugMode={config.getDebugMode()}
-              branchName={branchName}
-              debugMessage={debugMessage}
-              errorCount={errorCount}
-              showErrorDetails={showErrorDetails}
-              showMemoryUsage={
-                config.getDebugMode() ||
-                settings.merged.ui?.showMemoryUsage ||
-                false
-              }
-              historyTokenCount={historyTokenCount}
-              nightly={nightly}
-              vimMode={vimModeEnabled ? vimMode : undefined}
-              contextLimit={
-                config.getEphemeralSetting('context-limit') as
-                  | number
-                  | undefined
-              }
-              isTrustedFolder={config.isTrustedFolder()}
-              tokensPerMinute={tokenMetrics.tokensPerMinute}
-              throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
-              sessionTokenTotal={tokenMetrics.sessionTokenTotal}
-              hideCWD={settings.merged.hideCWD}
-              hideSandboxStatus={settings.merged.hideSandboxStatus}
-              hideModelInfo={settings.merged.hideModelInfo}
-            />
-          )}
+
+          {!isInputActive && !settings.merged.ui?.hideFooter && <Footer />}
         </Box>
       </Box>
     </StreamingContext.Provider>

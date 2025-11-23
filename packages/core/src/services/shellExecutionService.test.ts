@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import {
+  vi,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  type Mock,
+} from 'vitest';
 import EventEmitter from 'events';
 import { Readable } from 'stream';
 import { type ChildProcess } from 'child_process';
@@ -221,13 +229,22 @@ describe('ShellExecutionService', () => {
   });
 
   describe('pty interaction', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let activePtysSpy: any;
+
     beforeEach(() => {
-      vi.spyOn(ShellExecutionService['activePtys'], 'get').mockReturnValue({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ptyProcess: mockPtyProcess as any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        headlessTerminal: mockHeadlessTerminal as any,
-      });
+      activePtysSpy = vi
+        .spyOn(ShellExecutionService['activePtys'], 'get')
+        .mockReturnValue({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ptyProcess: mockPtyProcess as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          headlessTerminal: mockHeadlessTerminal as any,
+        });
+    });
+
+    afterEach(() => {
+      activePtysSpy.mockRestore();
     });
 
     it('should write to the pty and trigger a render', async () => {

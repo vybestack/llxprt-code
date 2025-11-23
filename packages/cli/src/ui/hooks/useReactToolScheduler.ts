@@ -220,6 +220,9 @@ export function useReactToolScheduler(
     ],
   );
 
+  // Dispose the scheduler when it changes or component unmounts
+  useEffect(() => () => scheduler.dispose(), [scheduler]);
+
   const createExternalScheduler = useCallback(
     (args: Parameters<ExternalSchedulerFactory>[0]) => {
       const {

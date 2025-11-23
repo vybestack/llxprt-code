@@ -11,6 +11,15 @@ export const SettingsContext = React.createContext<LoadedSettings | undefined>(
   undefined,
 );
 
+export const SettingsProvider: React.FC<{
+  settings: LoadedSettings;
+  children: React.ReactNode;
+}> = ({ settings, children }) => (
+  <SettingsContext.Provider value={settings}>
+    {children}
+  </SettingsContext.Provider>
+);
+
 export const useSettings = () => {
   const context = useContext(SettingsContext);
   if (context === undefined) {

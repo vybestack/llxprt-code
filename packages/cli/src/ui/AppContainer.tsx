@@ -104,6 +104,9 @@ import {
   UIActionsProvider,
   type UIActions,
 } from './contexts/UIActionsContext.js';
+import { ConfigProvider } from './contexts/ConfigContext.js';
+import { SettingsProvider } from './contexts/SettingsContext.js';
+import { AppContext } from './contexts/AppContext.js';
 import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
@@ -143,7 +146,14 @@ export const AppContainer = (props: AppContainerProps) => {
     appDispatch,
   } = props;
 
-  const [shellFocused] = useState(false);
+  const appContextValue = useMemo(
+    () => ({
+      version,
+      startupWarnings,
+    }),
+    [version, startupWarnings],
+  );
+
   const [shellModeActive, setShellModeActive] = useState(false);
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
@@ -198,20 +208,6 @@ export const AppContainer = (props: AppContainerProps) => {
   // Layout measurements
   const mainControlsRef = useRef<DOMElement>(null);
   const staticExtraHeight = 3;
-
-  useEffect(() => {
-    if (config.setShellExecutionConfig) {
-      config.setShellExecutionConfig({
-        terminalWidth: Math.floor(terminalWidth * SHELL_WIDTH_FRACTION),
-        terminalHeight: Math.max(
-          Math.floor(terminalHeight - SHELL_HEIGHT_PADDING), // Use terminalHeight directly or availableTerminalHeight? Report said availableTerminalHeight.
-          1,
-        ),
-        // pager: settings.merged.tools?.shell?.pager,
-        // showColor: settings.merged.tools?.shell?.showColor,
-      });
-    }
-  }, [terminalWidth, terminalHeight, config]);
 
   const shouldShowIdePrompt =
     currentIDE &&
@@ -639,7 +635,7 @@ export const AppContainer = (props: AppContainerProps) => {
     );
     try {
       const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
-        process.cwd(),
+        config.getTargetDir(),
         settings.merged.loadMemoryFromIncludeDirectories
           ? config.getWorkspaceContext().getDirectories()
           : [],
@@ -744,7 +740,9 @@ export const AppContainer = (props: AppContainerProps) => {
   }, []);
 
   const getPreferredEditor = useCallback(() => {
-    const editorType = settings.merged.preferredEditor;
+    const editorType =
+      settings.merged.general?.preferredEditor ??
+      settings.merged.preferredEditor;
     const isValidEditor = isEditorAvailable(editorType);
     if (!isValidEditor) {
       openEditorDialog();
@@ -1418,6 +1416,7 @@ export const AppContainer = (props: AppContainerProps) => {
     // Context and status
     ideContextState,
     llxprtMdFileCount,
+    contextFileNames,
     branchName,
     errorCount,
 
@@ -1466,7 +1465,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Shell integration
     activePtyId: undefined,
-    shellFocused,
 
     // Static key for refreshing
     staticKey,
@@ -1482,6 +1480,9 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Available terminal height for content (after footer measurement)
     availableTerminalHeight,
+
+    // Nightly flag
+    nightly,
   };
 
   // Build UIActions object
@@ -1588,20 +1589,26 @@ export const AppContainer = (props: AppContainerProps) => {
   };
 
   return (
-    <UIStateProvider value={uiState}>
-      <UIActionsProvider value={uiActions}>
-        <DefaultAppLayout
-          config={config}
-          settings={settings}
-          startupWarnings={startupWarnings}
-          version={version}
-          nightly={nightly}
-          mainControlsRef={mainControlsRef}
-          availableTerminalHeight={availableTerminalHeight}
-          contextFileNames={contextFileNames}
-          updateInfo={updateInfo}
-        />
-      </UIActionsProvider>
-    </UIStateProvider>
+    <AppContext.Provider value={appContextValue}>
+      <ConfigProvider config={config}>
+        <SettingsProvider settings={settings}>
+          <UIActionsProvider value={uiActions}>
+            <UIStateProvider value={uiState}>
+              <DefaultAppLayout
+                config={config}
+                settings={settings}
+                startupWarnings={startupWarnings}
+                version={version}
+                nightly={nightly}
+                mainControlsRef={mainControlsRef}
+                availableTerminalHeight={availableTerminalHeight}
+                contextFileNames={contextFileNames}
+                updateInfo={updateInfo}
+              />
+            </UIStateProvider>
+          </UIActionsProvider>
+        </SettingsProvider>
+      </ConfigProvider>
+    </AppContext.Provider>
   );
 };

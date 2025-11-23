@@ -100,8 +100,10 @@ export interface UIState {
   // Context and status
   ideContextState: IdeContext | undefined;
   llxprtMdFileCount: number;
+  contextFileNames: string[];
   branchName: string | undefined;
   errorCount: number;
+  nightly: boolean;
 
   // Console and messages
   consoleMessages: ConsoleMessageItem[];
@@ -166,7 +168,6 @@ export interface UIState {
 
   // Shell integration
   activePtyId: number | undefined;
-  shellFocused: boolean;
 
   // Hybrid compatibility
   messageQueue: string[];

@@ -51,34 +51,13 @@ export const Composer = ({ config, settings }: ComposerProps) => {
     constrainHeight,
     isInputActive,
     userMessages,
-    shellFocused,
+
     isNarrow,
-    vimMode,
   } = uiState;
 
   // Mocking contextFileNames for now as it wasn't in the original snippet but used in JSX
   const contextFileNames: string[] = [];
   const debugConsoleMaxHeight = 10; // Default or import?
-
-  const footerProps = {
-    model: config.getModel(),
-    targetDir: config.getTargetDir(),
-    debugMode: config.getDebugMode(),
-    debugMessage: uiState.debugMessage,
-    errorCount: uiState.errorCount,
-    showErrorDetails: uiState.showErrorDetails,
-    historyTokenCount: uiState.historyTokenCount,
-    nightly: false, // Assuming false or need to get from config/version
-    branchName: uiState.branchName,
-    showMemoryUsage: config.getShowMemoryUsage(),
-    isPaidMode: undefined, // Need to get from runtime if available, or pass undefined
-    vimMode: vimModeEnabled ? vimMode : undefined,
-    contextLimit: undefined, // Need to get from model or config
-    isTrustedFolder: config.isTrustedFolder(),
-    tokensPerMinute: uiState.tokenMetrics.tokensPerMinute,
-    throttleWaitTimeMs: uiState.tokenMetrics.throttleWaitTimeMs,
-    sessionTokenTotal: uiState.tokenMetrics.sessionTokenTotal,
-  };
 
   const vimEnabled = vimModeEnabled;
 
@@ -130,7 +109,6 @@ export const Composer = ({ config, settings }: ComposerProps) => {
               <ContextSummaryDisplay
                 ideContext={ideContextState}
                 llxprtMdFileCount={llxprtMdFileCount}
-                geminiMdFileCount={llxprtMdFileCount}
                 contextFileNames={contextFileNames}
                 mcpServers={config.getMcpServers()}
                 blockedMcpServers={config.getBlockedMcpServers()}
@@ -177,7 +155,6 @@ export const Composer = ({ config, settings }: ComposerProps) => {
           onEscapePromptChange={uiActions.handleEscapePromptChange}
           focus={isFocused}
           vimHandleInput={uiActions.vimHandleInput}
-          isShellFocused={shellFocused}
           placeholder={
             vimEnabled
               ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
@@ -188,7 +165,7 @@ export const Composer = ({ config, settings }: ComposerProps) => {
         />
       )}
 
-      {!settings.merged.ui?.hideFooter && <Footer {...footerProps} />}
+      {!settings.merged.ui?.hideFooter && <Footer />}
     </Box>
   );
 };

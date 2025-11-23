@@ -9,6 +9,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as childProcess from 'child_process';
 
+export const isDevelopment = process.env.NODE_ENV === 'development';
+
 export enum PackageManager {
   NPM = 'npm',
   YARN = 'yarn',

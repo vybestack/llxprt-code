@@ -14,11 +14,20 @@ import type {
 
 const DEFAULT_HEIGHT = 24;
 
+/**
+ * Props for the AnsiOutputText component.
+ */
 interface AnsiOutputProps {
+  /** The structured ANSI output data to render. */
   data: AnsiOutput;
+  /** The available height in the terminal for rendering. Used to calculate how many lines to show. */
   availableTerminalHeight?: number;
 }
 
+/**
+ * Renders ANSI-formatted text using Ink components.
+ * It maps the structured `AnsiOutput` data (lines and tokens) to `Text` components with appropriate styling.
+ */
 export const AnsiOutputText: React.FC<AnsiOutputProps> = ({
   data,
   availableTerminalHeight,
@@ -44,7 +53,7 @@ export const AnsiOutputText: React.FC<AnsiOutputProps> = ({
               {token.text}
             </Text>
           ))
-        : null}
+        : ''}
     </Text>
   ));
 };

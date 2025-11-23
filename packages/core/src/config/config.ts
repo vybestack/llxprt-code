@@ -562,6 +562,8 @@ export class Config {
       terminalHeight: params.shellExecutionConfig?.terminalHeight ?? 24,
       showColor: params.shellExecutionConfig?.showColor ?? false,
       pager: params.shellExecutionConfig?.pager ?? 'cat',
+      defaultFg: params.shellExecutionConfig?.defaultFg,
+      defaultBg: params.shellExecutionConfig?.defaultBg,
     };
 
     this.useSmartEdit = params.useSmartEdit ?? false;
@@ -1481,6 +1483,8 @@ export class Config {
         config.terminalHeight ?? this.shellExecutionConfig.terminalHeight,
       showColor: config.showColor ?? this.shellExecutionConfig.showColor,
       pager: config.pager ?? this.shellExecutionConfig.pager,
+      defaultFg: config.defaultFg ?? this.shellExecutionConfig.defaultFg,
+      defaultBg: config.defaultBg ?? this.shellExecutionConfig.defaultBg,
     };
   }
   getScreenReader(): boolean {

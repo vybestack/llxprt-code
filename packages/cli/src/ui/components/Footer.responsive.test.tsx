@@ -16,30 +16,79 @@ import {
 import { Footer } from './Footer.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 
+// Mock hooks
+const mockUseUIState = vi.fn();
+const mockUseConfig = vi.fn();
+const mockUseSettings = vi.fn();
+const mockUseRuntimeApi = vi.fn();
+const mockUseVimMode = vi.fn();
+
 vi.mock('../hooks/useTerminalSize.js');
-vi.mock('../../providers/providerManagerInstance.js', () => ({
-  getProviderManager: () => ({
-    getActiveProvider: () => ({ name: 'openai' }),
-  }),
+vi.mock('../contexts/UIStateContext.js', () => ({
+  useUIState: () => mockUseUIState(),
+}));
+vi.mock('../contexts/ConfigContext.js', () => ({
+  useConfig: () => mockUseConfig(),
+}));
+vi.mock('../contexts/SettingsContext.js', () => ({
+  useSettings: () => mockUseSettings(),
+}));
+vi.mock('../contexts/RuntimeContext.js', () => ({
+  useRuntimeApi: () => mockUseRuntimeApi(),
+}));
+vi.mock('../contexts/VimModeContext.js', () => ({
+  useVimMode: () => mockUseVimMode(),
+}));
+vi.mock('../../utils/installationInfo.js', () => ({
+  isDevelopment: false,
 }));
 
 describe('Footer Responsive Behavior', () => {
   let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
 
-  const defaultProps = {
-    model: 'gemini-2.0-flash',
-    targetDir: '/home/user/projects/long-project-name',
+  const defaultUIState = {
+    currentModel: 'gemini-2.0-flash',
     branchName: 'feature/very-long-branch-name-that-needs-truncation',
-    debugMode: false,
     debugMessage: '',
     errorCount: 0,
     showErrorDetails: false,
-    showMemoryUsage: true,
     historyTokenCount: 1000,
-    isPaidMode: false,
     nightly: false,
+    isTrustedFolder: true,
+    tokenMetrics: {
+      tokensPerMinute: 0,
+      throttleWaitTimeMs: 0,
+      sessionTokenTotal: 0,
+    },
+  };
+
+  const defaultConfig = {
+    getTargetDir: () => '/home/user/projects/long-project-name',
+    getDebugMode: () => false,
+    getShowMemoryUsage: () => true,
+    getEphemeralSetting: () => 100000,
+    isTrustedFolder: () => true,
+  };
+
+  const defaultSettings = {
+    merged: {
+      ui: {
+        hideFooter: false,
+        showMemoryUsage: true,
+      },
+      hideCWD: false,
+      hideSandboxStatus: false,
+      hideModelInfo: false,
+    },
+  };
+
+  const defaultRuntime = {
+    getActiveProviderStatus: () => ({ providerName: 'gemini', isPaid: false }),
+  };
+
+  const defaultVimMode = {
+    vimEnabled: true,
     vimMode: 'NORMAL',
-    contextLimit: 100000,
   };
 
   beforeEach(() => {
@@ -47,6 +96,12 @@ describe('Footer Responsive Behavior', () => {
     mockUseTerminalSize = useTerminalSize as MockedFunction<
       typeof useTerminalSize
     >;
+
+    mockUseUIState.mockReturnValue(defaultUIState);
+    mockUseConfig.mockReturnValue(defaultConfig);
+    mockUseSettings.mockReturnValue(defaultSettings);
+    mockUseRuntimeApi.mockReturnValue(defaultRuntime);
+    mockUseVimMode.mockReturnValue(defaultVimMode);
   });
 
   describe('NARROW width behavior (< 80 cols)', () => {
@@ -55,7 +110,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show abbreviated memory indicator', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should show abbreviated memory format
@@ -65,7 +120,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show abbreviated context indicator', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should show abbreviated context format
@@ -75,16 +130,16 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should NOT show model name at narrow width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should NOT show model name
-      expect(output).not.toContain('gpt-4');
+      expect(output).not.toContain(defaultUIState.currentModel);
       expect(output).not.toMatch(/Model:/);
     });
 
     it('should NOT show timestamp at narrow width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should NOT show timestamp
@@ -94,9 +149,12 @@ describe('Footer Responsive Behavior', () => {
     it('should truncate long branch names', () => {
       const longBranchName =
         'feature/very-long-branch-name-that-needs-truncation-handling-for-narrow-display-mode';
-      const { lastFrame } = render(
-        <Footer {...defaultProps} branchName={longBranchName} />,
-      );
+      mockUseUIState.mockReturnValue({
+        ...defaultUIState,
+        branchName: longBranchName,
+      });
+
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Branch name appears (may be truncated with ... or shown in full)
@@ -114,7 +172,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show full memory indicator label', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should show full "Memory:" label
@@ -124,7 +182,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show full context indicator label', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should show full "Context:" label
@@ -134,7 +192,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show model name at standard width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should show model name
@@ -143,7 +201,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should NOT show timestamp at standard width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should NOT show timestamp
@@ -157,7 +215,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show detailed memory usage with parenthetical details', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should show detailed memory format (may wrap across lines in two-line layout)
@@ -166,7 +224,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show detailed context usage with comma-separated numbers', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should show detailed context format (shows as 8,234/100,000 tokens)
@@ -174,7 +232,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show model name at wide width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should show model name
@@ -183,7 +241,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show timestamp at wide width', () => {
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should show timestamp in HH:MM:SS format (may wrap across lines)
@@ -193,9 +251,12 @@ describe('Footer Responsive Behavior', () => {
     it('should show full branch name when space allows', () => {
       const longBranchName =
         'feature/very-long-branch-name-that-needs-truncation';
-      const { lastFrame } = render(
-        <Footer {...defaultProps} branchName={longBranchName} />,
-      );
+      mockUseUIState.mockReturnValue({
+        ...defaultUIState,
+        branchName: longBranchName,
+      });
+
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should show branch name at wide width
@@ -208,7 +269,7 @@ describe('Footer Responsive Behavior', () => {
       // Test exactly at NARROW threshold (80 cols) - should be STANDARD
       mockUseTerminalSize.mockReturnValue({ columns: 80, rows: 20 });
 
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // At exactly 80, should be STANDARD behavior
@@ -221,7 +282,7 @@ describe('Footer Responsive Behavior', () => {
       // Test exactly at STANDARD threshold (120 cols) - should be STANDARD
       mockUseTerminalSize.mockReturnValue({ columns: 120, rows: 20 });
 
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // At exactly 120, should be STANDARD behavior (not WIDE)
@@ -237,7 +298,7 @@ describe('Footer Responsive Behavior', () => {
 
       widths.forEach((width) => {
         mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
-        const { lastFrame } = render(<Footer {...defaultProps} />);
+        const { lastFrame } = render(<Footer />);
         const output = lastFrame();
 
         // Memory and context should always be visible
@@ -250,12 +311,14 @@ describe('Footer Responsive Behavior', () => {
       const widths = [60, 100, 180];
       const longBranchName =
         'feature/very-long-branch-name-that-needs-truncation';
+      mockUseUIState.mockReturnValue({
+        ...defaultUIState,
+        branchName: longBranchName,
+      });
 
       widths.forEach((width) => {
         mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
-        const { lastFrame } = render(
-          <Footer {...defaultProps} branchName={longBranchName} />,
-        );
+        const { lastFrame } = render(<Footer />);
         const output = lastFrame();
 
         // Branch should always be visible (even if truncated)
@@ -270,7 +333,7 @@ describe('Footer Responsive Behavior', () => {
 
       widths.forEach((width) => {
         mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
-        const { lastFrame } = render(<Footer {...defaultProps} />);
+        const { lastFrame } = render(<Footer />);
         const output = lastFrame();
 
         // Should have status info (Memory|Context) separate from path info
@@ -287,7 +350,7 @@ describe('Footer Responsive Behavior', () => {
     it('should show Memory|Context|Time together when wide', () => {
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
 
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should have Memory, Context, and Time displayed
@@ -303,7 +366,7 @@ describe('Footer Responsive Behavior', () => {
     it('should organize Path and Model information appropriately', () => {
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
 
-      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const { lastFrame } = render(<Footer />);
       const output = lastFrame();
 
       // Should contain path and model information
@@ -319,7 +382,7 @@ describe('Footer Responsive Behavior', () => {
     it('should adapt content appropriately across width breakpoints', () => {
       // Test narrow width
       mockUseTerminalSize.mockReturnValue({ columns: 60, rows: 20 });
-      let { lastFrame } = render(<Footer {...defaultProps} />);
+      let { lastFrame } = render(<Footer />);
       let output = lastFrame();
 
       expect(output).toMatch(/Mem:/); // Abbreviated
@@ -328,7 +391,7 @@ describe('Footer Responsive Behavior', () => {
 
       // Test standard width
       mockUseTerminalSize.mockReturnValue({ columns: 100, rows: 20 });
-      ({ lastFrame } = render(<Footer {...defaultProps} />));
+      ({ lastFrame } = render(<Footer />));
       output = lastFrame();
 
       expect(output).toMatch(/Memory:/); // Full label
@@ -337,7 +400,7 @@ describe('Footer Responsive Behavior', () => {
 
       // Test wide width
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
-      ({ lastFrame } = render(<Footer {...defaultProps} />));
+      ({ lastFrame } = render(<Footer />));
       output = lastFrame();
 
       expect(output).toMatch(/Memory:/); // Full label
