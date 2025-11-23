@@ -386,7 +386,7 @@ jobs:
           prompt_file="review/prompt.md"
           llxprt_log="review/llxprt.log"
           set +e
-          llxprt \
+          cat "${prompt_file}" | llxprt \
             --provider "${LLXPRT_DEFAULT_PROVIDER}" \
             --model "${LLXPRT_DEFAULT_MODEL}" \
             --yolo \
@@ -395,9 +395,8 @@ jobs:
             --set modelparam.max_tokens=10000 \
             --set context-limit=121000 \
             --set base-url="${OPENAI_BASE_URL}" \
-            --set shell-replacement=true \
-            --prompt "$(cat "${prompt_file}")" | tee "${llxprt_log}"
-          llxprt_status=${PIPESTATUS[0]}
+            --set shell-replacement=true | tee "${llxprt_log}"
+          llxprt_status=${PIPESTATUS[1]}
           set -e
           if [[ ${llxprt_status} -ne 0 ]]; then
             {

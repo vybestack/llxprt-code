@@ -42,6 +42,11 @@ import Spinner from 'ink-spinner';
 import { AppWrapper } from './ui/App.js';
 import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
 import { loadCliConfig, parseArguments } from './config/config.js';
+import {
+  dynamicSettingsRegistry,
+  generateDynamicToolSettings,
+} from './utils/dynamicSettings.js';
+import type { SettingDefinition } from './config/settingsSchema.js';
 import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import dns from 'node:dns';
@@ -488,6 +493,24 @@ export async function main() {
   }
 
   await config.initialize();
+
+  // Register dynamic settings after config is fully initialized
+  try {
+    const dynamicToolSettings = generateDynamicToolSettings(config);
+
+    // Convert to full path settings
+    const fullDynamicSettings: Record<string, SettingDefinition> = {};
+    for (const [toolName, definition] of Object.entries(dynamicToolSettings)) {
+      fullDynamicSettings[`coreToolSettings.${toolName}`] = definition;
+    }
+
+    dynamicSettingsRegistry.register(fullDynamicSettings);
+    console.debug(
+      `[gemini] Registered ${Object.keys(fullDynamicSettings).length} dynamic settings`,
+    );
+  } catch (error) {
+    console.error('[gemini] Failed to register dynamic settings:', error);
+  }
 
   if (spinnerInstance) {
     // Small UX detail to show the completion message for a bit before unmounting.

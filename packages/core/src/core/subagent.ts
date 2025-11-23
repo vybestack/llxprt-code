@@ -1137,6 +1137,40 @@ export class SubAgentScope {
   }
 
   /**
+   * Dispose of the subagent scope, cleaning up resources and references.
+   * This method should be called when the subagent is no longer needed to prevent memory leaks.
+   *
+   * Cleanup performed:
+   * - Aborts any active operations
+   * - Removes parent abort signal event listeners
+   * - Nullifies references to allow garbage collection
+   *
+   * Safe to call multiple times.
+   */
+  dispose(): void {
+    // 1. Cancel any active operations
+    if (
+      this.activeAbortController &&
+      !this.activeAbortController.signal.aborted
+    ) {
+      this.logger.debug(
+        () =>
+          `Disposing subagent ${this.subagentId}, aborting active operations`,
+      );
+      this.activeAbortController.abort();
+    }
+    this.activeAbortController = null;
+
+    // 2. Clean up parent abort signal event listeners
+    if (this.parentAbortCleanup) {
+      this.parentAbortCleanup();
+      this.parentAbortCleanup = undefined;
+    }
+
+    this.logger.debug(() => `Subagent ${this.subagentId} disposed`);
+  }
+
+  /**
    * Processes a list of function calls, executing each one and collecting their responses.
    * This method iterates through the provided function calls, executes them using the
    * `executeToolCall` function (or handles `self_emitvalue` internally), and aggregates
@@ -1291,6 +1325,8 @@ export class SubAgentScope {
         typeof this.config.getApprovalMode === 'function'
           ? this.config.getApprovalMode()
           : ApprovalMode.DEFAULT,
+      getMessageBus: () => this.config.getMessageBus(),
+      getPolicyEngine: () => this.config.getPolicyEngine(),
     } as unknown as Config;
   }
 

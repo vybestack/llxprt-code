@@ -226,3 +226,40 @@ jobs:
             exit 1
           fi
           echo "All required E2E test jobs passed!"
+        shell: bash
+
+      - name: 'Collect provider error reports'
+        if: failure()
+        id: 'collect_provider_errors'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p provider-errors
+          shopt -s nullglob
+          declare -a roots=(
+            "/tmp"
+            "${TMPDIR:-}"
+            "${RUNNER_TEMP:-}"
+            "${TEMP:-}"
+            "${TMP:-}"
+          )
+          for dir in "${roots[@]}"; do
+            [[ -z "$dir" || ! -d "$dir" ]] && continue
+            for file in "$dir"/llxprt-client-error-*; do
+              [[ -f "$file" ]] || continue
+              cp "$file" "provider-errors/$(basename "$file")"
+            done
+          done
+          if compgen -G 'provider-errors/*' >/dev/null; then
+            echo "found=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "found=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: 'Upload provider error report'
+        if: failure() && steps.collect_provider_errors.outputs.found == 'true'
+        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+        with:
+          name: 'provider-error-${{ matrix.os }}-${{ matrix.sandbox }}-${{ github.run_id }}'
+          path: 'provider-errors'
+          if-no-files-found: 'ignore'

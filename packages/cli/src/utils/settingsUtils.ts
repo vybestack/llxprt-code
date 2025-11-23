@@ -5,6 +5,7 @@
  */
 
 import { Settings, SettingScope, LoadedSettings } from '../config/settings.js';
+import { dynamicSettingsRegistry } from './dynamicSettings.js';
 import {
   SETTINGS_SCHEMA,
   SettingDefinition,
@@ -62,30 +63,59 @@ export function getSettingsByCategory(): Record<
 export function getSettingDefinition(
   key: string,
 ): (SettingDefinition & { key: string }) | undefined {
-  return FLATTENED_SCHEMA[key];
+  // First check static settings
+  const staticDef = FLATTENED_SCHEMA[key];
+  if (staticDef) return staticDef;
+
+  // Then check dynamic settings
+  const dynamicDef = dynamicSettingsRegistry.get(key);
+  if (dynamicDef) {
+    return { ...dynamicDef, key };
+  }
+
+  return undefined;
 }
 
 /**
  * Check if a setting requires restart
  */
 export function requiresRestart(key: string): boolean {
-  return FLATTENED_SCHEMA[key]?.requiresRestart ?? false;
+  // First check static settings
+  if (FLATTENED_SCHEMA[key]?.requiresRestart) {
+    return true;
+  }
+
+  // Then check dynamic settings
+  return dynamicSettingsRegistry.requiresRestart(key);
 }
 
 /**
  * Get the default value for a setting
  */
 export function getDefaultValue(key: string): SettingDefinition['default'] {
-  return FLATTENED_SCHEMA[key]?.default;
+  // First check static settings
+  const staticDefault = FLATTENED_SCHEMA[key]?.default;
+  if (staticDefault !== undefined) {
+    return staticDefault;
+  }
+
+  // Then check dynamic settings
+  const dynamicDef = dynamicSettingsRegistry.get(key);
+  return dynamicDef?.default;
 }
 
 /**
  * Get all setting keys that require restart
  */
 export function getRestartRequiredSettings(): string[] {
-  return Object.values(FLATTENED_SCHEMA)
+  const staticKeys = Object.values(FLATTENED_SCHEMA)
     .filter((definition) => definition.requiresRestart)
     .map((definition) => definition.key);
+
+  // Add dynamic settings that require restart
+  const dynamicKeys = dynamicSettingsRegistry.getAllRestartRequiredKeys();
+
+  return [...staticKeys, ...dynamicKeys];
 }
 
 /**
@@ -142,10 +172,19 @@ export function getEffectiveValue(
 }
 
 /**
- * Get all setting keys from the schema
+ * Get all setting keys
  */
 export function getAllSettingKeys(): string[] {
   return Object.keys(FLATTENED_SCHEMA);
+}
+
+/**
+ * Get all setting keys that should be shown in dialog
+ */
+export function getDialogSettingKeys(): string[] {
+  return Object.values(FLATTENED_SCHEMA)
+    .filter((definition) => definition.showInDialog !== false)
+    .map((definition) => definition.key);
 }
 
 /**
@@ -231,14 +270,8 @@ export function getDialogSettingsByType(
 }
 
 /**
- * Get all setting keys that should be shown in the dialog
+ * Get all setting keys that require restart
  */
-export function getDialogSettingKeys(): string[] {
-  return Object.values(FLATTENED_SCHEMA)
-    .filter((definition) => definition.showInDialog !== false)
-    .map((definition) => definition.key);
-}
-
 // ============================================================================
 // BUSINESS LOGIC UTILITIES (Higher-level utilities for setting operations)
 // ============================================================================

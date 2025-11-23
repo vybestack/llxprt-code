@@ -389,6 +389,18 @@ export class Config {
   private subagentManager?: SubagentManager;
   private subagentSchedulerFactory?: SubagentSchedulerFactory;
 
+  // Track all potential tools for settings UI
+  private allPotentialTools: Array<{
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    toolClass: any;
+    toolName: string;
+    displayName: string;
+    isRegistered: boolean;
+    reason?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    args: any[];
+  }> = [];
+
   setProviderManager(providerManager: ProviderManager) {
     this.providerManager = providerManager;
   }
@@ -1575,6 +1587,8 @@ export class Config {
       const excludeTools = this.getExcludeTools() || [];
 
       let isEnabled = true; // Enabled by default if coreTools is not set.
+      let reason: string | undefined;
+
       if (coreTools) {
         isEnabled = coreTools.some(
           (tool) =>
@@ -1591,11 +1605,29 @@ export class Config {
 
       if (isExcluded) {
         isEnabled = false;
+        reason = 'excluded by excludeTools setting';
       }
+
+      // Record tool attempt for settings UI
+      const toolRecord = {
+        toolClass: ToolClass,
+        toolName: className,
+        displayName: toolName,
+        isRegistered: false,
+        reason,
+        args,
+      };
 
       if (isEnabled) {
         registry.registerTool(new ToolClass(...args));
+        toolRecord.isRegistered = true;
+        toolRecord.reason = undefined;
+      } else if (!reason) {
+        reason = 'not included in coreTools configuration';
+        toolRecord.reason = reason;
       }
+
+      this.allPotentialTools.push(toolRecord);
     };
 
     registerCoreTool(LSTool, this);
@@ -1640,21 +1672,73 @@ export class Config {
       this.setSubagentManager(subagentManager);
     }
 
+    // Handle TaskTool with dependency checking
+    const taskToolArgs = {
+      profileManager,
+      subagentManager,
+      schedulerFactoryProvider: () =>
+        this.getInteractiveSubagentSchedulerFactory(),
+    };
+
     if (profileManager && subagentManager) {
-      registerCoreTool(TaskTool, this, {
-        profileManager,
-        subagentManager,
-        schedulerFactoryProvider: () =>
-          this.getInteractiveSubagentSchedulerFactory(),
-      });
+      registerCoreTool(TaskTool, this, taskToolArgs);
+    } else {
+      // Record TaskTool as unregistered due to missing dependencies
+      const taskToolRecord = {
+        toolClass: TaskTool,
+        toolName: 'TaskTool',
+        displayName: TaskTool.Name || 'TaskTool',
+        isRegistered: false,
+        reason:
+          !profileManager && !subagentManager
+            ? 'requires profile manager and subagent manager'
+            : !profileManager
+              ? 'requires profile manager'
+              : 'requires subagent manager',
+        args: [this, taskToolArgs],
+      };
+      this.allPotentialTools.push(taskToolRecord);
     }
 
-    registerCoreTool(ListSubagentsTool, this, {
+    // Handle ListSubagentsTool with dependency checking
+    const listSubagentsArgs = {
       getSubagentManager: () => this.getSubagentManager(),
-    });
+    };
+
+    if (subagentManager) {
+      registerCoreTool(ListSubagentsTool, this, listSubagentsArgs);
+    } else {
+      // Record ListSubagentsTool as unregistered due to missing subagent manager
+      const listSubagentsRecord = {
+        toolClass: ListSubagentsTool,
+        toolName: 'ListSubagentsTool',
+        displayName: ListSubagentsTool.Name || 'ListSubagentsTool',
+        isRegistered: false,
+        reason: 'requires subagent manager',
+        args: [this, listSubagentsArgs],
+      };
+      this.allPotentialTools.push(listSubagentsRecord);
+    }
 
     await registry.discoverAllTools();
     return registry;
+  }
+
+  /**
+   * Get all potential tools (both registered and unregistered) for settings UI
+   */
+  getAllPotentialTools() {
+    return this.allPotentialTools;
+  }
+
+  /**
+   * Get tool registry information with registered/unregistered separation
+   */
+  getToolRegistryInfo() {
+    return {
+      registered: this.allPotentialTools.filter((t) => t.isRegistered),
+      unregistered: this.allPotentialTools.filter((t) => !t.isRegistered),
+    };
   }
 }
 // Export model constants for use in CLI

@@ -27,7 +27,12 @@ describe('mixed input crash prevention', () => {
       expect(error).toBeInstanceOf(Error);
       const err = error as Error;
 
-      expect(err.message).toContain('Process exited with code 1');
+      // Windows may exit with 3221226505 (0xC0000409 STATUS_STACK_BUFFER_OVERRUN)
+      // due to libuv async.c assertion failure when process exits
+      expect(
+        err.message.includes('Process exited with code 1') ||
+          err.message.includes('Process exited with code 3221226505'),
+      ).toBe(true);
       expect(err.message).toContain(
         '--prompt-interactive flag cannot be used when input is piped',
       );

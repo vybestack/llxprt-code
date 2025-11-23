@@ -164,8 +164,9 @@ export const DialogManager = ({
       <Box flexDirection="column">
         <SettingsDialog
           settings={settings}
-          onSelect={handleSettingsDialogSelect}
-          onRestartRequest={handleSettingsDialogRestart}
+          onSelect={uiActions.closeSettingsDialog}
+          onRestartRequest={uiActions.handleSettingsRestart}
+          config={config}
         />
       </Box>
     );

@@ -117,4 +117,26 @@ for (const file of aliasFiles) {
     console.error(`  Failed to copy alias: ${basename(file)}`);
   }
 }
+
+// Copy policy files preserving directory structure
+const policyFiles = glob.sync('packages/core/src/policy/policies/*.toml', {
+  cwd: root,
+});
+for (const file of policyFiles) {
+  const sourcePath = join(root, file);
+  const targetPath = join(bundleDir, 'policies', basename(file));
+  const targetDir = dirname(targetPath);
+
+  // Create directory structure if it doesn't exist
+  if (!existsSync(targetDir)) {
+    mkdirSync(targetDir, { recursive: true });
+  }
+
+  copyFileSync(sourcePath, targetPath);
+
+  // Verify the file was copied
+  if (!existsSync(targetPath)) {
+    console.error(`  Failed to copy policy: ${basename(file)}`);
+  }
+}
 // Assets copied to bundle/

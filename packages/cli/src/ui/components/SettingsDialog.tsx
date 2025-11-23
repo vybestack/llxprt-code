@@ -11,6 +11,7 @@ import {
   LoadedSettings,
   SettingScope,
   Settings,
+  ToolEnabledState,
 } from '../../config/settings.js';
 import {
   getScopeItems,
@@ -37,19 +38,80 @@ import { useVimMode } from '../contexts/VimModeContext.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import chalk from 'chalk';
 import { cpSlice, cpLen, stripUnsafeCharacters } from '../utils/textUtils.js';
+import type { Config } from '@vybestack/llxprt-code-core';
+import { SettingDefinition } from '../../config/settingsSchema.js';
+import { generateDynamicToolSettings } from '../../utils/dynamicSettings.js';
 
 interface SettingsDialogProps {
   settings: LoadedSettings;
   onSelect: (settingName: string | undefined, scope: SettingScope) => void;
   onRestartRequest?: () => void;
+  config?: Config;
 }
 
 const maxItemsToShow = 8;
+
+type PendingValue = boolean | number | string | string[];
+
+/**
+ * Get current state of a tool based on excludeTools settings
+ */
+export function getToolCurrentState(
+  toolName: string,
+  settings: LoadedSettings,
+  pendingExcludeTools?: string[],
+): ToolEnabledState {
+  try {
+    const excludeTools =
+      pendingExcludeTools ?? ((settings.merged.excludeTools as string[]) || []);
+    // Tool is enabled if not in excludeTools
+    return excludeTools.includes(toolName) ? 'disabled' : 'enabled';
+  } catch (error) {
+    console.error('Error getting tool state:', error);
+    return 'enabled'; // Default to enabled on error
+  }
+}
+
+/**
+ * Update tool exclusion in excludeTools list
+ */
+export function updateToolExclusion(
+  toolName: string,
+  state: ToolEnabledState,
+  settings: LoadedSettings,
+  scope: SettingScope,
+): void {
+  try {
+    const currentExcludeTools =
+      (settings.merged.excludeTools as string[]) || [];
+    let newExcludeTools = [...currentExcludeTools];
+
+    if (state === 'enabled') {
+      // Enable tool: remove from excludeTools
+      newExcludeTools = newExcludeTools.filter((name) => name !== toolName);
+    } else {
+      // Disable tool: add to excludeTools
+      if (!newExcludeTools.includes(toolName)) {
+        newExcludeTools.push(toolName);
+      }
+    }
+
+    // Save changes directly using setValue since saveSingleSetting skips coreToolSettings
+    settings.setValue(
+      scope,
+      'excludeTools' as keyof Settings,
+      newExcludeTools as Settings['excludeTools'],
+    );
+  } catch (error) {
+    console.error('Error updating tool exclusion:', error);
+  }
+}
 
 export function SettingsDialog({
   settings,
   onSelect,
   onRestartRequest,
+  config,
 }: SettingsDialogProps): React.JSX.Element {
   // Get vim mode context to sync vim mode changes
   const { vimEnabled, toggleVimEnabled } = useVimMode();
@@ -80,10 +142,29 @@ export function SettingsDialog({
   );
 
   // Preserve pending changes across scope switches
-  type PendingValue = boolean | number | string;
   const [globalPendingChanges, setGlobalPendingChanges] = useState<
     Map<string, PendingValue>
   >(new Map());
+
+  // Sub-settings mode state
+  const [subSettingsMode, setSubSettingsMode] = useState<{
+    isActive: boolean;
+    parentKey: string;
+    parentLabel: string;
+  }>({
+    isActive: false,
+    parentKey: '',
+    parentLabel: '',
+  });
+
+  // Save parent settings state for navigation back
+  const [parentState, setParentState] = useState<{
+    activeIndex: number;
+    scrollOffset: number;
+  }>({
+    activeIndex: 0,
+    scrollOffset: 0,
+  });
 
   // Track restart-required settings across scope changes
   const [_restartRequiredSettings, setRestartRequiredSettings] = useState<
@@ -117,6 +198,9 @@ export function SettingsDialog({
         (def?.type === 'enum' && typeof value === 'string')
       ) {
         updated = setPendingSettingValueAny(key, value, updated);
+      } else if (def?.type === 'array' && Array.isArray(value)) {
+        // Handle array type pending change (e.g. excludeTools)
+        updated = setPendingSettingValueAny(key, value, updated);
       }
       newModified.add(key);
       if (requiresRestart(key)) newRestartRequired.add(key);
@@ -133,6 +217,148 @@ export function SettingsDialog({
   }, [selectedScope, settings, globalPendingChanges]);
 
   const generateSettingsItems = () => {
+    if (subSettingsMode.isActive) {
+      return generateSubSettingsItems(subSettingsMode.parentKey);
+    } else {
+      return generateNormalSettingsItems();
+    }
+  };
+
+  const generateSubSettingsItems = (parentKey: string) => {
+    const parentDefinition = getSettingDefinition(parentKey);
+    let subSettings = parentDefinition?.subSettings || {};
+
+    // If this is the coreToolSettings, generate dynamic tool settings
+    if (parentKey === 'coreToolSettings' && config) {
+      const dynamicToolSettings = generateDynamicToolSettings(config);
+      subSettings = { ...subSettings, ...dynamicToolSettings };
+    }
+
+    return Object.entries(subSettings).map(([key, def]) => {
+      const fullKey = `${parentKey}.${key}`;
+      const typedDef = def as SettingDefinition;
+
+      return {
+        label: typedDef.label || key,
+        value: fullKey,
+        type: typedDef.type,
+        toggle: () => {
+          // For core tools, use excludeTools logic
+          if (parentKey === 'coreToolSettings') {
+            // Calculate new excludeTools list for pending state
+            const currentExcludeTools =
+              (settings.merged.excludeTools as string[]) || [];
+            // We need to check if there's already a pending change for excludeTools
+            let pendingExcludeTools = currentExcludeTools;
+            if (globalPendingChanges.has('excludeTools')) {
+              pendingExcludeTools = globalPendingChanges.get(
+                'excludeTools',
+              ) as string[];
+            }
+
+            const currentState = getToolCurrentState(
+              key,
+              settings,
+              pendingExcludeTools,
+            );
+            // Toggle state: if enabled (not in exclude), disable it (add to exclude)
+            // if disabled (in exclude), enable it (remove from exclude)
+            const newState =
+              currentState === 'enabled' ? 'disabled' : 'enabled';
+
+            // Check if this tool setting requires restart
+            if (requiresRestart(fullKey)) {
+              // Mark as restart-required setting
+              setModifiedSettings((prev) => {
+                const updated = new Set(prev).add(fullKey);
+                updated.add('excludeTools');
+                return updated;
+              });
+
+              // Add to restart-required settings and show prompt
+              setRestartRequiredSettings((prev) => {
+                const updated = new Set(prev).add(fullKey);
+                updated.add('excludeTools');
+                return updated;
+              });
+              setShowRestartPrompt(true);
+
+              // Calculate new excludeTools list for pending state
+              const currentExcludeTools =
+                (settings.merged.excludeTools as string[]) || [];
+              // We need to check if there's already a pending change for excludeTools
+              let pendingExcludeTools = currentExcludeTools;
+              if (globalPendingChanges.has('excludeTools')) {
+                pendingExcludeTools = globalPendingChanges.get(
+                  'excludeTools',
+                ) as string[];
+              }
+
+              let newExcludeTools = [...pendingExcludeTools];
+              if (newState === 'enabled') {
+                // Enable tool: remove from excludeTools
+                newExcludeTools = newExcludeTools.filter(
+                  (name) => name !== key,
+                );
+              } else {
+                // Disable tool: add to excludeTools
+                if (!newExcludeTools.includes(key)) {
+                  newExcludeTools.push(key);
+                }
+              }
+
+              // Update global pending changes for excludeTools
+              setGlobalPendingChanges((prev) => {
+                const next = new Map(prev);
+                next.set('excludeTools', newExcludeTools);
+                return next;
+              });
+            } else {
+              // No restart required - save immediately
+              updateToolExclusion(key, newState, settings, selectedScope);
+
+              // Remove from modified sets since it's saved immediately
+              setModifiedSettings((prev) => {
+                const updated = new Set(prev);
+                updated.delete(fullKey);
+                return updated;
+              });
+
+              setRestartRequiredSettings((prev) => {
+                const updated = new Set(prev);
+                updated.delete(fullKey);
+                return updated;
+              });
+            }
+            return;
+          }
+
+          // Regular boolean setting logic
+          const currentValue = getSettingValue(
+            fullKey,
+            pendingSettings,
+            settings.merged,
+          );
+          const newValue = !currentValue;
+
+          setPendingSettings((prev) =>
+            setPendingSettingValue(fullKey, newValue, prev),
+          );
+
+          if (!requiresRestart(fullKey)) {
+            saveSingleSetting(fullKey, newValue, settings, selectedScope);
+          } else {
+            setModifiedSettings((prev) => {
+              const updated = new Set(prev).add(fullKey);
+              return updated;
+            });
+          }
+        },
+      };
+    });
+  };
+
+  const generateNormalSettingsItems = () => {
     const settingKeys = getDialogSettingKeys();
 
     return settingKeys.map((key: string) => {
@@ -487,6 +713,44 @@ export function SettingsDialog({
             currentItem?.value || '',
           );
 
+          // Check if this item has sub-settings (special case for coreToolSettings)
+          let hasSubSettings = false;
+          if (
+            currentDefinition?.subSettings &&
+            Object.keys(currentDefinition.subSettings).length > 0
+          ) {
+            hasSubSettings = true;
+          } else if (currentItem?.value === 'coreToolSettings' && config) {
+            // Special case: coreToolSettings has dynamic sub-settings
+            const dynamicToolSettings = generateDynamicToolSettings(config);
+            hasSubSettings = Object.keys(dynamicToolSettings).length > 0;
+
+            // Always show sub-settings for coreToolSettings, even if no tools found
+            if (Object.keys(dynamicToolSettings).length === 0) {
+              hasSubSettings = true;
+            }
+          }
+
+          if (hasSubSettings) {
+            // Save current state for navigation back
+            setParentState({
+              activeIndex: activeSettingIndex,
+              scrollOffset,
+            });
+
+            // Switch to sub-settings mode
+            setSubSettingsMode({
+              isActive: true,
+              parentKey: currentItem?.value || '',
+              parentLabel: currentDefinition?.label || currentItem?.value || '',
+            });
+
+            // Reset sub-settings page state
+            setActiveSettingIndex(0);
+            setScrollOffset(0);
+            return;
+          }
+
           // For boolean type, use toggle() function (simple on/off)
           if (currentItem?.type === 'boolean') {
             currentItem?.toggle();
@@ -631,6 +895,15 @@ export function SettingsDialog({
                   ),
                 );
               }
+            } else if (defType === 'enum') {
+              const enumDefaultValue = defaultValue;
+              setPendingSettings((prev) =>
+                setPendingSettingValueAny(
+                  currentSetting.value,
+                  enumDefaultValue,
+                  prev,
+                ),
+              );
             }
 
             // Remove from modified settings since it's now at default
@@ -708,22 +981,10 @@ export function SettingsDialog({
           getRestartRequiredFromModified(modifiedSettings);
         const restartRequiredSet = new Set(restartRequiredSettings);
 
-        // Create an enhanced pendingSettings object that includes globalPendingChanges values
-        const finalPendingSettings = { ...pendingSettings } as Record<
-          string,
-          unknown
-        >;
-        for (const [key, value] of globalPendingChanges.entries()) {
-          const def = getSettingDefinition(key);
-          if (def?.type === 'enum' && typeof value === 'string') {
-            finalPendingSettings[key] = value;
-          }
-        }
-
         if (restartRequiredSet.size > 0) {
           saveModifiedSettings(
             restartRequiredSet,
-            finalPendingSettings, // Use enhanced version instead of just pendingSettings
+            pendingSettings,
             settings,
             selectedScope,
           );
@@ -746,6 +1007,17 @@ export function SettingsDialog({
       if (name === 'escape') {
         if (editingKey) {
           commitEdit(editingKey);
+        } else if (subSettingsMode.isActive) {
+          // Return to parent settings page
+          setSubSettingsMode({
+            isActive: false,
+            parentKey: '',
+            parentLabel: '',
+          });
+
+          // Restore parent settings page state
+          setActiveSettingIndex(parentState.activeIndex);
+          setScrollOffset(parentState.scrollOffset);
         } else {
           onSelect(undefined, selectedScope);
         }
@@ -765,7 +1037,9 @@ export function SettingsDialog({
     >
       <Box flexDirection="column" flexGrow={1}>
         <Text bold color={Colors.AccentBlue}>
-          Settings
+          {subSettingsMode.isActive
+            ? `${subSettingsMode.parentLabel} > Settings`
+            : 'Settings'}
         </Text>
         <Box height={1} />
         {showScrollUp && <Text color={Colors.Gray}>▲</Text>}
@@ -857,6 +1131,38 @@ export function SettingsDialog({
             if (isDifferentFromDefault || isModified) {
               displayValue += '*';
             }
+          } else if (
+            subSettingsMode.isActive &&
+            subSettingsMode.parentKey === 'coreToolSettings'
+          ) {
+            // For core tools, show actual enabled/disabled state based on excludeTools
+            const toolName = item.value.replace('coreToolSettings.', '');
+
+            // Check pending settings first for excludeTools
+            let excludeTools = (pendingSettings.excludeTools as string[]) || [];
+            // If not in pending, fall back to merged settings (handled by getToolCurrentState but we want pending awareness)
+            if (!pendingSettings.excludeTools) {
+              excludeTools = (settings.merged.excludeTools as string[]) || [];
+            }
+
+            const currentState = getToolCurrentState(
+              toolName,
+              settings,
+              excludeTools,
+            );
+            const isEnabled = currentState === 'enabled';
+            displayValue = isEnabled ? 'Enabled' : 'Disabled';
+
+            // Check if this differs from default (default is enabled)
+            const isModified = !isEnabled;
+            if (isModified) {
+              displayValue += '*';
+            }
+          } else if (
+            !subSettingsMode.isActive &&
+            item.value === 'coreToolSettings'
+          ) {
+            displayValue = 'Enter';
           } else {
             // For booleans and other types, use existing logic
             displayValue = getDisplayValue(
