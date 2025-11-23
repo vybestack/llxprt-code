@@ -85,6 +85,9 @@ if (hasSourceFiles && !hasBundle) {
       env: { ...process.env, LLXPRT_POSTINSTALL_RUNNING: 'true' },
     });
 
+    // Strip peer flags again after workspace install (npm may have added them back)
+    stripPeerFlagsFromLockfile();
+
     // Build the packages
     console.log('Building packages...');
     execSync('npm run build', {
