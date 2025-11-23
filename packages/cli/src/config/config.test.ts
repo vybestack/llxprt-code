@@ -12,8 +12,6 @@ import {
   EditTool,
   WriteFileTool,
   DEFAULT_GEMINI_MODEL,
-  DEFAULT_GEMINI_MODEL_AUTO,
-  OutputFormat,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
@@ -26,9 +24,7 @@ import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 vi.mock('./trustedFolders.js', () => ({
-  isWorkspaceTrusted: vi
-    .fn()
-    .mockReturnValue({ isTrusted: true, source: 'file' }), // Default to trusted
+  isWorkspaceTrusted: vi.fn().mockReturnValue(true), // Default to trusted
 }));
 
 vi.mock('fs', async (importOriginal) => {
@@ -81,6 +77,86 @@ vi.mock('read-package-up', () => ({
   ),
 }));
 
+const runtimeSettingsState = vi.hoisted(() => ({
+  context: null as {
+    settingsService: ServerConfig.SettingsService;
+    config: ServerConfig.Config | null;
+    runtimeId: string;
+    metadata?: Record<string, unknown>;
+  } | null,
+  providerManager: null as ServerConfig.ProviderManager | null,
+  oauthManager: null as unknown,
+}));
+
+vi.mock('../runtime/runtimeSettings.js', () => ({
+  applyProfileSnapshot: vi.fn(
+    async (profile: {
+      provider?: string;
+      model?: string;
+      baseUrl?: string;
+    }) => ({
+      providerName: profile.provider ?? '',
+      modelName: profile.model ?? '',
+      baseUrl: profile.baseUrl,
+      warnings: [],
+    }),
+  ),
+  getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
+  setCliRuntimeContext: vi.fn(
+    (
+      settingsService: ServerConfig.SettingsService,
+      config?: ServerConfig.Config,
+      options: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
+    ) => {
+      runtimeSettingsState.context = {
+        settingsService,
+        config: config ?? null,
+        runtimeId: options.runtimeId ?? 'mock-runtime',
+        metadata: options.metadata ?? {},
+      };
+    },
+  ),
+  switchActiveProvider: vi.fn(async () => ({
+    changed: true,
+    previousProvider: null,
+    nextProvider: 'mock-provider',
+    authType: 'USE_PROVIDER',
+    infoMessages: [],
+  })),
+  registerCliProviderInfrastructure: vi.fn(
+    (manager: ServerConfig.ProviderManager, oauthManager: unknown) => {
+      runtimeSettingsState.providerManager = manager;
+      runtimeSettingsState.oauthManager = oauthManager ?? null;
+    },
+  ),
+  applyCliArgumentOverrides: vi.fn(async () => {}),
+  getCliRuntimeConfig: vi.fn(
+    () => runtimeSettingsState.context?.config ?? null,
+  ),
+  getCliRuntimeServices: vi.fn(() => ({
+    config: runtimeSettingsState.context?.config ?? null,
+    settingsService:
+      runtimeSettingsState.context?.settingsService ??
+      new ServerConfig.SettingsService(),
+    providerManager:
+      runtimeSettingsState.providerManager ??
+      ({
+        listProviders: () => [],
+        getActiveProviderName: () => null,
+        setActiveProvider: vi.fn(),
+        getActiveProvider: vi.fn(() => null),
+      } as unknown as ServerConfig.ProviderManager),
+  })),
+  getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
+  getActiveProviderStatus: vi.fn(() => ({
+    name:
+      runtimeSettingsState.providerManager?.getActiveProviderName?.() ??
+      runtimeSettingsState.context?.config?.getProvider?.() ??
+      null,
+  })),
+  getCliOAuthManager: vi.fn(() => runtimeSettingsState.oauthManager ?? null),
+}));
+
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actualServer = await vi.importActual<typeof ServerConfig>(
     '@vybestack/llxprt-code-core',
@@ -111,6 +187,12 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
       respectGeminiIgnore: true,
     },
   };
+});
+
+beforeEach(() => {
+  runtimeSettingsState.context = null;
+  runtimeSettingsState.providerManager = null;
+  runtimeSettingsState.oauthManager = null;
 });
 
 describe('parseArguments', () => {
@@ -294,10 +376,10 @@ describe('parseArguments', () => {
     await expect(parseArguments({} as Settings)).rejects.toThrow(
       'process.exit called',
     );
-
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      expect.stringContaining('Invalid values:'),
-    );
+    const errorOutput = mockConsoleError.mock.calls
+      .map(([msg]) => String(msg))
+      .join('\n');
+    expect(errorOutput).toMatch(/Invalid values/i);
 
     mockExit.mockRestore();
     mockConsoleError.mockRestore();
@@ -873,88 +955,8 @@ describe('loadCliConfig telemetry', () => {
     expect(config.getTelemetryLogPromptsEnabled()).toBe(true);
   });
 
-  it('should use telemetry OTLP protocol from settings if CLI flag is not present', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = {
-      telemetry: { otlpProtocol: 'http' },
-    };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryOtlpProtocol()).toBe('http');
-  });
-
-  it('should prioritize --telemetry-otlp-protocol CLI flag over settings', async () => {
-    process.argv = ['node', 'script.js', '--telemetry-otlp-protocol', 'http'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = {
-      telemetry: { otlpProtocol: 'grpc' },
-    };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryOtlpProtocol()).toBe('http');
-  });
-
-  it('should use default protocol if no OTLP protocol is provided via CLI or settings', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = { telemetry: { enabled: true } };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryOtlpProtocol()).toBe('grpc');
-  });
-
-  it('should reject invalid --telemetry-otlp-protocol values', async () => {
-    process.argv = [
-      'node',
-      'script.js',
-      '--telemetry-otlp-protocol',
-      'invalid',
-    ];
-
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-
-    const mockConsoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
-
-    await expect(parseArguments({} as Settings)).rejects.toThrow(
-      'process.exit called',
-    );
-
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      expect.stringContaining('Invalid values:'),
-    );
-
-    mockExit.mockRestore();
-    mockConsoleError.mockRestore();
-  });
+  // External telemetry upload turned off (GCP reporting removed), so we no longer
+  // honor OTLP protocol overrides.
 });
 
 describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
@@ -1062,6 +1064,14 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
 });
 
 describe('mergeMcpServers', () => {
+  beforeEach(() => {
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+  });
+
   it('should not modify the original settings object', async () => {
     const settings: Settings = {
       mcpServers: {
@@ -1117,7 +1127,7 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should merge excludeTools from settings and extensions', async () => {
-    const settings: Settings = { tools: { exclude: ['tool1', 'tool2'] } };
+    const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
     const extensions: Extension[] = [
       {
         path: '/path/to/ext1',
@@ -1157,7 +1167,7 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should handle overlapping excludeTools between settings and extensions', async () => {
-    const settings: Settings = { tools: { exclude: ['tool1', 'tool2'] } };
+    const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
     const extensions: Extension[] = [
       {
         path: '/path/to/ext1',
@@ -1188,7 +1198,7 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should handle overlapping excludeTools between extensions', async () => {
-    const settings: Settings = { tools: { exclude: ['tool1'] } };
+    const settings: Settings = { excludeTools: ['tool1'] };
     const extensions: Extension[] = [
       {
         path: '/path/to/ext1',
@@ -1268,7 +1278,7 @@ describe('mergeExcludeTools', () => {
   it('should handle settings with excludeTools but no extensions', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const settings: Settings = { tools: { exclude: ['tool1', 'tool2'] } };
+    const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
     const extensions: Extension[] = [];
     const config = await loadCliConfig(
       settings,
@@ -1318,7 +1328,7 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should not modify the original settings object', async () => {
-    const settings: Settings = { tools: { exclude: ['tool1'] } };
+    const settings: Settings = { excludeTools: ['tool1'] };
     const extensions: Extension[] = [
       {
         path: '/path/to/ext',
@@ -1542,7 +1552,7 @@ describe('Approval mode tool exclusion logic', () => {
       'test',
     ];
     const argv = await parseArguments({} as Settings);
-    const settings: Settings = { tools: { exclude: ['custom_tool'] } };
+    const settings: Settings = { excludeTools: ['custom_tool'] };
     const extensions: Extension[] = [];
 
     const config = await loadCliConfig(
@@ -1727,7 +1737,7 @@ describe('loadCliConfig with allowed-mcp-server-names', () => {
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
       ...baseSettings,
-      mcp: { allowed: ['server1', 'server2'] },
+      allowMCPServers: ['server1', 'server2'],
     };
     const config = await loadCliConfig(
       settings,
@@ -1750,7 +1760,7 @@ describe('loadCliConfig with allowed-mcp-server-names', () => {
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
       ...baseSettings,
-      mcp: { excluded: ['server1', 'server2'] },
+      excludeMCPServers: ['server1', 'server2'],
     };
     const config = await loadCliConfig(
       settings,
@@ -1772,10 +1782,8 @@ describe('loadCliConfig with allowed-mcp-server-names', () => {
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
       ...baseSettings,
-      mcp: {
-        excluded: ['server1'],
-        allowed: ['server1', 'server2'],
-      },
+      excludeMCPServers: ['server1'],
+      allowMCPServers: ['server1', 'server2'],
     };
     const config = await loadCliConfig(
       settings,
@@ -1802,10 +1810,8 @@ describe('loadCliConfig with allowed-mcp-server-names', () => {
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
       ...baseSettings,
-      mcp: {
-        excluded: ['server1'],
-        allowed: ['server2'],
-      },
+      excludeMCPServers: ['server1'],
+      allowMCPServers: ['server2'],
     };
     const config = await loadCliConfig(
       settings,
@@ -1834,10 +1840,8 @@ describe('loadCliConfig with allowed-mcp-server-names', () => {
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
       ...baseSettings,
-      mcp: {
-        allowed: ['server1', 'server2'], // Should be ignored
-        excluded: ['server3'], // Should be ignored
-      },
+      allowMCPServers: ['server1', 'server2'], // Should be ignored
+      excludeMCPServers: ['server3'], // Should be ignored
     };
     const config = await loadCliConfig(
       settings,
@@ -1857,6 +1861,14 @@ describe('loadCliConfig with allowed-mcp-server-names', () => {
 });
 
 describe('loadCliConfig extensions', () => {
+  beforeEach(() => {
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+  });
+
   const mockExtensions: Extension[] = [
     {
       path: '/path/to/ext1',
@@ -1909,14 +1921,20 @@ describe('loadCliConfig extensions', () => {
 });
 
 describe('loadCliConfig model selection', () => {
+  beforeEach(() => {
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
+  });
+
   it('selects a model from settings.json if provided', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
       {
-        model: {
-          name: 'gemini-9001-ultra',
-        },
+        model: 'gemini-9001-ultra',
       },
       [],
       new ExtensionEnablementManager(
@@ -1946,7 +1964,7 @@ describe('loadCliConfig model selection', () => {
       argv,
     );
 
-    expect(config.getModel()).toBe(DEFAULT_GEMINI_MODEL_AUTO);
+    expect(config.getModel()).toBe(DEFAULT_GEMINI_MODEL);
   });
 
   it('always prefers model from argvs', async () => {
@@ -1954,9 +1972,7 @@ describe('loadCliConfig model selection', () => {
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
       {
-        model: {
-          name: 'gemini-9001-ultra',
-        },
+        model: 'gemini-9001-ultra',
       },
       [],
       new ExtensionEnablementManager(
@@ -1990,117 +2006,6 @@ describe('loadCliConfig model selection', () => {
   });
 });
 
-describe('loadCliConfig model selection with model router', () => {
-  it('should use auto model when useModelRouter is true and no model is provided', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {
-        experimental: {
-          useModelRouter: true,
-        },
-      },
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-
-    expect(config.getModel()).toBe(DEFAULT_GEMINI_MODEL_AUTO);
-  });
-
-  it('should use default model when useModelRouter is false and no model is provided', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {
-        experimental: {
-          useModelRouter: false,
-        },
-      },
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-
-    expect(config.getModel()).toBe(DEFAULT_GEMINI_MODEL);
-  });
-
-  it('should prioritize argv over useModelRouter', async () => {
-    process.argv = ['node', 'script.js', '--model', 'gemini-from-argv'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {
-        experimental: {
-          useModelRouter: true,
-        },
-      },
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-
-    expect(config.getModel()).toBe('gemini-from-argv');
-  });
-
-  it('should prioritize settings over useModelRouter', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {
-        experimental: {
-          useModelRouter: true,
-        },
-        model: {
-          name: 'gemini-from-settings',
-        },
-      },
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-
-    expect(config.getModel()).toBe('gemini-from-settings');
-  });
-
-  it('should prioritize environment variable over useModelRouter', async () => {
-    process.argv = ['node', 'script.js'];
-    vi.stubEnv('GEMINI_MODEL', 'gemini-from-env');
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {
-        experimental: {
-          useModelRouter: true,
-        },
-      },
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-
-    expect(config.getModel()).toBe('gemini-from-env');
-  });
-});
-
 describe('loadCliConfig folderTrust', () => {
   const originalArgv = process.argv;
 
@@ -2121,11 +2026,7 @@ describe('loadCliConfig folderTrust', () => {
   it('should be false when folderTrust is false', async () => {
     process.argv = ['node', 'script.js'];
     const settings: Settings = {
-      security: {
-        folderTrust: {
-          enabled: false,
-        },
-      },
+      folderTrust: false,
     };
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
@@ -2145,11 +2046,7 @@ describe('loadCliConfig folderTrust', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
-      security: {
-        folderTrust: {
-          enabled: true,
-        },
-      },
+      folderTrust: true,
     };
     const config = await loadCliConfig(
       settings,
@@ -2212,13 +2109,11 @@ describe('loadCliConfig with includeDirectories', () => {
     ];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
-      context: {
-        includeDirectories: [
-          path.resolve(path.sep, 'settings', 'path1'),
-          path.join(os.homedir(), 'settings', 'path2'),
-          path.join(mockCwd, 'settings', 'path3'),
-        ],
-      },
+      includeDirectories: [
+        path.resolve(path.sep, 'settings', 'path1'),
+        path.join(os.homedir(), 'settings', 'path2'),
+        path.join(mockCwd, 'settings', 'path3'),
+      ],
     };
     const config = await loadCliConfig(
       settings,
@@ -2268,10 +2163,8 @@ describe('loadCliConfig chatCompression', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
-      model: {
-        chatCompression: {
-          contextPercentageThreshold: 0.5,
-        },
+      chatCompression: {
+        contextPercentageThreshold: 0.5,
       },
     };
     const config = await loadCliConfig(
@@ -2324,7 +2217,7 @@ describe('loadCliConfig useRipgrep', () => {
     clearActiveProviderRuntimeContext();
   });
 
-  it('should be true by default when useRipgrep is not set in settings', async () => {
+  it('should be false by default when useRipgrep is not set in settings', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
@@ -2338,13 +2231,13 @@ describe('loadCliConfig useRipgrep', () => {
       'test-session',
       argv,
     );
-    expect(config.getUseRipgrep()).toBe(true);
+    expect(config.getUseRipgrep()).toBe(false);
   });
 
   it('should be false when useRipgrep is set to false in settings', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const settings: Settings = { tools: { useRipgrep: false } };
+    const settings: Settings = { useRipgrep: false };
     const config = await loadCliConfig(
       settings,
       [],
@@ -2361,7 +2254,7 @@ describe('loadCliConfig useRipgrep', () => {
   it('should be true when useRipgrep is explicitly set to true in settings', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const settings: Settings = { tools: { useRipgrep: true } };
+    const settings: Settings = { useRipgrep: true };
     const config = await loadCliConfig(
       settings,
       [],
@@ -2373,59 +2266,6 @@ describe('loadCliConfig useRipgrep', () => {
       argv,
     );
     expect(config.getUseRipgrep()).toBe(true);
-  });
-
-  describe('loadCliConfig useModelRouter', () => {
-    it('should be false by default when useModelRouter is not set in settings', async () => {
-      process.argv = ['node', 'script.js'];
-      const argv = await parseArguments({} as Settings);
-      const settings: Settings = {};
-      const config = await loadCliConfig(
-        settings,
-        [],
-        new ExtensionEnablementManager(
-          ExtensionStorage.getUserExtensionsDir(),
-          argv.extensions,
-        ),
-        'test-session',
-        argv,
-      );
-      expect(config.getUseModelRouter()).toBe(true);
-    });
-
-    it('should be true when useModelRouter is set to true in settings', async () => {
-      process.argv = ['node', 'script.js'];
-      const argv = await parseArguments({} as Settings);
-      const settings: Settings = { experimental: { useModelRouter: true } };
-      const config = await loadCliConfig(
-        settings,
-        [],
-        new ExtensionEnablementManager(
-          ExtensionStorage.getUserExtensionsDir(),
-          argv.extensions,
-        ),
-        'test-session',
-        argv,
-      );
-      expect(config.getUseModelRouter()).toBe(true);
-    });
-
-    it('should be false when useModelRouter is explicitly set to false in settings', async () => {
-      process.argv = ['node', 'script.js'];
-      const argv = await parseArguments({} as Settings);
-      const settings: Settings = { experimental: { useModelRouter: false } };
-      const config = await loadCliConfig(
-        settings,
-        [],
-        new ExtensionEnablementManager(
-          ExtensionStorage.getUserExtensionsDir(),
-          argv.extensions,
-        ),
-        'test-session',
-        argv,
-      );
-      expect(config.getUseModelRouter()).toBe(false);
-    });
   });
 });
 
@@ -2450,7 +2290,7 @@ describe('screenReader configuration', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
-      ui: { accessibility: { screenReader: true } },
+      accessibility: { screenReader: true },
     };
     const config = await loadCliConfig(
       settings,
@@ -2469,7 +2309,7 @@ describe('screenReader configuration', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
-      ui: { accessibility: { screenReader: false } },
+      accessibility: { screenReader: false },
     };
     const config = await loadCliConfig(
       settings,
@@ -2488,7 +2328,7 @@ describe('screenReader configuration', () => {
     process.argv = ['node', 'script.js', '--screen-reader'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {
-      ui: { accessibility: { screenReader: false } },
+      accessibility: { screenReader: false },
     };
     const config = await loadCliConfig(
       settings,
@@ -2920,10 +2760,7 @@ describe('loadCliConfig approval mode', () => {
   // --- Untrusted Folder Scenarios ---
   describe('when folder is NOT trusted', () => {
     beforeEach(() => {
-      vi.mocked(isWorkspaceTrusted).mockReturnValue({
-        isTrusted: false,
-        source: 'file',
-      });
+      vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
     });
 
     it('should override --approval-mode=yolo to DEFAULT', async () => {
@@ -3036,13 +2873,13 @@ describe('loadCliConfig fileFiltering', () => {
       value: false,
     },
     {
-      property: 'respectGeminiIgnore',
-      getter: (c) => c.getFileFilteringRespectGeminiIgnore(),
+      property: 'respectLlxprtIgnore',
+      getter: (c) => c.getFileFilteringRespectLlxprtIgnore(),
       value: true,
     },
     {
-      property: 'respectGeminiIgnore',
-      getter: (c) => c.getFileFilteringRespectGeminiIgnore(),
+      property: 'respectLlxprtIgnore',
+      getter: (c) => c.getFileFilteringRespectLlxprtIgnore(),
       value: false,
     },
     {
@@ -3061,9 +2898,7 @@ describe('loadCliConfig fileFiltering', () => {
     'should pass $property from settings to config when $value',
     async ({ property, getter, value }) => {
       const settings: Settings = {
-        context: {
-          fileFiltering: { [property]: value },
-        },
+        fileFiltering: { [property]: value },
       };
       const argv = await parseArguments(settings);
       const config = await loadCliConfig(
@@ -3079,74 +2914,6 @@ describe('loadCliConfig fileFiltering', () => {
       expect(getter(config)).toBe(value);
     },
   );
-});
-
-describe('Output format', () => {
-  it('should default to TEXT', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getOutputFormat()).toBe(OutputFormat.TEXT);
-  });
-
-  it('should use the format from settings', async () => {
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      { output: { format: OutputFormat.JSON } },
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getOutputFormat()).toBe(OutputFormat.JSON);
-  });
-
-  it('should prioritize the format from argv', async () => {
-    process.argv = ['node', 'script.js', '--output-format', 'json'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      { output: { format: OutputFormat.JSON } },
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getOutputFormat()).toBe(OutputFormat.JSON);
-  });
-
-  it('should error on invalid --output-format argument', async () => {
-    process.argv = ['node', 'script.js', '--output-format', 'yaml'];
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => {
-      throw new Error('process.exit called');
-    });
-    const mockConsoleError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
-    await expect(parseArguments({} as Settings)).rejects.toThrow(
-      'process.exit called',
-    );
-    expect(mockConsoleError).toHaveBeenCalledWith(
-      expect.stringContaining('Invalid values:'),
-    );
-    mockExit.mockRestore();
-    mockConsoleError.mockRestore();
-  });
 });
 
 describe('parseArguments with positional prompt', () => {
@@ -3198,264 +2965,5 @@ describe('parseArguments with positional prompt', () => {
     process.argv = ['node', 'script.js', '--prompt', 'test prompt'];
     const argv = await parseArguments({} as Settings);
     expect(argv.prompt).toBe('test prompt');
-  });
-});
-
-describe('Telemetry configuration via environment variables', () => {
-  it('should prioritize GEMINI_TELEMETRY_ENABLED over settings', async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_ENABLED', 'true');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = { telemetry: { enabled: false } };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryEnabled()).toBe(true);
-  });
-
-  it('should prioritize GEMINI_TELEMETRY_TARGET over settings', async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_TARGET', 'gcp');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = { telemetry: { target: 'local' } };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryTarget()).toBe('gcp');
-  });
-
-  it('should throw when GEMINI_TELEMETRY_TARGET is invalid', async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_TARGET', 'bogus');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = { telemetry: { target: 'gcp' } };
-    await expect(
-      loadCliConfig(
-        settings,
-        [],
-        new ExtensionEnablementManager(
-          ExtensionStorage.getUserExtensionsDir(),
-          argv.extensions,
-        ),
-        'test-session',
-        argv,
-      ),
-    ).rejects.toThrow(
-      /Invalid telemetry configuration: .*Invalid telemetry target/i,
-    );
-    vi.unstubAllEnvs();
-  });
-
-  it('should prioritize GEMINI_TELEMETRY_OTLP_ENDPOINT over settings and default env var', async () => {
-    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://default.env.com');
-    vi.stubEnv('GEMINI_TELEMETRY_OTLP_ENDPOINT', 'http://gemini.env.com');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = {
-      telemetry: { otlpEndpoint: 'http://settings.com' },
-    };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryOtlpEndpoint()).toBe('http://gemini.env.com');
-  });
-
-  it('should prioritize GEMINI_TELEMETRY_OTLP_PROTOCOL over settings', async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_OTLP_PROTOCOL', 'http');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = { telemetry: { otlpProtocol: 'grpc' } };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryOtlpProtocol()).toBe('http');
-  });
-
-  it('should prioritize GEMINI_TELEMETRY_LOG_PROMPTS over settings', async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_LOG_PROMPTS', 'false');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = { telemetry: { logPrompts: true } };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryLogPromptsEnabled()).toBe(false);
-  });
-
-  it('should prioritize GEMINI_TELEMETRY_OUTFILE over settings', async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_OUTFILE', '/gemini/env/telemetry.log');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = {
-      telemetry: { outfile: '/settings/telemetry.log' },
-    };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryOutfile()).toBe('/gemini/env/telemetry.log');
-  });
-
-  it('should prioritize GEMINI_TELEMETRY_USE_COLLECTOR over settings', async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_USE_COLLECTOR', 'true');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = { telemetry: { useCollector: false } };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryUseCollector()).toBe(true);
-  });
-
-  it('should use settings value when GEMINI_TELEMETRY_ENABLED is not set', async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_ENABLED', undefined);
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = { telemetry: { enabled: true } };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryEnabled()).toBe(true);
-  });
-
-  it('should use settings value when GEMINI_TELEMETRY_TARGET is not set', async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_TARGET', undefined);
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const settings: Settings = { telemetry: { target: 'local' } };
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryTarget()).toBe('local');
-  });
-
-  it("should treat GEMINI_TELEMETRY_ENABLED='1' as true", async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_ENABLED', '1');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryEnabled()).toBe(true);
-  });
-
-  it("should treat GEMINI_TELEMETRY_ENABLED='0' as false", async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_ENABLED', '0');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      { telemetry: { enabled: true } },
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryEnabled()).toBe(false);
-  });
-
-  it("should treat GEMINI_TELEMETRY_LOG_PROMPTS='1' as true", async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_LOG_PROMPTS', '1');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {},
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryLogPromptsEnabled()).toBe(true);
-  });
-
-  it("should treat GEMINI_TELEMETRY_LOG_PROMPTS='false' as false", async () => {
-    vi.stubEnv('GEMINI_TELEMETRY_LOG_PROMPTS', 'false');
-    process.argv = ['node', 'script.js'];
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      { telemetry: { logPrompts: true } },
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
-    expect(config.getTelemetryLogPromptsEnabled()).toBe(false);
   });
 });

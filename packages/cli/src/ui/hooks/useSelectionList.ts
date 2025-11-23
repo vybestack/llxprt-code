@@ -6,6 +6,7 @@
 
 import { useReducer, useRef, useEffect } from 'react';
 import { useKeypress } from './useKeypress.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 export interface SelectionListItem<T> {
   key: string;
@@ -26,6 +27,8 @@ export interface UseSelectionListResult {
   activeIndex: number;
   setActiveIndex: (index: number) => void;
 }
+
+const selectionLogger = new DebugLogger('llxprt:ui:selection');
 
 interface SelectionListState<T> {
   activeIndex: number;
@@ -256,6 +259,14 @@ export function useSelectionList<T>({
     if (state.pendingSelect && items[state.activeIndex]) {
       const currentItem = items[state.activeIndex];
       if (currentItem && !currentItem.disabled) {
+        if (selectionLogger.enabled) {
+          selectionLogger.debug(
+            () =>
+              `useSelectionList invoking onSelect with value=${JSON.stringify(
+                currentItem.value,
+              )}`,
+          );
+        }
         onSelect(currentItem.value);
       }
       needsClear = true;
@@ -287,6 +298,15 @@ export function useSelectionList<T>({
       const { sequence, name } = key;
       const isNumeric = showNumbers && /^[0-9]$/.test(sequence);
 
+      if (selectionLogger.enabled) {
+        selectionLogger.debug(
+          () =>
+            `useSelectionList key=${name} sequence=${JSON.stringify(
+              sequence,
+            )} isFocused=${!!isFocused}`,
+        );
+      }
+
       // Clear number input buffer on non-numeric key press
       if (!isNumeric && numberInputTimer.current) {
         clearTimeout(numberInputTimer.current);
@@ -304,6 +324,12 @@ export function useSelectionList<T>({
       }
 
       if (name === 'return') {
+        if (selectionLogger.enabled) {
+          selectionLogger.debug(
+            () =>
+              `useSelectionList dispatching SELECT_CURRENT at index ${state.activeIndex}`,
+          );
+        }
         dispatch({ type: 'SELECT_CURRENT', payload: { items } });
         return;
       }
@@ -328,6 +354,12 @@ export function useSelectionList<T>({
         }
 
         if (targetIndex >= 0 && targetIndex < items.length) {
+          if (selectionLogger.enabled) {
+            selectionLogger.debug(
+              () =>
+                `useSelectionList numeric selection targetIndex=${targetIndex}`,
+            );
+          }
           dispatch({
             type: 'SET_ACTIVE_INDEX',
             payload: { index: targetIndex, items },
@@ -340,6 +372,9 @@ export function useSelectionList<T>({
               type: 'SELECT_CURRENT',
               payload: { items },
             });
+            if (selectionLogger.enabled) {
+              selectionLogger.debug(() => 'Numeric selection auto-submitted');
+            }
             numberInputRef.current = '';
           } else {
             // Otherwise wait for more input or timeout
@@ -348,6 +383,11 @@ export function useSelectionList<T>({
                 type: 'SELECT_CURRENT',
                 payload: { items },
               });
+              if (selectionLogger.enabled) {
+                selectionLogger.debug(
+                  () => 'Numeric selection submitted after timeout',
+                );
+              }
               numberInputRef.current = '';
             }, NUMBER_INPUT_TIMEOUT_MS);
           }

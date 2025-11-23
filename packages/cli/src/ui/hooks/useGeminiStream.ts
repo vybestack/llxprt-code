@@ -145,6 +145,7 @@ export const useGeminiStream = (
   onEditorClose: () => void,
   onCancelSubmit: () => void,
   onTodoPause?: () => void,
+  onEditorOpen: () => void = () => {},
 ) => {
   const [initError, setInitError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -301,6 +302,7 @@ export const useGeminiStream = (
       setPendingHistoryItem,
       getPreferredEditor,
       onEditorClose,
+      onEditorOpen,
     );
 
   const pendingToolCallGroupDisplay = useMemo(

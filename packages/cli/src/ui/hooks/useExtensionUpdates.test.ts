@@ -38,8 +38,10 @@ const mockGit = {
 };
 
 vi.mock('simple-git', () => ({
-  simpleGit: vi.fn((path: string) => {
-    mockGit.path.mockReturnValue(path);
+  simpleGit: vi.fn((path?: string) => {
+    if (path) {
+      mockGit.path.mockReturnValue(path);
+    }
     return mockGit;
   }),
 }));
@@ -188,11 +190,11 @@ describe('useExtensionUpdates', () => {
     mockGit.revparse.mockResolvedValue('local-hash');
     mockGit.listRemote.mockResolvedValue('remote-hash\tHEAD');
     mockGit.clone.mockImplementation(async (_, destination) => {
-      fs.mkdirSync(path.join(mockGit.path(), destination), {
+      fs.mkdirSync(destination, {
         recursive: true,
       });
       fs.writeFileSync(
-        path.join(mockGit.path(), destination, EXTENSIONS_CONFIG_FILENAME),
+        path.join(destination, EXTENSIONS_CONFIG_FILENAME),
         JSON.stringify({ name: 'test-extension', version: '1.1.0' }),
       );
     });

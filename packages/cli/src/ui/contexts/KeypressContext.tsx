@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
 import {
   KittySequenceOverflowEvent,
   logKittySequenceOverflow,
@@ -18,6 +18,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 import readline from 'node:readline';
 import { PassThrough } from 'node:stream';
@@ -45,8 +46,10 @@ import {
   DISABLE_FOCUS_TRACKING,
   SHOW_CURSOR,
 } from '../utils/terminalSequences.js';
+import { enableSupportedProtocol } from '../utils/kittyProtocolDetector.js';
 
 const ESC = '\u001B';
+const keypressLogger = new DebugLogger('llxprt:ui:keypress');
 export const PASTE_MODE_PREFIX = `${ESC}[200~`;
 export const PASTE_MODE_SUFFIX = `${ESC}[201~`;
 export const DRAG_COMPLETION_TIMEOUT_MS = 100; // Broadcast full path after 100ms if no more input
@@ -242,7 +245,15 @@ export function KeypressProvider({
     [subscribers],
   );
 
+  const [refreshGeneration, setRefreshGeneration] = useState(0);
+
   useEffect(() => {
+    if (keypressLogger.enabled) {
+      keypressLogger.debug(
+        () =>
+          `Initializing keypress listeners (generation ${refreshGeneration})`,
+      );
+    }
     const clearDraggingTimer = () => {
       if (draggingTimerRef.current) {
         clearTimeout(draggingTimerRef.current);
@@ -882,6 +893,20 @@ export function KeypressProvider({
     };
 
     const handleKeypress = (_: unknown, key: Key) => {
+      if (
+        key &&
+        keypressLogger.enabled &&
+        (key.name === 'return' || key.sequence === '\r')
+      ) {
+        keypressLogger.debug(
+          () =>
+            `handleKeypress return event seq=${JSON.stringify(
+              key.sequence,
+            )} ctrl=${key.ctrl} meta=${key.meta} paste=${isPaste} kitty=${
+              key.kittyProtocol ? '1' : '0'
+            }`,
+        );
+      }
       if (handleFocusEvent(key)) return;
       if (handlePasteEvent(key)) return;
 
@@ -931,6 +956,14 @@ export function KeypressProvider({
     };
 
     const handleRawKeypress = (data: Buffer) => {
+      if (keypressLogger.enabled) {
+        keypressLogger.debug(
+          () =>
+            `handleRawKeypress chunk length=${data.length} endsWithCR=${
+              data.length > 0 && data[data.length - 1] === 13
+            }`,
+        );
+      }
       const pasteModePrefixBuffer = Buffer.from(PASTE_MODE_PREFIX);
       const pasteModeSuffixBuffer = Buffer.from(PASTE_MODE_SUFFIX);
 
@@ -993,6 +1026,7 @@ export function KeypressProvider({
       // Re-send terminal control sequences
       process.stdout.write(ENABLE_BRACKETED_PASTE);
       process.stdout.write(ENABLE_FOCUS_TRACKING);
+      enableSupportedProtocol();
     };
 
     process.on('SIGCONT', handleSigcont);
@@ -1013,6 +1047,12 @@ export function KeypressProvider({
     }
 
     return () => {
+      if (keypressLogger.enabled) {
+        keypressLogger.debug(
+          () =>
+            `Cleaning up keypress listeners (generation ${refreshGeneration})`,
+        );
+      }
       if (usePassthrough) {
         keypressStream.removeListener('keypress', handleKeypress);
         stdin.removeListener('data', handleRawKeypress);
@@ -1091,11 +1131,14 @@ export function KeypressProvider({
     config,
     subscribers,
     debugKeystrokeLogging,
+    refreshGeneration,
   ]);
 
   const refresh = useCallback(() => {
-    // Refresh implementation - currently a no-op but can be extended
-    // Future implementation can trigger context updates or re-renders
+    if (keypressLogger.enabled) {
+      keypressLogger.debug(() => 'KeypressProvider refresh requested');
+    }
+    setRefreshGeneration((prev) => prev + 1);
   }, []);
 
   const contextValue = useMemo(

@@ -5,6 +5,7 @@
  */
 
 import { Box, Text } from 'ink';
+import { useCallback } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
@@ -25,6 +26,7 @@ import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
 // import { ProQuotaDialog } from './ProQuotaDialog.js'; // TODO: Not yet ported from upstream
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
 // import { ModelDialog } from './ModelDialog.js'; // TODO: Not yet ported from upstream
+import { LoggingDialog } from './LoggingDialog.js';
 import { theme } from '../semantic-colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
@@ -53,6 +55,18 @@ export const DialogManager = ({
   const { constrainHeight, terminalHeight, mainAreaWidth } = uiState;
   // staticExtraHeight not yet implemented in LLxprt
   const staticExtraHeight = 0;
+
+  const handleSettingsDialogSelect = useCallback(() => {
+    uiActions.closeSettingsDialog();
+  }, [uiActions]);
+
+  const handleSettingsDialogRestart = useCallback(() => {
+    process.exit(0);
+  }, []);
+
+  const handlePrivacyNoticeExit = useCallback(() => {
+    uiActions.handlePrivacyNoticeExit();
+  }, [uiActions]);
 
   // TODO: IdeTrustChangeDialog not yet ported from upstream
   // if (uiState.showIdeRestartPrompt) {
@@ -150,8 +164,8 @@ export const DialogManager = ({
       <Box flexDirection="column">
         <SettingsDialog
           settings={settings}
-          onSelect={() => uiActions.closeSettingsDialog()}
-          onRestartRequest={() => process.exit(0)}
+          onSelect={handleSettingsDialogSelect}
+          onRestartRequest={handleSettingsDialogRestart}
         />
       </Box>
     );
@@ -251,12 +265,7 @@ export const DialogManager = ({
     );
   }
   if (uiState.showPrivacyNotice) {
-    return (
-      <PrivacyNotice
-        onExit={() => uiActions.handlePrivacyNoticeExit()}
-        config={config}
-      />
-    );
+    return <PrivacyNotice onExit={handlePrivacyNoticeExit} config={config} />;
   }
 
   if (uiState.isPermissionsDialogOpen) {
@@ -264,6 +273,35 @@ export const DialogManager = ({
       <PermissionsModifyTrustDialog
         onExit={uiActions.closePermissionsDialog}
         addItem={addItem}
+      />
+    );
+  }
+
+  if (uiState.isLoggingDialogOpen) {
+    return (
+      <LoggingDialog
+        entries={
+          (uiState.loggingDialogData?.entries || []) as Array<{
+            timestamp: string;
+            type: 'request' | 'response' | 'tool_call';
+            provider: string;
+            model?: string;
+            conversationId?: string;
+            messages?: Array<{ role: string; content: string }>;
+            response?: string;
+            tokens?: { input?: number; output?: number };
+            error?: string;
+            tool?: string;
+            duration?: number;
+            success?: boolean;
+            gitStats?: {
+              linesAdded: number;
+              linesRemoved: number;
+              filesChanged: number;
+            };
+          }>
+        }
+        onClose={uiActions.closeLoggingDialog}
       />
     );
   }

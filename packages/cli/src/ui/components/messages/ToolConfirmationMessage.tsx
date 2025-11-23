@@ -16,6 +16,7 @@ import {
   ToolMcpConfirmationDetails,
   Config,
   MessageBusType,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import {
   RadioButtonSelect,
@@ -34,6 +35,8 @@ export interface ToolConfirmationMessageProps {
   terminalWidth: number;
 }
 
+const confirmationLogger = new DebugLogger('llxprt:ui:selection');
+
 export const ToolConfirmationMessage: React.FC<
   ToolConfirmationMessageProps
 > = ({
@@ -51,6 +54,12 @@ export const ToolConfirmationMessage: React.FC<
 
   const handleConfirm = useCallback(
     (outcome: ToolConfirmationOutcome) => {
+      if (confirmationLogger.enabled) {
+        confirmationLogger.debug(
+          () =>
+            `ToolConfirmationMessage handleConfirm outcome=${outcome} correlationId=${confirmationDetails.correlationId}`,
+        );
+      }
       const correlationId = confirmationDetails.correlationId;
       if (!correlationId) {
         console.error(

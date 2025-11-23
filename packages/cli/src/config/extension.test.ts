@@ -50,8 +50,10 @@ const mockGit = {
 };
 
 vi.mock('simple-git', () => ({
-  simpleGit: vi.fn((path: string) => {
-    mockGit.path.mockReturnValue(path);
+  simpleGit: vi.fn((path?: string) => {
+    if (path) {
+      mockGit.path.mockReturnValue(path);
+    }
     return mockGit;
   }),
 }));
@@ -132,6 +134,13 @@ describe('extension tests', () => {
     mockQuestion.mockImplementation((_query, callback) => callback('y'));
     vi.mocked(execSync).mockClear();
     Object.values(mockGit).forEach((fn) => fn.mockReset());
+    mockLogExtensionInstallEvent.mockReset();
+    mockLogExtensionUninstall.mockReset();
+    mockLogExtensionEnable.mockReset();
+    mockLogExtensionDisable.mockReset();
+    vi.mocked(ExtensionUninstallEvent).mockClear();
+    vi.mocked(ExtensionDisableEvent).mockClear();
+    vi.mocked(ExtensionEnableEvent).mockClear();
   });
 
   afterEach(() => {
@@ -426,7 +435,7 @@ describe('extension tests', () => {
       expect(consoleSpy).toHaveBeenCalledOnce();
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining(
-          `Warning: Skipping extension in ${badExtDir}: Failed to load extension config from ${badConfigPath}`,
+          `Warning: Skipping extension in ${badExtDir}: Expected`,
         ),
       );
 
@@ -460,7 +469,7 @@ describe('extension tests', () => {
       expect(consoleSpy).toHaveBeenCalledOnce();
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining(
-          `Warning: Skipping extension in ${badExtDir}: Failed to load extension config from ${badConfigPath}: Invalid configuration in ${badConfigPath}: missing "name"`,
+          `Invalid extension config in ${badConfigPath}: missing name or version.`,
         ),
       );
 
@@ -740,14 +749,15 @@ describe('extension tests', () => {
     it('should throw an error and cleanup if gemini-extension.json is missing', async () => {
       const sourceExtDir = path.join(tempHomeDir, 'bad-extension');
       fs.mkdirSync(sourceExtDir, { recursive: true });
-      const configPath = path.join(sourceExtDir, EXTENSIONS_CONFIG_FILENAME);
 
       await expect(
         installExtension(
           { source: sourceExtDir, type: 'local' },
           async (_) => true,
         ),
-      ).rejects.toThrow(`Configuration file not found at ${configPath}`);
+      ).rejects.toThrow(
+        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json file.`,
+      );
 
       const targetExtDir = path.join(userExtensionsDir, 'bad-extension');
       expect(fs.existsSync(targetExtDir)).toBe(false);
@@ -765,12 +775,7 @@ describe('extension tests', () => {
           async (_) => true,
         ),
       ).rejects.toThrow(
-        new RegExp(
-          `^Failed to load extension config from ${configPath.replace(
-            /\\/g,
-            '\\\\',
-          )}`,
-        ),
+        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json file.`,
       );
     });
 
@@ -790,7 +795,7 @@ describe('extension tests', () => {
           async (_) => true,
         ),
       ).rejects.toThrow(
-        `Invalid configuration in ${configPath}: missing "name"`,
+        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json file.`,
       );
     });
 
@@ -801,11 +806,11 @@ describe('extension tests', () => {
       const metadataPath = path.join(targetExtDir, INSTALL_METADATA_FILENAME);
 
       mockGit.clone.mockImplementation(async (_, destination) => {
-        fs.mkdirSync(path.join(mockGit.path(), destination), {
+        fs.mkdirSync(destination, {
           recursive: true,
         });
         fs.writeFileSync(
-          path.join(mockGit.path(), destination, EXTENSIONS_CONFIG_FILENAME),
+          path.join(destination, EXTENSIONS_CONFIG_FILENAME),
           JSON.stringify({ name: extensionName, version: '1.0.0' }),
         );
       });
@@ -854,7 +859,7 @@ describe('extension tests', () => {
       fs.rmSync(targetExtDir, { recursive: true, force: true });
     });
 
-    it('should log to clearcut on successful install', async () => {
+    it('should not emit telemetry when installing', async () => {
       const sourceExtDir = createExtension({
         extensionsDir: tempHomeDir,
         name: 'my-local-extension',
@@ -866,7 +871,7 @@ describe('extension tests', () => {
         async (_) => true,
       );
 
-      expect(mockLogExtensionInstallEvent).toHaveBeenCalled();
+      expect(mockLogExtensionInstallEvent).not.toHaveBeenCalled();
     });
 
     it('should show users information on their mcp server when installing', async () => {
@@ -1075,11 +1080,11 @@ This extension will run the following MCP servers:
 
     it('should throw an error if the extension does not exist', async () => {
       await expect(uninstallExtension('nonexistent-extension')).rejects.toThrow(
-        'Extension not found.',
+        'Extension "nonexistent-extension" not found. Run llxprt extensions list to see available extensions.',
       );
     });
 
-    it('should log uninstall event', async () => {
+    it('should not emit telemetry when uninstalling', async () => {
       createExtension({
         extensionsDir: userExtensionsDir,
         name: 'my-local-extension',
@@ -1088,11 +1093,8 @@ This extension will run the following MCP servers:
 
       await uninstallExtension('my-local-extension');
 
-      expect(mockLogExtensionUninstall).toHaveBeenCalled();
-      expect(ExtensionUninstallEvent).toHaveBeenCalledWith(
-        'my-local-extension',
-        'success',
-      );
+      expect(mockLogExtensionUninstall).not.toHaveBeenCalled();
+      expect(ExtensionUninstallEvent).not.toHaveBeenCalled();
     });
 
     it('should uninstall an extension by its source URL', async () => {
@@ -1110,11 +1112,8 @@ This extension will run the following MCP servers:
       await uninstallExtension(gitUrl);
 
       expect(fs.existsSync(sourceExtDir)).toBe(false);
-      expect(mockLogExtensionUninstall).toHaveBeenCalled();
-      expect(ExtensionUninstallEvent).toHaveBeenCalledWith(
-        'gemini-sql-extension',
-        'success',
-      );
+      expect(mockLogExtensionUninstall).not.toHaveBeenCalled();
+      expect(ExtensionUninstallEvent).not.toHaveBeenCalled();
     });
 
     it('should fail to uninstall by URL if an extension has no install metadata', async () => {
@@ -1125,9 +1124,10 @@ This extension will run the following MCP servers:
         // No installMetadata provided
       });
 
-      await expect(
-        uninstallExtension('https://github.com/google/no-metadata-extension'),
-      ).rejects.toThrow('Extension not found.');
+      const identifier = 'https://github.com/google/no-metadata-extension';
+      await expect(uninstallExtension(identifier)).rejects.toThrow(
+        `Extension "${identifier}" not found. Run llxprt extensions list to see available extensions.`,
+      );
     });
   });
 
@@ -1363,7 +1363,7 @@ This extension will run the following MCP servers:
       ).toThrow('System and SystemDefaults scopes are not supported.');
     });
 
-    it('should log a disable event', () => {
+    it('should not emit telemetry when disabling', () => {
       createExtension({
         extensionsDir: userExtensionsDir,
         name: 'ext1',
@@ -1372,11 +1372,8 @@ This extension will run the following MCP servers:
 
       disableExtension('ext1', SettingScope.Workspace);
 
-      expect(mockLogExtensionDisable).toHaveBeenCalled();
-      expect(ExtensionDisableEvent).toHaveBeenCalledWith(
-        'ext1',
-        SettingScope.Workspace,
-      );
+      expect(mockLogExtensionDisable).not.toHaveBeenCalled();
+      expect(ExtensionDisableEvent).not.toHaveBeenCalled();
     });
   });
 
@@ -1430,7 +1427,7 @@ This extension will run the following MCP servers:
       expect(activeExtensions[0].name).toBe('ext1');
     });
 
-    it('should log an enable event', () => {
+    it('should not emit telemetry when enabling', () => {
       createExtension({
         extensionsDir: userExtensionsDir,
         name: 'ext1',
@@ -1439,11 +1436,8 @@ This extension will run the following MCP servers:
       disableExtension('ext1', SettingScope.Workspace);
       enableExtension('ext1', SettingScope.Workspace);
 
-      expect(mockLogExtensionEnable).toHaveBeenCalled();
-      expect(ExtensionEnableEvent).toHaveBeenCalledWith(
-        'ext1',
-        SettingScope.Workspace,
-      );
+      expect(mockLogExtensionEnable).not.toHaveBeenCalled();
+      expect(ExtensionEnableEvent).not.toHaveBeenCalled();
     });
   });
 });

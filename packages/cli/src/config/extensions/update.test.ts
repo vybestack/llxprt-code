@@ -35,8 +35,10 @@ const mockGit = {
 };
 
 vi.mock('simple-git', () => ({
-  simpleGit: vi.fn((path: string) => {
-    mockGit.path.mockReturnValue(path);
+  simpleGit: vi.fn((path?: string) => {
+    if (path) {
+      mockGit.path.mockReturnValue(path);
+    }
     return mockGit;
   }),
 }));
@@ -117,11 +119,11 @@ describe('update tests', () => {
       );
 
       mockGit.clone.mockImplementation(async (_, destination) => {
-        fs.mkdirSync(path.join(mockGit.path(), destination), {
+        fs.mkdirSync(destination, {
           recursive: true,
         });
         fs.writeFileSync(
-          path.join(mockGit.path(), destination, EXTENSIONS_CONFIG_FILENAME),
+          path.join(destination, EXTENSIONS_CONFIG_FILENAME),
           JSON.stringify({ name: extensionName, version: '1.1.0' }),
         );
       });
@@ -172,11 +174,11 @@ describe('update tests', () => {
       });
 
       mockGit.clone.mockImplementation(async (_, destination) => {
-        fs.mkdirSync(path.join(mockGit.path(), destination), {
+        fs.mkdirSync(destination, {
           recursive: true,
         });
         fs.writeFileSync(
-          path.join(mockGit.path(), destination, EXTENSIONS_CONFIG_FILENAME),
+          path.join(destination, EXTENSIONS_CONFIG_FILENAME),
           JSON.stringify({ name: extensionName, version: '1.1.0' }),
         );
       });
@@ -342,7 +344,7 @@ describe('update tests', () => {
       expect(result).toBe(ExtensionUpdateState.UP_TO_DATE);
     });
 
-    it('should return UpToDate for a local extension with no updates', async () => {
+    it('should mark local extensions without updates as not updatable', async () => {
       const localExtensionSourcePath = path.join(tempHomeDir, 'local-source');
       const sourceExtensionDir = createExtension({
         extensionsDir: localExtensionSourcePath,
@@ -379,10 +381,10 @@ describe('update tests', () => {
         },
       );
       const result = results.get('local-extension');
-      expect(result).toBe(ExtensionUpdateState.UP_TO_DATE);
+      expect(result).toBe(ExtensionUpdateState.NOT_UPDATABLE);
     });
 
-    it('should return UpdateAvailable for a local extension with updates', async () => {
+    it('should mark local extensions with newer sources as not updatable', async () => {
       const localExtensionSourcePath = path.join(tempHomeDir, 'local-source');
       const sourceExtensionDir = createExtension({
         extensionsDir: localExtensionSourcePath,
@@ -419,7 +421,7 @@ describe('update tests', () => {
         },
       );
       const result = results.get('local-extension');
-      expect(result).toBe(ExtensionUpdateState.UPDATE_AVAILABLE);
+      expect(result).toBe(ExtensionUpdateState.NOT_UPDATABLE);
     });
 
     it('should return Error when git check fails', async () => {

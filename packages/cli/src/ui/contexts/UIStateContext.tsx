@@ -70,6 +70,7 @@ export interface UIState {
   showPrivacyNotice: boolean;
   isOAuthCodeDialogOpen: boolean;
   isPermissionsDialogOpen: boolean;
+  isLoggingDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];
@@ -81,6 +82,7 @@ export interface UIState {
   toolsDialogTools: AnyDeclarativeTool[];
   toolsDialogDisabledTools: string[];
   workspaceExtensions: Extension[];
+  loggingDialogData: { entries: unknown[] };
 
   // Confirmation requests
   shellConfirmationRequest: ShellConfirmationRequest | null;

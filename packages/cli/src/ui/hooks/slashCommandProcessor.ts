@@ -19,6 +19,7 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import {
   GitService,
   Logger,
+  DebugLogger,
   logSlashCommand,
   SlashCommandEvent,
   ToolConfirmationOutcome,
@@ -43,13 +44,15 @@ import { McpPromptLoader } from '../../services/McpPromptLoader.js';
 import { parseSlashCommand } from '../../utils/commands.js';
 import type { ExtensionUpdateState } from '../state/extensions.js';
 
+const confirmationLogger = new DebugLogger('llxprt:ui:selection');
+
 interface SlashCommandProcessorActions {
   openAuthDialog: () => void;
   openThemeDialog: () => void;
   openEditorDialog: () => void;
   openPrivacyNotice: () => void;
   openSettingsDialog: () => void;
-  openLoggingDialog: () => void;
+  openLoggingDialog: (data?: { entries: unknown[] }) => void;
   openProviderModelDialog: () => void;
   openPermissionsDialog: () => void;
   openProviderDialog: () => void;
@@ -330,10 +333,14 @@ export const useSlashCommandProcessor = (
       addItem({ type: MessageType.USER, text: trimmed }, userMessageTimestamp);
 
       let hasError = false;
-      const { commandToExecute, args } = parseSlashCommand(trimmed, commands);
+      const { commandToExecute, args, canonicalPath } = parseSlashCommand(
+        trimmed,
+        commands,
+      );
 
-      // Extract subcommand from args if present
-      const subcommand = args.trim() !== '' ? args.trim() : undefined;
+      // Extract subcommand from canonical path if present
+      const subcommand =
+        canonicalPath.length > 1 ? canonicalPath.slice(1).join(' ') : undefined;
 
       try {
         if (commandToExecute) {
@@ -402,7 +409,17 @@ export const useSlashCommandProcessor = (
                       actions.openSettingsDialog();
                       return { type: 'handled' };
                     case 'logging':
-                      actions.openLoggingDialog();
+                      if (
+                        result.dialogData &&
+                        typeof result.dialogData === 'object' &&
+                        'entries' in result.dialogData
+                      ) {
+                        actions.openLoggingDialog(
+                          result.dialogData as { entries: unknown[] },
+                        );
+                      } else {
+                        actions.openLoggingDialog();
+                      }
                       return { type: 'handled' };
                     case 'providerModel':
                       actions.openProviderModelDialog();
@@ -415,8 +432,6 @@ export const useSlashCommandProcessor = (
                       return { type: 'handled' };
                     case 'loadProfile':
                       actions.openLoadProfileDialog();
-                      return { type: 'handled' };
-                    case 'help':
                       return { type: 'handled' };
                     default: {
                       const unhandled: never = result.dialog;
@@ -472,12 +487,24 @@ export const useSlashCommandProcessor = (
                     outcome: ToolConfirmationOutcome;
                     approvedCommands?: string[];
                   }>((resolve) => {
+                    if (confirmationLogger.enabled) {
+                      confirmationLogger.debug(
+                        () =>
+                          `Shell confirmation dialog opened for ${result.commandsToConfirm.length} command(s)`,
+                      );
+                    }
                     setShellConfirmationRequest({
                       commands: result.commandsToConfirm,
                       onConfirm: (
                         resolvedOutcome,
                         resolvedApprovedCommands,
                       ) => {
+                        if (confirmationLogger.enabled) {
+                          confirmationLogger.debug(
+                            () =>
+                              `Shell confirmation resolved outcome=${resolvedOutcome} approved=${resolvedApprovedCommands?.length}`,
+                          );
+                        }
                         setShellConfirmationRequest(null); // Close the dialog
                         resolve({
                           outcome: resolvedOutcome,
@@ -511,9 +538,20 @@ export const useSlashCommandProcessor = (
                   const { confirmed } = await new Promise<{
                     confirmed: boolean;
                   }>((resolve) => {
+                    if (confirmationLogger.enabled) {
+                      confirmationLogger.debug(
+                        () => 'Confirmation dialog opened',
+                      );
+                    }
                     setConfirmationRequest({
                       prompt: result.prompt,
                       onConfirm: (resolvedConfirmed) => {
+                        if (confirmationLogger.enabled) {
+                          confirmationLogger.debug(
+                            () =>
+                              `Confirmation dialog resolved confirmed=${resolvedConfirmed}`,
+                          );
+                        }
                         setConfirmationRequest(null);
                         resolve({ confirmed: resolvedConfirmed });
                       },

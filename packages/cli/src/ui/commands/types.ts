@@ -125,7 +125,6 @@ export interface OpenDialogActionReturn {
   type: 'dialog';
 
   dialog:
-    | 'help'
     | 'auth'
     | 'theme'
     | 'editor'

@@ -86,6 +86,7 @@ export function useReactToolScheduler(
   >,
   getPreferredEditor: () => EditorType | undefined,
   onEditorClose: () => void,
+  onEditorOpen: () => void = () => {},
 ): [TrackedToolCall[], ScheduleFn, MarkToolsAsSubmittedFn] {
   const [toolCallsByScheduler, setToolCallsByScheduler] = useState<
     Map<symbol, TrackedToolCall[]>
@@ -206,6 +207,7 @@ export function useReactToolScheduler(
         getPreferredEditor,
         config,
         onEditorClose,
+        onEditorOpen,
       }),
     [
       config,
@@ -215,6 +217,7 @@ export function useReactToolScheduler(
       onComplete,
       replaceToolCallsForScheduler,
       updateToolCallOutput,
+      onEditorOpen,
     ],
   );
 
@@ -248,6 +251,7 @@ export function useReactToolScheduler(
         },
         getPreferredEditor,
         onEditorClose,
+        onEditorOpen,
       });
     },
     [
@@ -256,6 +260,7 @@ export function useReactToolScheduler(
       replaceToolCallsForScheduler,
       onComplete,
       updateToolCallOutput,
+      onEditorOpen,
     ],
   ) as ExternalSchedulerFactory;
 
