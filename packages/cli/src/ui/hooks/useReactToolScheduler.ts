@@ -190,9 +190,11 @@ export function useReactToolScheduler(
   const scheduler = useMemo(
     () =>
       new CoreToolScheduler({
-        outputUpdateHandler: (toolCallId, chunk) =>
+        outputUpdateHandler: (toolCallId: string, chunk: string) =>
           updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
-        onAllToolCallsComplete: async (completedToolCalls) => {
+        onAllToolCallsComplete: async (
+          completedToolCalls: CompletedToolCall[],
+        ) => {
           if (completedToolCalls.length > 0) {
             await onComplete(mainSchedulerId, completedToolCalls, {
               isPrimary: true,
@@ -200,7 +202,7 @@ export function useReactToolScheduler(
           }
           replaceToolCallsForScheduler(mainSchedulerId, []);
         },
-        onToolCallsUpdate: (calls) => {
+        onToolCallsUpdate: (calls: ToolCall[]) => {
           replaceToolCallsForScheduler(mainSchedulerId, calls);
         },
         getPreferredEditor,
@@ -231,15 +233,15 @@ export function useReactToolScheduler(
 
       return new CoreToolScheduler({
         config: schedulerConfig,
-        outputUpdateHandler: (toolCallId, chunk) => {
+        outputUpdateHandler: (toolCallId: string, chunk: string) => {
           updateToolCallOutput(schedulerId, toolCallId, chunk);
           outputUpdateHandler(toolCallId, chunk);
         },
-        onToolCallsUpdate: (calls) => {
+        onToolCallsUpdate: (calls: ToolCall[]) => {
           replaceToolCallsForScheduler(schedulerId, calls);
           onToolCallsUpdate?.(calls);
         },
-        onAllToolCallsComplete: async (calls) => {
+        onAllToolCallsComplete: async (calls: CompletedToolCall[]) => {
           if (calls.length > 0) {
             await onComplete(schedulerId, calls, { isPrimary: false });
             await onAllToolCallsComplete?.(calls);

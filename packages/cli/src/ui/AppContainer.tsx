@@ -11,7 +11,6 @@ import React, {
   useMemo,
   useState,
   useRef,
-
 } from 'react';
 import { type DOMElement, measureElement, useStdin, useStdout } from 'ink';
 import {
@@ -58,7 +57,7 @@ import {
 } from '../constants/historyLimits.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
-import { registerCleanup, runExitCleanup } from '../utils/cleanup.js';
+import { registerCleanup } from '../utils/cleanup.js';
 import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
 import { calculateMainAreaWidth } from './utils/ui-sizing.js';
@@ -78,11 +77,7 @@ import { useVim } from './hooks/vim.js';
 import { useKeypress, Key } from './hooks/useKeypress.js';
 import { keyMatchers, Command } from './keyMatchers.js';
 import * as fs from 'fs';
-import {
-
-  type AppState,
-  type AppAction,
-} from './reducers/appReducer.js';
+import { type AppState, type AppAction } from './reducers/appReducer.js';
 import { UpdateObject } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
 import { useSettingsCommand } from './hooks/useSettingsCommand.js';
@@ -196,7 +191,6 @@ export const AppContainer = (props: AppContainerProps) => {
   const { columns: terminalWidth, rows: terminalHeight } = useTerminalSize();
   const { stdin, setRawMode } = useStdin();
 
-
   // Additional hooks moved from App.tsx
   const { stats: sessionStats } = useSessionStats();
   const branchName = useGitBranchName(config.getTargetDir());
@@ -288,7 +282,6 @@ export const AppContainer = (props: AppContainerProps) => {
     [],
   );
 
-
   // Set up history token count listener
   useEffect(() => {
     let intervalCleared = false;
@@ -374,7 +367,7 @@ export const AppContainer = (props: AppContainerProps) => {
       lastPublishedHistoryTokensRef.current = null;
     };
   }, [config, updateHistoryTokenCount, tokenLogger]);
-  const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
+  const [_staticNeedsRefresh, _setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const refreshStatic = useCallback(() => {
     stdout.write(ansiEscapes.clearTerminal);
@@ -387,7 +380,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const [themeError, _setThemeError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [editorError, _setEditorError] = useState<string | null>(null);
-  const [footerHeight, setFooterHeight] = useState<number>(0);
+  const [footerHeight, _setFooterHeight] = useState<number>(0);
 
   // Token metrics state for live updates
   const [tokenMetrics, setTokenMetrics] = useState({
@@ -436,11 +429,6 @@ export const AppContainer = (props: AppContainerProps) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [providerModels, setProviderModels] = useState<IModel[]>([]);
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
-  const [isProQuotaDialogOpen, setIsProQuotaDialogOpen] = useState(false);
-  const [proQuotaDialogResolver, setProQuotaDialogResolver] = useState<
-    ((value: boolean) => void) | null
-  >(null);
-
 
   const openPermissionsDialog = useCallback(() => {
     setIsPermissionsDialogOpen(true);
@@ -456,8 +444,6 @@ export const AppContainer = (props: AppContainerProps) => {
     onWorkspaceMigrationDialogOpen,
     onWorkspaceMigrationDialogClose,
   } = useWorkspaceMigration(settings);
-
-
 
   const openPrivacyNotice = useCallback(() => {
     setShowPrivacyNotice(true);
@@ -792,51 +778,12 @@ export const AppContainer = (props: AppContainerProps) => {
     shellModeActive,
   });
 
-
-
   const handleUserCancel = useCallback(() => {
     const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
     if (lastUserMessage) {
       buffer.setText(lastUserMessage);
     }
   }, [buffer, inputHistoryStore.inputHistory]);
-
-  const slashCommandActions = useMemo(
-    () => ({
-      openAuthDialog: openAuthDialog,
-      openThemeDialog,
-      openEditorDialog,
-      openProviderDialog,
-      openProviderModelDialog,
-      openLoadProfileDialog,
-      openToolsDialog,
-      openPrivacyNotice: () => setShowPrivacyNotice(true),
-      openSettingsDialog,
-      quit: (messages: HistoryItem[]) => {
-        setQuittingMessages(messages);
-        setTimeout(async () => {
-          await runExitCleanup();
-          process.exit(0);
-        }, 100);
-      },
-      setDebugMessage,
-      toggleCorgiMode: () => setCorgiMode((prev) => !prev),
-    }),
-    [
-      openAuthDialog,
-      openThemeDialog,
-      openEditorDialog,
-      openProviderDialog,
-      openProviderModelDialog,
-      openLoadProfileDialog,
-      openToolsDialog,
-      openSettingsDialog,
-      setQuittingMessages,
-      setDebugMessage,
-      setShowPrivacyNotice,
-      setCorgiMode,
-    ],
-  );
 
   const {
     handleSlashCommand,
@@ -870,9 +817,7 @@ export const AppContainer = (props: AppContainerProps) => {
     openPermissionsDialog,
   );
 
-
-
-  const cancelHandlerRef = useRef<() => void>(() => { });
+  const cancelHandlerRef = useRef<() => void>(() => {});
 
   const {
     streamingState,
@@ -946,22 +891,6 @@ export const AppContainer = (props: AppContainerProps) => {
     refreshStatic();
   }, [clearItems, clearConsoleMessagesState, refreshStatic]);
 
-  const handleProQuotaChoice = useCallback(
-    (choice: 'auth' | 'continue') => {
-      setIsProQuotaDialogOpen(false);
-      if (proQuotaDialogResolver) {
-        if (choice === 'auth') {
-          proQuotaDialogResolver(false); // Don't continue with fallback, show auth dialog
-          openAuthDialog();
-        } else {
-          proQuotaDialogResolver(true); // Continue with fallback model
-        }
-        setProQuotaDialogResolver(null);
-      }
-    },
-    [proQuotaDialogResolver, openAuthDialog],
-  );
-
   const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
 
   const isInputActive = !initError && !isProcessing;
@@ -985,12 +914,20 @@ export const AppContainer = (props: AppContainerProps) => {
         Math.max(terminalHeight - staticExtraHeight, 0),
       );
     }
-  }, [terminalHeight, mainControlsRef.current]);
+  }, [terminalHeight]); // Removed mainControlsRef.current
 
   // Update shell execution config with proper terminal height calculations
   useEffect(() => {
-    if ((config as any).setShellExecutionConfig) {
-      (config as any).setShellExecutionConfig({
+    // Cast to a type that includes the optional method to avoid 'any'
+    const configWithShell = config as typeof config & {
+      setShellExecutionConfig?: (config: {
+        terminalWidth: number;
+        terminalHeight: number;
+      }) => void;
+    };
+
+    if (configWithShell.setShellExecutionConfig) {
+      configWithShell.setShellExecutionConfig({
         terminalWidth: Math.floor(terminalWidth * SHELL_WIDTH_FRACTION),
         terminalHeight: Math.max(
           Math.floor(availableTerminalHeight - SHELL_HEIGHT_PADDING),
@@ -1001,8 +938,6 @@ export const AppContainer = (props: AppContainerProps) => {
       });
     }
   }, [terminalWidth, availableTerminalHeight, config]);
-
-
 
   // Context file names computation
   const contextFileNames = useMemo(() => {
@@ -1049,8 +984,6 @@ export const AppContainer = (props: AppContainerProps) => {
     geminiClient,
   ]);
 
-
-
   useEffect(() => {
     const getIde = async () => {
       const ideClient = await IdeClient.getInstance();
@@ -1059,7 +992,6 @@ export const AppContainer = (props: AppContainerProps) => {
     };
     getIde();
   }, []);
-
 
   const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
     useFolderTrust(settings, config);
@@ -1087,7 +1019,6 @@ export const AppContainer = (props: AppContainerProps) => {
       clearTimeout(handler);
     };
   }, [terminalWidth, refreshStatic]);
-
 
   useEffect(() => {
     const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
@@ -1155,8 +1086,6 @@ export const AppContainer = (props: AppContainerProps) => {
     };
   }, [handleNewMessage]);
 
-
-
   const handleOAuthCodeDialogClose = useCallback(() => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
   }, [appDispatch]);
@@ -1182,8 +1111,6 @@ export const AppContainer = (props: AppContainerProps) => {
     [runtime],
   );
 
-
-
   const pendingHistoryItems = useMemo(
     () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
     [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
@@ -1204,8 +1131,6 @@ export const AppContainer = (props: AppContainerProps) => {
       buffer.setText(textToSet);
     }
   }, [buffer, inputHistoryStore.inputHistory, pendingHistoryItems]);
-
-
 
   const handleIdePromptComplete = useCallback(
     (result: IdeIntegrationNudgeResult) => {
@@ -1231,8 +1156,6 @@ export const AppContainer = (props: AppContainerProps) => {
     },
     [handleSlashCommand, settings],
   );
-
-
 
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
@@ -1366,12 +1289,7 @@ export const AppContainer = (props: AppContainerProps) => {
     }
   }, [config, config.getLlxprtMdFileCount]);
 
-
-
   // Initialize independent input history from logger
-
-
-
 
   const handleConfirmationSelect = useCallback(
     (value: boolean) => {
@@ -1382,14 +1300,8 @@ export const AppContainer = (props: AppContainerProps) => {
     [confirmationRequest],
   );
 
-
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
-
-
-
-
-
 
   // Flicker detection - measures root UI element vs terminal height
   // to detect overflow that could cause flickering (issue #456)
@@ -1418,8 +1330,6 @@ export const AppContainer = (props: AppContainerProps) => {
     };
   }, [constrainHeight]);
 
-
-
   const filteredConsoleMessages = useMemo(() => {
     if (config.getDebugMode()) {
       return consoleMessages;
@@ -1427,14 +1337,7 @@ export const AppContainer = (props: AppContainerProps) => {
     return consoleMessages.filter((msg) => msg.type !== 'debug');
   }, [consoleMessages, config]);
 
-
-
-
-
   const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
-
-
-
 
   // Detect PowerShell for file reference syntax tip
   const isPowerShell =
@@ -1481,7 +1384,6 @@ export const AppContainer = (props: AppContainerProps) => {
     showPrivacyNotice,
     isOAuthCodeDialogOpen: appState.openDialogs.oauthCode,
     isPermissionsDialogOpen,
-    isProQuotaDialogOpen,
 
     // Dialog data
     providerOptions,
@@ -1530,8 +1432,6 @@ export const AppContainer = (props: AppContainerProps) => {
     // Token metrics
     tokenMetrics,
     historyTokenCount: sessionStats.historyTokenCount,
-
-
 
     initError,
     authError,
@@ -1658,7 +1558,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Confirmation handlers
     handleConfirmationSelect,
-    handleProQuotaChoice,
 
     // IDE prompt
     handleIdePromptComplete,

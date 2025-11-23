@@ -24,7 +24,7 @@ import { DebugProfiler } from './DebugProfiler.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { truncateMiddle } from '../utils/responsive.js';
 
-interface FooterProps {
+export interface FooterProps {
   model: string;
   targetDir: string;
   branchName?: string;

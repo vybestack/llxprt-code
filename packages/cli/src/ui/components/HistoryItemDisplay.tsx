@@ -35,7 +35,10 @@ interface HistoryItemDisplayProps {
   config: Config;
   isFocused?: boolean;
   slashCommands?: readonly SlashCommand[]; // For help display
+  commands?: readonly SlashCommand[]; // Alias for slashCommands for compatibility
   showTodoPanel?: boolean;
+  activeShellPtyId?: number;
+  shellFocused?: boolean;
 }
 
 export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({

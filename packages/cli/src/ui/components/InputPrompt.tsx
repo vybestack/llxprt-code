@@ -70,6 +70,7 @@ export interface InputPromptProps {
   popAllMessages?: (callback: (messages: string) => void) => void;
   vimModeEnabled?: boolean;
   isEmbeddedShellFocused?: boolean;
+  isShellFocused?: boolean;
   setQueueErrorMessage?: (message: string) => void;
   streamingState?: StreamingState;
 }

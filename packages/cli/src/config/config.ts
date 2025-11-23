@@ -1112,7 +1112,7 @@ export async function loadCliConfig(
     llxprtMdFileCount: fileCount,
     approvalMode,
     showMemoryUsage:
-      argv.showMemoryUsage || effectiveSettings.showMemoryUsage || false,
+      argv.showMemoryUsage || effectiveSettings.ui?.showMemoryUsage || false,
     accessibility: {
       ...effectiveSettings.accessibility,
       screenReader,

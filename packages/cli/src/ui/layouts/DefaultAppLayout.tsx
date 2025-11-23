@@ -105,7 +105,7 @@ export const DefaultAppLayout = ({
     : availableTerminalHeight;
 
   const showTodoPanelSetting = settings.merged.showTodoPanel ?? true;
-  const hideContextSummary = settings.merged.hideContextSummary ?? false;
+  const hideContextSummary = settings.merged.ui?.hideContextSummary ?? false;
   const { isNarrow } = uiState;
 
   const staticExtraHeight = 3;
@@ -161,14 +161,16 @@ export const DefaultAppLayout = ({
           key={staticKey}
           items={[
             <Box flexDirection="column" key="header">
-              {!(settings.merged.hideBanner || config.getScreenReader()) && (
+              {!(
+                settings.merged.ui?.hideBanner || config.getScreenReader()
+              ) && (
                 <Header
                   terminalWidth={terminalWidth}
                   version={version}
                   nightly={nightly}
                 />
               )}
-              {!(settings.merged.hideTips || config.getScreenReader()) && (
+              {!(settings.merged.ui?.hideTips || config.getScreenReader()) && (
                 <Tips config={config} />
               )}
             </Box>,
@@ -360,7 +362,7 @@ export const DefaultAppLayout = ({
               })()}
             </Box>
           )}
-          {!settings.merged.hideFooter && (
+          {!settings.merged.ui?.hideFooter && (
             <Footer
               model={currentModel}
               targetDir={config.getTargetDir()}
@@ -371,7 +373,7 @@ export const DefaultAppLayout = ({
               showErrorDetails={showErrorDetails}
               showMemoryUsage={
                 config.getDebugMode() ||
-                settings.merged.showMemoryUsage ||
+                settings.merged.ui?.showMemoryUsage ||
                 false
               }
               historyTokenCount={historyTokenCount}

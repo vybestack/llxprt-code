@@ -421,6 +421,7 @@ describe('ShellProcessor', () => {
         expect.any(Function),
         expect.any(Object),
         false,
+        expect.any(Object),
       );
       expect(result).toBe('Output: result');
     });
@@ -440,6 +441,7 @@ describe('ShellProcessor', () => {
         expect.any(Function),
         expect.any(Object),
         false,
+        expect.any(Object),
       );
       expect(result).toBe('{{a},{b}}');
     });

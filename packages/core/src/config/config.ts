@@ -424,9 +424,7 @@ export class Config {
   private readonly skipNextSpeakerCheck: boolean;
   private shellExecutionConfig: ShellExecutionConfig;
   private readonly extensionManagement: boolean;
-  private readonly truncateToolOutputThreshold: number;
-  private readonly truncateToolOutputLines: number;
-  private readonly enableToolOutputTruncation: boolean;
+
   private readonly enablePromptCompletion: boolean = false;
   private initialized: boolean = false;
   private readonly shellReplacement: boolean = false;
@@ -565,11 +563,7 @@ export class Config {
       showColor: params.shellExecutionConfig?.showColor ?? false,
       pager: params.shellExecutionConfig?.pager ?? 'cat',
     };
-    this.truncateToolOutputThreshold =
-      params.truncateToolOutputThreshold ?? 10000; // Default value
-    this.truncateToolOutputLines = params.truncateToolOutputLines ?? 100; // Default value
-    this.enableToolOutputTruncation =
-      params.enableToolOutputTruncation ?? false;
+
     this.useSmartEdit = params.useSmartEdit ?? false;
     this.extensionManagement = params.extensionManagement ?? false;
     this.storage = new Storage(this.targetDir);

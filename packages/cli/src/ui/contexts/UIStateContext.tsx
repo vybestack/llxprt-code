@@ -12,6 +12,7 @@ import type {
   HistoryItemWithoutId,
   ConsoleMessageItem,
   StreamingState,
+  ShellConfirmationRequest,
 } from '../types.js';
 import type {
   IdeContext,
@@ -20,9 +21,9 @@ import type {
   AnyDeclarativeTool,
   ThoughtSummary,
 } from '@vybestack/llxprt-code-core';
+
 import type { Extension } from '../../config/extension.js';
 import type { SlashCommand, CommandContext } from '../commands/types.js';
-import type { ShellConfirmationRequest } from '../components/ShellConfirmationDialog.js';
 
 /**
  * UI State shape for the AppContainer architecture.
@@ -62,7 +63,6 @@ export interface UIState {
   showPrivacyNotice: boolean;
   isOAuthCodeDialogOpen: boolean;
   isPermissionsDialogOpen: boolean;
-  isProQuotaDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];

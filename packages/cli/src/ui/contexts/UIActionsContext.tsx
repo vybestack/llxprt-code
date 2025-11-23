@@ -5,12 +5,12 @@
  */
 
 import React, { createContext, useContext } from 'react';
-import type { IdeIntegrationNudgeResult } from '../IdeIntegrationNudge.js';
+import { type Key } from '../hooks/useKeypress.js';
+import { type IdeIntegrationNudgeResult } from '../IdeIntegrationNudge.js';
+import { type FolderTrustChoice } from '../components/FolderTrustDialog.js';
+import { type AuthType, type EditorType } from '@vybestack/llxprt-code-core';
+import { type SettingScope } from '../../config/settings.js';
 import type { HistoryItem } from '../types.js';
-import type { FolderTrustChoice } from '../components/FolderTrustDialog.js';
-import type { Key } from '../hooks/useKeypress.js';
-import type { AuthType, EditorType } from '@vybestack/llxprt-code-core';
-import type { SettingScope } from '../../config/settings.js';
 
 /**
  * UI Actions shape for the AppContainer architecture.
@@ -99,7 +99,6 @@ export interface UIActions {
 
   // Confirmation handlers
   handleConfirmationSelect: (value: boolean) => void;
-  handleProQuotaChoice: (choice: 'auth' | 'continue') => void;
 
   // IDE prompt
   handleIdePromptComplete: (result: IdeIntegrationNudgeResult) => void;

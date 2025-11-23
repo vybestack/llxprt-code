@@ -13,12 +13,10 @@ describe('SettingsSchema', () => {
       const expectedSettings = [
         'theme',
         'customThemes',
-        'showMemoryUsage',
-        'historyMaxItems',
-        'historyMaxBytes',
+        'ui',
+        'general',
         'usageStatisticsEnabled',
         'autoConfigureMaxOldSpaceSize',
-        'preferredEditor',
         'maxSessionTurns',
         'memoryImportFormat',
         'memoryDiscoveryMaxDirs',
@@ -30,8 +28,7 @@ describe('SettingsSchema', () => {
         'fileFiltering',
         'disableAutoUpdate',
         'hideWindowTitle',
-        'hideTips',
-        'hideBanner',
+        'useFullWidth',
         'selectedAuthType',
         'useExternalAuth',
         'sandbox',
@@ -185,13 +182,15 @@ describe('SettingsSchema', () => {
 
     it('should have showInDialog property configured', () => {
       // Check that user-facing settings are marked for dialog display
-      expect(SETTINGS_SCHEMA.showMemoryUsage.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.showMemoryUsage.showInDialog).toBe(
+        true,
+      );
       expect(SETTINGS_SCHEMA.vimMode.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.ideMode.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.disableAutoUpdate.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.hideWindowTitle.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.hideTips.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.hideBanner.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.hideTips.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.hideBanner.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.usageStatisticsEnabled.showInDialog).toBe(false);
 
       // Check that advanced settings are hidden from dialog
@@ -204,9 +203,11 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.theme.showInDialog).toBe(false); // Changed to false
       expect(SETTINGS_SCHEMA.customThemes.showInDialog).toBe(false); // Managed via theme editor
       expect(SETTINGS_SCHEMA.checkpointing.showInDialog).toBe(false); // Experimental feature
-      expect(SETTINGS_SCHEMA.accessibility.showInDialog).toBe(false); // Changed to false
+      expect(SETTINGS_SCHEMA.accessibility.showInDialog).toBe(false);
       expect(SETTINGS_SCHEMA.fileFiltering.showInDialog).toBe(false); // Changed to false
-      expect(SETTINGS_SCHEMA.preferredEditor.showInDialog).toBe(false); // Changed to false
+      expect(
+        SETTINGS_SCHEMA.general.properties.preferredEditor.showInDialog,
+      ).toBe(true); // Changed to true
       expect(SETTINGS_SCHEMA.autoConfigureMaxOldSpaceSize.showInDialog).toBe(
         true,
       );

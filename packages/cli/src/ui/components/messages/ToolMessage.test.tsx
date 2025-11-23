@@ -5,12 +5,13 @@
  */
 
 import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
 import { render } from 'ink-testing-library';
 import { ToolMessage, ToolMessageProps } from './ToolMessage.js';
 import { StreamingState, ToolCallStatus } from '../../types.js';
 import { Text } from 'ink';
 import { StreamingContext } from '../../contexts/StreamingContext.js';
-import type { AnsiOutput } from '@google/gemini-cli-core';
+import type { AnsiOutput } from '@vybestack/llxprt-code-core';
 
 vi.mock('../TerminalOutput.js', () => ({
   TerminalOutput: function MockTerminalOutput({
@@ -34,6 +35,10 @@ vi.mock('../AnsiOutput.js', () => ({
       .join('\n');
     return <Text>MockAnsiOutput:{serialized}</Text>;
   },
+}));
+
+vi.mock('../../hooks/useKeypress.js', () => ({
+  useKeypress: vi.fn(),
 }));
 
 // Mock child components or utilities if they are complex or have side effects

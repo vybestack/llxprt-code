@@ -8,7 +8,35 @@ import {
   CompressionStatus,
   ToolCallConfirmationDetails,
   ToolResultDisplay,
+  ThoughtSummary,
+  ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
+
+// Auth state for UI context
+export interface AuthState {
+  isAuthenticated: boolean;
+  isPending: boolean;
+  error: string | null;
+  authType: string | null;
+}
+
+// Shell confirmation request for UI
+export interface ShellConfirmationRequest {
+  commands: string[];
+  onConfirm: (
+    outcome: ToolConfirmationOutcome,
+    approvedCommands?: string[],
+  ) => void;
+}
+
+// General confirmation request for UI
+export interface ConfirmationRequest {
+  prompt: React.ReactNode;
+  onConfirm: (confirmed: boolean) => void;
+}
+
+// Re-export ThoughtSummary from core
+export type { ThoughtSummary };
 
 // Only defining the state enum needed by the UI
 export enum StreamingState {

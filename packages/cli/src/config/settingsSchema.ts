@@ -62,6 +62,85 @@ const DEFAULT_EXTENSION_AUTO_UPDATE = {
  * `as const` is crucial for TypeScript to infer the most specific types possible.
  */
 export const SETTINGS_SCHEMA = {
+  // UI Group Settings
+  ui: {
+    type: 'object',
+    label: 'UI Settings',
+    category: 'UI',
+    requiresRestart: false,
+    default: {},
+    description: 'UI-related settings group.',
+    showInDialog: false,
+    properties: {
+      hideBanner: {
+        type: 'boolean',
+        label: 'Hide Banner',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description: 'Hide application banner',
+        showInDialog: true,
+      },
+      hideTips: {
+        type: 'boolean',
+        label: 'Hide Tips',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description: 'Hide helpful tips in the UI',
+        showInDialog: true,
+      },
+      showMemoryUsage: {
+        type: 'boolean',
+        label: 'Show Memory Usage',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description: 'Display memory usage information in the UI',
+        showInDialog: true,
+      },
+      hideContextSummary: {
+        type: 'boolean',
+        label: 'Hide Context Summary',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description:
+          'Hide the context summary (LLXPRT.md, MCP servers) above the input.',
+        showInDialog: true,
+      },
+      hideFooter: {
+        type: 'boolean',
+        label: 'Hide Footer',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description: 'Hide the footer from the UI',
+        showInDialog: true,
+      },
+    },
+  },
+  // General Settings
+  general: {
+    type: 'object',
+    label: 'General Settings',
+    category: 'General',
+    requiresRestart: false,
+    default: {},
+    description: 'General application settings.',
+    showInDialog: false,
+    properties: {
+      preferredEditor: {
+        type: 'string',
+        label: 'Preferred Editor',
+        category: 'General',
+        requiresRestart: false,
+        default: undefined as string | undefined,
+        description: 'Preferred editor for opening files.',
+        showInDialog: true,
+      },
+    },
+  },
   // UI Settings
   theme: {
     type: 'string',
@@ -90,24 +169,7 @@ export const SETTINGS_SCHEMA = {
     description: 'Hide the window title bar',
     showInDialog: true,
   },
-  hideTips: {
-    type: 'boolean',
-    label: 'Hide Tips',
-    category: 'UI',
-    requiresRestart: false,
-    default: false,
-    description: 'Hide helpful tips in the UI',
-    showInDialog: true,
-  },
-  hideBanner: {
-    type: 'boolean',
-    label: 'Hide Banner',
-    category: 'UI',
-    requiresRestart: false,
-    default: false,
-    description: 'Hide application banner',
-    showInDialog: true,
-  },
+
   useFullWidth: {
     type: 'boolean',
     label: 'Use Full Width',
@@ -117,25 +179,7 @@ export const SETTINGS_SCHEMA = {
     description: 'Use full terminal width instead of margins',
     showInDialog: true,
   },
-  hideFooter: {
-    type: 'boolean',
-    label: 'Hide Footer',
-    category: 'UI',
-    requiresRestart: false,
-    default: false,
-    description: 'Hide the footer from the UI',
-    showInDialog: true,
-  },
-  hideContextSummary: {
-    type: 'boolean',
-    label: 'Hide Context Summary',
-    category: 'UI',
-    requiresRestart: false,
-    default: false,
-    description:
-      'Hide the context summary (LLXPRT.md, MCP servers) above the input.',
-    showInDialog: true,
-  },
+
   showTodoPanel: {
     type: 'boolean',
     label: 'Show Todo Panel',
@@ -146,15 +190,7 @@ export const SETTINGS_SCHEMA = {
       'Display the interactive Todo panel. Disable to keep todos in the scrollback view instead.',
     showInDialog: true,
   },
-  showMemoryUsage: {
-    type: 'boolean',
-    label: 'Show Memory Usage',
-    category: 'UI',
-    requiresRestart: false,
-    default: false,
-    description: 'Display memory usage information in the UI',
-    showInDialog: true,
-  },
+
   historyMaxItems: {
     type: 'number',
     label: 'History Max Items',
@@ -1172,10 +1208,10 @@ export const SETTINGS_SCHEMA = {
 
 type InferSettings<T extends SettingsSchema> = {
   -readonly [K in keyof T]?: T[K] extends { properties: SettingsSchema }
-  ? InferSettings<T[K]['properties']>
-  : T[K]['default'] extends boolean
-  ? boolean
-  : T[K]['default'];
+    ? InferSettings<T[K]['properties']>
+    : T[K]['default'] extends boolean
+      ? boolean
+      : T[K]['default'];
 };
 
 export type Settings = InferSettings<typeof SETTINGS_SCHEMA>;

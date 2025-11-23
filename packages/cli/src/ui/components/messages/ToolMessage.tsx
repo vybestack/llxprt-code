@@ -18,7 +18,8 @@ import {
   TOOL_STATUS,
 } from '../../constants.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
-import { stripShellMarkers } from '@vybestack/llxprt-code-core';
+import { stripShellMarkers, AnsiOutput } from '@vybestack/llxprt-code-core';
+import { AnsiOutputText } from '../AnsiOutput.js';
 
 const STATIC_HEIGHT = 1;
 const RESERVED_LINE_COUNT = 5; // for tool name, status, padding etc.
@@ -222,14 +223,22 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
                 </Box>
               </MaxSizedBox>
             )}
-            {typeof resultDisplay !== 'string' && (
-              <DiffRenderer
-                diffContent={resultDisplay.fileDiff}
-                filename={resultDisplay.fileName}
-                availableTerminalHeight={availableHeight}
-                terminalWidth={childWidth}
-              />
-            )}
+            {typeof resultDisplay !== 'string' &&
+              'fileDiff' in resultDisplay && (
+                <DiffRenderer
+                  diffContent={resultDisplay.fileDiff}
+                  filename={resultDisplay.fileName}
+                  availableTerminalHeight={availableHeight}
+                  terminalWidth={childWidth}
+                />
+              )}
+            {typeof resultDisplay !== 'string' &&
+              !('fileDiff' in resultDisplay) && (
+                <AnsiOutputText
+                  data={resultDisplay as AnsiOutput}
+                  availableTerminalHeight={availableHeight}
+                />
+              )}
           </Box>
         </Box>
       )}

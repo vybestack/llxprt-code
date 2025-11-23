@@ -6,7 +6,11 @@
 
 import type React from 'react';
 import { Text } from 'ink';
-import type { AnsiLine, AnsiOutput, AnsiToken } from '@google/gemini-cli-core';
+import type {
+  AnsiLine,
+  AnsiOutput,
+  AnsiToken,
+} from '@vybestack/llxprt-code-core';
 
 const DEFAULT_HEIGHT = 24;
 
