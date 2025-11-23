@@ -1949,22 +1949,33 @@ describe('loadCliConfig model selection', () => {
   });
 
   it('uses the default gemini model if nothing is set', async () => {
-    process.argv = ['node', 'script.js']; // No model set.
-    const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      {
-        // No model set.
-      },
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
+    // Save and clear environment variable that might override the default
+    const savedModel = process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
 
-    expect(config.getModel()).toBe(DEFAULT_GEMINI_MODEL);
+    try {
+      process.argv = ['node', 'script.js']; // No model set.
+      const argv = await parseArguments({} as Settings);
+      const config = await loadCliConfig(
+        {
+          // No model set.
+        },
+        [],
+        new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+          argv.extensions,
+        ),
+        'test-session',
+        argv,
+      );
+
+      expect(config.getModel()).toBe(DEFAULT_GEMINI_MODEL);
+    } finally {
+      // Restore environment variable
+      if (savedModel !== undefined) {
+        process.env.LLXPRT_DEFAULT_MODEL = savedModel;
+      }
+    }
   });
 
   it('always prefers model from argvs', async () => {
