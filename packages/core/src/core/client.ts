@@ -5,7 +5,6 @@
  */
 
 import {
-  EmbedContentParameters,
   GenerateContentConfig,
   PartListUnion,
   Part,
@@ -30,7 +29,6 @@ import { CompressionStatus } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
 import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
-import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
@@ -71,28 +69,13 @@ import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import { subscribeToAgentRuntimeState } from '../runtime/AgentRuntimeState.js';
+import { BaseLLMClient } from './baseLlmClient.js';
 
 const COMPLEXITY_ESCALATION_TURN_THRESHOLD = 3;
 const TODO_PROMPT_SUFFIX = 'Use TODO List to organize this effort.';
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
   return false;
-}
-
-/**
- * Extracts JSON from a string that might be wrapped in markdown code blocks
- * @param text - The raw text that might contain markdown-wrapped JSON
- * @returns The extracted JSON string or the original text if no markdown found
- */
-function extractJsonFromMarkdown(text: string): string {
-  // Try to match ```json ... ``` or ``` ... ```
-  const markdownMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (markdownMatch && markdownMatch[1]) {
-    return markdownMatch[1].trim();
-  }
-
-  // If no markdown found, return trimmed original text
-  return text.trim();
 }
 
 /**
@@ -115,7 +98,6 @@ export function findCompressSplitPoint(
   let lastSplitPoint = 0;
   let cumulativeCharCount = 0;
   for (let i = 0; i < contents.length; i++) {
-    cumulativeCharCount += charCounts[i];
     const content = contents[i];
     const hasFunctionResponse = content.parts?.some(
       (part) => !!part.functionResponse,
@@ -126,6 +108,7 @@ export function findCompressSplitPoint(
       }
       lastSplitPoint = i;
     }
+    cumulativeCharCount += charCounts[i];
   }
 
   const lastContent = contents[contents.length - 1];
@@ -185,6 +168,12 @@ export class GeminiClient {
   private readonly runtimeState: AgentRuntimeState;
   private _historyService?: HistoryService;
   private _unsubscribe?: () => void;
+
+  /**
+   * BaseLLMClient for stateless utility operations (generateJson, embeddings, etc.)
+   * Lazily initialized when needed
+   */
+  private _baseLlmClient?: BaseLLMClient;
 
   /**
    * @plan PLAN-20251027-STATELESS5.P10
@@ -317,6 +306,17 @@ export class GeminiClient {
 
   getUserTier(): UserTierId | undefined {
     return this.contentGenerator?.userTier;
+  }
+
+  /**
+   * Get or create the BaseLLMClient for stateless utility operations.
+   * This is lazily initialized to avoid creating it when not needed.
+   */
+  private getBaseLlmClient(): BaseLLMClient {
+    if (!this._baseLlmClient) {
+      this._baseLlmClient = new BaseLLMClient(this.getContentGenerator());
+    }
+    return this._baseLlmClient;
   }
 
   private processComplexityAnalysis(
@@ -1467,115 +1467,76 @@ export class GeminiClient {
     config: GenerateContentConfig = {},
   ): Promise<Record<string, unknown>> {
     await this.lazyInitialize();
-    // Use the provided model parameter directly
     const modelToUse = model;
+
     try {
       const userMemory = this.config.getUserMemory();
-      // Provider name removed from prompt call signature
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
         modelToUse,
         this.getEnabledToolNamesForPrompt(),
       );
-      const requestConfig = {
-        abortSignal,
-        ...this.generateContentConfig,
-        ...config,
-      };
 
-      const apiCall = () =>
-        this.getContentGenerator().generateContent(
-          {
+      // Convert Content[] to a single prompt for BaseLLMClient
+      // This preserves the conversation context in the prompt
+      const prompt = contents
+        .map((c) =>
+          c.parts
+            ?.map((p) => ('text' in p ? p.text : ''))
+            .filter(Boolean)
+            .join('\n'),
+        )
+        .filter(Boolean)
+        .join('\n\n');
+
+      // Use BaseLLMClient for the core JSON generation
+      // This delegates to the stateless utility layer
+      const baseLlmClient = this.getBaseLlmClient();
+
+      const apiCall = async () => {
+        try {
+          return await baseLlmClient.generateJson({
+            prompt,
+            schema,
             model: modelToUse,
-            config: {
-              ...requestConfig,
-              systemInstruction,
-              responseJsonSchema: schema,
-              responseMimeType: 'application/json',
-            },
-            contents,
-          },
-          this.lastPromptId || this.config.getSessionId(),
-        );
+            temperature:
+              config.temperature ?? this.generateContentConfig.temperature,
+            systemInstruction,
+            promptId: this.lastPromptId || this.config.getSessionId(),
+          });
+        } catch (error) {
+          // Preserve abort signal behavior
+          if (abortSignal.aborted) {
+            throw error;
+          }
+          throw error;
+        }
+      };
 
       const result = await retryWithBackoff(apiCall);
 
-      let text = getResponseText(result);
-      if (!text) {
-        const error = new Error(
-          'API returned an empty response for generateJson.',
+      // Special case: Gemini sometimes returns just "user" or "model" for next speaker checks
+      // This happens particularly with non-ASCII content in the conversation
+      if (
+        typeof result === 'string' &&
+        (result === 'user' || result === 'model') &&
+        contents.some((c) =>
+          c.parts?.some((p) => 'text' in p && p.text?.includes('next_speaker')),
+        )
+      ) {
+        this.logger.warn(
+          () =>
+            `[generateJson] Gemini returned plain text "${result}" instead of JSON for next speaker check. Converting to valid response.`,
         );
-        await reportError(
-          error,
-          'Error in generateJson: API returned an empty response.',
-          contents,
-          'generateJson-empty-response',
-        );
-        throw error;
+        return {
+          reasoning: 'Gemini returned plain text response',
+          next_speaker: result,
+        };
       }
 
-      const prefix = '```json';
-      const suffix = '```';
-      if (text.startsWith(prefix) && text.endsWith(suffix)) {
-        // Note: upstream added logMalformedJsonResponse here but our telemetry doesn't have it
-        text = text
-          .substring(prefix.length, text.length - suffix.length)
-          .trim();
-      }
-
-      try {
-        // Extract JSON from potential markdown wrapper
-        const cleanedText = extractJsonFromMarkdown(text);
-
-        // Special case: Gemini sometimes returns just "user" or "model" for next speaker checks
-        // This happens particularly with non-ASCII content in the conversation
-        if (
-          (cleanedText === 'user' || cleanedText === 'model') &&
-          contents.some((c) =>
-            c.parts?.some(
-              (p) => 'text' in p && p.text?.includes('next_speaker'),
-            ),
-          )
-        ) {
-          this.logger.warn(
-            () =>
-              `[generateJson] Gemini returned plain text "${cleanedText}" instead of JSON for next speaker check. Converting to valid response.`,
-          );
-          return {
-            reasoning: 'Gemini returned plain text response',
-            next_speaker: cleanedText,
-          };
-        }
-
-        return JSON.parse(cleanedText);
-      } catch (parseError) {
-        // Log both the original and cleaned text for debugging
-        await reportError(
-          parseError,
-          'Failed to parse JSON response from generateJson.',
-          {
-            responseTextFailedToParse: text,
-            cleanedTextFailedToParse: extractJsonFromMarkdown(text),
-            originalRequestContents: contents,
-          },
-          'generateJson-parse',
-        );
-        throw new Error(
-          `Failed to parse API response as JSON: ${getErrorMessage(
-            parseError,
-          )}`,
-        );
-      }
+      return result as Record<string, unknown>;
     } catch (error) {
       if (abortSignal.aborted) {
-        throw error;
-      }
-
-      // Avoid double reporting for the empty response case handled above
-      if (
-        error instanceof Error &&
-        error.message === 'API returned an empty response for generateJson.'
-      ) {
         throw error;
       }
 
@@ -1585,9 +1546,7 @@ export class GeminiClient {
         contents,
         'generateJson-api',
       );
-      throw new Error(
-        `Failed to generate JSON content: ${getErrorMessage(error)}`,
-      );
+      throw error;
     }
   }
 
@@ -1656,35 +1615,16 @@ export class GeminiClient {
     if (!texts || texts.length === 0) {
       return [];
     }
-    const embedModelParams: EmbedContentParameters = {
+
+    // Delegate to BaseLLMClient for stateless embedding generation
+    const baseLlmClient = this.getBaseLlmClient();
+    const result = await baseLlmClient.generateEmbedding({
+      text: texts,
       model: this.embeddingModel,
-      contents: texts,
-    };
-
-    const embedContentResponse =
-      await this.getContentGenerator().embedContent(embedModelParams);
-    if (
-      !embedContentResponse.embeddings ||
-      embedContentResponse.embeddings.length === 0
-    ) {
-      throw new Error('No embeddings found in API response.');
-    }
-
-    if (embedContentResponse.embeddings.length !== texts.length) {
-      throw new Error(
-        `API returned a mismatched number of embeddings. Expected ${texts.length}, got ${embedContentResponse.embeddings.length}.`,
-      );
-    }
-
-    return embedContentResponse.embeddings.map((embedding, index) => {
-      const values = embedding.values;
-      if (!values || values.length === 0) {
-        throw new Error(
-          `API returned an empty embedding for input text at index ${index}: "${texts[index]}"`,
-        );
-      }
-      return values;
     });
+
+    // Result is already validated by BaseLLMClient
+    return result as number[][];
   }
 
   /**
@@ -1719,26 +1659,13 @@ export class GeminiClient {
       };
     }
 
-    // Note: chat variable used later in method
+    // Use lastPromptTokenCount from telemetry service as the source of truth
+    // This is more accurate than estimating from history
+    const originalTokenCount = uiTelemetryService.getLastPromptTokenCount();
 
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-003.1
     const model = this.runtimeState.model;
-    // Get the ACTUAL token count from the history service, not the curated subset
-    const historyService = this.getChat().getHistoryService();
-    const originalTokenCount = historyService
-      ? historyService.getTotalTokens()
-      : 0;
-    if (originalTokenCount === undefined) {
-      console.warn(`Could not determine token count for model ${model}.`);
-      this.hasFailedCompressionAttempt = !force && true;
-      return {
-        originalTokenCount: 0,
-        newTokenCount: 0,
-        compressionStatus:
-          CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
-      };
-    }
 
     const contextPercentageThreshold =
       this.config.getChatCompression()?.contextPercentageThreshold;
@@ -1825,15 +1752,12 @@ export class GeminiClient {
       };
     }
 
-    uiTelemetryService.setLastPromptTokenCount(newTokenCount);
-
     // TODO: Add proper telemetry logging once available
     console.debug(
       `Chat compression: ${originalTokenCount} -> ${newTokenCount} tokens`,
     );
 
     if (newTokenCount > originalTokenCount) {
-      this.getChat().setHistory(curatedHistory);
       this.hasFailedCompressionAttempt = !force && true;
       return {
         originalTokenCount,
@@ -1843,6 +1767,9 @@ export class GeminiClient {
       };
     } else {
       this.chat = compressedChat; // Chat compression successful, set new state.
+
+      // Update telemetry service with new token count
+      uiTelemetryService.setLastPromptTokenCount(newTokenCount);
 
       // Emit token update event for the new compressed chat
       // This ensures the UI updates with the new token count

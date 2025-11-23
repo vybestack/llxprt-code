@@ -47,7 +47,11 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
             }
           />
         </Box>
-        {primaryText && <Text color={Colors.AccentPurple}>{primaryText}</Text>}
+        {primaryText && (
+          <Text color={Colors.AccentPurple} wrap="truncate-end">
+            {primaryText}
+          </Text>
+        )}
         <Text color={Colors.Gray}>
           {streamingState === StreamingState.WaitingForConfirmation
             ? ''

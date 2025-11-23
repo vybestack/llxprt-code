@@ -562,7 +562,10 @@ export function SettingsDialog({
   };
 
   // Scope selector items
-  const scopeItems = getScopeItems();
+  const scopeItems = getScopeItems().map((item) => ({
+    ...item,
+    key: item.value,
+  }));
 
   const handleScopeHighlight = useCallback((scope: SettingScope) => {
     setSelectedScope(scope);
@@ -781,10 +784,12 @@ export function SettingsDialog({
               currentValue = getDefaultValue(currentItem?.value || '');
             }
 
-            const currentIndex = options.indexOf(currentValue as string);
+            const currentIndex = options.findIndex(
+              (opt) => opt.value === currentValue,
+            );
             const nextIndex =
               currentIndex === -1 ? 0 : (currentIndex + 1) % options.length;
-            const newValue = options[nextIndex];
+            const newValue = options[nextIndex].value;
 
             // Update pending settings
             setPendingSettings((prev) =>

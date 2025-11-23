@@ -91,6 +91,7 @@ describe('ShellTool', () => {
           }),
         },
       }),
+      isInteractive: vi.fn().mockReturnValue(true),
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig);

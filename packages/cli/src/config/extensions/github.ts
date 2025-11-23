@@ -7,22 +7,17 @@
 import { simpleGit } from 'simple-git';
 import { getErrorMessage } from '../../utils/errors.js';
 import type { ExtensionInstallMetadata } from '../extension.js';
+import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import * as os from 'node:os';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { execSync } from 'node:child_process';
-import { quote } from 'shell-quote';
+import { spawnSync } from 'node:child_process';
+import { EXTENSIONS_CONFIG_FILENAME } from '../extension.js';
 
-export enum ExtensionUpdateState {
-  CHECKING_FOR_UPDATES = 'checking for updates',
-  UPDATED_NEEDS_RESTART = 'updated, needs restart',
-  UPDATING = 'updating',
-  UPDATE_AVAILABLE = 'update available',
-  UP_TO_DATE = 'up to date',
-  ERROR = 'error checking for updates',
-  NOT_UPDATABLE = 'not updatable',
-}
+// Re-export ExtensionUpdateState for use by other modules
+export { ExtensionUpdateState };
 
 function getGitHubToken(): string | undefined {
   return process.env['GITHUB_TOKEN'];
@@ -76,7 +71,7 @@ export async function cloneFromGit(
     await git.checkout('FETCH_HEAD');
   } catch (error) {
     throw new Error(
-      `Failed to clone Git repository from ${installMetadata.source}`,
+      `Failed to clone Git repository from ${installMetadata.source} ${getErrorMessage(error)}`,
       {
         cause: error,
       },
@@ -138,39 +133,44 @@ export async function checkGitHubReleasesExist(
 }
 
 export async function checkForExtensionUpdate(
-  installMetadata: ExtensionInstallMetadata,
-): Promise<ExtensionUpdateState> {
+  extension: GeminiCLIExtension,
+  setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
+): Promise<void> {
+  setExtensionUpdateState(ExtensionUpdateState.CHECKING_FOR_UPDATES);
+  const installMetadata = extension.installMetadata;
   if (
-    installMetadata.type !== 'git' &&
-    installMetadata.type !== 'github-release'
+    !installMetadata ||
+    (installMetadata.type !== 'git' &&
+      installMetadata.type !== 'github-release')
   ) {
-    return ExtensionUpdateState.NOT_UPDATABLE;
+    setExtensionUpdateState(ExtensionUpdateState.NOT_UPDATABLE);
+    return;
   }
   try {
     if (installMetadata.type === 'git') {
-      const git = simpleGit(installMetadata.source);
+      const git = simpleGit(extension.path);
       const remotes = await git.getRemotes(true);
       if (remotes.length === 0) {
         console.error('No git remotes found.');
-        return ExtensionUpdateState.ERROR;
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
       }
       const remoteUrl = remotes[0].refs.fetch;
       if (!remoteUrl) {
         console.error(`No fetch URL found for git remote ${remotes[0].name}.`);
-        return ExtensionUpdateState.ERROR;
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
       }
 
       // Determine the ref to check on the remote.
       const refToCheck = installMetadata.ref || 'HEAD';
 
-      const lsRemoteOutput = await git.listRemote([
-        remotes[0].name,
-        refToCheck,
-      ]);
+      const lsRemoteOutput = await git.listRemote([remoteUrl, refToCheck]);
 
       if (typeof lsRemoteOutput !== 'string' || lsRemoteOutput.trim() === '') {
         console.error(`Git ref ${refToCheck} not found.`);
-        return ExtensionUpdateState.ERROR;
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
       }
 
       const remoteHash = lsRemoteOutput.split('\t')[0];
@@ -180,16 +180,21 @@ export async function checkForExtensionUpdate(
         console.error(
           `Unable to parse hash from git ls-remote output "${lsRemoteOutput}"`,
         );
-        return ExtensionUpdateState.ERROR;
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
       }
       if (remoteHash === localHash) {
-        return ExtensionUpdateState.UP_TO_DATE;
+        setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
+        return;
       }
-      return ExtensionUpdateState.UPDATE_AVAILABLE;
+      setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+      return;
     } else {
       const { source, ref } = installMetadata;
       if (!source) {
-        return ExtensionUpdateState.ERROR;
+        console.error(`No "source" provided for extension.`);
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
       }
       const { owner, repo } = parseGitHubRepoForReleases(source);
 
@@ -199,15 +204,18 @@ export async function checkForExtensionUpdate(
         installMetadata.ref,
       );
       if (releaseData.tag_name !== ref) {
-        return ExtensionUpdateState.UPDATE_AVAILABLE;
+        setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+        return;
       }
-      return ExtensionUpdateState.UP_TO_DATE;
+      setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
+      return;
     }
   } catch (error) {
     console.error(
       `Failed to check for updates for extension "${installMetadata.source}": ${getErrorMessage(error)}`,
     );
-    return ExtensionUpdateState.ERROR;
+    setExtensionUpdateState(ExtensionUpdateState.ERROR);
+    return;
   }
 }
 export interface GitHubDownloadResult {
@@ -262,6 +270,34 @@ export async function downloadFromGitHubRelease(
     await downloadFile(archiveUrl, downloadedAssetPath);
 
     extractFile(downloadedAssetPath, destination);
+
+    // For regular github releases, the repository is put inside of a top level
+    // directory. In this case we should see exactly two file in the destination
+    // dir, the archive and the directory. If we see that, validate that the
+    // dir has a gemini extension configuration file and then move all files
+    // from the directory up one level into the destination directory.
+    const entries = await fs.promises.readdir(destination, {
+      withFileTypes: true,
+    });
+    if (entries.length === 2) {
+      const lonelyDir = entries.find((entry) => entry.isDirectory());
+      if (
+        lonelyDir &&
+        fs.existsSync(
+          path.join(destination, lonelyDir.name, EXTENSIONS_CONFIG_FILENAME),
+        )
+      ) {
+        const dirPathToExtract = path.join(destination, lonelyDir.name);
+        const extractedDirFiles = await fs.promises.readdir(dirPathToExtract);
+        for (const file of extractedDirFiles) {
+          await fs.promises.rename(
+            path.join(dirPathToExtract, file),
+            path.join(destination, file),
+          );
+        }
+        await fs.promises.rmdir(dirPathToExtract);
+      }
+    }
 
     await fs.promises.unlink(downloadedAssetPath);
     return {
@@ -386,13 +422,26 @@ async function downloadFile(url: string, dest: string): Promise<void> {
 }
 
 function extractFile(file: string, dest: string) {
-  const safeFile = quote([file]);
-  const safeDest = quote([dest]);
+  let args: string[];
+  let command: 'tar' | 'unzip';
   if (file.endsWith('.tar.gz')) {
-    execSync(`tar -xzf ${safeFile} -C ${safeDest}`);
+    args = ['-xzf', file, '-C', dest];
+    command = 'tar';
   } else if (file.endsWith('.zip')) {
-    execSync(`unzip ${safeFile} -d ${safeDest}`);
+    args = [file, '-d', dest];
+    command = 'unzip';
   } else {
     throw new Error(`Unsupported file extension for extraction: ${file}`);
+  }
+
+  const result = spawnSync(command, args, { stdio: 'pipe' });
+
+  if (result.status !== 0) {
+    if (result.error) {
+      throw new Error(`Failed to spawn '${command}': ${result.error.message}`);
+    }
+    throw new Error(
+      `'${command}' command failed with exit code ${result.status}: ${result.stderr.toString()}`,
+    );
   }
 }

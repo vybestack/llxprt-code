@@ -54,6 +54,7 @@ const MIGRATION_MAP: Record<string, string> = {
   theme: 'theme',
   customThemes: 'customThemes',
   hideWindowTitle: 'hideWindowTitle',
+  showStatusInTitle: 'showStatusInTitle',
   hideTips: 'hideTips',
   hideBanner: 'hideBanner',
   hideFooter: 'hideFooter',

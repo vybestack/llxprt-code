@@ -10,6 +10,8 @@ import {
   TelemetrySettings,
   AuthType,
   ChatCompressionSettings,
+  DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+  DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
 } from '@vybestack/llxprt-code-core';
 import { CustomTheme } from '../ui/themes/theme.js';
 import {
@@ -17,19 +19,63 @@ import {
   DEFAULT_HISTORY_MAX_ITEMS,
 } from '../constants/historyLimits.js';
 
+export type SettingsType =
+  | 'boolean'
+  | 'string'
+  | 'number'
+  | 'array'
+  | 'object'
+  | 'enum';
+
+export type SettingsValue =
+  | boolean
+  | string
+  | number
+  | string[]
+  | object
+  | undefined;
+
+/**
+ * Setting datatypes that "toggle" through a fixed list of options
+ * (e.g. an enum or true/false) rather than allowing for free form input
+ * (like a number or string).
+ */
+export const TOGGLE_TYPES: ReadonlySet<SettingsType | undefined> = new Set([
+  'boolean',
+  'enum',
+]);
+
+export interface SettingEnumOption {
+  value: string | number;
+  label: string;
+}
+
+export enum MergeStrategy {
+  // Replace the old value with the new value. This is the default.
+  REPLACE = 'replace',
+  // Concatenate arrays.
+  CONCAT = 'concat',
+  // Merge arrays, ensuring unique values.
+  UNION = 'union',
+  // Shallow merge objects.
+  SHALLOW_MERGE = 'shallow_merge',
+}
+
 export interface SettingDefinition {
-  type: 'boolean' | 'string' | 'number' | 'array' | 'object' | 'enum';
+  type: SettingsType;
   label: string;
   category: string;
   requiresRestart: boolean;
-  default: boolean | string | number | string[] | object | undefined;
+  default: SettingsValue;
   description?: string;
   parentKey?: string;
   childKey?: string;
   key?: string;
   properties?: SettingsSchema;
   showInDialog?: boolean;
-  options?: readonly string[];
+  mergeStrategy?: MergeStrategy;
+  /** Enum type options  */
+  options?: readonly SettingEnumOption[];
   subSettings?: SettingsSchema;
 }
 
@@ -493,7 +539,10 @@ export const SETTINGS_SCHEMA = {
     description:
       'Mode for processing tool calls. Pipeline mode is optimized, legacy mode uses older implementation.',
     showInDialog: true,
-    options: ['legacy', 'pipeline'],
+    options: [
+      { value: 'legacy', label: 'Legacy' },
+      { value: 'pipeline', label: 'Pipeline' },
+    ] as const,
   },
 
   mcpServerCommand: {
@@ -513,6 +562,15 @@ export const SETTINGS_SCHEMA = {
     default: {} as Record<string, MCPServerConfig>,
     description: 'Configuration for MCP servers.',
     showInDialog: false,
+  },
+  showStatusInTitle: {
+    type: 'boolean',
+    label: 'Show Status in Title',
+    category: 'UI',
+    requiresRestart: false,
+    default: false,
+    description: 'Show LLxprt status and thoughts in the terminal window title',
+    showInDialog: true,
   },
   // Footer configuration settings - adapted to llxprt's flat structure
   hideCWD: {
@@ -681,6 +739,34 @@ export const SETTINGS_SCHEMA = {
         default: false,
         description:
           'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
+        showInDialog: true,
+      },
+      enableToolOutputTruncation: {
+        type: 'boolean',
+        label: 'Enable Tool Output Truncation',
+        category: 'Tools',
+        requiresRestart: true,
+        default: true,
+        description: 'Enable truncation of large tool outputs.',
+        showInDialog: true,
+      },
+      truncateToolOutputThreshold: {
+        type: 'number',
+        label: 'Tool Output Truncation Threshold',
+        category: 'Tools',
+        requiresRestart: true,
+        default: DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+        description:
+          'Truncate tool output if it is larger than this many characters. Set to -1 to disable.',
+        showInDialog: true,
+      },
+      truncateToolOutputLines: {
+        type: 'number',
+        label: 'Tool Output Truncation Lines',
+        category: 'Tools',
+        requiresRestart: true,
+        default: DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+        description: 'The number of lines to keep when truncating tool output.',
         showInDialog: true,
       },
       policyPath: {
@@ -1023,7 +1109,11 @@ export const SETTINGS_SCHEMA = {
             description:
               'Choose whether updates apply immediately, on restart, or manually.',
             showInDialog: false,
-            options: ['immediate', 'on-restart', 'manual'] as const,
+            options: [
+              { value: 'immediate', label: 'Immediate' },
+              { value: 'on-restart', label: 'On Restart' },
+              { value: 'manual', label: 'Manual' },
+            ] as const,
           },
           notificationLevel: {
             type: 'enum',
@@ -1034,7 +1124,11 @@ export const SETTINGS_SCHEMA = {
             description:
               'Controls how aggressively update notifications are surfaced.',
             showInDialog: false,
-            options: ['toast', 'dialog', 'silent'] as const,
+            options: [
+              { value: 'toast', label: 'Toast' },
+              { value: 'dialog', label: 'Dialog' },
+              { value: 'silent', label: 'Silent' },
+            ] as const,
           },
           perExtension: {
             type: 'object',
@@ -1137,9 +1231,13 @@ export const SETTINGS_SCHEMA = {
 type InferSettings<T extends SettingsSchema> = {
   -readonly [K in keyof T]?: T[K] extends { properties: SettingsSchema }
     ? InferSettings<T[K]['properties']>
-    : T[K]['default'] extends boolean
-      ? boolean
-      : T[K]['default'];
+    : T[K]['type'] extends 'enum'
+      ? T[K]['options'] extends readonly SettingEnumOption[]
+        ? T[K]['options'][number]['value']
+        : T[K]['default']
+      : T[K]['default'] extends boolean
+        ? boolean
+        : T[K]['default'];
 };
 
 export type Settings = InferSettings<typeof SETTINGS_SCHEMA>;

@@ -52,6 +52,9 @@ import {
   limitOutputTokens,
   ToolOutputSettingsProvider,
 } from '../utils/toolOutputLimiter.js';
+import { DebugLogger } from '../debug/index.js';
+
+const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
 export type ValidatingToolCall = {
   status: 'validating';
@@ -372,6 +375,7 @@ interface CoreToolSchedulerOptions {
   onToolCallsUpdate?: ToolCallsUpdateHandler;
   getPreferredEditor: () => EditorType | undefined;
   onEditorClose: () => void;
+  onEditorOpen?: () => void;
 }
 
 export class CoreToolScheduler {
@@ -383,6 +387,7 @@ export class CoreToolScheduler {
   private getPreferredEditor: () => EditorType | undefined;
   private config: Config;
   private onEditorClose: () => void;
+  private onEditorOpen?: () => void;
   private isFinalizingToolCalls = false;
   private isScheduling = false;
   private requestQueue: QueuedRequest[] = [];
@@ -397,6 +402,7 @@ export class CoreToolScheduler {
     this.onToolCallsUpdate = options.onToolCallsUpdate;
     this.getPreferredEditor = options.getPreferredEditor;
     this.onEditorClose = options.onEditorClose;
+    this.onEditorOpen = options.onEditorOpen;
 
     const messageBus = this.config.getMessageBus();
     this.messageBusUnsubscribe = messageBus.subscribe<ToolConfirmationResponse>(
@@ -412,6 +418,12 @@ export class CoreToolScheduler {
   private handleMessageBusResponse(response: ToolConfirmationResponse): void {
     const callId = this.pendingConfirmations.get(response.correlationId);
     if (!callId) {
+      if (toolSchedulerLogger.enabled) {
+        toolSchedulerLogger.debug(
+          () =>
+            `Received TOOL_CONFIRMATION_RESPONSE for unknown correlationId=${response.correlationId}`,
+        );
+      }
       return; // Not our confirmation request
     }
 
@@ -421,8 +433,21 @@ export class CoreToolScheduler {
     ) as WaitingToolCall | undefined;
 
     if (!waitingToolCall) {
+      if (toolSchedulerLogger.enabled) {
+        toolSchedulerLogger.debug(
+          () =>
+            `No waiting tool call found for correlationId=${response.correlationId}, callId=${callId}`,
+        );
+      }
       this.pendingConfirmations.delete(response.correlationId);
       return;
+    }
+
+    if (toolSchedulerLogger.enabled) {
+      toolSchedulerLogger.debug(
+        () =>
+          `Processing TOOL_CONFIRMATION_RESPONSE correlationId=${response.correlationId} callId=${callId} outcome=${response.outcome ?? response.confirmed}`,
+      );
     }
 
     const derivedOutcome =
@@ -1016,6 +1041,8 @@ export class CoreToolScheduler {
     if (toolCall && toolCall.status === 'awaiting_approval') {
       waitingToolCall = toolCall as WaitingToolCall;
     }
+    const previousCorrelationId =
+      waitingToolCall?.confirmationDetails?.correlationId;
 
     await originalOnConfirm(outcome);
 
@@ -1055,13 +1082,23 @@ export class CoreToolScheduler {
           editorType,
           signal,
           this.onEditorClose,
+          this.onEditorOpen,
         );
         this.setArgsInternal(callId, updatedParams);
-        this.setStatusInternal(callId, 'awaiting_approval', {
+        const newCorrelationId = randomUUID();
+        const updatedDetails: ToolCallConfirmationDetails = {
           ...waitingToolCall.confirmationDetails,
           fileDiff: updatedDiff,
           isModifying: false,
-        } as ToolCallConfirmationDetails);
+          correlationId: newCorrelationId,
+        } as ToolCallConfirmationDetails;
+        this.pendingConfirmations.set(newCorrelationId, callId);
+        const context = this.getPolicyContextFromInvocation(
+          waitingToolCall.invocation,
+          waitingToolCall.request,
+        );
+        this.publishConfirmationRequest(newCorrelationId, context);
+        this.setStatusInternal(callId, 'awaiting_approval', updatedDetails);
       }
     } else {
       if (payload?.newContent && waitingToolCall) {
@@ -1071,7 +1108,7 @@ export class CoreToolScheduler {
     }
     this.attemptExecutionOfScheduledCalls(signal);
 
-    const correlationId = waitingToolCall?.confirmationDetails?.correlationId;
+    const correlationId = previousCorrelationId;
     if (correlationId) {
       this.pendingConfirmations.delete(correlationId);
       if (!skipBusPublish) {

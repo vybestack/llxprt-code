@@ -34,6 +34,7 @@ import { GeminiChat, InvalidStreamError } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
 import { getCodeAssistServer } from '../code_assist/codeAssist.js';
 import { UserTierId } from '../code_assist/types.js';
+import { parseThought, type ThoughtSummary } from '../utils/thoughtUtils.js';
 
 export const DEFAULT_AGENT_ID = 'primary';
 
@@ -110,11 +111,6 @@ export interface ServerToolCallConfirmationDetails {
   request: ToolCallRequestInfo;
   details: ToolCallConfirmationDetails;
 }
-
-export type ThoughtSummary = {
-  subject: string;
-  description: string;
-};
 
 export type ServerGeminiContentEvent = {
   type: GeminiEventType.Content;
@@ -335,19 +331,7 @@ export class Turn {
 
         const thoughtPart = resp.candidates?.[0]?.content?.parts?.[0];
         if (thoughtPart?.thought) {
-          // Thought always has a bold "subject" part enclosed in double asterisks
-          // (e.g., **Subject**). The rest of the string is considered the description.
-          const rawText = thoughtPart.text ?? '';
-          const subjectStringMatches = rawText.match(/\*\*(.*?)\*\*/s);
-          const subject = subjectStringMatches
-            ? subjectStringMatches[1].trim()
-            : '';
-          const description = rawText.replace(/\*\*(.*?)\*\*/s, '').trim();
-          const thought: ThoughtSummary = {
-            subject,
-            description,
-          };
-
+          const thought = parseThought(thoughtPart.text ?? '');
           yield {
             type: GeminiEventType.Thought,
             value: thought,

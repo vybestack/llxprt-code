@@ -57,10 +57,7 @@ import {
   logCliConfiguration,
   StartSessionEvent,
 } from '../telemetry/index.js';
-import {
-  DEFAULT_GEMINI_EMBEDDING_MODEL,
-  DEFAULT_GEMINI_FLASH_MODEL,
-} from './models.js';
+import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import { MCPOAuthConfig } from '../mcp/oauth-provider.js';
@@ -174,21 +171,31 @@ export interface GeminiCLIExtension {
   version: string;
   isActive: boolean;
   path: string;
+  installMetadata?: ExtensionInstallMetadata;
 }
-export interface FileFilteringOptions {
-  respectGitIgnore: boolean;
-  respectLlxprtIgnore: boolean;
+
+export interface ExtensionInstallMetadata {
+  source: string;
+  type: 'git' | 'local' | 'link' | 'github-release';
+  releaseTag?: string; // Only present for github-release installs.
+  ref?: string;
+  autoUpdate?: boolean;
 }
-// For memory files
-export const DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: FileFilteringOptions = {
-  respectGitIgnore: false,
-  respectLlxprtIgnore: true,
+
+import type { FileFilteringOptions } from './constants.js';
+import {
+  DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+  DEFAULT_FILE_FILTERING_OPTIONS,
+} from './constants.js';
+
+export type { FileFilteringOptions };
+export {
+  DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+  DEFAULT_FILE_FILTERING_OPTIONS,
 };
-// For all other files
-export const DEFAULT_FILE_FILTERING_OPTIONS: FileFilteringOptions = {
-  respectGitIgnore: true,
-  respectLlxprtIgnore: true,
-};
+
+export const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 4_000_000;
+export const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 1000;
 export class MCPServerConfig {
   constructor(
     // For stdio transport
@@ -214,12 +221,18 @@ export class MCPServerConfig {
     // OAuth configuration
     readonly oauth?: MCPOAuthConfig,
     readonly authProviderType?: AuthProviderType,
+    // Service Account Configuration
+    /* targetAudience format: CLIENT_ID.apps.googleusercontent.com */
+    readonly targetAudience?: string,
+    /* targetServiceAccount format: <service-account-name>@<project-num>.iam.gserviceaccount.com */
+    readonly targetServiceAccount?: string,
   ) {}
 }
 
 export enum AuthProviderType {
   DYNAMIC_DISCOVERY = 'dynamic_discovery',
   GOOGLE_CREDENTIALS = 'google_credentials',
+  SERVICE_ACCOUNT_IMPERSONATION = 'service_account_impersonation',
 }
 
 export interface SandboxConfig {
@@ -301,6 +314,9 @@ export interface ConfigParameters {
   useSmartEdit?: boolean;
   settingsService?: SettingsService;
   policyEngineConfig?: PolicyEngineConfig;
+  truncateToolOutputThreshold?: number;
+  truncateToolOutputLines?: number;
+  enableToolOutputTruncation?: boolean;
 }
 
 export class Config {
@@ -310,7 +326,7 @@ export class Config {
   private readonly settingsService: SettingsService;
   private fileSystemService: FileSystemService;
   private contentGeneratorConfig!: ContentGeneratorConfig;
-  private readonly embeddingModel: string;
+  private readonly embeddingModel: string | undefined;
   private readonly sandbox: SandboxConfig | undefined;
   private readonly targetDir: string;
   private workspaceContext: WorkspaceContext;
@@ -439,6 +455,9 @@ export class Config {
   private readonly useSmartEdit: boolean;
   private readonly messageBus: MessageBus;
   private readonly policyEngine: PolicyEngine;
+  truncateToolOutputThreshold: number;
+  truncateToolOutputLines: number;
+  enableToolOutputTruncation: boolean;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -478,8 +497,8 @@ export class Config {
     }
 
     this.sessionId = params.sessionId;
-    this.embeddingModel =
-      params.embeddingModel ?? DEFAULT_GEMINI_EMBEDDING_MODEL;
+    // Embedding models not currently configured for llxprt-code
+    this.embeddingModel = params.embeddingModel;
     this.fileSystemService = new StandardFileSystemService();
     this.sandbox = params.sandbox;
     this.targetDir = path.resolve(params.targetDir);
@@ -562,6 +581,12 @@ export class Config {
     this.useRipgrep = params.useRipgrep ?? false;
     this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
     this.skipNextSpeakerCheck = params.skipNextSpeakerCheck ?? false;
+    this.truncateToolOutputThreshold =
+      params.truncateToolOutputThreshold ??
+      DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD;
+    this.truncateToolOutputLines =
+      params.truncateToolOutputLines ?? DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES;
+    this.enableToolOutputTruncation = params.enableToolOutputTruncation ?? true;
     this.useSmartEdit = params.useSmartEdit ?? false;
     this.extensionManagement = params.extensionManagement ?? false;
     this.storage = new Storage(this.targetDir);
@@ -825,7 +850,7 @@ export class Config {
     return this.maxSessionTurns;
   }
 
-  getEmbeddingModel(): string {
+  getEmbeddingModel(): string | undefined {
     return this.embeddingModel;
   }
 

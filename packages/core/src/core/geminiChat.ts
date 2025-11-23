@@ -17,6 +17,7 @@ import {
   GenerateContentResponseUsageMetadata,
   Tool,
   PartListUnion,
+  ApiError,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
@@ -833,12 +834,13 @@ export class GeminiChat {
       };
 
       response = await retryWithBackoff(apiCall, {
-        shouldRetry: (error: unknown) => {
+        shouldRetryOnError: (error: unknown) => {
           // Check for known error messages and codes.
-          if (error instanceof Error && error.message) {
+          if (error instanceof ApiError && error.message) {
+            if (error.status === 400) return false;
             if (isSchemaDepthError(error.message)) return false;
-            if (error.message.includes('429')) return true;
-            if (error.message.match(/5\d{2}/)) return true;
+            if (error.status === 429) return true;
+            if (error.status >= 500 && error.status < 600) return true;
           }
           return false; // Don't retry other errors by default
         },
@@ -1106,7 +1108,8 @@ export class GeminiChat {
 
         if (lastError) {
           // With send-then-commit pattern, we don't add to history until success,
-          // so there's nothing to remove on failure
+          // so there's nothing to remove on failure. This is the approach upstream
+          // moved to in 11f7a6a2d - we were already doing this correctly.
           throw lastError;
         }
       } finally {
@@ -1247,11 +1250,12 @@ export class GeminiChat {
           return directResponse;
         },
         {
-          shouldRetry: (error: unknown) => {
-            if (error instanceof Error && error.message) {
+          shouldRetryOnError: (error: unknown) => {
+            if (error instanceof ApiError && error.message) {
+              if (error.status === 400) return false;
               if (isSchemaDepthError(error.message)) return false;
-              if (error.message.includes('429')) return true;
-              if (error.message.match(/5\d{2}/)) return true;
+              if (error.status === 429) return true;
+              if (error.status >= 500 && error.status < 600) return true;
             }
             return false;
           },
@@ -1417,11 +1421,12 @@ export class GeminiChat {
     };
 
     const streamResponse = await retryWithBackoff(apiCall, {
-      shouldRetry: (error: unknown) => {
-        if (error instanceof Error && error.message) {
+      shouldRetryOnError: (error: unknown) => {
+        if (error instanceof ApiError && error.message) {
+          if (error.status === 400) return false;
           if (isSchemaDepthError(error.message)) return false;
-          if (error.message.includes('429')) return true;
-          if (error.message.match(/5\d{2}/)) return true;
+          if (error.status === 429) return true;
+          if (error.status >= 500 && error.status < 600) return true;
         }
         return false;
       },

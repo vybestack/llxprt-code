@@ -137,10 +137,10 @@ export function getDiffCommand(
           '-c',
           'wincmd h | setlocal statusline=OLD\\ FILE',
           '-c',
-          'wincmd l | setlocal statusline=%#StatusBold#NEW\\ FILE\\ :wqa(save\\ &\\ quit)\\ \\|\\ i/esc(toggle\\ edit\\ mode)',
-          // Auto close all windows when one is closed
+          'wincmd l | setlocal statusline=%#StatusBold#NEW\\ FILE\\ :wqa(save\\ &\\ quit)\\ \\|\\ :qa!(quit)\\ \\|\\ i/esc(toggle\\ edit\\ mode)',
+          // Auto-close all windows when any window is closed
           '-c',
-          'autocmd BufWritePost * wqa',
+          'autocmd WinClosed * qa!',
           oldPath,
           newPath,
         ],
@@ -216,6 +216,8 @@ export async function openDiff(
         } catch (e) {
           console.error('Error in onEditorClose callback:', e);
         } finally {
+          // Terminal state will be restored by onEditorClose (refreshStatic) callback
+          // which has access to the proper setRawMode from useStdin hook
           onEditorClose();
         }
         break;

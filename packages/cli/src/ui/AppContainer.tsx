@@ -33,6 +33,7 @@ import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
+import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
 import { loadHierarchicalLlxprtMemory } from '../config/config.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
@@ -58,6 +59,7 @@ import {
   type IdeContext,
   ideContext,
   type IModel,
+  // type IdeInfo, // TODO: Fix IDE integration
   getSettingsService,
   DebugLogger,
   uiTelemetryService,
@@ -103,9 +105,20 @@ import {
   type UIActions,
 } from './contexts/UIActionsContext.js';
 import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
+import {
+  disableBracketedPaste,
+  enableBracketedPaste,
+} from './utils/bracketedPaste.js';
+import { enableSupportedProtocol } from './utils/kittyProtocolDetector.js';
+import {
+  ENABLE_FOCUS_TRACKING,
+  DISABLE_FOCUS_TRACKING,
+  SHOW_CURSOR,
+} from './utils/terminalSequences.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
+const selectionLogger = new DebugLogger('llxprt:ui:selection');
 
 interface AppContainerProps {
   config: Config;
@@ -133,7 +146,6 @@ export const AppContainer = (props: AppContainerProps) => {
     config,
     settings,
     startupWarnings = [],
-    version,
     appState,
     appDispatch,
   } = props;
@@ -143,7 +155,8 @@ export const AppContainer = (props: AppContainerProps) => {
   useBracketedPaste();
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
   const { stdout } = useStdout();
-  const nightly = version.includes('nightly');
+  const { stdin, setRawMode } = useStdin();
+  const nightly = props.version.includes('nightly'); // TODO: Use for nightly-specific features
   const historyLimits = useMemo(
     () => ({
       maxItems:
@@ -331,10 +344,85 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [config, updateHistoryTokenCount, tokenLogger]);
   const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
+  const externalEditorStateRef = useRef<{
+    paused: boolean;
+    rawModeManaged: boolean;
+  } | null>(null);
+  const keypressRefreshRef = useRef<() => void>(() => {});
+
+  const restoreTerminalStateAfterEditor = useCallback(() => {
+    const editorState = externalEditorStateRef.current;
+    if (!stdin) {
+      return;
+    }
+
+    const readStream = stdin as NodeJS.ReadStream;
+
+    if (editorState?.paused && typeof readStream.resume === 'function') {
+      readStream.resume();
+    }
+
+    if (editorState?.rawModeManaged && setRawMode) {
+      try {
+        setRawMode(true);
+      } catch (error) {
+        console.error('Failed to re-enable raw mode:', error);
+      }
+    }
+
+    if (keypressRefreshRef.current) {
+      keypressRefreshRef.current();
+      debug.debug(
+        () => 'Keypress refresh requested after external editor closed',
+      );
+    }
+
+    externalEditorStateRef.current = null;
+  }, [setRawMode, stdin]);
+
   const refreshStatic = useCallback(() => {
     stdout.write(ansiEscapes.clearTerminal);
     setStaticKey((prev) => prev + 1);
-  }, [setStaticKey, stdout]);
+
+    restoreTerminalStateAfterEditor();
+
+    // Re-send terminal control sequences
+    enableBracketedPaste();
+    enableSupportedProtocol();
+    stdout.write(ENABLE_FOCUS_TRACKING);
+    stdout.write(SHOW_CURSOR);
+  }, [restoreTerminalStateAfterEditor, setStaticKey, stdout]);
+
+  const handleExternalEditorOpen = useCallback(() => {
+    if (!stdin) {
+      return;
+    }
+
+    const readStream = stdin as NodeJS.ReadStream;
+
+    externalEditorStateRef.current = {
+      paused: false,
+      rawModeManaged: false,
+    };
+
+    if (typeof readStream.pause === 'function') {
+      readStream.pause();
+      externalEditorStateRef.current.paused = true;
+    }
+
+    if (setRawMode) {
+      try {
+        setRawMode(false);
+        externalEditorStateRef.current.rawModeManaged = true;
+      } catch (error) {
+        console.error('Failed to disable raw mode:', error);
+      }
+    }
+
+    disableBracketedPaste();
+    stdout.write(DISABLE_FOCUS_TRACKING);
+    stdout.write(SHOW_CURSOR);
+  }, [setRawMode, stdin, stdout]);
   useStaticHistoryRefresh(history, refreshStatic);
 
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
@@ -387,12 +475,34 @@ export const AppContainer = (props: AppContainerProps) => {
     setIsPermissionsDialogOpen(false);
   }, []);
 
+  const [isLoggingDialogOpen, setIsLoggingDialogOpen] = useState(false);
+  const [loggingDialogData, setLoggingDialogData] = useState<{
+    entries: unknown[];
+  }>({ entries: [] });
+
+  const openLoggingDialog = useCallback((data?: { entries: unknown[] }) => {
+    setLoggingDialogData(data || { entries: [] });
+    setIsLoggingDialogOpen(true);
+  }, []);
+
+  const closeLoggingDialog = useCallback(() => {
+    setIsLoggingDialogOpen(false);
+  }, []);
+
   const {
     showWorkspaceMigrationDialog,
     workspaceExtensions,
     onWorkspaceMigrationDialogOpen,
     onWorkspaceMigrationDialogClose,
   } = useWorkspaceMigration(settings);
+
+  const extensions = config.getExtensions();
+  const {
+    extensionsUpdateState,
+    setExtensionsUpdateState,
+    confirmUpdateExtensionRequests,
+    addConfirmUpdateExtensionRequest,
+  } = useExtensionUpdates(extensions, addItem, config.getWorkingDir());
 
   useEffect(() => {
     const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
@@ -761,7 +871,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
   // Terminal and UI setup
   const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
-  const { stdin, setRawMode } = useStdin();
   const isInitialMount = useRef(true);
 
   const widthFraction = 0.9;
@@ -817,6 +926,43 @@ export const AppContainer = (props: AppContainerProps) => {
     toggleVimEnabled,
   } = useVimMode();
 
+  const slashCommandProcessorActions = useMemo(
+    () => ({
+      openAuthDialog,
+      openThemeDialog,
+      openEditorDialog,
+      openPrivacyNotice,
+      openSettingsDialog,
+      openLoggingDialog,
+      openProviderModelDialog,
+      openPermissionsDialog,
+      openProviderDialog,
+      openLoadProfileDialog,
+      quit: setQuittingMessages,
+      setDebugMessage,
+      toggleCorgiMode,
+      setExtensionsUpdateState,
+      addConfirmUpdateExtensionRequest,
+    }),
+    [
+      openAuthDialog,
+      openThemeDialog,
+      openEditorDialog,
+      openPrivacyNotice,
+      openSettingsDialog,
+      openLoggingDialog,
+      openProviderModelDialog,
+      openPermissionsDialog,
+      openProviderDialog,
+      openLoadProfileDialog,
+      setQuittingMessages,
+      setDebugMessage,
+      toggleCorgiMode,
+      setExtensionsUpdateState,
+      addConfirmUpdateExtensionRequest,
+    ],
+  );
+
   const {
     handleSlashCommand,
     slashCommands,
@@ -831,22 +977,12 @@ export const AppContainer = (props: AppContainerProps) => {
     clearItems,
     loadHistory,
     refreshStatic,
-    setDebugMessage,
-    openThemeDialog,
-    openAuthDialog,
-    openEditorDialog,
-    openProviderDialog,
-    openProviderModelDialog,
-    openLoadProfileDialog,
-    openToolsDialog,
-    toggleCorgiMode,
-    setQuittingMessages,
-    openPrivacyNotice,
-    openSettingsDialog,
     toggleVimEnabled,
     setIsProcessing,
     setLlxprtMdFileCount,
-    openPermissionsDialog,
+    slashCommandProcessorActions,
+    extensionsUpdateState,
+    true, // isConfigInitialized
   );
 
   // Memoize viewport to ensure it updates when inputWidth changes
@@ -921,6 +1057,7 @@ export const AppContainer = (props: AppContainerProps) => {
     refreshStatic,
     handleUserCancel,
     registerTodoPause,
+    handleExternalEditorOpen,
   );
 
   const pendingHistoryItems = useMemo(
@@ -1112,9 +1249,13 @@ export const AppContainer = (props: AppContainerProps) => {
     ],
   );
 
-  useKeypress(handleGlobalKeypress, {
+  const { refresh: globalKeypressRefresh } = useKeypress(handleGlobalKeypress, {
     isActive: true,
   });
+
+  useEffect(() => {
+    keypressRefreshRef.current = globalKeypressRefresh;
+  }, [globalKeypressRefresh]);
 
   useEffect(() => {
     if (config) {
@@ -1129,11 +1270,34 @@ export const AppContainer = (props: AppContainerProps) => {
     inputHistoryStore.initializeFromLogger(logger);
   }, [logger, inputHistoryStore]);
 
+  // Handle process exit when quit command is issued
+  useEffect(() => {
+    if (quittingMessages) {
+      // Allow UI to render the quit message briefly before exiting
+      const timer = setTimeout(() => {
+        process.exit(0);
+      }, 100); // 100ms delay to show quit screen
+
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [quittingMessages]);
+
   const isInputActive =
     (streamingState === StreamingState.Idle ||
       streamingState === StreamingState.Responding) &&
     !initError &&
     !isProcessing;
+
+  useEffect(() => {
+    if (selectionLogger.enabled) {
+      if (confirmationRequest) {
+        selectionLogger.debug(() => 'Confirmation dialog opened');
+      } else {
+        selectionLogger.debug(() => 'Confirmation dialog closed');
+      }
+    }
+  }, [confirmationRequest]);
 
   const handleClearScreen = useCallback(() => {
     clearItems();
@@ -1145,6 +1309,14 @@ export const AppContainer = (props: AppContainerProps) => {
   const handleConfirmationSelect = useCallback(
     (value: boolean) => {
       if (confirmationRequest) {
+        if (selectionLogger.enabled) {
+          selectionLogger.debug(
+            () =>
+              `AppContainer.handleConfirmationSelect value=${value} hasRequest=${Boolean(
+                confirmationRequest,
+              )}`,
+          );
+        }
         confirmationRequest.onConfirm(value);
       }
     },
@@ -1289,6 +1461,10 @@ export const AppContainer = (props: AppContainerProps) => {
 
   // Build UIState object
   const uiState: UIState = {
+    // Core app context
+    config,
+    settings,
+
     // Terminal dimensions
     terminalWidth,
     terminalHeight,
@@ -1321,6 +1497,7 @@ export const AppContainer = (props: AppContainerProps) => {
     showPrivacyNotice,
     isOAuthCodeDialogOpen: appState.openDialogs.oauthCode,
     isPermissionsDialogOpen,
+    isLoggingDialogOpen,
 
     // Dialog data
     providerOptions,
@@ -1332,10 +1509,12 @@ export const AppContainer = (props: AppContainerProps) => {
     toolsDialogTools,
     toolsDialogDisabledTools,
     workspaceExtensions,
+    loggingDialogData,
 
     // Confirmation requests
     shellConfirmationRequest,
     confirmationRequest,
+    confirmUpdateExtensionRequests,
 
     // Exit/warning states
     ctrlCPressedOnce,
@@ -1391,7 +1570,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // IDE prompt
     shouldShowIdePrompt: !!shouldShowIdePrompt,
-    currentIDE: currentIDE?.displayName,
+    currentIDE,
 
     // Trust
     isRestarting,
@@ -1476,6 +1655,10 @@ export const AppContainer = (props: AppContainerProps) => {
     openPermissionsDialog,
     closePermissionsDialog,
 
+    // Logging dialog
+    openLoggingDialog,
+    closeLoggingDialog,
+
     // Workspace migration dialog
     onWorkspaceMigrationDialogOpen,
     onWorkspaceMigrationDialogClose,
@@ -1526,7 +1709,7 @@ export const AppContainer = (props: AppContainerProps) => {
           config={config}
           settings={settings}
           startupWarnings={startupWarnings}
-          version={version}
+          version={props.version}
           nightly={nightly}
           mainControlsRef={mainControlsRef}
           availableTerminalHeight={availableTerminalHeight}

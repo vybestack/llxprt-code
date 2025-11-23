@@ -12,10 +12,8 @@ import { bfsFileSearch } from './bfsFileSearch.js';
 import { getAllLlxprtMdFilenames as getAllGeminiMdFilenames } from '../tools/memoryTool.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { processImports } from './memoryImportProcessor.js';
-import {
-  DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
-  FileFilteringOptions,
-} from '../config/config.js';
+import type { FileFilteringOptions } from '../config/constants.js';
+import { DEFAULT_MEMORY_FILE_FILTERING_OPTIONS } from '../config/constants.js';
 import { LLXPRT_DIR as GEMINI_DIR } from './paths.js';
 
 // Simple console logger, similar to the one previously in CLI's config.ts

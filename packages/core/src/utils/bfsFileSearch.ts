@@ -6,8 +6,8 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
-import { FileFilteringOptions } from '../config/config.js';
+import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+import type { FileFilteringOptions } from '../config/constants.js';
 import { DebugLogger } from '../debug/index.js';
 
 const logger = new DebugLogger('llxprt:core:bfsFileSearch');

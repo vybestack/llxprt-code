@@ -1292,7 +1292,7 @@ export class AnthropicProvider extends BaseProvider {
       response = await retryWithBackoff(apiCall, {
         maxAttempts,
         initialDelayMs,
-        shouldRetry: this.shouldRetryAnthropicResponse.bind(this),
+        shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
         trackThrottleWaitTime: this.throttleTracker,
       });
       rateLimitLogger.debug(
@@ -1324,7 +1324,7 @@ export class AnthropicProvider extends BaseProvider {
       const result = await retryWithBackoff(apiCallWithResponse, {
         maxAttempts,
         initialDelayMs,
-        shouldRetry: this.shouldRetryAnthropicResponse.bind(this),
+        shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
         trackThrottleWaitTime: this.throttleTracker,
       });
 

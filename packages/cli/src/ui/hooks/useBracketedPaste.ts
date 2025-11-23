@@ -6,9 +6,9 @@
 
 import { useEffect } from 'react';
 import {
-  ENABLE_BRACKETED_PASTE,
-  DISABLE_BRACKETED_PASTE,
-} from '../utils/terminalSequences.js';
+  disableBracketedPaste,
+  enableBracketedPaste,
+} from '../utils/bracketedPaste.js';
 
 /**
  * Enables and disables bracketed paste mode in the terminal.
@@ -18,11 +18,11 @@ import {
  */
 export const useBracketedPaste = () => {
   const cleanup = () => {
-    process.stdout.write(DISABLE_BRACKETED_PASTE);
+    disableBracketedPaste();
   };
 
   useEffect(() => {
-    process.stdout.write(ENABLE_BRACKETED_PASTE);
+    enableBracketedPaste();
 
     process.on('exit', cleanup);
     process.on('SIGINT', cleanup);

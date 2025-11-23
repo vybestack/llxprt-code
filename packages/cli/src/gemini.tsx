@@ -76,7 +76,7 @@ import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
-import { loadExtensions } from './config/extension.js';
+import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import {
   cleanupCheckpoints,
   registerCleanup,
@@ -92,6 +92,7 @@ import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
+import { computeWindowTitle } from './utils/windowTitle.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import {
   setCliRuntimeContext,
@@ -158,6 +159,7 @@ import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function setupUnhandledRejectionHandler() {
   let unhandledRejectionOccurred = false;
@@ -249,7 +251,11 @@ export async function startInteractiveUI(
       }
     });
 
-  registerCleanup(() => instance.unmount());
+  registerCleanup(async () => {
+    await instance.waitUntilExit();
+    instance.clear();
+    instance.unmount();
+  });
 }
 
 export async function main() {
@@ -318,7 +324,6 @@ export async function main() {
     console.info = console.error;
     console.debug = console.error;
   }
-  const extensions = loadExtensions(workspaceRoot);
 
   /**
    * @plan:PLAN-20250218-STATELESSPROVIDER.P06
@@ -331,9 +336,16 @@ export async function main() {
     metadata: { source: 'cli-bootstrap', stage: 'pre-config' },
   });
 
+  const extensionEnablementManager = new ExtensionEnablementManager(
+    ExtensionStorage.getUserExtensionsDir(),
+    argv.extensions,
+  );
+  const extensions = loadExtensions(extensionEnablementManager, workspaceRoot);
+
   const config = await loadCliConfig(
     settings.merged,
     extensions,
+    extensionEnablementManager,
     sessionId,
     argv,
     workspaceRoot,
@@ -641,6 +653,7 @@ export async function main() {
       const partialConfig = await loadCliConfig(
         settings.merged,
         [],
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
         sessionId,
         argv,
         workspaceRoot,
@@ -792,11 +805,7 @@ export async function main() {
 
 function setWindowTitle(title: string, settings: LoadedSettings) {
   if (!settings.merged.hideWindowTitle) {
-    const windowTitle = (process.env.CLI_TITLE || `LLxprt - ${title}`).replace(
-      // eslint-disable-next-line no-control-regex
-      /[\x00-\x1F\x7F]/g,
-      '',
-    );
+    const windowTitle = computeWindowTitle(title);
     process.stdout.write(`\x1b]2;${windowTitle}\x07`);
 
     process.on('exit', () => {

@@ -50,6 +50,7 @@ export default tseslint.config(
       '.integration-tests/**',
       '.stryker-tmp/**',
       '**/.stryker-tmp/**',
+      'project-plans/**',
     ],
   },
   eslint.configs.recommended,
