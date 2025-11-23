@@ -76,7 +76,13 @@ jobs:
 
       - name: 'Run E2E tests'
         env:
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: 'provider'
           KEEP_OUTPUT: 'true'
           VERBOSE: 'true'
         shell: 'bash'
@@ -129,7 +135,13 @@ jobs:
       - name: 'Run E2E tests (non-Windows)'
         if: "runner.os != 'Windows'"
         env:
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: 'provider'
           KEEP_OUTPUT: 'true'
           SANDBOX: 'sandbox:none'
           VERBOSE: 'true'
@@ -194,7 +206,13 @@ jobs:
 
       - name: 'Run E2E tests'
         env:
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: 'provider'
           KEEP_OUTPUT: 'true'
           SANDBOX: 'sandbox:none'
           VERBOSE: 'true'
