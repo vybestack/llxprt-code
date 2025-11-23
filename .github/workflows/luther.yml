@@ -460,6 +460,7 @@ jobs:
               echo "- Limit work to resolving this issue; avoid touching unrelated areas."
               echo "- Leave git commits/pushes to the workflow; keep changes in the working tree."
               echo "- Reference the issue as #${ISSUE_NUMBER} inside any summaries you produce."
+              echo "- CRITICAL: Do NOT modify any files in .github/workflows/ - GitHub will reject pushes that modify workflow files."
               echo "- CRITICAL: After making changes, you MUST run these QA commands FROM THE REPOSITORY ROOT:"
               echo "  npm run format && npm run lint && npm run typecheck && npm run test && npm run build"
               echo "- CRITICAL: Verify that ALL commands complete successfully with exit code 0 before claiming success."
