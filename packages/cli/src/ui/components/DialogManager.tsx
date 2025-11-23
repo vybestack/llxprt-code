@@ -32,7 +32,6 @@ import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
-import process from 'node:process';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 // import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // TODO: Not yet ported from upstream
 
@@ -55,14 +54,6 @@ export const DialogManager = ({
   const { constrainHeight, terminalHeight, mainAreaWidth } = uiState;
   // staticExtraHeight not yet implemented in LLxprt
   const staticExtraHeight = 0;
-
-  const handleSettingsDialogSelect = useCallback(() => {
-    uiActions.closeSettingsDialog();
-  }, [uiActions]);
-
-  const handleSettingsDialogRestart = useCallback(() => {
-    process.exit(0);
-  }, []);
 
   const handlePrivacyNoticeExit = useCallback(() => {
     uiActions.handlePrivacyNoticeExit();

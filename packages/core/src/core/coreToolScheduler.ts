@@ -1091,7 +1091,7 @@ export class CoreToolScheduler {
           fileDiff: updatedDiff,
           isModifying: false,
           correlationId: newCorrelationId,
-        };
+        } as ToolCallConfirmationDetails;
         this.pendingConfirmations.set(newCorrelationId, callId);
         const context = this.getPolicyContextFromInvocation(
           waitingToolCall.invocation,
