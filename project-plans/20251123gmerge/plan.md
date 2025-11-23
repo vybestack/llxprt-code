@@ -15,14 +15,21 @@ This plan details the step-by-step process for cherry-picking 36 commits from ge
 - [ ] Fetch latest: `git fetch upstream`
 - [ ] Confirm starting point: `git log --oneline -1`
 
+**CRITICAL: ALL WORK MUST BE DONE ON THE `20251123-gmerge` BRANCH**
+- ⚠️ **NEVER switch branches during this process**
+- ⚠️ All cherry-picks, commits, and merges must be on `20251123-gmerge`
+- ⚠️ Verify branch before each batch: `git branch --show-current`
+- ⚠️ If you accidentally switch branches, immediately switch back: `git checkout 20251123-gmerge`
+
 ## Execution Strategy
 
 ### Batch Processing Rules
 
-1. **Regular batches:** Cherry-pick 5 commits at once
-2. **PICK CAREFULLY batches:** Single commit per batch (for careful testing)
-3. **Verification frequency:** After every **second** batch (or after PICK CAREFULLY)
-4. **Conflict resolution:** Use dedicated subagent after each batch
+1. **Branch requirement:** ALL work on `20251123-gmerge` branch (never switch!)
+2. **Regular batches:** Cherry-pick 5 commits at once
+3. **PICK CAREFULLY batches:** Single commit per batch (for careful testing)
+4. **Verification frequency:** After every **second** batch (or after PICK CAREFULLY)
+5. **Conflict resolution:** Use dedicated subagent after each batch
 
 ### Subagent Workflow
 
@@ -70,6 +77,8 @@ EOF
 ---
 
 ## Batch 1: UI Fixes (Oct 1) - 5 commits
+
+**⚠️ VERIFY BRANCH:** `git branch --show-current` should show `20251123-gmerge`
 
 **Commits (chronological order):**
 1. `6eca199c` - Cleanup useSelectionList and fix infinite loop
