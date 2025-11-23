@@ -260,6 +260,6 @@ jobs:
         if: failure() && steps.collect_provider_errors.outputs.found == 'true'
         uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
-          name: 'provider-error-${{ matrix.os }}-${{ matrix.sandbox }}-${{ github.run_id }}'
+          name: 'provider-error-e2e-summary-${{ github.run_id }}'
           path: 'provider-errors'
           if-no-files-found: 'ignore'
