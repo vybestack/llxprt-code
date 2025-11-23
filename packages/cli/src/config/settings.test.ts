@@ -1754,6 +1754,7 @@ describe('Settings Loading and Merging', () => {
           fileFiltering: {},
           disableAutoUpdate: false,
           shouldUseNodePtyShell: false,
+          showStatusInTitle: false,
           selectedAuthType: 'provider',
           mcpServers: {},
           excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],

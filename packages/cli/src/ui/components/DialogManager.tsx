@@ -12,8 +12,9 @@ import { ShellConfirmationDialog } from './ShellConfirmationDialog.js';
 import { ConsentPrompt } from './ConsentPrompt.js';
 import { ThemeDialog } from './ThemeDialog.js';
 import { SettingsDialog } from './SettingsDialog.js';
-// import { AuthInProgress } from '../auth/AuthInProgress.js'; // TODO: Not yet ported from upstream
-// import { AuthDialog } from '../auth/AuthDialog.js'; // TODO: Not yet ported from upstream
+import { AuthInProgress } from './AuthInProgress.js';
+import { AuthDialog } from './AuthDialog.js';
+import { OAuthCodeDialog } from './OAuthCodeDialog.js';
 import { EditorSettingsDialog } from './EditorSettingsDialog.js';
 import { ProviderDialog } from './ProviderDialog.js';
 import { ProviderModelDialog } from './ProviderModelDialog.js';
@@ -159,29 +160,32 @@ export const DialogManager = ({
   // if (uiState.isModelDialogOpen) {
   //   return <ModelDialog onClose={uiActions.closeModelDialog} />;
   // }
-  // TODO: AuthInProgress and AuthDialog not yet ported from upstream
-  // if (uiState.isAuthenticating) {
-  //   return (
-  //     <AuthInProgress
-  //       onTimeout={() => {
-  //         uiActions.onAuthError('Authentication cancelled.');
-  //       }}
-  //     />
-  //   );
-  // }
-  // if (uiState.isAuthDialogOpen) {
-  //   return (
-  //     <Box flexDirection="column">
-  //       <AuthDialog
-  //         config={config}
-  //         settings={settings}
-  //         setAuthState={uiActions.setAuthState}
-  //         authError={uiState.authError}
-  //         onAuthError={uiActions.onAuthError}
-  //       />
-  //     </Box>
-  //   );
-  // }
+  if (uiState.isAuthenticating) {
+    return <AuthInProgress onTimeout={uiActions.handleAuthTimeout} />;
+  }
+  if (uiState.isAuthDialogOpen) {
+    return (
+      <Box flexDirection="column">
+        <AuthDialog
+          onSelect={uiActions.handleAuthSelect}
+          settings={settings}
+          initialErrorMessage={uiState.authError}
+        />
+      </Box>
+    );
+  }
+  if (uiState.isOAuthCodeDialogOpen) {
+    const provider =
+      (global as unknown as { __oauth_provider?: string }).__oauth_provider ||
+      'unknown';
+    return (
+      <OAuthCodeDialog
+        provider={provider}
+        onClose={uiActions.handleOAuthCodeDialogClose}
+        onSubmit={uiActions.handleOAuthCodeSubmit}
+      />
+    );
+  }
   if (uiState.isEditorDialogOpen) {
     return (
       <Box flexDirection="column">

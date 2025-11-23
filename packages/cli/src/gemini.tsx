@@ -246,7 +246,11 @@ export async function startInteractiveUI(
       }
     });
 
-  registerCleanup(() => instance.unmount());
+  registerCleanup(async () => {
+    await instance.waitUntilExit();
+    instance.clear();
+    instance.unmount();
+  });
 }
 
 export async function main() {
