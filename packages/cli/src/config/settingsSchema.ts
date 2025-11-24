@@ -19,7 +19,6 @@ import {
   DEFAULT_HISTORY_MAX_ITEMS,
 } from '../constants/historyLimits.js';
 import type { SessionRetentionSettings } from './settings.js';
-import { DEFAULT_MIN_RETENTION } from '../utils/sessionCleanup.js';
 
 export type SettingsType =
   | 'boolean'

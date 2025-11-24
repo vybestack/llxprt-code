@@ -119,9 +119,9 @@ describe('Session Cleanup', () => {
       });
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: 'invalid-format',
-          },
+          enabled: true,
+          maxAge: 'invalid-format',
+        },
       };
 
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -144,9 +144,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '10d', // 10 days
-          },
+          enabled: true,
+          maxAge: '10d', // 10 days
+        },
       };
 
       // Mock successful file operations
@@ -174,9 +174,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '1d', // Very short retention
-          },
+          enabled: true,
+          maxAge: '1d', // Very short retention
+        },
       };
 
       // Mock successful file operations
@@ -213,9 +213,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxCount: 2, // Keep only 2 most recent sessions
-          },
+          enabled: true,
+          maxCount: 2, // Keep only 2 most recent sessions
+        },
       };
 
       // Mock successful file operations
@@ -242,9 +242,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '1d',
-          },
+          enabled: true,
+          maxAge: '1d',
+        },
       };
 
       // Mock file operations to succeed for access and readFile but fail for unlink
@@ -271,9 +271,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '30d',
-          },
+          enabled: true,
+          maxAge: '30d',
+        },
       };
 
       mockGetAllSessionFiles.mockResolvedValue([]);
@@ -291,9 +291,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '30d',
-          },
+          enabled: true,
+          maxAge: '30d',
+        },
       };
 
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -318,10 +318,10 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '12h', // Less than 1 day minimum
-            minRetention: '1d',
-          },
+          enabled: true,
+          maxAge: '12h', // Less than 1 day minimum
+          minRetention: '1d',
+        },
       };
 
       const result = await cleanupExpiredSessions(config, settings);
@@ -338,9 +338,9 @@ describe('Session Cleanup', () => {
       });
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '10d',
-          },
+          enabled: true,
+          maxAge: '10d',
+        },
       };
 
       // Mock successful file operations
@@ -375,9 +375,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '7d', // Keep sessions for 7 days
-          },
+          enabled: true,
+          maxAge: '7d', // Keep sessions for 7 days
+        },
       };
 
       // Create sessions with specific dates
@@ -469,9 +469,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '14d', // Keep sessions for 14 days
-          },
+          enabled: true,
+          maxAge: '14d', // Keep sessions for 14 days
+        },
       };
 
       // Create sessions all within the retention period
@@ -545,9 +545,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxCount: 3, // Keep only 3 most recent sessions
-          },
+          enabled: true,
+          maxCount: 3, // Keep only 3 most recent sessions
+        },
       };
 
       // Create 6 sessions with different timestamps
@@ -651,10 +651,10 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '10d', // Keep sessions for 10 days
-            maxCount: 2, // But also keep only 2 most recent
-          },
+          enabled: true,
+          maxAge: '10d', // Keep sessions for 10 days
+          maxCount: 2, // But also keep only 2 most recent
+        },
       };
 
       // Create sessions where maxCount is more restrictive
@@ -790,11 +790,11 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: input,
-            // Set minRetention to 1h to allow testing of hour-based maxAge values
-            minRetention: '1h',
-          },
+          enabled: true,
+          maxAge: input,
+          // Set minRetention to 1h to allow testing of hour-based maxAge values
+          minRetention: '1h',
+        },
       };
 
       mockGetAllSessionFiles.mockResolvedValue([]);
@@ -824,9 +824,9 @@ describe('Session Cleanup', () => {
       });
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: input,
-          },
+          enabled: true,
+          maxAge: input,
+        },
       };
 
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -853,9 +853,9 @@ describe('Session Cleanup', () => {
       });
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '',
-          },
+          enabled: true,
+          maxAge: '',
+        },
       };
 
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -877,9 +877,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '9999d', // Very large number
-          },
+          enabled: true,
+          maxAge: '9999d', // Very large number
+        },
       };
 
       mockGetAllSessionFiles.mockResolvedValue([]);
@@ -895,10 +895,10 @@ describe('Session Cleanup', () => {
       });
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '5d',
-            minRetention: 'invalid-format', // Invalid minRetention
-          },
+          enabled: true,
+          maxAge: '5d',
+          minRetention: 'invalid-format', // Invalid minRetention
+        },
       };
 
       mockGetAllSessionFiles.mockResolvedValue([]);
@@ -919,9 +919,9 @@ describe('Session Cleanup', () => {
       });
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            // Neither maxAge nor maxCount specified
-          },
+          enabled: true,
+          // Neither maxAge nor maxCount specified
+        },
       };
 
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -943,9 +943,9 @@ describe('Session Cleanup', () => {
       });
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxCount: 0, // Invalid count
-          },
+          enabled: true,
+          maxCount: 0, // Invalid count
+        },
       };
 
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -968,9 +968,9 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '30', // Missing unit
-            },
+            enabled: true,
+            maxAge: '30', // Missing unit
+          },
         };
 
         const errorSpy = vi
@@ -994,9 +994,9 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '30x', // Invalid unit 'x'
-            },
+            enabled: true,
+            maxAge: '30x', // Invalid unit 'x'
+          },
         };
 
         const errorSpy = vi
@@ -1020,9 +1020,9 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: 'd', // No number
-            },
+            enabled: true,
+            maxAge: 'd', // No number
+          },
         };
 
         const errorSpy = vi
@@ -1046,9 +1046,9 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '1.5d', // Decimal not supported
-            },
+            enabled: true,
+            maxAge: '1.5d', // Decimal not supported
+          },
         };
 
         const errorSpy = vi
@@ -1072,9 +1072,9 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '-5d', // Negative not allowed
-            },
+            enabled: true,
+            maxAge: '-5d', // Negative not allowed
+          },
         };
 
         const errorSpy = vi
@@ -1096,10 +1096,10 @@ describe('Session Cleanup', () => {
         const config = createMockConfig();
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '48h', // Valid: 48 hours
-              maxCount: 10, // Need at least one valid retention method
-            },
+            enabled: true,
+            maxAge: '48h', // Valid: 48 hours
+            maxCount: 10, // Need at least one valid retention method
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1116,9 +1116,9 @@ describe('Session Cleanup', () => {
         const config = createMockConfig();
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '7d', // Valid: 7 days
-            },
+            enabled: true,
+            maxAge: '7d', // Valid: 7 days
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1135,9 +1135,9 @@ describe('Session Cleanup', () => {
         const config = createMockConfig();
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '2w', // Valid: 2 weeks
-            },
+            enabled: true,
+            maxAge: '2w', // Valid: 2 weeks
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1154,9 +1154,9 @@ describe('Session Cleanup', () => {
         const config = createMockConfig();
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '3m', // Valid: 3 months
-            },
+            enabled: true,
+            maxAge: '3m', // Valid: 3 months
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1177,9 +1177,9 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '12h', // Less than default 1d minRetention
-            },
+            enabled: true,
+            maxAge: '12h', // Less than default 1d minRetention
+          },
         };
 
         const errorSpy = vi
@@ -1205,10 +1205,10 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '2d',
-              minRetention: '3d', // maxAge < minRetention
-            },
+            enabled: true,
+            maxAge: '2d',
+            minRetention: '3d', // maxAge < minRetention
+          },
         };
 
         const errorSpy = vi
@@ -1232,10 +1232,10 @@ describe('Session Cleanup', () => {
         const config = createMockConfig();
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '2d',
-              minRetention: '2d', // maxAge == minRetention (edge case)
-            },
+            enabled: true,
+            maxAge: '2d',
+            minRetention: '2d', // maxAge == minRetention (edge case)
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1252,10 +1252,10 @@ describe('Session Cleanup', () => {
         const config = createMockConfig();
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '7d',
-              minRetention: '2d', // maxAge > minRetention
-            },
+            enabled: true,
+            maxAge: '7d',
+            minRetention: '2d', // maxAge > minRetention
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1274,10 +1274,10 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '5d',
-              minRetention: 'invalid', // Invalid format
-            },
+            enabled: true,
+            maxAge: '5d',
+            minRetention: 'invalid', // Invalid format
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1298,9 +1298,9 @@ describe('Session Cleanup', () => {
         const config = createMockConfig();
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxCount: 1, // Minimum valid value
-            },
+            enabled: true,
+            maxCount: 1, // Minimum valid value
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1317,9 +1317,9 @@ describe('Session Cleanup', () => {
         const config = createMockConfig();
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxCount: 1000, // Maximum valid value
-            },
+            enabled: true,
+            maxCount: 1000, // Maximum valid value
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1338,9 +1338,9 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxCount: -1, // Negative value
-            },
+            enabled: true,
+            maxCount: -1, // Negative value
+          },
         };
 
         const errorSpy = vi
@@ -1362,9 +1362,9 @@ describe('Session Cleanup', () => {
         const config = createMockConfig();
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxCount: 50, // Normal valid value
-            },
+            enabled: true,
+            maxCount: 50, // Normal valid value
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1383,10 +1383,10 @@ describe('Session Cleanup', () => {
         const config = createMockConfig();
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: '30d',
-              maxCount: 10,
-            },
+            enabled: true,
+            maxAge: '30d',
+            maxCount: 10,
+          },
         };
 
         mockGetAllSessionFiles.mockResolvedValue([]);
@@ -1405,10 +1405,10 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: 'invalid',
-              maxCount: 0,
-            },
+            enabled: true,
+            maxAge: 'invalid',
+            maxCount: 0,
+          },
         };
 
         const errorSpy = vi
@@ -1433,10 +1433,10 @@ describe('Session Cleanup', () => {
         });
         const settings: Settings = {
           sessionRetention: {
-              enabled: true,
-              maxAge: 'invalid', // Invalid format
-              maxCount: 5, // Valid count
-            },
+            enabled: true,
+            maxAge: 'invalid', // Invalid format
+            maxCount: 5, // Valid count
+          },
         };
 
         // The validation logic rejects invalid maxAge format even if maxCount is valid
@@ -1461,9 +1461,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '7d',
-          },
+          enabled: true,
+          maxAge: '7d',
+        },
       };
 
       // Mock getSessionFiles to throw an error
@@ -1483,9 +1483,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '30d',
-          },
+          enabled: true,
+          maxAge: '30d',
+        },
       };
 
       // Mock getAllSessionFiles to return both valid and corrupted files
@@ -1524,9 +1524,9 @@ describe('Session Cleanup', () => {
       const config = createMockConfig();
       const settings: Settings = {
         sessionRetention: {
-            enabled: true,
-            maxAge: '7d',
-          },
+          enabled: true,
+          maxAge: '7d',
+        },
       };
 
       // Mock getSessionFiles to throw a non-Error object

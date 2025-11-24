@@ -26,9 +26,9 @@ describe('Session Cleanup Integration', () => {
     const config = createTestConfig();
     const settings: Settings = {
       sessionRetention: {
-          enabled: true,
-          maxAge: '30d',
-        },
+        enabled: true,
+        maxAge: '30d',
+      },
     };
 
     const result = await cleanupExpiredSessions(config, settings);
@@ -45,8 +45,8 @@ describe('Session Cleanup Integration', () => {
     const config = createTestConfig();
     const settings: Settings = {
       sessionRetention: {
-          enabled: false,
-        },
+        enabled: false,
+      },
     };
 
     const result = await cleanupExpiredSessions(config, settings);
@@ -113,9 +113,9 @@ describe('Session Cleanup Integration', () => {
 
     const settings: Settings = {
       sessionRetention: {
-          enabled: true,
-          maxAge: 'invalid-format',
-        },
+        enabled: true,
+        maxAge: 'invalid-format',
+      },
     };
 
     const result = await cleanupExpiredSessions(config, settings);
@@ -208,9 +208,9 @@ describe('Session Cleanup Integration', () => {
 
     const settings: Settings = {
       sessionRetention: {
-          enabled: true,
-          maxAge: '30d', // Keep sessions for 30 days
-        },
+        enabled: true,
+        maxAge: '30d', // Keep sessions for 30 days
+      },
     };
 
     try {
