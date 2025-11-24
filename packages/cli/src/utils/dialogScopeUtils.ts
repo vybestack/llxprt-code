@@ -21,12 +21,21 @@ export const SCOPE_LABELS = {
  */
 export function getScopeItems() {
   return [
-    { label: SCOPE_LABELS[SettingScope.User], value: SettingScope.User },
     {
+      key: SettingScope.User,
+      label: SCOPE_LABELS[SettingScope.User],
+      value: SettingScope.User,
+    },
+    {
+      key: SettingScope.Workspace,
       label: SCOPE_LABELS[SettingScope.Workspace],
       value: SettingScope.Workspace,
     },
-    { label: SCOPE_LABELS[SettingScope.System], value: SettingScope.System },
+    {
+      key: SettingScope.System,
+      label: SCOPE_LABELS[SettingScope.System],
+      value: SettingScope.System,
+    },
   ];
 }
 

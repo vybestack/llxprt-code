@@ -67,14 +67,17 @@ export const PermissionsModifyTrustDialog: React.FC<
       {
         label: 'Trust this folder',
         value: TrustLevel.TRUST_FOLDER,
+        key: TrustLevel.TRUST_FOLDER,
       },
       {
         label: `Trust parent folder (${parentFolderName})`,
         value: TrustLevel.TRUST_PARENT,
+        key: TrustLevel.TRUST_PARENT,
       },
       {
         label: "Don't trust",
         value: TrustLevel.DO_NOT_TRUST,
+        key: TrustLevel.DO_NOT_TRUST,
       },
     ],
     [parentFolderName],

@@ -35,7 +35,8 @@ describe('docsCommand', () => {
       throw new Error('docsCommand must have an action.');
     }
 
-    const docsUrl = 'https://goo.gle/gemini-cli-docs';
+    const docsUrl =
+      'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';
 
     await docsCommand.action(mockContext, '');
 
@@ -57,7 +58,8 @@ describe('docsCommand', () => {
 
     // Simulate a sandbox environment
     process.env.SANDBOX = 'gemini-sandbox';
-    const docsUrl = 'https://goo.gle/gemini-cli-docs';
+    const docsUrl =
+      'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';
 
     await docsCommand.action(mockContext, '');
 
@@ -80,7 +82,8 @@ describe('docsCommand', () => {
 
     // Simulate the specific 'sandbox-exec' environment
     process.env.SANDBOX = 'sandbox-exec';
-    const docsUrl = 'https://goo.gle/gemini-cli-docs';
+    const docsUrl =
+      'https://github.com/vybestack/llxprt-code/blob/main/docs/index.md';
 
     await docsCommand.action(mockContext, '');
 

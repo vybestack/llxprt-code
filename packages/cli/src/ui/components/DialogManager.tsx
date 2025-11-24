@@ -1,23 +1,16 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { Box, Text } from 'ink';
-import type { Config } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from '../../config/settings.js';
-import { useUIState } from '../contexts/UIStateContext.js';
-import { useUIActions } from '../contexts/UIActionsContext.js';
-import { OverflowProvider } from '../contexts/OverflowContext.js';
-import { Colors } from '../colors.js';
-
-// Dialog components
-import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
+import { useCallback } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
+// import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
 import { ShellConfirmationDialog } from './ShellConfirmationDialog.js';
-import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
+import { ConsentPrompt } from './ConsentPrompt.js';
 import { ThemeDialog } from './ThemeDialog.js';
 import { SettingsDialog } from './SettingsDialog.js';
 import { AuthInProgress } from './AuthInProgress.js';
@@ -29,33 +22,47 @@ import { ProviderModelDialog } from './ProviderModelDialog.js';
 import { LoadProfileDialog } from './LoadProfileDialog.js';
 import { ToolsDialog } from './ToolsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
-import { DetailedMessagesDisplay } from './DetailedMessagesDisplay.js';
-import { ShowMoreLines } from './ShowMoreLines.js';
+import { WorkspaceMigrationDialog } from './WorkspaceMigrationDialog.js';
+// import { ProQuotaDialog } from './ProQuotaDialog.js'; // TODO: Not yet ported from upstream
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
+// import { ModelDialog } from './ModelDialog.js'; // TODO: Not yet ported from upstream
+import { LoggingDialog } from './LoggingDialog.js';
+import { theme } from '../semantic-colors.js';
+import { useUIState } from '../contexts/UIStateContext.js';
+import { useUIActions } from '../contexts/UIActionsContext.js';
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { LoadedSettings } from '../../config/settings.js';
+import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+// import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // TODO: Not yet ported from upstream
 
 interface DialogManagerProps {
+  addItem: UseHistoryManagerReturn['addItem'];
+  terminalWidth: number;
   config: Config;
   settings: LoadedSettings;
-  availableTerminalHeight: number | undefined;
-  mainAreaWidth: number;
-  inputWidth: number;
-  debugConsoleMaxHeight: number;
-  constrainHeight: boolean;
 }
 
+// Props for DialogManager
 export const DialogManager = ({
+  addItem,
+  terminalWidth,
   config,
   settings,
-  availableTerminalHeight,
-  mainAreaWidth,
-  inputWidth,
-  debugConsoleMaxHeight,
-  constrainHeight,
 }: DialogManagerProps) => {
   const uiState = useUIState();
   const uiActions = useUIActions();
+  const { constrainHeight, terminalHeight, mainAreaWidth } = uiState;
+  // staticExtraHeight not yet implemented in LLxprt
+  const staticExtraHeight = 0;
 
-  // Workspace migration dialog
+  const handlePrivacyNoticeExit = useCallback(() => {
+    uiActions.handlePrivacyNoticeExit();
+  }, [uiActions]);
+
+  // TODO: IdeTrustChangeDialog not yet ported from upstream
+  // if (uiState.showIdeRestartPrompt) {
+  //   return <IdeTrustChangeDialog reason={uiState.ideTrustRestartReason} />;
+  // }
   if (uiState.showWorkspaceMigrationDialog) {
     return (
       <WorkspaceMigrationDialog
@@ -65,34 +72,24 @@ export const DialogManager = ({
       />
     );
   }
-
-  // IDE integration nudge
-  if (uiState.shouldShowIdePrompt && uiState.currentIDE) {
+  // TODO: ProQuotaDialog not yet ported from upstream
+  // if (uiState.proQuotaRequest) {
+  //   return (
+  //     <ProQuotaDialog
+  //       failedModel={uiState.proQuotaRequest.failedModel}
+  //       fallbackModel={uiState.proQuotaRequest.fallbackModel}
+  //       onChoice={uiActions.handleProQuotaChoice}
+  //     />
+  //   );
+  // }
+  if (uiState.shouldShowIdePrompt) {
     return (
       <IdeIntegrationNudge
-        ide={
-          { displayName: uiState.currentIDE } as Parameters<
-            typeof IdeIntegrationNudge
-          >[0]['ide']
-        }
+        ide={uiState.currentIDE!}
         onComplete={uiActions.handleIdePromptComplete}
       />
     );
   }
-
-  // IDE restart prompt
-  if (uiState.showIdeRestartPrompt) {
-    return (
-      <Box borderStyle="round" borderColor={Colors.AccentYellow} paddingX={1}>
-        <Text color={Colors.AccentYellow}>
-          Workspace trust has changed. Press &apos;r&apos; to restart Gemini to
-          apply the changes.
-        </Text>
-      </Box>
-    );
-  }
-
-  // Folder trust dialog
   if (uiState.isFolderTrustDialogOpen) {
     return (
       <FolderTrustDialog
@@ -101,54 +98,58 @@ export const DialogManager = ({
       />
     );
   }
-
-  // Shell confirmation dialog
   if (uiState.shellConfirmationRequest) {
     return (
       <ShellConfirmationDialog request={uiState.shellConfirmationRequest} />
     );
   }
-
-  // Generic confirmation dialog
+  // TODO: LoopDetectionConfirmation not yet ported from upstream
+  // if (uiState.loopDetectionConfirmationRequest) {
+  //   return (
+  //     <LoopDetectionConfirmation
+  //       onComplete={uiState.loopDetectionConfirmationRequest.onComplete}
+  //     />
+  //   );
+  // }
   if (uiState.confirmationRequest) {
     return (
-      <Box flexDirection="column">
-        {uiState.confirmationRequest.prompt}
-        <Box paddingY={1}>
-          <RadioButtonSelect
-            isFocused={!!uiState.confirmationRequest}
-            items={[
-              { label: 'Yes', value: true },
-              { label: 'No', value: false },
-            ]}
-            onSelect={uiActions.handleConfirmationSelect}
-          />
-        </Box>
-      </Box>
+      <ConsentPrompt
+        prompt={uiState.confirmationRequest.prompt}
+        onConfirm={uiState.confirmationRequest.onConfirm}
+        terminalWidth={terminalWidth}
+      />
     );
   }
-
-  // Theme dialog
+  if (uiState.confirmUpdateExtensionRequests.length > 0) {
+    const request = uiState.confirmUpdateExtensionRequests[0];
+    return (
+      <ConsentPrompt
+        prompt={request.prompt}
+        onConfirm={request.onConfirm}
+        terminalWidth={terminalWidth}
+      />
+    );
+  }
   if (uiState.isThemeDialogOpen) {
     return (
       <Box flexDirection="column">
         {uiState.themeError && (
           <Box marginBottom={1}>
-            <Text color={Colors.AccentRed}>{uiState.themeError}</Text>
+            <Text color={theme.status.error}>{uiState.themeError}</Text>
           </Box>
         )}
         <ThemeDialog
           onSelect={uiActions.handleThemeSelect}
           onHighlight={uiActions.handleThemeHighlight}
           settings={settings}
-          availableTerminalHeight={availableTerminalHeight}
+          availableTerminalHeight={
+            constrainHeight ? terminalHeight - staticExtraHeight : undefined
+          }
           terminalWidth={mainAreaWidth}
         />
       </Box>
     );
   }
-
-  // Settings dialog
   if (uiState.isSettingsDialogOpen) {
     return (
       <Box flexDirection="column">
@@ -156,33 +157,18 @@ export const DialogManager = ({
           settings={settings}
           onSelect={uiActions.closeSettingsDialog}
           onRestartRequest={uiActions.handleSettingsRestart}
+          config={config}
         />
       </Box>
     );
   }
-
-  // Auth in progress
+  // TODO: ModelDialog not yet ported from upstream
+  // if (uiState.isModelDialogOpen) {
+  //   return <ModelDialog onClose={uiActions.closeModelDialog} />;
+  // }
   if (uiState.isAuthenticating) {
-    return (
-      <>
-        <AuthInProgress onTimeout={uiActions.handleAuthTimeout} />
-        {uiState.showErrorDetails && (
-          <OverflowProvider>
-            <Box flexDirection="column">
-              <DetailedMessagesDisplay
-                messages={uiState.consoleMessages}
-                maxHeight={constrainHeight ? debugConsoleMaxHeight : undefined}
-                width={inputWidth}
-              />
-              <ShowMoreLines constrainHeight={constrainHeight} />
-            </Box>
-          </OverflowProvider>
-        )}
-      </>
-    );
+    return <AuthInProgress onTimeout={uiActions.handleAuthTimeout} />;
   }
-
-  // Auth dialog
   if (uiState.isAuthDialogOpen) {
     return (
       <Box flexDirection="column">
@@ -194,30 +180,24 @@ export const DialogManager = ({
       </Box>
     );
   }
-
-  // OAuth code dialog
   if (uiState.isOAuthCodeDialogOpen) {
+    const provider =
+      (global as unknown as { __oauth_provider?: string }).__oauth_provider ||
+      'unknown';
     return (
-      <Box flexDirection="column">
-        <OAuthCodeDialog
-          provider={
-            ((global as Record<string, unknown>).__oauth_provider as string) ||
-            'anthropic'
-          }
-          onClose={uiActions.handleOAuthCodeDialogClose}
-          onSubmit={uiActions.handleOAuthCodeSubmit}
-        />
-      </Box>
+      <OAuthCodeDialog
+        provider={provider}
+        onClose={uiActions.handleOAuthCodeDialogClose}
+        onSubmit={uiActions.handleOAuthCodeSubmit}
+      />
     );
   }
-
-  // Editor settings dialog
   if (uiState.isEditorDialogOpen) {
     return (
       <Box flexDirection="column">
         {uiState.editorError && (
           <Box marginBottom={1}>
-            <Text color={Colors.AccentRed}>{uiState.editorError}</Text>
+            <Text color={theme.status.error}>{uiState.editorError}</Text>
           </Box>
         )}
         <EditorSettingsDialog
@@ -228,8 +208,6 @@ export const DialogManager = ({
       </Box>
     );
   }
-
-  // Provider dialog
   if (uiState.isProviderDialogOpen) {
     return (
       <Box flexDirection="column">
@@ -242,8 +220,6 @@ export const DialogManager = ({
       </Box>
     );
   }
-
-  // Provider model dialog
   if (uiState.isProviderModelDialogOpen) {
     return (
       <Box flexDirection="column">
@@ -256,8 +232,6 @@ export const DialogManager = ({
       </Box>
     );
   }
-
-  // Load profile dialog
   if (uiState.isLoadProfileDialogOpen) {
     return (
       <Box flexDirection="column">
@@ -269,8 +243,6 @@ export const DialogManager = ({
       </Box>
     );
   }
-
-  // Tools dialog
   if (uiState.isToolsDialogOpen) {
     return (
       <Box flexDirection="column">
@@ -284,28 +256,47 @@ export const DialogManager = ({
       </Box>
     );
   }
-
-  // Privacy notice
   if (uiState.showPrivacyNotice) {
-    return (
-      <PrivacyNotice
-        onExit={uiActions.handlePrivacyNoticeExit}
-        config={config}
-      />
-    );
+    return <PrivacyNotice onExit={handlePrivacyNoticeExit} config={config} />;
   }
 
-  // Permissions dialog
   if (uiState.isPermissionsDialogOpen) {
     return (
       <PermissionsModifyTrustDialog
         onExit={uiActions.closePermissionsDialog}
-        addItem={uiActions.addItem}
-        onRestart={uiActions.handleSettingsRestart}
+        addItem={addItem}
       />
     );
   }
 
-  // No dialog - shouldn't reach here but return null for safety
+  if (uiState.isLoggingDialogOpen) {
+    return (
+      <LoggingDialog
+        entries={
+          (uiState.loggingDialogData?.entries || []) as Array<{
+            timestamp: string;
+            type: 'request' | 'response' | 'tool_call';
+            provider: string;
+            model?: string;
+            conversationId?: string;
+            messages?: Array<{ role: string; content: string }>;
+            response?: string;
+            tokens?: { input?: number; output?: number };
+            error?: string;
+            tool?: string;
+            duration?: number;
+            success?: boolean;
+            gitStats?: {
+              linesAdded: number;
+              linesRemoved: number;
+              filesChanged: number;
+            };
+          }>
+        }
+        onClose={uiActions.closeLoggingDialog}
+      />
+    );
+  }
+
   return null;
 };

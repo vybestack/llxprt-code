@@ -73,9 +73,12 @@ describe('modifyWithEditor', () => {
         })),
     };
 
-    mockOpenDiff.mockImplementation(async (_oldPath, newPath) => {
-      await fsp.writeFile(newPath, modifiedContent, 'utf8');
-    });
+    mockOpenDiff.mockImplementation(
+      async (_oldPath, newPath, _editor, onEditorCloseCallback) => {
+        await fsp.writeFile(newPath, modifiedContent, 'utf8');
+        onEditorCloseCallback?.();
+      },
+    );
 
     mockCreatePatch.mockReturnValue('mock diff content');
   });
@@ -172,6 +175,27 @@ describe('modifyWithEditor', () => {
 
       expect(mkdirSpy).not.toHaveBeenCalled();
       mkdirSpy.mockRestore();
+    });
+
+    it('should invoke onEditorOpen before calling openDiff', async () => {
+      const onEditorOpen = vi.fn();
+      const onEditorClose = vi.fn();
+
+      await modifyWithEditor(
+        mockParams,
+        mockModifyContext,
+        'vscode' as EditorType,
+        abortSignal,
+        onEditorClose,
+        onEditorOpen,
+      );
+
+      expect(onEditorOpen).toHaveBeenCalledTimes(1);
+      expect(onEditorClose).toHaveBeenCalledTimes(1);
+      expect(mockOpenDiff).toHaveBeenCalledTimes(1);
+      expect(onEditorOpen.mock.invocationCallOrder[0]).toBeLessThan(
+        mockOpenDiff.mock.invocationCallOrder[0],
+      );
     });
   });
 

@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import type React from 'react';
+import { useMemo } from 'react';
+import { escapeAnsiCtrlCodes } from '../utils/textUtils.js';
 import type { HistoryItem } from '../types.js';
 import { UserMessage } from './messages/UserMessage.js';
 import { UserShellMessage } from './messages/UserShellMessage.js';
@@ -37,6 +39,8 @@ interface HistoryItemDisplayProps {
   slashCommands?: readonly SlashCommand[]; // For help display
   showTodoPanel?: boolean;
   activeShellPtyId?: number | null;
+  embeddedShellFocused?: boolean;
+  availableTerminalHeightGemini?: number;
 }
 
 export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
@@ -49,70 +53,94 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   slashCommands = [],
   showTodoPanel = true,
   activeShellPtyId,
-}) => (
-  <Box flexDirection="column" key={item.id}>
-    {/* Render standard message types */}
-    {item.type === 'user' && <UserMessage text={item.text} />}
-    {item.type === 'user_shell' && <UserShellMessage text={item.text} />}
-    {item.type === 'gemini' && (
-      <GeminiMessage
-        text={item.text}
-        isPending={isPending}
-        availableTerminalHeight={availableTerminalHeight}
-        terminalWidth={terminalWidth}
-        model={item.model}
-      />
-    )}
-    {item.type === 'gemini_content' && (
-      <GeminiMessageContent
-        text={item.text}
-        isPending={isPending}
-        availableTerminalHeight={availableTerminalHeight}
-        terminalWidth={terminalWidth}
-      />
-    )}
-    {item.type === 'info' && <InfoMessage text={item.text} />}
-    {item.type === 'warning' && <WarningMessage text={item.text} />}
-    {item.type === 'error' && <ErrorMessage text={item.text} />}
-    {item.type === 'oauth_url' && (
-      <OAuthUrlMessage text={item.text} url={item.url} />
-    )}
-    {item.type === 'about' && (
-      <AboutBox
-        cliVersion={item.cliVersion}
-        osVersion={item.osVersion}
-        sandboxEnv={item.sandboxEnv}
-        modelVersion={item.modelVersion}
-        selectedAuthType={item.selectedAuthType}
-        gcpProject={item.gcpProject}
-        ideClient={item.ideClient}
-        provider={item.provider}
-        baseURL={item.baseURL}
-        keyfile={item.keyfile}
-        key={item.key}
-      />
-    )}
-    {item.type === 'help' && <Help commands={slashCommands} />}
-    {item.type === 'stats' && <StatsDisplay duration={item.duration} />}
-    {item.type === 'model_stats' && <ModelStatsDisplay />}
-    {item.type === 'tool_stats' && <ToolStatsDisplay />}
-    {item.type === 'cache_stats' && <CacheStatsDisplay />}
-    {item.type === 'quit' && <SessionSummaryDisplay duration={item.duration} />}
-    {item.type === 'tool_group' && (
-      <ToolGroupMessage
-        toolCalls={item.tools}
-        groupId={item.id}
-        agentId={item.agentId}
-        availableTerminalHeight={availableTerminalHeight}
-        terminalWidth={terminalWidth}
-        config={config}
-        isFocused={isFocused}
-        showTodoPanel={showTodoPanel}
-        activeShellPtyId={activeShellPtyId}
-      />
-    )}
-    {item.type === 'compression' && (
-      <CompressionMessage compression={item.compression} />
-    )}
-  </Box>
-);
+  embeddedShellFocused: _embeddedShellFocused,
+  availableTerminalHeightGemini: _availableTerminalHeightGemini,
+}) => {
+  const itemForDisplay = useMemo(() => escapeAnsiCtrlCodes(item), [item]);
+
+  return (
+    <Box flexDirection="column" key={itemForDisplay.id}>
+      {/* Render standard message types */}
+      {itemForDisplay.type === 'user' && (
+        <UserMessage text={itemForDisplay.text} />
+      )}
+      {itemForDisplay.type === 'user_shell' && (
+        <UserShellMessage text={itemForDisplay.text} />
+      )}
+      {itemForDisplay.type === 'gemini' && (
+        <GeminiMessage
+          text={itemForDisplay.text}
+          isPending={isPending}
+          availableTerminalHeight={
+            _availableTerminalHeightGemini ?? availableTerminalHeight
+          }
+          terminalWidth={terminalWidth}
+          model={itemForDisplay.model}
+        />
+      )}
+      {itemForDisplay.type === 'gemini_content' && (
+        <GeminiMessageContent
+          text={itemForDisplay.text}
+          isPending={isPending}
+          availableTerminalHeight={
+            _availableTerminalHeightGemini ?? availableTerminalHeight
+          }
+          terminalWidth={terminalWidth}
+        />
+      )}
+      {itemForDisplay.type === 'info' && (
+        <InfoMessage text={itemForDisplay.text} />
+      )}
+      {itemForDisplay.type === 'warning' && (
+        <WarningMessage text={itemForDisplay.text} />
+      )}
+      {itemForDisplay.type === 'error' && (
+        <ErrorMessage text={itemForDisplay.text} />
+      )}
+      {itemForDisplay.type === 'oauth_url' && (
+        <OAuthUrlMessage text={itemForDisplay.text} url={itemForDisplay.url} />
+      )}
+      {itemForDisplay.type === 'about' && (
+        <AboutBox
+          cliVersion={itemForDisplay.cliVersion}
+          osVersion={itemForDisplay.osVersion}
+          sandboxEnv={itemForDisplay.sandboxEnv}
+          modelVersion={itemForDisplay.modelVersion}
+          selectedAuthType={itemForDisplay.selectedAuthType}
+          gcpProject={itemForDisplay.gcpProject}
+          ideClient={itemForDisplay.ideClient}
+          provider={itemForDisplay.provider}
+          baseURL={itemForDisplay.baseURL}
+          keyfile={itemForDisplay.keyfile}
+          key={itemForDisplay.key}
+        />
+      )}
+      {itemForDisplay.type === 'help' && <Help commands={slashCommands} />}
+      {itemForDisplay.type === 'stats' && (
+        <StatsDisplay duration={itemForDisplay.duration} />
+      )}
+      {itemForDisplay.type === 'model_stats' && <ModelStatsDisplay />}
+      {itemForDisplay.type === 'tool_stats' && <ToolStatsDisplay />}
+      {itemForDisplay.type === 'cache_stats' && <CacheStatsDisplay />}
+      {itemForDisplay.type === 'quit' && (
+        <SessionSummaryDisplay duration={itemForDisplay.duration} />
+      )}
+      {itemForDisplay.type === 'tool_group' && (
+        <ToolGroupMessage
+          toolCalls={itemForDisplay.tools}
+          groupId={itemForDisplay.id}
+          agentId={itemForDisplay.agentId}
+          availableTerminalHeight={availableTerminalHeight}
+          terminalWidth={terminalWidth}
+          config={config}
+          isFocused={isFocused}
+          showTodoPanel={showTodoPanel}
+          activeShellPtyId={activeShellPtyId}
+        />
+      )}
+      {itemForDisplay.type === 'compression' && (
+        <CompressionMessage compression={itemForDisplay.compression} />
+      )}
+    </Box>
+  );
+};

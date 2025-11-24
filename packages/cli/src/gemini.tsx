@@ -42,6 +42,11 @@ import Spinner from 'ink-spinner';
 import { AppWrapper } from './ui/App.js';
 import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
 import { loadCliConfig, parseArguments } from './config/config.js';
+import {
+  dynamicSettingsRegistry,
+  generateDynamicToolSettings,
+} from './utils/dynamicSettings.js';
+import type { SettingDefinition } from './config/settingsSchema.js';
 import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import dns from 'node:dns';
@@ -71,7 +76,7 @@ import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
-import { loadExtensions } from './config/extension.js';
+import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import {
   cleanupCheckpoints,
   registerCleanup,
@@ -87,6 +92,7 @@ import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
+import { computeWindowTitle } from './utils/windowTitle.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import {
   setCliRuntimeContext,
@@ -161,6 +167,7 @@ import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function setupUnhandledRejectionHandler() {
   let unhandledRejectionOccurred = false;
@@ -236,7 +243,11 @@ export async function startInteractiveUI(
       }
     });
 
-  registerCleanup(() => instance.unmount());
+  registerCleanup(async () => {
+    await instance.waitUntilExit();
+    instance.clear();
+    instance.unmount();
+  });
 }
 
 export async function main() {
@@ -305,7 +316,6 @@ export async function main() {
     console.info = console.error;
     console.debug = console.error;
   }
-  const extensions = loadExtensions(workspaceRoot);
 
   /**
    * @plan:PLAN-20250218-STATELESSPROVIDER.P06
@@ -318,9 +328,16 @@ export async function main() {
     metadata: { source: 'cli-bootstrap', stage: 'pre-config' },
   });
 
+  const extensionEnablementManager = new ExtensionEnablementManager(
+    ExtensionStorage.getUserExtensionsDir(),
+    argv.extensions,
+  );
+  const extensions = loadExtensions(extensionEnablementManager, workspaceRoot);
+
   const config = await loadCliConfig(
     settings.merged,
     extensions,
+    extensionEnablementManager,
     sessionId,
     argv,
     workspaceRoot,
@@ -469,6 +486,24 @@ export async function main() {
 
   await config.initialize();
 
+  // Register dynamic settings after config is fully initialized
+  try {
+    const dynamicToolSettings = generateDynamicToolSettings(config);
+
+    // Convert to full path settings
+    const fullDynamicSettings: Record<string, SettingDefinition> = {};
+    for (const [toolName, definition] of Object.entries(dynamicToolSettings)) {
+      fullDynamicSettings[`coreToolSettings.${toolName}`] = definition;
+    }
+
+    dynamicSettingsRegistry.register(fullDynamicSettings);
+    console.debug(
+      `[gemini] Registered ${Object.keys(fullDynamicSettings).length} dynamic settings`,
+    );
+  } catch (error) {
+    console.error('[gemini] Failed to register dynamic settings:', error);
+  }
+
   if (spinnerInstance) {
     // Small UX detail to show the completion message for a bit before unmounting.
     await new Promise((f) => setTimeout(f, 100));
@@ -610,6 +645,7 @@ export async function main() {
       const partialConfig = await loadCliConfig(
         settings.merged,
         [],
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
         sessionId,
         argv,
         workspaceRoot,
@@ -761,11 +797,7 @@ export async function main() {
 
 function setWindowTitle(title: string, settings: LoadedSettings) {
   if (!settings.merged.hideWindowTitle) {
-    const windowTitle = (process.env.CLI_TITLE || `LLxprt - ${title}`).replace(
-      // eslint-disable-next-line no-control-regex
-      /[\x00-\x1F\x7F]/g,
-      '',
-    );
+    const windowTitle = computeWindowTitle(title);
     process.stdout.write(`\x1b]2;${windowTitle}\x07`);
 
     process.on('exit', () => {

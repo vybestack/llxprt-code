@@ -143,6 +143,7 @@ export async function modifyWithEditor<ToolParams>(
   editorType: EditorType,
   _abortSignal: AbortSignal,
   onEditorClose: () => void,
+  onEditorOpen?: () => void,
 ): Promise<ModifyResult<ToolParams>> {
   const currentContent = await modifyContext.getCurrentContent(originalParams);
   const proposedContent =
@@ -155,6 +156,14 @@ export async function modifyWithEditor<ToolParams>(
   );
 
   try {
+    if (onEditorOpen) {
+      try {
+        onEditorOpen();
+      } catch (error) {
+        console.error('Error in onEditorOpen callback:', error);
+      }
+    }
+
     await openDiff(oldPath, newPath, editorType, onEditorClose);
     const result = getUpdatedParams(
       oldPath,

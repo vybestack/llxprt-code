@@ -13,6 +13,7 @@ import type {
   ConsoleMessageItem,
   StreamingState,
   ShellConfirmationRequest,
+  ConfirmationRequest,
 } from '../types.js';
 import type {
   IdeContext,
@@ -20,10 +21,13 @@ import type {
   ApprovalMode,
   AnyDeclarativeTool,
   ThoughtSummary,
+  IdeInfo,
+  Config,
 } from '@vybestack/llxprt-code-core';
 
 import type { Extension } from '../../config/extension.js';
 import type { SlashCommand, CommandContext } from '../commands/types.js';
+import type { LoadedSettings } from '../../config/settings.js';
 
 /**
  * UI State shape for the AppContainer architecture.
@@ -31,6 +35,10 @@ import type { SlashCommand, CommandContext } from '../commands/types.js';
  * the monolithic App.tsx component.
  */
 export interface UIState {
+  // Core app context
+  config: Config;
+  settings: LoadedSettings;
+
   // Terminal dimensions
   terminalWidth: number;
   terminalHeight: number;
@@ -63,6 +71,7 @@ export interface UIState {
   showPrivacyNotice: boolean;
   isOAuthCodeDialogOpen: boolean;
   isPermissionsDialogOpen: boolean;
+  isLoggingDialogOpen: boolean;
 
   // Dialog data
   providerOptions: string[];
@@ -74,6 +83,7 @@ export interface UIState {
   toolsDialogTools: AnyDeclarativeTool[];
   toolsDialogDisabledTools: string[];
   workspaceExtensions: Extension[];
+  loggingDialogData: { entries: unknown[] };
 
   // Confirmation requests
   shellConfirmationRequest: ShellConfirmationRequest | null;
@@ -81,6 +91,7 @@ export interface UIState {
     prompt: React.ReactNode;
     onConfirm: (value: boolean) => void;
   } | null;
+  confirmUpdateExtensionRequests: ConfirmationRequest[];
 
   // Exit/warning states
   ctrlCPressedOnce: boolean;
@@ -143,7 +154,7 @@ export interface UIState {
 
   // IDE prompt
   shouldShowIdePrompt: boolean;
-  currentIDE: string | undefined;
+  currentIDE: IdeInfo | undefined;
 
   // Trust
   isRestarting: boolean;

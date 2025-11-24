@@ -27,6 +27,7 @@ export * from './types/modelParams.js';
 
 // Export Core Logic
 export * from './core/client.js';
+export * from './core/baseLlmClient.js';
 export * from './core/contentGenerator.js';
 export * from './core/loggingContentGenerator.js';
 export * from './core/geminiChat.js';
@@ -73,6 +74,7 @@ export * from './utils/errorParsing.js';
 export * from './utils/ignorePatterns.js';
 export * from './utils/partUtils.js';
 export * from './utils/ide-trust.js';
+export * from './utils/thoughtUtils.js';
 
 // Export auth system
 export {

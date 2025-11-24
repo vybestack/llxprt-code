@@ -49,7 +49,7 @@ export class StartSessionEvent {
   'event.name': 'cli_config';
   'event.timestamp': string; // ISO 8601
   model: string;
-  embedding_model: string;
+  embedding_model: string | undefined;
   sandbox_enabled: boolean;
   core_tools_enabled: string;
   approval_mode: string;

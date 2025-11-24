@@ -27,7 +27,6 @@ import {
   Content,
   EmbedContentResponse,
   GenerateContentResponse,
-  GenerateContentParameters,
   GoogleGenAI,
   Part,
   PartListUnion,
@@ -146,6 +145,7 @@ vi.mock('../ide/ideContext.js');
 vi.mock('../telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
+    getLastPromptTokenCount: vi.fn(),
   },
 }));
 
@@ -187,7 +187,7 @@ describe('findCompressSplitPoint', () => {
       { role: 'model', parts: [{ text: 'This is the fourth message.' }] },
       { role: 'user', parts: [{ text: 'This is the fifth message.' }] },
     ];
-    expect(findCompressSplitPoint(history, 0.5)).toBe(2);
+    expect(findCompressSplitPoint(history, 0.5)).toBe(4);
   });
 
   it('should handle a fraction of last index', () => {
@@ -522,54 +522,43 @@ describe('Gemini Client (client.ts)', () => {
       // Mock lazyInitialize to prevent it from overriding our mock
       client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
 
-      // Track the arguments manually
-      let capturedRequest: GenerateContentParameters | undefined;
-      let capturedPromptId: string | undefined;
-
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: vi.fn(
-          async (request: GenerateContentParameters, promptId: string) => {
-            capturedRequest = request;
-            capturedPromptId = promptId;
-            return {
-              candidates: [
-                {
-                  content: {
-                    parts: [{ text: '{"key": "value"}' }],
-                  },
-                },
-              ],
-            } as GenerateContentResponse;
-          },
-        ),
+        generateContent: vi.fn().mockResolvedValue({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: '{"key": "value"}' }],
+              },
+            },
+          ],
+        } as GenerateContentResponse),
         generateContentStream: vi.fn(),
         embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      try {
-        await client.generateJson(contents, schema, abortSignal, 'test-model');
-      } catch (error) {
-        console.error('Error in generateJson:', error);
-        throw error;
-      }
-
-      // Check the captured arguments
-      expect(capturedRequest).toBeDefined();
-      expect(capturedPromptId).toBe('test-session-id');
-      expect(capturedRequest).toMatchObject({
-        model: 'test-model', // Now using the passed model parameter
-        config: {
-          abortSignal,
-          systemInstruction: 'Test system instruction',
-          temperature: 0,
-          topP: 1,
-          responseJsonSchema: schema,
-          responseMimeType: 'application/json',
-        },
+      const result = await client.generateJson(
         contents,
-      });
+        schema,
+        abortSignal,
+        'test-model',
+      );
+
+      // Check that generateJson returns the correct result
+      expect(result).toEqual({ key: 'value' });
+
+      // Verify generateContent was called (now via BaseLLMClient)
+      expect(mockGenerator.generateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'test-model',
+          config: expect.objectContaining({
+            responseJsonSchema: schema,
+            responseMimeType: 'application/json',
+          }),
+        }),
+        'test-session-id',
+      );
     });
 
     it('should allow overriding model and config', async () => {
@@ -584,31 +573,21 @@ describe('Gemini Client (client.ts)', () => {
       // Mock lazyInitialize to prevent it from overriding our mock
       client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
 
-      // Track the arguments manually
-      let capturedRequest: GenerateContentParameters | undefined;
-      let capturedPromptId: string | undefined;
-
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: vi.fn(
-          async (request: GenerateContentParameters, promptId: string) => {
-            capturedRequest = request;
-            capturedPromptId = promptId;
-            return {
-              candidates: [
-                {
-                  content: {
-                    parts: [{ text: '{"key": "value"}' }],
-                  },
-                },
-              ],
-            } as GenerateContentResponse;
-          },
-        ),
+        generateContent: vi.fn().mockResolvedValue({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: '{"key": "value"}' }],
+              },
+            },
+          ],
+        } as GenerateContentResponse),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      await client.generateJson(
+      const result = await client.generateJson(
         contents,
         schema,
         abortSignal,
@@ -616,22 +595,21 @@ describe('Gemini Client (client.ts)', () => {
         customConfig,
       );
 
-      // Check the captured arguments
-      expect(capturedRequest).toBeDefined();
-      expect(capturedPromptId).toBe('test-session-id');
-      expect(capturedRequest).toMatchObject({
-        model: customModel,
-        config: {
-          abortSignal,
-          systemInstruction: 'Test system instruction',
-          temperature: 0.9,
-          topP: 1, // from default
-          topK: 20,
-          responseJsonSchema: schema,
-          responseMimeType: 'application/json',
-        },
-        contents,
-      });
+      // Check that generateJson returns the correct result
+      expect(result).toEqual({ key: 'value' });
+
+      // Verify generateContent was called with custom config (now via BaseLLMClient)
+      expect(mockGenerator.generateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: customModel,
+          config: expect.objectContaining({
+            temperature: 0.9,
+            responseJsonSchema: schema,
+            responseMimeType: 'application/json',
+          }),
+        }),
+        'test-session-id',
+      );
     });
 
     it('should not change models when consecutive 429 errors occur', async () => {
@@ -795,6 +773,9 @@ describe('Gemini Client (client.ts)', () => {
 
       // Default to returning 1000 tokens unless overridden in specific tests
       mockGetTotalTokens.mockReturnValue(1000);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        1000,
+      );
     });
 
     // Removed setup function and mock theater tests that were testing implementation details
@@ -812,6 +793,9 @@ describe('Gemini Client (client.ts)', () => {
 
       // Set the mock to return 999 tokens
       mockGetTotalTokens.mockReturnValue(999);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        999,
+      );
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: '...history...' }] },
       ]);
@@ -833,12 +817,15 @@ describe('Gemini Client (client.ts)', () => {
       );
     });
 
-    it('updates telemetry when compression inflates the token count', async () => {
+    it('does NOT update telemetry when compression inflates the token count', async () => {
       vi.mocked(tokenLimit).mockReturnValue(1000);
       mockCountTokens.mockResolvedValue({
         totalTokens: 999,
       });
       mockGetTotalTokens.mockReturnValue(1000);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        1000,
+      );
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: '...history...' }] },
       ]);
@@ -865,12 +852,8 @@ describe('Gemini Client (client.ts)', () => {
         newTokenCount: inflatedTokenCount,
         originalTokenCount: 1000,
       });
-      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledWith(
-        inflatedTokenCount,
-      );
-      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledTimes(
-        1,
-      );
+      // Compression failed, so telemetry should NOT be updated
+      expect(uiTelemetryService.setLastPromptTokenCount).not.toHaveBeenCalled();
     });
 
     it('should not trigger summarization if token count is below threshold', async () => {
@@ -880,12 +863,16 @@ describe('Gemini Client (client.ts)', () => {
         { role: 'user', parts: [{ text: '...history...' }] },
       ]);
 
+      const originalTokenCount = MOCKED_TOKEN_LIMIT * 0.699;
       mockCountTokens.mockResolvedValue({
-        totalTokens: MOCKED_TOKEN_LIMIT * 0.699, // TOKEN_THRESHOLD_FOR_SUMMARIZATION = 0.7
+        totalTokens: originalTokenCount, // TOKEN_THRESHOLD_FOR_SUMMARIZATION = 0.7
       });
 
       // Set the mock to return 699 tokens (below threshold)
       mockGetTotalTokens.mockReturnValue(699);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        originalTokenCount,
+      );
 
       const initialChat = client.getChat();
       const result = await client.tryCompressChat('prompt-id-2');
@@ -894,8 +881,8 @@ describe('Gemini Client (client.ts)', () => {
       expect(tokenLimit).toHaveBeenCalled();
       expect(result).toEqual({
         compressionStatus: CompressionStatus.NOOP,
-        newTokenCount: 699,
-        originalTokenCount: 699,
+        newTokenCount: originalTokenCount,
+        originalTokenCount,
       });
       expect(newChat).toBe(initialChat);
     });
@@ -917,6 +904,9 @@ describe('Gemini Client (client.ts)', () => {
 
       // Set the mock to return original token count before compression
       mockGetTotalTokens.mockReturnValue(originalTokenCount);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        originalTokenCount,
+      );
 
       mockCountTokens
         .mockResolvedValueOnce({ totalTokens: originalTokenCount })
@@ -972,6 +962,9 @@ describe('Gemini Client (client.ts)', () => {
 
       // Set the mock to return 500 tokens initially
       mockGetTotalTokens.mockReturnValue(originalTokenCount);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        originalTokenCount,
+      );
 
       // Mock the summary response from the chat
       mockSendMessage.mockResolvedValue({

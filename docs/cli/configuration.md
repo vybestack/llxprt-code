@@ -198,6 +198,10 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
   - **Description:** Disable loading phrases for accessibility.
   - **Default:** `false`
 
+- **`ui.customWittyPhrases`** (array of strings):
+  - **Description:** A list of custom phrases to display during loading states. When provided, the CLI will cycle through these phrases instead of the default ones.
+  - **Default:** `[]`
+
 #### `ide`
 
 - **`ide.enabled`** (boolean):
@@ -593,6 +597,12 @@ The following settings remain at the top level of the `settings.json` file.
   "defaultProfile": "my-development-profile",
   "emojiFilter": {
     "mode": "warn"
+  },
+  "ui": {
+    "customWittyPhrases": [
+      "You forget a thousand things every day. Make sure this is one of 'em",
+      "Connecting to AGI"
+    ]
   },
   "toolDiscoveryCommand": "bin/get_tools",
   "toolCallCommand": "bin/call_tool",

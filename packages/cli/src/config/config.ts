@@ -18,7 +18,6 @@ import {
   setLlxprtMdFilename as setServerGeminiMdFilename,
   getCurrentLlxprtMdFilename,
   ApprovalMode,
-  DEFAULT_GEMINI_EMBEDDING_MODEL,
   DEFAULT_GEMINI_MODEL,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   FileDiscoveryService,
@@ -33,6 +32,7 @@ import {
   SettingsService,
   DebugLogger,
   createPolicyEngineConfig,
+  SHELL_TOOL_NAMES,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
 
@@ -52,6 +52,7 @@ import {
   createBootstrapResult,
   type BootstrapProfileArgs,
 } from './profileBootstrap.js';
+import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 import {
   applyProfileSnapshot,
@@ -625,9 +626,40 @@ export async function loadHierarchicalLlxprtMemory(
   );
 }
 
+/**
+ * Creates a filter function to determine if a tool should be excluded.
+ *
+ * In non-interactive mode, we want to disable tools that require user
+ * interaction to prevent the CLI from hanging. This function creates a predicate
+ * that returns `true` if a tool should be excluded.
+ *
+ * A tool is excluded if it's not in the `allowedToolsSet`. The shell tool
+ * has a special case: it's not excluded if any of its subcommands
+ * are in the `allowedTools` list.
+ *
+ * @param allowedTools A list of explicitly allowed tool names.
+ * @param allowedToolsSet A set of explicitly allowed tool names for quick lookups.
+ * @returns A function that takes a tool name and returns `true` if it should be excluded.
+ */
+function createToolExclusionFilter(
+  allowedTools: string[],
+  allowedToolsSet: Set<string>,
+) {
+  return (tool: string): boolean => {
+    if (tool === ShellTool.Name) {
+      // If any of the allowed tools is ShellTool (even with subcommands), don't exclude it.
+      return !allowedTools.some((allowed) =>
+        SHELL_TOOL_NAMES.some((shellName) => allowed.startsWith(shellName)),
+      );
+    }
+    return !allowedToolsSet.has(tool);
+  };
+}
+
 export async function loadCliConfig(
   settings: Settings,
   extensions: Extension[],
+  extensionEnablementManager: ExtensionEnablementManager,
   sessionId: string,
   argv: CliArgs,
   cwd: string = process.cwd(),
@@ -862,7 +894,8 @@ export async function loadCliConfig(
 
   const allExtensions = annotateActiveExtensions(
     extensions,
-    argv.extensions || [],
+    cwd,
+    extensionEnablementManager,
   );
 
   const activeExtensions = extensions.filter(
@@ -970,17 +1003,29 @@ export async function loadCliConfig(
   const interactive =
     !!argv.promptInteractive ||
     (process.stdin.isTTY && !hasPromptWords && !argv.prompt);
+
+  const allowedTools = argv.allowedTools || settings.allowedTools || [];
+  const allowedToolsSet = new Set(allowedTools);
+
   // In non-interactive mode, exclude tools that require a prompt.
   const extraExcludes: string[] = [];
   if (!interactive && !argv.experimentalAcp) {
+    const defaultExcludes = [ShellTool.Name, EditTool.Name, WriteFileTool.Name];
+    const autoEditExcludes = [ShellTool.Name];
+
+    const toolExclusionFilter = createToolExclusionFilter(
+      allowedTools,
+      allowedToolsSet,
+    );
+
     switch (approvalMode) {
       case ApprovalMode.DEFAULT:
         // In default non-interactive mode, all tools that require approval are excluded.
-        extraExcludes.push(ShellTool.Name, EditTool.Name, WriteFileTool.Name);
+        extraExcludes.push(...defaultExcludes.filter(toolExclusionFilter));
         break;
       case ApprovalMode.AUTO_EDIT:
         // In auto-edit non-interactive mode, only tools that still require a prompt are excluded.
-        extraExcludes.push(ShellTool.Name);
+        extraExcludes.push(...autoEditExcludes.filter(toolExclusionFilter));
         break;
       case ApprovalMode.YOLO:
         // No extra excludes for YOLO mode.
@@ -1093,7 +1138,7 @@ export async function loadCliConfig(
 
   const config = new Config({
     sessionId,
-    embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
+    embeddingModel: undefined, // No embedding model configured for llxprt-code
     sandbox: sandboxConfig,
     targetDir: cwd,
     includeDirectories,
@@ -1102,7 +1147,7 @@ export async function loadCliConfig(
     question,
     fullContext: argv.allFiles || false,
     coreTools: effectiveSettings.coreTools || undefined,
-    allowedTools: argv.allowedTools || settings.allowedTools || undefined,
+    allowedTools: allowedTools.length > 0 ? allowedTools : undefined,
     excludeTools,
     toolDiscoveryCommand: effectiveSettings.toolDiscoveryCommand,
     toolCallCommand: effectiveSettings.toolCallCommand,

@@ -57,10 +57,7 @@ import {
   logCliConfiguration,
   StartSessionEvent,
 } from '../telemetry/index.js';
-import {
-  DEFAULT_GEMINI_EMBEDDING_MODEL,
-  DEFAULT_GEMINI_FLASH_MODEL,
-} from './models.js';
+import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import { MCPOAuthConfig } from '../mcp/oauth-provider.js';
@@ -175,21 +172,31 @@ export interface GeminiCLIExtension {
   version: string;
   isActive: boolean;
   path: string;
+  installMetadata?: ExtensionInstallMetadata;
 }
-export interface FileFilteringOptions {
-  respectGitIgnore: boolean;
-  respectLlxprtIgnore: boolean;
+
+export interface ExtensionInstallMetadata {
+  source: string;
+  type: 'git' | 'local' | 'link' | 'github-release';
+  releaseTag?: string; // Only present for github-release installs.
+  ref?: string;
+  autoUpdate?: boolean;
 }
-// For memory files
-export const DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: FileFilteringOptions = {
-  respectGitIgnore: false,
-  respectLlxprtIgnore: true,
+
+import type { FileFilteringOptions } from './constants.js';
+import {
+  DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+  DEFAULT_FILE_FILTERING_OPTIONS,
+} from './constants.js';
+
+export type { FileFilteringOptions };
+export {
+  DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+  DEFAULT_FILE_FILTERING_OPTIONS,
 };
-// For all other files
-export const DEFAULT_FILE_FILTERING_OPTIONS: FileFilteringOptions = {
-  respectGitIgnore: true,
-  respectLlxprtIgnore: true,
-};
+
+export const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 4_000_000;
+export const DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES = 1000;
 export class MCPServerConfig {
   constructor(
     // For stdio transport
@@ -215,12 +222,18 @@ export class MCPServerConfig {
     // OAuth configuration
     readonly oauth?: MCPOAuthConfig,
     readonly authProviderType?: AuthProviderType,
+    // Service Account Configuration
+    /* targetAudience format: CLIENT_ID.apps.googleusercontent.com */
+    readonly targetAudience?: string,
+    /* targetServiceAccount format: <service-account-name>@<project-num>.iam.gserviceaccount.com */
+    readonly targetServiceAccount?: string,
   ) {}
 }
 
 export enum AuthProviderType {
   DYNAMIC_DISCOVERY = 'dynamic_discovery',
   GOOGLE_CREDENTIALS = 'google_credentials',
+  SERVICE_ACCOUNT_IMPERSONATION = 'service_account_impersonation',
 }
 
 export interface SandboxConfig {
@@ -315,7 +328,7 @@ export class Config {
   private readonly settingsService: SettingsService;
   private fileSystemService: FileSystemService;
   private contentGeneratorConfig!: ContentGeneratorConfig;
-  private readonly embeddingModel: string;
+  private readonly embeddingModel: string | undefined;
   private readonly sandbox: SandboxConfig | undefined;
   private readonly targetDir: string;
   private workspaceContext: WorkspaceContext;
@@ -374,6 +387,18 @@ export class Config {
   private profileManager?: ProfileManager;
   private subagentManager?: SubagentManager;
   private subagentSchedulerFactory?: SubagentSchedulerFactory;
+
+  // Track all potential tools for settings UI
+  private allPotentialTools: Array<{
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    toolClass: any;
+    toolName: string;
+    displayName: string;
+    isRegistered: boolean;
+    reason?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    args: any[];
+  }> = [];
 
   setProviderManager(providerManager: ProviderManager) {
     this.providerManager = providerManager;
@@ -434,6 +459,9 @@ export class Config {
   private readonly useSmartEdit: boolean;
   private readonly messageBus: MessageBus;
   private readonly policyEngine: PolicyEngine;
+  truncateToolOutputThreshold: number;
+  truncateToolOutputLines: number;
+  enableToolOutputTruncation: boolean;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -473,8 +501,8 @@ export class Config {
     }
 
     this.sessionId = params.sessionId;
-    this.embeddingModel =
-      params.embeddingModel ?? DEFAULT_GEMINI_EMBEDDING_MODEL;
+    // Embedding models not currently configured for llxprt-code
+    this.embeddingModel = params.embeddingModel;
     this.fileSystemService = new StandardFileSystemService();
     this.sandbox = params.sandbox;
     this.targetDir = path.resolve(params.targetDir);
@@ -566,6 +594,12 @@ export class Config {
       defaultBg: params.shellExecutionConfig?.defaultBg,
     };
 
+    this.truncateToolOutputThreshold =
+      params.truncateToolOutputThreshold ??
+      DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD;
+    this.truncateToolOutputLines =
+      params.truncateToolOutputLines ?? DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES;
+    this.enableToolOutputTruncation = params.enableToolOutputTruncation ?? true;
     this.useSmartEdit = params.useSmartEdit ?? false;
     this.extensionManagement = params.extensionManagement ?? false;
     this.storage = new Storage(this.targetDir);
@@ -829,7 +863,7 @@ export class Config {
     return this.maxSessionTurns;
   }
 
-  getEmbeddingModel(): string {
+  getEmbeddingModel(): string | undefined {
     return this.embeddingModel;
   }
 
@@ -1583,6 +1617,8 @@ export class Config {
       const excludeTools = this.getExcludeTools() || [];
 
       let isEnabled = true; // Enabled by default if coreTools is not set.
+      let reason: string | undefined;
+
       if (coreTools) {
         isEnabled = coreTools.some(
           (tool) =>
@@ -1599,11 +1635,29 @@ export class Config {
 
       if (isExcluded) {
         isEnabled = false;
+        reason = 'excluded by excludeTools setting';
       }
+
+      // Record tool attempt for settings UI
+      const toolRecord = {
+        toolClass: ToolClass,
+        toolName: className,
+        displayName: toolName,
+        isRegistered: false,
+        reason,
+        args,
+      };
 
       if (isEnabled) {
         registry.registerTool(new ToolClass(...args));
+        toolRecord.isRegistered = true;
+        toolRecord.reason = undefined;
+      } else if (!reason) {
+        reason = 'not included in coreTools configuration';
+        toolRecord.reason = reason;
       }
+
+      this.allPotentialTools.push(toolRecord);
     };
 
     registerCoreTool(LSTool, this);
@@ -1648,21 +1702,73 @@ export class Config {
       this.setSubagentManager(subagentManager);
     }
 
+    // Handle TaskTool with dependency checking
+    const taskToolArgs = {
+      profileManager,
+      subagentManager,
+      schedulerFactoryProvider: () =>
+        this.getInteractiveSubagentSchedulerFactory(),
+    };
+
     if (profileManager && subagentManager) {
-      registerCoreTool(TaskTool, this, {
-        profileManager,
-        subagentManager,
-        schedulerFactoryProvider: () =>
-          this.getInteractiveSubagentSchedulerFactory(),
-      });
+      registerCoreTool(TaskTool, this, taskToolArgs);
+    } else {
+      // Record TaskTool as unregistered due to missing dependencies
+      const taskToolRecord = {
+        toolClass: TaskTool,
+        toolName: 'TaskTool',
+        displayName: TaskTool.Name || 'TaskTool',
+        isRegistered: false,
+        reason:
+          !profileManager && !subagentManager
+            ? 'requires profile manager and subagent manager'
+            : !profileManager
+              ? 'requires profile manager'
+              : 'requires subagent manager',
+        args: [this, taskToolArgs],
+      };
+      this.allPotentialTools.push(taskToolRecord);
     }
 
-    registerCoreTool(ListSubagentsTool, this, {
+    // Handle ListSubagentsTool with dependency checking
+    const listSubagentsArgs = {
       getSubagentManager: () => this.getSubagentManager(),
-    });
+    };
+
+    if (subagentManager) {
+      registerCoreTool(ListSubagentsTool, this, listSubagentsArgs);
+    } else {
+      // Record ListSubagentsTool as unregistered due to missing subagent manager
+      const listSubagentsRecord = {
+        toolClass: ListSubagentsTool,
+        toolName: 'ListSubagentsTool',
+        displayName: ListSubagentsTool.Name || 'ListSubagentsTool',
+        isRegistered: false,
+        reason: 'requires subagent manager',
+        args: [this, listSubagentsArgs],
+      };
+      this.allPotentialTools.push(listSubagentsRecord);
+    }
 
     await registry.discoverAllTools();
     return registry;
+  }
+
+  /**
+   * Get all potential tools (both registered and unregistered) for settings UI
+   */
+  getAllPotentialTools() {
+    return this.allPotentialTools;
+  }
+
+  /**
+   * Get tool registry information with registered/unregistered separation
+   */
+  getToolRegistryInfo() {
+    return {
+      registered: this.allPotentialTools.filter((t) => t.isRegistered),
+      unregistered: this.allPotentialTools.filter((t) => !t.isRegistered),
+    };
   }
 }
 // Export model constants for use in CLI

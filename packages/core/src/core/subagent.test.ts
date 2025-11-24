@@ -1650,5 +1650,124 @@ describe('subagent.ts', () => {
         expect(scope.output.terminate_reason).toBe(SubagentTerminateMode.ERROR);
       });
     });
+
+    describe('dispose', () => {
+      it('should abort active operations when dispose is called', async () => {
+        const { config } = await createMockConfig();
+
+        const runtimeBundle = createStatelessRuntimeBundle();
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          { systemPrompt: 'Test agent' },
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        // Model returns stop immediately to complete normally
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+        await scope.runNonInteractive(new ContextState());
+
+        // Now call dispose - it should clean up
+        scope.dispose();
+
+        // Verify disposal was successful by checking cancel is safe
+        expect(() => scope.cancel('test')).not.toThrow();
+      });
+
+      it('should clean up parent abort signal listener when dispose is called', async () => {
+        const { config } = await createMockConfig();
+
+        const parentAbortController = new AbortController();
+        const removeEventListenerSpy = vi.spyOn(
+          parentAbortController.signal,
+          'removeEventListener',
+        );
+
+        const runtimeBundle = createStatelessRuntimeBundle();
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          { systemPrompt: 'Test agent' },
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+          parentAbortController.signal,
+        );
+
+        // Run the agent to bind the parent signal
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+        await scope.runNonInteractive(new ContextState());
+
+        // Now dispose should clean up listeners
+        scope.dispose();
+
+        // Verify removeEventListener was called
+        expect(removeEventListenerSpy).toHaveBeenCalled();
+      });
+
+      it('should be safe to call dispose multiple times', async () => {
+        const { config } = await createMockConfig();
+
+        const runtimeBundle = createStatelessRuntimeBundle();
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          { systemPrompt: 'Test agent' },
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        // Should not throw
+        expect(() => {
+          scope.dispose();
+          scope.dispose();
+          scope.dispose();
+        }).not.toThrow();
+      });
+
+      it('should nullify active abort controller reference', async () => {
+        const { config } = await createMockConfig();
+
+        const runtimeBundle = createStatelessRuntimeBundle();
+        const { overrides } = createRuntimeOverrides({ runtimeBundle });
+
+        const scope = await SubAgentScope.create(
+          'test-agent',
+          config,
+          { systemPrompt: 'Test agent' },
+          defaultModelConfig,
+          defaultRunConfig,
+          undefined,
+          undefined,
+          overrides,
+        );
+
+        // Start an operation to create an abort controller
+        mockSendMessageStream.mockImplementation(createMockStream(['stop']));
+        await scope.runNonInteractive(new ContextState());
+
+        // Dispose
+        scope.dispose();
+
+        // Try to access the private activeAbortController through cancel method
+        // If it's null, cancel should be safe
+        expect(() => scope.cancel('test')).not.toThrow();
+      });
+    });
   });
 });

@@ -274,8 +274,13 @@ describe('SettingsUtils', () => {
 
         // Advanced settings with showInDialog=true should be included
         expect(categories['Advanced']).toBeDefined();
-        expect(categories['Advanced']).toHaveLength(1);
-        expect(categories['Advanced'][0].key).toBe('toolCallProcessingMode');
+        expect(categories['Advanced']).toHaveLength(2);
+        expect(categories['Advanced'].map((s) => s.key)).toContain(
+          'toolCallProcessingMode',
+        );
+        expect(categories['Advanced'].map((s) => s.key)).toContain(
+          'coreToolSettings',
+        );
       });
 
       it('should include settings with showInDialog=true', () => {

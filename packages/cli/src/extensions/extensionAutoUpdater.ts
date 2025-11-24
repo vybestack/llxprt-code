@@ -8,14 +8,16 @@ import {
   ExtensionUpdateState,
   checkForExtensionUpdate,
 } from '../config/extensions/github.js';
+import { type Extension, loadUserExtensions } from '../config/extension.js';
 import {
-  type Extension,
-  type ExtensionUpdateInfo,
-  type ExtensionInstallMetadata,
-  loadUserExtensions,
   updateExtension,
-} from '../config/extension.js';
-import { Storage, getErrorMessage } from '@vybestack/llxprt-code-core';
+  type ExtensionUpdateInfo,
+} from '../config/extensions/update.js';
+import {
+  Storage,
+  getErrorMessage,
+  type GeminiCLIExtension,
+} from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -140,12 +142,15 @@ interface ExtensionAutoUpdaterOptions {
   stateStore?: ExtensionAutoUpdateStateStore;
   extensionLoader?: () => Promise<Extension[]>;
   updateExecutor?: (
-    extension: Extension,
+    extension: GeminiCLIExtension,
     cwd: string,
-  ) => Promise<ExtensionUpdateInfo>;
+    currentState: ExtensionUpdateState,
+    setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
+  ) => Promise<ExtensionUpdateInfo | undefined>;
   updateChecker?: (
-    metadata: ExtensionInstallMetadata,
-  ) => Promise<ExtensionUpdateState>;
+    extension: GeminiCLIExtension,
+    setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
+  ) => Promise<void>;
   now?: () => number;
 }
 
@@ -163,12 +168,15 @@ export class ExtensionAutoUpdater {
   private readonly stateStore: ExtensionAutoUpdateStateStore;
   private readonly extensionLoader: () => Promise<Extension[]>;
   private readonly updateExecutor: (
-    extension: Extension,
+    extension: GeminiCLIExtension,
     cwd: string,
-  ) => Promise<ExtensionUpdateInfo>;
+    currentState: ExtensionUpdateState,
+    setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
+  ) => Promise<ExtensionUpdateInfo | undefined>;
   private readonly updateChecker: (
-    metadata: ExtensionInstallMetadata,
-  ) => Promise<ExtensionUpdateState>;
+    extension: GeminiCLIExtension,
+    setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
+  ) => Promise<void>;
   private readonly now: () => number;
   private intervalHandle: NodeJS.Timeout | null = null;
   private isChecking = false;
@@ -182,7 +190,16 @@ export class ExtensionAutoUpdater {
     this.extensionLoader =
       options.extensionLoader ??
       (async () => loadUserExtensions(this.workspaceDir));
-    this.updateExecutor = options.updateExecutor ?? updateExtension;
+    this.updateExecutor =
+      options.updateExecutor ??
+      ((extension, cwd, currentState, setExtensionUpdateState) =>
+        updateExtension(
+          extension,
+          cwd,
+          async () => true, // Auto-approve in background mode
+          currentState,
+          setExtensionUpdateState,
+        ));
     this.updateChecker = options.updateChecker ?? checkForExtensionUpdate;
     this.now = options.now ?? Date.now;
   }
@@ -304,14 +321,30 @@ export class ExtensionAutoUpdater {
     entry.state = ExtensionUpdateState.CHECKING_FOR_UPDATES;
 
     try {
-      const updateState = await this.updateChecker(extension.installMetadata);
-      entry.state = updateState;
+      // Convert Extension to GeminiCLIExtension for the updateChecker
+      const geminiExtension: GeminiCLIExtension = {
+        name: extension.config.name,
+        version: extension.config.version,
+        isActive: true,
+        path: extension.path,
+        installMetadata: extension.installMetadata,
+      };
+
+      // Call the update checker which will update entry.state via callback
+      // Initialize with explicit type to prevent narrowing
+      let resultState: ExtensionUpdateState | undefined;
+      await this.updateChecker(geminiExtension, (updateState) => {
+        resultState = updateState;
+        entry.state = updateState;
+      });
+
       entry.lastError = undefined;
-      if (updateState === ExtensionUpdateState.UPDATE_AVAILABLE) {
+      // Check the state after update checker completes
+      if (resultState === ExtensionUpdateState.UPDATE_AVAILABLE) {
         await this.handleUpdateAvailable(extension, entry, settings);
       } else if (
-        updateState === ExtensionUpdateState.UP_TO_DATE ||
-        updateState === ExtensionUpdateState.NOT_UPDATABLE
+        resultState === ExtensionUpdateState.UP_TO_DATE ||
+        resultState === ExtensionUpdateState.NOT_UPDATABLE
       ) {
         entry.failureCount = 0;
       }
@@ -362,7 +395,29 @@ export class ExtensionAutoUpdater {
   ): Promise<void> {
     try {
       entry.state = ExtensionUpdateState.UPDATING;
-      const info = await this.updateExecutor(extension, this.workspaceDir);
+
+      // Convert Extension to GeminiCLIExtension for the updateExecutor
+      const geminiExtension: GeminiCLIExtension = {
+        name: extension.config.name,
+        version: extension.config.version,
+        isActive: true,
+        path: extension.path,
+        installMetadata: extension.installMetadata,
+      };
+
+      const info = await this.updateExecutor(
+        geminiExtension,
+        this.workspaceDir,
+        entry.state,
+        (updateState) => {
+          entry.state = updateState;
+        },
+      );
+
+      if (!info) {
+        throw new Error('Update returned undefined');
+      }
+
       entry.lastUpdate = this.now();
       entry.pendingInstall = false;
       entry.state = ExtensionUpdateState.UPDATED_NEEDS_RESTART;

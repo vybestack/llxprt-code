@@ -56,8 +56,7 @@ export const DefaultAppLayout = ({
 }: DefaultAppLayoutProps) => {
   const uiState = useUIState();
   const isAlternateBuffer = useAlternateBuffer();
-  // Note: uiActions is not used directly in layout but DialogManager and Composer use it
-  void useUIActions();
+  const uiActions = useUIActions();
 
   const {
     terminalWidth,
@@ -97,7 +96,6 @@ export const DefaultAppLayout = ({
   const hideContextSummary = settings.merged.ui?.hideContextSummary ?? false;
   const { isNarrow } = uiState;
 
-  const staticExtraHeight = 3;
   const debugConsoleMaxHeight = Math.floor(Math.max(terminalHeight * 0.2, 5));
 
   useFlickerDetector(uiState.rootUiRef, terminalHeight, constrainHeight);
@@ -186,13 +184,8 @@ export const DefaultAppLayout = ({
             <DialogManager
               config={config}
               settings={settings}
-              availableTerminalHeight={
-                constrainHeight ? terminalHeight - staticExtraHeight : undefined
-              }
-              mainAreaWidth={mainAreaWidth}
-              inputWidth={inputWidth}
-              debugConsoleMaxHeight={debugConsoleMaxHeight}
-              constrainHeight={constrainHeight}
+              addItem={uiActions.addItem}
+              terminalWidth={terminalWidth}
             />
           ) : (
             <>

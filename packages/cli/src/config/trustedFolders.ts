@@ -19,8 +19,8 @@ import { USER_SETTINGS_DIR } from './paths.js';
 export const TRUSTED_FOLDERS_FILENAME = 'trustedFolders.json';
 
 export function getTrustedFoldersPath(): string {
-  if (process.env['GEMINI_CLI_TRUSTED_FOLDERS_PATH']) {
-    return process.env['GEMINI_CLI_TRUSTED_FOLDERS_PATH'];
+  if (process.env['LLXPRT_CODE_TRUSTED_FOLDERS_PATH']) {
+    return process.env['LLXPRT_CODE_TRUSTED_FOLDERS_PATH'];
   }
   return path.join(USER_SETTINGS_DIR, TRUSTED_FOLDERS_FILENAME);
 }

@@ -164,9 +164,13 @@ const createTestContext = ({
       loadHistory: vi.fn(),
       toggleCorgiMode: vi.fn(),
       toggleVimEnabled: vi.fn().mockResolvedValue(true),
+      setGeminiMdFileCount: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
       updateHistoryTokenCount: vi.fn(),
       reloadCommands: vi.fn(),
+      extensionsUpdateState: new Map(),
+      setExtensionsUpdateState: vi.fn(),
+      addConfirmUpdateExtensionRequest: vi.fn(),
     },
     session: {
       stats,

@@ -7,15 +7,10 @@
 import fs from 'fs';
 import path from 'path';
 import { glob, escape } from 'glob';
-import {
-  BaseDeclarativeTool,
-  BaseToolInvocation,
-  Kind,
-  ToolInvocation,
-  ToolResult,
-} from './tools.js';
+import type { ToolInvocation, ToolResult } from './tools.js';
+import { BaseDeclarativeTool, BaseToolInvocation, Kind } from './tools.js';
 import { shortenPath, makeRelative } from '../utils/paths.js';
-import { Config } from '../config/config.js';
+import { type Config } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 

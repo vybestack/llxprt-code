@@ -8,6 +8,11 @@ let detectionComplete = false;
 let protocolSupported = false;
 let protocolEnabled = false;
 
+function enableProtocolSequence() {
+  process.stdout.write('\x1b[>1u');
+  protocolEnabled = true;
+}
+
 /**
  * Detects Kitty keyboard protocol support.
  * Definitive document about this protocol lives at https://sw.kovidgoyal.net/kitty/keyboard-protocol/
@@ -53,10 +58,8 @@ export async function detectAndEnableKittyProtocol(): Promise<boolean> {
           }
 
           if (progressiveEnhancementReceived) {
-            // Enable the protocol
-            process.stdout.write('\x1b[>1u');
             protocolSupported = true;
-            protocolEnabled = true;
+            enableProtocolSequence();
 
             // Set up cleanup on exit
             process.on('exit', disableProtocol);
@@ -94,6 +97,13 @@ function disableProtocol() {
     process.stdout.write('\x1b[<u');
     protocolEnabled = false;
   }
+}
+
+export function enableSupportedProtocol(): void {
+  if (!protocolSupported) {
+    return;
+  }
+  enableProtocolSequence();
 }
 
 export function isKittyProtocolEnabled(): boolean {

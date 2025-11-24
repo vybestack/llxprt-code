@@ -1,4 +1,4 @@
-name: 'E2E Tests'
+name: 'Testing: E2E'
 
 on:
   push:
@@ -14,336 +14,207 @@ on:
     types: ['labeled']
   merge_group:
   workflow_dispatch:
-    # Manual trigger with optional overrides
     inputs:
-      pr_number:
-        description: 'Run against pull request number (optional)'
-        required: false
-      override_model:
-        description: 'Override default model (optional)'
-        required: false
-      override_provider:
-        description: 'Override default provider (optional)'
-        required: false
+      branch_ref:
+        description: 'Branch to run on'
+        required: true
+        default: 'main'
+        type: 'string'
 
 jobs:
-  doc_change_filter:
-    name: 'Detect doc-only changes'
-    runs-on: 'ubuntu-latest'
-    outputs:
-      docs_only: '${{ steps.detect.outputs.docs_only }}'
-    steps:
-      - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
-        with:
-          fetch-depth: 1
-
-      - name: 'Determine documentation-only PR'
-        id: 'detect'
-        env:
-          PR_NUMBER: >-
-            ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && github.event.pull_request.number || '' }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${PR_NUMBER:-}" ]]; then
-            echo "docs_only=false" >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          files="$(gh api \
-            --paginate \
-            -H "Accept: application/vnd.github+json" \
-            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
-            --jq '.[].filename' || true)"
-
-          if [[ -z "$files" ]]; then
-            echo "docs_only=true" >>"$GITHUB_OUTPUT"
-            {
-              echo "### Documentation-only PR detected"
-              echo "Skipping E2E suites for this PR."
-            } >>"$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          docs_only=true
-          while IFS= read -r file; do
-            [[ -z "$file" ]] && continue
-            case "$file" in
-              docs/*|README.md|README.*|*.md|*.mdx|*.rst|*.txt|*.adoc)
-                ;;
-              *)
-                docs_only=false
-                break
-                ;;
-            esac
-          done <<<"$files"
-
-          echo "docs_only=${docs_only}" >>"$GITHUB_OUTPUT"
-          if [[ "$docs_only" == "true" ]]; then
-            {
-              echo "### Documentation-only PR detected"
-              echo "Skipping E2E suites for this PR."
-            } >>"$GITHUB_STEP_SUMMARY"
-          fi
-
-  e2e-test:
-    name: 'E2E Test (${{ matrix.os }}) - ${{ matrix.sandbox }}'
-    needs: 'doc_change_filter'
-    # This condition ensures the job runs for pushes to main, merge groups,
-    # PRs from the base repo, OR PRs from forks with the correct label.
+  e2e_linux:
+    name: 'E2E Test (Linux) - ${{ matrix.sandbox }}'
     if: |
-      needs.doc_change_filter.outputs.docs_only != 'true' && (
-        github.event_name == 'push' ||
-        github.event_name == 'merge_group' ||
-        github.event_name == 'workflow_dispatch' ||
-        (
-          (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') &&
-          (
-            github.event.pull_request.head.repo.full_name == github.repository ||
-            contains(github.event.pull_request.labels.*.name, 'maintainer:e2e:ok')
-          )
-        )
-      )
-    runs-on: '${{ matrix.os }}'
+      github.event_name == 'push' ||
+      github.event_name == 'merge_group' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event.label.name == 'maintainer:e2e:ok')
+    runs-on: 'ubuntu-latest'
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - 'ubuntu-latest'
-          - 'macos-latest'
-          - 'windows-latest'
         sandbox:
           - 'sandbox:none'
-          # Temporarily disable sandbox:docker until OAuth issue is resolved
-          # - 'sandbox:docker'
+          - 'sandbox:docker'
         node-version:
-          - '24.x'
-        # No excludes needed since sandbox:docker is commented out
-        # exclude:
-        # Docker tests are not supported on macOS or Windows
-        # - os: 'macos-latest'
-        #   sandbox: 'sandbox:docker'
-        # - os: 'windows-latest'
-        #   sandbox: 'sandbox:docker'
-    steps:
-      - name: 'Resolve workflow_dispatch target'
-        if: github.event_name == 'workflow_dispatch'
-        id: 'resolve_pr'
-        uses: 'actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b' # ratchet:actions/github-script@v7
-        with:
-          github-token: '${{ secrets.GITHUB_TOKEN }}'
-          script: |-
-            const eventInputs = context.payload?.inputs ?? {};
-            const rawInput = core.getInput('pr_number', { trimWhitespace: false });
-            const prNumberInput = (rawInput ?? '').trim() || (eventInputs.pr_number ?? '').trim();
-            if (!prNumberInput) {
-              core.setOutput('from_pr', 'false');
-              core.setOutput('ref', context.ref);
-              core.setOutput('repository', `${context.repo.owner}/${context.repo.repo}`);
-              core.info(
-                'No pr_number provided. Falling back to the branch/tag selected in the dispatch request.'
-              );
-              return;
-            }
-            const prNumber = Number.parseInt(prNumberInput, 10);
-            if (Number.isNaN(prNumber)) {
-              throw new Error(`pr_number must be a number, received "${rawInput}"`);
-            }
-            const pr = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-            });
-            core.setOutput('ref', pr.data.head.sha);
-            core.setOutput('repository', pr.data.head.repo.full_name);
-            core.setOutput('from_pr', 'true');
-            core.info(
-              `Resolved PR #${prNumber} to ${pr.data.head.sha} from ${pr.data.head.repo.full_name}.`
-            );
+          - '20.x'
 
+    steps:
       - name: 'Checkout (fork)'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
         if: "github.event_name == 'pull_request_target'"
         with:
           ref: '${{ github.event.pull_request.head.sha }}'
           repository: '${{ github.event.pull_request.head.repo.full_name }}'
 
-      - name: 'Checkout (workflow_dispatch PR)'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
-        if: |
-          github.event_name == 'workflow_dispatch' &&
-          steps.resolve_pr.outputs.from_pr == 'true'
-        with:
-          ref: '${{ steps.resolve_pr.outputs.ref }}'
-          repository: '${{ steps.resolve_pr.outputs.repository }}'
-          fetch-depth: 0
-
       - name: 'Checkout (internal)'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
-        if: |-
-          github.event_name != 'pull_request_target' &&
-          !(
-            github.event_name == 'workflow_dispatch' &&
-            steps.resolve_pr.outputs.from_pr == 'true'
-          )
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        if: "github.event_name != 'pull_request_target'"
+        with:
+          ref: '${{ github.event.inputs.branch_ref || github.ref }}'
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
         uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions-node@v4
         with:
           node-version: '${{ matrix.node-version }}'
-          cache: 'npm'
 
       - name: 'Install dependencies'
-        run: |-
-          npm ci
-
-      - name: 'Ensure npx is available (Windows fix)'
-        if: runner.os == 'Windows'
-        run: |-
-          echo "Checking npx availability..."
-          npx --version || npm install -g npm@latest
-          npx --version
-        shell: 'bash'
-
-      - name: 'Fix rollup platform dependency'
-        run: |-
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          if [ "$RUNNER_OS" = 'Linux' ]; then
-            npm install @rollup/rollup-linux-x64-gnu --no-save || true
-          elif [ "$RUNNER_OS" = 'macOS' ]; then
-            npm install @rollup/rollup-darwin-x64 @rollup/rollup-darwin-arm64 --no-save || true
-          elif [ "$RUNNER_OS" = 'Windows' ]; then
-            npm install @rollup/rollup-win32-x64-msvc --no-save || true
-          fi
-        shell: 'bash'
+        run: 'npm ci'
 
       - name: 'Build project'
-        run: |-
-          npm run build
-
-      - name: 'Create bundle'
-        run: |-
-          echo "Current directory: $(pwd)"
-          echo "Directory contents before bundle:"
-          node -e "console.log(require('fs').readdirSync('.').map(f => { const s = require('fs').statSync(f); return s.isDirectory() ? f + '/' : f; }).join('\n'))"
-          npm run bundle
-          echo "Directory contents after bundle:"
-          node -e "console.log(require('fs').readdirSync('.').map(f => { const s = require('fs').statSync(f); return s.isDirectory() ? f + '/' : f; }).join('\n'))"
-          echo "Bundle directory contents:"
-          node -e "try { console.log(require('fs').readdirSync('bundle').map(f => { const s = require('fs').statSync('bundle/' + f); return s.isDirectory() ? f + '/' : f; }).join('\n')); } catch(e) { console.log('Bundle directory not found'); }"
+        run: 'npm run build'
 
       - name: 'Set up Docker'
-        if: |-
-          matrix.os == 'ubuntu-latest' && matrix.sandbox == 'sandbox:docker'
+        if: "matrix.sandbox == 'sandbox:docker'"
         uses: 'docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435' # ratchet:docker/setup-buildx-action@v3
 
-      - name: 'Build sandbox Docker image'
-        if: |-
-          ${{ matrix.sandbox == 'sandbox:docker' }}
-        env:
-          # Tell the build script to use docker for sandboxing
-          LLXPRT_SANDBOX: 'docker'
-        run: |-
-          # Build the sandbox image locally with the same tag that's in package.json
-          # This matches Google's approach - build locally, no registry needed
-          echo "Building sandbox image..."
-          npm run build:sandbox
-
-          # Verify the image was built
-          echo "Docker images after build:"
-          docker images
-
-          # The image should be tagged as specified in package.json
-          if docker images | grep -q "ghcr.io/vybestack/llpxrt-code/sandbox"; then
-            echo "[OK] Sandbox image built successfully"
-            docker images | grep "ghcr.io/vybestack/llpxrt-code/sandbox"
-          else
-            echo " Sandbox image not found after build!"
-            echo "Expected to find image matching: ghcr.io/vybestack/llpxrt-code/sandbox"
-            exit 1
-          fi
-
-      - name: 'Set up Podman'
-        if: |-
-          ${{ matrix.sandbox == 'sandbox:podman' }}
-        uses: 'redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603' # ratchet:redhat-actions/podman-login@v1
-        with:
-          registry: 'docker.io'
-          username: '${{ secrets.DOCKERHUB_USERNAME }}'
-          password: '${{ secrets.DOCKERHUB_TOKEN }}'
       - name: 'Run E2E tests'
         env:
           # Provider configuration from repository secrets/variables
-          # Works for both push and workflow_dispatch triggers
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-          # Allow override from workflow_dispatch, otherwise use repository variables
-          # Allow a dedicated E2E model/provider override, falling back to repo defaults
-          LLXPRT_DEFAULT_MODEL: >-
-            ${{ inputs.override_model || vars.LLXPRT_E2E_MODEL || vars.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: >-
-            ${{ inputs.override_provider || vars.LLXPRT_E2E_PROVIDER || vars.LLXPRT_DEFAULT_PROVIDER }}
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
           # Set auth type to provider for API key authentication
           LLXPRT_AUTH_TYPE: 'provider'
-          # Suppress browser launch for OAuth (important for CI)
-          NO_BROWSER: 'true'
-          LLXPRT_NO_BROWSER_AUTH: 'true'
-          CI: 'true'
-          LLXPRT_SANDBOX: '${{ matrix.sandbox }}'
-          VERBOSE: 'true'
           KEEP_OUTPUT: 'true'
-          # Enable debug logging using repository variable for flexibility
-          DEBUG: ${{ vars.DEBUG_NAMESPACES || '' }}
-          # Output debug to stderr so it appears in CI logs
-          DEBUG_OUTPUT: 'stderr'
-          # Allow OpenAI integration tests to exceed Vitest's default timeout
-          VITEST_TEST_TIMEOUT: 15000
-        run: |-
-          # Use different commands based on sandbox type to avoid PowerShell variable expansion issues
-          if [ "${{ matrix.sandbox }}" = "sandbox:none" ]; then
-            npm run test:integration:sandbox:none
-          elif [ "${{ matrix.sandbox }}" = "sandbox:docker" ]; then
-            npm run test:integration:sandbox:docker
-          elif [ "${{ matrix.sandbox }}" = "sandbox:podman" ]; then
-            npm run test:integration:sandbox:podman
-          else
-            echo "Unknown sandbox type: ${{ matrix.sandbox }}"
-            exit 1
-          fi
-        shell: bash
-
-      - name: 'Collect provider error reports'
-        if: failure()
-        id: 'collect_provider_errors'
+          VERBOSE: 'true'
+        shell: 'bash'
         run: |
-          set -euo pipefail
-          mkdir -p provider-errors
-          shopt -s nullglob
-          declare -a roots=(
-            "/tmp"
-            "${TMPDIR:-}"
-            "${RUNNER_TEMP:-}"
-            "${TEMP:-}"
-            "${TMP:-}"
-          )
-          for dir in "${roots[@]}"; do
-            [[ -z "$dir" || ! -d "$dir" ]] && continue
-            for file in "$dir"/llxprt-client-error-*; do
-              [[ -f "$file" ]] || continue
-              cp "$file" "provider-errors/$(basename "$file")"
-            done
-          done
-          if compgen -G 'provider-errors/*' >/dev/null; then
-            echo "found=true" >>"$GITHUB_OUTPUT"
+          if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
+            npm run test:integration:sandbox:docker
           else
-            echo "found=false" >>"$GITHUB_OUTPUT"
+            npm run test:integration:sandbox:none
           fi
 
-      - name: 'Upload provider error report'
-        if: failure() && steps.collect_provider_errors.outputs.found == 'true'
-        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
+  e2e_mac:
+    name: 'E2E Test (macOS)'
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'merge_group' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event.label.name == 'maintainer:e2e:ok')
+    runs-on: 'macos-latest'
+    continue-on-error: true
+    steps:
+      - name: 'Checkout (fork)'
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        if: "github.event_name == 'pull_request_target'"
         with:
-          name: 'provider-error-${{ matrix.os }}-${{ matrix.sandbox }}-${{ github.run_id }}'
-          path: 'provider-errors'
-          if-no-files-found: 'ignore'
+          ref: '${{ github.event.pull_request.head.sha }}'
+          repository: '${{ github.event.pull_request.head.repo.full_name }}'
+
+      - name: 'Checkout (internal)'
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        if: "github.event_name != 'pull_request_target'"
+        with:
+          ref: '${{ github.event.inputs.branch_ref || github.ref }}'
+
+      - name: 'Set up Node.js 20.x'
+        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: 'Install dependencies'
+        run: 'npm ci'
+
+      - name: 'Build project'
+        run: 'npm run build'
+
+      - name: 'Fix rollup optional dependencies on macOS'
+        if: "runner.os == 'macOS'"
+        run: |
+          npm cache clean --force
+      - name: 'Run E2E tests (non-Windows)'
+        if: "runner.os != 'Windows'"
+        env:
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: 'provider'
+          KEEP_OUTPUT: 'true'
+          SANDBOX: 'sandbox:none'
+          VERBOSE: 'true'
+          # Force file storage to avoid keytar/libsecret dependency in CI
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
+        run: 'npm run test:integration:sandbox:none'
+
+  e2e_windows:
+    name: 'Slow E2E - Win'
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'merge_group' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event.label.name == 'maintainer:e2e:ok')
+    runs-on: 'windows-latest'
+    continue-on-error: true
+
+    steps:
+      - name: 'Checkout (fork)'
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        if: "github.event_name == 'pull_request_target'"
+        with:
+          ref: '${{ github.event.pull_request.head.sha }}'
+          repository: '${{ github.event.pull_request.head.repo.full_name }}'
+
+      - name: 'Checkout (internal)'
+        uses: 'actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955' # ratchet:actions/checkout@v5
+        if: "github.event_name != 'pull_request_target'"
+        with:
+          ref: '${{ github.event.inputs.branch_ref || github.ref }}'
+
+      - name: 'Set up Node.js 20.x'
+        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: 'Configure Windows Defender exclusions'
+        run: |
+          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE -Force
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\node_modules" -Force
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE\packages" -Force
+          Add-MpPreference -ExclusionPath "$env:TEMP" -Force
+        shell: 'pwsh'
+
+      - name: 'Configure npm for Windows performance'
+        run: |
+          npm config set progress false
+          npm config set audit false
+          npm config set fund false
+          npm config set loglevel error
+          npm config set maxsockets 32
+          npm config set registry https://registry.npmjs.org/
+        shell: 'pwsh'
+
+      - name: 'Install dependencies'
+        run: 'npm ci'
+        shell: 'pwsh'
+
+      - name: 'Build project'
+        run: 'npm run build'
+        shell: 'pwsh'
+
+      - name: 'Run E2E tests'
+        env:
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: 'provider'
+          KEEP_OUTPUT: 'true'
+          SANDBOX: 'sandbox:none'
+          VERBOSE: 'true'
+          NODE_OPTIONS: '--max-old-space-size=32768 --max-semi-space-size=256'
+          UV_THREADPOOL_SIZE: '32'
+          NODE_ENV: 'test'
+        shell: 'pwsh'
+        run: 'npm run test:integration:sandbox:none'

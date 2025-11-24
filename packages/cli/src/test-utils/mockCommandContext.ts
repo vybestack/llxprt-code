@@ -46,8 +46,8 @@ export const createMockCommandContext = (
         loadCheckpoint: vi.fn().mockResolvedValue([]),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any, // Cast because Logger is a class.
-      profileManager: undefined, // @plan:PLAN-20250117-SUBAGENTCONFIG.P07
-      subagentManager: undefined, // @plan:PLAN-20250117-SUBAGENTCONFIG.P07
+      // TODO: Add profileManager and subagentManager when CommandContext interface is updated
+      // @plan:PLAN-20250117-SUBAGENTCONFIG.P07
     },
     ui: {
       addItem: vi.fn(),
@@ -60,6 +60,8 @@ export const createMockCommandContext = (
       toggleVimEnabled: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
       updateHistoryTokenCount: vi.fn(),
+      extensionsUpdateState: new Map(),
+      setExtensionsUpdateState: vi.fn(),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any,
     session: {

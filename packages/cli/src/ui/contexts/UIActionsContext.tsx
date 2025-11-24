@@ -85,6 +85,10 @@ export interface UIActions {
   openPermissionsDialog: () => void;
   closePermissionsDialog: () => void;
 
+  // Logging dialog
+  openLoggingDialog: (data?: { entries: unknown[] }) => void;
+  closeLoggingDialog: () => void;
+
   // Workspace migration dialog
   onWorkspaceMigrationDialogOpen: () => void;
   onWorkspaceMigrationDialogClose: () => void;

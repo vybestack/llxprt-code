@@ -274,6 +274,8 @@ vi.mock('@vybestack/llxprt-code-core', () => {
         }
       }
     },
+    DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD: 8192,
+    DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES: 40,
     createProviderRuntimeContext: (
       init: {
         settingsService?: StubSettingsServiceInstance;

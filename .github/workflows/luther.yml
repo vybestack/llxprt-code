@@ -409,7 +409,7 @@ jobs:
           issue_comments_text="$(format_comments "${ISSUE_COMMENTS_PATH:-}")"
           pr_comments_text="$(format_comments "${PR_COMMENTS_PATH:-}")"
           qa_names=("format" "lint" "typecheck" "test" "build")
-          qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test:ci" "npm run build")
+          qa_commands=("npm run format" "npm run lint" "npm run typecheck" "npm run test" "npm run build")
 
           max_attempts="${LUTHER_MAX_ATTEMPTS:-3}"
           success_attempt=""
@@ -460,8 +460,11 @@ jobs:
               echo "- Limit work to resolving this issue; avoid touching unrelated areas."
               echo "- Leave git commits/pushes to the workflow; keep changes in the working tree."
               echo "- Reference the issue as #${ISSUE_NUMBER} inside any summaries you produce."
-              echo "- After making changes, run (locally) the same QA commands that the workflow will run:"
+              echo "- CRITICAL: Do NOT modify any files in .github/workflows/ - GitHub will reject pushes that modify workflow files."
+              echo "- CRITICAL: After making changes, you MUST run these QA commands FROM THE REPOSITORY ROOT:"
               echo "  npm run format && npm run lint && npm run typecheck && npm run test && npm run build"
+              echo "- CRITICAL: Verify that ALL commands complete successfully with exit code 0 before claiming success."
+              echo "- CRITICAL: If any command fails, fix the issue and re-run ALL commands again."
               echo "- Do not use web-search or web-fetch tools; stay within the repository context."
               echo "- Do not spawn subagents (e.g., /task or named profiles like 'joethecoder'); complete the work yourself in this session."
               echo "- Do not rely on local-only profiles or secrets that are unavailable in CI; assume only the data in this repository is accessible."
@@ -510,9 +513,9 @@ jobs:
                 cmd="${qa_commands[$idx]}"
                 name="${qa_names[$idx]}"
                 log_file="${attempt_dir}/${name//[: ]/_}.log"
-                echo "Attempt ${attempt}: running ${cmd}"
+                echo "Attempt ${attempt}: running ${cmd} in ${GITHUB_WORKSPACE}"
                 set +e
-                bash -lc "$cmd" >"$log_file" 2>&1
+                bash -c "cd \"${GITHUB_WORKSPACE}\" && pwd && $cmd" >"$log_file" 2>&1
                 cmd_exit=$?
                 set -e
                 if [[ "$cmd_exit" -ne 0 ]]; then
@@ -611,6 +614,7 @@ jobs:
         if: steps.commit_push.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_SECRET }}
+          GITHUB_TOKEN: '' # Override job-level GITHUB_TOKEN to force gh to use GH_TOKEN
           ISSUE_BRANCH: ${{ steps.select_issue.outputs.branch }}
           ISSUE_TITLE: ${{ steps.issue_data.outputs.title }}
           ISSUE_NUMBER: ${{ steps.select_issue.outputs.issue_number }}
@@ -661,6 +665,7 @@ jobs:
         if: steps.commit_push.outputs.has_changes == 'true' && steps.pr.outputs.pr_number != ''
         env:
           GH_TOKEN: ${{ secrets.GH_SECRET }}
+          GITHUB_TOKEN: '' # Override job-level GITHUB_TOKEN to force gh to use GH_TOKEN
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
           set -euo pipefail

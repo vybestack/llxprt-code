@@ -4,18 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CommandKind, OpenDialogActionReturn, SlashCommand } from './types.js';
+import { CommandKind, SlashCommand } from './types.js';
+import { MessageType } from '../types.js';
 
 export const helpCommand: SlashCommand = {
   name: 'help',
   altNames: ['?'],
   description: 'for help on LLxprt Code',
   kind: CommandKind.BUILT_IN,
-  action: (_context, _args): OpenDialogActionReturn => {
-    console.debug('Opening help UI ...');
-    return {
-      type: 'dialog',
-      dialog: 'help',
+  action: async (context) => {
+    const helpItem = {
+      type: MessageType.HELP,
+      timestamp: new Date(),
     };
+
+    context.ui.addItem(helpItem, Date.now());
   },
 };

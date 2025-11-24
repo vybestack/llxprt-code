@@ -14,7 +14,8 @@ import {
   ToolResult,
 } from './tools.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
-import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
+import type { Config } from '../config/config.js';
+import { DEFAULT_FILE_FILTERING_OPTIONS } from '../config/constants.js';
 import { ToolErrorType } from './tool-error.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 

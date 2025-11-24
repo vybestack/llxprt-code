@@ -51,6 +51,7 @@ export function IdeIntegrationNudge({
         userSelection: 'yes',
         isExtensionPreInstalled,
       },
+      key: 'Yes',
     },
     {
       label: 'No (esc)',
@@ -58,6 +59,7 @@ export function IdeIntegrationNudge({
         userSelection: 'no',
         isExtensionPreInstalled,
       },
+      key: 'No (esc)',
     },
     {
       label: "No, don't ask again",
@@ -65,6 +67,7 @@ export function IdeIntegrationNudge({
         userSelection: 'dismiss',
         isExtensionPreInstalled,
       },
+      key: "No, don't ask again",
     },
   ];
 

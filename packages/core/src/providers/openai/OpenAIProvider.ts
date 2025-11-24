@@ -1350,7 +1350,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       response = await retryWithBackoff(executeRequest, {
         maxAttempts: maxRetries,
         initialDelayMs,
-        shouldRetry: this.shouldRetryResponse.bind(this),
+        shouldRetryOnError: this.shouldRetryResponse.bind(this),
         trackThrottleWaitTime: this.throttleTracker,
       });
     } else {
@@ -1360,7 +1360,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           response = (await retryWithBackoff(executeRequest, {
             maxAttempts: maxRetries,
             initialDelayMs,
-            shouldRetry: this.shouldRetryResponse.bind(this),
+            shouldRetryOnError: this.shouldRetryResponse.bind(this),
             trackThrottleWaitTime: this.throttleTracker,
           })) as OpenAI.Chat.Completions.ChatCompletion;
           break;
@@ -2354,7 +2354,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             {
               maxAttempts: maxRetries,
               initialDelayMs,
-              shouldRetry: this.shouldRetryResponse.bind(this),
+              shouldRetryOnError: this.shouldRetryResponse.bind(this),
               trackThrottleWaitTime: this.throttleTracker,
             },
           );
@@ -2445,7 +2445,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             {
               maxAttempts: maxRetries,
               initialDelayMs,
-              shouldRetry: this.shouldRetryResponse.bind(this),
+              shouldRetryOnError: this.shouldRetryResponse.bind(this),
               trackThrottleWaitTime: this.throttleTracker,
             },
           )) as OpenAI.Chat.Completions.ChatCompletion;

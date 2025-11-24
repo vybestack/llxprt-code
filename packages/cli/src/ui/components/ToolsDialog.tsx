@@ -39,6 +39,7 @@ export const ToolsDialog: React.FC<ToolsDialogProps> = ({
 
   // Create items for RadioButtonSelect
   const items = availableTools.map((tool) => ({
+    key: tool.name,
     label: tool.displayName,
     value: tool.name,
   }));
