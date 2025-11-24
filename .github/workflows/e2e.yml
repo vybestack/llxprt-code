@@ -140,6 +140,8 @@ jobs:
           KEEP_OUTPUT: 'true'
           SANDBOX: 'sandbox:none'
           VERBOSE: 'true'
+          # Force file storage to avoid keytar/libsecret dependency in CI
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
         run: 'npm run test:integration:sandbox:none'
 
   e2e_windows:
