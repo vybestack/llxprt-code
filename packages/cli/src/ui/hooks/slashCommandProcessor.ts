@@ -7,6 +7,8 @@
 import { useCallback, useMemo, useEffect, useState } from 'react';
 import { type PartListUnion } from '@google/genai';
 import process from 'node:process';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import {
@@ -18,6 +20,8 @@ import {
   ToolConfirmationOutcome,
   Storage,
   IdeClient,
+  ProfileManager,
+  SubagentManager,
 } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import type {
@@ -118,6 +122,26 @@ export const useSlashCommandProcessor = (
     return l;
   }, [config]);
 
+  /**
+   * Initialize ProfileManager and SubagentManager for command context
+   *
+   * @plan:PLAN-20250117-SUBAGENTCONFIG.P15
+   * @requirement:REQ-010
+   */
+  const profileManager = useMemo(() => {
+    if (!config) return undefined;
+    const llxprtDir = path.join(os.homedir(), '.llxprt');
+    const profilesDir = path.join(llxprtDir, 'profiles');
+    return new ProfileManager(profilesDir);
+  }, [config]);
+
+  const subagentManager = useMemo(() => {
+    if (!config || !profileManager) return undefined;
+    const llxprtDir = path.join(os.homedir(), '.llxprt');
+    const subagentsDir = path.join(llxprtDir, 'subagents');
+    return new SubagentManager(subagentsDir, profileManager);
+  }, [config, profileManager]);
+
   const [pendingItem, setPendingItem] = useState<HistoryItemWithoutId | null>(
     null,
   );
@@ -213,6 +237,8 @@ export const useSlashCommandProcessor = (
         settings,
         git: gitService,
         logger,
+        profileManager, // @plan:PLAN-20250117-SUBAGENTCONFIG.P15 @requirement:REQ-010
+        subagentManager, // @plan:PLAN-20250117-SUBAGENTCONFIG.P15 @requirement:REQ-010
       },
       ui: {
         addItem,
@@ -247,6 +273,8 @@ export const useSlashCommandProcessor = (
       settings,
       gitService,
       logger,
+      profileManager,
+      subagentManager,
       loadHistory,
       addItem,
       clearItems,
