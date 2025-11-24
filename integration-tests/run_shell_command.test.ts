@@ -237,7 +237,7 @@ describe('run_shell_command', () => {
     ).toBeTruthy();
   });
 
-  it.skipIf(process.env.SANDBOX === 'sandbox:docker')(
+  it.skipIf(process.env.LLXPRT_SANDBOX !== 'false')(
     'should propagate environment variables to the child process',
     async () => {
       const rig = new TestRig();
