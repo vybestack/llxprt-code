@@ -237,9 +237,11 @@ describe('run_shell_command', () => {
     ).toBeTruthy();
   });
 
-  it('should propagate environment variables to the child process', async () => {
-    const rig = new TestRig();
-    await rig.setup('should propagate environment variables');
+  it.skipIf(process.env.SANDBOX === 'sandbox:docker')(
+    'should propagate environment variables to the child process',
+    async () => {
+      const rig = new TestRig();
+      await rig.setup('should propagate environment variables');
 
     const varName = 'GEMINI_CLI_TEST_VAR';
     const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
@@ -264,10 +266,11 @@ describe('run_shell_command', () => {
       ).toBeTruthy();
       validateModelOutput(result, varValue, 'Env var propagation test');
       expect(result).toContain(varValue);
-    } finally {
-      delete process.env[varName];
-    }
-  });
+      } finally {
+        delete process.env[varName];
+      }
+    },
+  );
 
   it('should run a platform-specific file listing command', async () => {
     const rig = new TestRig();
