@@ -135,7 +135,7 @@ export class ShellExecutionService {
         TERM: 'xterm-256color',
         PAGER: 'cat',
       };
-      delete envVars.GEMINI_CLI;
+      delete envVars.LLXPRT_CODE;
       delete (envVars as Record<string, unknown>)['gemini_cli'];
       delete envVars.BASH_ENV;
       delete (envVars as Record<string, unknown>)['bash_env'];
@@ -333,7 +333,7 @@ export class ShellExecutionService {
         TERM: 'xterm-256color',
         PAGER: 'cat',
       };
-      delete envVars.GEMINI_CLI;
+      delete envVars.LLXPRT_CODE;
       delete (envVars as Record<string, unknown>)['gemini_cli'];
       delete envVars.BASH_ENV;
       delete (envVars as Record<string, unknown>)['bash_env'];
