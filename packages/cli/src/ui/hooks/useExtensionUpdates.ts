@@ -199,8 +199,13 @@ export const useExtensionUpdates = (
     if (scheduledUpdate) {
       Promise.allSettled(updatePromises).then((results) => {
         const nonNullResults = results
-          .filter((result) => result.status === 'fulfilled' && result.value != null)
-          .map((result) => (result as PromiseFulfilledResult<ExtensionUpdateInfo>).value);
+          .filter(
+            (result) => result.status === 'fulfilled' && result.value != null,
+          )
+          .map(
+            (result) =>
+              (result as PromiseFulfilledResult<ExtensionUpdateInfo>).value,
+          );
         scheduledUpdate.onCompleteCallbacks.forEach((callback) => {
           try {
             callback(nonNullResults);

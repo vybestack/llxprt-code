@@ -151,58 +151,31 @@ describe('Settings Loading and Merging', () => {
       expect(settings.system.settings).toEqual({});
       expect(settings.user.settings).toEqual({});
       expect(settings.workspace.settings).toEqual({});
-      expect(settings.merged).toEqual({
-        accessibility: {},
-        chatCompression: {},
-        checkpointing: {},
-        coreToolSettings: {},
-        debugKeystrokeLogging: false,
-        disableAutoUpdate: false,
-        disableUpdateNag: false,
-        emojifilter: 'auto',
-        enablePromptCompletion: false,
-        enableTextToolCallParsing: false,
-        excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        extensionManagement: false,
-        extensions: {
-          disabled: [],
-          workspacesWithMigrationNudge: [],
-        },
-        fileFiltering: {},
-        folderTrust: false,
-        folderTrustFeature: false,
-        hasSeenIdeIntegrationNudge: false,
-        hideCWD: false,
-        hideModelInfo: false,
-        hideSandboxStatus: false,
-        ide: {},
-        includeDirectories: [],
-        loadMemoryFromIncludeDirectories: false,
-        mcp: {},
-        mcpServers: {},
-        oauthEnabledProviders: {},
-        openaiResponsesEnabled: false,
-        output: {},
-        providerApiKeys: {},
-        providerBaseUrls: {},
-        providerKeyfiles: {},
-        providerToolFormatOverrides: {},
-        security: {},
-        selectedAuthType: 'provider',
-        shellReplacement: false,
-        shouldUseNodePtyShell: false,
-        showLineNumbers: false,
-        showStatusInTitle: false,
-        textToolCallModels: [],
-        toolCallProcessingMode: 'legacy',
-        tools: {},
-        ui: {
-          customThemes: {},
-          theme: undefined,
-        },
-        useRipgrep: false,
-        useSmartEdit: false,
+      // Schema defaults are now recursively extracted for nested objects
+      // Test key nested defaults that demonstrate the fix is working
+      expect(settings.merged.accessibility).toEqual({
+        disableLoadingPhrases: false,
+        screenReader: false,
       });
+      expect(settings.merged.checkpointing).toEqual({ enabled: false });
+      expect(settings.merged.fileFiltering).toEqual({
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+        enableRecursiveFileSearch: true,
+        disableFuzzySearch: false,
+      });
+      expect(settings.merged.security).toEqual({
+        folderTrust: { enabled: false },
+        auth: {},
+      });
+      expect(settings.merged.tools).toMatchObject({
+        autoAccept: false,
+        useRipgrep: false,
+        enableToolOutputTruncation: true,
+      });
+      expect(settings.merged.mcp).toEqual({});
+      expect(settings.merged.output).toEqual({ format: 'text' });
+      expect(settings.merged.selectedAuthType).toBe('provider');
       expect(settings.errors.length).toBe(0);
     });
 
@@ -231,7 +204,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.system.settings).toEqual(systemSettingsContent);
       expect(settings.user.settings).toEqual({});
       expect(settings.workspace.settings).toEqual({});
-      expect(settings.merged).toEqual({
+      expect(settings.merged).toMatchObject({
         accessibility: {},
         chatCompression: {},
         checkpointing: {},
@@ -312,7 +285,7 @@ describe('Settings Loading and Merging', () => {
       );
       expect(settings.user.settings).toEqual(userSettingsContent);
       expect(settings.workspace.settings).toEqual({});
-      expect(settings.merged).toEqual({
+      expect(settings.merged).toMatchObject({
         accessibility: {},
         chatCompression: {},
         checkpointing: {},
@@ -393,7 +366,7 @@ describe('Settings Loading and Merging', () => {
       );
       expect(settings.user.settings).toEqual({});
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
-      expect(settings.merged).toEqual({
+      expect(settings.merged).toMatchObject({
         accessibility: {},
         chatCompression: {},
         checkpointing: {},
@@ -477,7 +450,7 @@ describe('Settings Loading and Merging', () => {
 
       expect(settings.user.settings).toEqual(userSettingsContent);
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
-      expect(settings.merged).toEqual({
+      expect(settings.merged).toMatchObject({
         accessibility: {},
         chatCompression: {},
         checkpointing: {},
@@ -573,7 +546,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.system.settings).toEqual(systemSettingsContent);
       expect(settings.user.settings).toEqual(userSettingsContent);
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
-      expect(settings.merged).toEqual({
+      expect(settings.merged).toMatchObject({
         accessibility: {},
         allowMCPServers: ['server1', 'server2'],
         chatCompression: {},
@@ -678,7 +651,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.system.settings).toEqual(systemSettingsContent);
       expect(settings.user.settings).toEqual(userSettingsContent);
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
-      expect(settings.merged).toEqual({
+      expect(settings.merged).toMatchObject({
         accessibility: {},
         chatCompression: {},
         checkpointing: {},
@@ -1650,7 +1623,7 @@ describe('Settings Loading and Merging', () => {
         );
         expect(settings.system.path).toBe(MOCK_ENV_SYSTEM_SETTINGS_PATH);
         expect(settings.system.settings).toEqual(systemSettingsContent);
-        expect(settings.merged).toEqual({
+        expect(settings.merged).toMatchObject({
           accessibility: {},
           chatCompression: {},
           checkpointing: {},

@@ -23,6 +23,7 @@ import {
   Settings,
   MemoryImportFormat,
   SETTINGS_SCHEMA,
+  SettingDefinition,
 } from './settingsSchema.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import {
@@ -182,15 +183,38 @@ export interface SettingsFile {
 function getSchemaDefaults(): Partial<Settings> {
   const defaults: Partial<Settings> = {};
 
-  // Extract defaults from the schema
-  for (const [key, schemaEntry] of Object.entries(SETTINGS_SCHEMA)) {
-    if ('default' in schemaEntry && schemaEntry.default !== undefined) {
-      // Skip coreToolSettings default to allow proper merging
-      if (key !== 'coreToolSettings') {
-        (defaults as Record<string, unknown>)[key] = schemaEntry.default;
+  // Helper function to recursively extract defaults from nested schema objects
+  function extractDefaults(
+    schema: Record<string, SettingDefinition>,
+    target: Record<string, unknown>,
+  ): void {
+    for (const [key, schemaEntry] of Object.entries(schema)) {
+      if ('default' in schemaEntry && schemaEntry.default !== undefined) {
+        // Skip coreToolSettings default to allow proper merging
+        if (key !== 'coreToolSettings') {
+          target[key] = schemaEntry.default;
+        }
+      }
+
+      // Recursively extract defaults from nested object schemas
+      if (
+        schemaEntry.type === 'object' &&
+        'properties' in schemaEntry &&
+        schemaEntry.properties
+      ) {
+        // Initialize nested object if it doesn't exist
+        if (!target[key]) {
+          target[key] = {};
+        }
+        extractDefaults(
+          schemaEntry.properties as Record<string, SettingDefinition>,
+          target[key] as Record<string, unknown>,
+        );
       }
     }
   }
+
+  extractDefaults(SETTINGS_SCHEMA, defaults as Record<string, unknown>);
 
   return defaults;
 }

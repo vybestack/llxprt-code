@@ -10,9 +10,9 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 
 ### Key Findings
 
-- **Recommended to PICK:** 64 commits that directly improve CLI stability, IDE parity, MCP tooling, test coverage, or UI polish without conflicting with llxprt customizations.
+- **Recommended to PICK:** 68 commits that directly improve CLI stability, IDE parity, MCP tooling, documentation accuracy, or UI polish without conflicting with llxprt customizations.
 - **Recommended to PICK CAREFULLY:** 6 commits introduce new defaults or major flows (interactive shell defaults, invalid-stream retries, `.gemini` path refactors, prompt changes) and need llxprt-specific review/testing.
-- **Recommended to SKIP:** 65 commits (release management, telemetry, Gemini-only features, temporary test disables, A2A publishing plumbing, doc-only edits, and stylistic churn) do not add value or conflict with llxprt’s privacy/multi-provider stance.
+- **Recommended to SKIP:** 61 commits (release management, telemetry, Gemini-only features, temporary test disables, A2A publishing plumbing, doc-only edits, and stylistic churn) do not add value or conflict with llxprt’s privacy/multi-provider stance.
 - **High-value themes:** Windows shell/IDE stability, deterministic tooling retries, better MCP diagnostics, UI accessibility (screen readers, trust dialog UX), and extension management fixes.
 
 ### Critical Compatibility Notes
@@ -25,7 +25,7 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 
 ---
 
-## Commits to PICK (64 commits)
+## Commits to PICK (68 commits)
 
 | SHA | Date | Description | Reasoning |
 |-----|------|-------------|-----------|
@@ -48,6 +48,8 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 | 4a5ef4d9f | 2025-10-13 | fix(infra) - Fix flake for file interactive system (#11019) | Stabilizes interactive filesystem tests; mirrors llxprt’s custom file loaders. |
 | 7beaa368a | 2025-10-14 | refactor(core): use assertConnected in McpClient discover method (#10989) | Adds defensive checks so MCP discovery fails fast when the client disconnects. |
 | 28e667bd9 | 2025-10-13 | Give explicit instructions for failure text in json-output.test.ts (#11029) | Clarifies test expectations for JSON output, reducing false positives. |
+| 19c1d7340 | 2025-10-13 | add bundle command info to integration test docs (#11034) | Documents the `npm run bundle` prerequisite, keeping our integration-test instructions accurate. |
+| a73b81452 | 2025-10-13 | Rename expect methods. (#11046) | Aligns the shared `InteractiveRun` helpers on `expect*` semantics so future tests compile against upstream names. |
 | 5dc7059ba | 2025-10-11 | Refactor: Introduce InteractiveRun class (#10947) | Cleans up interactive test harness so future fixes (including ours) are simpler. |
 | 09ef33ec3 | 2025-10-10 | fix(cli): prioritize configured auth over env vars in non-interactive mode (#10935) | Honors explicit auth configuration—a must for llxprt’s multi-provider flows. |
 | cd9193466 | 2025-10-10 | Clean up integration test warnings. (#10931) | Keeps CI noise down and highlights real failures. |
@@ -64,6 +66,7 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 | affd3cae9 | 2025-10-10 | fix: Prevent garbled input during "Login With Google" OAuth prompt on… (#10888) | Keeps Google auth prompts readable; also helps other providers by analogy. |
 | 8dc397c0a | 2025-10-10 | fix(core): set temperature to 1 on retry in sendMessageStream (#10866) | Forces retries to explore alternate completions instead of looping with same temperature. |
 | 971eb64e9 | 2025-10-10 | fix(cli) : fixed bug #8310 where /memory refresh will create discrepancies… (#10611) | Keeps `/memory` state consistent after refresh, avoiding provider desync. |
+| c82c2c2b1 | 2025-10-10 | chore: add a2a server bin (#10592) | Adds an executable bin and aligns the entry point for the a2a server package that llxprt distributes. |
 | 558be8731 | 2025-10-09 | Re-land bbiggs changes to reduce margin on narrow screens with fixes + full width setting (#10522) | UI polish that also benefits our responsive CLI panels. |
 | cce245738 | 2025-10-09 | Fix for race condition in extension install / uninstall logging (#10856) | Prevents duplicate logs and ensures telemetry-free logging remains accurate. |
 | fda3b5435 | 2025-10-09 | chore(int): disable skip on "should trigger chat compression with /co…" (#10854) | Re-enables the compression test so regressions surface quickly. |
@@ -85,6 +88,7 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 | 741b57ed0 | 2025-10-08 | fix(core): Use shell for spawn on Windows (#9995) | Fixes Windows shell command behavior for IDE workflows. |
 | 76b1deec2 | 2025-10-08 | fix(core): refresh file contents in smart edit given newer edits (#10084) | Ensures Smart Edit sees the latest file contents before applying diff hints. |
 | f2852056a | 2025-10-08 | feat: prevent ansi codes in extension MCP Servers (#10748) | Sanitizes ANSI codes so extension MCP traffic stays parseable. |
+| 8d8a2ab64 | 2025-10-08 | Fix(doc) - Add section in docs for deflaking (#10750) | Updates the deflake script default to 5 runs and explains how to use it, saving CI time while keeping our docs accurate. |
 | 1962b51d8 | 2025-10-09 | fix: ensure positional prompt arguments work with extensions flag (#10077) | Restores CLI parity when extensions are invoked with positional args. |
 | b92e3bca5 | 2025-10-09 | fix(mcp): fix MCP server removal not persisting to settings (#10098) | Eliminates an MCP settings persistence bug we also see in llxprt. |
 | 603ec2b21 | 2025-10-08 | Add script to deflake integration tests (#10666) | Gives us a shared deflake helper for repeated cherry-pick verifications. |
@@ -105,7 +109,7 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 | 249a193c0 | 2025-10-13 | Update system instructions for optimizing shell tool commands (#10651) | Modifies the core system prompt; review carefully so llxprt’s CLAUDE.md guidance and provider-agnostic metaphors stay intact. |
 | 3ba4ba79f | 2025-10-14 | Remove workflow examples from system instruction (#10811) | Removes upstream workflow examples; make sure llxprt still gives users enough context and doesn’t break our documentation references. |
 
-## Commits to SKIP (65 commits)
+## Commits to SKIP (61 commits)
 
 ### Release Management & Version Bumps (12 commits)
 | SHA | Date | Description | Reasoning |
@@ -131,20 +135,18 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 | 90de8416c | 2025-10-13 | Swap all self-hosted runners to ubuntu-latest per b/451586626 (#11023) | Same as above—CI plumbing not reused downstream. |
 | 112790cba | 2025-10-10 | fix(infra) - Create a step to calculate the inputs for the nightly-release (#10825) | Automation for Gemini nightly jobs that llxprt doesn’t run. |
 
-### Documentation-only Updates (14 commits)
+### Documentation-only Updates (12 commits)
 | SHA | Date | Description | Reasoning |
 |-----|------|-------------|-----------|
 | 0dea35445 | 2025-10-15 | Add a GH Issue template for a website issue… (#10923) | Gemini website template; llxprt tracks issues separately. |
 | 203bad7c0 | 2025-10-15 | Docs: Point to extensions gallery… (#10763) | Gemini-specific docs. |
 | 0f8199dde | 2025-10-13 | fix(site): Fix broken site link (#11079) | Applies to the upstream marketing site. |
 | 20fc7abc8 | 2025-10-13 | Docs: Quick fix: Sidebar link. (#11065) | Docs change only. |
-| 19c1d7340 | 2025-10-13 | add bundle command info to integration test docs (#11034) | Internal doc update; llxprt docs need a different voice. |
 | 37678acb1 | 2025-10-10 | Update deployment.md -> installation.md and sidebar links. (#10662) | Gemini doc restructure. |
 | a5e47c62e | 2025-10-10 | Docs: Update to tos-privacy.md (#10754) | Gemini ToS update, not relevant downstream. |
 | 849cd1f9e | 2025-10-10 | Docs: Fix Flutter extension link… (#10797) | External doc fix. |
 | 65b9e367f | 2025-10-10 | Docs: Fix broken links in architecture.md (#10747) | Architecture doc text only. |
 | bd6bba8d0 | 2025-10-09 | fix(doc) - Update doc for deflake command (#10829) | Documentation cleanup. |
-| 8d8a2ab64 | 2025-10-08 | Fix(doc) - Add section in docs for deflaking (#10750) | Documentation only. |
 | 3d106186f | 2025-10-08 | Docs: Add updates to changelog for v0.8.0 (#10732) | Upstream changelog entry. |
 | 118aade84 | 2025-10-08 | citations documentation (#10742) | Doc addition that references Gemini programs. |
 | bcbcaeb82 | 2025-10-08 | fix(docs): Update docs/faq.md per Srinanth (#10667) | FAQ update not applicable to llxprt. |
@@ -159,7 +161,7 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 | c0552ceb2 | 2025-10-08 | feat(core): add telemetry for subagent execution (#10456) | Relies on telemetry backend not present in llxprt. |
 | 8cd2ec7c9 | 2025-10-08 | [Part 4/6] feat(telemetry): add memory monitor… (#8122) | Same rationale—collects data we don’t want to send. |
 
-### A2A Server Publishing Plumbing (6 commits)
+### A2A Server Publishing Plumbing (5 commits)
 | SHA | Date | Description | Reasoning |
 |-----|------|-------------|-----------|
 | 8c78b62b7 | 2025-10-14 | fix: set a2a-server publish to --no-tag (#11138) | Gemini’s internal publishing flow; llxprt manages releases differently. |
@@ -167,7 +169,6 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 | c23eb84b0 | 2025-10-13 | fix(remove private) from gemini-cli-a2a-server (#11018) | Packaging tweak for Google’s npm scope; not applicable downstream. |
 | cfb71b9d6 | 2025-10-13 | chore: wire a2a-server up for publishing (#10627) | Same as above. |
 | f3424844d | 2025-10-13 | Revert "chore: wire a2a-server up for publishing" (#11064) | Reverts the previous line of work; neither is needed. |
-| c82c2c2b1 | 2025-10-10 | chore: add a2a server bin (#10592) | Adds an upstream-specific bin entry; llxprt already customizes bundling. |
 
 ### Subagent / Model Router / Google-specific Features (7 commits)
 | SHA | Date | Description | Reasoning |
@@ -201,10 +202,9 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 | f68f27e7f | 2025-10-13 | Revert "feat: Support Alt+key combinations" (#11025) | Intermediate revert superseded by c86ee4cc8; no need to cherry-pick. |
 | 87f175bb2 | 2025-10-12 | feat: Support Alt+key combinations (#10767) | First attempt at Alt-key support; the later c86ee4cc8 includes the final, fixed version. |
 
-### Miscellaneous Low-value Changes (2 commits)
+### Miscellaneous Low-value Changes (1 commit)
 | SHA | Date | Description | Reasoning |
 |-----|------|-------------|-----------|
-| a73b81452 | 2025-10-13 | Rename expect methods. (#11046) | Pure naming churn; no functional change. |
 | d190188aa | 2025-10-09 | Add a joke to usePhraseCycler.ts (#10685) | Adds whimsical output; llxprt keeps professional prompts. |
 
 ---
@@ -215,16 +215,18 @@ This review covers all 135 upstream commits landed between v0.9.0 and v0.10.0 (2
 - **MCP & Extension Parity:** MCP-specific fixes (`7beaa368a`, `a8379d1f4`, `b92e3bca5`, `4f5b33579`) plus extension lifecycle improvements (`a6e00d918`, `bf0f61e65`, `cce245738`, `21062dd30`) keep llxprt on parity with upstream IDE experiences.
 - **UI & Accessibility:** UX wins such as `0a7ee6770`, `558be8731`, `b2ba67f33`, and `c86ee4cc8` reduce friction for screen reader and keyboard-only users.
 - **Context Management:** Commits like `06920402f`, `a3fe9279d`, `8dc397c0a`, and `76b1deec2` protect the conversation history from unneeded compression or stale data.
+- **Testing Workflow Docs:** `19c1d7340` and `8d8a2ab64` keep the integration-test and deflake documentation (and defaults) aligned with how we actually run llxprt’s suites, reducing friction for new contributors.
 
 ## Recommended Cherry-Pick Order
 
 1. **Phase 1 – Stability & Test Harness (Days 1‑2)**
    - Shell/tool resilience: `265d39f33`, `5f96eba54`, `7c1a90244`, `5e688b811`, `5aab793cf`.
-   - Test harness fixes: `5d09ab7eb`, `603ec2b21`, `1af3fef33`, `f56a561f0`, `4f5b33579`, `99c7108bb`.
+   - Test harness fixes: `5d09ab7eb`, `603ec2b21`, `1af3fef33`, `f56a561f0`, `4f5b33579`, `99c7108bb`, `a73b81452`.
+   - Docs & workflow guidance: `19c1d7340`, `8d8a2ab64` (ensure everyone bundles/runs deflake the same way before filing bugs).
    - MCP & path refactors that don’t touch prompts: `7beaa368a`, `433ca84ce`, `1962b51d8`, `b92e3bca5`, `3d2457523`, `8aa730082`.
 
 2. **Phase 2 – IDE/Extension/UX Enhancements (Days 3‑4)**
-   - IDE/extension work: `6787d42de`, `a6e00d918`, `bf0f61e65`, `cce245738`, `21062dd30`, `8ac2c6842`.
+   - IDE/extension work: `6787d42de`, `a6e00d918`, `bf0f61e65`, `cce245738`, `21062dd30`, `8ac2c6842`, `c82c2c2b1`.
    - UI/accessibility: `b2ba67f33`, `0a7ee6770`, `558be8731`, `c86ee4cc8`, `b60c8858a`.
    - Context/Smart Edit improvements: `06920402f`, `a3fe9279d`, `8dc397c0a`, `76b1deec2`.
 

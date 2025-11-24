@@ -673,6 +673,29 @@ export class TestRig {
       };
     }[] = [];
 
+    // First, try to parse the simple VERBOSE format: [TELEMETRY] logToolCall: <name>
+    // This is emitted when telemetry SDK is not initialized (common in E2E tests)
+    const simplePattern = /\[TELEMETRY\] logToolCall: ([\w_-]+)/g;
+    const simpleMatches = [...stdout.matchAll(simplePattern)];
+
+    for (const match of simpleMatches) {
+      const toolName = match[1];
+      logs.push({
+        timestamp: Date.now(),
+        toolRequest: {
+          name: toolName,
+          args: '{}',
+          success: true, // Assume success since we don't have details
+          duration_ms: 0,
+        },
+      });
+    }
+
+    // If we found logs with the simple pattern, return them
+    if (logs.length > 0) {
+      return logs;
+    }
+
     // The console output from Podman is JavaScript object notation, not JSON
     // Look for tool call events in the output
     // Updated regex to handle tool names with hyphens and underscores
@@ -878,6 +901,12 @@ export class TestRig {
           console.error('Failed to parse telemetry object:', e);
         }
       }
+    }
+
+    // If no logs found in telemetry file, try parsing from stdout/stderr
+    // This happens when the telemetry SDK is not initialized (common in E2E tests)
+    if (logs.length === 0 && this._lastRunStdout) {
+      return this._parseToolLogsFromStdout(this._lastRunStdout);
     }
 
     return logs;
