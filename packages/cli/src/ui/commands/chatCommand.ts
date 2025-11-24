@@ -21,14 +21,10 @@ import {
   type EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
 import path from 'path';
-import type {
-  HistoryItemWithoutId,
-  HistoryItemChatList,
-  ChatDetail,
-} from '../types.js';
+import type { HistoryItemChatList, ChatDetail } from '../types.js';
 import { MessageType } from '../types.js';
-import { Content, Part } from '@google/genai';
 import { type CommandArgumentSchema } from './schema/types.js';
+import { type Part } from '@google/genai';
 
 const getSavedChatTags = async (
   context: CommandContext,
@@ -240,14 +236,23 @@ const resumeCommand: SlashCommand = {
     }
 
     const client = config?.getGeminiClient();
+    if (!client) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Gemini client not initialized',
+      };
+    }
     const chat = client.getChat();
-    await chat.loadHistory(conversation);
+    chat.clearHistory();
+    for (const content of conversation) {
+      chat.addHistory(content);
+    }
 
-    const modelName = checkpoint.modelName || 'unknown';
     return {
       type: 'message',
       messageType: 'info',
-      content: `Conversation from checkpoint (${decodeTagName(tag)}) with model ${modelName} is resumed. You can continue the conversation now.`,
+      content: `Conversation from checkpoint (${decodeTagName(tag)}) is resumed. You can continue the conversation now.`,
     };
   },
 };
@@ -259,7 +264,7 @@ const deleteCommand: SlashCommand = {
     'Delete a conversation checkpoint. Usage: /chat delete <tag> [--force]',
   kind: CommandKind.BUILT_IN,
   schema: chatTagSchema,
-  action: async (context, args): Promise<MessageActionReturn> => {
+  action: async (context, args): Promise<SlashCommandActionReturn> => {
     const force = args.includes('--force');
     const tag = args.replace('--force', '').trim();
 
@@ -314,7 +319,7 @@ const renameCommand: SlashCommand = {
   description:
     'Rename a conversation checkpoint. Usage: /chat rename <old_tag> <new_tag>',
   kind: CommandKind.BUILT_IN,
-  action: async (context, args): Promise<MessageActionReturn> => {
+  action: async (context, args): Promise<SlashCommandActionReturn> => {
     const parts = args.trim().split(/\s+/);
     if (parts.length !== 2) {
       return {
@@ -356,7 +361,10 @@ const renameCommand: SlashCommand = {
       await logger.deleteCheckpoint(newTag);
     }
 
-    await logger.renameCheckpoint(oldTag, newTag);
+    // Implement rename by loading, saving to new tag, and deleting old
+    const checkpoint = await logger.loadCheckpoint(oldTag);
+    await logger.saveCheckpoint(checkpoint.history, newTag, checkpoint.context);
+    await logger.deleteCheckpoint(oldTag);
 
     return {
       type: 'message',
@@ -446,7 +454,10 @@ const restoreHistory = async (
 
   // Create new history by removing the last N turns
   const newHistory = currentHistory.slice(0, -entriesToRemove);
-  await chat.loadHistory(newHistory);
+  chat.clearHistory();
+  for (const content of newHistory) {
+    chat.addHistory(content);
+  }
 
   return {
     type: 'message',
@@ -497,10 +508,10 @@ export const chatCommand: SlashCommand = {
     clearCommand,
     restoreCommand,
   ],
-  action: async (): Promise<HistoryItemWithoutId> => {
-    return {
-      type: 'info',
-      text: `Available /chat commands:
+  action: async (): Promise<MessageActionReturn> => ({
+    type: 'message',
+    messageType: 'info',
+    content: `Available /chat commands:
 • list - List all saved conversation checkpoints
 • save <tag> - Save current conversation with a tag
 • resume <tag> - Resume a saved conversation
@@ -508,6 +519,5 @@ export const chatCommand: SlashCommand = {
 • rename <old_tag> <new_tag> - Rename a checkpoint
 • clear - Clear current conversation history
 • restore <number> - Restore conversation to N turns ago`,
-    };
-  },
+  }),
 };

@@ -7,7 +7,7 @@
 import type { AgentDefinition } from './types.js';
 import { LSTool } from '../tools/ls.js';
 import { ReadFileTool } from '../tools/read-file.js';
-import { GLOB_TOOL_NAME } from '../tools/tool-names.js';
+import { GlobTool } from '../tools/glob.js';
 import { GrepTool } from '../tools/grep.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { z } from 'zod';
@@ -81,7 +81,7 @@ export const CodebaseInvestigatorAgent: AgentDefinition<
 
   toolConfig: {
     // Grant access only to read-only tools.
-    tools: [LSTool.Name, ReadFileTool.Name, GLOB_TOOL_NAME, GrepTool.Name],
+    tools: [LSTool.Name, ReadFileTool.Name, GlobTool.Name, GrepTool.Name],
   },
 
   promptConfig: {

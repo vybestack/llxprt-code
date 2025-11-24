@@ -16,7 +16,8 @@ import {
   type IdeInfo,
 } from '@vybestack/llxprt-code-core/ide';
 
-const CLI_IDE_COMPANION_IDENTIFIER = 'vybestack.llxprt-code-vscode-ide-companion';
+const CLI_IDE_COMPANION_IDENTIFIER =
+  'vybestack.llxprt-code-vscode-ide-companion';
 const INFO_MESSAGE_SHOWN_KEY = 'llxprtCodeInfoMessageShown';
 const IDE_WORKSPACE_PATH_ENV_VAR = 'LLXPRT_CODE_IDE_WORKSPACE_PATH';
 export const DIFF_SCHEME = 'llxprt-diff';

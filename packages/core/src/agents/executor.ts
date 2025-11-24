@@ -8,6 +8,10 @@ import type { Config } from '../config/config.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat, StreamEventType } from '../core/geminiChat.js';
 import { Type } from '@google/genai';
+import { loadAgentRuntime } from '../runtime/AgentRuntimeLoader.js';
+import { type ReadonlySettingsSnapshot } from '../runtime/AgentRuntimeContext.js';
+import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { createAgentRuntimeStateFromConfig } from '../runtime/runtimeStateFactory.js';
 import type {
   Content,
   Part,
@@ -244,7 +248,6 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
     };
 
     const responseStream = await chat.sendMessageStream(
-      this.definition.modelConfig.model,
       messageParams,
       promptId,
     );
@@ -322,8 +325,73 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
         generationConfig.systemInstruction = systemInstruction;
       }
 
-      return new GeminiChat(
+      // Create runtime context similar to how GeminiClient does it
+      const rawCompressionThreshold = this.runtimeContext.getEphemeralSetting(
+        'compression-threshold',
+      );
+      const compressionThreshold =
+        typeof rawCompressionThreshold === 'number'
+          ? rawCompressionThreshold
+          : 0.8;
+
+      const rawContextLimit =
+        this.runtimeContext.getEphemeralSetting('context-limit');
+      const contextLimit =
+        typeof rawContextLimit === 'number' &&
+        Number.isFinite(rawContextLimit) &&
+        rawContextLimit > 0
+          ? rawContextLimit
+          : undefined;
+
+      const rawPreserveThreshold = this.runtimeContext.getEphemeralSetting(
+        'compression-preserve-threshold',
+      );
+      const preserveThreshold =
+        typeof rawPreserveThreshold === 'number' ? rawPreserveThreshold : 0.2;
+
+      const settings: ReadonlySettingsSnapshot = {
+        compressionThreshold,
+        contextLimit,
+        preserveThreshold,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+      };
+
+      // Create runtime state from config
+      const runtimeState = createAgentRuntimeStateFromConfig(
         this.runtimeContext,
+      );
+
+      const providerRuntime = createProviderRuntimeContext({
+        settingsService: this.runtimeContext.getSettingsService(),
+        config: this.runtimeContext,
+        runtimeId: runtimeState.runtimeId,
+        metadata: { source: 'AgentExecutor.createChatObject' },
+      });
+
+      const runtimeBundle = await loadAgentRuntime({
+        profile: {
+          config: this.runtimeContext,
+          state: runtimeState,
+          settings,
+          providerRuntime,
+          contentGeneratorConfig:
+            this.runtimeContext.getContentGeneratorConfig(),
+          toolRegistry: this.toolRegistry,
+          providerManager: this.runtimeContext.getProviderManager?.(),
+        },
+        overrides: {
+          contentGenerator: this.runtimeContext.getGeminiClient
+            ? this.runtimeContext.getGeminiClient().getContentGenerator()
+            : undefined,
+        },
+      });
+
+      return new GeminiChat(
+        runtimeBundle.runtimeContext,
+        runtimeBundle.contentGenerator,
         generationConfig,
         startHistory,
       );

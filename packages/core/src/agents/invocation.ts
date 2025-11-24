@@ -6,7 +6,6 @@
 
 import type { Config } from '../config/config.js';
 import { AgentExecutor } from './executor.js';
-import type { AnsiOutput } from '../utils/terminalSerializer.js';
 import { BaseToolInvocation, type ToolResult } from '../tools/tools.js';
 import { ToolErrorType } from '../tools/tool-error.js';
 import type {
@@ -74,7 +73,7 @@ export class SubagentInvocation<
    */
   async execute(
     signal: AbortSignal,
-    updateOutput?: (output: string | AnsiOutput) => void,
+    updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     try {
       if (updateOutput) {
