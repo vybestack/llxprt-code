@@ -283,9 +283,9 @@ export class TestRig {
         'LLXPRT_DEFAULT_MODEL environment variable is required but not set',
       );
     }
-    if (provider === 'openai' && !apiKey) {
+    if (!apiKey) {
       throw new Error(
-        'OPENAI_API_KEY environment variable is required for OpenAI provider but not set',
+        'OPENAI_API_KEY environment variable is required but not set',
       );
     }
 

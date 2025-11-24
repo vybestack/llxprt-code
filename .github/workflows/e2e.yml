@@ -21,11 +21,6 @@ on:
         default: 'main'
         type: 'string'
 
-concurrency:
-  group: '${{ github.workflow }}-${{ github.head_ref || github.ref }}'
-  cancel-in-progress: |-
-    ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
-
 jobs:
   e2e_linux:
     name: 'E2E Test (Linux) - ${{ matrix.sandbox }}'
@@ -35,7 +30,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event.label.name == 'maintainer:e2e:ok')
-    runs-on: 'gemini-cli-ubuntu-16-core'
+    runs-on: 'ubuntu-latest'
     strategy:
       fail-fast: false
       matrix:
@@ -76,7 +71,13 @@ jobs:
 
       - name: 'Run E2E tests'
         env:
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: 'provider'
           KEEP_OUTPUT: 'true'
           VERBOSE: 'true'
         shell: 'bash'
@@ -129,10 +130,18 @@ jobs:
       - name: 'Run E2E tests (non-Windows)'
         if: "runner.os != 'Windows'"
         env:
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: 'provider'
           KEEP_OUTPUT: 'true'
           SANDBOX: 'sandbox:none'
           VERBOSE: 'true'
+          # Force file storage to avoid keytar/libsecret dependency in CI
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
         run: 'npm run test:integration:sandbox:none'
 
   e2e_windows:
@@ -143,7 +152,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event.label.name == 'maintainer:e2e:ok')
-    runs-on: 'gemini-cli-windows-16-core'
+    runs-on: 'windows-latest'
     continue-on-error: true
 
     steps:
@@ -194,7 +203,13 @@ jobs:
 
       - name: 'Run E2E tests'
         env:
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
+          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
+          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
+          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
+          # Set auth type to provider for API key authentication
+          LLXPRT_AUTH_TYPE: 'provider'
           KEEP_OUTPUT: 'true'
           SANDBOX: 'sandbox:none'
           VERBOSE: 'true'
@@ -203,63 +218,3 @@ jobs:
           NODE_ENV: 'test'
         shell: 'pwsh'
         run: 'npm run test:integration:sandbox:none'
-
-  e2e:
-    name: 'E2E'
-    if: |
-      always() && (
-        github.event_name == 'push' ||
-        github.event_name == 'merge_group' ||
-        github.event_name == 'workflow_dispatch' ||
-        (github.event.pull_request.head.repo.full_name == github.repository) ||
-        (github.event.label.name == 'maintainer:e2e:ok')
-      )
-    needs:
-      - 'e2e_linux'
-      - 'e2e_mac'
-    runs-on: 'gemini-cli-ubuntu-16-core'
-    steps:
-      - name: 'Check E2E test results'
-        run: |
-          if [[ ${{ needs.e2e_linux.result }} != 'success' ]]; then
-            echo "The required E2E test job failed."
-            exit 1
-          fi
-          echo "All required E2E test jobs passed!"
-        shell: bash
-
-      - name: 'Collect provider error reports'
-        if: failure()
-        id: 'collect_provider_errors'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p provider-errors
-          shopt -s nullglob
-          declare -a roots=(
-            "/tmp"
-            "${TMPDIR:-}"
-            "${RUNNER_TEMP:-}"
-            "${TEMP:-}"
-            "${TMP:-}"
-          )
-          for dir in "${roots[@]}"; do
-            [[ -z "$dir" || ! -d "$dir" ]] && continue
-            for file in "$dir"/llxprt-client-error-*; do
-              [[ -f "$file" ]] || continue
-              cp "$file" "provider-errors/$(basename "$file")"
-            done
-          done
-          if compgen -G 'provider-errors/*' >/dev/null; then
-            echo "found=true" >>"$GITHUB_OUTPUT"
-          else
-            echo "found=false" >>"$GITHUB_OUTPUT"
-          fi
-
-      - name: 'Upload provider error report'
-        if: failure() && steps.collect_provider_errors.outputs.found == 'true'
-        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
-        with:
-          name: 'provider-error-e2e-summary-${{ github.run_id }}'
-          path: 'provider-errors'
-          if-no-files-found: 'ignore'

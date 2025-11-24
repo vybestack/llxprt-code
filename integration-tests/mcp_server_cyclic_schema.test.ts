@@ -157,12 +157,6 @@ rpc.on('tools/list', async () => {
     }]
   };
 });
-
-// Send initialization notification
-rpc.send({
-  jsonrpc: '2.0',
-  method: 'initialized'
-});
 `;
 
 describe('mcp server with cyclic tool schema is detected', () => {

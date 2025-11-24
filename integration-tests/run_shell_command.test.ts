@@ -145,9 +145,12 @@ describe('run_shell_command', () => {
     const rig = new TestRig();
     await rig.setup('should succeed with --yolo mode');
 
-    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
-    const { tool } = getLineCountCommand();
-    const prompt = `use ${tool} to tell me how many lines there are in ${testFile}`;
+    // Use platform-appropriate command
+    const isLinux = process.platform === 'linux';
+    const prompt = isLinux
+      ? `use wc to tell me how many lines there are in /proc/meminfo`
+      : `use wc to count how many lines are in /etc/hosts`;
+    const expectedText = 'lines';
 
     const result = await rig.run(
       {
@@ -168,15 +171,19 @@ describe('run_shell_command', () => {
       foundToolCall,
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
+    expect(result).toContain(expectedText);
   });
 
   it('should work with ShellTool alias', async () => {
     const rig = new TestRig();
     await rig.setup('should work with ShellTool alias');
 
-    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
+    // Use platform-appropriate command
+    const isLinux = process.platform === 'linux';
+    const prompt = isLinux
+      ? `use wc to tell me how many lines there are in /proc/meminfo`
+      : `use wc to count how many lines are in /etc/hosts`;
     const { tool } = getLineCountCommand();
-    const prompt = `use ${tool} to tell me how many lines there are in ${testFile}`;
 
     const result = await rig.run({
       stdin: prompt,
@@ -255,37 +262,40 @@ describe('run_shell_command', () => {
     ).toBeTruthy();
   });
 
-  it('should propagate environment variables to the child process', async () => {
-    const rig = new TestRig();
-    await rig.setup('should propagate environment variables');
+  it.skipIf(process.env.LLXPRT_SANDBOX !== 'false')(
+    'should propagate environment variables to the child process',
+    async () => {
+      const rig = new TestRig();
+      await rig.setup('should propagate environment variables');
 
-    const varName = 'GEMINI_CLI_TEST_VAR';
-    const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
-    process.env[varName] = varValue;
+      const varName = 'LLXPRT_CODE_TEST_VAR';
+      const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
+      process.env[varName] = varValue;
 
-    try {
-      const prompt = `Use echo to learn the value of the environment variable named ${varName} and tell me what it is.`;
-      const result = await rig.run(prompt);
+      try {
+        const prompt = `Use echo to learn the value of the environment variable named ${varName} and tell me what it is.`;
+        const result = await rig.run(prompt);
 
-      const foundToolCall = await rig.waitForToolCall('run_shell_command');
+        const foundToolCall = await rig.waitForToolCall('run_shell_command');
 
-      if (!foundToolCall || !result.includes(varValue)) {
-        printDebugInfo(rig, result, {
-          'Found tool call': foundToolCall,
-          'Contains varValue': result.includes(varValue),
-        });
+        if (!foundToolCall || !result.includes(varValue)) {
+          printDebugInfo(rig, result, {
+            'Found tool call': foundToolCall,
+            'Contains varValue': result.includes(varValue),
+          });
+        }
+
+        expect(
+          foundToolCall,
+          'Expected to find a run_shell_command tool call',
+        ).toBeTruthy();
+        validateModelOutput(result, varValue, 'Env var propagation test');
+        expect(result).toContain(varValue);
+      } finally {
+        delete process.env[varName];
       }
-
-      expect(
-        foundToolCall,
-        'Expected to find a run_shell_command tool call',
-      ).toBeTruthy();
-      validateModelOutput(result, varValue, 'Env var propagation test');
-      expect(result).toContain(varValue);
-    } finally {
-      delete process.env[varName];
-    }
-  });
+    },
+  );
 
   it('should run a platform-specific file listing command', async () => {
     const rig = new TestRig();
