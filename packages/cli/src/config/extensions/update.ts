@@ -19,7 +19,7 @@ import {
   loadExtensionConfig,
 } from '../extension.js';
 import { checkForExtensionUpdate } from './github.js';
-import type { GeminiCLIExtension } from '@google/gemini-cli-core';
+import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import { getErrorMessage } from '../../utils/errors.js';
 
@@ -75,7 +75,7 @@ export async function updateExtension(
       installMetadata,
       requestConsent,
       cwd,
-      previousExtensionConfig,
+      previousExtensionConfig ?? undefined,
     );
 
     const updatedExtensionStorage = new ExtensionStorage(extension.name);

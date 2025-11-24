@@ -8,11 +8,6 @@
 import type { GenerateContentResponse } from '@google/genai';
 import { ApiError } from '@google/genai';
 import { DebugLogger } from '../debug/index.js';
-import { AuthType } from '../core/contentGenerator.js';
-import {
-  isProQuotaExceededError,
-  isGenericQuotaExceededError,
-} from './quotaErrorDetection.js';
 
 export interface HttpError extends Error {
   status?: number;

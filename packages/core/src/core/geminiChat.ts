@@ -18,7 +18,6 @@ import {
   type Tool,
   PartListUnion,
   ApiError,
-  FinishReason,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
@@ -1421,9 +1420,13 @@ export class GeminiChat {
       })(this);
     };
 
+    // LLxprt Note: We don't auto-fallback to different models in multi-provider setup
+    // Users should explicitly choose their model/provider
+    const onPersistent429Callback = async () => null;
+
     const streamResponse = await retryWithBackoff(apiCall, {
       onPersistent429: onPersistent429Callback,
-      authType: this.config.getContentGeneratorConfig()?.authType,
+      authType: activeAuthType,
     });
 
     return this.processStreamResponse(streamResponse, userContent);

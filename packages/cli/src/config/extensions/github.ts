@@ -9,7 +9,7 @@ import { getErrorMessage } from '../../utils/errors.js';
 import type {
   ExtensionInstallMetadata,
   GeminiCLIExtension,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import * as os from 'node:os';
 import * as https from 'node:https';
@@ -119,8 +119,10 @@ async function fetchReleaseFromGithub(
 
 export async function checkForExtensionUpdate(
   extension: GeminiCLIExtension,
+  setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
   cwd: string = process.cwd(),
-): Promise<ExtensionUpdateState> {
+): Promise<void> {
+  setExtensionUpdateState(ExtensionUpdateState.CHECKING_FOR_UPDATES);
   const installMetadata = extension.installMetadata;
   if (installMetadata?.type === 'local') {
     const newExtension = loadExtension({
@@ -131,19 +133,23 @@ export async function checkForExtensionUpdate(
       console.error(
         `Failed to check for update for local extension "${extension.name}". Could not load extension from source path: ${installMetadata.source}`,
       );
-      return ExtensionUpdateState.ERROR;
+      setExtensionUpdateState(ExtensionUpdateState.ERROR);
+      return;
     }
     if (newExtension.config.version !== extension.version) {
-      return ExtensionUpdateState.UPDATE_AVAILABLE;
+      setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+      return;
     }
-    return ExtensionUpdateState.UP_TO_DATE;
+    setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
+    return;
   }
   if (
     !installMetadata ||
     (installMetadata.type !== 'git' &&
       installMetadata.type !== 'github-release')
   ) {
-    return ExtensionUpdateState.NOT_UPDATABLE;
+    setExtensionUpdateState(ExtensionUpdateState.NOT_UPDATABLE);
+    return;
   }
   try {
     if (installMetadata.type === 'git') {
@@ -151,12 +157,14 @@ export async function checkForExtensionUpdate(
       const remotes = await git.getRemotes(true);
       if (remotes.length === 0) {
         console.error('No git remotes found.');
-        return ExtensionUpdateState.ERROR;
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
       }
       const remoteUrl = remotes[0].refs.fetch;
       if (!remoteUrl) {
         console.error(`No fetch URL found for git remote ${remotes[0].name}.`);
-        return ExtensionUpdateState.ERROR;
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
       }
 
       // Determine the ref to check on the remote.
@@ -166,7 +174,8 @@ export async function checkForExtensionUpdate(
 
       if (typeof lsRemoteOutput !== 'string' || lsRemoteOutput.trim() === '') {
         console.error(`Git ref ${refToCheck} not found.`);
-        return ExtensionUpdateState.ERROR;
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
       }
 
       const remoteHash = lsRemoteOutput.split('\t')[0];
@@ -176,17 +185,21 @@ export async function checkForExtensionUpdate(
         console.error(
           `Unable to parse hash from git ls-remote output "${lsRemoteOutput}"`,
         );
-        return ExtensionUpdateState.ERROR;
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
       }
       if (remoteHash === localHash) {
-        return ExtensionUpdateState.UP_TO_DATE;
+        setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
+        return;
       }
-      return ExtensionUpdateState.UPDATE_AVAILABLE;
+      setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+      return;
     } else {
       const { source, releaseTag } = installMetadata;
       if (!source) {
         console.error(`No "source" provided for extension.`);
-        return ExtensionUpdateState.ERROR;
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
       }
       const { owner, repo } = parseGitHubRepoForReleases(source);
 
@@ -196,15 +209,18 @@ export async function checkForExtensionUpdate(
         installMetadata.ref,
       );
       if (releaseData.tag_name !== releaseTag) {
-        return ExtensionUpdateState.UPDATE_AVAILABLE;
+        setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+        return;
       }
-      return ExtensionUpdateState.UP_TO_DATE;
+      setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
+      return;
     }
   } catch (error) {
     console.error(
       `Failed to check for updates for extension "${installMetadata.source}": ${getErrorMessage(error)}`,
     );
-    return ExtensionUpdateState.ERROR;
+    setExtensionUpdateState(ExtensionUpdateState.ERROR);
+    return;
   }
 }
 export interface GitHubDownloadResult {

@@ -8,12 +8,10 @@ import type { CommandModule } from 'yargs';
 import {
   installExtension,
   requestConsentNonInteractive,
-  type ExtensionInstallMetadata,
 } from '../../config/extension.js';
-import {
-  checkGitHubReleasesExist,
-  parseGitHubRepoForReleases,
-} from '../../config/extensions/github.js';
+import type { ExtensionInstallMetadata } from '@vybestack/llxprt-code-core';
+
+import { getErrorMessage } from '../../utils/errors.js';
 
 interface InstallArgs {
   source?: string;
@@ -22,15 +20,11 @@ interface InstallArgs {
   autoUpdate?: boolean;
 }
 
-const ORG_REPO_REGEX = /^[a-zA-Z0-9-]+\/[\w.-]+$/;
-
 export async function handleInstall(args: InstallArgs) {
   try {
     let installMetadata: ExtensionInstallMetadata;
-
     if (args.source) {
-      const { source, ref } = args;
-      const isSsoSource = source.startsWith('sso://');
+      const { source } = args;
       if (
         source.startsWith('http://') ||
         source.startsWith('https://') ||
@@ -43,46 +37,8 @@ export async function handleInstall(args: InstallArgs) {
           ref: args.ref,
           autoUpdate: args.autoUpdate,
         };
-        if (ref) {
-          installMetadata.ref = ref;
-        }
-        if (isSsoSource) {
-          console.warn(
-            'sso:// URLs require a git-remote-sso helper or protocol remapping. ' +
-              'Ensure your environment provides a git transport for sso:// before continuing.',
-          );
-        }
-      } else if (ORG_REPO_REGEX.test(source)) {
-        // For org/repo format, try github-release first, fall back to git
-        const { owner, repo } = parseGitHubRepoForReleases(source);
-        let useGitHubRelease = false;
-
-        try {
-          useGitHubRelease = await checkGitHubReleasesExist(owner, repo);
-        } catch {
-          // Fall back to git clone if we can't check for releases
-          useGitHubRelease = false;
-        }
-
-        if (useGitHubRelease) {
-          installMetadata = {
-            source,
-            type: 'github-release',
-          };
-        } else {
-          installMetadata = {
-            source: `https://github.com/${source}.git`,
-            type: 'git',
-          };
-        }
-
-        if (ref) {
-          installMetadata.ref = ref;
-        }
       } else {
-        throw new Error(
-          `The source "${source}" is not a valid URL or "org/repo" format.`,
-        );
+        throw new Error(`The source "${source}" is not a valid URL format.`);
       }
     } else if (args.path) {
       installMetadata = {
@@ -101,19 +57,18 @@ export async function handleInstall(args: InstallArgs) {
     );
     console.log(`Extension "${name}" installed successfully and enabled.`);
   } catch (error) {
-    console.error((error as Error).message);
+    console.error(getErrorMessage(error));
     process.exit(1);
   }
 }
 
 export const installCommand: CommandModule = {
   command: 'install [<source>] [--path] [--ref] [--auto-update]',
-  describe:
-    'Installs an extension from a git repository (URL or "org/repo") or a local path.',
+  describe: 'Installs an extension from a git repository URL or a local path.',
   builder: (yargs) =>
     yargs
-      .option('source', {
-        describe: 'The git URL or "org/repo" of the extension to install.',
+      .positional('source', {
+        describe: 'The github URL of the extension to install.',
         type: 'string',
       })
       .option('path', {
@@ -121,8 +76,7 @@ export const installCommand: CommandModule = {
         type: 'string',
       })
       .option('ref', {
-        describe:
-          'Git branch/tag or GitHub release tag to install from (default: latest).',
+        describe: 'The git ref to install from.',
         type: 'string',
       })
       .option('auto-update', {
@@ -134,7 +88,7 @@ export const installCommand: CommandModule = {
       .conflicts('path', 'auto-update')
       .check((argv) => {
         if (!argv.source && !argv.path) {
-          throw new Error('Either --source or --path must be provided.');
+          throw new Error('Either source or --path must be provided.');
         }
         return true;
       }),

@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  ExtensionUpdateState,
-  checkForExtensionUpdate,
-} from '../config/extensions/github.js';
+import { ExtensionUpdateState } from '../ui/state/extensions.js';
+import { checkForExtensionUpdate } from '../config/extensions/github.js';
 import { type Extension, loadUserExtensions } from '../config/extension.js';
 import {
   updateExtension,

@@ -7,15 +7,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkForExtensionUpdate,
-  checkGitHubReleasesExist,
   cloneFromGit,
   findReleaseAsset,
   parseGitHubRepoForReleases,
-  ExtensionUpdateState,
 } from './github.js';
 import { simpleGit, type SimpleGit } from 'simple-git';
+import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import type * as os from 'node:os';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type { GeminiCLIExtension } from '@google/gemini-cli-core';
 
 const mockPlatform = vi.hoisted(() => vi.fn());
 const mockArch = vi.hoisted(() => vi.fn());
@@ -129,11 +128,15 @@ describe('git extension helpers', () => {
         version: '1.0.0',
         isActive: true,
         installMetadata: {
-          type: 'local',
+          type: 'link',
           source: '',
         },
       };
-      const result = await checkForExtensionUpdate(extension);
+      let result: ExtensionUpdateState | undefined = undefined;
+      await checkForExtensionUpdate(
+        extension,
+        (newState) => (result = newState),
+      );
       expect(result).toBe(ExtensionUpdateState.NOT_UPDATABLE);
     });
 
@@ -149,7 +152,11 @@ describe('git extension helpers', () => {
         },
       };
       mockGit.getRemotes.mockResolvedValue([]);
-      const result = await checkForExtensionUpdate(extension);
+      let result: ExtensionUpdateState | undefined = undefined;
+      await checkForExtensionUpdate(
+        extension,
+        (newState) => (result = newState),
+      );
       expect(result).toBe(ExtensionUpdateState.ERROR);
     });
 
@@ -170,7 +177,11 @@ describe('git extension helpers', () => {
       mockGit.listRemote.mockResolvedValue('remote-hash\tHEAD');
       mockGit.revparse.mockResolvedValue('local-hash');
 
-      const result = await checkForExtensionUpdate(extension);
+      let result: ExtensionUpdateState | undefined = undefined;
+      await checkForExtensionUpdate(
+        extension,
+        (newState) => (result = newState),
+      );
       expect(result).toBe(ExtensionUpdateState.UPDATE_AVAILABLE);
     });
 
@@ -191,7 +202,11 @@ describe('git extension helpers', () => {
       mockGit.listRemote.mockResolvedValue('same-hash\tHEAD');
       mockGit.revparse.mockResolvedValue('same-hash');
 
-      const result = await checkForExtensionUpdate(extension);
+      let result: ExtensionUpdateState | undefined = undefined;
+      await checkForExtensionUpdate(
+        extension,
+        (newState) => (result = newState),
+      );
       expect(result).toBe(ExtensionUpdateState.UP_TO_DATE);
     });
 
@@ -208,7 +223,11 @@ describe('git extension helpers', () => {
       };
       mockGit.getRemotes.mockRejectedValue(new Error('git error'));
 
-      const result = await checkForExtensionUpdate(extension);
+      let result: ExtensionUpdateState | undefined = undefined;
+      await checkForExtensionUpdate(
+        extension,
+        (newState) => (result = newState),
+      );
       expect(result).toBe(ExtensionUpdateState.ERROR);
     });
   });
@@ -327,12 +346,6 @@ describe('git extension helpers', () => {
       expect(() => parseGitHubRepoForReleases(source)).toThrow(
         'Invalid GitHub repository source: https://github.com/owner/repo/extra. Expected "owner/repo" or a github repo uri.',
       );
-    });
-  });
-
-  describe('checkGitHubReleasesExist', () => {
-    it('should be exported from module', () => {
-      expect(typeof checkGitHubReleasesExist).toBe('function');
     });
   });
 });
