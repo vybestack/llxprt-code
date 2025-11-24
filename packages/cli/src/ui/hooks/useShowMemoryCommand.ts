@@ -25,7 +25,7 @@ export function createShowMemoryAction(
 
     const currentMemory = config.getUserMemory();
     const fileCount = config.getLlxprtMdFileCount();
-    const contextFileName = settings.merged.contextFileName;
+    const contextFileName = settings.merged.ui?.contextFileName;
     const contextFileNames = Array.isArray(contextFileName)
       ? contextFileName
       : [contextFileName];

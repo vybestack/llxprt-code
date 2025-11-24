@@ -50,7 +50,7 @@ export function EditorSettingsDialog({
     editorSettingsManager.getAvailableEditorDisplays();
 
   const currentPreference =
-    settings.forScope(selectedScope).settings.preferredEditor;
+    settings.forScope(selectedScope).settings.ui?.preferredEditor;
   let editorIndex = currentPreference
     ? editorItems.findIndex(
         (item: EditorDisplay) => item.type === currentPreference,
@@ -95,20 +95,23 @@ export function EditorSettingsDialog({
     selectedScope === SettingScope.User
       ? SettingScope.Workspace
       : SettingScope.User;
-  if (settings.forScope(otherScope).settings.preferredEditor !== undefined) {
+  if (
+    settings.forScope(otherScope).settings.ui?.preferredEditor !== undefined
+  ) {
     otherScopeModifiedMessage =
-      settings.forScope(selectedScope).settings.preferredEditor !== undefined
+      settings.forScope(selectedScope).settings.ui?.preferredEditor !==
+      undefined
         ? `(Also modified in ${otherScope})`
         : `(Modified in ${otherScope})`;
   }
 
   let mergedEditorName = 'None';
   if (
-    settings.merged.preferredEditor &&
-    isEditorAvailable(settings.merged.preferredEditor)
+    settings.merged.ui?.preferredEditor &&
+    isEditorAvailable(settings.merged.ui.preferredEditor)
   ) {
     mergedEditorName =
-      EDITOR_DISPLAY_NAMES[settings.merged.preferredEditor as EditorType];
+      EDITOR_DISPLAY_NAMES[settings.merged.ui.preferredEditor as EditorType];
   }
 
   return (

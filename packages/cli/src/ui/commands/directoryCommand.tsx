@@ -104,9 +104,10 @@ export const directoryCommand: SlashCommand = {
                 config.getFileService(),
                 config.getExtensionContextFilePaths(),
                 config.getFolderTrust(),
-                context.services.settings.merged.memoryImportFormat || 'tree', // Use setting or default to 'tree'
+                context.services.settings.merged.ui?.memoryImportFormat ||
+                  'tree', // Use setting or default to 'tree'
                 config.getFileFilteringOptions(),
-                context.services.settings.merged.memoryDiscoveryMaxDirs,
+                context.services.settings.merged.ui?.memoryDiscoveryMaxDirs,
               );
             config.setUserMemory(memoryContent);
             config.setLlxprtMdFileCount(fileCount);

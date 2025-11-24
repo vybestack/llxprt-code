@@ -160,15 +160,15 @@ export const AppContainer = (props: AppContainerProps) => {
   const historyLimits = useMemo(
     () => ({
       maxItems:
-        typeof settings.merged.historyMaxItems === 'number'
-          ? settings.merged.historyMaxItems
+        typeof settings.merged.ui?.historyMaxItems === 'number'
+          ? settings.merged.ui.historyMaxItems
           : DEFAULT_HISTORY_MAX_ITEMS,
       maxBytes:
-        typeof settings.merged.historyMaxBytes === 'number'
-          ? settings.merged.historyMaxBytes
+        typeof settings.merged.ui?.historyMaxBytes === 'number'
+          ? settings.merged.ui.historyMaxBytes
           : DEFAULT_HISTORY_MAX_BYTES,
     }),
-    [settings.merged.historyMaxItems, settings.merged.historyMaxBytes],
+    [settings.merged.ui?.historyMaxItems, settings.merged.ui?.historyMaxBytes],
   );
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
@@ -800,7 +800,7 @@ export const AppContainer = (props: AppContainerProps) => {
         settings.merged,
         config.getExtensionContextFilePaths(),
         config.getFolderTrust(),
-        settings.merged.memoryImportFormat || 'tree', // Use setting or default to 'tree'
+        settings.merged.ui?.memoryImportFormat || 'tree', // Use setting or default to 'tree'
         config.getFileFilteringOptions(),
       );
 
@@ -899,7 +899,7 @@ export const AppContainer = (props: AppContainerProps) => {
   }, []);
 
   const getPreferredEditor = useCallback(() => {
-    const editorType = settings.merged.preferredEditor;
+    const editorType = settings.merged.ui?.preferredEditor;
     const isValidEditor = isEditorAvailable(editorType);
     if (!isValidEditor) {
       openEditorDialog();
@@ -1136,7 +1136,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
-    settings.merged.customWittyPhrases,
+    settings.merged.ui?.customWittyPhrases,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
 
@@ -1412,12 +1412,12 @@ export const AppContainer = (props: AppContainerProps) => {
   const branchName = useGitBranchName(config.getTargetDir());
 
   const contextFileNames = useMemo(() => {
-    const fromSettings = settings.merged.contextFileName;
+    const fromSettings = settings.merged.ui?.contextFileName;
     if (fromSettings) {
       return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
     }
     return getAllLlxprtMdFilenames();
-  }, [settings.merged.contextFileName]);
+  }, [settings.merged.ui?.contextFileName]);
 
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
   const geminiClient = config.getGeminiClient();

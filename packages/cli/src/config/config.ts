@@ -622,7 +622,7 @@ export async function loadHierarchicalLlxprtMemory(
     folderTrust,
     memoryImportFormat,
     fileFilteringOptions,
-    settings.memoryDiscoveryMaxDirs,
+    settings.ui?.memoryDiscoveryMaxDirs,
   );
 }
 
@@ -874,7 +874,7 @@ export async function loadCliConfig(
     ) ||
     false;
 
-  const memoryImportFormat = effectiveSettings.memoryImportFormat || 'tree';
+  const memoryImportFormat = effectiveSettings.ui?.memoryImportFormat || 'tree';
 
   // Handle IDE mode: CLI flag overrides settings
   let ideMode: boolean;
@@ -884,13 +884,13 @@ export async function loadCliConfig(
     ideMode = false;
   } else {
     // No CLI flag, use settings
-    ideMode = effectiveSettings.ideMode ?? false;
+    ideMode = effectiveSettings.ui?.ideMode ?? false;
   }
 
   if (debugMode) {
     console.debug('[DEBUG] IDE mode configuration:', {
       'argv.ideMode': argv.ideMode,
-      'effectiveSettings.ideMode': effectiveSettings.ideMode,
+      'effectiveSettings.ui.ideMode': effectiveSettings.ui?.ideMode,
       'final ideMode': ideMode,
     });
   }
@@ -915,8 +915,8 @@ export async function loadCliConfig(
   // TODO(b/343434939): This is a bit of a hack. The contextFileName should ideally be passed
   // directly to the Config constructor in core, and have core handle setLlxprtMdFilename.
   // However, loadHierarchicalLlxprtMemory is called *before* createServerConfig.
-  if (effectiveSettings.contextFileName) {
-    setServerGeminiMdFilename(effectiveSettings.contextFileName);
+  if (effectiveSettings.ui?.contextFileName) {
+    setServerGeminiMdFilename(effectiveSettings.ui.contextFileName);
   } else {
     // Reset to default if not provided in settings.
     setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
@@ -1169,7 +1169,7 @@ export async function loadCliConfig(
     llxprtMdFilePaths: filePaths,
     approvalMode,
     showMemoryUsage:
-      argv.showMemoryUsage || effectiveSettings.showMemoryUsage || false,
+      argv.showMemoryUsage || effectiveSettings.ui?.showMemoryUsage || false,
     accessibility: {
       ...effectiveSettings.accessibility,
       screenReader,
@@ -1193,7 +1193,8 @@ export async function loadCliConfig(
       redactEmails: effectiveSettings.telemetry?.redactEmails,
       redactPersonalInfo: effectiveSettings.telemetry?.redactPersonalInfo,
     },
-    usageStatisticsEnabled: effectiveSettings.usageStatisticsEnabled ?? true,
+    usageStatisticsEnabled:
+      effectiveSettings.ui?.usageStatisticsEnabled ?? true,
     // Git-aware file filtering settings - fix from upstream: pass fileFiltering correctly
     fileFiltering: effectiveSettings.fileFiltering,
     checkpointing:
@@ -1210,7 +1211,7 @@ export async function loadCliConfig(
     bugCommand: effectiveSettings.bugCommand,
     model: finalModel,
     extensionContextFilePaths,
-    maxSessionTurns: effectiveSettings.maxSessionTurns ?? -1,
+    maxSessionTurns: effectiveSettings.ui?.maxSessionTurns ?? -1,
     experimentalZedIntegration: argv.experimentalAcp || false,
     listExtensions: argv.listExtensions || false,
     activeExtensions: activeExtensions.map((e) => ({

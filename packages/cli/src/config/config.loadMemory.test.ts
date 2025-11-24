@@ -273,13 +273,15 @@ describe('loadCliConfig memory discovery', () => {
     await fs.writeFile(includedContextPath, contextContent, 'utf-8');
 
     const settings = {
-      contextFileName,
       includeDirectories: [] as string[],
       loadMemoryFromIncludeDirectories: false,
-      memoryDiscoveryMaxDirs: 200,
       folderTrust: false,
       telemetry: { enabled: false },
       accessibility: { screenReader: false, disableLoadingPhrases: false },
+      ui: {
+        contextFileName,
+        memoryDiscoveryMaxDirs: 200,
+      },
     } as unknown as Settings;
 
     const argv: CliArgs = {

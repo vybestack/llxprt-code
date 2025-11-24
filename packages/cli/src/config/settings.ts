@@ -223,11 +223,18 @@ function mergeSettings(
     ...user,
     ...safeWorkspace,
     ...system,
-    customThemes: {
-      ...(systemDefaults.customThemes || {}),
-      ...(user.customThemes || {}),
-      ...(safeWorkspace.customThemes || {}),
-      ...(system.customThemes || {}),
+    ui: {
+      ...(schemaDefaults.ui || {}),
+      ...(systemDefaults.ui || {}),
+      ...(user.ui || {}),
+      ...(safeWorkspace.ui || {}),
+      ...(system.ui || {}),
+      customThemes: {
+        ...(systemDefaults.ui?.customThemes || {}),
+        ...(user.ui?.customThemes || {}),
+        ...(safeWorkspace.ui?.customThemes || {}),
+        ...(system.ui?.customThemes || {}),
+      },
     },
     mcpServers: {
       ...(systemDefaults.mcpServers || {}),
@@ -276,12 +283,14 @@ function mergeSettings(
   };
 
   const prioritizedTheme =
-    safeWorkspace.theme ??
-    user.theme ??
-    system.theme ??
-    systemDefaults.theme ??
-    (schemaDefaults.theme as string | undefined);
-  merged.theme = prioritizedTheme;
+    safeWorkspace.ui?.theme ??
+    user.ui?.theme ??
+    system.ui?.theme ??
+    systemDefaults.ui?.theme ??
+    (schemaDefaults.ui?.theme as string | undefined);
+  if (merged.ui) {
+    merged.ui.theme = prioritizedTheme;
+  }
 
   return merged;
 }
@@ -383,11 +392,38 @@ export class LoadedSettings {
 
   setValue<K extends keyof Settings>(
     scope: SettingScope,
-    key: K,
-    value: Settings[K],
+    key: K | string,
+    value: Settings[K] | unknown,
   ): void {
     const settingsFile = this.forScope(scope);
-    settingsFile.settings[key] = value;
+
+    // Handle nested paths like 'ui.ideMode'
+    if (typeof key === 'string' && key.includes('.')) {
+      const parts = key.split('.');
+      const topLevel = parts[0] as keyof Settings;
+      const nested = parts.slice(1).join('.');
+
+      // Ensure the top-level object exists
+      if (!settingsFile.settings[topLevel]) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        settingsFile.settings[topLevel] = {} as any;
+      }
+
+      // Navigate to the nested property
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let current: any = settingsFile.settings[topLevel];
+      const nestedParts = nested.split('.');
+      for (let i = 0; i < nestedParts.length - 1; i++) {
+        if (!current[nestedParts[i]]) {
+          current[nestedParts[i]] = {};
+        }
+        current = current[nestedParts[i]];
+      }
+      current[nestedParts[nestedParts.length - 1]] = value;
+    } else {
+      settingsFile.settings[key as K] = value as Settings[K];
+    }
+
     this._merged = this.computeMergedSettings();
     saveSettings(settingsFile);
   }
@@ -601,10 +637,10 @@ export function loadSettings(
       const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
       userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
       // Support legacy theme names
-      if (userSettings.theme && userSettings.theme === 'VS') {
-        userSettings.theme = DefaultLight.name;
-      } else if (userSettings.theme && userSettings.theme === 'VS2015') {
-        userSettings.theme = DefaultDark.name;
+      if (userSettings.ui?.theme && userSettings.ui.theme === 'VS') {
+        userSettings.ui.theme = DefaultLight.name;
+      } else if (userSettings.ui?.theme && userSettings.ui.theme === 'VS2015') {
+        userSettings.ui.theme = DefaultDark.name;
       }
     }
   } catch (error: unknown) {
@@ -622,13 +658,16 @@ export function loadSettings(
         workspaceSettings = JSON.parse(
           stripJsonComments(projectContent),
         ) as Settings;
-        if (workspaceSettings.theme && workspaceSettings.theme === 'VS') {
-          workspaceSettings.theme = DefaultLight.name;
-        } else if (
-          workspaceSettings.theme &&
-          workspaceSettings.theme === 'VS2015'
+        if (
+          workspaceSettings.ui?.theme &&
+          workspaceSettings.ui.theme === 'VS'
         ) {
-          workspaceSettings.theme = DefaultDark.name;
+          workspaceSettings.ui.theme = DefaultLight.name;
+        } else if (
+          workspaceSettings.ui?.theme &&
+          workspaceSettings.ui.theme === 'VS2015'
+        ) {
+          workspaceSettings.ui.theme = DefaultDark.name;
         }
       }
     } catch (error: unknown) {

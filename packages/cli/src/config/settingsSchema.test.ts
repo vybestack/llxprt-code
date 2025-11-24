@@ -11,27 +11,11 @@ describe('SettingsSchema', () => {
   describe('SETTINGS_SCHEMA', () => {
     it('should contain all expected top-level settings', () => {
       const expectedSettings = [
-        'theme',
-        'customThemes',
-        'showMemoryUsage',
-        'historyMaxItems',
-        'historyMaxBytes',
-        'usageStatisticsEnabled',
-        'autoConfigureMaxOldSpaceSize',
-        'preferredEditor',
-        'maxSessionTurns',
-        'memoryImportFormat',
-        'memoryDiscoveryMaxDirs',
-        'contextFileName',
-        'vimMode',
-        'ideMode',
+        'ui',
         'accessibility',
         'checkpointing',
         'fileFiltering',
         'disableAutoUpdate',
-        'hideWindowTitle',
-        'hideTips',
-        'hideBanner',
         'selectedAuthType',
         'useExternalAuth',
         'sandbox',
@@ -82,6 +66,7 @@ describe('SettingsSchema', () => {
 
     it('should have correct nested setting structure', () => {
       const nestedSettings = [
+        'ui',
         'accessibility',
         'checkpointing',
         'fileFiltering',
@@ -152,7 +137,6 @@ describe('SettingsSchema', () => {
       expect(categories.size).toBeGreaterThan(0);
       expect(categories).toContain('General');
       expect(categories).toContain('UI');
-      expect(categories).toContain('Mode');
       expect(categories).toContain('Updates');
       expect(categories).toContain('Accessibility');
       expect(categories).toContain('Checkpointing');
@@ -185,14 +169,20 @@ describe('SettingsSchema', () => {
 
     it('should have showInDialog property configured', () => {
       // Check that user-facing settings are marked for dialog display
-      expect(SETTINGS_SCHEMA.showMemoryUsage.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.vimMode.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.ideMode.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties?.showMemoryUsage.showInDialog).toBe(
+        true,
+      );
+      expect(SETTINGS_SCHEMA.ui.properties?.vimMode.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties?.ideMode.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.disableAutoUpdate.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.hideWindowTitle.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.hideTips.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.hideBanner.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.usageStatisticsEnabled.showInDialog).toBe(false);
+      expect(SETTINGS_SCHEMA.ui.properties?.hideWindowTitle.showInDialog).toBe(
+        true,
+      );
+      expect(SETTINGS_SCHEMA.ui.properties?.hideTips.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties?.hideBanner.showInDialog).toBe(true);
+      expect(
+        SETTINGS_SCHEMA.ui.properties?.usageStatisticsEnabled.showInDialog,
+      ).toBe(false);
 
       // Check that advanced settings are hidden from dialog
       expect(SETTINGS_SCHEMA.selectedAuthType.showInDialog).toBe(false);
@@ -201,27 +191,34 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.telemetry.showInDialog).toBe(false);
 
       // Check that some settings are appropriately hidden
-      expect(SETTINGS_SCHEMA.theme.showInDialog).toBe(false); // Changed to false
-      expect(SETTINGS_SCHEMA.customThemes.showInDialog).toBe(false); // Managed via theme editor
+      expect(SETTINGS_SCHEMA.ui.properties?.theme.showInDialog).toBe(false); // Changed to false
+      expect(SETTINGS_SCHEMA.ui.properties?.customThemes.showInDialog).toBe(
+        false,
+      ); // Managed via theme editor
       expect(SETTINGS_SCHEMA.checkpointing.showInDialog).toBe(false); // Experimental feature
       expect(SETTINGS_SCHEMA.accessibility.showInDialog).toBe(false); // Changed to false
       expect(SETTINGS_SCHEMA.fileFiltering.showInDialog).toBe(false); // Changed to false
-      expect(SETTINGS_SCHEMA.preferredEditor.showInDialog).toBe(false); // Changed to false
-      expect(SETTINGS_SCHEMA.autoConfigureMaxOldSpaceSize.showInDialog).toBe(
-        true,
-      );
+      expect(SETTINGS_SCHEMA.ui.properties?.preferredEditor.showInDialog).toBe(
+        false,
+      ); // Changed to false
+      expect(
+        SETTINGS_SCHEMA.ui.properties?.autoConfigureMaxOldSpaceSize
+          .showInDialog,
+      ).toBe(true);
     });
 
     it('should infer Settings type correctly', () => {
       // This test ensures that the Settings type is properly inferred from the schema
       const settings: Settings = {
-        theme: 'dark',
+        ui: {
+          theme: 'dark',
+        },
         includeDirectories: ['/path/to/dir'],
         loadMemoryFromIncludeDirectories: true,
       };
 
       // TypeScript should not complain about these properties
-      expect(settings.theme).toBe('dark');
+      expect(settings.ui?.theme).toBe('dark');
       expect(settings.includeDirectories).toEqual(['/path/to/dir']);
       expect(settings.loadMemoryFromIncludeDirectories).toBe(true);
     });

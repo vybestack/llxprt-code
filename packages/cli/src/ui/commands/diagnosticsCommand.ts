@@ -160,7 +160,7 @@ export const diagnosticsCommand: SlashCommand = {
 
       diagnostics.push('\n## Settings');
       const merged = settings?.merged || {};
-      diagnostics.push(`- Theme: ${merged.theme || 'default'}`);
+      diagnostics.push(`- Theme: ${merged.ui?.theme || 'default'}`);
       diagnostics.push(
         `- Selected Auth Type: ${merged.selectedAuthType || 'none'}`,
       );
@@ -218,7 +218,7 @@ export const diagnosticsCommand: SlashCommand = {
 
       diagnostics.push('\n## Telemetry');
       diagnostics.push(
-        `- Usage Statistics: ${merged.usageStatisticsEnabled ? 'Enabled' : 'Disabled'}`,
+        `- Usage Statistics: ${merged.ui?.usageStatisticsEnabled ? 'Enabled' : 'Disabled'}`,
       );
 
       return {

@@ -35,8 +35,9 @@ const mockGit = {
 };
 
 vi.mock('simple-git', () => ({
-  simpleGit: vi.fn((path: string) => {
-    mockGit.path.mockReturnValue(path);
+  simpleGit: vi.fn((path?: string) => {
+    // Return the provided path or an empty string if not provided
+    mockGit.path.mockReturnValue(path ?? '');
     return mockGit;
   }),
 }));
