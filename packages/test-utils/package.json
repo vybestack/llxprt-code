@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-test-utils",
-  "version": "0.5.0",
+  "version": "0.5.0-nightly.251124.0158ea13c",
   "private": true,
   "main": "src/index.ts",
   "license": "Apache-2.0",
