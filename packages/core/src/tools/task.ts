@@ -295,10 +295,20 @@ class TaskToolInvocation extends BaseToolInvocation<
 
     if (updateOutput) {
       const existingHandler = scope.onMessage;
+      // Ensure each streamed chunk renders on its own line in TTY/CLI UIs.
+      // - Normalize CR/CRLF to LF
+      // - Append a trailing newline if missing
+      const normalizeForStreaming = (text: string): string => {
+        if (!text) return '';
+        const lf = text.replace(/\r\n?/g, '\n');
+        return lf.endsWith('\n') ? lf : lf + '\n';
+      };
       scope.onMessage = (message: string) => {
-        if (message?.trim()) {
-          updateOutput(`[${agentId}] ${message}`);
+        const cleaned = normalizeForStreaming(message);
+        if (cleaned.trim().length > 0) {
+          updateOutput(`[${agentId}] ${cleaned}`);
         }
+        // Preserve any existing handler behavior
         existingHandler?.(message);
       };
     }

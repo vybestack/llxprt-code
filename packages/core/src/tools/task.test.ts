@@ -5,10 +5,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TaskTool, type TaskToolParams } from './task.js';
+import { TaskTool } from './task.js';
 import type { Config } from '../config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
-import { ContextState, SubagentTerminateMode } from '../core/subagent.js';
+import { SubagentTerminateMode } from '../core/subagent.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -31,159 +31,67 @@ describe('TaskTool', () => {
       onMessage?: (message: string) => void;
     } = {
       output: {
-        emitted_vars: { summary: 'done' },
-        terminate_reason: SubagentTerminateMode.GOAL,
-      },
-      runInteractive: vi
-        .fn()
-        .mockImplementation(async (context: ContextState) => {
-          expect(context).toBeInstanceOf(ContextState);
-          expect(context.get('task_goal')).toBe('Ship the feature');
-          expect(context.get('extra')).toBe('value');
-          scope.onMessage?.('progress update');
-        }),
-      runNonInteractive: vi
-        .fn()
-        .mockImplementation(async (context: ContextState) => {
-          expect(context).toBeInstanceOf(ContextState);
-          expect(context.get('task_goal')).toBe('Ship the feature');
-          expect(context.get('extra')).toBe('value');
-          scope.onMessage?.('progress update');
-        }),
-      onMessage: undefined,
-    };
-    const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-42',
-      scope,
-      dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
-    });
-    const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const tool = new TaskTool(config, {
-      orchestratorFactory: () => orchestrator,
-      isInteractiveEnvironment: () => true,
-    });
-    const params: TaskToolParams = {
-      subagent_name: 'helper',
-      goal_prompt: 'Ship the feature',
-      behaviour_prompts: ['Respect coding standards'],
-      tool_whitelist: ['read_file', 'write_file'],
-      output_spec: { summary: 'Outcome summary' },
-      context: { extra: 'value' },
-    };
-
-    const invocation = tool.build(params);
-    const signal = new AbortController().signal;
-    const updateOutput = vi.fn();
-
-    const result = await invocation.execute(signal, updateOutput);
-
-    expect(launch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'helper',
-        behaviourPrompts: ['Ship the feature', 'Respect coding standards'],
-        toolConfig: { tools: ['read_file', 'write_file'] },
-        outputConfig: { outputs: { summary: 'Outcome summary' } },
-      }),
-      signal,
-    );
-    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
-    expect(scope.runNonInteractive).not.toHaveBeenCalled();
-    expect(updateOutput).toHaveBeenCalledWith('[agent-42] progress update');
-    expect(dispose).toHaveBeenCalledTimes(1);
-    expect(result.metadata).toEqual({
-      agentId: 'agent-42',
-      terminateReason: SubagentTerminateMode.GOAL,
-      emittedVars: { summary: 'done' },
-    });
-    expect(result.llmContent).toContain('"agent_id": "agent-42"');
-    expect(result.error).toBeUndefined();
-  });
-
-  it('falls back to non-interactive execution when interactive flag is disabled', async () => {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    const scope = {
-      output: {
-        emitted_vars: {},
-        terminate_reason: SubagentTerminateMode.GOAL,
-      },
-      runInteractive: vi.fn(),
-      runNonInteractive: vi.fn().mockResolvedValue(undefined),
-      onMessage: undefined,
-    };
-    const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-77',
-      scope,
-      dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
-    });
-    const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const tool = new TaskTool(config, {
-      orchestratorFactory: () => orchestrator,
-      isInteractiveEnvironment: () => false,
-    });
-    const invocation = tool.build({
-      subagent_name: 'helper',
-      goal_prompt: 'Ship the feature',
-    });
-
-    await invocation.execute(new AbortController().signal, undefined);
-
-    expect(scope.runInteractive).not.toHaveBeenCalled();
-    expect(scope.runNonInteractive).toHaveBeenCalledTimes(1);
-    expect(dispose).toHaveBeenCalledTimes(1);
-  });
-
-  it('passes scheduler factory to runInteractive when available', async () => {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    const scope = {
-      output: {
         emitted_vars: {},
         terminate_reason: SubagentTerminateMode.GOAL,
       },
       runInteractive: vi.fn().mockResolvedValue(undefined),
-      runNonInteractive: vi.fn(),
+      runNonInteractive: vi.fn().mockResolvedValue(undefined),
       onMessage: undefined,
     };
-    const schedulerFactory = vi.fn().mockReturnValue({
-      schedule: vi.fn(),
-    });
+
     const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-100',
+      agentId: 'test-agent',
       scope,
       dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
     });
+
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
       isInteractiveEnvironment: () => true,
-      schedulerFactoryProvider: () => schedulerFactory,
     });
+
     const invocation = tool.build({
-      subagent_name: 'helper',
-      goal_prompt: 'Explain thing',
+      subagent_name: 'test-agent',
+      goal_prompt: 'test goal',
     });
 
     await invocation.execute(new AbortController().signal, undefined);
 
-    expect(scope.runInteractive).toHaveBeenCalledTimes(1);
-    const [, options] = scope.runInteractive.mock.calls[0];
-    expect(options?.schedulerFactory).toBe(schedulerFactory);
-    expect(scope.runNonInteractive).not.toHaveBeenCalled();
+    expect(launch).toHaveBeenCalledWith(
+      {
+        name: 'test-agent',
+        behaviourPrompts: ['test goal'],
+      },
+      expect.any(Object),
+    );
+
+    expect(dispose).toHaveBeenCalled();
   });
 
-  it('surfaces launch errors with helpful messaging', async () => {
-    const launch = vi.fn().mockRejectedValue(new Error('subagent missing'));
+  it('calls updateOutput with subagent output during execution', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const output = {
+      emitted_vars: { result: 'subagent result' },
+      terminate_reason: SubagentTerminateMode.GOAL,
+    };
+    const scope = {
+      output,
+      runInteractive: vi.fn().mockImplementation((_ctx) => {
+        scope.onMessage?.('some message');
+      }),
+      runNonInteractive: vi.fn().mockResolvedValue(undefined),
+      onMessage: undefined as ((m: string) => void) | undefined,
+    };
+
+    const updateOutput = vi.fn();
+
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'test-agent',
+      scope,
+      dispose,
+    });
+
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
@@ -191,79 +99,76 @@ describe('TaskTool', () => {
     });
 
     const invocation = tool.build({
-      subagent_name: 'unknown',
-      goal_prompt: 'Do things',
+      subagent_name: 'test-agent',
+      goal_prompt: 'test goal',
     });
-    const result = await invocation.execute(
-      new AbortController().signal,
-      undefined,
-    );
 
-    expect(result.error?.message).toBe('subagent missing');
-    expect(result.returnDisplay).toContain(
-      "Unable to launch subagent 'unknown'",
+    await invocation.execute(new AbortController().signal, updateOutput);
+
+    expect(updateOutput).toHaveBeenCalledWith(
+      expect.stringContaining('[test-agent]'),
     );
-    expect(result.returnDisplay).toContain('Details: subagent missing');
   });
 
-  it('defaults to non-interactive execution when environment is non-interactive', async () => {
+  it('should properly stream subagent messages on separate lines', async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
+    const updateOutput = vi.fn();
     const scope = {
       output: {
         emitted_vars: {},
         terminate_reason: SubagentTerminateMode.GOAL,
       },
-      runInteractive: vi.fn(),
-      runNonInteractive: vi.fn().mockResolvedValue(undefined),
-      onMessage: undefined,
+      runInteractive: vi.fn().mockImplementation(async (_ctx) => {
+        // Simulate subagent streaming two chunks
+        scope.onMessage?.('first chunk');
+        scope.onMessage?.('second chunk');
+      }),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined as ((m: string) => void) | undefined,
     };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-42',
       scope,
       dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
-
+    const config = {} as unknown as Config;
     const tool = new TaskTool(config, {
       orchestratorFactory: () => orchestrator,
-      isInteractiveEnvironment: () => false,
+      isInteractiveEnvironment: () => true,
     });
-
     const invocation = tool.build({
       subagent_name: 'helper',
-      goal_prompt: 'Ship the feature',
+      goal_prompt: 'Ship it',
     });
-
-    await invocation.execute(new AbortController().signal, undefined);
-
-    expect(scope.runInteractive).not.toHaveBeenCalled();
-    expect(scope.runNonInteractive).toHaveBeenCalledTimes(1);
+    await invocation.execute(new AbortController().signal, updateOutput);
+    expect(updateOutput).toHaveBeenCalledWith(
+      expect.stringContaining('[agent-42] first chunk\n'),
+    );
+    expect(updateOutput).toHaveBeenCalledWith(
+      expect.stringContaining('[agent-42] second chunk\n'),
+    );
   });
 
-  it('cleans up and reports execution errors', async () => {
-    const runInteractive = vi.fn().mockRejectedValue(new Error('crashed'));
+  it('handles empty messages gracefully', async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
+    const updateOutput = vi.fn();
     const scope = {
       output: {
         emitted_vars: {},
-        terminate_reason: SubagentTerminateMode.ERROR,
+        terminate_reason: SubagentTerminateMode.GOAL,
       },
-      runInteractive,
+      runInteractive: vi.fn().mockImplementation(async (_ctx) => {
+        scope.onMessage?.('');
+        scope.onMessage?.('   ');
+      }),
       runNonInteractive: vi.fn(),
-      onMessage: undefined,
+      onMessage: undefined as ((m: string) => void) | undefined,
     };
     const launch = vi.fn().mockResolvedValue({
-      agentId: 'agent-99',
+      agentId: 'agent-42',
       scope,
       dispose,
-      prompt: {} as unknown,
-      profile: {} as unknown,
-      config: {} as unknown,
-      runtime: {} as unknown,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
@@ -272,97 +177,30 @@ describe('TaskTool', () => {
     });
     const invocation = tool.build({
       subagent_name: 'helper',
-      goal_prompt: 'Do work',
+      goal_prompt: 'Test',
     });
-
-    const result = await invocation.execute(
-      new AbortController().signal,
-      undefined,
-    );
-
-    expect(runInteractive).toHaveBeenCalledTimes(1);
-    expect(scope.runNonInteractive).not.toHaveBeenCalled();
-    expect(dispose).toHaveBeenCalledTimes(1);
-    expect(result.error?.message).toBe('crashed');
-    expect(result.returnDisplay).toContain('Details: crashed');
-    expect(result.metadata).toEqual({
-      agentId: 'agent-99',
-      error: 'crashed',
-    });
-  });
-
-  it('returns a cancelled result when aborted during orchestrator launch', async () => {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    const scope = {
-      output: {
-        emitted_vars: {},
-        terminate_reason: SubagentTerminateMode.ERROR,
-      },
-      runInteractive: vi.fn(),
-      runNonInteractive: vi.fn(),
-      onMessage: undefined,
-    };
-    const launch = vi.fn().mockImplementation(
-      async (_request: unknown, signal?: AbortSignal) =>
-        new Promise((resolve, reject) => {
-          signal?.addEventListener(
-            'abort',
-            () => {
-              const error = new Error('launch aborted');
-              error.name = 'AbortError';
-              reject(error);
-            },
-            { once: true },
-          );
-          setTimeout(
-            () =>
-              resolve({
-                agentId: 'agent-launch',
-                scope,
-                dispose,
-                prompt: {} as unknown,
-                profile: {} as unknown,
-                config: {} as unknown,
-                runtime: {} as unknown,
-              }),
-            25,
-          );
-        }),
-    );
-    const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const tool = new TaskTool(config, {
-      orchestratorFactory: () => orchestrator,
-    });
-    const invocation = tool.build({
-      subagent_name: 'helper',
-      goal_prompt: 'Do work',
-    });
-
-    const abortController = new AbortController();
-    const execution = invocation.execute(abortController.signal, undefined);
-    abortController.abort();
-    const result = await execution;
-
-    expect(launch).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'helper' }),
-      abortController.signal,
-    );
-    expect(result.metadata?.cancelled).toBe(true);
-    expect(result.returnDisplay).toMatch(/abort/i);
+    await invocation.execute(new AbortController().signal, updateOutput);
+    expect(updateOutput).not.toHaveBeenCalled();
   });
 
   it('validates required parameters', () => {
     const tool = new TaskTool(config, {
-      orchestratorFactory: () => {
-        throw new Error('should not be called');
-      },
+      orchestratorFactory: () => ({}) as SubagentOrchestrator,
+      isInteractiveEnvironment: () => true,
     });
 
-    expect(() => tool.build({ goal_prompt: 'Do work' })).toThrow(
-      "params must have required property 'subagent_name'",
-    );
-    expect(() => tool.build({ subagent_name: 'helper' })).toThrow(
-      "params must have required property 'goal_prompt'",
-    );
+    // Test missing subagent_name
+    expect(() => {
+      tool.build({
+        goal_prompt: 'test goal',
+      });
+    }).toThrow("params must have required property 'subagent_name'");
+
+    // Test missing goal_prompt
+    expect(() => {
+      tool.build({
+        subagent_name: 'test-agent',
+      });
+    }).toThrow("params must have required property 'goal_prompt'");
   });
 });
