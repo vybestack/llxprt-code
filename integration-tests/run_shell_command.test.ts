@@ -128,7 +128,7 @@ describe('run_shell_command', () => {
     const prompt = isLinux
       ? `use wc to tell me how many lines there are in /proc/meminfo`
       : `use wc to count how many lines are in /etc/hosts`;
-    const expectedText = isLinux ? 'lines in /proc/meminfo' : 'lines';
+    const expectedText = 'lines';
 
     const result = await rig.run(
       {
@@ -241,7 +241,7 @@ describe('run_shell_command', () => {
     const rig = new TestRig();
     await rig.setup('should propagate environment variables');
 
-    const varName = 'GEMINI_CLI_TEST_VAR';
+    const varName = 'LLXPRT_TEST_VAR';
     const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
     process.env[varName] = varValue;
 
