@@ -34,6 +34,7 @@ describe('permissionsCommand', () => {
         setPendingItem: () => {},
         loadHistory: () => {},
         toggleCorgiMode: () => {},
+        toggleDebugProfiler: () => {},
         toggleVimEnabled: async () => false,
         setGeminiMdFileCount: () => {},
         setLlxprtMdFileCount: () => {},

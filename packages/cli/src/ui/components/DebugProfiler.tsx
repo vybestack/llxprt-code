@@ -7,7 +7,7 @@
 import { Text } from 'ink';
 import { useEffect, useState } from 'react';
 import { FixedDeque } from 'mnemonist';
-import { SemanticColors } from '../semantic-colors.js';
+import { SemanticColors } from '../colors.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { debugNumSpinners } from './CliSpinner.js';
 import { appEvents, AppEvent } from '../../utils/events.js';
@@ -189,9 +189,9 @@ export const DebugProfiler = () => {
   }
 
   return (
-    <Text color={SemanticColors.Warning} key={forceRefresh}>
+    <Text color={SemanticColors.status.warning} key={forceRefresh}>
       Renders: {profiler.numFrames} (total),{' '}
-      <Text color={SemanticColors.Error}>{profiler.totalIdleFrames} (idle) </Text>
+      <Text color={SemanticColors.status.error}>{profiler.totalIdleFrames} (idle) </Text>
     </Text>
   );
 };
