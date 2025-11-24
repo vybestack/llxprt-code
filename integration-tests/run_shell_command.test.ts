@@ -243,29 +243,29 @@ describe('run_shell_command', () => {
       const rig = new TestRig();
       await rig.setup('should propagate environment variables');
 
-    const varName = 'LLXPRT_CODE_TEST_VAR';
-    const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
-    process.env[varName] = varValue;
+      const varName = 'LLXPRT_CODE_TEST_VAR';
+      const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
+      process.env[varName] = varValue;
 
-    try {
-      const prompt = `Use echo to learn the value of the environment variable named ${varName} and tell me what it is.`;
-      const result = await rig.run(prompt);
+      try {
+        const prompt = `Use echo to learn the value of the environment variable named ${varName} and tell me what it is.`;
+        const result = await rig.run(prompt);
 
-      const foundToolCall = await rig.waitForToolCall('run_shell_command');
+        const foundToolCall = await rig.waitForToolCall('run_shell_command');
 
-      if (!foundToolCall || !result.includes(varValue)) {
-        printDebugInfo(rig, result, {
-          'Found tool call': foundToolCall,
-          'Contains varValue': result.includes(varValue),
-        });
-      }
+        if (!foundToolCall || !result.includes(varValue)) {
+          printDebugInfo(rig, result, {
+            'Found tool call': foundToolCall,
+            'Contains varValue': result.includes(varValue),
+          });
+        }
 
-      expect(
-        foundToolCall,
-        'Expected to find a run_shell_command tool call',
-      ).toBeTruthy();
-      validateModelOutput(result, varValue, 'Env var propagation test');
-      expect(result).toContain(varValue);
+        expect(
+          foundToolCall,
+          'Expected to find a run_shell_command tool call',
+        ).toBeTruthy();
+        validateModelOutput(result, varValue, 'Env var propagation test');
+        expect(result).toContain(varValue);
       } finally {
         delete process.env[varName];
       }
