@@ -5,3 +5,4 @@
  */
 
 export const MAX_DISPLAYED_QUEUED_MESSAGES = 4;
+export const MAX_GEMINI_MESSAGE_LINES = 5000;

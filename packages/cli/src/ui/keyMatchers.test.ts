@@ -67,6 +67,12 @@ describe('keyMatchers', () => {
       key.name === 'tab',
     [Command.TOGGLE_SHELL_INPUT_FOCUS]: (key: Key) =>
       key.ctrl && key.name === 'f',
+    [Command.SCROLL_UP]: (key: Key) => key.name === 'up',
+    [Command.SCROLL_DOWN]: (key: Key) => key.name === 'down',
+    [Command.PAGE_UP]: (key: Key) => key.name === 'pageup',
+    [Command.PAGE_DOWN]: (key: Key) => key.name === 'pagedown',
+    [Command.SCROLL_HOME]: (key: Key) => key.name === 'home',
+    [Command.SCROLL_END]: (key: Key) => key.name === 'end',
   };
 
   // Test data for each command with positive and negative test cases

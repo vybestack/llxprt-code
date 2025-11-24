@@ -16,8 +16,11 @@ import { useUIActions } from '../contexts/UIActionsContext.js';
 import { StreamingContext } from '../contexts/StreamingContext.js';
 import { OverflowProvider } from '../contexts/OverflowContext.js';
 import { Colors } from '../colors.js';
+import { useFlickerDetector } from '../hooks/useFlickerDetector.js';
+import { useAlternateBuffer } from '../hooks/useAlternateBuffer.js';
 
 // Components
+import { ConfigInitDisplay } from '../components/ConfigInitDisplay.js';
 import { MainContent } from '../components/MainContent.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
@@ -56,6 +59,7 @@ export const DefaultAppLayout = ({
   updateInfo,
 }: DefaultAppLayoutProps) => {
   const uiState = useUIState();
+  const isAlternateBuffer = useAlternateBuffer();
   // Note: uiActions is not used directly in layout but DialogManager and Composer use it
   void useUIActions();
 
@@ -100,6 +104,12 @@ export const DefaultAppLayout = ({
   const staticExtraHeight = 3;
   const debugConsoleMaxHeight = Math.floor(Math.max(terminalHeight * 0.2, 5));
 
+  useFlickerDetector(uiState.rootUiRef, terminalHeight, constrainHeight);
+
+  // If in alternate buffer mode, need to leave room to draw the scrollbar on
+  // the right side of the terminal.
+  const width = isAlternateBuffer ? terminalWidth : mainAreaWidth;
+
   // Check if any dialog is visible
   const dialogsVisible =
     uiState.showWorkspaceMigrationDialog ||
@@ -142,10 +152,19 @@ export const DefaultAppLayout = ({
     );
   }
 
+  const mcpServers = config.getMcpServers();
+  const hasMcpServers = mcpServers && Object.keys(mcpServers).length > 0;
+
   return (
     <StreamingContext.Provider value={streamingState}>
-      <Box flexDirection="column" width="90%" ref={uiState.rootUiRef}>
-        <MainContent />
+      <Box
+        flexDirection="column"
+        width={width}
+        height={isAlternateBuffer ? terminalHeight - 1 : undefined}
+        ref={uiState.rootUiRef}
+      >
+        {hasMcpServers && <ConfigInitDisplay />}
+        <MainContent config={config} />
 
         <Box flexDirection="column" ref={mainControlsRef}>
           {updateInfo && <UpdateNotification message={updateInfo.message} />}

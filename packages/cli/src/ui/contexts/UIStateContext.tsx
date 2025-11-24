@@ -112,6 +112,7 @@ export interface UIState {
   elapsedTime: number;
   currentLoadingPhrase: string | undefined;
   showAutoAcceptIndicator: ApprovalMode;
+  embeddedShellFocused: boolean;
 
   // Token metrics
   tokenMetrics: {

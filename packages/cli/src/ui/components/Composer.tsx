@@ -48,6 +48,7 @@ export const Composer = ({ config, settings }: ComposerProps) => {
 
     isNarrow,
     contextFileNames,
+    embeddedShellFocused,
   } = uiState;
 
   const vimEnabled = vimModeEnabled;
@@ -142,6 +143,7 @@ export const Composer = ({ config, settings }: ComposerProps) => {
           }
           approvalMode={showAutoAcceptIndicator}
           vimModeEnabled={vimModeEnabled}
+          isEmbeddedShellFocused={embeddedShellFocused}
         />
       )}
 

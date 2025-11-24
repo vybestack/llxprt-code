@@ -5,7 +5,7 @@
  */
 
 import React, { useCallback, useEffect, useState, useRef } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, type DOMElement } from 'ink';
 import { theme } from '../semantic-colors.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
@@ -32,6 +32,9 @@ import {
 } from '../utils/clipboardUtils.js';
 import * as path from 'path';
 import { SCREEN_READER_USER_PREFIX } from '../textConstants.js';
+import { useMouseClick } from '../hooks/useMouseClick.js';
+import { useMouse, type MouseEvent } from '../contexts/MouseContext.js';
+import { useUIActions } from '../contexts/UIActionsContext.js';
 
 const LARGE_PASTE_LINE_THRESHOLD = 4;
 const LARGE_PASTE_CHAR_THRESHOLD = 1000;
@@ -116,11 +119,14 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   setShellModeActive,
   onEscapePromptChange,
   vimHandleInput,
+  isEmbeddedShellFocused,
 }) => {
+  const { setEmbeddedShellFocused } = useUIActions();
   const [justNavigatedHistory, setJustNavigatedHistory] = useState(false);
   const [escPressCount, setEscPressCount] = useState(0);
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const escapeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const innerBoxRef = useRef<DOMElement>(null);
 
   const pendingLargePastesRef = useRef<Map<string, string>>(new Map());
 
@@ -318,6 +324,27 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       console.error('Error handling clipboard image:', error);
     }
   }, [buffer, config]);
+
+  useMouseClick(
+    innerBoxRef,
+    (_event, relX, relY) => {
+      if (isEmbeddedShellFocused) {
+        setEmbeddedShellFocused(false);
+      }
+      const visualRow = buffer.visualScrollRow + relY;
+      buffer.moveToVisualPosition(visualRow, relX);
+    },
+    { isActive: focus },
+  );
+
+  useMouse(
+    (event: MouseEvent) => {
+      if (event.name === 'right-release') {
+        handleClipboardImage();
+      }
+    },
+    { isActive: focus },
+  );
 
   const handleInput = useCallback(
     (key: Key) => {
@@ -838,7 +865,12 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
             '> '
           )}
         </Text>
-        <Box flexGrow={1} flexDirection="column">
+        <Box
+          marginTop={1}
+          flexDirection="column"
+          width={calculatePromptWidths(inputWidth + 6).containerWidth}
+          ref={innerBoxRef}
+        >
           {buffer.text.length === 0 && placeholder ? (
             focus ? (
               <Text>

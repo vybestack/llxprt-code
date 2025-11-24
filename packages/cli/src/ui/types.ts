@@ -80,6 +80,8 @@ export interface IndividualToolCallDisplay {
   confirmationDetails: ToolCallConfirmationDetails | undefined;
   renderOutputAsMarkdown?: boolean;
   isFocused?: boolean;
+  ptyId?: number;
+  outputFile?: string;
 }
 
 export interface CompressionProps {

@@ -8,6 +8,7 @@ import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { ToolMessage } from './ToolMessage.js';
+import { ShellToolMessage } from './ShellToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { Colors } from '../../colors.js';
 import {
@@ -15,7 +16,11 @@ import {
   DEFAULT_AGENT_ID,
   formatTodoListForDisplay,
 } from '@vybestack/llxprt-code-core';
-import { SHELL_COMMAND_NAME, SHELL_NAME } from '../../constants.js';
+import {
+  SHELL_COMMAND_NAME,
+  SHELL_NAME,
+  SHELL_TOOL_NAME,
+} from '../../constants.js';
 import { useTodoContext } from '../../contexts/TodoContext.js';
 import { useToolCallContext } from '../../contexts/ToolCallContext.js';
 
@@ -28,6 +33,8 @@ interface ToolGroupMessageProps {
   config: Config;
   isFocused?: boolean;
   showTodoPanel?: boolean;
+  activeShellPtyId?: number | null;
+  embeddedShellFocused?: boolean;
 }
 
 const extractCountFromText = (text?: string): number | undefined => {
@@ -88,6 +95,8 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   config,
   isFocused = true,
   showTodoPanel = true,
+  activeShellPtyId,
+  embeddedShellFocused,
 }) => {
   const { todos } = useTodoContext();
   const { getExecutingToolCalls } = useToolCallContext();
@@ -153,22 +162,30 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
     return null;
   }
 
+  const isEmbeddedShellFocused =
+    embeddedShellFocused &&
+    filteredToolCalls.some(
+      (t) =>
+        t.ptyId === activeShellPtyId && t.status === ToolCallStatus.Executing,
+    );
+
   const hasPending = !filteredToolCalls.every(
     (t) => t.status === ToolCallStatus.Success,
   );
   const isShellCommand = filteredToolCalls.some(
     (t) => t.name === SHELL_COMMAND_NAME || t.name === SHELL_NAME,
   );
-  const borderColor = isShellCommand
-    ? Colors.Foreground
-    : hasPending
-      ? Colors.AccentYellow
-      : Colors.Gray;
+  const borderColor =
+    (isShellCommand && hasPending) || isEmbeddedShellFocused
+      ? Colors.Foreground
+      : hasPending
+        ? Colors.AccentYellow
+        : Colors.Gray;
+
+  const borderDimColor =
+    hasPending && (!isShellCommand || !isEmbeddedShellFocused);
 
   const staticHeight = /* border */ 2 + /* marginBottom */ 1;
-  // This is a bit of a magic number, but it accounts for the border and
-  // marginLeft.
-  const innerWidth = terminalWidth - 4;
 
   let countToolCallsWithResults = 0;
   for (const tool of filteredToolCalls) {
@@ -191,17 +208,14 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   return (
     <Box
       flexDirection="column"
-      borderStyle="round"
       /*
         This width constraint is highly important and protects us from an Ink rendering bug.
         Since the ToolGroup can typically change rendering states frequently, it can cause
         Ink to render the border of the box incorrectly and span multiple lines and even
         cause tearing.
       */
-      width="100%"
+      width={terminalWidth}
       marginLeft={1}
-      borderDimColor={hasPending}
-      borderColor={borderColor}
       gap={1}
     >
       {agentId && agentId !== DEFAULT_AGENT_ID && (
@@ -209,46 +223,96 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
           <Text color={Colors.AccentCyan}>{`Agent: ${agentId}`}</Text>
         </Box>
       )}
-      {filteredToolCalls.map((tool) => {
+      {filteredToolCalls.map((tool, index) => {
         const isConfirming = toolAwaitingApproval?.callId === tool.callId;
+        const isFirst = index === 0;
+        const isShellTool =
+          tool.name === SHELL_COMMAND_NAME ||
+          tool.name === SHELL_NAME ||
+          tool.name === SHELL_TOOL_NAME;
+
+        const commonProps = {
+          ...tool,
+          availableTerminalHeight: availableTerminalHeightPerToolMessage,
+          terminalWidth: terminalWidth - 4, // Adjust for margin
+          emphasis: isConfirming
+            ? ('high' as const)
+            : toolAwaitingApproval
+              ? ('low' as const)
+              : ('medium' as const),
+          isFirst,
+          borderColor,
+          borderDimColor,
+        };
+
         return (
           <Box key={tool.callId} flexDirection="column" minHeight={1}>
-            <Box flexDirection="row" alignItems="center">
-              <ToolMessage
-                callId={tool.callId}
-                name={tool.name}
-                description={tool.description}
-                resultDisplay={tool.resultDisplay}
-                status={tool.status}
-                confirmationDetails={tool.confirmationDetails}
-                availableTerminalHeight={availableTerminalHeightPerToolMessage}
-                terminalWidth={innerWidth}
-                emphasis={
-                  isConfirming
-                    ? 'high'
-                    : toolAwaitingApproval
-                      ? 'low'
-                      : 'medium'
-                }
-                renderOutputAsMarkdown={tool.renderOutputAsMarkdown}
+            {isShellTool ? (
+              <ShellToolMessage
+                {...commonProps}
+                activeShellPtyId={activeShellPtyId}
+                embeddedShellFocused={embeddedShellFocused}
+                config={config}
               />
-            </Box>
-            {tool.status === ToolCallStatus.Confirming &&
-              isConfirming &&
-              tool.confirmationDetails && (
-                <ToolConfirmationMessage
-                  confirmationDetails={tool.confirmationDetails}
-                  config={config}
-                  isFocused={isFocused}
-                  availableTerminalHeight={
-                    availableTerminalHeightPerToolMessage
-                  }
-                  terminalWidth={innerWidth}
-                />
+            ) : (
+              <ToolMessage {...commonProps} />
+            )}
+            <Box
+              borderLeft={true}
+              borderRight={true}
+              borderTop={false}
+              borderBottom={false}
+              borderColor={borderColor}
+              borderDimColor={borderDimColor}
+              flexDirection="column"
+              borderStyle="round"
+              paddingLeft={1}
+              paddingRight={1}
+              width={terminalWidth - 4} // Adjust for margin
+            >
+              {tool.status === ToolCallStatus.Confirming &&
+                isConfirming &&
+                tool.confirmationDetails && (
+                  <ToolConfirmationMessage
+                    confirmationDetails={tool.confirmationDetails}
+                    config={config}
+                    isFocused={isFocused}
+                    availableTerminalHeight={
+                      availableTerminalHeightPerToolMessage
+                    }
+                    terminalWidth={terminalWidth - 8} // Adjust for inner padding
+                  />
+                )}
+              {tool.outputFile && (
+                <Box>
+                  <Text color={Colors.Foreground}>
+                    Output too long and was saved to: {tool.outputFile}
+                  </Text>
+                </Box>
               )}
+            </Box>
           </Box>
         );
       })}
+      {
+        /*
+              We have to keep the bottom border separate so it doesn't get
+              drawn over by the sticky header directly inside it.
+             */
+        filteredToolCalls.length > 0 && (
+          <Box
+            height={0}
+            width={terminalWidth - 4} // Adjust for margin
+            borderLeft={true}
+            borderRight={true}
+            borderTop={false}
+            borderBottom={true}
+            borderColor={borderColor}
+            borderDimColor={borderDimColor}
+            borderStyle="round"
+          />
+        )
+      }
     </Box>
   );
 };

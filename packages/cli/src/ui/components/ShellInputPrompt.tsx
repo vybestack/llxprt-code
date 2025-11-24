@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,20 +10,11 @@ import { useKeypress } from '../hooks/useKeypress.js';
 import { ShellExecutionService } from '@vybestack/llxprt-code-core';
 import { keyToAnsi, type Key } from '../hooks/keyToAnsi.js';
 
-/**
- * Props for the ShellInputPrompt component.
- */
 export interface ShellInputPromptProps {
-  /** The ID of the active PTY to send input to. */
   activeShellPtyId: number | null;
-  /** Whether the input capture is currently focused. Defaults to true. */
   focus?: boolean;
 }
 
-/**
- * A headless component that captures keyboard input and forwards it to the active shell PTY.
- * It handles standard input as well as special key combinations for scrolling (Ctrl+Shift+Up/Down).
- */
 export const ShellInputPrompt: React.FC<ShellInputPromptProps> = ({
   activeShellPtyId,
   focus = true,

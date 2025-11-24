@@ -120,6 +120,7 @@ export interface UIActions {
 
   // Shell mode
   setShellModeActive: (active: boolean) => void;
+  setEmbeddedShellFocused: (focused: boolean) => void;
 
   // Escape prompt
   handleEscapePromptChange: (show: boolean) => void;

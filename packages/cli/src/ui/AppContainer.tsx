@@ -167,6 +167,7 @@ export const AppContainer = (props: AppContainerProps) => {
   );
 
   const [shellModeActive, setShellModeActive] = useState(false);
+  const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
@@ -1353,11 +1354,9 @@ export const AppContainer = (props: AppContainerProps) => {
     history,
     pendingHistoryItems,
     streamingState,
-    thought,
 
     // Input buffer
     buffer,
-    shellModeActive,
 
     // Dialog states
     isThemeDialogOpen,
@@ -1419,6 +1418,10 @@ export const AppContainer = (props: AppContainerProps) => {
     elapsedTime,
     currentLoadingPhrase,
     showAutoAcceptIndicator,
+    shellModeActive,
+    embeddedShellFocused,
+    thought:
+      streamingState === StreamingState.Responding ? (thought ?? null) : null,
 
     // Token metrics
     tokenMetrics,
@@ -1572,6 +1575,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Shell mode
     setShellModeActive,
+    setEmbeddedShellFocused,
 
     // Escape prompt
     handleEscapePromptChange,

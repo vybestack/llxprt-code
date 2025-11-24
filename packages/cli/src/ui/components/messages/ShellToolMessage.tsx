@@ -4,44 +4,37 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { Box, Text } from 'ink';
-import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
+import React from 'react';
+import { Box, Text, type DOMElement } from 'ink';
+import { ToolCallStatus } from '../../types.js';
+import { ShellInputPrompt } from '../ShellInputPrompt.js';
 import { StickyHeader } from '../StickyHeader.js';
+import {
+  SHELL_COMMAND_NAME,
+  SHELL_NAME,
+  SHELL_FOCUS_HINT_DELAY_MS,
+  SHELL_TOOL_NAME,
+} from '../../constants.js';
+import { Colors } from '../../colors.js';
+import { useUIActions } from '../../contexts/UIActionsContext.js';
+import { useMouseClick } from '../../hooks/useMouseClick.js';
 import { ToolResultDisplay } from './ToolResultDisplay.js';
 import {
   ToolStatusIndicator,
   ToolInfo,
   TrailingIndicator,
-  type TextEmphasis,
   STATUS_INDICATOR_WIDTH,
 } from './ToolShared.js';
-import {
-  SHELL_COMMAND_NAME,
-  SHELL_FOCUS_HINT_DELAY_MS,
-} from '../../constants.js';
-import { Colors } from '../../colors.js';
+import type { ToolMessageProps } from './ToolMessage.js';
 import type { Config } from '@vybestack/llxprt-code-core';
-import { useInactivityTimer } from '../../hooks/useInactivityTimer.js';
-import { ShellInputPrompt } from '../ShellInputPrompt.js';
 
-export type { TextEmphasis };
-
-export interface ToolMessageProps extends IndividualToolCallDisplay {
-  availableTerminalHeight?: number;
-  terminalWidth: number;
-  emphasis?: TextEmphasis;
-  renderOutputAsMarkdown?: boolean;
-  isFirst: boolean;
-  borderColor: string;
-  borderDimColor: boolean;
+export interface ShellToolMessageProps extends ToolMessageProps {
   activeShellPtyId?: number | null;
   embeddedShellFocused?: boolean;
-  ptyId?: number;
   config?: Config;
 }
 
-export const ToolMessage: React.FC<ToolMessageProps> = ({
+export const ShellToolMessage: React.FC<ShellToolMessageProps> = ({
   name,
   description,
   resultDisplay,
@@ -50,51 +43,88 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   terminalWidth,
   emphasis = 'medium',
   renderOutputAsMarkdown = true,
-  isFirst,
-  borderColor,
-  borderDimColor,
   activeShellPtyId,
   embeddedShellFocused,
   ptyId,
   config,
+  isFirst,
+  borderColor,
+  borderDimColor,
 }) => {
   const isThisShellFocused =
-    (name === SHELL_COMMAND_NAME || name === 'Shell') &&
+    (name === SHELL_COMMAND_NAME ||
+      name === SHELL_NAME ||
+      name === SHELL_TOOL_NAME) &&
     status === ToolCallStatus.Executing &&
     ptyId === activeShellPtyId &&
     embeddedShellFocused;
 
-  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
-  const [userHasFocused, setUserHasFocused] = useState(false);
-  const showFocusHint = useInactivityTimer(
-    !!lastUpdateTime,
-    lastUpdateTime ? lastUpdateTime.getTime() : 0,
-    SHELL_FOCUS_HINT_DELAY_MS,
+  const { setEmbeddedShellFocused } = useUIActions();
+  const containerRef = React.useRef<DOMElement>(null);
+  // The shell is focusable if it's the shell command, it's executing, and the interactive shell is enabled.
+  const isThisShellFocusable =
+    (name === SHELL_COMMAND_NAME ||
+      name === SHELL_NAME ||
+      name === SHELL_TOOL_NAME) &&
+    status === ToolCallStatus.Executing &&
+    // @ts-expect-error - getEnableInteractiveShell is not in the Config type yet
+    (config?.getEnableInteractiveShell?.() ?? false);
+
+  useMouseClick(
+    containerRef,
+    () => {
+      if (isThisShellFocusable) {
+        setEmbeddedShellFocused(true);
+      }
+    },
+    { isActive: !!isThisShellFocusable },
   );
 
-  useEffect(() => {
+  const wasFocusedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (isThisShellFocused) {
+      wasFocusedRef.current = true;
+    } else if (wasFocusedRef.current) {
+      if (embeddedShellFocused) {
+        setEmbeddedShellFocused(false);
+      }
+      wasFocusedRef.current = false;
+    }
+  }, [isThisShellFocused, embeddedShellFocused, setEmbeddedShellFocused]);
+
+  const [lastUpdateTime, setLastUpdateTime] = React.useState<Date | null>(null);
+  const [userHasFocused, setUserHasFocused] = React.useState(false);
+  const [showFocusHint, setShowFocusHint] = React.useState(false);
+
+  React.useEffect(() => {
     if (resultDisplay) {
       setLastUpdateTime(new Date());
     }
   }, [resultDisplay]);
 
-  useEffect(() => {
+  React.useEffect(() => {
+    if (!lastUpdateTime) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setShowFocusHint(true);
+    }, SHELL_FOCUS_HINT_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [lastUpdateTime]);
+
+  React.useEffect(() => {
     if (isThisShellFocused) {
       setUserHasFocused(true);
     }
   }, [isThisShellFocused]);
 
-  const isThisShellFocusable =
-    (name === SHELL_COMMAND_NAME || name === 'Shell') &&
-    status === ToolCallStatus.Executing &&
-    // @ts-expect-error - getEnableInteractiveShell is not in the Config type yet
-    (config?.getEnableInteractiveShell?.() ?? false);
-
   const shouldShowFocusHint =
     isThisShellFocusable && (showFocusHint || userHasFocused);
 
   return (
-    <Box flexDirection="column" width={terminalWidth}>
+    <Box ref={containerRef} flexDirection="column" width={terminalWidth}>
       <StickyHeader
         width={terminalWidth}
         isFirst={isFirst}
