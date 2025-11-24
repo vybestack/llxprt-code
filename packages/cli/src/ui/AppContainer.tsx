@@ -499,7 +499,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const extensions = config.getExtensions();
   const {
     extensionsUpdateState,
-    setExtensionsUpdateState,
+    dispatchExtensionStateUpdate,
     confirmUpdateExtensionRequests,
     addConfirmUpdateExtensionRequest,
   } = useExtensionUpdates(extensions, addItem, config.getWorkingDir());
@@ -941,7 +941,7 @@ export const AppContainer = (props: AppContainerProps) => {
       quit: setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
-      setExtensionsUpdateState,
+      dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
     }),
     [
@@ -958,7 +958,7 @@ export const AppContainer = (props: AppContainerProps) => {
       setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
-      setExtensionsUpdateState,
+      dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
     ],
   );

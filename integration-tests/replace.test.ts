@@ -105,9 +105,7 @@ describe('replace', () => {
     await rig.waitForTelemetryReady();
     const toolLogs = rig.readToolLogs();
 
-    const editAttempt = toolLogs.find(
-      (log) => log.toolRequest.name === 'edit',
-    );
+    const editAttempt = toolLogs.find((log) => log.toolRequest.name === 'edit');
     const readAttempt = toolLogs.find(
       (log) => log.toolRequest.name === 'read_file',
     );
@@ -121,9 +119,7 @@ describe('replace', () => {
     // If the model tried to edit, that specific attempt must have failed.
     if (editAttempt) {
       if (editAttempt.toolRequest.success) {
-        console.error(
-          'The edit tool succeeded when it was expected to fail',
-        );
+        console.error('The edit tool succeeded when it was expected to fail');
         console.error('Tool call args:', editAttempt.toolRequest.args);
       }
       expect(

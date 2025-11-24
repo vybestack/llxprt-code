@@ -196,7 +196,11 @@ export class ExtensionAutoUpdater {
           cwd,
           async () => true, // Auto-approve in background mode
           currentState,
-          setExtensionUpdateState,
+          (action) => {
+            if (action.type === 'SET_STATE') {
+              setExtensionUpdateState(action.payload.state);
+            }
+          },
         ));
     this.updateChecker = options.updateChecker ?? checkForExtensionUpdate;
     this.now = options.now ?? Date.now;

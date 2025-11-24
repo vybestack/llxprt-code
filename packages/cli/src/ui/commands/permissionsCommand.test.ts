@@ -40,7 +40,7 @@ describe('permissionsCommand', () => {
         updateHistoryTokenCount: () => {},
         reloadCommands: () => {},
         extensionsUpdateState: new Map(),
-        setExtensionsUpdateState: () => {},
+        dispatchExtensionStateUpdate: () => {},
         addConfirmUpdateExtensionRequest: () => {},
       },
       session: {

@@ -59,7 +59,10 @@ export async function handleUpdate(args: UpdateArgs) {
         );
         return;
       }
-      const updateState = await checkForExtensionUpdate(extension);
+      let updateState = ExtensionUpdateState.UNKNOWN as ExtensionUpdateState;
+      await checkForExtensionUpdate(extension, (state) => {
+        updateState = state;
+      });
       if (updateState !== ExtensionUpdateState.UPDATE_AVAILABLE) {
         console.log(`Extension "${args.name}" is already up to date.`);
         return;
@@ -70,7 +73,11 @@ export async function handleUpdate(args: UpdateArgs) {
         workingDir,
         requestConsentNonInteractive,
         updateState,
-        () => {},
+        (action) => {
+          if (action.type === 'SET_STATE') {
+            updateState = action.payload.state;
+          }
+        },
       ))!;
       if (
         updatedExtensionInfo.originalVersion !==
@@ -105,7 +112,13 @@ export async function handleUpdate(args: UpdateArgs) {
         requestConsentNonInteractive,
         extensions,
         extensionState,
-        () => {},
+        (action) => {
+          if (action.type === 'SET_STATE') {
+            extensionState.set(action.payload.name, {
+              status: action.payload.state,
+            });
+          }
+        },
       );
       updateInfos = updateInfos.filter(
         (info) => info.originalVersion !== info.updatedVersion,

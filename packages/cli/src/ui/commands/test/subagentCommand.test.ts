@@ -169,7 +169,7 @@ const createTestContext = ({
       updateHistoryTokenCount: vi.fn(),
       reloadCommands: vi.fn(),
       extensionsUpdateState: new Map(),
-      setExtensionsUpdateState: vi.fn(),
+      dispatchExtensionStateUpdate: vi.fn(),
       addConfirmUpdateExtensionRequest: vi.fn(),
     },
     session: {

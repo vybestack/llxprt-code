@@ -33,7 +33,7 @@ export function createNonInteractiveUI(): CommandContext['ui'] {
     updateHistoryTokenCount: (_count: number) => {},
     reloadCommands: () => {},
     extensionsUpdateState: new Map(),
-    setExtensionsUpdateState: (_updateState) => {},
+    dispatchExtensionStateUpdate: (_action) => {},
     addConfirmUpdateExtensionRequest: (_request) => {},
   };
 }

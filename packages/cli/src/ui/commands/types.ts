@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import type { ReactNode } from 'react';
 import type { Content, PartListUnion } from '@google/genai';
 import type {
   HistoryItemWithoutId,
@@ -21,7 +21,10 @@ import type {
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
-import type { ExtensionUpdateState } from '../state/extensions.js';
+import type {
+  ExtensionUpdateState,
+  ExtensionUpdateAction,
+} from '../state/extensions.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 
 // Grouped dependencies for clarity and easier mocking
@@ -78,9 +81,7 @@ export interface CommandContext {
     updateHistoryTokenCount: (count: number) => void;
     reloadCommands: () => void;
     extensionsUpdateState: Map<string, ExtensionUpdateState>;
-    setExtensionsUpdateState: Dispatch<
-      SetStateAction<Map<string, ExtensionUpdateState>>
-    >;
+    dispatchExtensionStateUpdate: (action: ExtensionUpdateAction) => void;
     addConfirmUpdateExtensionRequest: (value: ConfirmationRequest) => void;
   };
   // Session-specific data
