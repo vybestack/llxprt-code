@@ -1538,17 +1538,22 @@ export class Config {
     return this.fileExclusions;
   }
 
-  async refreshMemory(): Promise<{ memoryContent: string; fileCount: number; filePaths: string[] }> {
-    const { memoryContent, fileCount, filePaths } = await loadServerHierarchicalMemory(
-      this.getWorkingDir(),
-      this.shouldLoadMemoryFromIncludeDirectories()
-        ? this.getWorkspaceContext().getDirectories()
-        : [],
-      this.getDebugMode(),
-      this.getFileService(),
-      this.getExtensionContextFilePaths(),
-      this.getFolderTrust(),
-    );
+  async refreshMemory(): Promise<{
+    memoryContent: string;
+    fileCount: number;
+    filePaths: string[];
+  }> {
+    const { memoryContent, fileCount, filePaths } =
+      await loadServerHierarchicalMemory(
+        this.getWorkingDir(),
+        this.shouldLoadMemoryFromIncludeDirectories()
+          ? this.getWorkspaceContext().getDirectories()
+          : [],
+        this.getDebugMode(),
+        this.getFileService(),
+        this.getExtensionContextFilePaths(),
+        this.getFolderTrust(),
+      );
 
     this.setUserMemory(memoryContent);
     this.setLlxprtMdFileCount(fileCount);

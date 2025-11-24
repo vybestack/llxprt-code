@@ -546,7 +546,6 @@ describe('connectToMcpServer with OAuth', () => {
   let mockedClient: ClientLib.Client;
   let workspaceContext: WorkspaceContext;
   let testWorkspace: string;
-  let mockAuthProvider: MCPOAuthProvider;
   let mockTokenStorage: MCPOAuthTokenStorage;
 
   beforeEach(() => {
@@ -568,17 +567,21 @@ describe('connectToMcpServer with OAuth', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'debug').mockImplementation(() => {});
 
     mockTokenStorage = {
       getCredentials: vi.fn().mockResolvedValue({ clientId: 'test-client' }),
     } as unknown as MCPOAuthTokenStorage;
     vi.mocked(MCPOAuthTokenStorage).mockReturnValue(mockTokenStorage);
-    mockAuthProvider = {
-      authenticate: vi.fn().mockResolvedValue(undefined),
-      getValidToken: vi.fn().mockResolvedValue('test-access-token'),
-      tokenStorage: mockTokenStorage,
-    } as unknown as MCPOAuthProvider;
-    vi.mocked(MCPOAuthProvider).mockReturnValue(mockAuthProvider);
+
+    // Mock the static methods directly
+    vi.spyOn(MCPOAuthProvider, 'authenticate').mockResolvedValue({
+      accessToken: 'test-access-token',
+      tokenType: 'Bearer',
+    });
+    vi.spyOn(MCPOAuthProvider, 'getValidToken').mockResolvedValue(
+      'test-access-token',
+    );
   });
 
   afterEach(() => {
@@ -620,7 +623,7 @@ describe('connectToMcpServer with OAuth', () => {
 
     expect(client).toBe(mockedClient);
     expect(mockedClient.connect).toHaveBeenCalledTimes(2);
-    expect(mockAuthProvider.authenticate).toHaveBeenCalledOnce();
+    expect(MCPOAuthProvider.authenticate).toHaveBeenCalledOnce();
 
     const authHeader =
       capturedTransport._requestInit?.headers?.['Authorization'];
@@ -641,9 +644,6 @@ describe('connectToMcpServer with OAuth', () => {
       tokenUrl,
       scopes: ['test-scope'],
     });
-    vi.mocked(mockAuthProvider.getValidToken).mockResolvedValue(
-      'test-access-token-from-discovery',
-    );
 
     // We need this to be an any type because we dig into its private state.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -664,11 +664,11 @@ describe('connectToMcpServer with OAuth', () => {
 
     expect(client).toBe(mockedClient);
     expect(mockedClient.connect).toHaveBeenCalledTimes(2);
-    expect(mockAuthProvider.authenticate).toHaveBeenCalledOnce();
+    expect(MCPOAuthProvider.authenticate).toHaveBeenCalledOnce();
     expect(OAuthUtils.discoverOAuthConfig).toHaveBeenCalledWith(serverUrl);
 
     const authHeader =
       capturedTransport._requestInit?.headers?.['Authorization'];
-    expect(authHeader).toBe('Bearer test-access-token-from-discovery');
+    expect(authHeader).toBe('Bearer test-access-token');
   });
 });

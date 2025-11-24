@@ -949,17 +949,18 @@ export async function loadCliConfig(
   }
 
   // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
-  const { memoryContent, fileCount, filePaths } = await loadHierarchicalLlxprtMemory(
-    cwd,
-    resolvedLoadMemoryFromIncludeDirectories ? includeDirectories : [],
-    debugMode,
-    fileService,
-    effectiveSettings,
-    extensionContextFilePaths,
-    trustedFolder,
-    memoryImportFormat,
-    fileFiltering,
-  );
+  const { memoryContent, fileCount, filePaths } =
+    await loadHierarchicalLlxprtMemory(
+      cwd,
+      resolvedLoadMemoryFromIncludeDirectories ? includeDirectories : [],
+      debugMode,
+      fileService,
+      effectiveSettings,
+      extensionContextFilePaths,
+      trustedFolder,
+      memoryImportFormat,
+      fileFiltering,
+    );
 
   let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
   const question =

@@ -220,7 +220,7 @@ describe('memoryCommand', () => {
       expect(mockSetLlxprtMdFileCount).toHaveBeenCalledWith(
         refreshResult.fileCount,
       );
-      expect(mockSetGeminiMdFilePaths).toHaveBeenCalledWith(
+      expect(mockSetLlxprtMdFilePaths).toHaveBeenCalledWith(
         refreshResult.filePaths,
       );
 
