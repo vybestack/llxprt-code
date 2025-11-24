@@ -383,9 +383,15 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
           providerManager: this.runtimeContext.getProviderManager?.(),
         },
         overrides: {
-          contentGenerator: this.runtimeContext.getGeminiClient
-            ? this.runtimeContext.getGeminiClient().getContentGenerator()
-            : undefined,
+          contentGenerator: (() => {
+            try {
+              return this.runtimeContext
+                .getGeminiClient?.()
+                ?.getContentGenerator();
+            } catch {
+              return undefined;
+            }
+          })(),
         },
       });
 

@@ -219,6 +219,9 @@ describe('Settings Loading and Merging', () => {
         security: {},
         tools: {},
         useSmartEdit: false,
+        ide: {},
+        output: {},
+        ui: {},
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -311,6 +314,9 @@ describe('Settings Loading and Merging', () => {
         security: {},
         tools: {},
         useSmartEdit: false,
+        ide: {},
+        output: {},
+        ui: {},
         ...systemSettingsContent,
       });
     });
@@ -404,6 +410,9 @@ describe('Settings Loading and Merging', () => {
         security: {},
         tools: {},
         useSmartEdit: false,
+        ide: {},
+        output: {},
+        ui: {},
         ...userSettingsContent,
       });
       expect(settings.errors.length).toBe(0);
@@ -496,6 +505,9 @@ describe('Settings Loading and Merging', () => {
         security: {},
         tools: {},
         useSmartEdit: false,
+        ide: {},
+        output: {},
+        ui: {},
         ...workspaceSettingsContent,
       });
       expect(settings.errors.length).toBe(0);
@@ -591,6 +603,9 @@ describe('Settings Loading and Merging', () => {
         security: {},
         tools: {},
         useSmartEdit: false,
+        ide: {},
+        output: {},
+        ui: {},
         ...userSettingsContent,
         ...workspaceSettingsContent,
       });
@@ -697,6 +712,9 @@ describe('Settings Loading and Merging', () => {
         security: {},
         tools: {},
         useSmartEdit: false,
+        ide: {},
+        output: {},
+        ui: {},
         ...userSettingsContent,
         ...workspaceSettingsContent,
         ...systemSettingsContent,
@@ -817,6 +835,9 @@ describe('Settings Loading and Merging', () => {
         security: {},
         tools: {},
         useSmartEdit: false,
+        ide: {},
+        output: {},
+        ui: {},
         theme: 'user-theme',
         toolCallProcessingMode: 'legacy',
         sandbox: false,
@@ -1796,6 +1817,9 @@ describe('Settings Loading and Merging', () => {
           security: {},
           tools: {},
           useSmartEdit: false,
+          ide: {},
+          output: {},
+          ui: {},
           ...systemSettingsContent,
         });
       });

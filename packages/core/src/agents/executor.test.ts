@@ -110,8 +110,8 @@ const mockModelResponse = (
 const getMockMessageParams = (callIndex: number) => {
   const call = mockSendMessageStream.mock.calls[callIndex];
   expect(call).toBeDefined();
-  // Arg 1 of sendMessageStream is the message parameters
-  return call[1] as { message?: Part[]; config?: GenerateContentConfig };
+  // Arg 0 of sendMessageStream is the message parameters (SendMessageParameters)
+  return call[0] as { message?: Part[]; config?: GenerateContentConfig };
 };
 
 let mockConfig: Config;
@@ -278,7 +278,7 @@ describe('AgentExecutor', () => {
       expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
 
       const chatConstructorArgs = MockedGeminiChat.mock.calls[0];
-      const chatConfig = chatConstructorArgs[1];
+      const chatConfig = chatConstructorArgs[2]; // generationConfig is the 3rd argument (index 2)
       expect(chatConfig?.systemInstruction).toContain(
         `MUST call the \`${TASK_COMPLETE_TOOL_NAME}\` tool`,
       );
