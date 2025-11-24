@@ -16,7 +16,6 @@ import {
 
 import type { CommandContext, SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { Content } from '@google/genai';
 import { GeminiClient } from '@vybestack/llxprt-code-core';
 
 import * as fsPromises from 'fs/promises';

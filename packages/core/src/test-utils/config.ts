@@ -5,7 +5,10 @@
  */
 
 import { Config, ConfigParameters } from '../config/config.js';
-import { AuthType, type ContentGeneratorConfig } from '../core/contentGenerator.js';
+import {
+  AuthType,
+  type ContentGeneratorConfig,
+} from '../core/contentGenerator.js';
 
 /**
  * Creates a fake config instance for testing
