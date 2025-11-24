@@ -15,11 +15,6 @@ on:
   workflow_dispatch:
     # Manual trigger - no inputs needed, uses repository variables
 
-concurrency:
-  group: '${{ github.workflow }}-${{ github.head_ref || github.ref }}'
-  cancel-in-progress: |-
-    ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/release/') }}
-
 permissions:
   checks: 'write'
   contents: 'read'
