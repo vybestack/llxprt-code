@@ -123,7 +123,12 @@ describe('run_shell_command', () => {
     const rig = new TestRig();
     await rig.setup('should succeed with --yolo mode');
 
-    const prompt = `use wc to tell me how many lines there are in /proc/meminfo`;
+    // Use platform-appropriate command
+    const isLinux = process.platform === 'linux';
+    const prompt = isLinux
+      ? `use wc to tell me how many lines there are in /proc/meminfo`
+      : `use wc to count how many lines are in /etc/hosts`;
+    const expectedText = isLinux ? 'lines in /proc/meminfo' : 'lines';
 
     const result = await rig.run(
       {
@@ -144,14 +149,18 @@ describe('run_shell_command', () => {
       foundToolCall,
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
-    expect(result).toContain('lines in /proc/meminfo');
+    expect(result).toContain(expectedText);
   });
 
   it('should work with ShellTool alias', async () => {
     const rig = new TestRig();
     await rig.setup('should work with ShellTool alias');
 
-    const prompt = `use wc to tell me how many lines there are in /proc/meminfo`;
+    // Use platform-appropriate command
+    const isLinux = process.platform === 'linux';
+    const prompt = isLinux
+      ? `use wc to tell me how many lines there are in /proc/meminfo`
+      : `use wc to count how many lines are in /etc/hosts`;
 
     const result = await rig.run({
       stdin: prompt,
