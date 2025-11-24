@@ -144,23 +144,31 @@ export async function checkForExtensionUpdate(
   setExtensionUpdateState(ExtensionUpdateState.CHECKING_FOR_UPDATES);
   const installMetadata = extension.installMetadata;
   if (installMetadata?.type === 'local') {
-    const newExtension = loadExtension({
-      extensionDir: installMetadata.source,
-      workspaceDir: cwd,
-    });
-    if (!newExtension) {
+    try {
+      const newExtension = loadExtension({
+        extensionDir: installMetadata.source,
+        workspaceDir: cwd,
+      });
+      if (!newExtension) {
+        console.error(
+          `Failed to check for update for local extension "${extension.name}". Could not load extension from source path: ${installMetadata.source}`,
+        );
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
+      }
+      if (newExtension.config.version !== extension.version) {
+        setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+        return;
+      }
+      setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
+      return;
+    } catch (error) {
       console.error(
-        `Failed to check for update for local extension "${extension.name}". Could not load extension from source path: ${installMetadata.source}`,
+        `Error checking for update for local extension "${extension.name}": ${getErrorMessage(error)}`,
       );
       setExtensionUpdateState(ExtensionUpdateState.ERROR);
       return;
     }
-    if (newExtension.config.version !== extension.version) {
-      setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
-      return;
-    }
-    setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
-    return;
   }
   if (
     !installMetadata ||

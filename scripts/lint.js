@@ -222,6 +222,7 @@ export function runSensitiveKeywordLinter() {
     }
     const content = readFileSync(file, 'utf-8');
     const lines = content.split('\n');
+    SENSITIVE_PATTERN.lastIndex = 0; // Reset regex state before each file
     let match;
     while ((match = SENSITIVE_PATTERN.exec(content)) !== null) {
       const keyword = match[0];
