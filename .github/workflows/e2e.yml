@@ -30,7 +30,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event.label.name == 'maintainer:e2e:ok')
-    runs-on: 'gemini-cli-ubuntu-16-core'
+    runs-on: 'ubuntu-latest'
     strategy:
       fail-fast: false
       matrix:
@@ -150,7 +150,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event.label.name == 'maintainer:e2e:ok')
-    runs-on: 'gemini-cli-windows-16-core'
+    runs-on: 'windows-latest'
     continue-on-error: true
 
     steps:
