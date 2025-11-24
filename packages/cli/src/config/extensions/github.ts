@@ -108,6 +108,24 @@ export function parseGitHubRepoForReleases(source: string): {
   return { owner, repo };
 }
 
+/**
+ * Checks if a GitHub repository has any releases.
+ * @param owner The repository owner.
+ * @param repo The repository name.
+ * @returns true if releases exist, false otherwise.
+ */
+export async function checkGitHubReleasesExist(
+  owner: string,
+  repo: string,
+): Promise<boolean> {
+  try {
+    await fetchReleaseFromGithub(owner, repo);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function fetchReleaseFromGithub(
   owner: string,
   repo: string,

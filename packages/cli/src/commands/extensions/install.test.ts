@@ -279,6 +279,12 @@ describe('handleInstall', () => {
   });
 
   it('logs an error for an unknown source scheme', async () => {
+    mockParseGitHubRepoForReleases.mockImplementationOnce(() => {
+      throw new Error(
+        'Invalid GitHub repository source: test://google.com. Expected "owner/repo" or a github repo uri.',
+      );
+    });
+
     await handleInstall({ source: 'test://google.com' });
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(

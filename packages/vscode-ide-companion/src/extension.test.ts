@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { activate } from './extension.js';
-import { detectIdeFromEnv, IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
+import { IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
 
 vi.mock('vscode', () => ({
   window: {
@@ -57,19 +57,34 @@ vi.mock('vscode', () => ({
   })),
 }));
 
-vi.mock('@vybestack/llxprt-code-core/ide', () => ({
-  detectIdeFromEnv: vi.fn(() => ({ name: 'vscode', displayName: 'VS Code' })),
-  IDE_DEFINITIONS: {
-    vscode: { name: 'vscode', displayName: 'VS Code' },
-    cloudshell: { name: 'cloudshell', displayName: 'Cloud Shell' },
-    firebasestudio: { name: 'firebasestudio', displayName: 'Firebase Studio' },
-  },
-}));
+const { mockDetectIdeFromEnv } = vi.hoisted(() => {
+  const mock = vi.fn(() => ({
+    name: 'vscode',
+    displayName: 'VS Code',
+  }));
+  return { mockDetectIdeFromEnv: mock };
+});
+
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-core')
+  >('@vybestack/llxprt-code-core');
+  return {
+    ...actual,
+    detectIdeFromEnv: mockDetectIdeFromEnv,
+  };
+});
 
 describe('activate', () => {
   let context: vscode.ExtensionContext;
 
   beforeEach(() => {
+    // Reset the mock implementation to default
+    mockDetectIdeFromEnv.mockImplementation(() => ({
+      name: 'vscode',
+      displayName: 'VS Code',
+    }));
+
     context = {
       subscriptions: [],
       environmentVariableCollection: {
@@ -198,7 +213,7 @@ describe('activate', () => {
     ])(
       'does not show install or update messages for $ide.name',
       async ({ ide }) => {
-        vi.mocked(detectIdeFromEnv).mockReturnValue(ide);
+        mockDetectIdeFromEnv.mockImplementation(() => ide);
         vi.mocked(context.globalState.get).mockReturnValue(undefined);
         vi.spyOn(global, 'fetch').mockResolvedValue({
           ok: true,

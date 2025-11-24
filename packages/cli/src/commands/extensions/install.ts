@@ -10,6 +10,10 @@ import {
   requestConsentNonInteractive,
 } from '../../config/extension.js';
 import type { ExtensionInstallMetadata } from '@vybestack/llxprt-code-core';
+import {
+  checkGitHubReleasesExist,
+  parseGitHubRepoForReleases,
+} from '../../config/extensions/github.js';
 
 import { getErrorMessage } from '../../utils/errors.js';
 
@@ -28,8 +32,7 @@ export async function handleInstall(args: InstallArgs) {
       if (
         source.startsWith('http://') ||
         source.startsWith('https://') ||
-        source.startsWith('git@') ||
-        source.startsWith('sso://')
+        source.startsWith('git@')
       ) {
         installMetadata = {
           source,
@@ -37,8 +40,50 @@ export async function handleInstall(args: InstallArgs) {
           ref: args.ref,
           autoUpdate: args.autoUpdate,
         };
+      } else if (source.startsWith('sso://')) {
+        console.warn(
+          'sso:// URLs require a git-remote-sso helper to be installed. See https://github.com/google/git-remote-sso for more information.',
+        );
+        installMetadata = {
+          source,
+          type: 'git',
+          ref: args.ref,
+          autoUpdate: args.autoUpdate,
+        };
       } else {
-        throw new Error(`The source "${source}" is not a valid URL format.`);
+        // Try to parse as org/repo format
+        try {
+          const { owner, repo } = parseGitHubRepoForReleases(source);
+          // Check if releases exist
+          let hasReleases = false;
+          try {
+            hasReleases = await checkGitHubReleasesExist(owner, repo);
+          } catch {
+            // If check fails, fall back to git
+            hasReleases = false;
+          }
+
+          if (hasReleases) {
+            installMetadata = {
+              source,
+              type: 'github-release',
+              ref: args.ref,
+              autoUpdate: args.autoUpdate,
+            };
+          } else {
+            // Fall back to git clone
+            installMetadata = {
+              source: `https://github.com/${owner}/${repo}.git`,
+              type: 'git',
+              ref: args.ref,
+              autoUpdate: args.autoUpdate,
+            };
+          }
+        } catch {
+          throw new Error(
+            `The source "${source}" is not a valid URL or "org/repo" format.`,
+          );
+        }
       }
     } else if (args.path) {
       installMetadata = {
@@ -88,7 +133,7 @@ export const installCommand: CommandModule = {
       .conflicts('path', 'auto-update')
       .check((argv) => {
         if (!argv.source && !argv.path) {
-          throw new Error('Either source or --path must be provided.');
+          throw new Error('Either --source or --path must be provided.');
         }
         return true;
       }),
