@@ -159,21 +159,21 @@ describe('BuiltinCommandLoader profile', () => {
     } as unknown as Config;
   });
 
-  it('should not include profile command when isDevelopment is false', async () => {
+  it('should not include uiprofile command when isDevelopment is false', async () => {
     process.env['NODE_ENV'] = 'production';
     const { BuiltinCommandLoader } = await import('./BuiltinCommandLoader.js');
     const loader = new BuiltinCommandLoader(mockConfig);
     const commands = await loader.loadCommands(new AbortController().signal);
-    const profileCmd = commands.find((c) => c.name === 'profile');
-    expect(profileCmd).toBeUndefined();
+    const uiprofileCmd = commands.find((c) => c.name === 'uiprofile');
+    expect(uiprofileCmd).toBeUndefined();
   });
 
-  it('should include profile command when isDevelopment is true', async () => {
+  it('should include uiprofile command when isDevelopment is true', async () => {
     process.env['NODE_ENV'] = 'development';
     const { BuiltinCommandLoader } = await import('./BuiltinCommandLoader.js');
     const loader = new BuiltinCommandLoader(mockConfig);
     const commands = await loader.loadCommands(new AbortController().signal);
-    const profileCmd = commands.find((c) => c.name === 'profile');
-    expect(profileCmd).toBeDefined();
+    const uiprofileCmd = commands.find((c) => c.name === 'uiprofile');
+    expect(uiprofileCmd).toBeDefined();
   });
 });

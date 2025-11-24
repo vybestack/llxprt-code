@@ -5,8 +5,7 @@
  */
 
 import { Config, ConfigParameters } from '../config/config.js';
-import { AuthType } from '../core/contentGenerator.js';
-import type { ContentGeneratorConfig } from '../core/types.js';
+import { AuthType, type ContentGeneratorConfig } from '../core/contentGenerator.js';
 
 /**
  * Creates a fake config instance for testing
@@ -30,16 +29,16 @@ export function makeFakeConfig(): Config {
   // This is normally done via refreshAuth() but we can set it directly for synchronous test setup
   const mockContentGeneratorConfig: ContentGeneratorConfig = {
     model: 'gemini-2.0-flash-exp',
-    provider: 'gemini',
     authType: AuthType.USE_GEMINI,
-    baseUrl: undefined,
     apiKey: 'test-api-key',
   };
 
-  // Use type assertion to bypass readonly restrictions for test setup
-  (
-    config as { contentGeneratorConfig: ContentGeneratorConfig }
-  ).contentGeneratorConfig = mockContentGeneratorConfig;
+  // Use reflection to bypass readonly restrictions for test setup
+  Object.defineProperty(config, 'contentGeneratorConfig', {
+    value: mockContentGeneratorConfig,
+    writable: true,
+    configurable: true,
+  });
 
   return config;
 }

@@ -756,36 +756,6 @@ export const SETTINGS_SCHEMA = {
         description: 'Custom witty phrases to display during loading.',
         showInDialog: false,
       },
-      accessibility: {
-        type: 'object',
-        label: 'Accessibility',
-        category: 'UI',
-        requiresRestart: true,
-        default: {},
-        description: 'Accessibility settings.',
-        showInDialog: false,
-        properties: {
-          disableLoadingPhrases: {
-            type: 'boolean',
-            label: 'Disable Loading Phrases',
-            category: 'UI',
-            requiresRestart: true,
-            default: false,
-            description: 'Disable loading phrases for accessibility',
-            showInDialog: true,
-          },
-          screenReader: {
-            type: 'boolean',
-            label: 'Screen Reader Mode',
-            category: 'UI',
-            requiresRestart: true,
-            default: false,
-            description:
-              'Render output in plain-text to be more screen reader accessible',
-            showInDialog: true,
-          },
-        },
-      },
     },
   },
 

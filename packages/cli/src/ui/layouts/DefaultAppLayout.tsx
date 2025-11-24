@@ -22,7 +22,7 @@ import { Header } from '../components/Header.js';
 import { Tips } from '../components/Tips.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
-import { UpdateNotification } from '../components/UpdateNotification.js';
+import { Notifications } from '../components/Notifications.js';
 import { TodoPanel } from '../components/TodoPanel.js';
 import { Footer } from '../components/Footer.js';
 import { DialogManager } from '../components/DialogManager.js';
@@ -85,7 +85,6 @@ export const DefaultAppLayout = ({
     showAutoAcceptIndicator,
     shellModeActive,
     thought,
-    initError,
     branchName,
     debugMessage,
     errorCount,
@@ -208,22 +207,11 @@ export const DefaultAppLayout = ({
         </OverflowProvider>
 
         <Box flexDirection="column" ref={mainControlsRef}>
-          {updateInfo && <UpdateNotification message={updateInfo.message} />}
-          {startupWarnings.length > 0 && (
-            <Box
-              borderStyle="round"
-              borderColor={Colors.AccentYellow}
-              paddingX={1}
-              marginY={1}
-              flexDirection="column"
-            >
-              {startupWarnings.map((warning, index) => (
-                <Text key={index} color={Colors.AccentYellow}>
-                  {warning}
-                </Text>
-              ))}
-            </Box>
-          )}
+          <Notifications
+            startupWarnings={startupWarnings}
+            updateInfo={updateInfo}
+            history={history}
+          />
 
           {showTodoPanelSetting && <TodoPanel width={inputWidth} />}
 
@@ -320,39 +308,6 @@ export const DefaultAppLayout = ({
             </>
           )}
 
-          {initError && streamingState !== StreamingState.Responding && (
-            <Box
-              borderStyle="round"
-              borderColor={Colors.AccentRed}
-              paddingX={1}
-              marginBottom={1}
-            >
-              {(() => {
-                const matchingHistoryError = history.find(
-                  (item) =>
-                    item.type === 'error' && item.text?.includes(initError),
-                );
-                if (matchingHistoryError?.text) {
-                  return (
-                    <Text color={Colors.AccentRed}>
-                      {matchingHistoryError.text}
-                    </Text>
-                  );
-                }
-                return (
-                  <>
-                    <Text color={Colors.AccentRed}>
-                      Initialization Error: {initError}
-                    </Text>
-                    <Text color={Colors.AccentRed}>
-                      {' '}
-                      Please check API key and configuration.
-                    </Text>
-                  </>
-                );
-              })()}
-            </Box>
-          )}
           {!settings.merged.hideFooter && (
             <Footer
               model={currentModel}

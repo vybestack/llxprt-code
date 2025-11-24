@@ -191,7 +191,9 @@ export const DebugProfiler = () => {
   return (
     <Text color={SemanticColors.status.warning} key={forceRefresh}>
       Renders: {profiler.numFrames} (total),{' '}
-      <Text color={SemanticColors.status.error}>{profiler.totalIdleFrames} (idle) </Text>
+      <Text color={SemanticColors.status.error}>
+        {profiler.totalIdleFrames} (idle){' '}
+      </Text>
     </Text>
   );
 };
