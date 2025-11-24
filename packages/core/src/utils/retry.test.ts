@@ -299,7 +299,8 @@ describe('retryWithBackoff', () => {
     });
   });
 
-  describe('Flash model fallback for OAuth users', () => {
+  // Skipped: llxprt doesn't have automatic model fallback (multi-provider design)
+  describe.skip('Flash model fallback for OAuth users', () => {
     it('should trigger fallback for OAuth personal users after persistent 429 errors', async () => {
       const fallbackCallback = vi.fn().mockResolvedValue('gemini-2.5-flash');
 
