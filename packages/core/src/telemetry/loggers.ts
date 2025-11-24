@@ -19,6 +19,12 @@ import {
   EVENT_SLASH_COMMAND,
   EVENT_TOOL_OUTPUT_TRUNCATED,
   EVENT_FILE_OPERATION,
+  EVENT_MALFORMED_JSON_RESPONSE,
+  EVENT_MODEL_ROUTING,
+  EVENT_EXTENSION_INSTALL,
+  EVENT_EXTENSION_UNINSTALL,
+  EVENT_EXTENSION_ENABLE,
+  EVENT_EXTENSION_DISABLE,
 } from './constants.js';
 import {
   ApiErrorEvent,
@@ -39,6 +45,12 @@ import {
   PerformanceMetricsEvent,
   ToolOutputTruncatedEvent,
   FileOperationEvent,
+  MalformedJsonResponseEvent,
+  ModelRoutingEvent,
+  ExtensionInstallEvent,
+  ExtensionUninstallEvent,
+  ExtensionEnableEvent,
+  ExtensionDisableEvent,
 } from './types.js';
 import {
   recordApiErrorMetrics,
@@ -46,6 +58,8 @@ import {
   recordApiResponseMetrics,
   recordToolCallMetrics,
   recordFileOperationMetric,
+  recordModelRoutingMetrics,
+  FileOperation,
 } from './metrics.js';
 import { isTelemetrySdkInitialized } from './sdk.js';
 import { uiTelemetryService, UiEvent } from './uiTelemetry.js';
@@ -181,7 +195,6 @@ export function logToolOutputTruncated(
   config: Config,
   event: ToolOutputTruncatedEvent,
 ): void {
-  ClearcutLogger.getInstance(config)?.logToolOutputTruncatedEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -203,7 +216,6 @@ export function logFileOperation(
   config: Config,
   event: FileOperationEvent,
 ): void {
-  ClearcutLogger.getInstance(config)?.logFileOperationEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -234,13 +246,13 @@ export function logFileOperation(
   };
   logger.emit(logRecord);
 
-  recordFileOperationMetric(config, {
-    operation: event.operation,
-    lines: event.lines,
-    mimetype: event.mimetype,
-    extension: event.extension,
-    programming_language: event.programming_language,
-  });
+  recordFileOperationMetric(
+    config,
+    event.operation as FileOperation,
+    event.lines,
+    event.mimetype,
+    event.extension,
+  );
 }
 
 export function logApiRequest(config: Config, event: ApiRequestEvent): void {
@@ -585,6 +597,143 @@ export function logPerformanceMetrics(
   const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Performance metrics. Provider: ${event.provider}, TokensPerMinute: ${event.tokensPerMinute}, ThrottleWaitTimeMs: ${event.throttleWaitTimeMs}, TotalRequests: ${event.totalRequests}, ErrorRate: ${event.errorRate}.`,
+    attributes,
+  };
+  logger.emit(logRecord);
+}
+
+export function logMalformedJsonResponse(
+  config: Config,
+  event: MalformedJsonResponseEvent,
+): void {
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    'event.name': EVENT_MALFORMED_JSON_RESPONSE,
+    'event.timestamp': new Date().toISOString(),
+    model: event.model,
+  };
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `Malformed JSON response from ${event.model}.`,
+    attributes,
+  };
+  logger.emit(logRecord);
+}
+
+export function logModelRouting(
+  config: Config,
+  event: ModelRoutingEvent,
+): void {
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    model: event.model,
+    source: event.source,
+    contextLimit: event.contextLimit,
+    reason: event.reason,
+    fallback: event.fallback,
+    'event.name': EVENT_MODEL_ROUTING,
+  };
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `Model routing decision. Model: ${event.model}, Source: ${event.source}`,
+    attributes,
+  };
+  logger.emit(logRecord);
+
+  recordModelRoutingMetrics(config, event);
+}
+
+export function logExtensionInstallEvent(
+  config: Config,
+  event: ExtensionInstallEvent,
+): void {
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    'event.name': EVENT_EXTENSION_INSTALL,
+    'event.timestamp': new Date().toISOString(),
+    extension_name: event.extension_name,
+    extension_version: event.extension_version,
+    extension_source: event.extension_source,
+    status: event.status,
+  };
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `Installed extension ${event.extension_name}`,
+    attributes,
+  };
+  logger.emit(logRecord);
+}
+
+export function logExtensionUninstall(
+  config: Config,
+  event: ExtensionUninstallEvent,
+): void {
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    'event.name': EVENT_EXTENSION_UNINSTALL,
+    'event.timestamp': new Date().toISOString(),
+    extension_name: event.extension_name,
+    status: event.status,
+  };
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `Uninstalled extension ${event.extension_name}`,
+    attributes,
+  };
+  logger.emit(logRecord);
+}
+
+export function logExtensionEnable(
+  config: Config,
+  event: ExtensionEnableEvent,
+): void {
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    'event.name': EVENT_EXTENSION_ENABLE,
+    'event.timestamp': new Date().toISOString(),
+    extension_name: event.extension_name,
+    setting_scope: event.setting_scope,
+  };
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `Enabled extension ${event.extension_name}`,
+    attributes,
+  };
+  logger.emit(logRecord);
+}
+
+export function logExtensionDisable(
+  config: Config,
+  event: ExtensionDisableEvent,
+): void {
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    'event.name': EVENT_EXTENSION_DISABLE,
+    'event.timestamp': new Date().toISOString(),
+    extension_name: event.extension_name,
+    setting_scope: event.setting_scope,
+  };
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `Disabled extension ${event.extension_name}`,
     attributes,
   };
   logger.emit(logRecord);

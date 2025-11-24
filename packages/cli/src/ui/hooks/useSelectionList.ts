@@ -429,7 +429,7 @@ export function useSelectionList<T>({
         }
       }
     },
-    [dispatch, itemsLength, showNumbers],
+    [dispatch, itemsLength, showNumbers, isFocused, state.activeIndex],
   );
 
   useKeypress(handleKeypress, { isActive: !!(isFocused && itemsLength > 0) });

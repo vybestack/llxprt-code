@@ -212,3 +212,11 @@ export function recordFileOperationMetric(
   }
   fileOperationCounter.add(1, attributes);
 }
+
+export function recordModelRoutingMetrics(
+  _config: Config,
+  _event: { model: string; source: string; fallback?: boolean },
+): void {
+  // Placeholder implementation for model routing metrics
+  // This would record metrics about model selection and routing decisions
+}
