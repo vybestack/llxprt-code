@@ -39,8 +39,6 @@ interface DefaultAppLayoutProps {
   config: Config;
   settings: LoadedSettings;
   startupWarnings: string[];
-  version: string;
-  nightly: boolean;
   mainControlsRef: React.RefObject<DOMElement | null>;
   availableTerminalHeight: number;
   contextFileNames: string[];
@@ -51,8 +49,6 @@ export const DefaultAppLayout = ({
   config,
   settings,
   startupWarnings,
-  version: _version,
-  nightly: _nightly,
   mainControlsRef,
   availableTerminalHeight,
   contextFileNames,

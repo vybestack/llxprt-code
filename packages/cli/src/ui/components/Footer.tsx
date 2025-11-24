@@ -273,8 +273,9 @@ export const Footer: React.FC = React.memo(() => {
   // Determine paid mode
   const status = runtime.getActiveProviderStatus();
   const isPaidMode =
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    status.providerName === 'gemini' ? (status as any).isPaid : undefined;
+    status.providerName === 'gemini' && 'isPaid' in status
+      ? (status as { isPaid: boolean }).isPaid
+      : undefined;
 
   const showDebugProfiler = debugMode || isDevelopment;
 

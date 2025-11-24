@@ -15,6 +15,13 @@ export function interpolateColor(
   color2: string,
   factor: number,
 ): string {
+  if (!/^#[0-9A-F]{6}$/i.test(color1) || !/^#[0-9A-F]{6}$/i.test(color2)) {
+    throw new Error('Invalid color format. Expected hex string (e.g. #RRGGBB)');
+  }
+  if (factor < 0 || factor > 1) {
+    throw new Error('Factor must be between 0 and 1');
+  }
+
   const r1 = parseInt(color1.substring(1, 3), 16);
   const g1 = parseInt(color1.substring(3, 5), 16);
   const b1 = parseInt(color1.substring(5, 7), 16);

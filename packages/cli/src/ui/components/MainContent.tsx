@@ -51,7 +51,8 @@ export const MainContent = ({ config }: { config: Config }) => {
       key={h.id}
       item={h}
       isPending={false}
-      commands={uiState.slashCommands}
+      slashCommands={uiState.slashCommands}
+      activeShellPtyId={uiState.activePtyId}
       config={config}
     />
   ));
@@ -60,20 +61,26 @@ export const MainContent = ({ config }: { config: Config }) => {
     () => (
       <OverflowProvider>
         <Box flexDirection="column">
-          {pendingHistoryItems.map((item, i) => (
-            <HistoryItemDisplay
-              key={i}
-              availableTerminalHeight={
-                uiState.constrainHeight ? availableTerminalHeight : undefined
-              }
-              terminalWidth={mainAreaWidth}
-              item={{ ...item, id: 0 }}
-              isPending={true}
-              isFocused={!uiState.isEditorDialogOpen}
-              activeShellPtyId={uiState.activePtyId}
-              config={config}
-            />
-          ))}
+          {pendingHistoryItems.map((item, i) => {
+            // Use negative IDs for pending items to avoid collision with persisted items (positive IDs)
+            // and ensure keys are unique within the list.
+            const pendingId = -1 - i;
+            return (
+              <HistoryItemDisplay
+                key={pendingId}
+                availableTerminalHeight={
+                  uiState.constrainHeight ? availableTerminalHeight : undefined
+                }
+                terminalWidth={mainAreaWidth}
+                item={{ ...item, id: pendingId }}
+                isPending={true}
+                isFocused={!uiState.isEditorDialogOpen}
+                slashCommands={uiState.slashCommands}
+                activeShellPtyId={uiState.activePtyId}
+                config={config}
+              />
+            );
+          })}
           <ShowMoreLines constrainHeight={uiState.constrainHeight} />
         </Box>
       </OverflowProvider>
@@ -84,8 +91,9 @@ export const MainContent = ({ config }: { config: Config }) => {
       availableTerminalHeight,
       mainAreaWidth,
       uiState.isEditorDialogOpen,
-      uiState.activePtyId,
       config,
+      uiState.activePtyId,
+      uiState.slashCommands,
     ],
   );
 
@@ -110,7 +118,8 @@ export const MainContent = ({ config }: { config: Config }) => {
             key={item.item.id}
             item={item.item}
             isPending={false}
-            commands={uiState.slashCommands}
+            slashCommands={uiState.slashCommands}
+            activeShellPtyId={uiState.activePtyId}
             config={config}
           />
         );
@@ -122,9 +131,10 @@ export const MainContent = ({ config }: { config: Config }) => {
       version,
       mainAreaWidth,
       availableTerminalHeight,
-      uiState.slashCommands,
       pendingItems,
       config,
+      uiState.slashCommands,
+      uiState.activePtyId,
     ],
   );
 

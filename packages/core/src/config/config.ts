@@ -1467,6 +1467,10 @@ export class Config {
     return this.shouldUseNodePtyShell;
   }
 
+  getEnableInteractiveShell(): boolean {
+    return this.shouldUseNodePtyShell;
+  }
+
   getSkipNextSpeakerCheck(): boolean {
     return this.skipNextSpeakerCheck;
   }

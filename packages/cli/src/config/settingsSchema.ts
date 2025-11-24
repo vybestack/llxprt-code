@@ -248,6 +248,9 @@ export const SETTINGS_SCHEMA = {
     description: 'Automatically configure Node.js memory limits',
     showInDialog: true,
   },
+  // TODO: This is a duplicate of general.preferredEditor.
+  // It is kept here for now because the codebase relies on it being a top-level setting.
+  // We should migrate usages to general.preferredEditor and remove this top-level definition to align with gemini-cli.
   preferredEditor: {
     type: 'string',
     label: 'Preferred Editor',
@@ -257,6 +260,7 @@ export const SETTINGS_SCHEMA = {
     description: 'The preferred editor to open files in.',
     showInDialog: false,
   },
+
   maxSessionTurns: {
     type: 'number',
     label: 'Max Session Turns',
@@ -443,13 +447,13 @@ export const SETTINGS_SCHEMA = {
 
   shouldUseNodePtyShell: {
     type: 'boolean',
-    label: 'Enable Interactive Shell (node-pty)',
+    label: 'Enable Interactive Shell (node-pty) [DEPRECATED]',
     category: 'Shell',
     requiresRestart: true,
     default: false,
     description:
-      'Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty. Falls back to child_process when disabled.',
-    showInDialog: true,
+      'DEPRECATED: Use tools.usePty instead. Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty.',
+    showInDialog: false,
   },
 
   selectedAuthType: {
@@ -1186,13 +1190,13 @@ export const SETTINGS_SCHEMA = {
   },
   useRipgrep: {
     type: 'boolean',
-    label: 'Use Ripgrep',
-    category: 'Tools',
+    label: 'Use Ripgrep [DEPRECATED]',
+    category: 'General',
     requiresRestart: false,
     default: false,
     description:
-      'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
-    showInDialog: true,
+      'DEPRECATED: Use tools.useRipgrep instead. Use ripgrep for file content search instead of the fallback implementation.',
+    showInDialog: false,
   },
   enablePromptCompletion: {
     type: 'boolean',

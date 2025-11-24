@@ -280,16 +280,24 @@ export const useGeminiStream = (
       }
 
       if (options.isPrimary) {
+        // Transform CompletedToolCall[] to TrackedCompletedToolCall[] to satisfy the type
+        const trackedCompletedCalls: TrackedCompletedToolCall[] =
+          completedToolCallsFromScheduler.map((call) => ({
+            ...call,
+            status: 'success', // CompletedToolCall implies success or error, but here we treat as completed state for tracking
+            responseSubmittedToGemini: false,
+          })) as unknown as TrackedCompletedToolCall[]; // We need to cast because CompletedToolCall structure might slightly differ but is compatible for display
+
         addItem(
-          mapTrackedToolCallsToDisplay(
-            completedToolCallsFromScheduler as TrackedToolCall[],
-          ),
+          mapTrackedToolCallsToDisplay(trackedCompletedCalls),
           Date.now(),
         );
 
-        await handleCompletedToolsRef.current(
-          completedToolCallsFromScheduler as TrackedToolCall[],
-        );
+        try {
+          await handleCompletedToolsRef.current(trackedCompletedCalls);
+        } catch (error) {
+          onDebugMessage(`Error handling completed tools: ${error}`);
+        }
         return;
       }
 
@@ -307,7 +315,7 @@ export const useGeminiStream = (
         Date.now(),
       );
     },
-    [addItem],
+    [addItem, onDebugMessage],
   );
 
   const [toolCalls, scheduleToolCalls, markToolsAsSubmitted] =

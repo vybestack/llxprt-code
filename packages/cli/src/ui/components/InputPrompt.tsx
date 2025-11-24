@@ -79,25 +79,16 @@ export interface InputPromptProps {
 }
 
 // The input content, input container, and input suggestions list may have different widths
-export const calculatePromptWidths = (terminalWidth: number) => {
-  const widthFraction = 0.9;
+export const calculatePromptWidths = (mainContentWidth: number) => {
   const FRAME_PADDING_AND_BORDER = 4; // Border (2) + padding (2)
   const PROMPT_PREFIX_WIDTH = 2; // '> ' or '! '
-  const MIN_CONTENT_WIDTH = 2;
 
-  const innerContentWidth =
-    Math.floor(terminalWidth * widthFraction) -
-    FRAME_PADDING_AND_BORDER -
-    PROMPT_PREFIX_WIDTH;
-
-  const inputWidth = Math.max(MIN_CONTENT_WIDTH, innerContentWidth);
   const FRAME_OVERHEAD = FRAME_PADDING_AND_BORDER + PROMPT_PREFIX_WIDTH;
-  const containerWidth = inputWidth + FRAME_OVERHEAD;
-  const suggestionsWidth = Math.max(20, Math.floor(terminalWidth * 1.0));
+  const suggestionsWidth = Math.max(20, mainContentWidth);
 
   return {
-    inputWidth,
-    containerWidth,
+    inputWidth: Math.max(mainContentWidth - FRAME_OVERHEAD, 1),
+    containerWidth: mainContentWidth,
     suggestionsWidth,
     frameOverhead: FRAME_OVERHEAD,
   } as const;
@@ -868,7 +859,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         <Box
           marginTop={1}
           flexDirection="column"
-          width={calculatePromptWidths(inputWidth + 6).containerWidth}
+          width={inputWidth + 6} // 6 = FRAME_OVERHEAD (4) + PADDING (2)
           ref={innerBoxRef}
         >
           {buffer.text.length === 0 && placeholder ? (

@@ -31,7 +31,8 @@ export const calculateMainAreaWidth = (
 
     // Linearly interpolate between 80 columns (98%) and 132 columns (90%).
     const t = (terminalWidth - 80) / (132 - 80);
-    return Math.round(lerp(0.98, 0.9, t));
+    const percentage = lerp(0.98, 0.9, t);
+    return Math.round(percentage * terminalWidth);
   };
 
   return getMainAreaWidthInternal(terminalWidth);

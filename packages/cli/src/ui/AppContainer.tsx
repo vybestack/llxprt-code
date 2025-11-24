@@ -109,6 +109,7 @@ import { ConfigProvider } from './contexts/ConfigContext.js';
 import { SettingsProvider } from './contexts/SettingsContext.js';
 import { AppContext } from './contexts/AppContext.js';
 import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
+import { calculatePromptWidths } from './components/InputPrompt.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
@@ -731,17 +732,13 @@ export const AppContainer = (props: AppContainerProps) => {
     return () => clearInterval(interval);
   }, [runtime]);
 
-  // Terminal and UI setup
-  const widthFraction = 0.9;
-  // Calculate inputWidth accounting for:
-  // - Prompt: 2 chars ("! " or "> ")
-  // - Padding: 2 chars (paddingX={1} on each side in InputPrompt)
-  // - Additional margin: 2 chars (for proper wrapping)
-  const inputWidth = Math.max(
-    20,
-    Math.floor(terminalWidth * widthFraction) - 6,
-  );
-  const suggestionsWidth = Math.max(60, Math.floor(terminalWidth * 0.8));
+  const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
+  // Derive widths for InputPrompt using shared helper
+  const { inputWidth, suggestionsWidth } = useMemo(() => {
+    const { inputWidth, suggestionsWidth } =
+      calculatePromptWidths(mainAreaWidth);
+    return { inputWidth, suggestionsWidth };
+  }, [mainAreaWidth]);
 
   // Utility callbacks
   const isValidPath = useCallback((filePath: string): boolean => {
@@ -1328,8 +1325,6 @@ export const AppContainer = (props: AppContainerProps) => {
     return consoleMessages.filter((msg) => msg.type !== 'debug');
   }, [consoleMessages, config]);
 
-  const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
-
   // Detect PowerShell for file reference syntax tip
   const isPowerShell =
     process.env.PSModulePath !== undefined ||
@@ -1594,8 +1589,6 @@ export const AppContainer = (props: AppContainerProps) => {
                 config={config}
                 settings={settings}
                 startupWarnings={startupWarnings}
-                version={version}
-                nightly={nightly}
                 mainControlsRef={mainControlsRef}
                 availableTerminalHeight={availableTerminalHeight}
                 contextFileNames={contextFileNames}

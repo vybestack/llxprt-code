@@ -67,8 +67,7 @@ export const ShellToolMessage: React.FC<ShellToolMessageProps> = ({
       name === SHELL_NAME ||
       name === SHELL_TOOL_NAME) &&
     status === ToolCallStatus.Executing &&
-    // @ts-expect-error - getEnableInteractiveShell is not in the Config type yet
-    (config?.getEnableInteractiveShell?.() ?? false);
+    (config?.getEnableInteractiveShell() ?? false);
 
   useMouseClick(
     containerRef,

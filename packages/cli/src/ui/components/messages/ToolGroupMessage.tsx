@@ -215,8 +215,6 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
         cause tearing.
       */
       width={terminalWidth}
-      marginLeft={1}
-      gap={1}
     >
       {agentId && agentId !== DEFAULT_AGENT_ID && (
         <Box marginLeft={1}>
@@ -234,7 +232,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
         const commonProps = {
           ...tool,
           availableTerminalHeight: availableTerminalHeightPerToolMessage,
-          terminalWidth: terminalWidth - 4, // Adjust for margin
+          terminalWidth,
           emphasis: isConfirming
             ? ('high' as const)
             : toolAwaitingApproval
@@ -246,7 +244,12 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
         };
 
         return (
-          <Box key={tool.callId} flexDirection="column" minHeight={1}>
+          <Box
+            key={tool.callId}
+            flexDirection="column"
+            minHeight={1}
+            width={terminalWidth}
+          >
             {isShellTool ? (
               <ShellToolMessage
                 {...commonProps}
@@ -268,7 +271,6 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
               borderStyle="round"
               paddingLeft={1}
               paddingRight={1}
-              width={terminalWidth - 4} // Adjust for margin
             >
               {tool.status === ToolCallStatus.Confirming &&
                 isConfirming &&
@@ -280,7 +282,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
                     availableTerminalHeight={
                       availableTerminalHeightPerToolMessage
                     }
-                    terminalWidth={terminalWidth - 8} // Adjust for inner padding
+                    terminalWidth={terminalWidth - 4}
                   />
                 )}
               {tool.outputFile && (
@@ -302,7 +304,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
         filteredToolCalls.length > 0 && (
           <Box
             height={0}
-            width={terminalWidth - 4} // Adjust for margin
+            width={terminalWidth}
             borderLeft={true}
             borderRight={true}
             borderTop={false}

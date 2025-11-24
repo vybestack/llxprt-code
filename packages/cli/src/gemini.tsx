@@ -102,7 +102,10 @@ import { writeFileSync } from 'node:fs';
 
 const handleError = (error: Error, errorInfo: React.ErrorInfo) => {
   console.error('Uncaught error:', error, errorInfo);
-  appEvents.emit(AppEvent.LogError, `Uncaught error: ${error.message}`);
+  appEvents.emit(
+    AppEvent.LogError,
+    `Uncaught error: ${error.message}\nComponent Stack: ${errorInfo.componentStack}`,
+  );
 };
 
 export function validateDnsResolutionOrder(

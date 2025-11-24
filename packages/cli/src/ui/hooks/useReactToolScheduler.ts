@@ -399,7 +399,12 @@ export function mapToDisplay(
         description = JSON.stringify(trackedCall.request.args);
       } else {
         displayName = trackedCall.tool.displayName;
-        description = trackedCall.invocation.getDescription();
+        // Defensive check: invocation might be missing in some edge cases (e.g. subagent boundary)
+        if (trackedCall.invocation) {
+          description = trackedCall.invocation.getDescription();
+        } else {
+          description = JSON.stringify(trackedCall.request.args);
+        }
         renderOutputAsMarkdown = trackedCall.tool.isOutputMarkdown;
       }
 

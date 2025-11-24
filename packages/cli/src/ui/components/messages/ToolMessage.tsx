@@ -87,8 +87,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   const isThisShellFocusable =
     (name === SHELL_COMMAND_NAME || name === 'Shell') &&
     status === ToolCallStatus.Executing &&
-    // @ts-expect-error - getEnableInteractiveShell is not in the Config type yet
-    (config?.getEnableInteractiveShell?.() ?? false);
+    (config?.getEnableInteractiveShell() ?? false);
 
   const shouldShowFocusHint =
     isThisShellFocusable && (showFocusHint || userHasFocused);

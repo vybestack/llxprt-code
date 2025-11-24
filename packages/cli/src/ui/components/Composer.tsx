@@ -54,7 +54,12 @@ export const Composer = ({ config, settings }: ComposerProps) => {
   const vimEnabled = vimModeEnabled;
 
   return (
-    <Box flexDirection="column">
+    <Box
+      flexDirection="column"
+      width={uiState.mainAreaWidth}
+      flexGrow={0}
+      flexShrink={0}
+    >
       <Box flexDirection="column" marginTop={1}>
         {messageQueue
           .slice(0, MAX_DISPLAYED_QUEUED_MESSAGES)
