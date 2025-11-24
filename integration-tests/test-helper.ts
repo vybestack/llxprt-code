@@ -680,12 +680,25 @@ export class TestRig {
 
     for (const match of simpleMatches) {
       const toolName = match[1];
+      const matchIndex = match.index || 0;
+
+      // Look for error message immediately following this tool call
+      // Pattern: "Error executing tool <name>: Error: <message>"
+      const afterMatch = stdout.substring(
+        matchIndex,
+        Math.min(stdout.length, matchIndex + 500),
+      );
+      const errorPattern = new RegExp(
+        `Error executing tool ${toolName}:.*Error:`,
+      );
+      const hasError = errorPattern.test(afterMatch);
+
       logs.push({
         timestamp: Date.now(),
         toolRequest: {
           name: toolName,
           args: '{}',
-          success: true, // Assume success since we don't have details
+          success: !hasError,
           duration_ms: 0,
         },
       });
