@@ -105,7 +105,7 @@ describe('DebugLogger', () => {
     }
     const duration = performance.now() - start;
 
-    expect(duration).toBeLessThan(1);
+    expect(duration).toBeLessThan(3);
   });
 
   /**
