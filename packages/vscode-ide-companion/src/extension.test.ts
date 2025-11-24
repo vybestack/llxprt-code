@@ -7,10 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { activate } from './extension.js';
-import {
-  detectIdeFromEnv,
-  IDE_DEFINITIONS,
-} from '@vybestack/llxprt-code-core/ide';
+import { detectIdeFromEnv, IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
 
 vi.mock('vscode', () => ({
   window: {
