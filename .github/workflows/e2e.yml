@@ -80,6 +80,8 @@ jobs:
           LLXPRT_AUTH_TYPE: 'provider'
           KEEP_OUTPUT: 'true'
           VERBOSE: 'true'
+          # Force file storage to avoid keytar/libsecret dependency in CI
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
         shell: 'bash'
         run: |
           if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
