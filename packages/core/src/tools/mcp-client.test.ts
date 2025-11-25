@@ -604,12 +604,14 @@ describe('connectToMcpServer with OAuth', () => {
       scopes: ['test-scope'],
     });
 
-    // We need this to be an any type because we dig into its private state.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let capturedTransport: any;
+    // Type for accessing transport's private state in tests
+    interface TransportWithPrivate {
+      _requestInit?: { headers?: Record<string, string> };
+    }
+    let capturedTransport: TransportWithPrivate | undefined;
     vi.mocked(mockedClient.connect).mockImplementationOnce(
       async (transport) => {
-        capturedTransport = transport;
+        capturedTransport = transport as unknown as TransportWithPrivate;
         return Promise.resolve();
       },
     );
@@ -626,7 +628,7 @@ describe('connectToMcpServer with OAuth', () => {
     expect(MCPOAuthProvider.authenticate).toHaveBeenCalledOnce();
 
     const authHeader =
-      capturedTransport._requestInit?.headers?.['Authorization'];
+      capturedTransport?._requestInit?.headers?.['Authorization'];
     expect(authHeader).toBe('Bearer test-access-token');
   });
 
@@ -645,12 +647,14 @@ describe('connectToMcpServer with OAuth', () => {
       scopes: ['test-scope'],
     });
 
-    // We need this to be an any type because we dig into its private state.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let capturedTransport: any;
+    // Type for accessing transport's private state in tests
+    interface TransportWithPrivate {
+      _requestInit?: { headers?: Record<string, string> };
+    }
+    let capturedTransport: TransportWithPrivate | undefined;
     vi.mocked(mockedClient.connect).mockImplementationOnce(
       async (transport) => {
-        capturedTransport = transport;
+        capturedTransport = transport as unknown as TransportWithPrivate;
         return Promise.resolve();
       },
     );
@@ -668,7 +672,7 @@ describe('connectToMcpServer with OAuth', () => {
     expect(OAuthUtils.discoverOAuthConfig).toHaveBeenCalledWith(serverUrl);
 
     const authHeader =
-      capturedTransport._requestInit?.headers?.['Authorization'];
+      capturedTransport?._requestInit?.headers?.['Authorization'];
     expect(authHeader).toBe('Bearer test-access-token');
   });
 });
