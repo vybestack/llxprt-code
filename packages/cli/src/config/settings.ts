@@ -38,74 +38,28 @@ export type { Settings, MemoryImportFormat };
 
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
-// Currently unused - reserved for future migration implementation
-// const MIGRATE_V2_OVERWRITE = false;
+// Keys that exist at root level but should be migrated to ui.* namespace
+// These are read from effectiveSettings.ui.* in config.ts but may exist at root in user settings
+const LEGACY_UI_KEYS = [
+  'usageStatisticsEnabled',
+  'contextFileName',
+  'memoryImportFormat',
+  'ideMode',
+  'hideWindowTitle',
+  'showStatusInTitle',
+  'hideTips',
+  'hideBanner',
+  'hideFooter',
+  'hideCWD',
+  'hideSandboxStatus',
+  'hideModelInfo',
+  'hideContextSummary',
+  'showMemoryUsage',
+  'showLineNumbers',
+  'showCitations',
+  'hasSeenIdeIntegrationNudge',
+] as const;
 
-// As defined in spec.md - adapted for llxprt's flat settings structure
-// Currently unused - reserved for future migration implementation
-/*
-const MIGRATION_MAP: Record<string, string> = {
-  preferredEditor: 'preferredEditor',
-  vimMode: 'vimMode',
-  disableAutoUpdate: 'disableAutoUpdate',
-  disableUpdateNag: 'disableUpdateNag',
-  checkpointing: 'checkpointing',
-  enablePromptCompletion: 'enablePromptCompletion',
-  debugKeystrokeLogging: 'debugKeystrokeLogging',
-  theme: 'theme',
-  customThemes: 'customThemes',
-  hideWindowTitle: 'hideWindowTitle',
-  showStatusInTitle: 'showStatusInTitle',
-  hideTips: 'hideTips',
-  hideBanner: 'hideBanner',
-  hideFooter: 'hideFooter',
-  hideCWD: 'hideCWD',
-  hideSandboxStatus: 'hideSandboxStatus',
-  hideModelInfo: 'hideModelInfo',
-  hideContextSummary: 'hideContextSummary',
-  showMemoryUsage: 'showMemoryUsage',
-  showLineNumbers: 'showLineNumbers',
-  showCitations: 'showCitations',
-  accessibility: 'accessibility',
-  ideMode: 'ideMode',
-  hasSeenIdeIntegrationNudge: 'hasSeenIdeIntegrationNudge',
-  usageStatisticsEnabled: 'usageStatisticsEnabled',
-  telemetry: 'telemetry',
-  model: 'model',
-  maxSessionTurns: 'maxSessionTurns',
-  summarizeToolOutput: 'summarizeToolOutput',
-  chatCompression: 'chatCompression',
-  skipNextSpeakerCheck: 'skipNextSpeakerCheck',
-  contextFileName: 'contextFileName',
-  memoryImportFormat: 'memoryImportFormat',
-  memoryDiscoveryMaxDirs: 'memoryDiscoveryMaxDirs',
-  includeDirectories: 'includeDirectories',
-  loadMemoryFromIncludeDirectories: 'loadMemoryFromIncludeDirectories',
-  fileFiltering: 'fileFiltering',
-  useRipgrep: 'useRipgrep',
-  sandbox: 'sandbox',
-  shouldUseNodePtyShell: 'shouldUseNodePtyShell',
-  autoAccept: 'autoAccept',
-  allowedTools: 'allowedTools',
-  coreTools: 'coreTools',
-  excludeTools: 'excludeTools',
-  toolDiscoveryCommand: 'toolDiscoveryCommand',
-  toolCallCommand: 'toolCallCommand',
-  mcpServerCommand: 'mcpServerCommand',
-  allowMCPServers: 'allowMCPServers',
-  excludeMCPServers: 'excludeMCPServers',
-  folderTrust: 'folderTrust',
-  folderTrustFeature: 'folderTrustFeature',
-  selectedAuthType: 'selectedAuthType',
-  useExternalAuth: 'useExternalAuth',
-  autoConfigureMaxOldSpaceSize: 'autoConfigureMaxOldSpaceSize',
-  dnsResolutionOrder: 'dnsResolutionOrder',
-  excludedProjectEnvVars: 'excludedProjectEnvVars',
-  bugCommand: 'bugCommand',
-  extensionManagement: 'extensionManagement',
-  extensions: 'extensions',
-};
-*/
 export function getSystemSettingsPath(): string {
   if (process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH) {
     return process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH;
@@ -231,6 +185,22 @@ function mergeSettings(
   // Get defaults from schema
   const schemaDefaults = getSchemaDefaults();
 
+  // Helper to extract legacy top-level UI keys from a settings object
+  // These keys were at root level in old settings files but are now under ui.*
+  const extractLegacyUiKeys = (settings: Settings): Record<string, unknown> => {
+    const legacy: Record<string, unknown> = {};
+    for (const key of LEGACY_UI_KEYS) {
+      if (
+        key in settings &&
+        settings[key as keyof Settings] !== undefined &&
+        !(settings.ui && key in settings.ui)
+      ) {
+        legacy[key] = settings[key as keyof Settings];
+      }
+    }
+    return legacy;
+  };
+
   // Settings are merged with the following precedence (last one wins for
   // single values):
   // 1. Schema Defaults (from settingsSchema.ts)
@@ -249,9 +219,15 @@ function mergeSettings(
     ...system,
     ui: {
       ...(schemaDefaults.ui || {}),
+      // Migrate legacy top-level UI settings to ui.* namespace for backwards compatibility
+      // This ensures users with old settings.json files don't lose their preferences
+      ...extractLegacyUiKeys(systemDefaults),
       ...(systemDefaults.ui || {}),
+      ...extractLegacyUiKeys(user),
       ...(user.ui || {}),
+      ...extractLegacyUiKeys(safeWorkspace),
       ...(safeWorkspace.ui || {}),
+      ...extractLegacyUiKeys(system),
       ...(system.ui || {}),
       customThemes: {
         ...(systemDefaults.ui?.customThemes || {}),

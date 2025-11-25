@@ -6,7 +6,7 @@
 
 import type { Config } from '../config/config.js';
 import type { AgentDefinition } from './types.js';
-import { CodebaseInvestigatorAgent } from './codebase-investigator.js';
+// CodebaseInvestigatorAgent removed - hardcodes Gemini model, violates multi-provider
 import { type z } from 'zod';
 
 /**
@@ -33,7 +33,8 @@ export class AgentRegistry {
   }
 
   private loadBuiltInAgents(): void {
-    this.registerAgent(CodebaseInvestigatorAgent);
+    // No built-in agents registered - CodebaseInvestigatorAgent was removed
+    // because it hardcodes DEFAULT_GEMINI_MODEL, violating multi-provider support
   }
 
   /**

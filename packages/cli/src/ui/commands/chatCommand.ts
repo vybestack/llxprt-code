@@ -14,6 +14,7 @@ import {
   MessageActionReturn,
   CommandKind,
   SlashCommandActionReturn,
+  LoadHistoryActionReturn,
 } from './types.js';
 import {
   decodeTagName,
@@ -21,7 +22,11 @@ import {
   type EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
 import path from 'path';
-import type { HistoryItemChatList, ChatDetail } from '../types.js';
+import type {
+  HistoryItemChatList,
+  ChatDetail,
+  HistoryItemWithoutId,
+} from '../types.js';
 import { MessageType } from '../types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { type Part } from '@google/genai';
@@ -184,7 +189,12 @@ const resumeCommand: SlashCommand = {
     'Resume a conversation from a checkpoint. Usage: /chat resume <tag>',
   kind: CommandKind.BUILT_IN,
   schema: chatTagSchema,
-  action: async (context, args) => {
+  action: async (
+    context,
+    args,
+  ): Promise<
+    SlashCommandActionReturn | MessageActionReturn | LoadHistoryActionReturn
+  > => {
     const tag = args.trim();
     if (!tag) {
       return {
@@ -235,24 +245,23 @@ const resumeCommand: SlashCommand = {
       };
     }
 
-    const client = config?.getGeminiClient();
-    if (!client) {
+    // Convert checkpoint history to UI history items for display
+    // Use LoadHistoryActionReturn to properly sync both UI and client history
+    const uiHistory: HistoryItemWithoutId[] = conversation.map((content) => {
+      const text =
+        content.parts
+          ?.map((part: Part) => (part.text ? part.text : ''))
+          .join('') || '';
       return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Gemini client not initialized',
+        type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
+        text,
       };
-    }
-    const chat = client.getChat();
-    chat.clearHistory();
-    for (const content of conversation) {
-      chat.addHistory(content);
-    }
+    });
 
     return {
-      type: 'message',
-      messageType: 'info',
-      content: `Conversation from checkpoint (${decodeTagName(tag)}) is resumed. You can continue the conversation now.`,
+      type: 'load_history',
+      history: uiHistory,
+      clientHistory: conversation,
     };
   },
 };
@@ -399,12 +408,12 @@ const clearCommand: SlashCommand = {
       };
     }
 
+    // Clear both the chat history and the UI display
     await chat.clearHistory();
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: 'Conversation history cleared.',
-    };
+    context.ui.updateHistoryTokenCount(0);
+    context.ui.clear();
+    // Note: context.ui.clear() clears the screen, so we don't return a message
+    // The clear is visible to the user through the UI reset itself
   },
 };
 
@@ -412,12 +421,12 @@ const clearCommand: SlashCommand = {
  * Restore the conversation based on the number of turns to go back.
  * @param context The slash command context.
  * @param turns Number of turns to restore (negative number).
- * @returns A message about the restore operation.
+ * @returns A LoadHistoryActionReturn to sync both UI and client history.
  */
 const restoreHistory = async (
   context: CommandContext,
   turns: number,
-): Promise<MessageActionReturn | void> => {
+): Promise<MessageActionReturn | LoadHistoryActionReturn> => {
   const client = context.services.config?.getGeminiClient();
   if (!client?.hasChatInitialized()) {
     return {
@@ -454,15 +463,24 @@ const restoreHistory = async (
 
   // Create new history by removing the last N turns
   const newHistory = currentHistory.slice(0, -entriesToRemove);
-  chat.clearHistory();
-  for (const content of newHistory) {
-    chat.addHistory(content);
-  }
 
+  // Convert to UI history items for display
+  const uiHistory: HistoryItemWithoutId[] = newHistory.map((content) => {
+    const text =
+      content.parts
+        ?.map((part: Part) => (part.text ? part.text : ''))
+        .join('') || '';
+    return {
+      type: content.role === 'user' ? MessageType.USER : MessageType.GEMINI,
+      text,
+    };
+  });
+
+  // Use LoadHistoryActionReturn to properly sync both UI and client history
   return {
-    type: 'message',
-    messageType: 'info',
-    content: `Restored conversation to ${turnsToRestore} turn${turnsToRestore > 1 ? 's' : ''} ago.`,
+    type: 'load_history',
+    history: uiHistory,
+    clientHistory: newHistory,
   };
 };
 
@@ -472,7 +490,10 @@ const restoreCommand: SlashCommand = {
   description:
     'Restore conversation to N turns ago. Usage: /chat restore <number>',
   kind: CommandKind.BUILT_IN,
-  action: async (context, args): Promise<MessageActionReturn | void> => {
+  action: async (
+    context,
+    args,
+  ): Promise<MessageActionReturn | LoadHistoryActionReturn> => {
     const turnsStr = args.trim();
     if (!turnsStr) {
       return {

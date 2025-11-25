@@ -283,10 +283,14 @@ describe('chatCommand', () => {
 
       const result = await resumeCommand?.action?.(mockContext, goodTag);
 
+      // Now returns LoadHistoryActionReturn to properly sync UI and client history
       expect(result).toEqual({
-        type: 'message',
-        messageType: 'info',
-        content: `Conversation from checkpoint (${goodTag}) is resumed. You can continue the conversation now.`,
+        type: 'load_history',
+        history: [
+          { type: 'user', text: 'hello gemini' },
+          { type: 'gemini', text: 'hello world' },
+        ],
+        clientHistory: conversation,
       });
     });
 
