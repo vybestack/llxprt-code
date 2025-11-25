@@ -53,10 +53,13 @@ export class SubagentInvocation<
    */
   getDescription(): string {
     const inputSummary = Object.entries(this.params)
-      .map(
-        ([key, value]) =>
-          `${key}: ${String(value).slice(0, INPUT_PREVIEW_MAX_LENGTH)}`,
-      )
+      .map(([key, value]) => {
+        const stringValue =
+          typeof value === 'object' && value !== null
+            ? JSON.stringify(value)
+            : String(value);
+        return `${key}: ${stringValue.slice(0, INPUT_PREVIEW_MAX_LENGTH)}`;
+      })
       .join(', ');
 
     const description = `Running subagent '${this.definition.name}' with inputs: { ${inputSummary} }`;

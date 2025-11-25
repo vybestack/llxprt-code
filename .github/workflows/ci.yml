@@ -391,9 +391,6 @@ jobs:
           VITEST_TEST_TIMEOUT: 15000
         run: 'npm run test'
 
-      - name: 'Bundle'
-        run: 'npm run bundle'
-
       - name: 'Smoke test bundle'
         run: 'node ./bundle/llxprt.js --version'
 

@@ -113,7 +113,7 @@ export const installCommand: CommandModule = {
   builder: (yargs) =>
     yargs
       .positional('source', {
-        describe: 'The github URL of the extension to install.',
+        describe: 'The git repository URL of the extension to install.',
         type: 'string',
       })
       .option('path', {
