@@ -55,6 +55,7 @@ import {
   buildToolResponsePayload,
   EMPTY_TOOL_RESULT_PLACEHOLDER,
 } from '../utils/toolResponsePayload.js';
+import { isLocalEndpoint } from '../utils/localEndpoint.js';
 
 const MAX_TOOL_RESPONSE_CHARS = 1024;
 const MAX_TOOL_RESPONSE_RETRY_CHARS = 512;
@@ -299,19 +300,26 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P09
    * @requirement:REQ-SP4-002
+   * @requirement:REQ-LOCAL-001
    * Creates a client scoped to the active runtime metadata without caching.
+   * Local endpoints (localhost, private IPs) are allowed without authentication
+   * to support local AI servers like Ollama.
    */
   protected async getClient(
     options: NormalizedGenerateChatOptions,
   ): Promise<OpenAI> {
     const authToken =
       (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
-    if (!authToken) {
+    const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
+
+    // Allow local endpoints without authentication (fixes #598)
+    // Local AI servers like Ollama typically don't require API keys
+    if (!authToken && !isLocalEndpoint(baseURL)) {
       throw new Error(
         `ProviderCacheError("Auth token unavailable for runtimeId=${options.runtime?.runtimeId} (REQ-SP4-003).")`,
       );
     }
-    const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
+
     const agents = this.createHttpAgents(options);
     return this.instantiateClient(authToken, baseURL, agents);
   }
