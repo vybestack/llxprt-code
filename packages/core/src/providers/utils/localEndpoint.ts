@@ -28,12 +28,12 @@
  *
  * Local endpoints include:
  * - localhost
- * - 127.0.0.1 (IPv4 loopback)
+ * - 127.0.0.0/8 (IPv4 loopback range - 127.0.0.0 - 127.255.255.255)
  * - [::1] (IPv6 loopback)
- * - Private IP ranges:
- *   - 10.0.0.0 - 10.255.255.255 (Class A private)
- *   - 172.16.0.0 - 172.31.255.255 (Class B private)
- *   - 192.168.0.0 - 192.168.255.255 (Class C private)
+ * - Private IP ranges (RFC 1918):
+ *   - 10.0.0.0/8 (10.0.0.0 - 10.255.255.255)
+ *   - 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
+ *   - 192.168.0.0/16 (192.168.0.0 - 192.168.255.255)
  *
  * @param url - The URL to check (can be undefined or empty)
  * @returns true if the URL points to a local/private endpoint, false otherwise
@@ -52,8 +52,9 @@ export function isLocalEndpoint(url: string | undefined): boolean {
       return true;
     }
 
-    // Check for IPv4 loopback (127.0.0.1)
-    if (hostname === '127.0.0.1') {
+    // Check for IPv4 loopback range (127.0.0.0/8)
+    // The entire 127.x.x.x range is reserved for loopback
+    if (isIPv4LoopbackRange(hostname)) {
       return true;
     }
 
@@ -73,6 +74,20 @@ export function isLocalEndpoint(url: string | undefined): boolean {
     // Invalid URL
     return false;
   }
+}
+
+/**
+ * Checks if an IPv4 address is in the loopback range (127.0.0.0/8).
+ * The entire 127.x.x.x range is reserved for loopback (RFC 1122).
+ */
+function isIPv4LoopbackRange(ip: string): boolean {
+  const ipv4Match = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!ipv4Match) {
+    return false;
+  }
+
+  const firstOctet = Number(ipv4Match[1]);
+  return firstOctet === 127;
 }
 
 /**
