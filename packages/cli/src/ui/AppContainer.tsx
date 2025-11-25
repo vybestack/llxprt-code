@@ -14,9 +14,9 @@ import React, {
 } from 'react';
 import { type DOMElement, measureElement, useStdin, useStdout } from 'ink';
 import {
-  StreamingState,
   MessageType,
   ToolCallStatus,
+  StreamingState,
   type HistoryItemWithoutId,
   type HistoryItem,
 } from './types.js';
@@ -24,6 +24,25 @@ import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useResponsive } from './hooks/useResponsive.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
+import {
+  type EditorType,
+  type Config,
+  IdeClient,
+  ideContext,
+  type IdeContext,
+  type IdeInfo,
+  getErrorMessage,
+  getAllLlxprtMdFilenames,
+  isEditorAvailable,
+  type IModel,
+  getSettingsService,
+  DebugLogger,
+  uiTelemetryService,
+} from '@vybestack/llxprt-code-core';
+import { validateAuthMethod } from '../config/auth.js';
+import { loadHierarchicalLlxprtMemory } from '../config/config.js';
+import process from 'node:process';
+import { useHistory } from './hooks/useHistoryManager.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useFolderTrust } from './hooks/useFolderTrust.js';
@@ -34,7 +53,6 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
-import { loadHierarchicalLlxprtMemory } from '../config/config.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
   DEFAULT_HISTORY_MAX_ITEMS,
@@ -42,30 +60,15 @@ import {
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
 import { registerCleanup } from '../utils/cleanup.js';
-import { useHistory } from './hooks/useHistoryManager.js';
 import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
+import { calculateMainAreaWidth } from './utils/ui-sizing.js';
 import {
   useTodoPausePreserver,
   TodoPausePreserver,
 } from './hooks/useTodoPausePreserver.js';
-import process from 'node:process';
-import {
-  getErrorMessage,
-  type Config,
-  getAllLlxprtMdFilenames,
-  isEditorAvailable,
-  EditorType,
-  type IdeContext,
-  ideContext,
-  type IModel,
-  // type IdeInfo, // TODO: Fix IDE integration
-  getSettingsService,
-  DebugLogger,
-  uiTelemetryService,
-} from '@vybestack/llxprt-code-core';
+
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
-import { validateAuthMethod } from '../config/auth.js';
 import { useLogger } from './hooks/useLogger.js';
 import { useSessionStats } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
@@ -104,7 +107,11 @@ import {
   UIActionsProvider,
   type UIActions,
 } from './contexts/UIActionsContext.js';
+import { ConfigProvider } from './contexts/ConfigContext.js';
+import { SettingsProvider } from './contexts/SettingsContext.js';
+import { AppContext } from './contexts/AppContext.js';
 import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
+import { calculatePromptWidths } from './components/InputPrompt.js';
 import {
   disableBracketedPaste,
   enableBracketedPaste,
@@ -119,6 +126,9 @@ import {
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
 const selectionLogger = new DebugLogger('llxprt:ui:selection');
+
+const SHELL_WIDTH_FRACTION = 0.89;
+const SHELL_HEIGHT_PADDING = 10;
 
 interface AppContainerProps {
   config: Config;
@@ -140,15 +150,38 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
   });
 }
 
+/**
+ * The main container component for the CLI application.
+ * It orchestrates the entire UI state, including:
+ * - Layout management (responsive resizing)
+ * - Tool execution and scheduling
+ * - History management and rendering
+ * - User input handling (shell and chat)
+ * - Integration with core services (Config, Settings, IDE)
+ *
+ * This component implements the "Hybrid UI Architecture" to solve rendering stability issues.
+ */
 export const AppContainer = (props: AppContainerProps) => {
   debug.log('AppContainer architecture active (v2)');
   const {
     config,
     settings,
     startupWarnings = [],
+    version,
     appState,
     appDispatch,
   } = props;
+
+  const appContextValue = useMemo(
+    () => ({
+      version,
+      startupWarnings,
+    }),
+    [version, startupWarnings],
+  );
+
+  const [shellModeActive, setShellModeActive] = useState(false);
+  const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
@@ -179,14 +212,29 @@ export const AppContainer = (props: AppContainerProps) => {
     todoPauseController.registerTodoPause();
   }, [todoPauseController]);
 
+  const logger = useLogger(config.storage);
+  const inputHistoryStore = useInputHistoryStore();
+
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
-  const currentIDE = config.getIdeClient()?.getCurrentIde();
+  const [currentIDE, setCurrentIDE] = useState<IdeInfo | undefined>(undefined);
   useEffect(() => {
     const ideClient = config.getIdeClient();
     if (ideClient) {
       registerCleanup(() => ideClient.disconnect());
     }
-  }, [config]);
+    inputHistoryStore.initializeFromLogger(logger);
+  }, [logger, inputHistoryStore, config]);
+
+  // Terminal and layout hooks
+  const { columns: terminalWidth, rows: terminalHeight } = useTerminalSize();
+
+  // Additional hooks moved from App.tsx
+  const { stats: sessionStats } = useSessionStats();
+  const branchName = useGitBranchName(config.getTargetDir());
+
+  // Layout measurements
+  const mainControlsRef = useRef<DOMElement>(null);
+  const staticExtraHeight = 3;
 
   const shouldShowIdePrompt =
     currentIDE &&
@@ -248,7 +296,7 @@ export const AppContainer = (props: AppContainerProps) => {
     registerCleanup(consolePatcher.cleanup);
   }, [handleNewMessage, config]);
 
-  const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
+  const { updateHistoryTokenCount } = useSessionStats();
   const historyTokenCleanupRef = useRef<(() => void) | null>(null);
   const lastHistoryServiceRef = useRef<unknown>(null);
   const lastPublishedHistoryTokensRef = useRef<number | null>(null);
@@ -342,7 +390,7 @@ export const AppContainer = (props: AppContainerProps) => {
       lastPublishedHistoryTokensRef.current = null;
     };
   }, [config, updateHistoryTokenCount, tokenLogger]);
-  const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
+  const [_staticNeedsRefresh, _setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const externalEditorStateRef = useRef<{
     paused: boolean;
@@ -430,7 +478,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const [themeError, _setThemeError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [editorError, _setEditorError] = useState<string | null>(null);
-  const [footerHeight, setFooterHeight] = useState<number>(0);
+  const [footerHeight, _setFooterHeight] = useState<number>(0);
 
   // Token metrics state for live updates
   const [tokenMetrics, setTokenMetrics] = useState({
@@ -443,8 +491,21 @@ export const AppContainer = (props: AppContainerProps) => {
   const [_isTrustedFolderState, _setIsTrustedFolder] = useState(
     isWorkspaceTrusted(settings.merged),
   );
+
+  // Core hooks and processors
+  const {
+    vimEnabled: vimModeEnabled,
+    vimMode,
+    toggleVimEnabled,
+  } = useVimMode();
+
+  const onAuthError = useCallback(() => {
+    setAuthError('reauth required');
+    // Open the auth dialog when authentication errors occur
+    appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
+  }, [setAuthError, appDispatch]);
   const [currentModel, setCurrentModel] = useState(config.getModel());
-  const [shellModeActive, setShellModeActive] = useState(false);
+
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
     useState<boolean>(false);
@@ -570,7 +631,6 @@ export const AppContainer = (props: AppContainerProps) => {
       appEvents.off(AppEvent.LogError, logErrorHandler);
     };
   }, [handleNewMessage]);
-
   const openPrivacyNotice = useCallback(() => {
     setShowPrivacyNotice(true);
   }, []);
@@ -578,8 +638,6 @@ export const AppContainer = (props: AppContainerProps) => {
   const handleEscapePromptChange = useCallback((showPrompt: boolean) => {
     setShowEscapePrompt(showPrompt);
   }, []);
-
-  const initialPromptSubmitted = useRef(false);
 
   const errorCount = useMemo(
     () =>
@@ -598,26 +656,6 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const { isSettingsDialogOpen, openSettingsDialog, closeSettingsDialog } =
     useSettingsCommand();
-
-  const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
-    useFolderTrust(settings, config);
-
-  const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
-  useEffect(() => {
-    if (ideNeedsRestart) {
-      // IDE trust changed, force a restart.
-      setShowIdeRestartPrompt(true);
-    }
-  }, [ideNeedsRestart]);
-
-  useKeypress(
-    (key) => {
-      if (key.name === 'r' || key.name === 'R') {
-        process.exit(0);
-      }
-    },
-    { isActive: showIdeRestartPrompt },
-  );
 
   const {
     isAuthDialogOpen,
@@ -791,7 +829,7 @@ export const AppContainer = (props: AppContainerProps) => {
     );
     try {
       const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
-        process.cwd(),
+        config.getTargetDir(),
         settings.merged.loadMemoryFromIncludeDirectories
           ? config.getWorkspaceContext().getDirectories()
           : [],
@@ -874,20 +912,13 @@ export const AppContainer = (props: AppContainerProps) => {
     return () => clearInterval(interval);
   }, [runtime]);
 
-  // Terminal and UI setup
-  const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
-  const isInitialMount = useRef(true);
-
-  const widthFraction = 0.9;
-  // Calculate inputWidth accounting for:
-  // - Prompt: 2 chars ("! " or "> ")
-  // - Padding: 2 chars (paddingX={1} on each side in InputPrompt)
-  // - Additional margin: 2 chars (for proper wrapping)
-  const inputWidth = Math.max(
-    20,
-    Math.floor(terminalWidth * widthFraction) - 6,
-  );
-  const suggestionsWidth = Math.max(60, Math.floor(terminalWidth * 0.8));
+  const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
+  // Derive widths for InputPrompt using shared helper
+  const { inputWidth, suggestionsWidth } = useMemo(() => {
+    const { inputWidth, suggestionsWidth } =
+      calculatePromptWidths(mainAreaWidth);
+    return { inputWidth, suggestionsWidth };
+  }, [mainAreaWidth]);
 
   // Utility callbacks
   const isValidPath = useCallback((filePath: string): boolean => {
@@ -899,7 +930,9 @@ export const AppContainer = (props: AppContainerProps) => {
   }, []);
 
   const getPreferredEditor = useCallback(() => {
-    const editorType = settings.merged.ui?.preferredEditor;
+    const editorType =
+      settings.merged.general?.preferredEditor ??
+      settings.merged.preferredEditor;
     const isValidEditor = isEditorAvailable(editorType);
     if (!isValidEditor) {
       openEditorDialog();
@@ -907,12 +940,6 @@ export const AppContainer = (props: AppContainerProps) => {
     }
     return editorType as EditorType;
   }, [settings, openEditorDialog]);
-
-  const onAuthError = useCallback(() => {
-    setAuthError('reauth required');
-    // Open the auth dialog when authentication errors occur
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
-  }, [setAuthError, appDispatch]);
 
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
@@ -924,12 +951,27 @@ export const AppContainer = (props: AppContainerProps) => {
     setShowPrivacyNotice(false);
   }, []);
 
-  // Core hooks and processors
-  const {
-    vimEnabled: vimModeEnabled,
-    vimMode,
-    toggleVimEnabled,
-  } = useVimMode();
+  // Memoize viewport to ensure it updates when inputWidth changes
+  const viewport = useMemo(
+    () => ({ height: 10, width: inputWidth }),
+    [inputWidth],
+  );
+
+  const buffer = useTextBuffer({
+    initialText: '',
+    viewport,
+    stdin,
+    setRawMode,
+    isValidPath,
+    shellModeActive,
+  });
+
+  const handleUserCancel = useCallback(() => {
+    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
+    if (lastUserMessage) {
+      buffer.setText(lastUserMessage);
+    }
+  }, [buffer, inputHistoryStore.inputHistory]);
 
   const slashCommandProcessorActions = useMemo(
     () => ({
@@ -992,55 +1034,7 @@ export const AppContainer = (props: AppContainerProps) => {
     true, // isConfigInitialized
   );
 
-  // Memoize viewport to ensure it updates when inputWidth changes
-  const viewport = useMemo(
-    () => ({ height: 10, width: inputWidth }),
-    [inputWidth],
-  );
-
-  const buffer = useTextBuffer({
-    initialText: '',
-    viewport,
-    stdin,
-    setRawMode,
-    isValidPath,
-    shellModeActive,
-  });
-
-  // Independent input history management (unaffected by /clear)
-  const inputHistoryStore = useInputHistoryStore();
-
-  const handleUserCancel = useCallback(() => {
-    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
-    if (lastUserMessage) {
-      buffer.setText(lastUserMessage);
-    }
-  }, [buffer, inputHistoryStore.inputHistory]);
-
-  const handleOAuthCodeDialogClose = useCallback(() => {
-    appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
-  }, [appDispatch]);
-
-  const handleOAuthCodeSubmit = useCallback(
-    async (code: string) => {
-      const provider = (global as unknown as { __oauth_provider?: string })
-        .__oauth_provider;
-
-      if (provider === 'anthropic') {
-        const oauthManager = runtime.getCliOAuthManager();
-
-        if (oauthManager) {
-          const anthropicProvider = oauthManager.getProvider('anthropic');
-          if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
-            (
-              anthropicProvider as { submitAuthCode: (code: string) => void }
-            ).submitAuthCode(code);
-          }
-        }
-      }
-    },
-    [runtime],
-  );
+  const cancelHandlerRef = useRef<() => void>(() => {});
 
   const {
     streamingState,
@@ -1067,28 +1061,6 @@ export const AppContainer = (props: AppContainerProps) => {
     handleExternalEditorOpen,
   );
 
-  const pendingHistoryItems = useMemo(
-    () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
-    [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
-  );
-
-  // Update the cancel handler with message queue support
-  const cancelHandlerRef = useRef<(() => void) | null>(null);
-  cancelHandlerRef.current = useCallback(() => {
-    if (isToolExecuting(pendingHistoryItems)) {
-      buffer.setText(''); // Just clear the prompt
-      return;
-    }
-
-    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
-    const textToSet = lastUserMessage || '';
-
-    if (textToSet) {
-      buffer.setText(textToSet);
-    }
-  }, [buffer, inputHistoryStore.inputHistory, pendingHistoryItems]);
-
-  // Input handling - queue messages for processing
   const handleFinalSubmit = useCallback(
     (submittedValue: string) => {
       const trimmedValue = submittedValue.trim();
@@ -1106,6 +1078,196 @@ export const AppContainer = (props: AppContainerProps) => {
     updateTodos,
     handleFinalSubmit,
   });
+
+  const handleClearScreen = useCallback(() => {
+    clearItems();
+    clearConsoleMessagesState();
+    console.clear();
+    refreshStatic();
+  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
+
+  const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
+
+  const isInputActive =
+    !initError &&
+    !isProcessing &&
+    streamingState !== StreamingState.WaitingForConfirmation;
+
+  // Compute available terminal height based on controls measurement
+  // Using useLayoutEffect for proper layout timing (from Phase 03 analysis)
+  const [availableTerminalHeight, setAvailableTerminalHeight] = useState(
+    () => terminalHeight - staticExtraHeight,
+  );
+
+  useLayoutEffect(() => {
+    if (mainControlsRef.current) {
+      const fullFooterMeasurement = measureElement(mainControlsRef.current);
+      const newHeight = Math.max(
+        terminalHeight - fullFooterMeasurement.height - staticExtraHeight,
+        0,
+      );
+      setAvailableTerminalHeight(newHeight);
+    } else {
+      setAvailableTerminalHeight(
+        Math.max(terminalHeight - staticExtraHeight, 0),
+      );
+    }
+  }, [terminalHeight]); // Removed mainControlsRef.current
+
+  // Update shell execution config with proper terminal height calculations
+  useEffect(() => {
+    // Cast to a type that includes the optional method to avoid 'any'
+    const configWithShell = config as typeof config & {
+      setShellExecutionConfig?: (config: {
+        terminalWidth: number;
+        terminalHeight: number;
+      }) => void;
+    };
+
+    if (configWithShell.setShellExecutionConfig) {
+      configWithShell.setShellExecutionConfig({
+        terminalWidth: Math.max(
+          Math.floor(terminalWidth * SHELL_WIDTH_FRACTION),
+          1,
+        ),
+        terminalHeight: Math.max(
+          Math.floor(availableTerminalHeight - SHELL_HEIGHT_PADDING),
+          1,
+        ),
+        // pager: settings.merged.tools?.shell?.pager,
+        // showColor: settings.merged.tools?.shell?.showColor,
+      });
+    }
+  }, [terminalWidth, availableTerminalHeight, config]);
+
+  // Context file names computation
+  const contextFileNames = useMemo(() => {
+    const fromSettings = settings.merged.contextFileName;
+    return fromSettings
+      ? Array.isArray(fromSettings)
+        ? fromSettings
+        : [fromSettings]
+      : getAllLlxprtMdFilenames();
+  }, [settings.merged.contextFileName]);
+  // Initial prompt handling
+  const initialPrompt = useMemo(() => config.getQuestion(), [config]);
+  const initialPromptSubmitted = useRef(false);
+  const geminiClient = config.getGeminiClient();
+
+  useEffect(() => {
+    if (
+      initialPrompt &&
+      !initialPromptSubmitted.current &&
+      !isAuthenticating &&
+      !isAuthDialogOpen &&
+      !isThemeDialogOpen &&
+      !isEditorDialogOpen &&
+      !isProviderDialogOpen &&
+      !isProviderModelDialogOpen &&
+      !isToolsDialogOpen &&
+      !showPrivacyNotice &&
+      geminiClient?.isInitialized?.()
+    ) {
+      handleFinalSubmit(initialPrompt);
+      initialPromptSubmitted.current = true;
+    }
+  }, [
+    initialPrompt,
+    handleFinalSubmit,
+    isAuthenticating,
+    isAuthDialogOpen,
+    isThemeDialogOpen,
+    isEditorDialogOpen,
+    isProviderDialogOpen,
+    isProviderModelDialogOpen,
+    isToolsDialogOpen,
+    showPrivacyNotice,
+    geminiClient,
+  ]);
+
+  useEffect(() => {
+    const getIde = async () => {
+      const ideClient = await IdeClient.getInstance();
+      const currentIde = ideClient.getCurrentIde();
+      setCurrentIDE(currentIde || undefined);
+    };
+    getIde();
+  }, []);
+
+  const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
+    useFolderTrust(settings, config);
+  const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
+  const isInitialMount = useRef(true);
+
+  useEffect(() => {
+    if (ideNeedsRestart) {
+      // IDE trust changed, force a restart.
+      setShowIdeRestartPrompt(true);
+    }
+  }, [ideNeedsRestart]);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    const handler = setTimeout(() => {
+      refreshStatic();
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [terminalWidth, refreshStatic]);
+
+  // Update currentModel when settings change - get it from the SAME place as diagnostics
+
+  const handleOAuthCodeDialogClose = useCallback(() => {
+    appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
+  }, [appDispatch]);
+
+  const handleOAuthCodeSubmit = useCallback(
+    async (code: string) => {
+      const provider = (global as unknown as { __oauth_provider?: string })
+        .__oauth_provider;
+
+      if (provider === 'anthropic') {
+        const oauthManager = runtime.getCliOAuthManager();
+
+        if (oauthManager) {
+          const anthropicProvider = oauthManager.getProvider('anthropic');
+          if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
+            (
+              anthropicProvider as { submitAuthCode: (code: string) => void }
+            ).submitAuthCode(code);
+          }
+        }
+      }
+    },
+    [runtime],
+  );
+
+  const pendingHistoryItems = useMemo(
+    () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
+    [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
+  );
+
+  // Update the cancel handler with message queue support
+
+  cancelHandlerRef.current = useCallback(() => {
+    if (isToolExecuting(pendingHistoryItems)) {
+      buffer.setText(''); // Just clear the prompt
+      return;
+    }
+
+    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
+    const textToSet = lastUserMessage || '';
+
+    if (textToSet) {
+      buffer.setText(textToSet);
+    }
+  }, [buffer, inputHistoryStore.inputHistory, pendingHistoryItems]);
 
   const handleIdePromptComplete = useCallback(
     (result: IdeIntegrationNudgeResult) => {
@@ -1131,8 +1293,6 @@ export const AppContainer = (props: AppContainerProps) => {
     },
     [handleSlashCommand, settings],
   );
-
-  const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
 
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
@@ -1270,13 +1430,7 @@ export const AppContainer = (props: AppContainerProps) => {
     }
   }, [config, config.getLlxprtMdFileCount]);
 
-  const logger = useLogger(config.storage);
-
   // Initialize independent input history from logger
-  useEffect(() => {
-    inputHistoryStore.initializeFromLogger(logger);
-  }, [logger, inputHistoryStore]);
-
   // Handle process exit when quit command is issued
   useEffect(() => {
     if (quittingMessages) {
@@ -1290,12 +1444,6 @@ export const AppContainer = (props: AppContainerProps) => {
     return undefined;
   }, [quittingMessages]);
 
-  const isInputActive =
-    (streamingState === StreamingState.Idle ||
-      streamingState === StreamingState.Responding) &&
-    !initError &&
-    !isProcessing;
-
   useEffect(() => {
     if (selectionLogger.enabled) {
       if (confirmationRequest) {
@@ -1305,13 +1453,6 @@ export const AppContainer = (props: AppContainerProps) => {
       }
     }
   }, [confirmationRequest]);
-
-  const handleClearScreen = useCallback(() => {
-    clearItems();
-    clearConsoleMessagesState();
-    console.clear();
-    refreshStatic();
-  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
 
   const handleConfirmationSelect = useCallback(
     (value: boolean) => {
@@ -1330,22 +1471,8 @@ export const AppContainer = (props: AppContainerProps) => {
     [confirmationRequest],
   );
 
-  const mainControlsRef = useRef<DOMElement>(null);
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
-
-  useLayoutEffect(() => {
-    if (mainControlsRef.current) {
-      const fullFooterMeasurement = measureElement(mainControlsRef.current);
-      setFooterHeight(fullFooterMeasurement.height);
-    }
-  }, [terminalHeight, consoleMessages, showErrorDetails]);
-
-  const staticExtraHeight = /* margins and padding */ 3;
-  const availableTerminalHeight = useMemo(
-    () => terminalHeight - footerHeight - staticExtraHeight,
-    [terminalHeight, footerHeight],
-  );
 
   // Flicker detection - measures root UI element vs terminal height
   // to detect overflow that could cause flickering (issue #456)
@@ -1374,86 +1501,12 @@ export const AppContainer = (props: AppContainerProps) => {
     };
   }, [constrainHeight]);
 
-  useEffect(() => {
-    // skip refreshing Static during first mount
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-
-    // debounce so it doesn't fire up too often during resize
-    const handler = setTimeout(() => {
-      if (streamingState === StreamingState.Idle) {
-        refreshStatic();
-      } else {
-        setStaticNeedsRefresh(true);
-      }
-    }, 300);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [terminalWidth, terminalHeight, refreshStatic, streamingState]);
-
-  useEffect(() => {
-    if (streamingState === StreamingState.Idle && _staticNeedsRefresh) {
-      setStaticNeedsRefresh(false);
-      refreshStatic();
-    }
-  }, [streamingState, refreshStatic, _staticNeedsRefresh]);
-
   const filteredConsoleMessages = useMemo(() => {
     if (config.getDebugMode()) {
       return consoleMessages;
     }
     return consoleMessages.filter((msg) => msg.type !== 'debug');
   }, [consoleMessages, config]);
-
-  const branchName = useGitBranchName(config.getTargetDir());
-
-  const contextFileNames = useMemo(() => {
-    const fromSettings = settings.merged.ui?.contextFileName;
-    if (fromSettings) {
-      return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
-    }
-    return getAllLlxprtMdFilenames();
-  }, [settings.merged.ui?.contextFileName]);
-
-  const initialPrompt = useMemo(() => config.getQuestion(), [config]);
-  const geminiClient = config.getGeminiClient();
-
-  useEffect(() => {
-    if (
-      initialPrompt &&
-      !initialPromptSubmitted.current &&
-      !isAuthenticating &&
-      !isAuthDialogOpen &&
-      !isThemeDialogOpen &&
-      !isEditorDialogOpen &&
-      !isProviderDialogOpen &&
-      !isProviderModelDialogOpen &&
-      !isToolsDialogOpen &&
-      !showPrivacyNotice &&
-      geminiClient
-    ) {
-      submitQuery(initialPrompt);
-      initialPromptSubmitted.current = true;
-    }
-  }, [
-    initialPrompt,
-    submitQuery,
-    isAuthenticating,
-    isAuthDialogOpen,
-    isThemeDialogOpen,
-    isEditorDialogOpen,
-    isProviderDialogOpen,
-    isProviderModelDialogOpen,
-    isToolsDialogOpen,
-    showPrivacyNotice,
-    geminiClient,
-  ]);
-
-  const mainAreaWidth = Math.floor(terminalWidth * 0.9);
 
   // Detect PowerShell for file reference syntax tip
   const isPowerShell =
@@ -1483,11 +1536,9 @@ export const AppContainer = (props: AppContainerProps) => {
     history,
     pendingHistoryItems,
     streamingState,
-    thought,
 
     // Input buffer
     buffer,
-    shellModeActive,
 
     // Dialog states
     isThemeDialogOpen,
@@ -1541,6 +1592,7 @@ export const AppContainer = (props: AppContainerProps) => {
     // Context and status
     ideContextState,
     llxprtMdFileCount,
+    contextFileNames,
     branchName,
     errorCount,
 
@@ -1551,12 +1603,15 @@ export const AppContainer = (props: AppContainerProps) => {
     elapsedTime,
     currentLoadingPhrase,
     showAutoAcceptIndicator,
+    shellModeActive,
+    embeddedShellFocused,
+    thought:
+      streamingState === StreamingState.Responding ? (thought ?? null) : null,
 
     // Token metrics
     tokenMetrics,
     historyTokenCount: sessionStats.historyTokenCount,
 
-    // Error states
     initError,
     authError,
     themeError,
@@ -1585,6 +1640,9 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Input history
     inputHistory: inputHistoryStore.inputHistory,
+    userMessages: inputHistoryStore.inputHistory, // Alias for hybrid compatibility
+    messageQueue: [], // TODO: Implement in hybrid architecture
+    activePtyId: undefined, // TODO: Implement in hybrid architecture
 
     // Static key for refreshing
     staticKey,
@@ -1601,6 +1659,9 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Available terminal height for content (after footer measurement)
     availableTerminalHeight,
+
+    // Nightly flag
+    nightly,
   };
 
   // Build UIActions object
@@ -1702,6 +1763,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Shell mode
     setShellModeActive,
+    setEmbeddedShellFocused,
 
     // Escape prompt
     handleEscapePromptChange,
@@ -1711,20 +1773,24 @@ export const AppContainer = (props: AppContainerProps) => {
   };
 
   return (
-    <UIStateProvider value={uiState}>
-      <UIActionsProvider value={uiActions}>
-        <DefaultAppLayout
-          config={config}
-          settings={settings}
-          startupWarnings={startupWarnings}
-          version={props.version}
-          nightly={nightly}
-          mainControlsRef={mainControlsRef}
-          availableTerminalHeight={availableTerminalHeight}
-          contextFileNames={contextFileNames}
-          updateInfo={updateInfo}
-        />
-      </UIActionsProvider>
-    </UIStateProvider>
+    <AppContext.Provider value={appContextValue}>
+      <ConfigProvider config={config}>
+        <SettingsProvider settings={settings}>
+          <UIActionsProvider value={uiActions}>
+            <UIStateProvider value={uiState}>
+              <DefaultAppLayout
+                config={config}
+                settings={settings}
+                startupWarnings={startupWarnings}
+                mainControlsRef={mainControlsRef}
+                availableTerminalHeight={availableTerminalHeight}
+                contextFileNames={contextFileNames}
+                updateInfo={updateInfo}
+              />
+            </UIStateProvider>
+          </UIActionsProvider>
+        </SettingsProvider>
+      </ConfigProvider>
+    </AppContext.Provider>
   );
 };

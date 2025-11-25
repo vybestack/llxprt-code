@@ -5,6 +5,7 @@
  */
 
 import { FunctionDeclaration, PartListUnion } from '@google/genai';
+import { AnsiOutput } from '../utils/terminalSerializer.js';
 import { ToolContext, ContextAwareTool } from './tool-context.js';
 import { ToolErrorType } from './tool-error.js';
 import { DiffUpdateResult } from '../ide/ideContext.js';
@@ -539,7 +540,7 @@ export function hasCycleInSchema(schema: object): boolean {
   return traverse(schema, new Set<string>(), new Set<string>());
 }
 
-export type ToolResultDisplay = string | FileDiff;
+export type ToolResultDisplay = string | FileDiff | AnsiOutput;
 
 export interface FileDiff {
   fileDiff: string;

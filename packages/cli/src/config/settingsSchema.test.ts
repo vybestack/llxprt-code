@@ -11,11 +11,24 @@ describe('SettingsSchema', () => {
   describe('SETTINGS_SCHEMA', () => {
     it('should contain all expected top-level settings', () => {
       const expectedSettings = [
+        'theme',
+        'customThemes',
         'ui',
+        'general',
+        'usageStatisticsEnabled',
+        'autoConfigureMaxOldSpaceSize',
+        'maxSessionTurns',
+        'memoryImportFormat',
+        'memoryDiscoveryMaxDirs',
+        'contextFileName',
+        'vimMode',
+        'ideMode',
         'accessibility',
         'checkpointing',
         'fileFiltering',
         'disableAutoUpdate',
+        'hideWindowTitle',
+        'useFullWidth',
         'selectedAuthType',
         'useExternalAuth',
         'sandbox',
@@ -169,20 +182,16 @@ describe('SettingsSchema', () => {
 
     it('should have showInDialog property configured', () => {
       // Check that user-facing settings are marked for dialog display
-      expect(SETTINGS_SCHEMA.ui.properties?.showMemoryUsage.showInDialog).toBe(
+      expect(SETTINGS_SCHEMA.ui.properties.showMemoryUsage.showInDialog).toBe(
         true,
       );
-      expect(SETTINGS_SCHEMA.ui.properties?.vimMode.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.ui.properties?.ideMode.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.vimMode.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ideMode.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.disableAutoUpdate.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.ui.properties?.hideWindowTitle.showInDialog).toBe(
-        true,
-      );
-      expect(SETTINGS_SCHEMA.ui.properties?.hideTips.showInDialog).toBe(true);
-      expect(SETTINGS_SCHEMA.ui.properties?.hideBanner.showInDialog).toBe(true);
-      expect(
-        SETTINGS_SCHEMA.ui.properties?.usageStatisticsEnabled.showInDialog,
-      ).toBe(false);
+      expect(SETTINGS_SCHEMA.hideWindowTitle.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.hideTips.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.ui.properties.hideBanner.showInDialog).toBe(true);
+      expect(SETTINGS_SCHEMA.usageStatisticsEnabled.showInDialog).toBe(false);
 
       // Check that advanced settings are hidden from dialog
       expect(SETTINGS_SCHEMA.selectedAuthType.showInDialog).toBe(false);
@@ -196,15 +205,14 @@ describe('SettingsSchema', () => {
         false,
       ); // Managed via theme editor
       expect(SETTINGS_SCHEMA.checkpointing.showInDialog).toBe(false); // Experimental feature
-      expect(SETTINGS_SCHEMA.accessibility.showInDialog).toBe(false); // Changed to false
+      expect(SETTINGS_SCHEMA.accessibility.showInDialog).toBe(false);
       expect(SETTINGS_SCHEMA.fileFiltering.showInDialog).toBe(false); // Changed to false
-      expect(SETTINGS_SCHEMA.ui.properties?.preferredEditor.showInDialog).toBe(
-        false,
-      ); // Changed to false
       expect(
-        SETTINGS_SCHEMA.ui.properties?.autoConfigureMaxOldSpaceSize
-          .showInDialog,
-      ).toBe(true);
+        SETTINGS_SCHEMA.general.properties.preferredEditor.showInDialog,
+      ).toBe(true); // Changed to true
+      expect(SETTINGS_SCHEMA.autoConfigureMaxOldSpaceSize.showInDialog).toBe(
+        true,
+      );
     });
 
     it('should infer Settings type correctly', () => {

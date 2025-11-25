@@ -18,6 +18,8 @@ export const SHELL_COMMAND_NAME = 'Shell Command';
 
 export const SHELL_NAME = 'Shell';
 
+export const SHELL_TOOL_NAME = 'shell';
+
 // Tool status symbols used in ToolMessage component
 export const TOOL_STATUS = {
   SUCCESS: '✓',
@@ -27,3 +29,5 @@ export const TOOL_STATUS = {
   CANCELED: '-',
   ERROR: 'x',
 } as const;
+
+export const SHELL_FOCUS_HINT_DELAY_MS = 3000;

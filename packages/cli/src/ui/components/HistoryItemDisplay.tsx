@@ -39,7 +39,6 @@ interface HistoryItemDisplayProps {
   isFocused?: boolean;
   slashCommands?: readonly SlashCommand[]; // For help display
   showTodoPanel?: boolean;
-  commands?: readonly SlashCommand[];
   activeShellPtyId?: number | null;
   embeddedShellFocused?: boolean;
   availableTerminalHeightGemini?: number;
@@ -54,7 +53,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   isFocused = true,
   slashCommands = [],
   showTodoPanel = true,
-  activeShellPtyId: _activeShellPtyId,
+  activeShellPtyId,
   embeddedShellFocused: _embeddedShellFocused,
   availableTerminalHeightGemini: _availableTerminalHeightGemini,
 }) => {
@@ -137,6 +136,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
           config={config}
           isFocused={isFocused}
           showTodoPanel={showTodoPanel}
+          activeShellPtyId={activeShellPtyId}
         />
       )}
       {itemForDisplay.type === 'compression' && (
