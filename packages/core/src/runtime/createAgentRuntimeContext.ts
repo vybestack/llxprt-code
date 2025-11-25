@@ -52,23 +52,19 @@ export function createAgentRuntimeContext(
 
   const history = options.history ?? new HistoryService();
 
-  const contextLimitOverride =
-    typeof options.settings.contextLimit === 'number' &&
-    Number.isFinite(options.settings.contextLimit) &&
-    options.settings.contextLimit > 0
-      ? options.settings.contextLimit
-      : undefined;
-
-  const resolvedContextLimit = tokenLimit(
-    options.state.model,
-    contextLimitOverride,
-  );
-
   const ephemerals = {
     compressionThreshold: (): number =>
       options.settings.compressionThreshold ??
       EPHEMERAL_DEFAULTS.compressionThreshold,
-    contextLimit: (): number => resolvedContextLimit,
+    contextLimit: (): number => {
+      const liveOverride =
+        typeof options.settings.contextLimit === 'number' &&
+        Number.isFinite(options.settings.contextLimit) &&
+        options.settings.contextLimit > 0
+          ? options.settings.contextLimit
+          : undefined;
+      return tokenLimit(options.state.model, liveOverride);
+    },
     preserveThreshold: (): number =>
       options.settings.preserveThreshold ??
       EPHEMERAL_DEFAULTS.preserveThreshold,
