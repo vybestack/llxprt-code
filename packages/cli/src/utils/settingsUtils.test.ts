@@ -63,7 +63,7 @@ describe('SettingsUtils', () => {
 
     describe('getSettingDefinition', () => {
       it('should return definition for valid setting', () => {
-        const definition = getSettingDefinition('showMemoryUsage');
+        const definition = getSettingDefinition('ui.showMemoryUsage');
         expect(definition).toBeDefined();
         expect(definition?.label).toBe('Show Memory Usage');
       });
@@ -81,8 +81,8 @@ describe('SettingsUtils', () => {
       });
 
       it('should return false for settings that do not require restart', () => {
-        expect(requiresRestart('showMemoryUsage')).toBe(false);
-        expect(requiresRestart('hideTips')).toBe(false);
+        expect(requiresRestart('ui.showMemoryUsage')).toBe(false);
+        expect(requiresRestart('ui.hideTips')).toBe(false);
       });
 
       it('should return false for invalid settings', () => {
@@ -92,7 +92,7 @@ describe('SettingsUtils', () => {
 
     describe('getDefaultValue', () => {
       it('should return correct default values', () => {
-        expect(getDefaultValue('showMemoryUsage')).toBe(false);
+        expect(getDefaultValue('ui.showMemoryUsage')).toBe(false);
         expect(getDefaultValue('fileFiltering.enableRecursiveFileSearch')).toBe(
           true,
         );
@@ -108,17 +108,17 @@ describe('SettingsUtils', () => {
         const restartSettings = getRestartRequiredSettings();
         expect(restartSettings).toContain('autoConfigureMaxOldSpaceSize');
         expect(restartSettings).toContain('checkpointing.enabled');
-        expect(restartSettings).not.toContain('showMemoryUsage');
+        expect(restartSettings).not.toContain('ui.showMemoryUsage');
       });
     });
 
     describe('getEffectiveValue', () => {
       it('should return value from settings when set', () => {
-        const settings = { showMemoryUsage: true };
-        const mergedSettings = { showMemoryUsage: false };
+        const settings = { ui: { showMemoryUsage: true } };
+        const mergedSettings = { ui: { showMemoryUsage: false } };
 
         const value = getEffectiveValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
         );
@@ -127,10 +127,10 @@ describe('SettingsUtils', () => {
 
       it('should return value from merged settings when not set in current scope', () => {
         const settings = {};
-        const mergedSettings = { showMemoryUsage: true };
+        const mergedSettings = { ui: { showMemoryUsage: true } };
 
         const value = getEffectiveValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
         );
@@ -142,7 +142,7 @@ describe('SettingsUtils', () => {
         const mergedSettings = {};
 
         const value = getEffectiveValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
         );
@@ -181,7 +181,7 @@ describe('SettingsUtils', () => {
     describe('getAllSettingKeys', () => {
       it('should return all setting keys', () => {
         const keys = getAllSettingKeys();
-        expect(keys).toContain('showMemoryUsage');
+        expect(keys).toContain('ui.showMemoryUsage');
         expect(keys).toContain('accessibility.disableLoadingPhrases');
         expect(keys).toContain('checkpointing.enabled');
       });
@@ -209,7 +209,7 @@ describe('SettingsUtils', () => {
 
     describe('isValidSettingKey', () => {
       it('should return true for valid setting keys', () => {
-        expect(isValidSettingKey('showMemoryUsage')).toBe(true);
+        expect(isValidSettingKey('ui.showMemoryUsage')).toBe(true);
         expect(isValidSettingKey('accessibility.disableLoadingPhrases')).toBe(
           true,
         );
@@ -223,7 +223,7 @@ describe('SettingsUtils', () => {
 
     describe('getSettingCategory', () => {
       it('should return correct category for valid settings', () => {
-        expect(getSettingCategory('showMemoryUsage')).toBe('UI');
+        expect(getSettingCategory('ui.showMemoryUsage')).toBe('UI');
         expect(getSettingCategory('accessibility.disableLoadingPhrases')).toBe(
           'Accessibility',
         );
@@ -236,7 +236,7 @@ describe('SettingsUtils', () => {
 
     describe('shouldShowInDialog', () => {
       it('should return true for settings marked to show in dialog', () => {
-        expect(shouldShowInDialog('showMemoryUsage')).toBe(true);
+        expect(shouldShowInDialog('ui.showMemoryUsage')).toBe(true);
         expect(shouldShowInDialog('vimMode')).toBe(true);
         expect(shouldShowInDialog('hideWindowTitle')).toBe(true);
         expect(shouldShowInDialog('usageStatisticsEnabled')).toBe(false);
@@ -263,7 +263,7 @@ describe('SettingsUtils', () => {
         expect(categories['UI']).toBeDefined();
         const uiSettings = categories['UI'];
         const uiKeys = uiSettings.map((s) => s.key);
-        expect(uiKeys).toContain('showMemoryUsage');
+        expect(uiKeys).toContain('ui.showMemoryUsage');
         expect(uiKeys).toContain('hideWindowTitle');
         expect(uiKeys).not.toContain('customThemes'); // This is marked false
         expect(uiKeys).not.toContain('theme'); // This is now marked false
@@ -292,7 +292,7 @@ describe('SettingsUtils', () => {
         expect(allKeys).toContain('vimMode');
         expect(allKeys).toContain('ideMode');
         expect(allKeys).toContain('disableAutoUpdate');
-        expect(allKeys).toContain('showMemoryUsage');
+        expect(allKeys).toContain('ui.showMemoryUsage');
         expect(allKeys).not.toContain('usageStatisticsEnabled');
         expect(allKeys).not.toContain('selectedAuthType');
         expect(allKeys).not.toContain('coreTools');
@@ -306,7 +306,7 @@ describe('SettingsUtils', () => {
         const booleanSettings = getDialogSettingsByType('boolean');
 
         const keys = booleanSettings.map((s) => s.key);
-        expect(keys).toContain('showMemoryUsage');
+        expect(keys).toContain('ui.showMemoryUsage');
         expect(keys).toContain('vimMode');
         expect(keys).toContain('hideWindowTitle');
         expect(keys).not.toContain('usageStatisticsEnabled');
@@ -333,7 +333,7 @@ describe('SettingsUtils', () => {
         const dialogKeys = getDialogSettingKeys();
 
         // Should include settings marked for dialog
-        expect(dialogKeys).toContain('showMemoryUsage');
+        expect(dialogKeys).toContain('ui.showMemoryUsage');
         expect(dialogKeys).toContain('vimMode');
         expect(dialogKeys).toContain('hideWindowTitle');
         expect(dialogKeys).not.toContain('usageStatisticsEnabled');
@@ -418,11 +418,11 @@ describe('SettingsUtils', () => {
   describe('Business Logic Utilities', () => {
     describe('getSettingValue', () => {
       it('should return value from settings when set', () => {
-        const settings = { showMemoryUsage: true };
-        const mergedSettings = { showMemoryUsage: false };
+        const settings = { ui: { showMemoryUsage: true } };
+        const mergedSettings = { ui: { showMemoryUsage: false } };
 
         const value = getSettingValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
         );
@@ -431,10 +431,10 @@ describe('SettingsUtils', () => {
 
       it('should return value from merged settings when not set in current scope', () => {
         const settings = {};
-        const mergedSettings = { showMemoryUsage: true };
+        const mergedSettings = { ui: { showMemoryUsage: true } };
 
         const value = getSettingValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
         );
@@ -456,14 +456,14 @@ describe('SettingsUtils', () => {
 
     describe('isSettingModified', () => {
       it('should return true when value differs from default', () => {
-        expect(isSettingModified('showMemoryUsage', true)).toBe(true);
+        expect(isSettingModified('ui.showMemoryUsage', true)).toBe(true);
         expect(
           isSettingModified('fileFiltering.enableRecursiveFileSearch', false),
         ).toBe(true);
       });
 
       it('should return false when value matches default', () => {
-        expect(isSettingModified('showMemoryUsage', false)).toBe(false);
+        expect(isSettingModified('ui.showMemoryUsage', false)).toBe(false);
         expect(
           isSettingModified('fileFiltering.enableRecursiveFileSearch', true),
         ).toBe(false);
@@ -472,13 +472,15 @@ describe('SettingsUtils', () => {
 
     describe('settingExistsInScope', () => {
       it('should return true for top-level settings that exist', () => {
-        const settings = { showMemoryUsage: true };
-        expect(settingExistsInScope('showMemoryUsage', settings)).toBe(true);
+        const settings = { ui: { showMemoryUsage: true } };
+        expect(settingExistsInScope('ui.showMemoryUsage', settings)).toBe(true);
       });
 
       it('should return false for top-level settings that do not exist', () => {
         const settings = {};
-        expect(settingExistsInScope('showMemoryUsage', settings)).toBe(false);
+        expect(settingExistsInScope('ui.showMemoryUsage', settings)).toBe(
+          false,
+        );
       });
 
       it('should return true for nested settings that exist', () => {
@@ -509,12 +511,12 @@ describe('SettingsUtils', () => {
       it('should set top-level setting value', () => {
         const pendingSettings = {};
         const result = setPendingSettingValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           true,
           pendingSettings,
         );
 
-        expect(result.showMemoryUsage).toBe(true);
+        expect(result.ui?.showMemoryUsage).toBe(true);
       });
 
       it('should set nested setting value', () => {
@@ -553,15 +555,15 @@ describe('SettingsUtils', () => {
       it('should return true when modified settings require restart', () => {
         const modifiedSettings = new Set<string>([
           'autoConfigureMaxOldSpaceSize',
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
         ]);
         expect(hasRestartRequiredSettings(modifiedSettings)).toBe(true);
       });
 
       it('should return false when no modified settings require restart', () => {
         const modifiedSettings = new Set<string>([
-          'showMemoryUsage',
-          'hideTips',
+          'ui.showMemoryUsage',
+          'ui.hideTips',
         ]);
         expect(hasRestartRequiredSettings(modifiedSettings)).toBe(false);
       });
@@ -576,20 +578,20 @@ describe('SettingsUtils', () => {
       it('should return only settings that require restart', () => {
         const modifiedSettings = new Set<string>([
           'autoConfigureMaxOldSpaceSize',
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           'checkpointing.enabled',
         ]);
         const result = getRestartRequiredFromModified(modifiedSettings);
 
         expect(result).toContain('autoConfigureMaxOldSpaceSize');
         expect(result).toContain('checkpointing.enabled');
-        expect(result).not.toContain('showMemoryUsage');
+        expect(result).not.toContain('ui.showMemoryUsage');
       });
 
       it('should return empty array when no settings require restart', () => {
         const modifiedSettings = new Set<string>([
-          'showMemoryUsage',
-          'hideTips',
+          'ui.showMemoryUsage',
+          'ui.hideTips',
         ]);
         const result = getRestartRequiredFromModified(modifiedSettings);
 
@@ -599,12 +601,12 @@ describe('SettingsUtils', () => {
 
     describe('getDisplayValue', () => {
       it('should show value without * when setting matches default', () => {
-        const settings = { showMemoryUsage: false }; // false matches default, so no *
-        const mergedSettings = { showMemoryUsage: false };
+        const settings = { ui: { showMemoryUsage: false } }; // false matches default, so no *
+        const mergedSettings = { ui: { showMemoryUsage: false } };
         const modifiedSettings = new Set<string>();
 
         const result = getDisplayValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
           modifiedSettings,
@@ -614,11 +616,11 @@ describe('SettingsUtils', () => {
 
       it('should show default value when setting is not in scope', () => {
         const settings = {}; // no setting in scope
-        const mergedSettings = { showMemoryUsage: false };
+        const mergedSettings = { ui: { showMemoryUsage: false } };
         const modifiedSettings = new Set<string>();
 
         const result = getDisplayValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
           modifiedSettings,
@@ -627,12 +629,12 @@ describe('SettingsUtils', () => {
       });
 
       it('should show value with * when changed from default', () => {
-        const settings = { showMemoryUsage: true }; // true is different from default (false)
-        const mergedSettings = { showMemoryUsage: true };
+        const settings = { ui: { showMemoryUsage: true } }; // true is different from default (false)
+        const mergedSettings = { ui: { showMemoryUsage: true } };
         const modifiedSettings = new Set<string>();
 
         const result = getDisplayValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
           modifiedSettings,
@@ -642,11 +644,11 @@ describe('SettingsUtils', () => {
 
       it('should show default value without * when setting does not exist in scope', () => {
         const settings = {}; // setting doesn't exist in scope, show default
-        const mergedSettings = { showMemoryUsage: false };
+        const mergedSettings = { ui: { showMemoryUsage: false } };
         const modifiedSettings = new Set<string>();
 
         const result = getDisplayValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
           modifiedSettings,
@@ -656,12 +658,12 @@ describe('SettingsUtils', () => {
 
       it('should show value with * when user changes from default', () => {
         const settings = {}; // setting doesn't exist in scope originally
-        const mergedSettings = { showMemoryUsage: false };
-        const modifiedSettings = new Set<string>(['showMemoryUsage']);
-        const pendingSettings = { showMemoryUsage: true }; // user changed to true
+        const mergedSettings = { ui: { showMemoryUsage: false } };
+        const modifiedSettings = new Set<string>(['ui.showMemoryUsage']);
+        const pendingSettings = { ui: { showMemoryUsage: true } }; // user changed to true
 
         const result = getDisplayValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
           modifiedSettings,
@@ -675,14 +677,14 @@ describe('SettingsUtils', () => {
       it('should return true when setting does not exist in scope', () => {
         const settings = {}; // setting doesn't exist
 
-        const result = isDefaultValue('showMemoryUsage', settings);
+        const result = isDefaultValue('ui.showMemoryUsage', settings);
         expect(result).toBe(true);
       });
 
       it('should return false when setting exists in scope', () => {
-        const settings = { showMemoryUsage: true }; // setting exists
+        const settings = { ui: { showMemoryUsage: true } }; // setting exists
 
-        const result = isDefaultValue('showMemoryUsage', settings);
+        const result = isDefaultValue('ui.showMemoryUsage', settings);
         expect(result).toBe(false);
       });
 
@@ -709,11 +711,11 @@ describe('SettingsUtils', () => {
 
     describe('isValueInherited', () => {
       it('should return false for top-level settings that exist in scope', () => {
-        const settings = { showMemoryUsage: true };
-        const mergedSettings = { showMemoryUsage: true };
+        const settings = { ui: { showMemoryUsage: true } };
+        const mergedSettings = { ui: { showMemoryUsage: true } };
 
         const result = isValueInherited(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
         );
@@ -722,10 +724,10 @@ describe('SettingsUtils', () => {
 
       it('should return true for top-level settings that do not exist in scope', () => {
         const settings = {};
-        const mergedSettings = { showMemoryUsage: true };
+        const mergedSettings = { ui: { showMemoryUsage: true } };
 
         const result = isValueInherited(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
         );
@@ -765,11 +767,11 @@ describe('SettingsUtils', () => {
 
     describe('getEffectiveDisplayValue', () => {
       it('should return value from settings when available', () => {
-        const settings = { showMemoryUsage: true };
-        const mergedSettings = { showMemoryUsage: false };
+        const settings = { ui: { showMemoryUsage: true } };
+        const mergedSettings = { ui: { showMemoryUsage: false } };
 
         const result = getEffectiveDisplayValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
         );
@@ -778,10 +780,10 @@ describe('SettingsUtils', () => {
 
       it('should return value from merged settings when not in scope', () => {
         const settings = {};
-        const mergedSettings = { showMemoryUsage: true };
+        const mergedSettings = { ui: { showMemoryUsage: true } };
 
         const result = getEffectiveDisplayValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
         );
@@ -793,7 +795,7 @@ describe('SettingsUtils', () => {
         const mergedSettings = {};
 
         const result = getEffectiveDisplayValue(
-          'showMemoryUsage',
+          'ui.showMemoryUsage',
           settings,
           mergedSettings,
         );

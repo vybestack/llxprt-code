@@ -302,7 +302,9 @@ class ShellToolInvocation extends BaseToolInvocation<
           switch (event.type) {
             case 'data':
               if (isBinaryStream) break;
-              outputChunks.push(event.chunk);
+              if (typeof event.chunk === 'string') {
+                outputChunks.push(event.chunk);
+              }
               if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
                 cumulativeOutput = outputChunks.join('');
                 outputChunks = [cumulativeOutput];
@@ -337,8 +339,10 @@ class ShellToolInvocation extends BaseToolInvocation<
         },
         signal,
         this.config.getShouldUseNodePtyShell(),
-        terminalColumns,
-        terminalRows,
+        {
+          terminalWidth: terminalColumns,
+          terminalHeight: terminalRows,
+        },
       );
 
       const result = await executionResult.result;

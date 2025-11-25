@@ -63,6 +63,7 @@ vi.mock('../utils/logger.js', () => ({
 let config: Config;
 const getToolRegistrySpy = vi.fn().mockReturnValue(ApprovalMode.DEFAULT);
 const getApprovalModeSpy = vi.fn();
+const getShellExecutionConfigSpy = vi.fn();
 vi.mock('../config/config.js', async () => {
   const actual = await vi.importActual('../config/config.js');
   return {
@@ -71,6 +72,7 @@ vi.mock('../config/config.js', async () => {
       const mockConfig = createMockConfig({
         getToolRegistry: getToolRegistrySpy,
         getApprovalMode: getApprovalModeSpy,
+        getShellExecutionConfig: getShellExecutionConfigSpy,
       });
       config = mockConfig as Config;
       return config;

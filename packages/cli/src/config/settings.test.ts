@@ -59,7 +59,7 @@ import {
   SettingScope,
   type Settings,
   loadEnvironment,
-} from './settings';
+} from './settings.js';
 import { FatalConfigError, LLXPRT_DIR } from '@vybestack/llxprt-code-core';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
@@ -159,15 +159,13 @@ describe('Settings Loading and Merging', () => {
         customThemes: {},
         customWittyPhrases: [],
         hideWindowTitle: false,
-        hideTips: false,
-        hideBanner: false,
-        hideFooter: false,
+        ui: {},
+        general: {},
         hideCWD: false,
-        hideContextSummary: false,
         showTodoPanel: true,
         hideModelInfo: false,
         hideSandboxStatus: false,
-        showMemoryUsage: false,
+        useFullWidth: true,
         showStatusInTitle: false,
         historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
         historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
@@ -252,15 +250,13 @@ describe('Settings Loading and Merging', () => {
         customThemes: {},
         customWittyPhrases: [],
         hideWindowTitle: false,
-        hideTips: false,
-        hideBanner: false,
-        hideFooter: false,
+        ui: {},
+        general: {},
         hideCWD: false,
-        hideContextSummary: false,
         showTodoPanel: true,
         hideModelInfo: false,
         hideSandboxStatus: false,
-        showMemoryUsage: false,
+        useFullWidth: true,
         showStatusInTitle: false,
         historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
         historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
@@ -345,15 +341,13 @@ describe('Settings Loading and Merging', () => {
         customThemes: {},
         customWittyPhrases: [],
         hideWindowTitle: false,
-        hideTips: false,
-        hideBanner: false,
-        hideFooter: false,
+        ui: {},
+        general: {},
         hideCWD: false,
-        hideContextSummary: false,
         showTodoPanel: true,
         hideModelInfo: false,
         hideSandboxStatus: false,
-        showMemoryUsage: false,
+        useFullWidth: true,
         showStatusInTitle: false,
         historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
         historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
@@ -437,15 +431,13 @@ describe('Settings Loading and Merging', () => {
         customThemes: {},
         customWittyPhrases: [],
         hideWindowTitle: false,
-        hideTips: false,
-        hideBanner: false,
-        hideFooter: false,
+        ui: {},
+        general: {},
         hideCWD: false,
-        hideContextSummary: false,
         showTodoPanel: true,
         hideModelInfo: false,
         hideSandboxStatus: false,
-        showMemoryUsage: false,
+        useFullWidth: true,
         showStatusInTitle: false,
         historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
         historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
@@ -532,15 +524,13 @@ describe('Settings Loading and Merging', () => {
         customThemes: {},
         customWittyPhrases: [],
         hideWindowTitle: false,
-        hideTips: false,
-        hideBanner: false,
-        hideFooter: false,
+        ui: {},
+        general: {},
         hideCWD: false,
-        hideContextSummary: false,
         showTodoPanel: true,
         hideModelInfo: false,
         hideSandboxStatus: false,
-        showMemoryUsage: false,
+        useFullWidth: true,
         showStatusInTitle: false,
         historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
         historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
@@ -637,16 +627,15 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged).toEqual({
         customThemes: {},
         customWittyPhrases: [],
+
         hideWindowTitle: false,
-        hideTips: false,
-        hideBanner: false,
-        hideFooter: false,
+        ui: {},
+        general: {},
         hideCWD: false,
-        hideContextSummary: false,
         showTodoPanel: true,
         hideModelInfo: false,
         hideSandboxStatus: false,
-        showMemoryUsage: false,
+        useFullWidth: true,
         showStatusInTitle: false,
         historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
         historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
@@ -752,16 +741,15 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged).toEqual({
         customThemes: {},
         customWittyPhrases: [],
+
         hideWindowTitle: false,
-        hideTips: false,
-        hideBanner: false,
-        hideFooter: false,
+        ui: {},
+        general: {},
         hideCWD: false,
-        hideContextSummary: false,
         showTodoPanel: true,
         hideModelInfo: false,
         hideSandboxStatus: false,
-        showMemoryUsage: false,
+        useFullWidth: true,
         showStatusInTitle: false,
         historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
         historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
@@ -1435,9 +1423,11 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
+      // @ts-expect-error: dynamic property for test
       expect(settings.workspace.settings.endpoint).toBe(
         'workspace_endpoint_from_env/api',
       );
+      // @ts-expect-error: dynamic property for test
       expect(settings.workspace.settings.nested.value).toBe(
         'workspace_endpoint_from_env',
       );
@@ -1574,7 +1564,9 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.apiKey).toBe('$UNDEFINED_VAR');
+      // @ts-expect-error: dynamic property for test
       expect(settings.merged.apiKey).toBe('$UNDEFINED_VAR');
     });
 
@@ -1593,6 +1585,7 @@ describe('Settings Loading and Merging', () => {
         },
       );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.path).toBe('/path/valueA/valueB/end');
       delete process.env.VAR_A;
       delete process.env.VAR_B;
@@ -1613,6 +1606,7 @@ describe('Settings Loading and Merging', () => {
         },
       );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.list).toEqual([
         'item1_env',
         'item2_env',
@@ -1654,17 +1648,28 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nullVal).toBeNull();
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.trueVal).toBe(true);
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.falseVal).toBe(false);
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.numberVal).toBe(123.45);
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.stringVal).toBe('env_string_value');
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.undefinedVal).toBeUndefined();
 
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nestedObj.nestedNull).toBeNull();
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nestedObj.nestedBool).toBe(true);
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nestedObj.nestedNum).toBe(0);
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nestedObj.nestedString).toBe('literal');
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nestedObj.anotherEnv).toBe(
         'env_string_nested_value',
       );
@@ -1691,6 +1696,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.serverAddress).toBe('myhost:9090/api');
 
       delete process.env.TEST_HOST;
@@ -1737,15 +1743,13 @@ describe('Settings Loading and Merging', () => {
           customThemes: {},
           customWittyPhrases: [],
           hideWindowTitle: false,
-          hideTips: false,
-          hideBanner: false,
-          hideFooter: false,
+          ui: {},
+          general: {},
           hideCWD: false,
-          hideContextSummary: false,
           showTodoPanel: true,
           hideModelInfo: false,
           hideSandboxStatus: false,
-          showMemoryUsage: false,
+          useFullWidth: true,
           historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
           historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
           usageStatisticsEnabled: true,
@@ -2197,7 +2201,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.user.settings).toEqual(complexSettingsContent);
       expect(settings.merged.mcpServers).toHaveProperty('test-server');
       expect(settings.merged.customThemes).toHaveProperty('my-theme');
-      expect(settings.merged.mcpServers['test-server'].env).toEqual({
+      expect(settings.merged.mcpServers!['test-server'].env).toEqual({
         NODE_ENV: 'production',
         PORT: '3000',
       });
@@ -2279,15 +2283,19 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.complexPath).toBe(
         '/home/testuser/configs/part1:part2:part3/app.json',
       );
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.configData).toBe(
         '{"key": "value", "number": 42}',
       );
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.fallbackValue).toBe(
         '${EMPTY_VAR:-default_value}',
       ); // Should not resolve bash-style fallbacks
+      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.multipleVars).toBe(
         'user:testuser@host:testhost:${PORT:-8080}',
       );

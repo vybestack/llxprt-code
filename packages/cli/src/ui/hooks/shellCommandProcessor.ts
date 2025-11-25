@@ -193,6 +193,7 @@ export const useShellCommandProcessor = (
             },
             abortSignal,
             config.getShouldUseNodePtyShell(),
+            config.getShellExecutionConfig?.() || {},
           );
 
           executionPid = pid;

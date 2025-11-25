@@ -8,7 +8,36 @@ import {
   CompressionStatus,
   ToolCallConfirmationDetails,
   ToolResultDisplay,
+  ThoughtSummary,
+  ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
+import type React from 'react';
+
+// Auth state for UI context
+export interface AuthState {
+  isAuthenticated: boolean;
+  isPending: boolean;
+  error: string | null;
+  authType: string | null;
+}
+
+// Shell confirmation request for UI
+export interface ShellConfirmationRequest {
+  commands: string[];
+  onConfirm: (
+    outcome: ToolConfirmationOutcome,
+    approvedCommands?: string[],
+  ) => void;
+}
+
+// General confirmation request for UI
+export interface ConfirmationRequest {
+  prompt: React.ReactNode;
+  onConfirm: (confirmed: boolean) => void;
+}
+
+// Re-export ThoughtSummary from core
+export type { ThoughtSummary };
 
 // Only defining the state enum needed by the UI
 export enum StreamingState {
@@ -52,6 +81,8 @@ export interface IndividualToolCallDisplay {
   confirmationDetails: ToolCallConfirmationDetails | undefined;
   renderOutputAsMarkdown?: boolean;
   isFocused?: boolean;
+  ptyId?: number;
+  outputFile?: string;
 }
 
 export interface CompressionProps {
@@ -304,8 +335,3 @@ export type SlashCommandProcessorResult =
       type: 'handled'; // Indicates the command was processed and no further action is needed.
     }
   | SubmitPromptResult;
-
-export interface ConfirmationRequest {
-  prompt: React.ReactNode;
-  onConfirm: (confirm: boolean) => void;
-}

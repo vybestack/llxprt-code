@@ -36,7 +36,7 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
   });
 }
 
-import React, { ErrorInfo, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { render, Box, Text } from 'ink';
 import Spinner from 'ink-spinner';
 import { AppWrapper } from './ui/App.js';
@@ -96,15 +96,23 @@ import { computeWindowTitle } from './utils/windowTitle.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import {
   setCliRuntimeContext,
-  switchActiveProvider,
-  setActiveModel,
-  setActiveModelParam,
-  clearActiveModelParam,
-  getActiveModelParams,
   loadProfileByName,
   applyCliArgumentOverrides,
+  switchActiveProvider,
+  setActiveModel,
+  getActiveModelParams,
+  setActiveModelParam,
+  clearActiveModelParam,
 } from './runtime/runtimeSettings.js';
 import { writeFileSync } from 'node:fs';
+
+const handleError = (error: Error, errorInfo: React.ErrorInfo) => {
+  console.error('Uncaught error:', error, errorInfo);
+  appEvents.emit(
+    AppEvent.LogError,
+    `Uncaught error: ${error.message}\nComponent Stack: ${errorInfo.componentStack}`,
+  );
+};
 
 export function validateDnsResolutionOrder(
   order: string | undefined,
@@ -181,22 +189,6 @@ ${reason.stack}`
       appEvents.emit(AppEvent.OpenDebugConsole);
     }
   });
-}
-
-function handleError(error: Error, errorInfo: ErrorInfo) {
-  // Log to console for debugging
-  console.error('Application Error:', error);
-  console.error('Component Stack:', errorInfo.componentStack);
-
-  // Special handling for maximum update depth errors
-  if (error.message.includes('Maximum update depth exceeded')) {
-    console.error('\nCRITICAL: RENDER LOOP DETECTED!');
-    console.error('This is likely caused by:');
-    console.error('- State updates during render');
-    console.error('- Incorrect useEffect dependencies');
-    console.error('- Non-memoized props causing re-renders');
-    console.error('\nCheck recent changes to React components and hooks.');
-  }
 }
 
 export async function startInteractiveUI(

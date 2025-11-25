@@ -11,6 +11,8 @@ export enum AppEvent {
   LogError = 'log-error',
   OauthDisplayMessage = 'oauth-display-message',
   Flicker = 'flicker',
+  SelectionWarning = 'selection-warning',
+  McpClientUpdate = 'mcp-client-update',
 }
 
 export const appEvents = new EventEmitter();

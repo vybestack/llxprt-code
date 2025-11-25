@@ -32,6 +32,7 @@ import {
   EmojiFilter,
   type EmojiFilterMode,
   DEFAULT_AGENT_ID,
+  CompletedToolCall,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -59,6 +60,7 @@ import {
   TrackedToolCall,
   TrackedCompletedToolCall,
   TrackedCancelledToolCall,
+  MarkToolsAsSubmittedFn,
 } from './useReactToolScheduler.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { useKeypress } from './useKeypress.js';
@@ -263,47 +265,70 @@ export const useGeminiStream = (
     return new GitService(config.getProjectRoot(), storage);
   }, [config, storage]);
 
-  const [toolCalls, scheduleToolCalls, markToolsAsSubmitted] =
-    useReactToolScheduler(
-      async (schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
-        if (completedToolCallsFromScheduler.length === 0) {
-          return;
-        }
+  const markToolsAsSubmittedRef = useRef<MarkToolsAsSubmittedFn>(() => {});
+  const handleCompletedToolsRef = useRef<
+    (calls: TrackedToolCall[]) => Promise<void>
+  >(async () => {});
 
-        if (isPrimary) {
-          addItem(
-            mapTrackedToolCallsToDisplay(
-              completedToolCallsFromScheduler as TrackedToolCall[],
-            ),
-            Date.now(),
-          );
+  const handleToolSchedulerComplete = useCallback(
+    async (
+      _schedulerId: symbol,
+      completedToolCallsFromScheduler: CompletedToolCall[],
+      options: { isPrimary: boolean },
+    ) => {
+      if (completedToolCallsFromScheduler.length === 0) {
+        return;
+      }
 
-          await handleCompletedTools(
-            completedToolCallsFromScheduler as TrackedToolCall[],
-          );
-          return;
-        }
-
-        const callIdsToMark = completedToolCallsFromScheduler.map(
-          (toolCall) => toolCall.request.callId,
-        );
-        if (callIdsToMark.length > 0) {
-          markToolsAsSubmitted(callIdsToMark);
-        }
+      if (options.isPrimary) {
+        // Transform CompletedToolCall[] to TrackedCompletedToolCall[] to satisfy the type
+        const trackedCompletedCalls: TrackedCompletedToolCall[] =
+          completedToolCallsFromScheduler.map((call) => ({
+            ...call,
+            responseSubmittedToGemini: false,
+          }));
 
         addItem(
-          mapTrackedToolCallsToDisplay(
-            completedToolCallsFromScheduler as TrackedToolCall[],
-          ),
+          mapTrackedToolCallsToDisplay(trackedCompletedCalls),
           Date.now(),
         );
-      },
+
+        try {
+          await handleCompletedToolsRef.current(trackedCompletedCalls);
+        } catch (error) {
+          onDebugMessage(`Error handling completed tools: ${error}`);
+        }
+        return;
+      }
+
+      const callIdsToMark = completedToolCallsFromScheduler.map(
+        (toolCall) => toolCall.request.callId,
+      );
+      if (callIdsToMark.length > 0) {
+        markToolsAsSubmittedRef.current(callIdsToMark);
+      }
+
+      addItem(
+        mapTrackedToolCallsToDisplay(
+          completedToolCallsFromScheduler as TrackedToolCall[],
+        ),
+        Date.now(),
+      );
+    },
+    [addItem, onDebugMessage],
+  );
+
+  const [toolCalls, scheduleToolCalls, markToolsAsSubmitted] =
+    useReactToolScheduler(
+      handleToolSchedulerComplete,
       config,
       setPendingHistoryItem,
       getPreferredEditor,
       onEditorClose,
       onEditorOpen,
     );
+
+  markToolsAsSubmittedRef.current = markToolsAsSubmitted;
 
   const pendingToolCallGroupDisplay = useMemo(
     () =>
@@ -1184,6 +1209,8 @@ export const useGeminiStream = (
       onTodoPause,
     ],
   );
+
+  handleCompletedToolsRef.current = handleCompletedTools;
 
   const pendingHistoryItems = useMemo(
     () =>

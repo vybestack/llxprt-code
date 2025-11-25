@@ -110,6 +110,94 @@ const DEFAULT_EXTENSION_AUTO_UPDATE = {
  * `as const` is crucial for TypeScript to infer the most specific types possible.
  */
 export const SETTINGS_SCHEMA = {
+  // UI Group Settings
+  ui: {
+    type: 'object',
+    label: 'UI Settings',
+    category: 'UI',
+    requiresRestart: false,
+    default: {},
+    description: 'UI-related settings group.',
+    showInDialog: false,
+    properties: {
+      hideBanner: {
+        type: 'boolean',
+        label: 'Hide Banner',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description: 'Hide application banner',
+        showInDialog: true,
+      },
+      hideTips: {
+        type: 'boolean',
+        label: 'Hide Tips',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description: 'Hide helpful tips in the UI',
+        showInDialog: true,
+      },
+      showMemoryUsage: {
+        type: 'boolean',
+        label: 'Show Memory Usage',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description: 'Display memory usage information in the UI',
+        showInDialog: true,
+      },
+      hideContextSummary: {
+        type: 'boolean',
+        label: 'Hide Context Summary',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description:
+          'Hide the context summary (LLXPRT.md, MCP servers) above the input.',
+        showInDialog: true,
+      },
+      hideFooter: {
+        type: 'boolean',
+        label: 'Hide Footer',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description: 'Hide the footer',
+        showInDialog: true,
+      },
+      useAlternateBuffer: {
+        type: 'boolean',
+        label: 'Use Alternate Buffer',
+        category: 'UI',
+        requiresRestart: false,
+        default: true,
+        description: 'Use alternate buffer for history scrolling',
+        showInDialog: true,
+      },
+    },
+  },
+  // General Settings
+  general: {
+    type: 'object',
+    label: 'General Settings',
+    category: 'General',
+    requiresRestart: false,
+    default: {},
+    description: 'General application settings.',
+    showInDialog: false,
+    properties: {
+      preferredEditor: {
+        type: 'string',
+        label: 'Preferred Editor',
+        category: 'General',
+        requiresRestart: false,
+        default: undefined as string | undefined,
+        description: 'Preferred editor for opening files.',
+        showInDialog: true,
+      },
+    },
+  },
   // UI Settings
   theme: {
     type: 'string',
@@ -138,43 +226,17 @@ export const SETTINGS_SCHEMA = {
     description: 'Hide the window title bar',
     showInDialog: true,
   },
-  hideTips: {
+
+  useFullWidth: {
     type: 'boolean',
-    label: 'Hide Tips',
+    label: 'Use Full Width',
     category: 'UI',
     requiresRestart: false,
-    default: false,
-    description: 'Hide helpful tips in the UI',
+    default: true,
+    description: 'Use full terminal width instead of margins',
     showInDialog: true,
   },
-  hideBanner: {
-    type: 'boolean',
-    label: 'Hide Banner',
-    category: 'UI',
-    requiresRestart: false,
-    default: false,
-    description: 'Hide the application banner',
-    showInDialog: true,
-  },
-  hideFooter: {
-    type: 'boolean',
-    label: 'Hide Footer',
-    category: 'UI',
-    requiresRestart: false,
-    default: false,
-    description: 'Hide the footer from the UI',
-    showInDialog: true,
-  },
-  hideContextSummary: {
-    type: 'boolean',
-    label: 'Hide Context Summary',
-    category: 'UI',
-    requiresRestart: false,
-    default: false,
-    description:
-      'Hide the context summary (LLXPRT.md, MCP servers) above the input.',
-    showInDialog: true,
-  },
+
   showTodoPanel: {
     type: 'boolean',
     label: 'Show Todo Panel',
@@ -185,15 +247,7 @@ export const SETTINGS_SCHEMA = {
       'Display the interactive Todo panel. Disable to keep todos in the scrollback view instead.',
     showInDialog: true,
   },
-  showMemoryUsage: {
-    type: 'boolean',
-    label: 'Show Memory Usage',
-    category: 'UI',
-    requiresRestart: false,
-    default: false,
-    description: 'Display memory usage information in the UI',
-    showInDialog: true,
-  },
+
   historyMaxItems: {
     type: 'number',
     label: 'History Max Items',
@@ -242,6 +296,9 @@ export const SETTINGS_SCHEMA = {
     description: 'Automatically configure Node.js memory limits',
     showInDialog: true,
   },
+  // TODO: This is a duplicate of general.preferredEditor.
+  // It is kept here for now because the codebase relies on it being a top-level setting.
+  // We should migrate usages to general.preferredEditor and remove this top-level definition to align with gemini-cli.
   preferredEditor: {
     type: 'string',
     label: 'Preferred Editor',
@@ -251,6 +308,7 @@ export const SETTINGS_SCHEMA = {
     description: 'The preferred editor to open files in.',
     showInDialog: false,
   },
+
   maxSessionTurns: {
     type: 'number',
     label: 'Max Session Turns',
@@ -437,13 +495,13 @@ export const SETTINGS_SCHEMA = {
 
   shouldUseNodePtyShell: {
     type: 'boolean',
-    label: 'Enable Interactive Shell (node-pty)',
+    label: 'Enable Interactive Shell (node-pty) [DEPRECATED]',
     category: 'Shell',
     requiresRestart: true,
     default: false,
     description:
-      'Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty. Falls back to child_process when disabled.',
-    showInDialog: true,
+      'DEPRECATED: Use tools.usePty instead. Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty.',
+    showInDialog: false,
   },
 
   selectedAuthType: {
@@ -674,6 +732,46 @@ export const SETTINGS_SCHEMA = {
         description:
           'Sandbox execution environment (can be a boolean or a path string).',
         showInDialog: false,
+      },
+      usePty: {
+        type: 'boolean',
+        label: 'Use node-pty for Shell Execution',
+        category: 'Tools',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Use node-pty for shell command execution. Fallback to child_process still applies.',
+        showInDialog: true,
+      },
+      shell: {
+        type: 'object',
+        label: 'Shell',
+        category: 'Tools',
+        requiresRestart: false,
+        default: {},
+        description: 'Settings for shell execution.',
+        showInDialog: false,
+        properties: {
+          pager: {
+            type: 'string',
+            label: 'Pager',
+            category: 'Tools',
+            requiresRestart: false,
+            default: 'cat' as string | undefined,
+            description:
+              'The pager command to use for shell output. Defaults to `cat`.',
+            showInDialog: false,
+          },
+          showColor: {
+            type: 'boolean',
+            label: 'Show Color',
+            category: 'Tools',
+            requiresRestart: false,
+            default: false,
+            description: 'Show color in shell output.',
+            showInDialog: true,
+          },
+        },
       },
       autoAccept: {
         type: 'boolean',
@@ -1199,13 +1297,13 @@ export const SETTINGS_SCHEMA = {
   },
   useRipgrep: {
     type: 'boolean',
-    label: 'Use Ripgrep',
-    category: 'Tools',
+    label: 'Use Ripgrep [DEPRECATED]',
+    category: 'General',
     requiresRestart: false,
     default: false,
     description:
-      'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
-    showInDialog: true,
+      'DEPRECATED: Use tools.useRipgrep instead. Use ripgrep for file content search instead of the fallback implementation.',
+    showInDialog: false,
   },
   enablePromptCompletion: {
     type: 'boolean',

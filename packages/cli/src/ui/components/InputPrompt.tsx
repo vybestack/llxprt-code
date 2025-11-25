@@ -5,7 +5,7 @@
  */
 
 import React, { useCallback, useEffect, useState, useRef } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, type DOMElement } from 'ink';
 import { theme } from '../semantic-colors.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
@@ -32,6 +32,10 @@ import {
 } from '../utils/clipboardUtils.js';
 import * as path from 'path';
 import { SCREEN_READER_USER_PREFIX } from '../textConstants.js';
+import { useMouseClick } from '../hooks/useMouseClick.js';
+import { useMouse } from '../hooks/useMouse.js';
+import { type MouseEvent } from '../contexts/MouseContext.js';
+import { useUIActions } from '../contexts/UIActionsContext.js';
 
 const LARGE_PASTE_LINE_THRESHOLD = 4;
 const LARGE_PASTE_CHAR_THRESHOLD = 1000;
@@ -70,30 +74,22 @@ export interface InputPromptProps {
   popAllMessages?: (callback: (messages: string) => void) => void;
   vimModeEnabled?: boolean;
   isEmbeddedShellFocused?: boolean;
+
   setQueueErrorMessage?: (message: string) => void;
   streamingState?: StreamingState;
 }
 
 // The input content, input container, and input suggestions list may have different widths
-export const calculatePromptWidths = (terminalWidth: number) => {
-  const widthFraction = 0.9;
+export const calculatePromptWidths = (mainContentWidth: number) => {
   const FRAME_PADDING_AND_BORDER = 4; // Border (2) + padding (2)
   const PROMPT_PREFIX_WIDTH = 2; // '> ' or '! '
-  const MIN_CONTENT_WIDTH = 2;
 
-  const innerContentWidth =
-    Math.floor(terminalWidth * widthFraction) -
-    FRAME_PADDING_AND_BORDER -
-    PROMPT_PREFIX_WIDTH;
-
-  const inputWidth = Math.max(MIN_CONTENT_WIDTH, innerContentWidth);
   const FRAME_OVERHEAD = FRAME_PADDING_AND_BORDER + PROMPT_PREFIX_WIDTH;
-  const containerWidth = inputWidth + FRAME_OVERHEAD;
-  const suggestionsWidth = Math.max(20, Math.floor(terminalWidth * 1.0));
+  const suggestionsWidth = Math.max(20, mainContentWidth);
 
   return {
-    inputWidth,
-    containerWidth,
+    inputWidth: Math.max(mainContentWidth - FRAME_OVERHEAD, 1),
+    containerWidth: mainContentWidth,
     suggestionsWidth,
     frameOverhead: FRAME_OVERHEAD,
   } as const;
@@ -115,11 +111,14 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   setShellModeActive,
   onEscapePromptChange,
   vimHandleInput,
+  isEmbeddedShellFocused,
 }) => {
+  const { setEmbeddedShellFocused } = useUIActions();
   const [justNavigatedHistory, setJustNavigatedHistory] = useState(false);
   const [escPressCount, setEscPressCount] = useState(0);
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const escapeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const innerBoxRef = useRef<DOMElement>(null);
 
   const pendingLargePastesRef = useRef<Map<string, string>>(new Map());
 
@@ -317,6 +316,27 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       console.error('Error handling clipboard image:', error);
     }
   }, [buffer, config]);
+
+  useMouseClick(
+    innerBoxRef,
+    (_event, relX, relY) => {
+      if (isEmbeddedShellFocused) {
+        setEmbeddedShellFocused(false);
+      }
+      const visualRow = buffer.visualScrollRow + relY;
+      buffer.moveToVisualPosition(visualRow, relX);
+    },
+    { isActive: focus },
+  );
+
+  useMouse(
+    (event: MouseEvent) => {
+      if (event.name === 'right-release') {
+        handleClipboardImage();
+      }
+    },
+    { isActive: focus },
+  );
 
   const handleInput = useCallback(
     (key: Key) => {
@@ -837,7 +857,12 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
             '> '
           )}
         </Text>
-        <Box flexGrow={1} flexDirection="column">
+        <Box
+          marginTop={1}
+          flexDirection="column"
+          width={inputWidth + 6} // 6 = FRAME_OVERHEAD (4) + PADDING (2)
+          ref={innerBoxRef}
+        >
           {buffer.text.length === 0 && placeholder ? (
             focus ? (
               <Text>

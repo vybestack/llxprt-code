@@ -13,7 +13,7 @@ import { getAsciiArtWidth } from '../utils/textUtils.js';
 
 interface HeaderProps {
   customAsciiArt?: string; // For user-defined ASCII art
-  terminalWidth: number; // For responsive logo
+  terminalWidth?: number; // For responsive logo (optional)
   version: string;
   nightly: boolean;
 }
@@ -31,7 +31,9 @@ export const Header: React.FC<HeaderProps> = ({
     displayTitle = customAsciiArt;
   } else {
     displayTitle =
-      terminalWidth >= widthOfLongLogo ? longAsciiLogo : shortAsciiLogo;
+      terminalWidth && terminalWidth >= widthOfLongLogo
+        ? longAsciiLogo
+        : shortAsciiLogo;
   }
 
   const artWidth = getAsciiArtWidth(displayTitle);
