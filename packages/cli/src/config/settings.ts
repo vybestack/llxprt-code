@@ -405,19 +405,17 @@ export class LoadedSettings {
 
       // Ensure the top-level object exists
       if (!settingsFile.settings[topLevel]) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        settingsFile.settings[topLevel] = {} as any;
+        (settingsFile.settings as Record<string, unknown>)[topLevel] = {};
       }
 
       // Navigate to the nested property
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let current: any = settingsFile.settings[topLevel];
+      let current = settingsFile.settings[topLevel] as Record<string, unknown>;
       const nestedParts = nested.split('.');
       for (let i = 0; i < nestedParts.length - 1; i++) {
         if (!current[nestedParts[i]]) {
           current[nestedParts[i]] = {};
         }
-        current = current[nestedParts[i]];
+        current = current[nestedParts[i]] as Record<string, unknown>;
       }
       current[nestedParts[nestedParts.length - 1]] = value;
     } else {

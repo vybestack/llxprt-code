@@ -6,16 +6,16 @@
 
 import type { Config } from '../config/config.js';
 import type { AgentDefinition } from './types.js';
-// CodebaseInvestigatorAgent removed - hardcodes Gemini model, violates multi-provider
-import { type z } from 'zod';
+import type { z } from 'zod';
 
 /**
  * Manages the discovery, loading, validation, and registration of
  * AgentDefinitions.
  */
 export class AgentRegistry {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private readonly agents = new Map<string, AgentDefinition<any>>();
+  // Using unknown output type for the internal map to handle generic variance correctly
+  // Callers will cast to specific types as needed
+  private readonly agents = new Map<string, AgentDefinition>();
 
   constructor(private readonly config: Config) {}
 
@@ -57,7 +57,8 @@ export class AgentRegistry {
       console.log(`[AgentRegistry] Overriding agent '${definition.name}'`);
     }
 
-    this.agents.set(definition.name, definition);
+    // Cast to default AgentDefinition type for storage - callers will cast back as needed
+    this.agents.set(definition.name, definition as unknown as AgentDefinition);
   }
 
   /**
