@@ -4,35 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Box, Text, useInput } from 'ink';
+import { Box } from 'ink';
 import { type Config, AuthType } from '@vybestack/llxprt-code-core';
 import { GeminiPrivacyNotice } from './GeminiPrivacyNotice.js';
 import { CloudPaidPrivacyNotice } from './CloudPaidPrivacyNotice.js';
 import { CloudFreePrivacyNotice } from './CloudFreePrivacyNotice.js';
+import { MultiProviderPrivacyNotice } from './MultiProviderPrivacyNotice.js';
 
 interface PrivacyNoticeProps {
   onExit: () => void;
   config: Config;
 }
-
-const NonGeminiProviderNotice = ({
-  providerName,
-  onExit,
-}: {
-  providerName: string;
-  onExit: () => void;
-}) => {
-  useInput(() => {
-    onExit();
-  });
-
-  return (
-    <Box flexDirection="column" marginY={1}>
-      <Text>Using {providerName} provider.</Text>
-      <Text color="gray">Press any key to continue.</Text>
-    </Box>
-  );
-};
 
 const PrivacyNoticeText = ({
   config,
@@ -55,7 +37,7 @@ const PrivacyNoticeText = ({
     // If we have a specific non-Gemini provider, show its notice
     if (isNonGeminiProvider) {
       return (
-        <NonGeminiProviderNotice
+        <MultiProviderPrivacyNotice
           providerName={activeProvider.name}
           onExit={onExit}
         />
