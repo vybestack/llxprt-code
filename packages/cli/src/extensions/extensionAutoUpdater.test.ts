@@ -11,7 +11,7 @@ import {
   type ExtensionAutoUpdateStateStore,
   type ExtensionUpdateHistoryEntry,
 } from './extensionAutoUpdater.js';
-import { ExtensionUpdateState } from '../config/extensions/github.js';
+import { ExtensionUpdateState } from '../ui/state/extensions.js';
 import type { Extension } from '../config/extension.js';
 
 function createExtension(name: string): Extension {

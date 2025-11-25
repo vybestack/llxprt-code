@@ -86,6 +86,8 @@ import { getCliVersion } from './utils/version.js';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 // createProviderManager removed - provider manager now created in loadCliConfig()
+import { runZedIntegration } from './zed-integration/zedIntegration.js';
+import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
@@ -163,7 +165,6 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
   );
 };
 
-import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -262,7 +263,10 @@ export async function main() {
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
 
-  if (settings.merged.autoConfigureMaxOldSpaceSize && !process.env.SANDBOX) {
+  if (
+    settings.merged.ui?.autoConfigureMaxOldSpaceSize &&
+    !process.env.SANDBOX
+  ) {
     // Only relaunch with a larger heap when the autosizing setting is enabled.
     const debugMode = isDebugMode();
     const memoryArgs = shouldRelaunchForMemory(debugMode);
@@ -520,7 +524,7 @@ export async function main() {
   }
 
   // Load custom themes from settings
-  themeManager.loadCustomThemes(settings.merged.customThemes);
+  themeManager.loadCustomThemes(settings.merged.ui?.customThemes || {});
 
   // If a provider is specified, activate it after initialization
   const configProvider = config.getProvider();
@@ -608,11 +612,11 @@ export async function main() {
     }
   }
 
-  if (settings.merged.theme) {
-    if (!themeManager.setActiveTheme(settings.merged.theme)) {
+  if (settings.merged.ui?.theme) {
+    if (!themeManager.setActiveTheme(settings.merged.ui.theme)) {
       // If the theme is not found during initial load, log a warning and continue.
       // The useThemeCommand hook in App.tsx will handle opening the dialog.
-      console.warn(`Warning: Theme "${settings.merged.theme}" not found.`);
+      console.warn(`Warning: Theme "${settings.merged.ui.theme}" not found.`);
     }
   }
 
@@ -632,7 +636,7 @@ export async function main() {
   if (!process.env.SANDBOX) {
     // Memory relaunch was already handled at the top of main() before config loading
     // Now only handle sandbox entry, which needs memory args passed to the sandbox process
-    const sandboxMemoryArgs = settings.merged.autoConfigureMaxOldSpaceSize
+    const sandboxMemoryArgs = settings.merged.ui?.autoConfigureMaxOldSpaceSize
       ? shouldRelaunchForMemory(config.getDebugMode())
       : [];
     const sandboxConfig = config.getSandbox();
@@ -720,6 +724,17 @@ export async function main() {
     await getOauthClient(settings.merged.selectedAuthType, config);
   }
 
+  // Cleanup sessions after config initialization
+  await cleanupExpiredSessions(config, settings.merged);
+
+  if (config.getListExtensions()) {
+    console.log('Installed extensions:');
+    for (const extension of extensions) {
+      console.log(`- ${extension.config.name}`);
+    }
+    process.exit(0);
+  }
+
   if (config.getExperimentalZedIntegration()) {
     // In ACP mode, authentication happens through the protocol
     // Just ensure the provider manager is set up if configured
@@ -796,7 +811,7 @@ export async function main() {
 }
 
 function setWindowTitle(title: string, settings: LoadedSettings) {
-  if (!settings.merged.hideWindowTitle) {
+  if (!settings.merged.ui?.hideWindowTitle) {
     const windowTitle = computeWindowTitle(title);
     process.stdout.write(`\x1b]2;${windowTitle}\x07`);
 

@@ -79,6 +79,7 @@ describe('SettingsSchema', () => {
 
     it('should have correct nested setting structure', () => {
       const nestedSettings = [
+        'ui',
         'accessibility',
         'checkpointing',
         'fileFiltering',
@@ -149,7 +150,6 @@ describe('SettingsSchema', () => {
       expect(categories.size).toBeGreaterThan(0);
       expect(categories).toContain('General');
       expect(categories).toContain('UI');
-      expect(categories).toContain('Mode');
       expect(categories).toContain('Updates');
       expect(categories).toContain('Accessibility');
       expect(categories).toContain('Checkpointing');
@@ -200,8 +200,10 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.telemetry.showInDialog).toBe(false);
 
       // Check that some settings are appropriately hidden
-      expect(SETTINGS_SCHEMA.theme.showInDialog).toBe(false); // Changed to false
-      expect(SETTINGS_SCHEMA.customThemes.showInDialog).toBe(false); // Managed via theme editor
+      expect(SETTINGS_SCHEMA.ui.properties?.theme.showInDialog).toBe(false); // Changed to false
+      expect(SETTINGS_SCHEMA.ui.properties?.customThemes.showInDialog).toBe(
+        false,
+      ); // Managed via theme editor
       expect(SETTINGS_SCHEMA.checkpointing.showInDialog).toBe(false); // Experimental feature
       expect(SETTINGS_SCHEMA.accessibility.showInDialog).toBe(false);
       expect(SETTINGS_SCHEMA.fileFiltering.showInDialog).toBe(false); // Changed to false
@@ -216,13 +218,15 @@ describe('SettingsSchema', () => {
     it('should infer Settings type correctly', () => {
       // This test ensures that the Settings type is properly inferred from the schema
       const settings: Settings = {
-        theme: 'dark',
+        ui: {
+          theme: 'dark',
+        },
         includeDirectories: ['/path/to/dir'],
         loadMemoryFromIncludeDirectories: true,
       };
 
       // TypeScript should not complain about these properties
-      expect(settings.theme).toBe('dark');
+      expect(settings.ui?.theme).toBe('dark');
       expect(settings.includeDirectories).toEqual(['/path/to/dir']);
       expect(settings.loadMemoryFromIncludeDirectories).toBe(true);
     });

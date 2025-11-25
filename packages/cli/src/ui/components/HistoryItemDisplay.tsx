@@ -18,7 +18,7 @@ import { ToolGroupMessage } from './messages/ToolGroupMessage.js';
 import { GeminiMessageContent } from './messages/GeminiMessageContent.js';
 import { CompressionMessage } from './messages/CompressionMessage.js';
 import { WarningMessage } from './messages/WarningMessage.js';
-import { Box } from 'ink';
+import { Box, Text } from 'ink';
 import { AboutBox } from './AboutBox.js';
 import { StatsDisplay } from './StatsDisplay.js';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
@@ -27,7 +27,8 @@ import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
 import { Help } from './Help.js';
 import { Config } from '@vybestack/llxprt-code-core';
-import { SlashCommand } from '../commands/types.js';
+import type { SlashCommand } from '../commands/types.js';
+import { ChatList } from './views/ChatList.js';
 
 interface HistoryItemDisplayProps {
   item: HistoryItem;
@@ -140,6 +141,24 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
       )}
       {itemForDisplay.type === 'compression' && (
         <CompressionMessage compression={itemForDisplay.compression} />
+      )}
+      {itemForDisplay.type === 'extensions_list' && (
+        <Box>
+          <Text color="yellow">Extensions list view not yet implemented</Text>
+        </Box>
+      )}
+      {itemForDisplay.type === 'tools_list' && (
+        <Box>
+          <Text color="yellow">Tools list view not yet implemented</Text>
+        </Box>
+      )}
+      {itemForDisplay.type === 'mcp_status' && (
+        <Box>
+          <Text color="yellow">MCP status view not yet implemented</Text>
+        </Box>
+      )}
+      {itemForDisplay.type === 'chat_list' && (
+        <ChatList chats={itemForDisplay.chats} />
       )}
     </Box>
   );

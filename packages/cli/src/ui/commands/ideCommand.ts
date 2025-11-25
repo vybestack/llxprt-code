@@ -173,7 +173,11 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
         Date.now(),
       );
       if (result.success) {
-        context.services.settings.setValue(SettingScope.User, 'ideMode', true);
+        context.services.settings.setValue(
+          SettingScope.User,
+          'ui.ideMode',
+          true,
+        );
         // Poll for up to 5 seconds for the extension to activate.
         for (let i = 0; i < 10; i++) {
           config.setIdeMode(true);
@@ -215,7 +219,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     description: 'enable IDE integration',
     kind: CommandKind.BUILT_IN,
     action: async (context: CommandContext) => {
-      context.services.settings.setValue(SettingScope.User, 'ideMode', true);
+      context.services.settings.setValue(SettingScope.User, 'ui.ideMode', true);
       config.setIdeMode(true);
       config.setIdeClientConnected();
     },
@@ -226,7 +230,11 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     description: 'disable IDE integration',
     kind: CommandKind.BUILT_IN,
     action: async (context: CommandContext) => {
-      context.services.settings.setValue(SettingScope.User, 'ideMode', false);
+      context.services.settings.setValue(
+        SettingScope.User,
+        'ui.ideMode',
+        false,
+      );
       config.setIdeMode(false);
       config.setIdeClientDisconnected();
     },

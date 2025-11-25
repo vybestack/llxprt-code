@@ -28,7 +28,7 @@ export const useThemeCommand = (
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
 ): UseThemeCommandReturn => {
   // Determine the effective theme
-  const effectiveTheme = loadedSettings.merged.theme;
+  const effectiveTheme = loadedSettings.merged.ui?.theme;
   const appDispatch = useAppDispatch();
   const isThemeDialogOpen = appState.openDialogs.theme;
 
@@ -115,8 +115,8 @@ export const useThemeCommand = (
       try {
         // Merge user and workspace custom themes (workspace takes precedence)
         const mergedCustomThemes = {
-          ...(loadedSettings.user.settings.customThemes || {}),
-          ...(loadedSettings.workspace.settings.customThemes || {}),
+          ...(loadedSettings.user.settings.ui?.customThemes || {}),
+          ...(loadedSettings.workspace.settings.ui?.customThemes || {}),
         };
         // Only allow selecting themes available in the merged custom themes or built-in themes
         const isBuiltIn = themeManager.findThemeByName(themeName);
@@ -129,11 +129,11 @@ export const useThemeCommand = (
           appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
           return;
         }
-        loadedSettings.setValue(scope, 'theme', themeName); // Update the merged settings
-        if (loadedSettings.merged.customThemes) {
-          themeManager.loadCustomThemes(loadedSettings.merged.customThemes);
+        loadedSettings.setValue(scope, 'ui.theme', themeName); // Update the merged settings
+        if (loadedSettings.merged.ui?.customThemes) {
+          themeManager.loadCustomThemes(loadedSettings.merged.ui.customThemes);
         }
-        applyTheme(loadedSettings.merged.theme); // Apply the current theme
+        applyTheme(loadedSettings.merged.ui?.theme); // Apply the current theme
         appDispatch({ type: 'SET_THEME_ERROR', payload: null });
       } finally {
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'theme' }); // Close the dialog

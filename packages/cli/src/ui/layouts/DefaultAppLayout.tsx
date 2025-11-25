@@ -24,7 +24,7 @@ import { ConfigInitDisplay } from '../components/ConfigInitDisplay.js';
 import { MainContent } from '../components/MainContent.js';
 import { HistoryItemDisplay } from '../components/HistoryItemDisplay.js';
 import { ShowMoreLines } from '../components/ShowMoreLines.js';
-import { UpdateNotification } from '../components/UpdateNotification.js';
+import { Notifications } from '../components/Notifications.js';
 import { TodoPanel } from '../components/TodoPanel.js';
 import { Footer } from '../components/Footer.js';
 import { DialogManager } from '../components/DialogManager.js';
@@ -161,22 +161,11 @@ export const DefaultAppLayout = ({
         <MainContent config={config} />
 
         <Box flexDirection="column" ref={mainControlsRef}>
-          {updateInfo && <UpdateNotification message={updateInfo.message} />}
-          {startupWarnings.length > 0 && (
-            <Box
-              borderStyle="round"
-              borderColor={Colors.AccentYellow}
-              paddingX={1}
-              marginY={1}
-              flexDirection="column"
-            >
-              {startupWarnings.map((warning, index) => (
-                <Text key={index} color={Colors.AccentYellow}>
-                  {warning}
-                </Text>
-              ))}
-            </Box>
-          )}
+          <Notifications
+            startupWarnings={startupWarnings}
+            updateInfo={updateInfo}
+            history={history}
+          />
 
           {showTodoPanelSetting && <TodoPanel width={inputWidth} />}
 

@@ -643,6 +643,135 @@ export class IdeConnectionEvent {
   }
 }
 
+export enum FileOperation {
+  CREATE = 'create',
+  READ = 'read',
+  UPDATE = 'update',
+}
+
+export class ToolOutputTruncatedEvent {
+  eventName: 'tool_output_truncated';
+  prompt_id: string;
+  tool_name: string;
+  original_content_length: number;
+  truncated_content_length: number;
+  threshold: number;
+  lines?: number;
+
+  constructor(
+    promptId: string,
+    params: {
+      toolName: string;
+      originalContentLength: number;
+      truncatedContentLength: number;
+      threshold: number;
+      lines?: number;
+    },
+  ) {
+    this.eventName = 'tool_output_truncated';
+    this.prompt_id = promptId;
+    this.tool_name = params.toolName;
+    this.original_content_length = params.originalContentLength;
+    this.truncated_content_length = params.truncatedContentLength;
+    this.threshold = params.threshold;
+    this.lines = params.lines;
+  }
+}
+
+export class FileOperationEvent {
+  tool_name: string;
+  operation: FileOperation | string;
+  lines?: number;
+  mimetype?: string;
+  extension?: string;
+  programming_language?: string;
+
+  constructor(
+    toolName: string,
+    operation: FileOperation | string,
+    lines?: number,
+    mimetype?: string,
+    extension?: string,
+    programmingLanguage?: string,
+  ) {
+    this.tool_name = toolName;
+    this.operation = operation;
+    this.lines = lines;
+    this.mimetype = mimetype;
+    this.extension = extension;
+    this.programming_language = programmingLanguage;
+  }
+}
+
+export class ModelRoutingEvent {
+  model: string;
+  source: string;
+  contextLimit: number;
+  reason?: string;
+  fallback: boolean;
+  error?: unknown;
+
+  constructor(
+    model: string,
+    source: string,
+    contextLimit: number,
+    reason?: string,
+    fallback: boolean = false,
+    error?: unknown,
+  ) {
+    this.model = model;
+    this.source = source;
+    this.contextLimit = contextLimit;
+    this.reason = reason;
+    this.fallback = fallback;
+    this.error = error;
+  }
+}
+
+export class ExtensionInstallEvent {
+  extension_name: string;
+  extension_version: string;
+  extension_source: string;
+  status: string;
+
+  constructor(name: string, version: string, source: string, status: string) {
+    this.extension_name = name;
+    this.extension_version = version;
+    this.extension_source = source;
+    this.status = status;
+  }
+}
+
+export class ExtensionUninstallEvent {
+  extension_name: string;
+  status: string;
+
+  constructor(name: string, status: string) {
+    this.extension_name = name;
+    this.status = status;
+  }
+}
+
+export class ExtensionEnableEvent {
+  extension_name: string;
+  setting_scope: string;
+
+  constructor(name: string, scope: string) {
+    this.extension_name = name;
+    this.setting_scope = scope;
+  }
+}
+
+export class ExtensionDisableEvent {
+  extension_name: string;
+  setting_scope: string;
+
+  constructor(name: string, scope: string) {
+    this.extension_name = name;
+    this.setting_scope = scope;
+  }
+}
+
 export type TelemetryEvent =
   | StartSessionEvent
   | EndSessionEvent

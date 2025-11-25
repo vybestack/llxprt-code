@@ -6,13 +6,29 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import semver from 'semver';
 import { IDEServer } from './ide-server.js';
 import { DiffContentProvider, DiffManager } from './diff-manager.js';
 import { createLogger } from './utils/logger.js';
+import {
+  detectIdeFromEnv,
+  IDE_DEFINITIONS,
+  type IdeInfo,
+} from '@vybestack/llxprt-code-core';
 
+const CLI_IDE_COMPANION_IDENTIFIER =
+  'vybestack.llxprt-code-vscode-ide-companion';
 const INFO_MESSAGE_SHOWN_KEY = 'llxprtCodeInfoMessageShown';
 const IDE_WORKSPACE_PATH_ENV_VAR = 'LLXPRT_CODE_IDE_WORKSPACE_PATH';
 export const DIFF_SCHEME = 'llxprt-diff';
+
+/**
+ * In these environments the companion extension is installed and managed by the IDE instead of the user.
+ */
+const MANAGED_EXTENSION_SURFACES: ReadonlySet<IdeInfo['name']> = new Set([
+  IDE_DEFINITIONS.firebasestudio.name,
+  IDE_DEFINITIONS.cloudshell.name,
+]);
 
 let ideServer: IDEServer;
 let logger: vscode.OutputChannel;
@@ -38,12 +54,89 @@ function updateWorkspacePath(context: vscode.ExtensionContext) {
   }
 }
 
+async function checkForUpdates(
+  context: vscode.ExtensionContext,
+  log: (message: string) => void,
+  isManagedExtensionSurface: boolean,
+) {
+  try {
+    const currentVersion = context.extension.packageJSON.version;
+
+    // Fetch extension details from the VSCode Marketplace.
+    const response = await fetch(
+      'https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json;api-version=7.1-preview.1',
+        },
+        body: JSON.stringify({
+          filters: [
+            {
+              criteria: [
+                {
+                  filterType: 7, // Corresponds to ExtensionName
+                  value: CLI_IDE_COMPANION_IDENTIFIER,
+                },
+              ],
+            },
+          ],
+          // See: https://learn.microsoft.com/en-us/azure/devops/extend/gallery/apis/hyper-linking?view=azure-devops
+          // 946 = IncludeVersions | IncludeFiles | IncludeCategoryAndTags |
+          //       IncludeShortDescription | IncludePublisher | IncludeStatistics
+          flags: 946,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      log(
+        `Failed to fetch latest version info from marketplace: ${response.statusText}`,
+      );
+      return;
+    }
+
+    const data = await response.json();
+    const extension = data?.results?.[0]?.extensions?.[0];
+    // The versions are sorted by date, so the first one is the latest.
+    const latestVersion = extension?.versions?.[0]?.version;
+
+    if (
+      !isManagedExtensionSurface &&
+      latestVersion &&
+      semver.gt(latestVersion, currentVersion)
+    ) {
+      const selection = await vscode.window.showInformationMessage(
+        `A new version (${latestVersion}) of the LLxprt Code Companion extension is available.`,
+        'Update to latest version',
+      );
+      if (selection === 'Update to latest version') {
+        // The install command will update the extension if a newer version is found.
+        await vscode.commands.executeCommand(
+          'workbench.extensions.installExtension',
+          CLI_IDE_COMPANION_IDENTIFIER,
+        );
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log(`Error checking for extension updates: ${message}`);
+  }
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   logger = vscode.window.createOutputChannel('LLxprt Code IDE Companion');
   log = createLogger(context, logger);
   log('Extension activated');
 
   updateWorkspacePath(context);
+
+  const isManagedExtensionSurface = MANAGED_EXTENSION_SURFACES.has(
+    detectIdeFromEnv().name,
+  );
+
+  checkForUpdates(context, log, isManagedExtensionSurface);
 
   const diffContentProvider = new DiffContentProvider();
   const diffManager = new DiffManager(log, diffContentProvider);
@@ -86,7 +179,10 @@ export async function activate(context: vscode.ExtensionContext) {
     log(`Failed to start IDE server: ${message}`);
   }
 
-  if (!context.globalState.get(INFO_MESSAGE_SHOWN_KEY)) {
+  if (
+    !context.globalState.get(INFO_MESSAGE_SHOWN_KEY) &&
+    !isManagedExtensionSurface
+  ) {
     void vscode.window.showInformationMessage(
       'LLxprt Code Companion extension successfully installed.',
     );

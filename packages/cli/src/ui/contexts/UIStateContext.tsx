@@ -168,6 +168,7 @@ export interface UIState {
 
   // Debug
   debugMessage: string;
+  showDebugProfiler: boolean;
 
   // Footer height
   footerHeight: number;

@@ -12,6 +12,7 @@ import { env } from 'node:process';
 import { EOL } from 'node:os';
 import fs from 'node:fs';
 import * as pty from '@lydell/node-pty';
+import * as os from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -672,6 +673,42 @@ export class TestRig {
       };
     }[] = [];
 
+    // First, try to parse the simple VERBOSE format: [TELEMETRY] logToolCall: <name>
+    // This is emitted when telemetry SDK is not initialized (common in E2E tests)
+    const simplePattern = /\[TELEMETRY\] logToolCall: ([\w_-]+)/g;
+    const simpleMatches = [...stdout.matchAll(simplePattern)];
+
+    for (const match of simpleMatches) {
+      const toolName = match[1];
+      const matchIndex = match.index || 0;
+
+      // Look for error message immediately following this tool call
+      // Pattern: "Error executing tool <name>: Error: <message>"
+      const afterMatch = stdout.substring(
+        matchIndex,
+        Math.min(stdout.length, matchIndex + 500),
+      );
+      const errorPattern = new RegExp(
+        `Error executing tool ${toolName}:.*Error:`,
+      );
+      const hasError = errorPattern.test(afterMatch);
+
+      logs.push({
+        timestamp: Date.now(),
+        toolRequest: {
+          name: toolName,
+          args: '{}',
+          success: !hasError,
+          duration_ms: 0,
+        },
+      });
+    }
+
+    // If we found logs with the simple pattern, return them
+    if (logs.length > 0) {
+      return logs;
+    }
+
     // The console output from Podman is JavaScript object notation, not JSON
     // Look for tool call events in the output
     // Updated regex to handle tool names with hyphens and underscores
@@ -879,6 +916,12 @@ export class TestRig {
       }
     }
 
+    // If no logs found in telemetry file, try parsing from stdout/stderr
+    // This happens when the telemetry SDK is not initialized (common in E2E tests)
+    if (logs.length === 0 && this._lastRunStdout) {
+      return this._parseToolLogsFromStdout(this._lastRunStdout);
+    }
+
     return logs;
   }
 
@@ -923,14 +966,24 @@ export class TestRig {
     promise: Promise<{ exitCode: number; signal?: number; output: string }>;
   } {
     const commandArgs = [this.bundlePath, '--yolo', ...args];
+    const isWindows = os.platform() === 'win32';
 
-    const ptyProcess = pty.spawn('node', commandArgs, {
+    const options: pty.IPtyForkOptions = {
       name: 'xterm-color',
       cols: 80,
       rows: 30,
       cwd: this.testDir!,
-      env: process.env as { [key: string]: string },
-    });
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([, v]) => v !== undefined),
+      ) as { [key: string]: string },
+    };
+
+    if (isWindows) {
+      // node-pty on Windows requires a shell to be specified when using winpty.
+      options.shell = process.env.COMSPEC || 'cmd.exe';
+    }
+
+    const ptyProcess = pty.spawn('node', commandArgs, options);
 
     let output = '';
     ptyProcess.onData((data) => {

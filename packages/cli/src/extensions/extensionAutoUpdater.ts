@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  ExtensionUpdateState,
-  checkForExtensionUpdate,
-} from '../config/extensions/github.js';
+import { ExtensionUpdateState } from '../ui/state/extensions.js';
+import { checkForExtensionUpdate } from '../config/extensions/github.js';
 import { type Extension, loadUserExtensions } from '../config/extension.js';
 import {
   updateExtension,
@@ -198,7 +196,11 @@ export class ExtensionAutoUpdater {
           cwd,
           async () => true, // Auto-approve in background mode
           currentState,
-          setExtensionUpdateState,
+          (action) => {
+            if (action.type === 'SET_STATE') {
+              setExtensionUpdateState(action.payload.state);
+            }
+          },
         ));
     this.updateChecker = options.updateChecker ?? checkForExtensionUpdate;
     this.now = options.now ?? Date.now;

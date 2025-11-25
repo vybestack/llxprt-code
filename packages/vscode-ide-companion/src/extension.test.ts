@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { activate } from './extension.js';
+import { IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
 
 vi.mock('vscode', () => ({
   window: {
@@ -34,6 +35,9 @@ vi.mock('vscode', () => ({
     onDidChangeWorkspaceFolders: vi.fn(),
     onDidGrantWorkspaceTrust: vi.fn(() => ({ dispose: vi.fn() })),
     isTrusted: true,
+    getConfiguration: vi.fn(() => ({
+      get: vi.fn(),
+    })),
   },
   commands: {
     registerCommand: vi.fn(),
@@ -53,10 +57,34 @@ vi.mock('vscode', () => ({
   })),
 }));
 
+const { mockDetectIdeFromEnv } = vi.hoisted(() => {
+  const mock = vi.fn(() => ({
+    name: 'vscode',
+    displayName: 'VS Code',
+  }));
+  return { mockDetectIdeFromEnv: mock };
+});
+
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual<
+    typeof import('@vybestack/llxprt-code-core')
+  >('@vybestack/llxprt-code-core');
+  return {
+    ...actual,
+    detectIdeFromEnv: mockDetectIdeFromEnv,
+  };
+});
+
 describe('activate', () => {
   let context: vscode.ExtensionContext;
 
   beforeEach(() => {
+    // Reset the mock implementation to default
+    mockDetectIdeFromEnv.mockImplementation(() => ({
+      name: 'vscode',
+      displayName: 'VS Code',
+    }));
+
     context = {
       subscriptions: [],
       environmentVariableCollection: {
@@ -68,6 +96,11 @@ describe('activate', () => {
       },
       extensionUri: {
         fsPath: '/path/to/extension',
+      },
+      extension: {
+        packageJSON: {
+          version: '1.1.0',
+        },
       },
     } as unknown as vscode.ExtensionContext;
   });
@@ -111,5 +144,170 @@ describe('activate', () => {
       .mock.calls.find((call) => call[0] === 'llxprt-code.runLLxprtCode')?.[1];
 
     expect(commandCallback).toBeDefined();
+  });
+
+  describe('update notification', () => {
+    beforeEach(() => {
+      // Prevent the "installed" message from showing
+      vi.mocked(context.globalState.get).mockReturnValue(true);
+    });
+
+    it('should show an update notification if a newer version is available', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              extensions: [
+                {
+                  versions: [{ version: '1.2.0' }],
+                },
+              ],
+            },
+          ],
+        }),
+      } as Response);
+
+      const showInformationMessageMock = vi.mocked(
+        vscode.window.showInformationMessage,
+      );
+
+      await activate(context);
+
+      expect(showInformationMessageMock).toHaveBeenCalledWith(
+        'A new version (1.2.0) of the LLxprt Code Companion extension is available.',
+        'Update to latest version',
+      );
+    });
+
+    it('should not show an update notification if the version is the same', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              extensions: [
+                {
+                  versions: [{ version: '1.1.0' }],
+                },
+              ],
+            },
+          ],
+        }),
+      } as Response);
+
+      const showInformationMessageMock = vi.mocked(
+        vscode.window.showInformationMessage,
+      );
+
+      await activate(context);
+
+      expect(showInformationMessageMock).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        ide: IDE_DEFINITIONS.cloudshell,
+      },
+      { ide: IDE_DEFINITIONS.firebasestudio },
+    ])(
+      'does not show install or update messages for $ide.name',
+      async ({ ide }) => {
+        mockDetectIdeFromEnv.mockImplementation(() => ide);
+        vi.mocked(context.globalState.get).mockReturnValue(undefined);
+        vi.spyOn(global, 'fetch').mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            results: [
+              {
+                extensions: [
+                  {
+                    versions: [{ version: '1.2.0' }],
+                  },
+                ],
+              },
+            ],
+          }),
+        } as Response);
+        const showInformationMessageMock = vi.mocked(
+          vscode.window.showInformationMessage,
+        );
+
+        await activate(context);
+
+        expect(showInformationMessageMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it('should not show an update notification if the version is older', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              extensions: [
+                {
+                  versions: [{ version: '1.0.0' }],
+                },
+              ],
+            },
+          ],
+        }),
+      } as Response);
+
+      const showInformationMessageMock = vi.mocked(
+        vscode.window.showInformationMessage,
+      );
+
+      await activate(context);
+
+      expect(showInformationMessageMock).not.toHaveBeenCalled();
+    });
+
+    it('should execute the install command when the user clicks "Update"', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              extensions: [
+                {
+                  versions: [{ version: '1.2.0' }],
+                },
+              ],
+            },
+          ],
+        }),
+      } as Response);
+      vi.mocked(vscode.window.showInformationMessage).mockResolvedValue(
+        'Update to latest version' as never,
+      );
+      const executeCommandMock = vi.mocked(vscode.commands.executeCommand);
+
+      await activate(context);
+
+      // Wait for the promise from showInformationMessage.then() to resolve
+      await new Promise(process.nextTick);
+
+      expect(executeCommandMock).toHaveBeenCalledWith(
+        'workbench.extensions.installExtension',
+        'vybestack.llxprt-code-vscode-ide-companion',
+      );
+    });
+
+    it('should handle fetch errors gracefully', async () => {
+      vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        statusText: 'Internal Server Error',
+      } as Response);
+
+      const showInformationMessageMock = vi.mocked(
+        vscode.window.showInformationMessage,
+      );
+
+      await activate(context);
+
+      expect(showInformationMessageMock).not.toHaveBeenCalled();
+    });
   });
 });

@@ -9,17 +9,18 @@
 
 import {
   GenerateContentResponse,
-  Content,
-  GenerateContentConfig,
-  SendMessageParameters,
+  type Content,
+  type GenerateContentConfig,
+  type SendMessageParameters,
   createUserContent,
-  Part,
+  type Part,
   GenerateContentResponseUsageMetadata,
-  Tool,
+  type Tool,
   PartListUnion,
   ApiError,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
+import type { CompletedToolCall } from './coreToolScheduler.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { ContentGenerator } from './contentGenerator.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -1109,7 +1110,7 @@ export class GeminiChat {
         if (lastError) {
           // With send-then-commit pattern, we don't add to history until success,
           // so there's nothing to remove on failure. This is the approach upstream
-          // moved to in 11f7a6a2d - we were already doing this correctly.
+          // moved to in e705f45c - we were already doing this correctly.
           throw lastError;
         }
       } finally {
@@ -1420,16 +1421,13 @@ export class GeminiChat {
       })(this);
     };
 
+    // LLxprt Note: We don't auto-fallback to different models in multi-provider setup
+    // Users should explicitly choose their model/provider
+    const onPersistent429Callback = async () => null;
+
     const streamResponse = await retryWithBackoff(apiCall, {
-      shouldRetryOnError: (error: unknown) => {
-        if (error instanceof ApiError && error.message) {
-          if (error.status === 400) return false;
-          if (isSchemaDepthError(error.message)) return false;
-          if (error.status === 429) return true;
-          if (error.status >= 500 && error.status < 600) return true;
-        }
-        return false;
-      },
+      onPersistent429: onPersistent429Callback,
+      authType: activeAuthType,
     });
 
     return this.processStreamResponse(streamResponse, userContent);
@@ -2161,6 +2159,18 @@ export class GeminiChat {
       undefined,
       streamingUsageMetadata,
     );
+  }
+
+  /**
+   * Records completed tool calls with full metadata.
+   * This is called by external components when tool calls complete, before sending responses to Gemini.
+   * NOTE: llxprt does not use ChatRecordingService, so this is a no-op stub for compatibility.
+   */
+  recordCompletedToolCalls(
+    _model: string,
+    _toolCalls: CompletedToolCall[],
+  ): void {
+    // No-op: llxprt does not record chat sessions like gemini-cli
   }
 
   private recordHistory(

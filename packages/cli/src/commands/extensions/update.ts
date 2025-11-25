@@ -1,11 +1,10 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type CommandModule } from 'yargs';
-import { FatalConfigError, getErrorMessage } from '@vybestack/llxprt-code-core';
+import type { CommandModule } from 'yargs';
 import {
   loadExtensions,
   annotateActiveExtensions,
@@ -19,6 +18,7 @@ import {
   updateExtension,
 } from '../../config/extensions/update.js';
 import { checkForExtensionUpdate } from '../../config/extensions/github.js';
+import { getErrorMessage } from '../../utils/errors.js';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
 
@@ -38,35 +38,13 @@ export async function handleUpdate(args: UpdateArgs) {
     // ones.
     args.name ? [args.name] : [],
   );
-  const allExtensions = loadExtensions(extensionEnablementManager, workingDir);
+  const allExtensions = loadExtensions(extensionEnablementManager);
   const extensions = annotateActiveExtensions(
     allExtensions,
     workingDir,
     extensionEnablementManager,
   );
-
-  if (args.all) {
-    try {
-      let updateInfos = await updateAllUpdatableExtensions(
-        workingDir,
-        requestConsentNonInteractive,
-        extensions,
-        await checkForAllExtensionUpdates(extensions, new Map(), (_) => {}),
-        () => {},
-      );
-      updateInfos = updateInfos.filter(
-        (info) => info.originalVersion !== info.updatedVersion,
-      );
-      if (updateInfos.length === 0) {
-        console.log('No extensions to update.');
-        return;
-      }
-      console.log(updateInfos.map((info) => updateOutput(info)).join('\n'));
-    } catch (error) {
-      throw new FatalConfigError(getErrorMessage(error));
-    }
-  }
-  if (args.name)
+  if (args.name) {
     try {
       const extension = extensions.find(
         (extension) => extension.name === args.name,
@@ -75,15 +53,15 @@ export async function handleUpdate(args: UpdateArgs) {
         console.log(`Extension "${args.name}" not found.`);
         return;
       }
-      let updateState: ExtensionUpdateState | undefined;
       if (!extension.installMetadata) {
         console.log(
           `Unable to install extension "${args.name}" due to missing install metadata`,
         );
         return;
       }
-      await checkForExtensionUpdate(extension, (newState) => {
-        updateState = newState;
+      let updateState = ExtensionUpdateState.UNKNOWN as ExtensionUpdateState;
+      await checkForExtensionUpdate(extension, (state) => {
+        updateState = state;
       });
       if (updateState !== ExtensionUpdateState.UPDATE_AVAILABLE) {
         console.log(`Extension "${args.name}" is already up to date.`);
@@ -95,7 +73,11 @@ export async function handleUpdate(args: UpdateArgs) {
         workingDir,
         requestConsentNonInteractive,
         updateState,
-        () => {},
+        (action) => {
+          if (action.type === 'SET_STATE') {
+            updateState = action.payload.state;
+          }
+        },
       ))!;
       if (
         updatedExtensionInfo.originalVersion !==
@@ -108,12 +90,52 @@ export async function handleUpdate(args: UpdateArgs) {
         console.log(`Extension "${args.name}" is already up to date.`);
       }
     } catch (error) {
-      throw new FatalConfigError(getErrorMessage(error));
+      console.error(getErrorMessage(error));
     }
+  }
+  if (args.all) {
+    try {
+      const extensionState = new Map();
+      await checkForAllExtensionUpdates(
+        extensions,
+        (action) => {
+          if (action.type === 'SET_STATE') {
+            extensionState.set(action.payload.name, {
+              status: action.payload.state,
+            });
+          }
+        },
+        workingDir,
+      );
+      let updateInfos = await updateAllUpdatableExtensions(
+        workingDir,
+        requestConsentNonInteractive,
+        extensions,
+        extensionState,
+        (action) => {
+          if (action.type === 'SET_STATE') {
+            extensionState.set(action.payload.name, {
+              status: action.payload.state,
+            });
+          }
+        },
+      );
+      updateInfos = updateInfos.filter(
+        (info) => info.originalVersion !== info.updatedVersion,
+      );
+      if (updateInfos.length === 0) {
+        console.log('No extensions to update.');
+        return;
+      }
+      console.log(updateInfos.map((info) => updateOutput(info)).join('\n'));
+    } catch (error) {
+      console.error(getErrorMessage(error));
+    }
+  }
 }
 
 export const updateCommand: CommandModule = {
-  command: 'update [--all] [name]',
+  command: 'update [<name>] [--all]',
   describe:
     'Updates all extensions or a named extension to the latest version.',
   builder: (yargs) =>

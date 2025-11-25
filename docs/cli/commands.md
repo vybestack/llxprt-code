@@ -85,7 +85,9 @@ Slash commands provide meta-level control over the CLI itself.
       - **Description:** Display the full, concatenated content of the current hierarchical memory that has been loaded from all `LLXPRT.md` files. This lets you inspect the instructional context being provided to the active model.
     - **`refresh`**:
       - **Description:** Reload the hierarchical instructional memory from all `LLXPRT.md` files found in the configured locations (global, project/ancestors, and sub-directories). This command updates the model with the latest `LLXPRT.md` content.
-    - **Note:** For more details on how `LXXPRT.md` files contribute to hierarchical memory, see the [CLI Configuration documentation](./configuration.md#4-llxprtmd-files-hierarchical-instructional-context).
+    - **`list`**:
+      - **Description:** Lists the paths of the LLXPRT.md files in use for hierarchical memory.
+    - **Note:** For more details on how `LLXPRT.md` files contribute to hierarchical memory, see the [CLI Configuration documentation](./configuration.md#4-llxprtmd-files-hierarchical-instructional-context).
 
 - **`/restore`**
   - **Description:** Restores the project files to the state they were in just before a tool was executed. This is particularly useful for undoing file edits made by a tool. If run without a tool call ID, it will list available checkpoints to restore from.

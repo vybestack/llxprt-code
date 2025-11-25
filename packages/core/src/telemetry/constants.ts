@@ -20,6 +20,15 @@ export const EVENT_ENHANCED_CONVERSATION_RESPONSE =
   'llxprt_code.enhanced_conversation_response';
 export const EVENT_PROVIDER_SWITCH = 'llxprt_code.provider_switch';
 export const EVENT_PROVIDER_CAPABILITY = 'llxprt_code.provider_capability';
+export const EVENT_TOOL_OUTPUT_TRUNCATED = 'llxprt_code.tool_output_truncated';
+export const EVENT_FILE_OPERATION = 'llxprt_code.file_operation';
+export const EVENT_MALFORMED_JSON_RESPONSE =
+  'llxprt_code.malformed_json_response';
+export const EVENT_MODEL_ROUTING = 'llxprt_code.model_routing';
+export const EVENT_EXTENSION_INSTALL = 'llxprt_code.extension_install';
+export const EVENT_EXTENSION_UNINSTALL = 'llxprt_code.extension_uninstall';
+export const EVENT_EXTENSION_ENABLE = 'llxprt_code.extension_enable';
+export const EVENT_EXTENSION_DISABLE = 'llxprt_code.extension_disable';
 
 export const METRIC_TOOL_CALL_COUNT = 'llxprt_code.tool.call.count';
 export const METRIC_TOOL_CALL_LATENCY = 'llxprt_code.tool.call.latency';

@@ -23,6 +23,7 @@ import {
   Settings,
   MemoryImportFormat,
   SETTINGS_SCHEMA,
+  SettingDefinition,
 } from './settingsSchema.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import {
@@ -37,74 +38,28 @@ export type { Settings, MemoryImportFormat };
 
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
-// Currently unused - reserved for future migration implementation
-// const MIGRATE_V2_OVERWRITE = false;
+// Keys that exist at root level but should be migrated to ui.* namespace
+// These are read from effectiveSettings.ui.* in config.ts but may exist at root in user settings
+const LEGACY_UI_KEYS = [
+  'usageStatisticsEnabled',
+  'contextFileName',
+  'memoryImportFormat',
+  'ideMode',
+  'hideWindowTitle',
+  'showStatusInTitle',
+  'hideTips',
+  'hideBanner',
+  'hideFooter',
+  'hideCWD',
+  'hideSandboxStatus',
+  'hideModelInfo',
+  'hideContextSummary',
+  'showMemoryUsage',
+  'showLineNumbers',
+  'showCitations',
+  'hasSeenIdeIntegrationNudge',
+] as const;
 
-// As defined in spec.md - adapted for llxprt's flat settings structure
-// Currently unused - reserved for future migration implementation
-/*
-const MIGRATION_MAP: Record<string, string> = {
-  preferredEditor: 'preferredEditor',
-  vimMode: 'vimMode',
-  disableAutoUpdate: 'disableAutoUpdate',
-  disableUpdateNag: 'disableUpdateNag',
-  checkpointing: 'checkpointing',
-  enablePromptCompletion: 'enablePromptCompletion',
-  debugKeystrokeLogging: 'debugKeystrokeLogging',
-  theme: 'theme',
-  customThemes: 'customThemes',
-  hideWindowTitle: 'hideWindowTitle',
-  showStatusInTitle: 'showStatusInTitle',
-  hideTips: 'hideTips',
-  hideBanner: 'hideBanner',
-  hideFooter: 'hideFooter',
-  hideCWD: 'hideCWD',
-  hideSandboxStatus: 'hideSandboxStatus',
-  hideModelInfo: 'hideModelInfo',
-  hideContextSummary: 'hideContextSummary',
-  showMemoryUsage: 'showMemoryUsage',
-  showLineNumbers: 'showLineNumbers',
-  showCitations: 'showCitations',
-  accessibility: 'accessibility',
-  ideMode: 'ideMode',
-  hasSeenIdeIntegrationNudge: 'hasSeenIdeIntegrationNudge',
-  usageStatisticsEnabled: 'usageStatisticsEnabled',
-  telemetry: 'telemetry',
-  model: 'model',
-  maxSessionTurns: 'maxSessionTurns',
-  summarizeToolOutput: 'summarizeToolOutput',
-  chatCompression: 'chatCompression',
-  skipNextSpeakerCheck: 'skipNextSpeakerCheck',
-  contextFileName: 'contextFileName',
-  memoryImportFormat: 'memoryImportFormat',
-  memoryDiscoveryMaxDirs: 'memoryDiscoveryMaxDirs',
-  includeDirectories: 'includeDirectories',
-  loadMemoryFromIncludeDirectories: 'loadMemoryFromIncludeDirectories',
-  fileFiltering: 'fileFiltering',
-  useRipgrep: 'useRipgrep',
-  sandbox: 'sandbox',
-  shouldUseNodePtyShell: 'shouldUseNodePtyShell',
-  autoAccept: 'autoAccept',
-  allowedTools: 'allowedTools',
-  coreTools: 'coreTools',
-  excludeTools: 'excludeTools',
-  toolDiscoveryCommand: 'toolDiscoveryCommand',
-  toolCallCommand: 'toolCallCommand',
-  mcpServerCommand: 'mcpServerCommand',
-  allowMCPServers: 'allowMCPServers',
-  excludeMCPServers: 'excludeMCPServers',
-  folderTrust: 'folderTrust',
-  folderTrustFeature: 'folderTrustFeature',
-  selectedAuthType: 'selectedAuthType',
-  useExternalAuth: 'useExternalAuth',
-  autoConfigureMaxOldSpaceSize: 'autoConfigureMaxOldSpaceSize',
-  dnsResolutionOrder: 'dnsResolutionOrder',
-  excludedProjectEnvVars: 'excludedProjectEnvVars',
-  bugCommand: 'bugCommand',
-  extensionManagement: 'extensionManagement',
-  extensions: 'extensions',
-};
-*/
 export function getSystemSettingsPath(): string {
   if (process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH) {
     return process.env.LLXPRT_CODE_SYSTEM_SETTINGS_PATH;
@@ -152,6 +107,20 @@ export interface AccessibilitySettings {
   screenReader?: boolean;
 }
 
+export interface SessionRetentionSettings {
+  /** Enable automatic session cleanup */
+  enabled?: boolean;
+
+  /** Maximum age of sessions to keep (e.g., "30d", "7d", "24h", "1w") */
+  maxAge?: string;
+
+  /** Alternative: Maximum number of sessions to keep (most recent) */
+  maxCount?: number;
+
+  /** Minimum retention period (safety limit, defaults to "1d") */
+  minRetention?: string;
+}
+
 export interface SettingsError {
   message: string;
   path: string;
@@ -168,15 +137,38 @@ export interface SettingsFile {
 function getSchemaDefaults(): Partial<Settings> {
   const defaults: Partial<Settings> = {};
 
-  // Extract defaults from the schema
-  for (const [key, schemaEntry] of Object.entries(SETTINGS_SCHEMA)) {
-    if ('default' in schemaEntry && schemaEntry.default !== undefined) {
-      // Skip coreToolSettings default to allow proper merging
-      if (key !== 'coreToolSettings') {
-        (defaults as Record<string, unknown>)[key] = schemaEntry.default;
+  // Helper function to recursively extract defaults from nested schema objects
+  function extractDefaults(
+    schema: Record<string, SettingDefinition>,
+    target: Record<string, unknown>,
+  ): void {
+    for (const [key, schemaEntry] of Object.entries(schema)) {
+      if ('default' in schemaEntry && schemaEntry.default !== undefined) {
+        // Skip coreToolSettings default to allow proper merging
+        if (key !== 'coreToolSettings') {
+          target[key] = schemaEntry.default;
+        }
+      }
+
+      // Recursively extract defaults from nested object schemas
+      if (
+        schemaEntry.type === 'object' &&
+        'properties' in schemaEntry &&
+        schemaEntry.properties
+      ) {
+        // Initialize nested object if it doesn't exist
+        if (!target[key]) {
+          target[key] = {};
+        }
+        extractDefaults(
+          schemaEntry.properties as Record<string, SettingDefinition>,
+          target[key] as Record<string, unknown>,
+        );
       }
     }
   }
+
+  extractDefaults(SETTINGS_SCHEMA, defaults as Record<string, unknown>);
 
   return defaults;
 }
@@ -192,6 +184,22 @@ function mergeSettings(
 
   // Get defaults from schema
   const schemaDefaults = getSchemaDefaults();
+
+  // Helper to extract legacy top-level UI keys from a settings object
+  // These keys were at root level in old settings files but are now under ui.*
+  const extractLegacyUiKeys = (settings: Settings): Record<string, unknown> => {
+    const legacy: Record<string, unknown> = {};
+    for (const key of LEGACY_UI_KEYS) {
+      if (
+        key in settings &&
+        settings[key as keyof Settings] !== undefined &&
+        !(settings.ui && key in settings.ui)
+      ) {
+        legacy[key] = settings[key as keyof Settings];
+      }
+    }
+    return legacy;
+  };
 
   // Settings are merged with the following precedence (last one wins for
   // single values):
@@ -209,11 +217,24 @@ function mergeSettings(
     ...user,
     ...safeWorkspace,
     ...system,
-    customThemes: {
-      ...(systemDefaults.customThemes || {}),
-      ...(user.customThemes || {}),
-      ...(safeWorkspace.customThemes || {}),
-      ...(system.customThemes || {}),
+    ui: {
+      ...(schemaDefaults.ui || {}),
+      // Migrate legacy top-level UI settings to ui.* namespace for backwards compatibility
+      // This ensures users with old settings.json files don't lose their preferences
+      ...extractLegacyUiKeys(systemDefaults),
+      ...(systemDefaults.ui || {}),
+      ...extractLegacyUiKeys(user),
+      ...(user.ui || {}),
+      ...extractLegacyUiKeys(safeWorkspace),
+      ...(safeWorkspace.ui || {}),
+      ...extractLegacyUiKeys(system),
+      ...(system.ui || {}),
+      customThemes: {
+        ...(systemDefaults.ui?.customThemes || {}),
+        ...(user.ui?.customThemes || {}),
+        ...(safeWorkspace.ui?.customThemes || {}),
+        ...(system.ui?.customThemes || {}),
+      },
     },
     mcpServers: {
       ...(systemDefaults.mcpServers || {}),
@@ -261,12 +282,22 @@ function mergeSettings(
     coreToolSettings: schemaDefaults.coreToolSettings || {},
   };
 
+  // Theme prioritization: workspace > user > system > systemDefaults > schemaDefaults
+  // Check both ui.theme and root-level theme for backwards compatibility
   const prioritizedTheme =
-    safeWorkspace.theme ??
-    user.theme ??
-    system.theme ??
-    systemDefaults.theme ??
-    (schemaDefaults.theme as string | undefined);
+    safeWorkspace.ui?.theme ??
+    (safeWorkspace.theme as string | undefined) ??
+    user.ui?.theme ??
+    (user.theme as string | undefined) ??
+    system.ui?.theme ??
+    (system.theme as string | undefined) ??
+    systemDefaults.ui?.theme ??
+    (systemDefaults.theme as string | undefined) ??
+    (schemaDefaults.ui?.theme as string | undefined);
+  if (merged.ui) {
+    merged.ui.theme = prioritizedTheme;
+  }
+  // Also set root-level theme for backwards compatibility
   merged.theme = prioritizedTheme;
 
   return merged;
@@ -369,11 +400,36 @@ export class LoadedSettings {
 
   setValue<K extends keyof Settings>(
     scope: SettingScope,
-    key: K,
-    value: Settings[K],
+    key: K | string,
+    value: Settings[K] | unknown,
   ): void {
     const settingsFile = this.forScope(scope);
-    settingsFile.settings[key] = value;
+
+    // Handle nested paths like 'ui.ideMode'
+    if (typeof key === 'string' && key.includes('.')) {
+      const parts = key.split('.');
+      const topLevel = parts[0] as keyof Settings;
+      const nested = parts.slice(1).join('.');
+
+      // Ensure the top-level object exists
+      if (!settingsFile.settings[topLevel]) {
+        (settingsFile.settings as Record<string, unknown>)[topLevel] = {};
+      }
+
+      // Navigate to the nested property
+      let current = settingsFile.settings[topLevel] as Record<string, unknown>;
+      const nestedParts = nested.split('.');
+      for (let i = 0; i < nestedParts.length - 1; i++) {
+        if (!current[nestedParts[i]]) {
+          current[nestedParts[i]] = {};
+        }
+        current = current[nestedParts[i]] as Record<string, unknown>;
+      }
+      current[nestedParts[nestedParts.length - 1]] = value;
+    } else {
+      settingsFile.settings[key as K] = value as Settings[K];
+    }
+
     this._merged = this.computeMergedSettings();
     saveSettings(settingsFile);
   }
@@ -587,10 +643,10 @@ export function loadSettings(
       const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
       userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
       // Support legacy theme names
-      if (userSettings.theme && userSettings.theme === 'VS') {
-        userSettings.theme = DefaultLight.name;
-      } else if (userSettings.theme && userSettings.theme === 'VS2015') {
-        userSettings.theme = DefaultDark.name;
+      if (userSettings.ui?.theme && userSettings.ui.theme === 'VS') {
+        userSettings.ui.theme = DefaultLight.name;
+      } else if (userSettings.ui?.theme && userSettings.ui.theme === 'VS2015') {
+        userSettings.ui.theme = DefaultDark.name;
       }
     }
   } catch (error: unknown) {
@@ -608,13 +664,16 @@ export function loadSettings(
         workspaceSettings = JSON.parse(
           stripJsonComments(projectContent),
         ) as Settings;
-        if (workspaceSettings.theme && workspaceSettings.theme === 'VS') {
-          workspaceSettings.theme = DefaultLight.name;
-        } else if (
-          workspaceSettings.theme &&
-          workspaceSettings.theme === 'VS2015'
+        if (
+          workspaceSettings.ui?.theme &&
+          workspaceSettings.ui.theme === 'VS'
         ) {
-          workspaceSettings.theme = DefaultDark.name;
+          workspaceSettings.ui.theme = DefaultLight.name;
+        } else if (
+          workspaceSettings.ui?.theme &&
+          workspaceSettings.ui.theme === 'VS2015'
+        ) {
+          workspaceSettings.ui.theme = DefaultDark.name;
         }
       }
     } catch (error: unknown) {

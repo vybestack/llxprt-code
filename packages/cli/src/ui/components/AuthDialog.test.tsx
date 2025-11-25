@@ -46,7 +46,7 @@ describe('AuthDialog', () => {
 
     const settings: LoadedSettings = new LoadedSettings(
       {
-        settings: { customThemes: {}, mcpServers: {} },
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
         path: '',
       },
       {
@@ -60,7 +60,7 @@ describe('AuthDialog', () => {
         path: '',
       },
       {
-        settings: { customThemes: {}, mcpServers: {} },
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
         path: '',
       },
       true,
@@ -88,7 +88,7 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
-            customThemes: {},
+            ui: { customThemes: {} },
             mcpServers: {},
           },
           path: '',
@@ -98,11 +98,11 @@ describe('AuthDialog', () => {
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         true,
@@ -146,7 +146,7 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
-            customThemes: {},
+            ui: { customThemes: {} },
             mcpServers: {},
           },
           path: '',
@@ -157,7 +157,7 @@ describe('AuthDialog', () => {
         },
         {
           settings: {
-            customThemes: {},
+            ui: { customThemes: {} },
             mcpServers: {},
             oauthEnabledProviders: {
               gemini: true,
@@ -168,7 +168,7 @@ describe('AuthDialog', () => {
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         true,
@@ -193,7 +193,7 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
-            customThemes: {},
+            ui: { customThemes: {} },
             mcpServers: {},
           },
           path: '',
@@ -203,11 +203,11 @@ describe('AuthDialog', () => {
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         true,
@@ -232,7 +232,7 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
-            customThemes: {},
+            ui: { customThemes: {} },
             mcpServers: {},
           },
           path: '',
@@ -242,11 +242,11 @@ describe('AuthDialog', () => {
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         true,
@@ -273,7 +273,7 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
-            customThemes: {},
+            ui: { customThemes: {} },
             mcpServers: {},
           },
           path: '',
@@ -283,11 +283,11 @@ describe('AuthDialog', () => {
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         true,
@@ -306,7 +306,7 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
-            customThemes: {},
+            ui: { customThemes: {} },
             mcpServers: {},
           },
           path: '',
@@ -316,11 +316,11 @@ describe('AuthDialog', () => {
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         true,
@@ -341,7 +341,7 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
-            customThemes: {},
+            ui: { customThemes: {} },
             mcpServers: {},
           },
           path: '',
@@ -351,11 +351,11 @@ describe('AuthDialog', () => {
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         {
-          settings: { customThemes: {}, mcpServers: {} },
+          settings: { ui: { customThemes: {} }, mcpServers: {} },
           path: '',
         },
         true,
@@ -379,7 +379,7 @@ describe('AuthDialog', () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
-        settings: { customThemes: {}, mcpServers: {} },
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
         path: '',
       },
       {
@@ -389,13 +389,13 @@ describe('AuthDialog', () => {
       {
         settings: {
           selectedAuthType: undefined,
-          customThemes: {},
+          ui: { customThemes: {} },
           mcpServers: {},
         },
         path: '',
       },
       {
-        settings: { customThemes: {}, mcpServers: {} },
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
         path: '',
       },
       true,
@@ -419,7 +419,7 @@ describe('AuthDialog', () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
-        settings: { customThemes: {}, mcpServers: {} },
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
         path: '',
       },
       {
@@ -429,13 +429,13 @@ describe('AuthDialog', () => {
       {
         settings: {
           selectedAuthType: undefined,
-          customThemes: {},
+          ui: { customThemes: {} },
           mcpServers: {},
         },
         path: '',
       },
       {
-        settings: { customThemes: {}, mcpServers: {} },
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
         path: '',
       },
       true,
@@ -465,7 +465,7 @@ describe('AuthDialog', () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
-        settings: { customThemes: {}, mcpServers: {} },
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
         path: '',
       },
       {
@@ -475,13 +475,13 @@ describe('AuthDialog', () => {
       {
         settings: {
           selectedAuthType: AuthType.USE_GEMINI,
-          customThemes: {},
+          ui: { customThemes: {} },
           mcpServers: {},
         },
         path: '',
       },
       {
-        settings: { customThemes: {}, mcpServers: {} },
+        settings: { ui: { customThemes: {} }, mcpServers: {} },
         path: '',
       },
       true,

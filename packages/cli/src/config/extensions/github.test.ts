@@ -7,14 +7,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkForExtensionUpdate,
-  checkGitHubReleasesExist,
   cloneFromGit,
+  extractFile,
   findReleaseAsset,
   parseGitHubRepoForReleases,
-  ExtensionUpdateState,
 } from './github.js';
 import { simpleGit, type SimpleGit } from 'simple-git';
-import type * as os from 'node:os';
+import { ExtensionUpdateState } from '../../ui/state/extensions.js';
+import * as os from 'node:os';
+import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
+import * as path from 'node:path';
+import * as tar from 'tar';
+import * as archiver from 'archiver';
 import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 
 const mockPlatform = vi.hoisted(() => vi.fn());
@@ -129,7 +134,7 @@ describe('git extension helpers', () => {
         version: '1.0.0',
         isActive: true,
         installMetadata: {
-          type: 'local',
+          type: 'link',
           source: '',
         },
       };
@@ -293,8 +298,15 @@ describe('git extension helpers', () => {
       expect(repo).toBe('repo');
     });
 
-    it('should parse owner and repo from a full GitHub UR without .git', () => {
+    it('should parse owner and repo from a full GitHub URL without .git', () => {
       const source = 'https://github.com/owner/repo';
+      const { owner, repo } = parseGitHubRepoForReleases(source);
+      expect(owner).toBe('owner');
+      expect(repo).toBe('repo');
+    });
+
+    it('should parse owner and repo from a full GitHub URL with a trailing slash', () => {
+      const source = 'https://github.com/owner/repo/';
       const { owner, repo } = parseGitHubRepoForReleases(source);
       expect(owner).toBe('owner');
       expect(repo).toBe('repo');
@@ -343,9 +355,82 @@ describe('git extension helpers', () => {
     });
   });
 
-  describe('checkGitHubReleasesExist', () => {
-    it('should be exported from module', () => {
-      expect(typeof checkGitHubReleasesExist).toBe('function');
+  describe('extractFile', () => {
+    let tempDir: string;
+
+    beforeEach(async () => {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gemini-test-'));
+    });
+
+    afterEach(async () => {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    });
+
+    it('should extract a .tar.gz file', async () => {
+      const archivePath = path.join(tempDir, 'test.tar.gz');
+      const extractionDest = path.join(tempDir, 'extracted');
+      await fs.mkdir(extractionDest);
+
+      // Create a dummy file to be archived
+      const dummyFilePath = path.join(tempDir, 'test.txt');
+      await fs.writeFile(dummyFilePath, 'hello tar');
+
+      // Create the tar.gz file
+      await tar.c(
+        {
+          gzip: true,
+          file: archivePath,
+          cwd: tempDir,
+        },
+        ['test.txt'],
+      );
+
+      await extractFile(archivePath, extractionDest);
+
+      const extractedFilePath = path.join(extractionDest, 'test.txt');
+      const content = await fs.readFile(extractedFilePath, 'utf-8');
+      expect(content).toBe('hello tar');
+    });
+
+    it('should extract a .zip file', async () => {
+      const archivePath = path.join(tempDir, 'test.zip');
+      const extractionDest = path.join(tempDir, 'extracted');
+      await fs.mkdir(extractionDest);
+
+      // Create a dummy file to be archived
+      const dummyFilePath = path.join(tempDir, 'test.txt');
+      await fs.writeFile(dummyFilePath, 'hello zip');
+
+      // Create the zip file
+      const output = fsSync.createWriteStream(archivePath);
+      const archive = archiver.create('zip');
+
+      const streamFinished = new Promise((resolve, reject) => {
+        output.on('close', () => resolve(null));
+        archive.on('error', reject);
+      });
+
+      archive.pipe(output);
+      archive.file(dummyFilePath, { name: 'test.txt' });
+      await archive.finalize();
+      await streamFinished;
+
+      await extractFile(archivePath, extractionDest);
+
+      const extractedFilePath = path.join(extractionDest, 'test.txt');
+      const content = await fs.readFile(extractedFilePath, 'utf-8');
+      expect(content).toBe('hello zip');
+    });
+
+    it('should throw an error for unsupported file types', async () => {
+      const unsupportedFilePath = path.join(tempDir, 'test.txt');
+      await fs.writeFile(unsupportedFilePath, 'some content');
+      const extractionDest = path.join(tempDir, 'extracted');
+      await fs.mkdir(extractionDest);
+
+      await expect(
+        extractFile(unsupportedFilePath, extractionDest),
+      ).rejects.toThrow('Unsupported file extension for extraction:');
     });
   });
 });

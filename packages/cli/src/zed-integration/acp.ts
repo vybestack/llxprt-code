@@ -7,7 +7,6 @@
 /* ACP defines a schema for a simple (experimental) JSON-RPC protocol that allows GUI applications to interact with agents. */
 
 import { z } from 'zod';
-import { EOL } from 'os';
 import * as schema from './schema.js';
 export * from './schema.js';
 
@@ -178,7 +177,7 @@ class Connection {
     for await (const chunk of output) {
       acpLogger.debug(() => `Received chunk of size: ${chunk.length}`);
       content += decoder.decode(chunk, { stream: true });
-      const lines = content.split(EOL);
+      const lines = content.split('\n');
       content = lines.pop() || '';
 
       for (const line of lines) {

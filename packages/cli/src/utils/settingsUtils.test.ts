@@ -46,7 +46,6 @@ describe('SettingsUtils', () => {
         expect(categories).toHaveProperty('Checkpointing');
         expect(categories).toHaveProperty('File Filtering');
         expect(categories).toHaveProperty('UI');
-        expect(categories).toHaveProperty('Mode');
         expect(categories).toHaveProperty('Updates');
       });
 
@@ -76,7 +75,7 @@ describe('SettingsUtils', () => {
 
     describe('requiresRestart', () => {
       it('should return true for settings that require restart', () => {
-        expect(requiresRestart('autoConfigureMaxOldSpaceSize')).toBe(true);
+        expect(requiresRestart('ui.autoConfigureMaxOldSpaceSize')).toBe(true);
         expect(requiresRestart('checkpointing.enabled')).toBe(true);
       });
 
@@ -106,7 +105,7 @@ describe('SettingsUtils', () => {
     describe('getRestartRequiredSettings', () => {
       it('should return all settings that require restart', () => {
         const restartSettings = getRestartRequiredSettings();
-        expect(restartSettings).toContain('autoConfigureMaxOldSpaceSize');
+        expect(restartSettings).toContain('ui.autoConfigureMaxOldSpaceSize');
         expect(restartSettings).toContain('checkpointing.enabled');
         expect(restartSettings).not.toContain('ui.showMemoryUsage');
       });
@@ -245,9 +244,9 @@ describe('SettingsUtils', () => {
       it('should return false for settings marked to hide from dialog', () => {
         expect(shouldShowInDialog('selectedAuthType')).toBe(false);
         expect(shouldShowInDialog('coreTools')).toBe(false);
-        expect(shouldShowInDialog('customThemes')).toBe(false);
-        expect(shouldShowInDialog('theme')).toBe(false); // Changed to false
-        expect(shouldShowInDialog('preferredEditor')).toBe(false); // Changed to false
+        expect(shouldShowInDialog('ui.customThemes')).toBe(false);
+        expect(shouldShowInDialog('ui.theme')).toBe(false); // Changed to false
+        expect(shouldShowInDialog('ui.preferredEditor')).toBe(false); // Changed to false
       });
 
       it('should return true for invalid settings (default behavior)', () => {
@@ -289,15 +288,15 @@ describe('SettingsUtils', () => {
         const allSettings = Object.values(categories).flat();
         const allKeys = allSettings.map((s) => s.key);
 
-        expect(allKeys).toContain('vimMode');
-        expect(allKeys).toContain('ideMode');
+        expect(allKeys).toContain('ui.vimMode');
+        expect(allKeys).toContain('ui.ideMode');
         expect(allKeys).toContain('disableAutoUpdate');
         expect(allKeys).toContain('ui.showMemoryUsage');
         expect(allKeys).not.toContain('usageStatisticsEnabled');
         expect(allKeys).not.toContain('selectedAuthType');
         expect(allKeys).not.toContain('coreTools');
-        expect(allKeys).not.toContain('theme'); // Now hidden
-        expect(allKeys).not.toContain('preferredEditor'); // Now hidden
+        expect(allKeys).not.toContain('ui.theme'); // Now hidden
+        expect(allKeys).not.toContain('ui.preferredEditor'); // Now hidden
       });
     });
 
@@ -545,7 +544,7 @@ describe('SettingsUtils', () => {
 
       it('should not mutate original settings', () => {
         const pendingSettings = {};
-        setPendingSettingValue('showMemoryUsage', true, pendingSettings);
+        setPendingSettingValue('ui.showMemoryUsage', true, pendingSettings);
 
         expect(pendingSettings).toEqual({});
       });

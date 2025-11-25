@@ -41,6 +41,16 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "configuration": {
+      "title": "Gemini CLI",
+      "properties": {
+        "gemini-cli.debug.logging.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable detailed logging for debugging the Gemini CLI Companion."
+        }
+      }
+    },
     "languages": [
       {
         "id": "llxprt-diff-editable"
@@ -140,6 +150,7 @@
     "@modelcontextprotocol/sdk": "^1.15.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "semver": "^7.6.3",
     "zod": "^3.25.76"
   },
   "overrides": {

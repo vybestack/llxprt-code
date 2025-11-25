@@ -193,15 +193,15 @@ export const AppContainer = (props: AppContainerProps) => {
   const historyLimits = useMemo(
     () => ({
       maxItems:
-        typeof settings.merged.historyMaxItems === 'number'
-          ? settings.merged.historyMaxItems
+        typeof settings.merged.ui?.historyMaxItems === 'number'
+          ? settings.merged.ui.historyMaxItems
           : DEFAULT_HISTORY_MAX_ITEMS,
       maxBytes:
-        typeof settings.merged.historyMaxBytes === 'number'
-          ? settings.merged.historyMaxBytes
+        typeof settings.merged.ui?.historyMaxBytes === 'number'
+          ? settings.merged.ui.historyMaxBytes
           : DEFAULT_HISTORY_MAX_BYTES,
     }),
-    [settings.merged.historyMaxItems, settings.merged.historyMaxBytes],
+    [settings.merged.ui?.historyMaxItems, settings.merged.ui?.historyMaxBytes],
   );
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
@@ -509,6 +509,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
     useState<boolean>(false);
+  const [showDebugProfiler, setShowDebugProfiler] = useState(false);
 
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
   const [quittingMessages, setQuittingMessages] = useState<
@@ -560,7 +561,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const extensions = config.getExtensions();
   const {
     extensionsUpdateState,
-    setExtensionsUpdateState,
+    dispatchExtensionStateUpdate,
     confirmUpdateExtensionRequests,
     addConfirmUpdateExtensionRequest,
   } = useExtensionUpdates(extensions, addItem, config.getWorkingDir());
@@ -772,6 +773,10 @@ export const AppContainer = (props: AppContainerProps) => {
     setCorgiMode((prev) => !prev);
   }, []);
 
+  const toggleDebugProfiler = useCallback(() => {
+    setShowDebugProfiler((prev) => !prev);
+  }, []);
+
   const {
     showDialog: isLoadProfileDialogOpen,
     openDialog: openLoadProfileDialog,
@@ -833,7 +838,7 @@ export const AppContainer = (props: AppContainerProps) => {
         settings.merged,
         config.getExtensionContextFilePaths(),
         config.getFolderTrust(),
-        settings.merged.memoryImportFormat || 'tree', // Use setting or default to 'tree'
+        settings.merged.ui?.memoryImportFormat || 'tree', // Use setting or default to 'tree'
         config.getFileFilteringOptions(),
       );
 
@@ -983,7 +988,8 @@ export const AppContainer = (props: AppContainerProps) => {
       quit: setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
-      setExtensionsUpdateState,
+      toggleDebugProfiler,
+      dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
     }),
     [
@@ -1000,7 +1006,8 @@ export const AppContainer = (props: AppContainerProps) => {
       setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
-      setExtensionsUpdateState,
+      toggleDebugProfiler,
+      dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
     ],
   );
@@ -1289,7 +1296,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
-    settings.merged.customWittyPhrases,
+    settings.merged.ui?.customWittyPhrases,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
 
@@ -1642,6 +1649,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Debug
     debugMessage,
+    showDebugProfiler,
 
     // Footer height
     footerHeight,

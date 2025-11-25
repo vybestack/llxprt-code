@@ -27,13 +27,14 @@ export function createNonInteractiveUI(): CommandContext['ui'] {
       _item: Parameters<CommandContext['ui']['setPendingItem']>[0],
     ) => {},
     toggleCorgiMode: () => {},
+    toggleDebugProfiler: () => {},
     toggleVimEnabled: async () => false,
     setGeminiMdFileCount: (_count: number) => {},
     setLlxprtMdFileCount: (_count: number) => {},
     updateHistoryTokenCount: (_count: number) => {},
     reloadCommands: () => {},
     extensionsUpdateState: new Map(),
-    setExtensionsUpdateState: (_updateState) => {},
+    dispatchExtensionStateUpdate: (_action) => {},
     addConfirmUpdateExtensionRequest: (_request) => {},
   };
 }

@@ -6,18 +6,18 @@
 
 import { simpleGit } from 'simple-git';
 import { getErrorMessage } from '../../utils/errors.js';
-import type { ExtensionInstallMetadata } from '../extension.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type {
+  ExtensionInstallMetadata,
+  GeminiCLIExtension,
+} from '@vybestack/llxprt-code-core';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import * as os from 'node:os';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { EXTENSIONS_CONFIG_FILENAME } from '../extension.js';
-
-// Re-export ExtensionUpdateState for use by other modules
-export { ExtensionUpdateState };
+import { EXTENSIONS_CONFIG_FILENAME, loadExtension } from '../extension.js';
+import * as tar from 'tar';
+import extract from 'extract-zip';
 
 function getGitHubToken(): string | undefined {
   return process.env['GITHUB_TOKEN'];
@@ -86,7 +86,11 @@ export function parseGitHubRepoForReleases(source: string): {
   // Default to a github repo path, so `source` can be just an org/repo
   const parsedUrl = URL.parse(source, 'https://github.com');
   // The pathname should be "/owner/repo".
-  const parts = parsedUrl?.pathname.substring(1).split('/');
+  const parts = parsedUrl?.pathname
+    .substring(1)
+    .split('/')
+    // Remove the empty segments, fixes trailing slashes
+    .filter((part) => part !== '');
   if (parts?.length !== 2 || parsedUrl?.host !== 'github.com') {
     throw new Error(
       `Invalid GitHub repository source: ${source}. Expected "owner/repo" or a github repo uri.`,
@@ -104,21 +108,11 @@ export function parseGitHubRepoForReleases(source: string): {
   return { owner, repo };
 }
 
-async function fetchReleaseFromGithub(
-  owner: string,
-  repo: string,
-  ref?: string,
-): Promise<GithubReleaseData> {
-  const endpoint = ref ? `releases/tags/${ref}` : 'releases/latest';
-  const url = `https://api.github.com/repos/${owner}/${repo}/${endpoint}`;
-  return await fetchJson(url);
-}
-
 /**
- * Checks if a GitHub repository has any releases available.
- * @param owner The GitHub repository owner.
- * @param repo The GitHub repository name.
- * @returns True if releases exist, false otherwise.
+ * Checks if a GitHub repository has any releases.
+ * @param owner The repository owner.
+ * @param repo The repository name.
+ * @returns true if releases exist, false otherwise.
  */
 export async function checkGitHubReleasesExist(
   owner: string,
@@ -132,12 +126,50 @@ export async function checkGitHubReleasesExist(
   }
 }
 
+async function fetchReleaseFromGithub(
+  owner: string,
+  repo: string,
+  ref?: string,
+): Promise<GithubReleaseData> {
+  const endpoint = ref ? `releases/tags/${ref}` : 'releases/latest';
+  const url = `https://api.github.com/repos/${owner}/${repo}/${endpoint}`;
+  return await fetchJson(url);
+}
+
 export async function checkForExtensionUpdate(
   extension: GeminiCLIExtension,
   setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
+  cwd: string = process.cwd(),
 ): Promise<void> {
   setExtensionUpdateState(ExtensionUpdateState.CHECKING_FOR_UPDATES);
   const installMetadata = extension.installMetadata;
+  if (installMetadata?.type === 'local') {
+    try {
+      const newExtension = loadExtension({
+        extensionDir: installMetadata.source,
+        workspaceDir: cwd,
+      });
+      if (!newExtension) {
+        console.error(
+          `Failed to check for update for local extension "${extension.name}". Could not load extension from source path: ${installMetadata.source}`,
+        );
+        setExtensionUpdateState(ExtensionUpdateState.ERROR);
+        return;
+      }
+      if (newExtension.config.version !== extension.version) {
+        setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
+        return;
+      }
+      setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
+      return;
+    } catch (error) {
+      console.error(
+        `Error checking for update for local extension "${extension.name}": ${getErrorMessage(error)}`,
+      );
+      setExtensionUpdateState(ExtensionUpdateState.ERROR);
+      return;
+    }
+  }
   if (
     !installMetadata ||
     (installMetadata.type !== 'git' &&
@@ -190,7 +222,7 @@ export async function checkForExtensionUpdate(
       setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
       return;
     } else {
-      const { source, ref } = installMetadata;
+      const { source, releaseTag } = installMetadata;
       if (!source) {
         console.error(`No "source" provided for extension.`);
         setExtensionUpdateState(ExtensionUpdateState.ERROR);
@@ -203,7 +235,7 @@ export async function checkForExtensionUpdate(
         repo,
         installMetadata.ref,
       );
-      if (releaseData.tag_name !== ref) {
+      if (releaseData.tag_name !== releaseTag) {
         setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
         return;
       }
@@ -269,7 +301,7 @@ export async function downloadFromGitHubRelease(
 
     await downloadFile(archiveUrl, downloadedAssetPath);
 
-    extractFile(downloadedAssetPath, destination);
+    await extractFile(downloadedAssetPath, destination);
 
     // For regular github releases, the repository is put inside of a top level
     // directory. In this case we should see exactly two file in the destination
@@ -399,13 +431,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
     https
       .get(url, { headers }, (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
-          const location = res.headers.location;
-          if (!location) {
-            reject(new Error('Redirect response missing location header'));
-            return;
-          }
-          const resolvedUrl = new URL(location, url).toString();
-          downloadFile(resolvedUrl, dest).then(resolve).catch(reject);
+          downloadFile(res.headers.location!, dest).then(resolve).catch(reject);
           return;
         }
         if (res.statusCode !== 200) {
@@ -421,27 +447,15 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   });
 }
 
-function extractFile(file: string, dest: string) {
-  let args: string[];
-  let command: 'tar' | 'unzip';
+export async function extractFile(file: string, dest: string): Promise<void> {
   if (file.endsWith('.tar.gz')) {
-    args = ['-xzf', file, '-C', dest];
-    command = 'tar';
+    await tar.x({
+      file,
+      cwd: dest,
+    });
   } else if (file.endsWith('.zip')) {
-    args = [file, '-d', dest];
-    command = 'unzip';
+    await extract(file, { dir: dest });
   } else {
     throw new Error(`Unsupported file extension for extraction: ${file}`);
-  }
-
-  const result = spawnSync(command, args, { stdio: 'pipe' });
-
-  if (result.status !== 0) {
-    if (result.error) {
-      throw new Error(`Failed to spawn '${command}': ${result.error.message}`);
-    }
-    throw new Error(
-      `'${command}' command failed with exit code ${result.status}: ${result.stderr.toString()}`,
-    );
   }
 }

@@ -39,7 +39,7 @@ const createMockSettings = (
 ) =>
   new LoadedSettings(
     {
-      settings: { customThemes: {}, mcpServers: {}, ...systemSettings },
+      settings: { ui: { customThemes: {} }, mcpServers: {}, ...systemSettings },
       path: '/system/settings.json',
     },
     {
@@ -48,14 +48,18 @@ const createMockSettings = (
     },
     {
       settings: {
-        customThemes: {},
+        ui: { customThemes: {} },
         mcpServers: {},
         ...userSettings,
       },
       path: '/user/settings.json',
     },
     {
-      settings: { customThemes: {}, mcpServers: {}, ...workspaceSettings },
+      settings: {
+        ui: { customThemes: {} },
+        mcpServers: {},
+        ...workspaceSettings,
+      },
       path: '/workspace/settings.json',
     },
     true,
@@ -178,7 +182,11 @@ describe('SettingsDialog', () => {
   ) =>
     new LoadedSettings(
       {
-        settings: { customThemes: {}, mcpServers: {}, ...systemSettings },
+        settings: {
+          ui: { customThemes: {} },
+          mcpServers: {},
+          ...systemSettings,
+        },
         path: '/system/settings.json',
       },
       {
@@ -187,14 +195,18 @@ describe('SettingsDialog', () => {
       },
       {
         settings: {
-          customThemes: {},
+          ui: { customThemes: {} },
           mcpServers: {},
           ...userSettings,
         },
         path: '/user/settings.json',
       },
       {
-        settings: { customThemes: {}, mcpServers: {}, ...workspaceSettings },
+        settings: {
+          ui: { customThemes: {} },
+          mcpServers: {},
+          ...workspaceSettings,
+        },
         path: '/workspace/settings.json',
       },
       true,
