@@ -130,6 +130,11 @@ function buildCallOptions(
 
 beforeEach(() => {
   FakeOpenAIClass.reset();
+  // Clear environment variables that could interfere with auth tests
+  // This is critical for CI environments which may have OPENAI_API_KEY set
+  vi.stubEnv('OPENAI_API_KEY', '');
+  vi.stubEnv('OPENAI_BASE_URL', '');
+
   setActiveProviderRuntimeContext(
     createProviderRuntimeContext({
       settingsService: new SettingsService(),
@@ -140,6 +145,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearActiveProviderRuntimeContext();
+  vi.unstubAllEnvs();
 });
 
 describe('isLocalEndpoint utility', () => {
@@ -149,10 +155,15 @@ describe('isLocalEndpoint utility', () => {
     expect(isLocalEndpoint('https://localhost:8080')).toBe(true);
   });
 
-  it('returns true for 127.0.0.1', () => {
+  it('returns true for 127.x.x.x loopback range', () => {
+    // Standard loopback
     expect(isLocalEndpoint('http://127.0.0.1:11434/v1')).toBe(true);
     expect(isLocalEndpoint('http://127.0.0.1/v1')).toBe(true);
     expect(isLocalEndpoint('https://127.0.0.1:8080')).toBe(true);
+    // Full loopback range (127.0.0.0/8)
+    expect(isLocalEndpoint('http://127.0.0.2:11434/v1')).toBe(true);
+    expect(isLocalEndpoint('http://127.1.0.1:11434/v1')).toBe(true);
+    expect(isLocalEndpoint('http://127.255.255.255:11434/v1')).toBe(true);
   });
 
   it('returns true for IPv6 localhost', () => {
