@@ -858,7 +858,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           )}
         </Text>
         <Box
-          marginTop={1}
           flexDirection="column"
           width={inputWidth + 6} // 6 = FRAME_OVERHEAD (4) + PADDING (2)
           ref={innerBoxRef}
