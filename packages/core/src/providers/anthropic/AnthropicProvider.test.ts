@@ -340,6 +340,48 @@ describe('AnthropicProvider', () => {
       });
     });
 
+    it('should include Claude Opus 4.5 models in OAuth model list', async () => {
+      // Create provider with OAuth token to get the OAuth-specific model list
+      const oauthProvider = new AnthropicProvider(
+        'sk-ant-oat-test-token',
+        undefined,
+        TEST_PROVIDER_CONFIG,
+      );
+
+      // Mock getAuthToken to return the OAuth token
+      vi.spyOn(oauthProvider, 'getAuthToken').mockResolvedValue(
+        'sk-ant-oat-test-token',
+      );
+
+      const models = await oauthProvider.getModels();
+      const modelIds = models.map((m) => m.id);
+
+      // Verify Claude Opus 4.5 dated model is present
+      expect(modelIds).toContain('claude-opus-4-5-20251101');
+
+      // Verify Claude Opus 4.5 rolling alias is present
+      expect(modelIds).toContain('claude-opus-4-5');
+
+      // Verify the models have correct properties
+      const opus45Dated = models.find(
+        (m) => m.id === 'claude-opus-4-5-20251101',
+      );
+      expect(opus45Dated).toBeDefined();
+      expect(opus45Dated?.name).toBe('Claude Opus 4.5');
+      expect(opus45Dated?.provider).toBe('anthropic');
+      expect(opus45Dated?.supportedToolFormats).toContain('anthropic');
+      expect(opus45Dated?.contextWindow).toBe(500000);
+      expect(opus45Dated?.maxOutputTokens).toBe(32000);
+
+      const opus45Alias = models.find((m) => m.id === 'claude-opus-4-5');
+      expect(opus45Alias).toBeDefined();
+      expect(opus45Alias?.name).toBe('Claude Opus 4.5');
+      expect(opus45Alias?.provider).toBe('anthropic');
+      expect(opus45Alias?.supportedToolFormats).toContain('anthropic');
+      expect(opus45Alias?.contextWindow).toBe(500000);
+      expect(opus45Alias?.maxOutputTokens).toBe(32000);
+    });
+
     it('should return models with correct structure', async () => {
       const models = await provider.getModels();
 
