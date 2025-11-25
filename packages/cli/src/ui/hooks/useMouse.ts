@@ -19,9 +19,10 @@ export type { MouseEvent };
  */
 export function useMouse(
   onMouseEvent: MouseHandler,
-  { isActive }: { isActive: boolean },
+  options?: { isActive?: boolean },
 ) {
   const { subscribe, unsubscribe } = useMouseContext();
+  const isActive = options?.isActive ?? true;
 
   useEffect(() => {
     if (!isActive) {

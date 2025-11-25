@@ -51,7 +51,19 @@ export function useAnimatedScrollbar(
     const unfocusedColor = theme.ui.comment; // Use comment color as fallback for dark
     const startColor = colorRef.current;
 
-    if (!focusedColor || !unfocusedColor) {
+    if (!focusedColor || !unfocusedColor || !startColor) {
+      return;
+    }
+
+    // Validate hex format to prevent interpolateColor from throwing
+    const hexPattern = /^#[0-9A-Fa-f]{6}$/;
+    if (
+      !hexPattern.test(startColor) ||
+      !hexPattern.test(focusedColor) ||
+      !hexPattern.test(unfocusedColor)
+    ) {
+      debugState.debugNumAnimatedComponents--;
+      isAnimatingRef.current = false;
       return;
     }
 
@@ -102,7 +114,14 @@ export function useAnimatedScrollbar(
       flashScrollbar();
     } else if (!isFocused && wasFocused.current) {
       cleanup();
-      setScrollbarColor(theme.ui.comment);
+      const fallbackColor = '#666666'; // Fallback gray if theme color is invalid
+      const targetColor = theme.ui.comment;
+      const hexPattern = /^#[0-9A-Fa-f]{6}$/;
+      setScrollbarColor(
+        targetColor && hexPattern.test(targetColor)
+          ? targetColor
+          : fallbackColor,
+      );
     }
     wasFocused.current = isFocused;
     return cleanup;

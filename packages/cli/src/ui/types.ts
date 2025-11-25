@@ -11,6 +11,7 @@ import {
   ThoughtSummary,
   ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
+import type React from 'react';
 
 // Auth state for UI context
 export interface AuthState {

@@ -1119,7 +1119,10 @@ export const AppContainer = (props: AppContainerProps) => {
 
     if (configWithShell.setShellExecutionConfig) {
       configWithShell.setShellExecutionConfig({
-        terminalWidth: Math.floor(terminalWidth * SHELL_WIDTH_FRACTION),
+        terminalWidth: Math.max(
+          Math.floor(terminalWidth * SHELL_WIDTH_FRACTION),
+          1,
+        ),
         terminalHeight: Math.max(
           Math.floor(availableTerminalHeight - SHELL_HEIGHT_PADDING),
           1,
@@ -1211,71 +1214,7 @@ export const AppContainer = (props: AppContainerProps) => {
     };
   }, [terminalWidth, refreshStatic]);
 
-  useEffect(() => {
-    const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
-    // Set the initial value
-    setIdeContextState(ideContext.getIdeContext());
-    return unsubscribe;
-  }, []);
-
   // Update currentModel when settings change - get it from the SAME place as diagnostics
-  useEffect(() => {
-    const updateModel = async () => {
-      const settingsService = getSettingsService();
-
-      // Try to get from SettingsService first (same as diagnostics does)
-      if (settingsService && settingsService.getDiagnosticsData) {
-        try {
-          const diagnosticsData = await settingsService.getDiagnosticsData();
-          if (diagnosticsData && diagnosticsData.model) {
-            setCurrentModel(diagnosticsData.model);
-            return;
-          }
-        } catch (_error) {
-          // Fall through to config
-        }
-      }
-
-      // Otherwise use config (which is what diagnostics falls back to)
-      setCurrentModel(config.getModel());
-    };
-
-    // Update immediately
-    updateModel();
-
-    // Also listen for any changes if SettingsService is available
-    const settingsService = getSettingsService();
-    if (settingsService) {
-      settingsService.on('settings-changed', updateModel);
-      return () => {
-        settingsService.off('settings-changed', updateModel);
-      };
-    }
-
-    return undefined;
-  }, [config]);
-
-  useEffect(() => {
-    const openDebugConsole = () => {
-      setShowErrorDetails(true);
-      setConstrainHeight(false); // Make sure the user sees the full message.
-    };
-    appEvents.on(AppEvent.OpenDebugConsole, openDebugConsole);
-
-    const logErrorHandler = (errorMessage: unknown) => {
-      handleNewMessage({
-        type: 'error',
-        content: String(errorMessage),
-        count: 1,
-      });
-    };
-    appEvents.on(AppEvent.LogError, logErrorHandler);
-
-    return () => {
-      appEvents.off(AppEvent.OpenDebugConsole, openDebugConsole);
-      appEvents.off(AppEvent.LogError, logErrorHandler);
-    };
-  }, [handleNewMessage]);
 
   const handleOAuthCodeDialogClose = useCallback(() => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
@@ -1695,10 +1634,8 @@ export const AppContainer = (props: AppContainerProps) => {
     // Input history
     inputHistory: inputHistoryStore.inputHistory,
     userMessages: inputHistoryStore.inputHistory, // Alias for hybrid compatibility
-    messageQueue: [], // Empty for now, hybrid compatibility
-
-    // Shell integration
-    activePtyId: undefined,
+    messageQueue: [], // TODO: Implement in hybrid architecture
+    activePtyId: undefined, // TODO: Implement in hybrid architecture
 
     // Static key for refreshing
     staticKey,

@@ -33,7 +33,8 @@ import {
 import * as path from 'path';
 import { SCREEN_READER_USER_PREFIX } from '../textConstants.js';
 import { useMouseClick } from '../hooks/useMouseClick.js';
-import { useMouse, type MouseEvent } from '../contexts/MouseContext.js';
+import { useMouse } from '../hooks/useMouse.js';
+import { type MouseEvent } from '../contexts/MouseContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 
 const LARGE_PASTE_LINE_THRESHOLD = 4;
@@ -73,7 +74,7 @@ export interface InputPromptProps {
   popAllMessages?: (callback: (messages: string) => void) => void;
   vimModeEnabled?: boolean;
   isEmbeddedShellFocused?: boolean;
-  isShellFocused?: boolean;
+
   setQueueErrorMessage?: (message: string) => void;
   streamingState?: StreamingState;
 }

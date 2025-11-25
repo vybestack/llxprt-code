@@ -35,5 +35,5 @@ export const calculateMainAreaWidth = (
     return Math.round(percentage * terminalWidth);
   };
 
-  return getMainAreaWidthInternal(terminalWidth);
+  return Math.max(getMainAreaWidthInternal(terminalWidth), 1);
 };

@@ -43,19 +43,6 @@ export function useMouseContext() {
   return context;
 }
 
-export function useMouse(handler: MouseHandler, { isActive = true } = {}) {
-  const { subscribe, unsubscribe } = useMouseContext();
-
-  useEffect(() => {
-    if (!isActive) {
-      return;
-    }
-
-    subscribe(handler);
-    return () => unsubscribe(handler);
-  }, [isActive, handler, subscribe, unsubscribe]);
-}
-
 export function MouseProvider({
   children,
   mouseEventsEnabled,

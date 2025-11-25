@@ -21,7 +21,7 @@ export const ShellInputPrompt: React.FC<ShellInputPromptProps> = ({
 }) => {
   const handleShellInputSubmit = useCallback(
     (input: string) => {
-      if (activeShellPtyId) {
+      if (activeShellPtyId !== null && activeShellPtyId !== undefined) {
         ShellExecutionService.writeToPty(activeShellPtyId, input);
       }
     },
@@ -30,7 +30,11 @@ export const ShellInputPrompt: React.FC<ShellInputPromptProps> = ({
 
   const handleInput = useCallback(
     (key: Key) => {
-      if (!focus || !activeShellPtyId) {
+      if (
+        !focus ||
+        activeShellPtyId === null ||
+        activeShellPtyId === undefined
+      ) {
         return;
       }
       if (key.ctrl && key.shift && key.name === 'up') {

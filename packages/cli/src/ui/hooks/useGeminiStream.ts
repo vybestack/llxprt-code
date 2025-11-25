@@ -272,7 +272,7 @@ export const useGeminiStream = (
 
   const handleToolSchedulerComplete = useCallback(
     async (
-      schedulerId: symbol,
+      _schedulerId: symbol,
       completedToolCallsFromScheduler: CompletedToolCall[],
       options: { isPrimary: boolean },
     ) => {
@@ -285,9 +285,8 @@ export const useGeminiStream = (
         const trackedCompletedCalls: TrackedCompletedToolCall[] =
           completedToolCallsFromScheduler.map((call) => ({
             ...call,
-            status: 'success', // CompletedToolCall implies success or error, but here we treat as completed state for tracking
             responseSubmittedToGemini: false,
-          })) as unknown as TrackedCompletedToolCall[]; // We need to cast because CompletedToolCall structure might slightly differ but is compatible for display
+          }));
 
         addItem(
           mapTrackedToolCallsToDisplay(trackedCompletedCalls),

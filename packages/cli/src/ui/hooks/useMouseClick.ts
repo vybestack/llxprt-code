@@ -7,7 +7,8 @@
 import { type DOMElement } from 'ink';
 import { getBoundingBox } from '../utils/ink-utils.js';
 import type React from 'react';
-import { useMouse, type MouseEvent } from '../contexts/MouseContext.js';
+import { useMouse } from '../hooks/useMouse.js';
+import { type MouseEvent } from '../contexts/MouseContext.js';
 
 export const useMouseClick = (
   containerRef: React.RefObject<DOMElement | null>,

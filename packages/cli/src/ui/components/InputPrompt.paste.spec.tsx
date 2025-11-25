@@ -109,6 +109,10 @@ vi.mock('../hooks/useMouseClick.js', () => ({
 }));
 
 vi.mock('../contexts/MouseContext.js', () => ({
+  // useMouse is now in hooks
+}));
+
+vi.mock('../hooks/useMouse.js', () => ({
   useMouse: vi.fn(),
 }));
 
