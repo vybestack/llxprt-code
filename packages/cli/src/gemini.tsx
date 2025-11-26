@@ -92,6 +92,7 @@ import {
   patchStdio,
   writeToStderr,
   writeToStdout,
+  ExitCodes,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { theme } from './ui/colors.js';
@@ -446,7 +447,8 @@ export async function main() {
     writeToStderr(
       'Error: The --prompt-interactive flag cannot be used when input is piped from stdin.\n',
     );
-    process.exit(1);
+    await runExitCleanup();
+    process.exit(ExitCodes.FATAL_INPUT_ERROR);
   }
 
   const wasRaw = process.stdin.isRaw;
@@ -1055,7 +1057,8 @@ export async function main() {
       console.error(
         'Install bun from https://bun.sh or via your package manager.',
       );
-      process.exit(1);
+      await runExitCleanup();
+      process.exit(ExitCodes.FATAL_INPUT_ERROR);
     }
 
     const resolveImportMeta = (
@@ -1251,8 +1254,6 @@ export async function main() {
     }
     // Call cleanup before process.exit, which causes cleanup to not run
     await runExitCleanup();
-    // Non-interactive mode should exit with error code 1 for API errors
-    process.exit(1);
   }
   // Call cleanup before process.exit, which causes cleanup to not run
   await runExitCleanup();
