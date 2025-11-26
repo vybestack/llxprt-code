@@ -87,6 +87,7 @@ export * from './utils/ripgrepPathResolver.js';
 export * from './utils/schemaValidator.js';
 export * from './utils/errors.js';
 export * from './utils/output-format.js';
+export * from './utils/exitCodes.js';
 export * from './utils/getFolderStructure.js';
 export * from './utils/memoryDiscovery.js';
 export * from './utils/gitIgnoreParser.js';
