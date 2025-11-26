@@ -35,6 +35,7 @@ import { DiscoveredMCPTool } from './mcp-tool.js';
 import type { CallableTool, FunctionCall, Part, Tool } from '@google/genai';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import type { McpAuthProvider } from '../mcp/auth-provider.js';
 import { MCPOAuthProvider } from '../mcp/oauth-provider.js';
 import { MCPOAuthTokenStorage } from '../mcp/oauth-token-storage.js';
 import { OAuthUtils } from '../mcp/oauth-utils.js';
@@ -398,6 +399,73 @@ async function handleAutomaticOAuth(
     );
     return false;
   }
+}
+
+/**
+ * Create RequestInit for TransportOptions.
+ *
+ * @param mcpServerConfig The MCP server configuration
+ * @param headers Additional headers
+ */
+function createTransportRequestInit(
+  mcpServerConfig: MCPServerConfig,
+  headers: Record<string, string>,
+): RequestInit {
+  return {
+    headers: {
+      ...mcpServerConfig.headers,
+      ...headers,
+    },
+  };
+}
+
+/**
+ * Create an AuthProvider for the MCP Transport.
+ *
+ * @param mcpServerConfig The MCP server configuration
+ */
+function createAuthProvider(
+  mcpServerConfig: MCPServerConfig,
+): McpAuthProvider | undefined {
+  if (
+    mcpServerConfig.authProviderType ===
+    AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION
+  ) {
+    return new ServiceAccountImpersonationProvider(mcpServerConfig);
+  }
+  if (
+    mcpServerConfig.authProviderType === AuthProviderType.GOOGLE_CREDENTIALS
+  ) {
+    return new GoogleCredentialProvider(mcpServerConfig);
+  }
+  return undefined;
+}
+
+/**
+ * Create a transport for URL based servers (remote servers).
+ *
+ * @param mcpServerConfig The MCP server configuration
+ * @param transportOptions The transport options
+ */
+function createUrlTransport(
+  mcpServerConfig: MCPServerConfig,
+  transportOptions:
+    | StreamableHTTPClientTransportOptions
+    | SSEClientTransportOptions,
+): StreamableHTTPClientTransport | SSEClientTransport {
+  if (mcpServerConfig.httpUrl) {
+    return new StreamableHTTPClientTransport(
+      new URL(mcpServerConfig.httpUrl),
+      transportOptions,
+    );
+  }
+  if (mcpServerConfig.url) {
+    return new SSEClientTransport(
+      new URL(mcpServerConfig.url),
+      transportOptions,
+    );
+  }
+  throw new Error('No URL configured for MCP Server');
 }
 
 /**
@@ -1304,138 +1372,78 @@ export async function createTransport(
   mcpServerConfig: MCPServerConfig,
   debugMode: boolean,
 ): Promise<Transport> {
-  if (
-    mcpServerConfig.authProviderType ===
-    AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION
-  ) {
-    const provider = new ServiceAccountImpersonationProvider(mcpServerConfig);
-    const transportOptions:
-      | StreamableHTTPClientTransportOptions
-      | SSEClientTransportOptions = {
-      authProvider: provider,
-    };
-
-    if (mcpServerConfig.httpUrl) {
-      return new StreamableHTTPClientTransport(
-        new URL(mcpServerConfig.httpUrl),
-        transportOptions,
-      );
-    } else if (mcpServerConfig.url) {
-      // Default to SSE if only url is provided
-      return new SSEClientTransport(
-        new URL(mcpServerConfig.url),
-        transportOptions,
-      );
-    }
-    throw new Error(
-      'No URL configured for ServiceAccountImpersonation MCP Server',
-    );
-  }
-
-  if (
-    mcpServerConfig.authProviderType === AuthProviderType.GOOGLE_CREDENTIALS
-  ) {
-    const provider = new GoogleCredentialProvider(mcpServerConfig);
-    const transportOptions:
-      | StreamableHTTPClientTransportOptions
-      | SSEClientTransportOptions = {
-      authProvider: provider,
-    };
-    if (mcpServerConfig.httpUrl) {
-      return new StreamableHTTPClientTransport(
-        new URL(mcpServerConfig.httpUrl),
-        transportOptions,
-      );
-    } else if (mcpServerConfig.url) {
-      return new SSEClientTransport(
-        new URL(mcpServerConfig.url),
-        transportOptions,
-      );
-    }
-    throw new Error('No URL configured for Google Credentials MCP server');
-  }
-
-  // Check if we have OAuth configuration or stored tokens
-  let accessToken: string | null = null;
-  let hasOAuthConfig = mcpServerConfig.oauth?.enabled;
-
-  if (hasOAuthConfig && mcpServerConfig.oauth) {
-    accessToken = await MCPOAuthProvider.getValidToken(
-      mcpServerName,
-      mcpServerConfig.oauth,
-    );
-
-    if (!accessToken) {
-      console.error(
-        `MCP server '${mcpServerName}' requires OAuth authentication. ` +
-          `Please authenticate using the /mcp auth command.`,
-      );
+  const noUrl = !mcpServerConfig.url && !mcpServerConfig.httpUrl;
+  if (noUrl) {
+    if (
+      mcpServerConfig.authProviderType === AuthProviderType.GOOGLE_CREDENTIALS
+    ) {
       throw new Error(
-        `MCP server '${mcpServerName}' requires OAuth authentication. ` +
-          `Please authenticate using the /mcp auth command.`,
+        `URL must be provided in the config for Google Credentials provider`,
       );
     }
-  } else {
-    // Check if we have stored OAuth tokens for this server (from previous authentication)
-    const tokenStorage = new MCPOAuthTokenStorage();
-    const credentials = await tokenStorage.getCredentials(mcpServerName);
-    if (credentials) {
-      accessToken = await MCPOAuthProvider.getValidToken(mcpServerName, {
-        // Pass client ID if available
-        clientId: credentials.clientId,
-      });
+    if (
+      mcpServerConfig.authProviderType ===
+      AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION
+    ) {
+      throw new Error(
+        `No URL configured for ServiceAccountImpersonation MCP Server`,
+      );
+    }
+  }
 
-      if (accessToken) {
-        hasOAuthConfig = true;
-        console.log(`Found stored OAuth token for server '${mcpServerName}'`);
+  if (mcpServerConfig.httpUrl || mcpServerConfig.url) {
+    const authProvider = createAuthProvider(mcpServerConfig);
+    const headers: Record<string, string> =
+      (await authProvider?.getRequestHeaders?.()) ?? {};
+
+    if (authProvider === undefined) {
+      // Check if we have OAuth configuration or stored tokens
+      let accessToken: string | null = null;
+      let hasOAuthConfig = mcpServerConfig.oauth?.enabled;
+
+      if (hasOAuthConfig && mcpServerConfig.oauth) {
+        accessToken = await MCPOAuthProvider.getValidToken(
+          mcpServerName,
+          mcpServerConfig.oauth,
+        );
+
+        if (!accessToken) {
+          throw new Error(
+            `MCP server '${mcpServerName}' requires OAuth authentication. ` +
+              `Please authenticate using the /mcp auth command.`,
+          );
+        }
+      } else {
+        // Check if we have stored OAuth tokens for this server (from previous authentication)
+        const tokenStorage = new MCPOAuthTokenStorage();
+        const credentials = await tokenStorage.getCredentials(mcpServerName);
+        if (credentials) {
+          accessToken = await MCPOAuthProvider.getValidToken(mcpServerName, {
+            // Pass client ID if available
+            clientId: credentials.clientId,
+          });
+
+          if (accessToken) {
+            hasOAuthConfig = true;
+            debugLogger.log(
+              `Found stored OAuth token for server '${mcpServerName}'`,
+            );
+          }
+        }
+      }
+      if (hasOAuthConfig && accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
       }
     }
-  }
 
-  if (mcpServerConfig.httpUrl) {
-    const transportOptions: StreamableHTTPClientTransportOptions = {};
+    const transportOptions:
+      | StreamableHTTPClientTransportOptions
+      | SSEClientTransportOptions = {
+      authProvider,
+      requestInit: createTransportRequestInit(mcpServerConfig, headers),
+    };
 
-    // Set up headers with OAuth token if available
-    if (hasOAuthConfig && accessToken) {
-      transportOptions.requestInit = {
-        headers: {
-          ...mcpServerConfig.headers,
-          Authorization: `Bearer ${accessToken}`,
-        },
-      };
-    } else if (mcpServerConfig.headers) {
-      transportOptions.requestInit = {
-        headers: mcpServerConfig.headers,
-      };
-    }
-
-    return new StreamableHTTPClientTransport(
-      new URL(mcpServerConfig.httpUrl),
-      transportOptions,
-    );
-  }
-
-  if (mcpServerConfig.url) {
-    const transportOptions: SSEClientTransportOptions = {};
-
-    // Set up headers with OAuth token if available
-    if (hasOAuthConfig && accessToken) {
-      transportOptions.requestInit = {
-        headers: {
-          ...mcpServerConfig.headers,
-          Authorization: `Bearer ${accessToken}`,
-        },
-      };
-    } else if (mcpServerConfig.headers) {
-      transportOptions.requestInit = {
-        headers: mcpServerConfig.headers,
-      };
-    }
-
-    return new SSEClientTransport(
-      new URL(mcpServerConfig.url),
-      transportOptions,
-    );
+    return createUrlTransport(mcpServerConfig, transportOptions);
   }
 
   if (mcpServerConfig.command) {
@@ -1462,6 +1470,7 @@ export async function createTransport(
     `Invalid configuration: missing httpUrl (for Streamable HTTP), url (for SSE), and command (for stdio).`,
   );
 }
+
 
 interface NamedTool {
   name?: string;

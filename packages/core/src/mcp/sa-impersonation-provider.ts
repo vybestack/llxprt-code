@@ -13,15 +13,14 @@ import type {
 import { GoogleAuth } from 'google-auth-library';
 import { OAuthUtils, FIVE_MIN_BUFFER_MS } from './oauth-utils.js';
 import type { MCPServerConfig } from '../config/config.js';
-import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
+import type { McpAuthProvider } from './auth-provider.js';
+import { coreEvents } from '../utils/events.js';
 
 function createIamApiUrl(targetSA: string): string {
   return `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${encodeURIComponent(targetSA)}:generateIdToken`;
 }
 
-export class ServiceAccountImpersonationProvider
-  implements OAuthClientProvider
-{
+export class ServiceAccountImpersonationProvider implements McpAuthProvider {
   private readonly targetServiceAccount: string;
   private readonly targetAudience: string; // OAuth Client Id
   private readonly auth: GoogleAuth;
