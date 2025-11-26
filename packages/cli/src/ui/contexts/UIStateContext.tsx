@@ -12,7 +12,6 @@ import type {
   HistoryItemWithoutId,
   ConsoleMessageItem,
   StreamingState,
-  ShellConfirmationRequest,
   ConfirmationRequest,
 } from '../types.js';
 import type {
@@ -24,9 +23,9 @@ import type {
   IdeInfo,
   Config,
 } from '@vybestack/llxprt-code-core';
-
 import type { Extension } from '../../config/extension.js';
 import type { SlashCommand, CommandContext } from '../commands/types.js';
+import type { ShellConfirmationRequest } from '../components/ShellConfirmationDialog.js';
 import type { LoadedSettings } from '../../config/settings.js';
 
 /**
@@ -111,10 +110,8 @@ export interface UIState {
   // Context and status
   ideContextState: IdeContext | undefined;
   llxprtMdFileCount: number;
-  contextFileNames: string[];
   branchName: string | undefined;
   errorCount: number;
-  nightly: boolean;
 
   // Console and messages
   consoleMessages: ConsoleMessageItem[];
@@ -123,7 +120,6 @@ export interface UIState {
   elapsedTime: number;
   currentLoadingPhrase: string | undefined;
   showAutoAcceptIndicator: ApprovalMode;
-  embeddedShellFocused: boolean;
 
   // Token metrics
   tokenMetrics: {
@@ -178,13 +174,6 @@ export interface UIState {
 
   // Available terminal height for content (after footer measurement)
   availableTerminalHeight: number;
-
-  // Shell integration
-  activePtyId: number | undefined;
-
-  // Hybrid compatibility
-  messageQueue: string[];
-  userMessages: string[];
 }
 
 const UIStateContext = createContext<UIState | undefined>(undefined);

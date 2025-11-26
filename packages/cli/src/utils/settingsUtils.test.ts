@@ -236,9 +236,9 @@ describe('SettingsUtils', () => {
     describe('shouldShowInDialog', () => {
       it('should return true for settings marked to show in dialog', () => {
         expect(shouldShowInDialog('ui.showMemoryUsage')).toBe(true);
-        expect(shouldShowInDialog('vimMode')).toBe(true);
-        expect(shouldShowInDialog('hideWindowTitle')).toBe(true);
-        expect(shouldShowInDialog('usageStatisticsEnabled')).toBe(false);
+        expect(shouldShowInDialog('ui.vimMode')).toBe(true);
+        expect(shouldShowInDialog('ui.hideWindowTitle')).toBe(true);
+        expect(shouldShowInDialog('ui.usageStatisticsEnabled')).toBe(false);
       });
 
       it('should return false for settings marked to hide from dialog', () => {
@@ -263,9 +263,9 @@ describe('SettingsUtils', () => {
         const uiSettings = categories['UI'];
         const uiKeys = uiSettings.map((s) => s.key);
         expect(uiKeys).toContain('ui.showMemoryUsage');
-        expect(uiKeys).toContain('hideWindowTitle');
-        expect(uiKeys).not.toContain('customThemes'); // This is marked false
-        expect(uiKeys).not.toContain('theme'); // This is now marked false
+        expect(uiKeys).toContain('ui.hideWindowTitle');
+        expect(uiKeys).not.toContain('ui.customThemes'); // This is marked false
+        expect(uiKeys).not.toContain('ui.theme'); // This is now marked false
       });
 
       it('should include Advanced category settings that have showInDialog=true', () => {
@@ -292,7 +292,7 @@ describe('SettingsUtils', () => {
         expect(allKeys).toContain('ui.ideMode');
         expect(allKeys).toContain('disableAutoUpdate');
         expect(allKeys).toContain('ui.showMemoryUsage');
-        expect(allKeys).not.toContain('usageStatisticsEnabled');
+        expect(allKeys).not.toContain('ui.usageStatisticsEnabled');
         expect(allKeys).not.toContain('selectedAuthType');
         expect(allKeys).not.toContain('coreTools');
         expect(allKeys).not.toContain('ui.theme'); // Now hidden
@@ -306,9 +306,9 @@ describe('SettingsUtils', () => {
 
         const keys = booleanSettings.map((s) => s.key);
         expect(keys).toContain('ui.showMemoryUsage');
-        expect(keys).toContain('vimMode');
-        expect(keys).toContain('hideWindowTitle');
-        expect(keys).not.toContain('usageStatisticsEnabled');
+        expect(keys).toContain('ui.vimMode');
+        expect(keys).toContain('ui.hideWindowTitle');
+        expect(keys).not.toContain('ui.usageStatisticsEnabled');
         expect(keys).not.toContain('selectedAuthType'); // Advanced setting
         expect(keys).not.toContain('useExternalAuth'); // Advanced setting
       });
@@ -333,10 +333,10 @@ describe('SettingsUtils', () => {
 
         // Should include settings marked for dialog
         expect(dialogKeys).toContain('ui.showMemoryUsage');
-        expect(dialogKeys).toContain('vimMode');
-        expect(dialogKeys).toContain('hideWindowTitle');
-        expect(dialogKeys).not.toContain('usageStatisticsEnabled');
-        expect(dialogKeys).toContain('ideMode');
+        expect(dialogKeys).toContain('ui.vimMode');
+        expect(dialogKeys).toContain('ui.hideWindowTitle');
+        expect(dialogKeys).not.toContain('ui.usageStatisticsEnabled');
+        expect(dialogKeys).toContain('ui.ideMode');
         expect(dialogKeys).toContain('disableAutoUpdate');
 
         // Should include nested settings marked for dialog
@@ -553,7 +553,7 @@ describe('SettingsUtils', () => {
     describe('hasRestartRequiredSettings', () => {
       it('should return true when modified settings require restart', () => {
         const modifiedSettings = new Set<string>([
-          'autoConfigureMaxOldSpaceSize',
+          'ui.autoConfigureMaxOldSpaceSize',
           'ui.showMemoryUsage',
         ]);
         expect(hasRestartRequiredSettings(modifiedSettings)).toBe(true);
@@ -576,13 +576,13 @@ describe('SettingsUtils', () => {
     describe('getRestartRequiredFromModified', () => {
       it('should return only settings that require restart', () => {
         const modifiedSettings = new Set<string>([
-          'autoConfigureMaxOldSpaceSize',
+          'ui.autoConfigureMaxOldSpaceSize',
           'ui.showMemoryUsage',
           'checkpointing.enabled',
         ]);
         const result = getRestartRequiredFromModified(modifiedSettings);
 
-        expect(result).toContain('autoConfigureMaxOldSpaceSize');
+        expect(result).toContain('ui.autoConfigureMaxOldSpaceSize');
         expect(result).toContain('checkpointing.enabled');
         expect(result).not.toContain('ui.showMemoryUsage');
       });

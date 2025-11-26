@@ -191,11 +191,9 @@ export function useReactToolScheduler(
   const scheduler = useMemo(
     () =>
       new CoreToolScheduler({
-        outputUpdateHandler: (toolCallId: string, chunk: string) =>
+        outputUpdateHandler: (toolCallId, chunk) =>
           updateToolCallOutput(mainSchedulerId, toolCallId, chunk),
-        onAllToolCallsComplete: async (
-          completedToolCalls: CompletedToolCall[],
-        ) => {
+        onAllToolCallsComplete: async (completedToolCalls) => {
           if (completedToolCalls.length > 0) {
             await onComplete(mainSchedulerId, completedToolCalls, {
               isPrimary: true,
@@ -203,7 +201,7 @@ export function useReactToolScheduler(
           }
           replaceToolCallsForScheduler(mainSchedulerId, []);
         },
-        onToolCallsUpdate: (calls: ToolCall[]) => {
+        onToolCallsUpdate: (calls) => {
           replaceToolCallsForScheduler(mainSchedulerId, calls);
         },
         getPreferredEditor,
@@ -223,9 +221,6 @@ export function useReactToolScheduler(
     ],
   );
 
-  // Dispose the scheduler when it changes or component unmounts
-  useEffect(() => () => scheduler.dispose(), [scheduler]);
-
   const createExternalScheduler = useCallback(
     (args: Parameters<ExternalSchedulerFactory>[0]) => {
       const {
@@ -239,15 +234,15 @@ export function useReactToolScheduler(
 
       return new CoreToolScheduler({
         config: schedulerConfig,
-        outputUpdateHandler: (toolCallId: string, chunk: string) => {
+        outputUpdateHandler: (toolCallId, chunk) => {
           updateToolCallOutput(schedulerId, toolCallId, chunk);
           outputUpdateHandler(toolCallId, chunk);
         },
-        onToolCallsUpdate: (calls: ToolCall[]) => {
+        onToolCallsUpdate: (calls) => {
           replaceToolCallsForScheduler(schedulerId, calls);
           onToolCallsUpdate?.(calls);
         },
-        onAllToolCallsComplete: async (calls: CompletedToolCall[]) => {
+        onAllToolCallsComplete: async (calls) => {
           if (calls.length > 0) {
             await onComplete(schedulerId, calls, { isPrimary: false });
             await onAllToolCallsComplete?.(calls);
@@ -404,12 +399,7 @@ export function mapToDisplay(
         description = JSON.stringify(trackedCall.request.args);
       } else {
         displayName = trackedCall.tool.displayName;
-        // Defensive check: invocation might be missing in some edge cases (e.g. subagent boundary)
-        if (trackedCall.invocation) {
-          description = trackedCall.invocation.getDescription();
-        } else {
-          description = JSON.stringify(trackedCall.request.args);
-        }
+        description = trackedCall.invocation.getDescription();
         renderOutputAsMarkdown = trackedCall.tool.isOutputMarkdown;
       }
 

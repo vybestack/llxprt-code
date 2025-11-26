@@ -5,12 +5,12 @@
  */
 
 import React, { createContext, useContext } from 'react';
-import { type Key } from '../hooks/useKeypress.js';
-import { type IdeIntegrationNudgeResult } from '../IdeIntegrationNudge.js';
-import { type FolderTrustChoice } from '../components/FolderTrustDialog.js';
-import { type AuthType, type EditorType } from '@vybestack/llxprt-code-core';
-import { type SettingScope } from '../../config/settings.js';
+import type { IdeIntegrationNudgeResult } from '../IdeIntegrationNudge.js';
 import type { HistoryItem } from '../types.js';
+import type { FolderTrustChoice } from '../components/FolderTrustDialog.js';
+import type { Key } from '../hooks/useKeypress.js';
+import type { AuthType, EditorType } from '@vybestack/llxprt-code-core';
+import type { SettingScope } from '../../config/settings.js';
 
 /**
  * UI Actions shape for the AppContainer architecture.
@@ -124,7 +124,6 @@ export interface UIActions {
 
   // Shell mode
   setShellModeActive: (active: boolean) => void;
-  setEmbeddedShellFocused: (focused: boolean) => void;
 
   // Escape prompt
   handleEscapePromptChange: (show: boolean) => void;

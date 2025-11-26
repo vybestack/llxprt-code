@@ -883,7 +883,6 @@ export type TextBufferAction =
         dir: Direction;
       };
     }
-  | { type: 'set_cursor'; row: number; col: number }
   | { type: 'delete' }
   | { type: 'delete_word_left' }
   | { type: 'delete_word_right' }
@@ -1402,15 +1401,6 @@ export function textBufferReducer(
       };
     }
 
-    case 'set_cursor': {
-      return {
-        ...state,
-        cursorRow: action.row,
-        cursorCol: action.col,
-        preferredCol: null,
-      };
-    }
-
     case 'create_undo_snapshot': {
       return pushUndoLocal(state);
     }
@@ -1631,40 +1621,9 @@ export function useTextBuffer({
     dispatch({ type: 'delete_word_left' });
   }, []);
 
-  const deleteWordRight = useCallback(() => {
+  const deleteWordRight = useCallback((): void => {
     dispatch({ type: 'delete_word_right' });
   }, []);
-
-  const moveToVisualPosition = useCallback(
-    (visualRow: number, visualCol: number) => {
-      // Ensure row is within bounds
-      const targetRow = Math.max(
-        0,
-        Math.min(visualRow, visualLines.length - 1),
-      );
-
-      // Get the logical mapping for this visual line
-      const [logicalRow, logicalColStart] = visualToLogicalMap[targetRow] || [
-        0, 0,
-      ];
-
-      // Calculate the logical column
-      // visualCol is relative to the start of the visual line
-      // logicalColStart is the offset of the visual line start within the logical line
-      const logicalCol = logicalColStart + visualCol;
-
-      // Ensure logical column is within the logical line's bounds
-      const lineLength = cpLen(state.lines[logicalRow] || '');
-      const finalLogicalCol = Math.min(logicalCol, lineLength);
-
-      dispatch({
-        type: 'set_cursor',
-        row: logicalRow,
-        col: finalLogicalCol,
-      });
-    },
-    [visualLines.length, visualToLogicalMap, state.lines],
-  );
 
   const killLineRight = useCallback((): void => {
     dispatch({ type: 'kill_line_right' });
@@ -1979,7 +1938,6 @@ export function useTextBuffer({
       moveToOffset,
       deleteWordLeft,
       deleteWordRight,
-      moveToVisualPosition,
 
       killLineRight,
       killLineLeft,
@@ -2043,7 +2001,6 @@ export function useTextBuffer({
       moveToOffset,
       deleteWordLeft,
       deleteWordRight,
-      moveToVisualPosition,
       killLineRight,
       killLineLeft,
       handleInput,
@@ -2160,13 +2117,6 @@ export interface TextBuffer {
    * follows the caret and the next contiguous run of word characters.
    */
   deleteWordRight: () => void;
-
-  /**
-   * Moves the cursor to a specific visual position.
-   * @param visualRow The target visual row.
-   * @param visualCol The target visual column.
-   */
-  moveToVisualPosition: (visualRow: number, visualCol: number) => void;
 
   /**
    * Deletes text from the cursor to the end of the current line.

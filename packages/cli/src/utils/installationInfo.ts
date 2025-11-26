@@ -10,7 +10,7 @@ import * as path from 'node:path';
 import * as childProcess from 'node:child_process';
 import process from 'node:process';
 
-export const isDevelopment = process.env.NODE_ENV === 'development';
+export const isDevelopment = process.env['NODE_ENV'] === 'development';
 
 export enum PackageManager {
   NPM = 'npm',

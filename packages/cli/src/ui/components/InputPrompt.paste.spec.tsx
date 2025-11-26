@@ -92,34 +92,16 @@ vi.mock('../hooks/useProviderModelDialog.js', () => ({
 let keypressHandler: ((key: Record<string, unknown>) => void) | null = null;
 
 // Mock useKeypress hook to capture the handler
-vi.mock('../hooks/useKeypress.js', () => ({
+vi.mock('../hooks/useKeypress.ts', () => ({
   useKeypress: (
     handler: (key: Record<string, unknown>) => void,
     _options?: unknown,
   ) => {
     keypressHandler = handler;
     // Return a mock function to ensure the hook setup completes
-    return { refresh: vi.fn() };
+    return vi.fn();
   },
   Key: {},
-}));
-
-vi.mock('../hooks/useMouseClick.js', () => ({
-  useMouseClick: vi.fn(),
-}));
-
-vi.mock('../contexts/MouseContext.js', () => ({
-  // useMouse is now in hooks
-}));
-
-vi.mock('../hooks/useMouse.js', () => ({
-  useMouse: vi.fn(),
-}));
-
-vi.mock('../contexts/UIActionsContext.js', () => ({
-  useUIActions: () => ({
-    setEmbeddedShellFocused: vi.fn(),
-  }),
 }));
 
 // Now import components after all mocks are set up

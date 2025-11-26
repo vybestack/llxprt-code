@@ -143,7 +143,6 @@ export class ShellProcessor implements IPromptProcessor {
           () => {},
           new AbortController().signal,
           config.getShouldUseNodePtyShell(),
-          config.getShellExecutionConfig?.() || {}, // shellExecutionConfig
         );
 
         const executionResult = await result;

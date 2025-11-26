@@ -1,16 +1,14 @@
-import { Box, Text } from 'ink';
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { Config } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
 import { useUIState } from '../contexts/UIStateContext.js';
 import { useUIActions } from '../contexts/UIActionsContext.js';
 import { InputPrompt } from './InputPrompt.js';
-import { Colors } from '../colors.js';
-import { ContextSummaryDisplay } from './ContextSummaryDisplay.js';
-import { AutoAcceptIndicator } from './AutoAcceptIndicator.js';
-import { ShellModeIndicator } from './ShellModeIndicator.js';
-import { Footer } from './Footer.js';
-import { MAX_DISPLAYED_QUEUED_MESSAGES } from '../constants/uiConstants.js';
-import process from 'node:process';
 
 interface ComposerProps {
   config: Config;
@@ -21,7 +19,8 @@ interface ComposerProps {
  * The Composer component handles user input in the CLI.
  * It wraps the InputPrompt component and connects it to the UIState and UIActions contexts.
  */
-export const Composer = ({ config, settings }: ComposerProps) => {
+export const Composer = ({ config, settings: _settings }: ComposerProps) => {
+  // settings is passed for future use but currently not used
   const uiState = useUIState();
   const uiActions = useUIActions();
 
@@ -35,124 +34,29 @@ export const Composer = ({ config, settings }: ComposerProps) => {
     isFocused,
     vimModeEnabled,
     showAutoAcceptIndicator,
-
-    messageQueue,
-    ctrlCPressedOnce,
-    ctrlDPressedOnce,
-    showEscapePrompt,
-    ideContextState,
-    llxprtMdFileCount,
-    showToolDescriptions,
-    isInputActive,
-    userMessages,
-
-    isNarrow,
-    contextFileNames,
-    embeddedShellFocused,
+    placeholder,
+    inputHistory,
   } = uiState;
 
-  const vimEnabled = vimModeEnabled;
-
   return (
-    <Box
-      flexDirection="column"
-      width={uiState.mainAreaWidth}
-      flexGrow={0}
-      flexShrink={0}
-    >
-      <Box flexDirection="column" marginTop={1}>
-        {messageQueue
-          .slice(0, MAX_DISPLAYED_QUEUED_MESSAGES)
-          .map((message, index) => {
-            const preview = message.replace(/\s+/g, ' ');
-
-            return (
-              <Box key={index} paddingLeft={2} width="100%">
-                <Text dimColor wrap="truncate">
-                  {preview}
-                </Text>
-              </Box>
-            );
-          })}
-        {messageQueue.length > MAX_DISPLAYED_QUEUED_MESSAGES && (
-          <Box paddingLeft={2}>
-            <Text dimColor>
-              ... (+
-              {messageQueue.length - MAX_DISPLAYED_QUEUED_MESSAGES} more)
-            </Text>
-          </Box>
-        )}
-      </Box>
-
-      <Box
-        marginTop={1}
-        justifyContent="space-between"
-        width="100%"
-        flexDirection={isNarrow ? 'column' : 'row'}
-        alignItems={isNarrow ? 'flex-start' : 'center'}
-      >
-        <Box>
-          {process.env['GEMINI_SYSTEM_MD'] && (
-            <Text color={Colors.AccentRed}>|⌐■_■| </Text>
-          )}
-          {ctrlCPressedOnce ? (
-            <Text color={Colors.AccentYellow}>Press Ctrl+C again to exit.</Text>
-          ) : ctrlDPressedOnce ? (
-            <Text color={Colors.AccentYellow}>Press Ctrl+D again to exit.</Text>
-          ) : showEscapePrompt ? (
-            <Text color={Colors.Gray}>Press Esc again to clear.</Text>
-          ) : (
-            !settings.merged.ui?.hideContextSummary && (
-              // Render ContextSummaryDisplay here when input IS active.
-              // DefaultAppLayout handles it when input is NOT active.
-              <ContextSummaryDisplay
-                ideContext={ideContextState}
-                llxprtMdFileCount={llxprtMdFileCount}
-                contextFileNames={contextFileNames}
-                mcpServers={config.getMcpServers()}
-                blockedMcpServers={config.getBlockedMcpServers()}
-                showToolDescriptions={showToolDescriptions}
-              />
-            )
-          )}
-        </Box>
-        <Box paddingTop={isNarrow ? 1 : 0}>
-          {showAutoAcceptIndicator !== 'default' && // ApprovalMode.DEFAULT is 'default'
-            !shellModeActive && (
-              <AutoAcceptIndicator approvalMode={showAutoAcceptIndicator} />
-            )}
-          {shellModeActive && <ShellModeIndicator />}
-        </Box>
-      </Box>
-
-      {isInputActive && (
-        <InputPrompt
-          buffer={buffer}
-          inputWidth={inputWidth}
-          suggestionsWidth={suggestionsWidth}
-          onSubmit={uiActions.handleUserInputSubmit}
-          userMessages={userMessages}
-          onClearScreen={uiActions.handleClearScreen}
-          config={config}
-          slashCommands={slashCommands}
-          commandContext={commandContext}
-          shellModeActive={shellModeActive}
-          setShellModeActive={uiActions.setShellModeActive}
-          onEscapePromptChange={uiActions.handleEscapePromptChange}
-          focus={isFocused}
-          vimHandleInput={uiActions.vimHandleInput}
-          placeholder={
-            vimEnabled
-              ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
-              : '  Type your message or @path/to/file'
-          }
-          approvalMode={showAutoAcceptIndicator}
-          vimModeEnabled={vimModeEnabled}
-          isEmbeddedShellFocused={embeddedShellFocused}
-        />
-      )}
-
-      {!settings.merged.ui?.hideFooter && <Footer />}
-    </Box>
+    <InputPrompt
+      buffer={buffer}
+      inputWidth={inputWidth}
+      suggestionsWidth={suggestionsWidth}
+      onSubmit={uiActions.handleUserInputSubmit}
+      userMessages={inputHistory}
+      onClearScreen={uiActions.handleClearScreen}
+      config={config}
+      slashCommands={slashCommands}
+      commandContext={commandContext}
+      shellModeActive={shellModeActive}
+      setShellModeActive={uiActions.setShellModeActive}
+      onEscapePromptChange={uiActions.handleEscapePromptChange}
+      focus={isFocused}
+      vimHandleInput={uiActions.vimHandleInput}
+      placeholder={placeholder}
+      approvalMode={showAutoAcceptIndicator}
+      vimModeEnabled={vimModeEnabled}
+    />
   );
 };

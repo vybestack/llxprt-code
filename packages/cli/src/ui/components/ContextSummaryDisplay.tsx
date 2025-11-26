@@ -15,7 +15,6 @@ import {
 interface ContextSummaryDisplayProps {
   activeFile?: string;
   llxprtMdFileCount: number;
-
   contextFileNames: string[];
   mcpServers?: Record<string, MCPServerConfig>;
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;

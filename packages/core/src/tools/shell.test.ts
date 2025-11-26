@@ -195,10 +195,8 @@ describe('ShellTool', () => {
         expect.any(Function),
         mockAbortSignal,
         false,
-        {
-          terminalHeight: undefined,
-          terminalWidth: undefined,
-        },
+        undefined,
+        undefined,
       );
       // Check that it contains background PIDs but not the service PID
       const backgroundLine = result.llmContent
@@ -232,10 +230,8 @@ describe('ShellTool', () => {
         expect.any(Function),
         mockAbortSignal,
         false,
-        {
-          terminalHeight: undefined,
-          terminalWidth: undefined,
-        },
+        undefined,
+        undefined,
       );
     });
 

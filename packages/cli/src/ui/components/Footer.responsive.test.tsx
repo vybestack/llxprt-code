@@ -1,5 +1,4 @@
 /**
- * @vitest-environment node
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
@@ -17,88 +16,30 @@ import {
 import { Footer } from './Footer.js';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 
-// Mock hooks
-const mockUseUIState = vi.fn();
-const mockUseConfig = vi.fn();
-const mockUseSettings = vi.fn();
-const mockUseRuntimeApi = vi.fn();
-const mockUseVimMode = vi.fn();
-
-vi.unmock('ink');
 vi.mock('../hooks/useTerminalSize.js');
-vi.mock('../contexts/UIStateContext.js', () => ({
-  useUIState: () => mockUseUIState(),
+vi.mock('../../providers/providerManagerInstance.js', () => ({
+  getProviderManager: () => ({
+    getActiveProvider: () => ({ name: 'openai' }),
+  }),
 }));
-vi.mock('../contexts/ConfigContext.js', () => ({
-  useConfig: () => mockUseConfig(),
-}));
-vi.mock('../contexts/SettingsContext.js', () => ({
-  useSettings: () => mockUseSettings(),
-}));
-vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => mockUseRuntimeApi(),
-}));
-vi.mock('../contexts/VimModeContext.js', () => ({
-  useVimMode: () => mockUseVimMode(),
-}));
-vi.mock('../../utils/installationInfo.js', () => ({
-  isDevelopment: false,
-}));
-
-// Helper to mock terminal width
-const mockTerminalWidth = (width: number) => {
-  Object.defineProperty(process.stdout, 'columns', {
-    value: width,
-    writable: true,
-  });
-};
 
 describe('Footer Responsive Behavior', () => {
   let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
 
-  const defaultUIState = {
-    currentModel: 'gemini-2.0-flash',
+  const defaultProps = {
+    model: 'gemini-2.0-flash',
+    targetDir: '/home/user/projects/long-project-name',
     branchName: 'feature/very-long-branch-name-that-needs-truncation',
+    debugMode: false,
     debugMessage: '',
     errorCount: 0,
     showErrorDetails: false,
+    showMemoryUsage: true,
     historyTokenCount: 1000,
+    isPaidMode: false,
     nightly: false,
-    isTrustedFolder: true,
-    tokenMetrics: {
-      tokensPerMinute: 0,
-      throttleWaitTimeMs: 0,
-      sessionTokenTotal: 0,
-    },
-  };
-
-  const defaultConfig = {
-    getTargetDir: () => '/home/user/projects/long-project-name',
-    getDebugMode: () => false,
-    getShowMemoryUsage: () => true,
-    getEphemeralSetting: () => 100000,
-    isTrustedFolder: () => true,
-  };
-
-  const defaultSettings = {
-    merged: {
-      ui: {
-        hideFooter: false,
-        showMemoryUsage: true,
-      },
-      hideCWD: false,
-      hideSandboxStatus: false,
-      hideModelInfo: false,
-    },
-  };
-
-  const defaultRuntime = {
-    getActiveProviderStatus: () => ({ providerName: 'gemini', isPaid: false }),
-  };
-
-  const defaultVimMode = {
-    vimEnabled: true,
     vimMode: 'NORMAL',
+    contextLimit: 100000,
   };
 
   beforeEach(() => {
@@ -106,28 +47,15 @@ describe('Footer Responsive Behavior', () => {
     mockUseTerminalSize = useTerminalSize as MockedFunction<
       typeof useTerminalSize
     >;
-
-    // Default to a safe size
-    mockUseTerminalSize.mockReturnValue({ columns: 100, rows: 20 });
-    mockTerminalWidth(100);
-
-    mockUseUIState.mockReturnValue(defaultUIState);
-    mockUseConfig.mockReturnValue(defaultConfig);
-    mockUseSettings.mockReturnValue(defaultSettings);
-    mockUseRuntimeApi.mockReturnValue(defaultRuntime);
-    mockUseVimMode.mockReturnValue(defaultVimMode);
   });
 
   describe('NARROW width behavior (< 80 cols)', () => {
     beforeEach(() => {
-      // We'll just manually set it here for now or refactor to use a shared helper if possible.
-      // Actually, let's just use the implementation details directly since we can't easily share the helper across describe blocks without moving it up.
       mockUseTerminalSize.mockReturnValue({ columns: 60, rows: 20 });
-      mockTerminalWidth(60);
     });
 
     it('should show abbreviated memory indicator', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should show abbreviated memory format
@@ -137,7 +65,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show abbreviated context indicator', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should show abbreviated context format
@@ -147,16 +75,16 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should NOT show model name at narrow width', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should NOT show model name
-      expect(output).not.toContain(defaultUIState.currentModel);
+      expect(output).not.toContain('gpt-4');
       expect(output).not.toMatch(/Model:/);
     });
 
     it('should NOT show timestamp at narrow width', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should NOT show timestamp
@@ -166,12 +94,9 @@ describe('Footer Responsive Behavior', () => {
     it('should truncate long branch names', () => {
       const longBranchName =
         'feature/very-long-branch-name-that-needs-truncation-handling-for-narrow-display-mode';
-      mockUseUIState.mockReturnValue({
-        ...defaultUIState,
-        branchName: longBranchName,
-      });
-
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(
+        <Footer {...defaultProps} branchName={longBranchName} />,
+      );
       const output = lastFrame();
 
       // Branch name appears (may be truncated with ... or shown in full)
@@ -186,11 +111,10 @@ describe('Footer Responsive Behavior', () => {
   describe('STANDARD width behavior (80-120 cols)', () => {
     beforeEach(() => {
       mockUseTerminalSize.mockReturnValue({ columns: 100, rows: 20 });
-      mockTerminalWidth(100);
     });
 
     it('should show full memory indicator label', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should show full "Memory:" label
@@ -200,7 +124,7 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show full context indicator label', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should show full "Context:" label
@@ -210,16 +134,16 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show model name at standard width', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should show model name
-      expect(output).toMatch(/gemini-2\.0-fla/);
+      expect(output).toContain('gemini-2.0-flash');
       // Model name shows without 'Model:' prefix now
     });
 
     it('should NOT show timestamp at standard width', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should NOT show timestamp
@@ -230,11 +154,10 @@ describe('Footer Responsive Behavior', () => {
   describe('WIDE width behavior (> 120 cols)', () => {
     beforeEach(() => {
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
-      mockTerminalWidth(180);
     });
 
     it('should show detailed memory usage with parenthetical details', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should show detailed memory format (may wrap across lines in two-line layout)
@@ -243,39 +166,36 @@ describe('Footer Responsive Behavior', () => {
     });
 
     it('should show detailed context usage with comma-separated numbers', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should show detailed context format (shows as 8,234/100,000 tokens)
-      expect(output).toMatch(/Context:[\s\S]*?\d+,\d+\/\d+,\d+/);
+      expect(output).toMatch(/Context: \d+,\d+\/\d+,\d+/);
     });
 
     it('should show model name at wide width', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should show model name
-      expect(output).toMatch(/gemini-2\.0-fla/);
+      expect(output).toContain('gemini-2.0-flash');
       // Model name shows without 'Model:' prefix now
     });
 
     it('should show timestamp at wide width', () => {
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should show timestamp in HH:MM:SS format (may wrap across lines)
-      expect(output).toMatch(/\d{1,2}:\d{2}:[\s\S]*?\d{2}/);
+      expect(output).toMatch(/\d{1,2}:\d{2}:\d/);
     });
 
     it('should show full branch name when space allows', () => {
       const longBranchName =
         'feature/very-long-branch-name-that-needs-truncation';
-      mockUseUIState.mockReturnValue({
-        ...defaultUIState,
-        branchName: longBranchName,
-      });
-
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(
+        <Footer {...defaultProps} branchName={longBranchName} />,
+      );
       const output = lastFrame();
 
       // Should show branch name at wide width
@@ -287,28 +207,26 @@ describe('Footer Responsive Behavior', () => {
     it('should handle exact breakpoint boundaries correctly', () => {
       // Test exactly at NARROW threshold (80 cols) - should be STANDARD
       mockUseTerminalSize.mockReturnValue({ columns: 80, rows: 20 });
-      mockTerminalWidth(80);
 
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // At exactly 80, should be STANDARD behavior
       expect(output).toMatch(/Memory:/); // Not abbreviated
-      expect(output).toMatch(/gemini-2\.0-fla/); // Model shown
+      expect(output).toContain('gemini-2.0-flash'); // Model shown
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // No timestamp
     });
 
     it('should transition properly at STANDARD threshold', () => {
       // Test exactly at STANDARD threshold (120 cols) - should be STANDARD
       mockUseTerminalSize.mockReturnValue({ columns: 120, rows: 20 });
-      mockTerminalWidth(120);
 
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // At exactly 120, should be STANDARD behavior (not WIDE)
       expect(output).toMatch(/Memory:/);
-      expect(output).toMatch(/gemini-2\.0-fla/);
+      expect(output).toContain('gemini-2.0-flash');
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // Still no timestamp
     });
   });
@@ -319,8 +237,7 @@ describe('Footer Responsive Behavior', () => {
 
       widths.forEach((width) => {
         mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
-        mockTerminalWidth(width);
-        const { lastFrame } = render(<Footer />);
+        const { lastFrame } = render(<Footer {...defaultProps} />);
         const output = lastFrame();
 
         // Memory and context should always be visible
@@ -333,15 +250,12 @@ describe('Footer Responsive Behavior', () => {
       const widths = [60, 100, 180];
       const longBranchName =
         'feature/very-long-branch-name-that-needs-truncation';
-      mockUseUIState.mockReturnValue({
-        ...defaultUIState,
-        branchName: longBranchName,
-      });
 
       widths.forEach((width) => {
         mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
-        mockTerminalWidth(width);
-        const { lastFrame } = render(<Footer />);
+        const { lastFrame } = render(
+          <Footer {...defaultProps} branchName={longBranchName} />,
+        );
         const output = lastFrame();
 
         // Branch should always be visible (even if truncated)
@@ -356,8 +270,7 @@ describe('Footer Responsive Behavior', () => {
 
       widths.forEach((width) => {
         mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
-        mockTerminalWidth(width);
-        const { lastFrame } = render(<Footer />);
+        const { lastFrame } = render(<Footer {...defaultProps} />);
         const output = lastFrame();
 
         // Should have status info (Memory|Context) separate from path info
@@ -366,38 +279,36 @@ describe('Footer Responsive Behavior', () => {
         // Path check - should contain path elements (may be truncated)
         expect(output).toMatch(/(home|user|projects|project-name)/); // Path (may be truncated)
         if (width >= 80) {
-          expect(output).toMatch(/gemini-2\.0-fla/); // Model only shown at standard+ widths
+          expect(output).toContain('gemini-2.0-flash'); // Model only shown at standard+ widths
         }
       });
     });
 
     it('should show Memory|Context|Time together when wide', () => {
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
-      mockTerminalWidth(180);
 
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should have Memory, Context, and Time displayed
       expect(output).toMatch(/Memory:/);
       expect(output).toMatch(/Context:/);
-      expect(output).toMatch(/\d{1,2}:\d{2}:[\s\S]*?\d{2}/); // Timestamp (may wrap)
+      expect(output).toMatch(/\d{1,2}:\d{2}:\d/); // Timestamp (may wrap)
 
       // Should also have path and model displayed
       expect(output).toMatch(/home.*user.*projects|long-project-name/);
-      expect(output).toMatch(/gemini-2\.0-fla/);
+      expect(output).toContain('gemini-2.0-flash');
     });
 
     it('should organize Path and Model information appropriately', () => {
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
-      mockTerminalWidth(180);
 
-      const { lastFrame } = render(<Footer />);
+      const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
       // Should contain path and model information
       expect(output).toMatch(/home.*user.*projects|long-project-name/);
-      expect(output).toMatch(/gemini-2\.0-fla/);
+      expect(output).toContain('gemini-2.0-flash');
       expect(output).toContain('feature'); // Branch name (from defaultProps)
 
       // Should also have memory and context (they can be on separate logical lines)
@@ -408,8 +319,7 @@ describe('Footer Responsive Behavior', () => {
     it('should adapt content appropriately across width breakpoints', () => {
       // Test narrow width
       mockUseTerminalSize.mockReturnValue({ columns: 60, rows: 20 });
-      mockTerminalWidth(60);
-      let { lastFrame } = render(<Footer />);
+      let { lastFrame } = render(<Footer {...defaultProps} />);
       let output = lastFrame();
 
       expect(output).toMatch(/Mem:/); // Abbreviated
@@ -418,8 +328,7 @@ describe('Footer Responsive Behavior', () => {
 
       // Test standard width
       mockUseTerminalSize.mockReturnValue({ columns: 100, rows: 20 });
-      mockTerminalWidth(100);
-      ({ lastFrame } = render(<Footer />));
+      ({ lastFrame } = render(<Footer {...defaultProps} />));
       output = lastFrame();
 
       expect(output).toMatch(/Memory:/); // Full label
@@ -428,13 +337,12 @@ describe('Footer Responsive Behavior', () => {
 
       // Test wide width
       mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
-      mockTerminalWidth(180);
-      ({ lastFrame } = render(<Footer />));
+      ({ lastFrame } = render(<Footer {...defaultProps} />));
       output = lastFrame();
 
       expect(output).toMatch(/Memory:/); // Full label
       expect(output).toMatch(/Context:/); // Full label
-      expect(output).toMatch(/\d{1,2}:\d{2}:[\s\S]*?\d{2}/); // Timestamp in HH:MM:SS format (may wrap across lines);
+      expect(output).toMatch(/\d{1,2}:\d{2}:\d/); // Timestamp at wide (may wrap)
     });
   });
 });

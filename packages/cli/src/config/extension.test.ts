@@ -432,7 +432,8 @@ describe('extension tests', () => {
 
       expect(extensions).toHaveLength(1);
       expect(extensions[0].config.name).toBe('good-ext');
-      expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(
+      expect(consoleSpy).toHaveBeenCalledOnce();
+      expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining(
           `Warning: Skipping extension in ${badExtDir}: Expected`,
         ),
@@ -465,7 +466,8 @@ describe('extension tests', () => {
 
       expect(extensions).toHaveLength(1);
       expect(extensions[0].config.name).toBe('good-ext');
-      expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(
+      expect(consoleSpy).toHaveBeenCalledOnce();
+      expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining(
           `Invalid extension config in ${badConfigPath}: missing name or version.`,
         ),

@@ -54,10 +54,16 @@ export class SubagentInvocation<
   getDescription(): string {
     const inputSummary = Object.entries(this.params)
       .map(([key, value]) => {
-        const stringValue =
-          typeof value === 'object' && value !== null
-            ? JSON.stringify(value)
-            : String(value);
+        let stringValue: string;
+        try {
+          stringValue =
+            typeof value === 'object' && value !== null
+              ? JSON.stringify(value)
+              : String(value);
+        } catch {
+          // Handle circular references/unsupported values gracefully
+          stringValue = Object.prototype.toString.call(value);
+        }
         return `${key}: ${stringValue.slice(0, INPUT_PREVIEW_MAX_LENGTH)}`;
       })
       .join(', ');
