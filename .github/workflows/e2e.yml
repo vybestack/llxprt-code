@@ -212,6 +212,8 @@ jobs:
           LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
           # Set auth type to provider for API key authentication
           LLXPRT_AUTH_TYPE: 'provider'
+          # Force file storage to avoid keytar/libsecret dependency in CI
+          LLXPRT_FORCE_FILE_STORAGE: 'true'
           KEEP_OUTPUT: 'true'
           SANDBOX: 'sandbox:none'
           VERBOSE: 'true'
