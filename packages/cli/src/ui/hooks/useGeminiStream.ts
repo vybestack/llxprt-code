@@ -511,11 +511,7 @@ export const useGeminiStream = (
             signal: abortSignal,
           });
 
-          // Add user's turn after @ command processing is done.
-          addItem(
-            { type: MessageType.USER, text: trimmedQuery },
-            userMessageTimestamp,
-          );
+          // User message already displayed in submitQuery before this function was called
 
           if (!atCommandResult.shouldProceed) {
             return { queryToSend: null, shouldProceed: false };
@@ -523,10 +519,7 @@ export const useGeminiStream = (
           localQueryToSendToGemini = atCommandResult.processedQuery;
         } else {
           // Normal query for Gemini
-          addItem(
-            { type: MessageType.USER, text: trimmedQuery },
-            userMessageTimestamp,
-          );
+          // User message already displayed in submitQuery before this function was called
           localQueryToSendToGemini = trimmedQuery;
         }
       } else {
@@ -950,6 +943,20 @@ export const useGeminiStream = (
 
       if (!prompt_id) {
         prompt_id = config.getSessionId() + '########' + getPromptCount();
+      }
+
+      // Display user message IMMEDIATELY for string queries (not continuations)
+      // This ensures the user sees their input right away, before any async processing
+      if (
+        typeof query === 'string' &&
+        query.trim().length > 0 &&
+        !options?.isContinuation
+      ) {
+        const trimmedQuery = query.trim();
+        addItem(
+          { type: MessageType.USER, text: trimmedQuery },
+          userMessageTimestamp,
+        );
       }
 
       const { queryToSend, shouldProceed } = await prepareQueryForGemini(
