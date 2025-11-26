@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -28,7 +28,6 @@ import type { ToolRegistry } from './tool-registry.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { coreEvents } from '../utils/events.js';
 
 vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
@@ -219,8 +218,11 @@ describe('mcp-client', () => {
       await expect(client.discover({} as Config)).rejects.toThrow(
         'No prompts or tools found on the server.',
       );
-      // discoverPrompts logs to console.error, not coreEvents.emitFeedback
-      // The error is swallowed and doesn't propagate - just verifies the throw above
+      expect(coreEvents.emitFeedback).toHaveBeenCalledWith(
+        'error',
+        `Error discovering prompts from test-server: Test error`,
+        expect.any(Error),
+      );
     });
 
     it('should not discover tools if server does not support them', async () => {
@@ -485,15 +487,17 @@ describe('mcp-client', () => {
           false,
         );
 
-        expect(transport).toEqual(
-          new StreamableHTTPClientTransport(new URL('http://test-server'), {
-            requestInit: { headers: {} },
-          }),
+        expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
+        expect(transport).toHaveProperty(
+          '_url',
+          new URL('http://test-server/'),
         );
       });
 
       it('with headers', async () => {
-        const transport = await createTransport(
+        // We need this to be an any type because we dig into its private state.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const transport: any = await createTransport(
           'test-server',
           {
             httpUrl: 'http://test-server',
@@ -501,8 +505,13 @@ describe('mcp-client', () => {
           },
           false,
         );
-
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
+        expect(transport).toHaveProperty(
+          '_url',
+          new URL('http://test-server/'),
+        );
+        const authHeader = transport._requestInit?.headers?.['Authorization'];
+        expect(authHeader).toBe('derp');
       });
     });
 
@@ -515,15 +524,17 @@ describe('mcp-client', () => {
           },
           false,
         );
-        expect(transport).toEqual(
-          new SSEClientTransport(new URL('http://test-server'), {
-            requestInit: { headers: {} },
-          }),
+        expect(transport).toBeInstanceOf(SSEClientTransport);
+        expect(transport).toHaveProperty(
+          '_url',
+          new URL('http://test-server/'),
         );
       });
 
       it('with headers', async () => {
-        const transport = await createTransport(
+        // We need this to be an any type because we dig into its private state.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const transport: any = await createTransport(
           'test-server',
           {
             url: 'http://test-server',
@@ -531,8 +542,13 @@ describe('mcp-client', () => {
           },
           false,
         );
-
         expect(transport).toBeInstanceOf(SSEClientTransport);
+        expect(transport).toHaveProperty(
+          '_url',
+          new URL('http://test-server/'),
+        );
+        const authHeader = transport._requestInit?.headers?.['Authorization'];
+        expect(authHeader).toBe('derp');
       });
     });
 
@@ -571,6 +587,9 @@ describe('mcp-client', () => {
             oauth: {
               scopes: ['scope1'],
             },
+            headers: {
+              'X-Goog-User-Project': 'myproject',
+            },
           },
           false,
         );
@@ -579,6 +598,11 @@ describe('mcp-client', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const authProvider = (transport as any)._authProvider;
         expect(authProvider).toBeInstanceOf(GoogleCredentialProvider);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const googUserProject = (transport as any)._requestInit?.headers?.[
+          'X-Goog-User-Project'
+        ];
+        expect(googUserProject).toBe('myproject');
       });
 
       it('should use GoogleCredentialProvider with SSE transport', async () => {
@@ -613,7 +637,7 @@ describe('mcp-client', () => {
             false,
           ),
         ).rejects.toThrow(
-          'No URL configured for Google Credentials MCP server',
+          'URL must be provided in the config for Google Credentials provider',
         );
       });
     });
@@ -732,12 +756,6 @@ describe('connectToMcpServer with OAuth', () => {
       tokenStorage: mockTokenStorage,
     } as unknown as MCPOAuthProvider;
     vi.mocked(MCPOAuthProvider).mockReturnValue(mockAuthProvider);
-
-    // Mock static methods used by connectToMcpServer's OAuth flow
-    vi.spyOn(MCPOAuthProvider, 'authenticate').mockResolvedValue(undefined);
-    vi.spyOn(MCPOAuthProvider, 'getValidToken').mockResolvedValue(
-      'test-access-token',
-    );
   });
 
   afterEach(() => {
@@ -779,8 +797,7 @@ describe('connectToMcpServer with OAuth', () => {
 
     expect(client).toBe(mockedClient);
     expect(mockedClient.connect).toHaveBeenCalledTimes(2);
-    // connectToMcpServer calls static MCPOAuthProvider.authenticate
-    expect(MCPOAuthProvider.authenticate).toHaveBeenCalledOnce();
+    expect(mockAuthProvider.authenticate).toHaveBeenCalledOnce();
 
     const authHeader =
       capturedTransport._requestInit?.headers?.['Authorization'];
@@ -801,7 +818,7 @@ describe('connectToMcpServer with OAuth', () => {
       tokenUrl,
       scopes: ['test-scope'],
     });
-    vi.spyOn(MCPOAuthProvider, 'getValidToken').mockResolvedValue(
+    vi.mocked(mockAuthProvider.getValidToken).mockResolvedValue(
       'test-access-token-from-discovery',
     );
 
@@ -824,8 +841,7 @@ describe('connectToMcpServer with OAuth', () => {
 
     expect(client).toBe(mockedClient);
     expect(mockedClient.connect).toHaveBeenCalledTimes(2);
-    // connectToMcpServer calls static MCPOAuthProvider.authenticate
-    expect(MCPOAuthProvider.authenticate).toHaveBeenCalledOnce();
+    expect(mockAuthProvider.authenticate).toHaveBeenCalledOnce();
     expect(OAuthUtils.discoverOAuthConfig).toHaveBeenCalledWith(serverUrl);
 
     const authHeader =
