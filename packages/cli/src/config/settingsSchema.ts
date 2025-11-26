@@ -15,10 +15,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { CustomTheme } from '../ui/themes/theme.js';
 import type { SessionRetentionSettings } from './settings.js';
-import {
-  DEFAULT_HISTORY_MAX_ITEMS,
-  DEFAULT_HISTORY_MAX_BYTES,
-} from '../constants/historyLimits.js';
 
 export type SettingsType =
   | 'boolean'
@@ -111,204 +107,6 @@ const DEFAULT_EXTENSION_AUTO_UPDATE = {
  * `as const` is crucial for TypeScript to infer the most specific types possible.
  */
 export const SETTINGS_SCHEMA = {
-  // General Settings
-  general: {
-    type: 'object',
-    label: 'General Settings',
-    category: 'General',
-    requiresRestart: false,
-    default: {},
-    description: 'General application settings.',
-    showInDialog: false,
-    properties: {
-      preferredEditor: {
-        type: 'string',
-        label: 'Preferred Editor',
-        category: 'General',
-        requiresRestart: false,
-        default: undefined as string | undefined,
-        description: 'Preferred editor for opening files.',
-        showInDialog: true,
-      },
-    },
-  },
-  // UI Settings
-  theme: {
-    type: 'string',
-    label: 'Theme',
-    category: 'UI',
-    requiresRestart: false,
-    default: undefined as string | undefined,
-    description: 'The color theme for the UI.',
-    showInDialog: false,
-  },
-  customThemes: {
-    type: 'object',
-    label: 'Custom Themes',
-    category: 'UI',
-    requiresRestart: false,
-    default: {} as Record<string, CustomTheme>,
-    description: 'Custom theme definitions.',
-    showInDialog: false,
-  },
-  hideWindowTitle: {
-    type: 'boolean',
-    label: 'Hide Window Title',
-    category: 'UI',
-    requiresRestart: true,
-    default: false,
-    description: 'Hide the window title bar',
-    showInDialog: true,
-  },
-
-  useFullWidth: {
-    type: 'boolean',
-    label: 'Use Full Width',
-    category: 'UI',
-    requiresRestart: false,
-    default: true,
-    description: 'Use full terminal width instead of margins',
-    showInDialog: true,
-  },
-
-  showTodoPanel: {
-    type: 'boolean',
-    label: 'Show Todo Panel',
-    category: 'UI',
-    requiresRestart: false,
-    default: true,
-    description:
-      'Display the interactive Todo panel. Disable to keep todos in the scrollback view instead.',
-    showInDialog: true,
-  },
-
-  historyMaxItems: {
-    type: 'number',
-    label: 'History Max Items',
-    category: 'UI',
-    requiresRestart: false,
-    default: DEFAULT_HISTORY_MAX_ITEMS,
-    description:
-      'Maximum number of history entries to keep in the scrollback before trimming the oldest ones. Set to -1 for unlimited.',
-    showInDialog: true,
-  },
-  historyMaxBytes: {
-    type: 'number',
-    label: 'History Max Bytes',
-    category: 'UI',
-    requiresRestart: false,
-    default: DEFAULT_HISTORY_MAX_BYTES,
-    description:
-      'Approximate maximum number of bytes to keep in history. Older entries are removed once this budget is exceeded. Set to -1 for unlimited.',
-    showInDialog: true,
-  },
-  customWittyPhrases: {
-    type: 'array',
-    label: 'Custom Witty Phrases',
-    category: 'UI',
-    requiresRestart: false,
-    default: [] as string[],
-    description: 'Custom witty phrases to display during loading.',
-    showInDialog: false,
-  },
-
-  usageStatisticsEnabled: {
-    type: 'boolean',
-    label: 'Enable Usage Statistics',
-    category: 'General',
-    requiresRestart: true,
-    default: true,
-    description: 'Enable collection of usage statistics',
-    showInDialog: false, // All details are shown in /privacy and dependent on auth type
-  },
-  autoConfigureMaxOldSpaceSize: {
-    type: 'boolean',
-    label: 'Auto Configure Max Old Space Size',
-    category: 'General',
-    requiresRestart: true,
-    default: false,
-    description: 'Automatically configure Node.js memory limits',
-    showInDialog: true,
-  },
-  // TODO: This is a duplicate of general.preferredEditor.
-  // It is kept here for now because the codebase relies on it being a top-level setting.
-  // We should migrate usages to general.preferredEditor and remove this top-level definition to align with gemini-cli.
-  preferredEditor: {
-    type: 'string',
-    label: 'Preferred Editor',
-    category: 'General',
-    requiresRestart: false,
-    default: undefined as string | undefined,
-    description: 'The preferred editor to open files in.',
-    showInDialog: false,
-  },
-
-  maxSessionTurns: {
-    type: 'number',
-    label: 'Max Session Turns',
-    category: 'General',
-    requiresRestart: false,
-    default: -1,
-    description:
-      'Maximum number of user/model/tool turns to keep in a session. -1 means unlimited.',
-    showInDialog: true,
-  },
-  maxTurnsPerPrompt: {
-    type: 'number',
-    label: 'Max Turns Per Prompt',
-    category: 'General',
-    requiresRestart: false,
-    default: 200,
-    description:
-      'Maximum number of turns allowed per prompt before stopping to prevent loops. Set to -1 for unlimited (default: 200).',
-    showInDialog: true,
-  },
-  memoryImportFormat: {
-    type: 'string',
-    label: 'Memory Import Format',
-    category: 'General',
-    requiresRestart: false,
-    default: undefined as MemoryImportFormat | undefined,
-    description: 'The format to use when importing memory.',
-    showInDialog: false,
-  },
-  memoryDiscoveryMaxDirs: {
-    type: 'number',
-    label: 'Memory Discovery Max Dirs',
-    category: 'General',
-    requiresRestart: false,
-    default: 200,
-    description: 'Maximum number of directories to search for memory.',
-    showInDialog: true,
-  },
-  contextFileName: {
-    type: 'object',
-    label: 'Context File Name',
-    category: 'General',
-    requiresRestart: false,
-    default: undefined as string | string[] | undefined,
-    description: 'The name of the context file.',
-    showInDialog: false,
-  },
-  vimMode: {
-    type: 'boolean',
-    label: 'Vim Mode',
-    category: 'Mode',
-    requiresRestart: false,
-    default: false,
-    description: 'Enable Vim keybindings',
-    showInDialog: true,
-  },
-  ideMode: {
-    type: 'boolean',
-    label: 'IDE Mode',
-    category: 'Mode',
-    requiresRestart: true,
-    default: false,
-    description: 'Enable IDE integration mode',
-    showInDialog: true,
-  },
-
   accessibility: {
     type: 'object',
     label: 'Accessibility',
@@ -429,13 +227,13 @@ export const SETTINGS_SCHEMA = {
 
   shouldUseNodePtyShell: {
     type: 'boolean',
-    label: 'Enable Interactive Shell (node-pty) [DEPRECATED]',
+    label: 'Enable Interactive Shell (node-pty)',
     category: 'Shell',
     requiresRestart: true,
     default: false,
     description:
-      'DEPRECATED: Use tools.usePty instead. Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty.',
-    showInDialog: false,
+      'Allow fully interactive shell commands (vim, git rebase -i, etc.) by running tools through node-pty. Falls back to child_process when disabled.',
+    showInDialog: true,
   },
 
   selectedAuthType: {
@@ -711,15 +509,6 @@ export const SETTINGS_SCHEMA = {
         description: 'Hide the footer from the UI',
         showInDialog: true,
       },
-      useAlternateBuffer: {
-        type: 'boolean',
-        label: 'Use Alternate Buffer',
-        category: 'UI',
-        requiresRestart: false,
-        default: true,
-        description: 'Use alternate buffer for history scrolling',
-        showInDialog: true,
-      },
       showMemoryUsage: {
         type: 'boolean',
         label: 'Show Memory Usage',
@@ -990,46 +779,6 @@ export const SETTINGS_SCHEMA = {
         description:
           'Sandbox execution environment (can be a boolean or a path string).',
         showInDialog: false,
-      },
-      usePty: {
-        type: 'boolean',
-        label: 'Use node-pty for Shell Execution',
-        category: 'Tools',
-        requiresRestart: true,
-        default: false,
-        description:
-          'Use node-pty for shell command execution. Fallback to child_process still applies.',
-        showInDialog: true,
-      },
-      shell: {
-        type: 'object',
-        label: 'Shell',
-        category: 'Tools',
-        requiresRestart: false,
-        default: {},
-        description: 'Settings for shell execution.',
-        showInDialog: false,
-        properties: {
-          pager: {
-            type: 'string',
-            label: 'Pager',
-            category: 'Tools',
-            requiresRestart: false,
-            default: 'cat' as string | undefined,
-            description:
-              'The pager command to use for shell output. Defaults to `cat`.',
-            showInDialog: false,
-          },
-          showColor: {
-            type: 'boolean',
-            label: 'Show Color',
-            category: 'Tools',
-            requiresRestart: false,
-            default: false,
-            description: 'Show color in shell output.',
-            showInDialog: true,
-          },
-        },
       },
       autoAccept: {
         type: 'boolean',
@@ -1555,13 +1304,13 @@ export const SETTINGS_SCHEMA = {
   },
   useRipgrep: {
     type: 'boolean',
-    label: 'Use Ripgrep [DEPRECATED]',
-    category: 'General',
+    label: 'Use Ripgrep',
+    category: 'Tools',
     requiresRestart: false,
     default: false,
     description:
-      'DEPRECATED: Use tools.useRipgrep instead. Use ripgrep for file content search instead of the fallback implementation.',
-    showInDialog: false,
+      'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
+    showInDialog: true,
   },
   enablePromptCompletion: {
     type: 'boolean',

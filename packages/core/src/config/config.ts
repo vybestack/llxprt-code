@@ -84,7 +84,6 @@ export type { MCPOAuthConfig, AnyToolInvocation };
 import type { AnyToolInvocation } from '../tools/tools.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { Storage } from './storage.js';
-import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import { FileExclusions } from '../utils/ignorePatterns.js';
 import type { EventEmitter } from 'node:events';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -310,16 +309,15 @@ export interface ConfigParameters {
   useRipgrep?: boolean;
   shouldUseNodePtyShell?: boolean;
   skipNextSpeakerCheck?: boolean;
-  shellExecutionConfig?: ShellExecutionConfig;
-  truncateToolOutputThreshold?: number;
-  truncateToolOutputLines?: number;
-  enableToolOutputTruncation?: boolean;
   extensionManagement?: boolean;
   enablePromptCompletion?: boolean;
   eventEmitter?: EventEmitter;
   useSmartEdit?: boolean;
   settingsService?: SettingsService;
   policyEngineConfig?: PolicyEngineConfig;
+  truncateToolOutputThreshold?: number;
+  truncateToolOutputLines?: number;
+  enableToolOutputTruncation?: boolean;
 }
 
 export class Config {
@@ -449,9 +447,7 @@ export class Config {
   private readonly useRipgrep: boolean;
   private readonly shouldUseNodePtyShell: boolean;
   private readonly skipNextSpeakerCheck: boolean;
-  private shellExecutionConfig: ShellExecutionConfig;
   private readonly extensionManagement: boolean;
-
   private readonly enablePromptCompletion: boolean = false;
   private initialized: boolean = false;
   private readonly shellReplacement: boolean = false;
@@ -588,15 +584,6 @@ export class Config {
     this.useRipgrep = params.useRipgrep ?? false;
     this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
     this.skipNextSpeakerCheck = params.skipNextSpeakerCheck ?? false;
-    this.shellExecutionConfig = {
-      terminalWidth: params.shellExecutionConfig?.terminalWidth ?? 80,
-      terminalHeight: params.shellExecutionConfig?.terminalHeight ?? 24,
-      showColor: params.shellExecutionConfig?.showColor ?? false,
-      pager: params.shellExecutionConfig?.pager ?? 'cat',
-      defaultFg: params.shellExecutionConfig?.defaultFg,
-      defaultBg: params.shellExecutionConfig?.defaultBg,
-    };
-
     this.truncateToolOutputThreshold =
       params.truncateToolOutputThreshold ??
       DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD;
@@ -1512,30 +1499,10 @@ export class Config {
     return this.shouldUseNodePtyShell;
   }
 
-  getEnableInteractiveShell(): boolean {
-    return this.shouldUseNodePtyShell;
-  }
-
   getSkipNextSpeakerCheck(): boolean {
     return this.skipNextSpeakerCheck;
   }
 
-  getShellExecutionConfig(): ShellExecutionConfig {
-    return this.shellExecutionConfig;
-  }
-
-  setShellExecutionConfig(config: ShellExecutionConfig): void {
-    this.shellExecutionConfig = {
-      terminalWidth:
-        config.terminalWidth ?? this.shellExecutionConfig.terminalWidth,
-      terminalHeight:
-        config.terminalHeight ?? this.shellExecutionConfig.terminalHeight,
-      showColor: config.showColor ?? this.shellExecutionConfig.showColor,
-      pager: config.pager ?? this.shellExecutionConfig.pager,
-      defaultFg: config.defaultFg ?? this.shellExecutionConfig.defaultFg,
-      defaultBg: config.defaultBg ?? this.shellExecutionConfig.defaultBg,
-    };
-  }
   getScreenReader(): boolean {
     return this.accessibility.screenReader ?? false;
   }

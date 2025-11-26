@@ -59,12 +59,8 @@ import {
   SettingScope,
   type Settings,
   loadEnvironment,
-} from './settings.js';
+} from './settings';
 import { FatalConfigError, LLXPRT_DIR } from '@vybestack/llxprt-code-core';
-import {
-  DEFAULT_HISTORY_MAX_BYTES,
-  DEFAULT_HISTORY_MAX_ITEMS,
-} from '../constants/historyLimits.js';
 
 const MOCK_WORKSPACE_DIR = '/mock/workspace';
 // Use the (mocked) SETTINGS_DIRECTORY_NAME for consistency
@@ -73,130 +69,6 @@ const MOCK_WORKSPACE_SETTINGS_PATH = pathActual.join(
   SETTINGS_DIRECTORY_NAME,
   'settings.json',
 );
-
-// Base expected merged settings with all schema defaults
-// This represents what mergeSettings() produces when no user settings exist
-const BASE_EXPECTED_MERGED_SETTINGS = {
-  customThemes: {},
-  customWittyPhrases: [],
-  hideWindowTitle: false,
-  ui: {
-    customThemes: {},
-    hideWindowTitle: false,
-    showStatusInTitle: false,
-    hideTips: false,
-    hideBanner: false,
-    hideContextSummary: false,
-    footer: {
-      hideCWD: false,
-      hideSandboxStatus: false,
-      hideModelInfo: false,
-    },
-    hideFooter: false,
-    showMemoryUsage: false,
-    showLineNumbers: false,
-    showCitations: false,
-    customWittyPhrases: [],
-    vimMode: false,
-    ideMode: false,
-    autoConfigureMaxOldSpaceSize: true,
-    historyMaxItems: 100,
-    historyMaxBytes: 1048576,
-    memoryImportFormat: 'tree',
-    usageStatisticsEnabled: true,
-    maxSessionTurns: -1,
-    showTodoPanel: true,
-    theme: undefined,
-    useAlternateBuffer: true,
-  },
-  general: {},
-  hideCWD: false,
-  showTodoPanel: true,
-  hideModelInfo: false,
-  hideSandboxStatus: false,
-  useFullWidth: true,
-  showStatusInTitle: false,
-  historyMaxItems: DEFAULT_HISTORY_MAX_ITEMS,
-  historyMaxBytes: DEFAULT_HISTORY_MAX_BYTES,
-  usageStatisticsEnabled: true,
-  autoConfigureMaxOldSpaceSize: false,
-  maxSessionTurns: -1,
-  coreToolSettings: {},
-  maxTurnsPerPrompt: 200,
-  memoryDiscoveryMaxDirs: 200,
-  vimMode: false,
-  ideMode: false,
-  accessibility: {
-    disableLoadingPhrases: false,
-    screenReader: false,
-  },
-  checkpointing: {
-    enabled: false,
-  },
-  emojifilter: 'auto',
-  fileFiltering: {
-    respectGitIgnore: true,
-    respectLlxprtIgnore: true,
-    enableRecursiveFileSearch: true,
-    disableFuzzySearch: false,
-  },
-  disableAutoUpdate: false,
-  shouldUseNodePtyShell: false,
-  selectedAuthType: 'provider',
-  mcpServers: {},
-  output: {
-    format: 'text',
-  },
-  excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-  disableUpdateNag: false,
-  includeDirectories: [],
-  loadMemoryFromIncludeDirectories: false,
-  hasSeenIdeIntegrationNudge: false,
-  folderTrustFeature: false,
-  folderTrust: false,
-  showLineNumbers: false,
-  providerApiKeys: {},
-  providerBaseUrls: {},
-  providerToolFormatOverrides: {},
-  providerKeyfiles: {},
-  extensionManagement: false,
-  extensions: {
-    disabled: [],
-    workspacesWithMigrationNudge: [],
-  },
-  enableTextToolCallParsing: false,
-  textToolCallModels: [],
-  theme: undefined,
-  toolCallProcessingMode: 'legacy',
-  openaiResponsesEnabled: false,
-  shellReplacement: false,
-  oauthEnabledProviders: {},
-  useRipgrep: false,
-  enablePromptCompletion: false,
-  debugKeystrokeLogging: false,
-  chatCompression: {},
-  mcp: {},
-  security: {
-    folderTrust: {
-      enabled: false,
-    },
-    auth: {},
-  },
-  tools: {
-    autoAccept: false,
-    useRipgrep: false,
-    enableToolOutputTruncation: true,
-    truncateToolOutputThreshold: 4000000,
-    truncateToolOutputLines: 1000,
-    shell: {
-      pager: 'cat',
-      showColor: false,
-    },
-    usePty: false,
-  },
-  useSmartEdit: false,
-  ide: {},
-};
 
 vi.mock('fs', async (importOriginal) => {
   // Get all the functions from the real 'fs' module
@@ -279,7 +151,31 @@ describe('Settings Loading and Merging', () => {
       expect(settings.system.settings).toEqual({});
       expect(settings.user.settings).toEqual({});
       expect(settings.workspace.settings).toEqual({});
-      expect(settings.merged).toEqual(BASE_EXPECTED_MERGED_SETTINGS);
+      // Schema defaults are now recursively extracted for nested objects
+      // Test key nested defaults that demonstrate the fix is working
+      expect(settings.merged.accessibility).toEqual({
+        disableLoadingPhrases: false,
+        screenReader: false,
+      });
+      expect(settings.merged.checkpointing).toEqual({ enabled: false });
+      expect(settings.merged.fileFiltering).toEqual({
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+        enableRecursiveFileSearch: true,
+        disableFuzzySearch: false,
+      });
+      expect(settings.merged.security).toEqual({
+        folderTrust: { enabled: false },
+        auth: {},
+      });
+      expect(settings.merged.tools).toMatchObject({
+        autoAccept: false,
+        useRipgrep: false,
+        enableToolOutputTruncation: true,
+      });
+      expect(settings.merged.mcp).toEqual({});
+      expect(settings.merged.output).toEqual({ format: 'text' });
+      expect(settings.merged.selectedAuthType).toBe('provider');
       expect(settings.errors.length).toBe(0);
     });
 
@@ -308,14 +204,58 @@ describe('Settings Loading and Merging', () => {
       expect(settings.system.settings).toEqual(systemSettingsContent);
       expect(settings.user.settings).toEqual({});
       expect(settings.workspace.settings).toEqual({});
-      expect(settings.merged).toEqual({
-        ...BASE_EXPECTED_MERGED_SETTINGS,
-        ...systemSettingsContent,
-        // Theme also appears in ui.theme
-        ui: {
-          ...BASE_EXPECTED_MERGED_SETTINGS.ui,
-          theme: 'system-default',
+      expect(settings.merged).toMatchObject({
+        accessibility: {},
+        chatCompression: {},
+        checkpointing: {},
+        coreToolSettings: {},
+        debugKeystrokeLogging: false,
+        disableAutoUpdate: false,
+        disableUpdateNag: false,
+        emojifilter: 'auto',
+        enablePromptCompletion: false,
+        enableTextToolCallParsing: false,
+        excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
+        extensionManagement: false,
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
         },
+        fileFiltering: {},
+        folderTrust: false,
+        folderTrustFeature: false,
+        hasSeenIdeIntegrationNudge: false,
+        hideCWD: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
+        ide: {},
+        includeDirectories: [],
+        loadMemoryFromIncludeDirectories: false,
+        mcp: {},
+        mcpServers: {},
+        oauthEnabledProviders: {},
+        openaiResponsesEnabled: false,
+        output: {},
+        providerApiKeys: {},
+        providerBaseUrls: {},
+        providerKeyfiles: {},
+        providerToolFormatOverrides: {},
+        security: {},
+        selectedAuthType: 'provider',
+        shellReplacement: false,
+        shouldUseNodePtyShell: false,
+        showLineNumbers: false,
+        showStatusInTitle: false,
+        textToolCallModels: [],
+        toolCallProcessingMode: 'legacy',
+        tools: {},
+        ui: {
+          customThemes: {},
+          theme: undefined,
+        },
+        useRipgrep: false,
+        useSmartEdit: false,
+        ...systemSettingsContent,
       });
     });
 
@@ -345,15 +285,59 @@ describe('Settings Loading and Merging', () => {
       );
       expect(settings.user.settings).toEqual(userSettingsContent);
       expect(settings.workspace.settings).toEqual({});
-      expect(settings.merged).toEqual({
-        ...BASE_EXPECTED_MERGED_SETTINGS,
-        ...userSettingsContent,
-        // Theme and contextFileName also appear in ui namespace
-        ui: {
-          ...BASE_EXPECTED_MERGED_SETTINGS.ui,
-          theme: 'dark',
-          contextFileName: 'USER_CONTEXT.md',
+      expect(settings.merged).toMatchObject({
+        accessibility: {},
+        chatCompression: {},
+        checkpointing: {},
+        contextFileName: 'USER_CONTEXT.md',
+        coreToolSettings: {},
+        debugKeystrokeLogging: false,
+        disableAutoUpdate: false,
+        disableUpdateNag: false,
+        emojifilter: 'auto',
+        enablePromptCompletion: false,
+        enableTextToolCallParsing: false,
+        excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
+        extensionManagement: false,
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
         },
+        fileFiltering: {},
+        folderTrust: false,
+        folderTrustFeature: false,
+        hasSeenIdeIntegrationNudge: false,
+        hideCWD: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
+        ide: {},
+        includeDirectories: [],
+        loadMemoryFromIncludeDirectories: false,
+        mcp: {},
+        mcpServers: {},
+        oauthEnabledProviders: {},
+        openaiResponsesEnabled: false,
+        output: {},
+        providerApiKeys: {},
+        providerBaseUrls: {},
+        providerKeyfiles: {},
+        providerToolFormatOverrides: {},
+        security: {},
+        selectedAuthType: 'provider',
+        shellReplacement: false,
+        shouldUseNodePtyShell: false,
+        showLineNumbers: false,
+        showStatusInTitle: false,
+        textToolCallModels: [],
+        theme: 'dark',
+        toolCallProcessingMode: 'legacy',
+        tools: {},
+        ui: {
+          customThemes: {},
+          theme: undefined,
+        },
+        useRipgrep: false,
+        useSmartEdit: false,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -382,14 +366,59 @@ describe('Settings Loading and Merging', () => {
       );
       expect(settings.user.settings).toEqual({});
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
-      expect(settings.merged).toEqual({
-        ...BASE_EXPECTED_MERGED_SETTINGS,
-        ...workspaceSettingsContent,
-        // contextFileName is migrated to ui namespace
-        ui: {
-          ...BASE_EXPECTED_MERGED_SETTINGS.ui,
-          contextFileName: 'WORKSPACE_CONTEXT.md',
+      expect(settings.merged).toMatchObject({
+        accessibility: {},
+        chatCompression: {},
+        checkpointing: {},
+        contextFileName: 'WORKSPACE_CONTEXT.md',
+        coreToolSettings: {},
+        debugKeystrokeLogging: false,
+        disableAutoUpdate: false,
+        disableUpdateNag: false,
+        emojifilter: 'auto',
+        enablePromptCompletion: false,
+        enableTextToolCallParsing: false,
+        excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
+        extensionManagement: false,
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
         },
+        fileFiltering: {},
+        folderTrust: false,
+        folderTrustFeature: false,
+        hasSeenIdeIntegrationNudge: false,
+        hideCWD: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
+        ide: {},
+        includeDirectories: [],
+        loadMemoryFromIncludeDirectories: false,
+        mcp: {},
+        mcpServers: {},
+        oauthEnabledProviders: {},
+        openaiResponsesEnabled: false,
+        output: {},
+        providerApiKeys: {},
+        providerBaseUrls: {},
+        providerKeyfiles: {},
+        providerToolFormatOverrides: {},
+        sandbox: true,
+        security: {},
+        selectedAuthType: 'provider',
+        shellReplacement: false,
+        shouldUseNodePtyShell: false,
+        showLineNumbers: false,
+        showStatusInTitle: false,
+        textToolCallModels: [],
+        toolCallProcessingMode: 'legacy',
+        tools: {},
+        ui: {
+          customThemes: {},
+          theme: undefined,
+        },
+        useRipgrep: false,
+        useSmartEdit: false,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -421,16 +450,61 @@ describe('Settings Loading and Merging', () => {
 
       expect(settings.user.settings).toEqual(userSettingsContent);
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
-      expect(settings.merged).toEqual({
-        ...BASE_EXPECTED_MERGED_SETTINGS,
-        ...userSettingsContent,
-        ...workspaceSettingsContent,
-        // Theme and contextFileName also appear in ui namespace (workspace value takes precedence)
-        ui: {
-          ...BASE_EXPECTED_MERGED_SETTINGS.ui,
-          theme: 'dark',
-          contextFileName: 'WORKSPACE_CONTEXT.md',
+      expect(settings.merged).toMatchObject({
+        accessibility: {},
+        chatCompression: {},
+        checkpointing: {},
+        contextFileName: 'WORKSPACE_CONTEXT.md',
+        coreTools: ['tool1'],
+        coreToolSettings: {},
+        debugKeystrokeLogging: false,
+        disableAutoUpdate: false,
+        disableUpdateNag: false,
+        emojifilter: 'auto',
+        enablePromptCompletion: false,
+        enableTextToolCallParsing: false,
+        excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
+        extensionManagement: false,
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
         },
+        fileFiltering: {},
+        folderTrust: false,
+        folderTrustFeature: false,
+        hasSeenIdeIntegrationNudge: false,
+        hideCWD: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
+        ide: {},
+        includeDirectories: [],
+        loadMemoryFromIncludeDirectories: false,
+        mcp: {},
+        mcpServers: {},
+        oauthEnabledProviders: {},
+        openaiResponsesEnabled: false,
+        output: {},
+        providerApiKeys: {},
+        providerBaseUrls: {},
+        providerKeyfiles: {},
+        providerToolFormatOverrides: {},
+        sandbox: true,
+        security: {},
+        selectedAuthType: 'provider',
+        shellReplacement: false,
+        shouldUseNodePtyShell: false,
+        showLineNumbers: false,
+        showStatusInTitle: false,
+        textToolCallModels: [],
+        theme: 'dark',
+        toolCallProcessingMode: 'legacy',
+        tools: {},
+        ui: {
+          customThemes: {},
+          theme: undefined,
+        },
+        useRipgrep: false,
+        useSmartEdit: false,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -472,18 +546,63 @@ describe('Settings Loading and Merging', () => {
       expect(settings.system.settings).toEqual(systemSettingsContent);
       expect(settings.user.settings).toEqual(userSettingsContent);
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
-      expect(settings.merged).toEqual({
-        ...BASE_EXPECTED_MERGED_SETTINGS,
-        ...userSettingsContent,
-        ...workspaceSettingsContent,
-        ...systemSettingsContent,
-        // User theme overrides system theme (workspace has no theme)
-        theme: 'dark',
-        ui: {
-          ...BASE_EXPECTED_MERGED_SETTINGS.ui,
-          theme: 'dark',
-          contextFileName: 'WORKSPACE_CONTEXT.md',
+      expect(settings.merged).toMatchObject({
+        accessibility: {},
+        allowMCPServers: ['server1', 'server2'],
+        chatCompression: {},
+        checkpointing: {},
+        contextFileName: 'WORKSPACE_CONTEXT.md',
+        coreTools: ['tool1'],
+        coreToolSettings: {},
+        debugKeystrokeLogging: false,
+        disableAutoUpdate: false,
+        disableUpdateNag: false,
+        emojifilter: 'auto',
+        enablePromptCompletion: false,
+        enableTextToolCallParsing: false,
+        excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
+        extensionManagement: false,
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
         },
+        fileFiltering: {},
+        folderTrust: false,
+        folderTrustFeature: false,
+        hasSeenIdeIntegrationNudge: false,
+        hideCWD: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
+        ide: {},
+        includeDirectories: [],
+        loadMemoryFromIncludeDirectories: false,
+        mcp: {},
+        mcpServers: {},
+        oauthEnabledProviders: {},
+        openaiResponsesEnabled: false,
+        output: {},
+        providerApiKeys: {},
+        providerBaseUrls: {},
+        providerKeyfiles: {},
+        providerToolFormatOverrides: {},
+        sandbox: false,
+        security: {},
+        selectedAuthType: 'provider',
+        shellReplacement: false,
+        shouldUseNodePtyShell: false,
+        showLineNumbers: false,
+        showStatusInTitle: false,
+        telemetry: { enabled: false },
+        textToolCallModels: [],
+        theme: 'system-theme',
+        toolCallProcessingMode: 'legacy',
+        tools: {},
+        ui: {
+          customThemes: {},
+          theme: undefined,
+        },
+        useRipgrep: false,
+        useSmartEdit: false,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -532,9 +651,32 @@ describe('Settings Loading and Merging', () => {
       expect(settings.system.settings).toEqual(systemSettingsContent);
       expect(settings.user.settings).toEqual(userSettingsContent);
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
-      expect(settings.merged).toEqual({
-        ...BASE_EXPECTED_MERGED_SETTINGS,
-        // Include directories are concatenated
+      expect(settings.merged).toMatchObject({
+        accessibility: {},
+        chatCompression: {},
+        checkpointing: {},
+        contextFileName: 'WORKSPACE_CONTEXT.md',
+        coreToolSettings: {},
+        debugKeystrokeLogging: false,
+        disableAutoUpdate: false,
+        disableUpdateNag: false,
+        emojifilter: 'auto',
+        enablePromptCompletion: false,
+        enableTextToolCallParsing: false,
+        excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
+        extensionManagement: false,
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
+        },
+        fileFiltering: {},
+        folderTrust: false,
+        folderTrustFeature: false,
+        hasSeenIdeIntegrationNudge: false,
+        hideCWD: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
+        ide: {},
         includeDirectories: [
           '/system/defaults/dir',
           '/user/dir1',
@@ -542,16 +684,34 @@ describe('Settings Loading and Merging', () => {
           '/workspace/dir',
           '/system/dir',
         ],
-        // User theme overrides system theme
-        theme: 'user-theme',
-        ui: {
-          ...BASE_EXPECTED_MERGED_SETTINGS.ui,
-          theme: 'user-theme',
-          contextFileName: 'WORKSPACE_CONTEXT.md',
-        },
+        loadMemoryFromIncludeDirectories: false,
+        mcp: {},
+        mcpServers: {},
+        oauthEnabledProviders: {},
+        openaiResponsesEnabled: false,
+        output: {},
+        providerApiKeys: {},
+        providerBaseUrls: {},
+        providerKeyfiles: {},
+        providerToolFormatOverrides: {},
         sandbox: false,
+        security: {},
+        selectedAuthType: 'provider',
+        shellReplacement: false,
+        shouldUseNodePtyShell: false,
+        showLineNumbers: false,
+        showStatusInTitle: false,
         telemetry: false,
-        contextFileName: 'WORKSPACE_CONTEXT.md',
+        textToolCallModels: [],
+        theme: 'system-theme',
+        toolCallProcessingMode: 'legacy',
+        tools: {},
+        ui: {
+          customThemes: {},
+          theme: undefined,
+        },
+        useRipgrep: false,
+        useSmartEdit: false,
       });
     });
 
@@ -800,7 +960,7 @@ describe('Settings Loading and Merging', () => {
       (fs.readFileSync as Mock).mockReturnValue('{}');
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
       expect(settings.merged.telemetry).toBeUndefined();
-      expect(settings.merged.customThemes).toEqual({});
+      expect(settings.merged.ui?.customThemes).toEqual({});
       expect(settings.merged.mcpServers).toEqual({});
     });
 
@@ -1165,11 +1325,9 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      // @ts-expect-error: dynamic property for test
       expect(settings.workspace.settings.endpoint).toBe(
         'workspace_endpoint_from_env/api',
       );
-      // @ts-expect-error: dynamic property for test
       expect(settings.workspace.settings.nested.value).toBe(
         'workspace_endpoint_from_env',
       );
@@ -1306,9 +1464,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.apiKey).toBe('$UNDEFINED_VAR');
-      // @ts-expect-error: dynamic property for test
       expect(settings.merged.apiKey).toBe('$UNDEFINED_VAR');
     });
 
@@ -1327,7 +1483,6 @@ describe('Settings Loading and Merging', () => {
         },
       );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.path).toBe('/path/valueA/valueB/end');
       delete process.env.VAR_A;
       delete process.env.VAR_B;
@@ -1348,7 +1503,6 @@ describe('Settings Loading and Merging', () => {
         },
       );
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.list).toEqual([
         'item1_env',
         'item2_env',
@@ -1390,28 +1544,17 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nullVal).toBeNull();
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.trueVal).toBe(true);
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.falseVal).toBe(false);
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.numberVal).toBe(123.45);
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.stringVal).toBe('env_string_value');
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.undefinedVal).toBeUndefined();
 
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nestedObj.nestedNull).toBeNull();
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nestedObj.nestedBool).toBe(true);
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nestedObj.nestedNum).toBe(0);
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nestedObj.nestedString).toBe('literal');
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.nestedObj.anotherEnv).toBe(
         'env_string_nested_value',
       );
@@ -1438,7 +1581,6 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.serverAddress).toBe('myhost:9090/api');
 
       delete process.env.TEST_HOST;
@@ -1481,14 +1623,58 @@ describe('Settings Loading and Merging', () => {
         );
         expect(settings.system.path).toBe(MOCK_ENV_SYSTEM_SETTINGS_PATH);
         expect(settings.system.settings).toEqual(systemSettingsContent);
-        expect(settings.merged).toEqual({
-          ...BASE_EXPECTED_MERGED_SETTINGS,
-          ...systemSettingsContent,
-          // Theme also appears in ui.theme
-          ui: {
-            ...BASE_EXPECTED_MERGED_SETTINGS.ui,
-            theme: 'env-var-theme',
+        expect(settings.merged).toMatchObject({
+          accessibility: {},
+          chatCompression: {},
+          checkpointing: {},
+          coreToolSettings: {},
+          debugKeystrokeLogging: false,
+          disableAutoUpdate: false,
+          disableUpdateNag: false,
+          emojifilter: 'auto',
+          enablePromptCompletion: false,
+          enableTextToolCallParsing: false,
+          excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
+          extensionManagement: false,
+          extensions: {
+            disabled: [],
+            workspacesWithMigrationNudge: [],
           },
+          fileFiltering: {},
+          folderTrust: false,
+          folderTrustFeature: false,
+          hasSeenIdeIntegrationNudge: false,
+          hideCWD: false,
+          hideModelInfo: false,
+          hideSandboxStatus: false,
+          ide: {},
+          includeDirectories: [],
+          loadMemoryFromIncludeDirectories: false,
+          mcp: {},
+          mcpServers: {},
+          oauthEnabledProviders: {},
+          openaiResponsesEnabled: false,
+          output: {},
+          providerApiKeys: {},
+          providerBaseUrls: {},
+          providerKeyfiles: {},
+          providerToolFormatOverrides: {},
+          security: {},
+          selectedAuthType: 'provider',
+          shellReplacement: false,
+          shouldUseNodePtyShell: false,
+          showLineNumbers: false,
+          showStatusInTitle: false,
+          textToolCallModels: [],
+          toolCallProcessingMode: 'legacy',
+          tools: {},
+          ui: {
+            customThemes: {},
+            theme: undefined,
+          },
+          useRipgrep: false,
+          useSmartEdit: false,
+          ...systemSettingsContent,
         });
       });
     });
@@ -1583,41 +1769,45 @@ describe('Settings Loading and Merging', () => {
       vi.mocked(fs.writeFileSync).mockImplementation(() => {});
       // mkdirSync is mocked in beforeEach to return undefined, which is fine for void usage
 
-      loadedSettings.setValue(SettingScope.User, 'theme', 'matrix');
-      expect(loadedSettings.user.settings.theme).toBe('matrix');
-      expect(loadedSettings.merged.theme).toBe('matrix');
+      loadedSettings.setValue(SettingScope.User, 'ui.theme', 'matrix');
+      expect(loadedSettings.user.settings.ui?.theme).toBe('matrix');
+      expect(loadedSettings.merged.ui?.theme).toBe('matrix');
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         USER_SETTINGS_PATH,
-        JSON.stringify({ theme: 'matrix' }, null, 2),
+        JSON.stringify({ ui: { theme: 'matrix' } }, null, 2),
         'utf-8',
       );
 
       loadedSettings.setValue(
         SettingScope.Workspace,
-        'contextFileName',
+        'ui.contextFileName',
         'MY_AGENTS.md',
       );
-      expect(loadedSettings.workspace.settings.contextFileName).toBe(
+      expect(loadedSettings.workspace.settings.ui?.contextFileName).toBe(
         'MY_AGENTS.md',
       );
-      expect(loadedSettings.merged.contextFileName).toBe('MY_AGENTS.md');
-      expect(loadedSettings.merged.theme).toBe('matrix'); // User setting should still be there
+      expect(loadedSettings.merged.ui?.contextFileName).toBe('MY_AGENTS.md');
+      expect(loadedSettings.merged.ui?.theme).toBe('matrix'); // User setting should still be there
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         MOCK_WORKSPACE_SETTINGS_PATH,
-        JSON.stringify({ contextFileName: 'MY_AGENTS.md' }, null, 2),
+        JSON.stringify({ ui: { contextFileName: 'MY_AGENTS.md' } }, null, 2),
         'utf-8',
       );
 
       // System theme should not override user/workspace themes
-      loadedSettings.setValue(SettingScope.System, 'theme', 'ocean');
+      loadedSettings.setValue(SettingScope.System, 'ui.theme', 'ocean');
 
-      expect(loadedSettings.system.settings.theme).toBe('ocean');
-      expect(loadedSettings.merged.theme).toBe('matrix');
+      expect(loadedSettings.system.settings.ui?.theme).toBe('ocean');
+      expect(loadedSettings.merged.ui?.theme).toBe('matrix');
 
       // SystemDefaults theme is overridden by user, workspace, and system themes
-      loadedSettings.setValue(SettingScope.SystemDefaults, 'theme', 'default');
-      expect(loadedSettings.systemDefaults.settings.theme).toBe('default');
-      expect(loadedSettings.merged.theme).toBe('matrix');
+      loadedSettings.setValue(
+        SettingScope.SystemDefaults,
+        'ui.theme',
+        'default',
+      );
+      expect(loadedSettings.systemDefaults.settings.ui?.theme).toBe('default');
+      expect(loadedSettings.merged.ui?.theme).toBe('matrix');
     });
   });
 
@@ -1889,7 +2079,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.user.settings).toEqual(complexSettingsContent);
       expect(settings.merged.mcpServers).toHaveProperty('test-server');
       expect(settings.merged.customThemes).toHaveProperty('my-theme');
-      expect(settings.merged.mcpServers!['test-server'].env).toEqual({
+      expect(settings.merged.mcpServers['test-server'].env).toEqual({
         NODE_ENV: 'production',
         PORT: '3000',
       });
@@ -1971,19 +2161,15 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.complexPath).toBe(
         '/home/testuser/configs/part1:part2:part3/app.json',
       );
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.configData).toBe(
         '{"key": "value", "number": 42}',
       );
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.fallbackValue).toBe(
         '${EMPTY_VAR:-default_value}',
       ); // Should not resolve bash-style fallbacks
-      // @ts-expect-error: dynamic property for test
       expect(settings.user.settings.multipleVars).toBe(
         'user:testuser@host:testhost:${PORT:-8080}',
       );

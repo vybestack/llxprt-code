@@ -60,15 +60,6 @@ export enum Command {
 
   // Debugging/Terminal fixes
   REFRESH_KEYPRESS = 'refreshKeypress',
-  TOGGLE_SHELL_INPUT_FOCUS = 'toggleShellInputFocus',
-
-  // Scroll commands
-  SCROLL_UP = 'scrollUp',
-  SCROLL_DOWN = 'scrollDown',
-  PAGE_UP = 'pageUp',
-  PAGE_DOWN = 'pageDown',
-  SCROLL_HOME = 'scrollHome',
-  SCROLL_END = 'scrollEnd',
 }
 
 /**
@@ -179,13 +170,4 @@ export const defaultKeyBindings: KeyBindingConfig = {
 
   // Debugging/Terminal fixes
   [Command.REFRESH_KEYPRESS]: [{ key: 'r', ctrl: true, shift: true }],
-  [Command.TOGGLE_SHELL_INPUT_FOCUS]: [{ key: 'f', ctrl: true }],
-
-  // Scroll commands
-  [Command.SCROLL_UP]: [{ key: 'up' }],
-  [Command.SCROLL_DOWN]: [{ key: 'down' }],
-  [Command.PAGE_UP]: [{ key: 'pageup' }],
-  [Command.PAGE_DOWN]: [{ key: 'pagedown' }],
-  [Command.SCROLL_HOME]: [{ key: 'home' }],
-  [Command.SCROLL_END]: [{ key: 'end' }],
 };

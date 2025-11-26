@@ -7,6 +7,7 @@
 import type { Config } from '../config/config.js';
 import type { AgentDefinition } from './types.js';
 import type { z } from 'zod';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
 /**
  * Manages the discovery, loading, validation, and registration of
@@ -16,8 +17,12 @@ export class AgentRegistry {
   // Using unknown output type for the internal map to handle generic variance correctly
   // Callers will cast to specific types as needed
   private readonly agents = new Map<string, AgentDefinition>();
+  private readonly logger = new DebugLogger('llxprt:agents:registry');
 
-  constructor(private readonly config: Config) {}
+  constructor(private readonly config: Config) {
+    // Access config to satisfy lint and allow future conditional logging
+    void this.config;
+  }
 
   /**
    * Discovers and loads agents.
@@ -25,11 +30,9 @@ export class AgentRegistry {
   async initialize(): Promise<void> {
     this.loadBuiltInAgents();
 
-    if (this.config.getDebugMode()) {
-      console.log(
-        `[AgentRegistry] Initialized with ${this.agents.size} agents.`,
-      );
-    }
+    this.logger.debug(
+      () => `[AgentRegistry] Initialized with ${this.agents.size} agents.`,
+    );
   }
 
   private loadBuiltInAgents(): void {
@@ -47,14 +50,16 @@ export class AgentRegistry {
   ): void {
     // Basic validation
     if (!definition.name || !definition.description) {
-      console.warn(
+      this.logger.warn(
         `[AgentRegistry] Skipping invalid agent definition. Missing name or description.`,
       );
       return;
     }
 
-    if (this.agents.has(definition.name) && this.config.getDebugMode()) {
-      console.log(`[AgentRegistry] Overriding agent '${definition.name}'`);
+    if (this.agents.has(definition.name)) {
+      this.logger.debug(
+        `[AgentRegistry] Overriding agent '${definition.name}'`,
+      );
     }
 
     // Cast to default AgentDefinition type for storage - callers will cast back as needed
@@ -63,6 +68,7 @@ export class AgentRegistry {
 
   /**
    * Retrieves an agent definition by name.
+   * Callers should cast to their expected AgentDefinition<TOutput> shape before invoking typed callbacks.
    */
   getDefinition(name: string): AgentDefinition | undefined {
     return this.agents.get(name);

@@ -282,23 +282,15 @@ function mergeSettings(
     coreToolSettings: schemaDefaults.coreToolSettings || {},
   };
 
-  // Theme prioritization: workspace > user > system > systemDefaults > schemaDefaults
-  // Check both ui.theme and root-level theme for backwards compatibility
   const prioritizedTheme =
     safeWorkspace.ui?.theme ??
-    (safeWorkspace.theme as string | undefined) ??
     user.ui?.theme ??
-    (user.theme as string | undefined) ??
     system.ui?.theme ??
-    (system.theme as string | undefined) ??
     systemDefaults.ui?.theme ??
-    (systemDefaults.theme as string | undefined) ??
     (schemaDefaults.ui?.theme as string | undefined);
   if (merged.ui) {
     merged.ui.theme = prioritizedTheme;
   }
-  // Also set root-level theme for backwards compatibility
-  merged.theme = prioritizedTheme;
 
   return merged;
 }

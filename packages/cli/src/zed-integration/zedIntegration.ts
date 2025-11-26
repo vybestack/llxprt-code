@@ -1429,15 +1429,12 @@ function toToolCallContent(toolResult: ToolResult): acp.ToolCallContent | null {
         content: { type: 'text', text: toolResult.returnDisplay },
       };
     } else {
-      if ('fileName' in toolResult.returnDisplay) {
-        return {
-          type: 'diff',
-          path: toolResult.returnDisplay.fileName,
-          oldText: toolResult.returnDisplay.originalContent,
-          newText: toolResult.returnDisplay.newContent,
-        };
-      }
-      return null;
+      return {
+        type: 'diff',
+        path: toolResult.returnDisplay.fileName,
+        oldText: toolResult.returnDisplay.originalContent,
+        newText: toolResult.returnDisplay.newContent,
+      };
     }
   } else {
     return null;

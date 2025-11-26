@@ -26,18 +26,12 @@ interface AppProps {
   version: string;
 }
 
-import { MouseProvider } from './contexts/MouseContext.js';
-import { ScrollProvider } from './contexts/ScrollProvider.js';
-import { isAlternateBufferEnabled } from './hooks/useAlternateBuffer.js';
-
 /**
  * AppWrapper is the main entry point for the CLI UI.
  * It sets up the provider stack that wraps the AppContainer.
  *
  * Provider stack (outermost to innermost):
  * - KeypressProvider: Terminal keypress handling with Kitty/Vim support
- * - MouseProvider: Mouse event handling
- * - ScrollProvider: Scrollable area management
  * - SessionStatsProvider: Session statistics tracking
  * - VimModeProvider: Vim mode state management
  * - ToolCallProvider: Tool call tracking
@@ -49,35 +43,25 @@ import { isAlternateBufferEnabled } from './hooks/useAlternateBuffer.js';
  */
 export const AppWrapper = (props: AppProps) => {
   const kittyProtocolStatus = useKittyKeyboardProtocol();
-  const mouseEventsEnabled =
-    isAlternateBufferEnabled(props.settings) && !props.config.getScreenReader();
-
   return (
     <KeypressProvider
       kittyProtocolEnabled={kittyProtocolStatus.enabled}
       config={props.config}
       debugKeystrokeLogging={props.settings.merged.debugKeystrokeLogging}
     >
-      <MouseProvider
-        mouseEventsEnabled={mouseEventsEnabled}
-        debugKeystrokeLogging={props.settings.merged.debugKeystrokeLogging}
-      >
-        <ScrollProvider>
-          <SessionStatsProvider>
-            <VimModeProvider settings={props.settings}>
-              <ToolCallProvider sessionId={props.config.getSessionId()}>
-                <TodoProvider sessionId={props.config.getSessionId()}>
-                  <RuntimeContextProvider>
-                    <OverflowProvider>
-                      <AppWithState {...props} />
-                    </OverflowProvider>
-                  </RuntimeContextProvider>
-                </TodoProvider>
-              </ToolCallProvider>
-            </VimModeProvider>
-          </SessionStatsProvider>
-        </ScrollProvider>
-      </MouseProvider>
+      <SessionStatsProvider>
+        <VimModeProvider settings={props.settings}>
+          <ToolCallProvider sessionId={props.config.getSessionId()}>
+            <TodoProvider sessionId={props.config.getSessionId()}>
+              <RuntimeContextProvider>
+                <OverflowProvider>
+                  <AppWithState {...props} />
+                </OverflowProvider>
+              </RuntimeContextProvider>
+            </TodoProvider>
+          </ToolCallProvider>
+        </VimModeProvider>
+      </SessionStatsProvider>
     </KeypressProvider>
   );
 };
