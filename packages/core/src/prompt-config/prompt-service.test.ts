@@ -790,8 +790,11 @@ describe('PromptService', () => {
       expect(tools).toContain('TodoPause');
       expect(tools).toContain('TodoRead');
       expect(tools).toContain('TodoWrite');
-      expect(tools).toContain('WebFetch');
-      expect(tools).toContain('WebSearch');
+      expect(tools).toContain('GoogleWebFetch');
+      expect(tools).toContain('DirectWebFetch');
+      expect(tools).toContain('GoogleWebSearch');
+      expect(tools).toContain('ExaWebSearch');
+      expect(tools).toContain('CodeSearch');
       expect(tools).toContain('WriteFile');
     });
 

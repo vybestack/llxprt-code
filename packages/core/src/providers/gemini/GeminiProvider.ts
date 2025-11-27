@@ -852,7 +852,7 @@ export class GeminiProvider extends BaseProvider {
             // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
             const result = await oauthContentGenerator.generateContent(
               oauthRequest,
-              'web-search-oauth', // userPromptId for OAuth web search
+              'google-web-search-oauth', // userPromptId for OAuth web search
             );
             logger.debug(
               () =>
@@ -990,7 +990,7 @@ export class GeminiProvider extends BaseProvider {
           // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
           const result = await oauthContentGenerator.generateContent(
             oauthRequest,
-            'web-fetch-oauth', // userPromptId for OAuth web fetch
+            'google-web-fetch-oauth', // userPromptId for OAuth web fetch
           );
           return result;
         }

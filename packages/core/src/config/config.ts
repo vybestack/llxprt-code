@@ -24,7 +24,7 @@ import { EditTool } from '../tools/edit.js';
 import { SmartEditTool } from '../tools/smart-edit.js';
 import { ShellTool } from '../tools/shell.js';
 import { WriteFileTool } from '../tools/write-file.js';
-import { WebFetchTool } from '../tools/web-fetch.js';
+import { GoogleWebFetchTool } from '../tools/google-web-fetch.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import { ReadLineRangeTool } from '../tools/read_line_range.js';
 import { DeleteLineRangeTool } from '../tools/delete_line_range.js';
@@ -34,10 +34,14 @@ import {
   setLlxprtMdFilename,
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
 } from '../tools/memoryTool.js';
-import { WebSearchTool } from '../tools/web-search.js';
+import { GoogleWebSearchTool } from '../tools/google-web-search.js';
+import { ExaWebSearchTool } from '../tools/exa-web-search.js';
 import { TodoWrite } from '../tools/todo-write.js';
 import { TodoRead } from '../tools/todo-read.js';
 import { TodoPause } from '../tools/todo-pause.js';
+import { CodeSearchTool } from '../tools/codesearch.js';
+import { DirectWebFetchTool } from '../tools/direct-web-fetch.js';
+
 import { TaskTool } from '../tools/task.js';
 import type { SubagentSchedulerFactory } from '../core/subagentScheduler.js';
 import { ListSubagentsTool } from '../tools/list-subagents.js';
@@ -1660,17 +1664,20 @@ export class Config {
       registerCoreTool(EditTool, this);
     }
     registerCoreTool(WriteFileTool, this);
-    registerCoreTool(WebFetchTool, this);
+    registerCoreTool(GoogleWebFetchTool, this);
     registerCoreTool(ReadManyFilesTool, this);
     registerCoreTool(ReadLineRangeTool, this);
     registerCoreTool(DeleteLineRangeTool, this);
     registerCoreTool(InsertAtLineTool, this);
     registerCoreTool(ShellTool, this);
     registerCoreTool(MemoryTool);
-    registerCoreTool(WebSearchTool, this);
+    registerCoreTool(GoogleWebSearchTool, this);
+    registerCoreTool(ExaWebSearchTool, this);
     registerCoreTool(TodoWrite);
     registerCoreTool(TodoRead);
     registerCoreTool(TodoPause);
+    registerCoreTool(CodeSearchTool, this);
+    registerCoreTool(DirectWebFetchTool, this);
 
     let profileManager = this.getProfileManager();
     if (!profileManager) {

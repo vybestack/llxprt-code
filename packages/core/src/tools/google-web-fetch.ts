@@ -56,27 +56,27 @@ interface GroundingSupportItem {
 /**
  * Parameters for the WebFetch tool
  */
-export interface WebFetchToolParams {
+export interface GoogleWebFetchToolParams {
   /**
    * The prompt containing URL(s) (up to 20) and instructions for processing their content.
    */
   prompt: string;
 }
 
-class WebFetchToolInvocation extends BaseToolInvocation<
-  WebFetchToolParams,
+class GoogleWebFetchToolInvocation extends BaseToolInvocation<
+  GoogleWebFetchToolParams,
   ToolResult
 > {
   constructor(
     private readonly config: Config,
-    params: WebFetchToolParams,
+    params: GoogleWebFetchToolParams,
     messageBus?: MessageBus,
   ) {
     super(params, messageBus);
   }
 
   override getToolName(): string {
-    return WebFetchTool.Name;
+    return GoogleWebFetchTool.Name;
   }
 
   private async executeFallback(_signal: AbortSignal): Promise<ToolResult> {
@@ -92,7 +92,11 @@ class WebFetchToolInvocation extends BaseToolInvocation<
     }
 
     try {
-      const response = await fetchWithTimeout(url, URL_FETCH_TIMEOUT_MS);
+      const response = await fetchWithTimeout(
+        url,
+        URL_FETCH_TIMEOUT_MS,
+        _signal,
+      );
       if (!response.ok) {
         throw new Error(
           `Request failed with status code ${response.status} ${response.statusText}`,
@@ -361,19 +365,19 @@ ${sourceListFormatted.join('\n')}`;
 /**
  * Implementation of the WebFetch tool logic
  */
-export class WebFetchTool extends BaseDeclarativeTool<
-  WebFetchToolParams,
+export class GoogleWebFetchTool extends BaseDeclarativeTool<
+  GoogleWebFetchToolParams,
   ToolResult
 > {
-  static readonly Name: string = 'web_fetch';
+  static readonly Name: string = 'google_web_fetch';
 
   constructor(
     private readonly config: Config,
     messageBus?: MessageBus,
   ) {
     super(
-      WebFetchTool.Name,
-      'WebFetch',
+      GoogleWebFetchTool.Name,
+      'GoogleWebFetch',
       "Processes content from URL(s), including local and private network addresses (e.g., localhost), embedded in a prompt. Include up to 20 URLs and instructions (e.g., summarize, extract specific data) directly in the 'prompt' parameter.",
       Kind.Fetch,
       {
@@ -398,7 +402,7 @@ export class WebFetchTool extends BaseDeclarativeTool<
   }
 
   protected override validateToolParamValues(
-    params: WebFetchToolParams,
+    params: GoogleWebFetchToolParams,
   ): string | null {
     if (!params.prompt || params.prompt.trim() === '') {
       return "The 'prompt' parameter cannot be empty and must contain URL(s) and instructions.";
@@ -413,9 +417,9 @@ export class WebFetchTool extends BaseDeclarativeTool<
   }
 
   protected createInvocation(
-    params: WebFetchToolParams,
+    params: GoogleWebFetchToolParams,
     messageBus?: MessageBus,
-  ): ToolInvocation<WebFetchToolParams, ToolResult> {
-    return new WebFetchToolInvocation(this.config, params, messageBus);
+  ): ToolInvocation<GoogleWebFetchToolParams, ToolResult> {
+    return new GoogleWebFetchToolInvocation(this.config, params, messageBus);
   }
 }
