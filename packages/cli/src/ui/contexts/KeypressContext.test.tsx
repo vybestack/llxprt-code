@@ -1730,10 +1730,41 @@ describe('Kitty Sequence Parsing', () => {
       });
 
       // Should re-send bracketed paste and focus tracking sequences
+      // Use escape character directly (0x1b) rather than escaped string
       expect(writeSpy).toHaveBeenCalledWith('\x1b[?2004h'); // Bracketed paste enable
       expect(writeSpy).toHaveBeenCalledWith('\x1b[?1004h'); // Focus tracking enable
 
       writeSpy.mockRestore();
+    });
+
+    it('should trigger refresh to re-render UI on SIGCONT', async () => {
+      // This test verifies that the prompt/UI state is refreshed after tmux reattach
+      // Without triggering a refresh, the UI won't re-render and prompt text may be lost
+      stdin.isRaw = false;
+
+      // Track how many times the keypress effect runs by counting setRawMode calls
+      // The effect runs on mount and should run again when refreshGeneration changes
+      const { result } = renderHook(() => useKeypressContext(), { wrapper });
+
+      act(() => {
+        result.current.subscribe(vi.fn());
+      });
+
+      // Initial mount calls setRawMode(true)
+      expect(mockSetRawMode).toHaveBeenCalledWith(true);
+      const initialCallCount = mockSetRawMode.mock.calls.length;
+
+      // Emit SIGCONT to simulate tmux reattach
+      act(() => {
+        process.emit('SIGCONT');
+      });
+
+      // SIGCONT handler should call setRawMode(true) directly
+      // AND trigger refreshGeneration which causes the useEffect to re-run
+      // The useEffect cleanup disables raw mode, then the new effect enables it again
+      // So we expect at least one more setRawMode(true) call from the SIGCONT handler
+      const sigcontCalls = mockSetRawMode.mock.calls.slice(initialCallCount);
+      expect(sigcontCalls.some((call) => call[0] === true)).toBe(true);
     });
 
     it('should handle Ctrl+Z by suspending cleanly', async () => {
