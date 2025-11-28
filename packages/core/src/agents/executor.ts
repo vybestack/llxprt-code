@@ -31,7 +31,7 @@ import { LSTool } from '../tools/ls.js';
 import { MemoryTool } from '../tools/memoryTool.js';
 import { ReadFileTool } from '../tools/read-file.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
-import { WebSearchTool } from '../tools/web-search.js';
+import { GoogleWebSearchTool } from '../tools/google-web-search.js';
 import type {
   AgentDefinition,
   AgentInputs,
@@ -765,7 +765,7 @@ Important Rules:
       GlobTool.Name,
       ReadManyFilesTool.Name,
       MemoryTool.Name,
-      WebSearchTool.Name,
+      GoogleWebSearchTool.Name,
     ]);
     for (const tool of toolRegistry.getAllTools()) {
       if (!allowlist.has(tool.name)) {

@@ -39,19 +39,45 @@ export function isPrivateIp(url: string): boolean {
 export async function fetchWithTimeout(
   url: string,
   timeout: number,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
+  const onAbort = () => {
+    clearTimeout(timeoutId);
+    controller.abort();
+  };
+
+  // If an external signal is provided, listen to it
+  if (signal) {
+    if (signal.aborted) {
+      clearTimeout(timeoutId);
+      controller.abort();
+    } else {
+      signal.addEventListener('abort', onAbort);
+    }
+  }
+
   try {
     const response = await fetch(url, { signal: controller.signal });
     return response;
-  } catch (error) {
-    if (isNodeError(error) && error.code === 'ABORT_ERR') {
+  } catch (error: unknown) {
+    if (
+      (isNodeError(error) && error.code === 'ABORT_ERR') ||
+      (error instanceof Error && error.name === 'AbortError')
+    ) {
+      // Check if it was our timeout or the external signal
+      if (signal?.aborted) {
+        throw new FetchError('Request aborted by user', 'ABORT_ERR');
+      }
       throw new FetchError(`Request timed out after ${timeout}ms`, 'ETIMEDOUT');
     }
     throw new FetchError(getErrorMessage(error));
   } finally {
     clearTimeout(timeoutId);
+    if (signal) {
+      signal.removeEventListener('abort', onAbort);
+    }
   }
 }

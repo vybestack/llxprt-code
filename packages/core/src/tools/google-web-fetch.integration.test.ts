@@ -5,15 +5,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { WebFetchTool } from './web-fetch.js';
+import { GoogleWebFetchTool } from './google-web-fetch.js';
 import { Config } from '../config/config.js';
 import { IProvider } from '../providers/IProvider.js';
 import { IProviderManager } from '../providers/IProviderManager.js';
 import { ContentGeneratorConfig } from '../core/contentGenerator.js';
 import * as fetchUtils from '../utils/fetch.js';
 
-describe('WebFetchTool Integration Tests', () => {
-  let webFetchTool: WebFetchTool;
+describe('GoogleWebFetchTool Integration Tests', () => {
+  let webFetchTool: GoogleWebFetchTool;
   let mockConfig: Config;
   let mockAbortSignal: AbortSignal;
   let mockProviderManager: IProviderManager;
@@ -75,7 +75,7 @@ describe('WebFetchTool Integration Tests', () => {
       getProxy: vi.fn().mockReturnValue(null),
     } as unknown as Config;
 
-    webFetchTool = new WebFetchTool(mockConfig);
+    webFetchTool = new GoogleWebFetchTool(mockConfig);
     mockAbortSignal = new AbortController().signal;
   });
 

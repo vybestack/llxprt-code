@@ -57,7 +57,7 @@ export interface WebSearchToolResult extends ToolResult {
 /**
  * Tool invocation for performing web searches using Google Search via the Gemini API.
  */
-export class WebSearchToolInvocation extends BaseToolInvocation<
+export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
   WebSearchToolParams,
   WebSearchToolResult
 > {
