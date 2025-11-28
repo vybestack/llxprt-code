@@ -85,10 +85,16 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     let url = urls[0];
 
     // Convert GitHub blob URL to raw URL
-    if (url.includes('github.com') && url.includes('/blob/')) {
-      url = url
-        .replace('github.com', 'raw.githubusercontent.com')
-        .replace('/blob/', '/');
+    // Convert GitHub blob URL to raw URL
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.hostname === 'github.com' && url.includes('/blob/')) {
+        url = url
+          .replace('github.com', 'raw.githubusercontent.com')
+          .replace('/blob/', '/');
+      }
+    } catch (_) {
+      // Ignore invalid URLs, they will be caught by fetchWithTimeout
     }
 
     try {
@@ -149,10 +155,15 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     // Perform GitHub URL conversion here to differentiate between user-provided
     // URL and the actual URL to be fetched.
     const urls = extractUrls(this.params.prompt).map((url) => {
-      if (url.includes('github.com') && url.includes('/blob/')) {
-        return url
-          .replace('github.com', 'raw.githubusercontent.com')
-          .replace('/blob/', '/');
+      try {
+        const urlObj = new URL(url);
+        if (urlObj.hostname === 'github.com' && url.includes('/blob/')) {
+          return url
+            .replace('github.com', 'raw.githubusercontent.com')
+            .replace('/blob/', '/');
+        }
+      } catch (_) {
+        // Ignore invalid URLs
       }
       return url;
     });

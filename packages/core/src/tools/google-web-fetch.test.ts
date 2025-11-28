@@ -115,6 +115,26 @@ describe('GoogleWebFetchTool', () => {
       });
     });
 
+    it('should NOT convert malicious urls containing github.com and /blob/', async () => {
+      const tool = new GoogleWebFetchTool(mockConfig);
+      const maliciousUrl = 'https://evil.com/github.com/blob/malware';
+      const params = {
+        prompt: `fetch ${maliciousUrl}`,
+      };
+      const invocation = tool.build(params);
+      const confirmationDetails = await invocation.shouldConfirmExecute(
+        new AbortController().signal,
+      );
+
+      expect(confirmationDetails).toEqual({
+        type: 'info',
+        title: 'Confirm Web Fetch',
+        prompt: `fetch ${maliciousUrl}`,
+        urls: [maliciousUrl], // Should remain unchanged
+        onConfirm: expect.any(Function),
+      });
+    });
+
     it('should return false if approval mode is AUTO_EDIT', async () => {
       vi.spyOn(mockConfig, 'getApprovalMode').mockReturnValue(
         ApprovalMode.AUTO_EDIT,
