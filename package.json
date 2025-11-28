@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "engines": {
     "node": ">=20"
   },
