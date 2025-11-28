@@ -253,8 +253,11 @@ export const TOOL_DEFAULTS: Record<string, string> = {
   'tools/todo-read.md': loadMarkdownFile('tools/todo-read.md'),
   'tools/todo-write.md': loadMarkdownFile('tools/todo-write.md'),
   'tools/todo-pause.md': loadMarkdownFile('tools/todo-pause.md'),
-  'tools/web-fetch.md': loadMarkdownFile('tools/web-fetch.md'),
-  'tools/web-search.md': loadMarkdownFile('tools/web-search.md'),
+  'tools/google-web-fetch.md': loadMarkdownFile('tools/google-web-fetch.md'),
+  'tools/direct-web-fetch.md': loadMarkdownFile('tools/direct-web-fetch.md'),
+  'tools/code-search.md': loadMarkdownFile('tools/code-search.md'),
+  'tools/google-web-search.md': loadMarkdownFile('tools/google-web-search.md'),
+  'tools/exa-web-search.md': loadMarkdownFile('tools/exa-web-search.md'),
   'tools/list-subagents.md': loadMarkdownFile('tools/list-subagents.md'),
   'tools/task.md': loadMarkdownFile('tools/task.md'),
 };

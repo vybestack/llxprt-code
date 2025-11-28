@@ -69,4 +69,11 @@ export enum ToolErrorType {
 
   // WebSearch-specific Errors
   WEB_SEARCH_FAILED = 'web_search_failed',
+
+  // CodeSearch-specific Errors
+  SEARCH_ERROR = 'search_error',
+
+  // WebFetch-specific Errors (Direct)
+  FETCH_ERROR = 'fetch_error',
+  INVALID_ARGUMENT = 'invalid_argument',
 }
