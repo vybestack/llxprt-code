@@ -1443,6 +1443,83 @@ export class CoreToolScheduler {
       }
     }
   }
+
+  /**
+   * Synchronously cancels all queued and active tool calls in the scheduler.
+   * This updates the status of tracked tools to 'cancelled'.
+   * Note: The actual async execution of tools is interrupted by the AbortSignal
+   * passed during scheduling, which the caller is responsible for aborting.
+   */
+  cancelAll(): void {
+    // 1. Cancel all queued requests
+    while (this.requestQueue.length > 0) {
+      const item = this.requestQueue.shift();
+      if (item) {
+        item.reject(new Error('Tool call cancelled by user.'));
+      }
+    }
+
+    // 2. Cancel all active tool calls
+    this.toolCalls = this.toolCalls.map((call) => {
+      if (
+        call.status === 'success' ||
+        call.status === 'error' ||
+        call.status === 'cancelled'
+      ) {
+        return call;
+      }
+
+      // For awaiting_approval, we need to clean up pending confirmations
+      if (call.status === 'awaiting_approval') {
+        const waitingCall = call as WaitingToolCall;
+        if (waitingCall.confirmationDetails.correlationId) {
+          this.pendingConfirmations.delete(
+            waitingCall.confirmationDetails.correlationId,
+          );
+        }
+      }
+
+      // Create a cancelled tool call
+      const cancelledCall: CancelledToolCall = {
+        status: 'cancelled',
+        request: call.request,
+        response: {
+          callId: call.request.callId,
+          responseParts: [
+            {
+              functionCall: {
+                id: call.request.callId,
+                name: call.request.name,
+                args: call.request.args,
+              },
+            },
+            {
+              functionResponse: {
+                id: call.request.callId,
+                name: call.request.name,
+                response: {
+                  error: 'Tool call cancelled by user.',
+                },
+              },
+            },
+          ],
+          resultDisplay: undefined,
+          error: undefined,
+          errorType: undefined,
+          agentId: call.request.agentId ?? DEFAULT_AGENT_ID,
+        },
+        tool: call.tool,
+        invocation: call.invocation,
+        durationMs: call.startTime ? Date.now() - call.startTime : undefined,
+        outcome: ToolConfirmationOutcome.Cancel,
+      };
+
+      return cancelledCall;
+    });
+
+    this.notifyToolCallsUpdate();
+    this.checkAndNotifyCompletion();
+  }
 }
 
 import { normalizeToolName } from '../tools/toolNameUtils.js';
