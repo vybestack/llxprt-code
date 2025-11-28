@@ -16,6 +16,9 @@ This document defines how to create foolproof implementation plans that prevent 
 6. **No Reverse Testing** - Tests NEVER check for NotYetImplemented or stub behavior
 7. **Modify, Don't Duplicate** - Always UPDATE existing files, never create parallel versions
 8. **NO ISOLATED FEATURES** - Every feature MUST be integrated into the existing system, not built in isolation
+9. **Integration-First Testing** - Integration tests written BEFORE unit tests to verify component contracts
+10. **Preflight Verification** - All assumptions verified BEFORE implementation begins
+11. **Semantic over Structural** - Verify features WORK, not just that files/markers exist
 
 ---
 
@@ -328,6 +331,111 @@ const LoginRequestSchema = z.object({
 
 ---
 
+## Phase 0.5: Preflight Verification (MANDATORY)
+
+**PURPOSE**: Verify ALL assumptions before writing any code. This phase prevents the most common planning failures: missing dependencies, wrong types, and impossible call patterns.
+
+### Why This Phase Exists
+
+Historical analysis of plan failures shows that 60%+ of remediation work traces back to incorrect assumptions made during planning:
+- Dependencies assumed to exist but not installed
+- Type interfaces assumed to match actual code
+- Call patterns assumed possible but architecturally blocked
+- Test infrastructure assumed present but missing
+
+### Required Verifications
+
+#### 1. Dependency Verification
+```bash
+# For each library referenced in the plan:
+npm ls <dependency-name>    # Must show installed version
+grep -r "<dependency>" package.json  # Must find entry
+
+# Example:
+npm ls fast-check           # Verify testing library exists
+npm ls zod                  # Verify validation library exists
+```
+
+**If any dependency is missing**: STOP. Update the plan to either:
+- Add the dependency installation as Phase 0.6
+- Remove reliance on the missing dependency
+
+#### 2. Type/Interface Verification
+```bash
+# For each type referenced in the plan, verify it exists and matches expectations:
+grep -A 30 "interface <InterfaceName>" packages/*/src/**/*.ts
+
+# Example:
+grep -A 20 "interface BootstrapRuntimeState" packages/cli/src/config/profileBootstrap.ts
+# Expected: providerName, modelName, warnings
+# Verify this MATCHES what the plan says
+```
+
+**If types don't match plan assumptions**: STOP. Update the plan to use actual types.
+
+#### 3. Call Path Verification
+```bash
+# Verify the code paths described in the plan actually exist:
+grep -r "<functionName>" packages/*/src --include="*.ts"
+
+# Example:
+grep -r "prepareRuntimeForProfile" packages/cli/src --include="*.ts"
+# Verify: Called from where? Returns what? Takes what params?
+```
+
+**If call paths are impossible**: STOP. Redesign the plan.
+
+#### 4. Test Infrastructure Verification
+```bash
+# Verify test files exist for components being modified:
+ls packages/<package>/src/<path>/__tests__/
+
+# Verify test patterns:
+grep -r "describe\|it\|test" packages/<package>/src/<path>/__tests__/*.test.ts | head -5
+
+# Verify test framework setup:
+npm run test -- --listTests | grep "<component>"
+```
+
+**If test infrastructure is missing**: Add a phase to create it BEFORE implementation.
+
+### Preflight Verification Checklist
+
+Create `plan/00a-preflight-verification.md` with:
+
+```markdown
+# Preflight Verification Results
+
+## Dependencies Verified
+- [ ] `<dep1>`: `npm ls <dep1>` output: [paste]
+- [ ] `<dep2>`: `npm ls <dep2>` output: [paste]
+
+## Types Verified
+- [ ] `<TypeName>`: Actual definition matches plan? [yes/no]
+  - Expected: [what plan says]
+  - Actual: [what code shows]
+
+## Call Paths Verified
+- [ ] `<function>`: Can be called from `<caller>`? [yes/no]
+  - Evidence: [grep output]
+
+## Test Infrastructure Verified
+- [ ] Test file exists: `<path>/__tests__/<file>.test.ts`
+- [ ] Test patterns work: [sample output]
+
+## Blocking Issues Found
+[List any issues that require plan modification before proceeding]
+```
+
+### Verification Gate
+
+**This phase MUST pass before ANY implementation phase begins.**
+- If ANY verification fails, update the plan FIRST
+- Do NOT proceed with "we'll fix it later" mentality
+- The coordinator MUST review preflight results before approving Phase 1
+
+---
+
 ## Phase 1: Analysis Phase
 
 ### Worker Launch:
@@ -401,6 +509,121 @@ DO NOT write actual TypeScript, only numbered pseudocode
 - No actual implementation code
 - Clear algorithm documentation
 - All error paths defined
+
+### Contract-First Pseudocode Requirements (MANDATORY)
+
+Every pseudocode file MUST include three sections:
+
+#### 1. Interface Contracts
+
+```typescript
+// INPUTS this component receives:
+interface ChatServiceInput {
+  message: string;
+  conversationId: string;
+}
+
+// OUTPUTS this component produces:
+interface ChatServiceOutput {
+  response: string;
+  tokens_used: number;
+}
+
+// DEPENDENCIES this component requires (NEVER stubbed):
+interface Dependencies {
+  openaiService: OpenAIService; // Real dependency, injected
+  todoStore: TodoStore; // Real dependency, injected
+}
+```
+
+#### 2. Integration Points (Line-by-Line)
+
+```
+Line 15: CALL openaiService.complete(prompt)
+         - openaiService MUST be injected, not hardcoded
+         - Return value MUST be awaited (async)
+         - Errors MUST propagate, not be swallowed
+
+Line 23: EMIT event to messagebus('chat.response', response)
+         - EventBus MUST be injected dependency
+         - Event MUST match schema in events/chat.schema.ts
+```
+
+#### 3. Anti-Pattern Warnings
+
+```
+[ERROR] DO NOT: return "Hello, I'm your assistant"  // Hardcoded response
+[OK] DO: return await this.openaiService.complete(prompt)
+
+[ERROR] DO NOT: const response = "TODO: implement"  // Deferred implementation
+[OK] DO: throw new NotImplementedError('ChatService.respond')
+
+[ERROR] DO NOT: this.mockDb.save(data)  // Test double in production
+[OK] DO: await this.database.save(data)  // Real injected dependency
+```
+
+### Why This Matters
+
+Historical failures show pseudocode that "describes behavior" leads to implementations that work in isolation but fail on integration. Contract-first pseudocode forces explicit definition of:
+
+1. What data flows between components
+2. What each component expects as input
+3. What each component produces as output
+4. Which dependencies are real vs test doubles
+
+---
+
+## Phase 2.5: Integration Contract Definition (RECOMMENDED)
+
+For complex features involving 3+ components, add an integration contract phase BEFORE implementation.
+
+### Required Artifacts
+
+#### 1. Component Interaction Diagram (Mermaid REQUIRED)
+
+```mermaid
+sequenceDiagram
+    participant CLI as CLI Parser
+    participant Boot as profileBootstrap
+    participant Apply as profileApplication
+
+    CLI->>Boot: parseBootstrapArgs(argv)
+    Boot->>Boot: Extract --profile JSON
+    Boot->>Apply: prepareRuntimeForProfile(json)
+    Apply-->>Boot: BootstrapRuntimeState
+    Boot-->>CLI: RuntimeConfig
+```
+
+#### 2. Interface Boundary Tests
+
+Tests that verify ONLY the contract between components:
+
+```typescript
+describe('Integration: CLI → Bootstrap', () => {
+  it('passes profileJson from CLI to bootstrap', () => {
+    // This test verifies the BOUNDARY, not implementation details
+    const mockBootstrap = vi.fn();
+    runCLI(['--profile', '{"x":1}'], { bootstrap: mockBootstrap });
+    expect(mockBootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({ profileJson: '{"x":1}' }),
+    );
+  });
+});
+```
+
+#### 3. Lifecycle Documentation
+
+Document the ORDER in which components are called:
+
+```markdown
+1. CLI parses `--profile` argument (SYNC)
+2. Bootstrap validates JSON syntax (SYNC)
+3. Bootstrap calls profileApplication (ASYNC)
+4. profileApplication returns state (ASYNC)
+5. Bootstrap returns to CLI (ASYNC)
+
+WARNING: CRITICAL: Step 3 MUST be awaited. Fire-and-forget will break token persistence.
+```
 
 ---
 
@@ -734,6 +957,35 @@ it('should integrate with payment system', async () => {
 // Creating SettingsServiceNew.ts alongside SettingsService.ts
 ```
 
+### 3.5 Deferred Implementation Detection (MANDATORY after impl phases)
+
+After ANY implementation phase, the verification phase MUST scan for deferred work patterns:
+
+```bash
+# MANDATORY: Run this check after every implementation phase
+grep -rn -E "(TODO|FIXME|HACK|STUB|XXX|TEMPORARY|TEMP|WIP)" packages/*/src --include="*.ts" | grep -v node_modules | grep -v ".test.ts"
+
+# MANDATORY: Detect "in a real" / "in production" / "ideally" cop-outs
+grep -rn -E "(in a real|in production|ideally|for now|placeholder|not yet|will be|should be)" packages/*/src --include="*.ts" | grep -v node_modules | grep -v ".test.ts"
+
+# MANDATORY: Detect empty/trivial implementations
+grep -rn -E "return \[\]|return \{\}|return null|return undefined|throw new Error\('Not" packages/*/src --include="*.ts" | grep -v node_modules | grep -v ".test.ts"
+```
+
+**If ANY of these patterns are found in implemented code (not stubs), the phase FAILS.**
+
+Common Claude fraud patterns to detect:
+
+| Pattern                  | Example                               | Why It's Fraud                |
+| ------------------------ | ------------------------------------- | ----------------------------- |
+| `// TODO: implement`     | Left in "implemented" code            | Work was deferred, not done   |
+| `// HACK: temporary fix` | Quick workaround                      | Real solution not implemented |
+| `// In a real system...` | Comment explaining what SHOULD happen | Admission of incomplete work  |
+| `return []`              | Empty array return                    | Fake implementation           |
+| `// placeholder`         | Marker for future work                | Work was skipped              |
+| `// STUB`                | Left after impl phase                 | Stub wasn't replaced          |
+| `// for now`             | Temporary solution                    | Permanent hack incoming       |
+
 ### 4. Behavioral Contract Verification
 
 **Required**: TypeScript-based verification tools in `verification/` directory:
@@ -871,6 +1123,186 @@ export function validatePropertyTests(testDir: string): ValidationResult {
   return { valid: true };
 }
 ```
+
+### 7. Semantic Verification Checklist (MANDATORY for all verification phases)
+
+**CRITICAL**: Structural verification (files exist, markers present) catches only 20% of fraud. The verifier MUST go beyond markers and actually verify the behavior exists.
+
+#### Verification Phase Mandate
+
+The verification worker MUST:
+
+1. **READ the actual implementation code** - not just check for file existence
+2. **TRACE the code path** - follow the logic from entry point to result
+3. **VERIFY behavior matches requirement** - not just that something was written
+4. **IDENTIFY missing pieces** - what should be there but isn't?
+5. **BLOCK progression** if implementation is incomplete or fraudulent
+
+#### Questions the Verifier MUST Answer
+
+Before marking a phase complete, the verifier must answer YES to ALL of these:
+
+```markdown
+## Behavioral Verification Questions
+
+1. **Does the code DO what the requirement says?**
+   - [ ] Read the requirement text
+   - [ ] Read the implementation
+   - [ ] Can you trace HOW the requirement is fulfilled?
+   - If you can't explain the mechanism, it's not implemented.
+
+2. **Is this a REAL implementation or a placeholder?**
+   - [ ] Run deferred implementation detection (grep for TODO/HACK/STUB/etc)
+   - [ ] Check for empty returns (return [], return {}, return null)
+   - [ ] Look for "will be implemented" comments
+   - If any found, FAIL the phase.
+
+3. **Does the test actually TEST the behavior?**
+   - [ ] Read the test assertions
+   - [ ] Would the test fail if the implementation was removed?
+   - [ ] Does the test verify OUTPUTS, not just that code ran?
+   - If test would pass with empty implementation, it's fraud.
+
+4. **Is the feature INTEGRATED, not isolated?**
+   - [ ] Is the new code called from existing code paths?
+   - [ ] Can a user actually trigger this feature?
+   - [ ] Is there a path from UI/CLI/API to this code?
+   - If code exists but is unreachable, it's incomplete.
+
+5. **Are there obvious gaps?**
+   - [ ] Error handling implemented?
+   - [ ] Edge cases covered?
+   - [ ] Cleanup/disposal handled?
+   - List any gaps found and require fixes before proceeding.
+```
+
+#### Feature Actually Works
+
+```bash
+# Manual test command (run and paste actual output):
+node scripts/start.js --profile '{"provider":"openai","model":"gpt-4"}'
+# Expected: Starts with openai/gpt-4 active
+# Actual: [PASTE OUTPUT HERE]
+
+# The verifier MUST run this command and confirm expected behavior
+```
+
+#### Integration Points Verified
+
+```markdown
+- [ ] Caller component passes correct data type (verified by reading both files)
+- [ ] Callee component receives and processes it (verified by tracing call)
+- [ ] Return value flows back correctly (verified by checking usage)
+- [ ] Error handling works at boundaries (verified by inducing error)
+```
+
+#### Lifecycle Verified
+
+```markdown
+- [ ] Components initialize in correct order
+- [ ] Async operations are properly awaited (no fire-and-forget)
+- [ ] Cleanup/disposal happens correctly
+- [ ] No race conditions in concurrent access
+```
+
+#### Edge Cases Verified
+
+```markdown
+- [ ] Empty input handled gracefully
+- [ ] Invalid input rejected with clear error message
+- [ ] Boundary values work correctly
+- [ ] Resource limits respected (memory, file handles, connections)
+```
+
+### 8. Vertical Slice Testing Strategy
+
+**The old approach (unit-first, integration-last) is DEPRECATED because it discovers integration issues too late.**
+
+#### Old Approach (AVOID)
+
+1. Test Component A in isolation with unit tests
+2. Test Component B in isolation with unit tests
+3. Write integration test at the end (discovers fundamental contract mismatches too late)
+
+#### New Approach: Vertical Slice (REQUIRED for features with 3+ components)
+
+Integration tests and unit tests work TOGETHER, but integration tests are DEFINED first to establish the contract:
+
+1. **Create stubs** for Component A and B (they compile but throw NotImplementedError)
+2. **Write integration test** that exercises A -> B flow (test fails because stubs don't work)
+3. **Write unit tests for A**, then implement A (A's unit tests pass, integration still fails)
+4. **Write unit tests for B**, then implement B (B's unit tests pass, integration NOW passes)
+5. Integration test passing = feature works end-to-end
+
+#### Why Both Test Types Are Necessary
+
+| Test Type       | Purpose                                                          | When Written                            |
+| --------------- | ---------------------------------------------------------------- | --------------------------------------- |
+| **Integration** | Verify components connect correctly, data flows, contracts match | FIRST (after stubs exist)               |
+| **Unit**        | Verify edge cases, error handling, internal logic, performance   | During implementation of each component |
+
+**Integration tests CANNOT replace unit tests because:**
+
+- Edge cases are impractical to trigger through full stack
+- Error handling paths need isolated verification
+- Performance-critical logic needs focused benchmarks
+- Internal algorithms need exhaustive input coverage
+
+**Unit tests CANNOT replace integration tests because:**
+
+- Mocked dependencies hide contract mismatches
+- Lifecycle/ordering issues only appear in real composition
+- Data transformation bugs compound across boundaries
+
+#### Example: Chat + OpenAI + Todo System
+
+**FIRST TEST (write this BEFORE any component implementation):**
+
+```typescript
+describe('Chat System Integration', () => {
+  it('creates todo from natural language via LLM', async () => {
+    // This test exercises the ENTIRE flow
+    const system = await createChatSystem({
+      openai: new OpenAIService(testConfig), // REAL service with mocked HTTP
+      todoStore: new TodoStore(),
+    });
+
+    // Mock the OpenAI API response (HTTP level, not service level)
+    mockOpenAIHTTP.mockResponse({
+      tool_calls: [{ name: 'create_todo', arguments: { title: 'Buy milk' } }],
+    });
+
+    // Execute the chat
+    await system.handleMessage('Remind me to buy milk');
+
+    // Verify end-to-end behavior
+    expect(system.todoStore.getAll()).toContainEqual(
+      expect.objectContaining({ title: 'Buy milk' }),
+    );
+  });
+});
+```
+
+#### Practical Workflow for TDD Phases
+
+Given the existing stub -> TDD -> impl phase structure:
+
+```
+Phase 03: Stub A          - Create stub that compiles, throws NotImplementedError
+Phase 04: Stub B          - Create stub that compiles, throws NotImplementedError
+Phase 05: Integration TDD - Write integration test (A -> B), fails on stubs
+Phase 06: Unit TDD A      - Write unit tests for A's internal logic
+Phase 07: Impl A          - Implement A, unit tests pass, integration still fails
+Phase 08: Unit TDD B      - Write unit tests for B's internal logic
+Phase 09: Impl B          - Implement B, unit tests pass, integration NOW passes
+Phase 10: Verification    - Run full suite, verify semantic correctness
+```
+
+**Key insight**: Integration test is written AFTER stubs exist but BEFORE unit tests. This ensures:
+
+1. Stubs can be instantiated (they compile)
+2. The contract between components is defined before implementation details
+3. Unit tests focus on internal logic, not on guessing how components connect
 
 ---
 

@@ -1027,6 +1027,11 @@ export function KeypressProvider({
       process.stdout.write(ENABLE_BRACKETED_PASTE);
       process.stdout.write(ENABLE_FOCUS_TRACKING);
       enableSupportedProtocol();
+
+      // Trigger a refresh to ensure the UI re-renders with proper prompt state
+      // This is necessary because tmux reattach can cause the terminal to lose
+      // the current display state, including the prompt text and cursor position
+      setRefreshGeneration((prev) => prev + 1);
     };
 
     process.on('SIGCONT', handleSigcont);
