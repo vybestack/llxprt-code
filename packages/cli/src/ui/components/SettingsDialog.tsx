@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import {
@@ -216,6 +216,17 @@ export function SettingsDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedScope, settings, globalPendingChanges]);
 
+  const dynamicToolSettings = useMemo(() => {
+    if (
+      subSettingsMode.isActive &&
+      subSettingsMode.parentKey === 'coreToolSettings' &&
+      config
+    ) {
+      return generateDynamicToolSettings(config);
+    }
+    return {};
+  }, [subSettingsMode.isActive, subSettingsMode.parentKey, config]);
+
   const generateSettingsItems = () => {
     if (subSettingsMode.isActive) {
       return generateSubSettingsItems(subSettingsMode.parentKey);
@@ -228,9 +239,8 @@ export function SettingsDialog({
     const parentDefinition = getSettingDefinition(parentKey);
     let subSettings = parentDefinition?.subSettings || {};
 
-    // If this is the coreToolSettings, generate dynamic tool settings
-    if (parentKey === 'coreToolSettings' && config) {
-      const dynamicToolSettings = generateDynamicToolSettings(config);
+    // If this is the coreToolSettings, use the memoized dynamic settings
+    if (parentKey === 'coreToolSettings') {
       subSettings = { ...subSettings, ...dynamicToolSettings };
     }
 
@@ -721,14 +731,9 @@ export function SettingsDialog({
           ) {
             hasSubSettings = true;
           } else if (currentItem?.value === 'coreToolSettings' && config) {
-            // Special case: coreToolSettings has dynamic sub-settings
-            const dynamicToolSettings = generateDynamicToolSettings(config);
-            hasSubSettings = Object.keys(dynamicToolSettings).length > 0;
-
-            // Always show sub-settings for coreToolSettings, even if no tools found
-            if (Object.keys(dynamicToolSettings).length === 0) {
-              hasSubSettings = true;
-            }
+            // Special case: coreToolSettings always has sub-settings
+            // Avoid unnecessary computation by directly setting to true
+            hasSubSettings = true;
           }
 
           if (hasSubSettings) {
