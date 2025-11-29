@@ -70,6 +70,7 @@ import {
   uiTelemetryService,
   // IDE connection logging removed - telemetry disabled in llxprt
   SettingsService,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -509,8 +510,9 @@ export async function main() {
     }
 
     dynamicSettingsRegistry.register(fullDynamicSettings);
-    console.debug(
-      `[gemini] Registered ${Object.keys(fullDynamicSettings).length} dynamic settings`,
+    const logger = new DebugLogger('llxprt:gemini');
+    logger.log(
+      `Registered ${Object.keys(fullDynamicSettings).length} dynamic settings`,
     );
   } catch (error) {
     console.error('[gemini] Failed to register dynamic settings:', error);

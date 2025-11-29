@@ -115,11 +115,6 @@ export class FileTokenStorage extends BaseTokenStorage {
       return null;
     }
 
-    // Expiration check removed to allow UI to handle expired state
-    // if (this.isTokenExpired(credentials)) {
-    //   return null;
-    // }
-
     return credentials;
   }
 
