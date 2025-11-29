@@ -115,9 +115,10 @@ export class FileTokenStorage extends BaseTokenStorage {
       return null;
     }
 
-    if (this.isTokenExpired(credentials)) {
-      return null;
-    }
+    // Expiration check removed to allow UI to handle expired state
+    // if (this.isTokenExpired(credentials)) {
+    //   return null;
+    // }
 
     return credentials;
   }
@@ -168,9 +169,7 @@ export class FileTokenStorage extends BaseTokenStorage {
     const result = new Map<string, MCPOAuthCredentials>();
 
     for (const [serverName, credentials] of tokens) {
-      if (!this.isTokenExpired(credentials)) {
-        result.set(serverName, credentials);
-      }
+      result.set(serverName, credentials);
     }
 
     return result;
