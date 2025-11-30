@@ -58,7 +58,19 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   embeddedShellFocused: _embeddedShellFocused,
   availableTerminalHeightGemini: _availableTerminalHeightGemini,
 }) => {
-  const itemForDisplay = useMemo(() => escapeAnsiCtrlCodes(item), [item]);
+  const itemForDisplay = useMemo(() => {
+    // Skip sanitization for trusted system message types that may contain ANSI codes
+    // for coloring (e.g. from mcpCommand)
+    if (
+      item.type === 'info' ||
+      item.type === 'error' ||
+      item.type === 'warning' ||
+      item.type === 'oauth_url'
+    ) {
+      return item;
+    }
+    return escapeAnsiCtrlCodes(item);
+  }, [item]);
 
   return (
     <Box flexDirection="column" key={itemForDisplay.id}>

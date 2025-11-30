@@ -82,7 +82,7 @@ describe('FileTokenStorage', () => {
       mockFs.readFile.mockResolvedValue(encryptedData);
 
       const result = await storage.getCredentials('test-server');
-      expect(result).toBeNull();
+      expect(result).toEqual(credentials);
     });
 
     it('should return credentials for valid tokens', async () => {

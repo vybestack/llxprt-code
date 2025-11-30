@@ -12,6 +12,22 @@ import {
 } from './dynamicSettings.js';
 import type { SettingDefinition } from '../config/settingsSchema.js';
 
+// Mock DebugLogger
+const { mockLog } = vi.hoisted(() => ({
+  mockLog: vi.fn(),
+}));
+
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  return {
+    ...actual,
+    DebugLogger: vi.fn().mockImplementation(() => ({
+      log: mockLog,
+    })),
+  };
+});
+
 // Mock console methods to avoid noise in tests
 const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
@@ -240,6 +256,7 @@ describe('DynamicSettingsRegistry', () => {
 describe('generateDynamicToolSettings', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockConfig: any;
+  const originalEnv = process.env;
 
   const mockRegisteredTools = [
     {
@@ -288,6 +305,7 @@ describe('generateDynamicToolSettings', () => {
     vi.clearAllMocks();
     console.error = vi.fn();
     console.debug = vi.fn();
+    process.env = { ...originalEnv }; // Reset env vars
 
     mockConfig = {
       getToolRegistryInfo: vi.fn(() => ({
@@ -300,6 +318,7 @@ describe('generateDynamicToolSettings', () => {
   afterEach(() => {
     console.error = originalConsoleError;
     console.debug = originalConsoleDebug;
+    process.env = originalEnv;
   });
 
   it('should generate settings for registered tools', () => {
@@ -386,39 +405,39 @@ describe('generateDynamicToolSettings', () => {
     );
   });
 
-  it('should log debug information for registered tools', () => {
+  it('should log basic debug information', () => {
     generateDynamicToolSettings(mockConfig);
 
-    expect(console.debug).toHaveBeenCalledWith(
-      '[generateDynamicToolSettings] Processing 3 registered and 2 unregistered tools',
+    expect(mockLog).toHaveBeenCalledWith(
+      'Processing 3 registered and 2 unregistered tools',
     );
-    expect(console.debug).toHaveBeenCalledWith(
-      '[generateDynamicToolSettings]   ✅ REGISTERED: Read File',
+    expect(mockLog).toHaveBeenCalledWith('Final toolSettings count: 5');
+  });
+
+  it('should NOT log detailed tool info when DEBUG is not verbose', () => {
+    process.env.DEBUG = ''; // Ensure verbose is not set
+    generateDynamicToolSettings(mockConfig);
+
+    expect(mockLog).not.toHaveBeenCalledWith(
+      expect.stringContaining('✅ REGISTERED'),
     );
-    expect(console.debug).toHaveBeenCalledWith(
-      '[generateDynamicToolSettings]   ✅ REGISTERED: Write File',
-    );
-    expect(console.debug).toHaveBeenCalledWith(
-      '[generateDynamicToolSettings]   ✅ REGISTERED: Shell Command',
+    expect(mockLog).not.toHaveBeenCalledWith(
+      expect.stringContaining('🚫 UNREGISTERED'),
     );
   });
 
-  it('should log debug information for unregistered tools', () => {
+  it('should log detailed tool info when DEBUG includes verbose', () => {
+    process.env.DEBUG = 'verbose'; // Set verbose mode
     generateDynamicToolSettings(mockConfig);
 
-    expect(console.debug).toHaveBeenCalledWith(
-      '[generateDynamicToolSettings]   🚫 UNREGISTERED: Task - requires profile manager and subagent manager',
+    expect(mockLog).toHaveBeenCalledWith('✅ REGISTERED: Read File');
+    expect(mockLog).toHaveBeenCalledWith('✅ REGISTERED: Write File');
+    expect(mockLog).toHaveBeenCalledWith('✅ REGISTERED: Shell Command');
+    expect(mockLog).toHaveBeenCalledWith(
+      '🚫 UNREGISTERED: Task - requires profile manager and subagent manager',
     );
-    expect(console.debug).toHaveBeenCalledWith(
-      '[generateDynamicToolSettings]   🚫 UNREGISTERED: List Subagents - requires subagent manager',
-    );
-  });
-
-  it('should log final tool settings count', () => {
-    generateDynamicToolSettings(mockConfig);
-
-    expect(console.debug).toHaveBeenCalledWith(
-      '[generateDynamicToolSettings] Final toolSettings count: 5',
+    expect(mockLog).toHaveBeenCalledWith(
+      '🚫 UNREGISTERED: List Subagents - requires subagent manager',
     );
   });
 });
