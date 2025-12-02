@@ -778,7 +778,6 @@ describe('useCommandCompletion', () => {
         const textBuffer = useTextBufferForTest('// This is a line comment');
         const completion = useCommandCompletion(
           textBuffer,
-          testDirs,
           testRootDir,
           [],
           mockCommandContext,
@@ -804,7 +803,6 @@ describe('useCommandCompletion', () => {
         );
         const completion = useCommandCompletion(
           textBuffer,
-          testDirs,
           testRootDir,
           [],
           mockCommandContext,
@@ -830,7 +828,6 @@ describe('useCommandCompletion', () => {
         );
         const completion = useCommandCompletion(
           textBuffer,
-          testDirs,
           testRootDir,
           [],
           mockCommandContext,

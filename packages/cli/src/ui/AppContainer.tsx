@@ -1403,6 +1403,64 @@ export const AppContainer = (props: AppContainerProps) => {
   const { handleUserInputSubmit } = useTodoPausePreserver({
     controller: todoPauseController,
     updateTodos,
+  const contextFileNames = useMemo(() => {
+    const fromSettings = settings.merged.context?.fileName;
+    return fromSettings
+      ? Array.isArray(fromSettings)
+        ? fromSettings
+        : [fromSettings]
+      : getAllGeminiMdFilenames();
+  }, [settings.merged.context?.fileName]);
+  // Initial prompt handling
+  const initialPrompt = useMemo(() => config.getQuestion(), [config]);
+  const initialPromptSubmitted = useRef(false);
+  const geminiClient = config.getGeminiClient();
+
+  useEffect(() => {
+    if (activePtyId) {
+      try {
+        ShellExecutionService.resizePty(
+          activePtyId,
+          Math.floor(terminalWidth * SHELL_WIDTH_FRACTION),
+          Math.max(
+            Math.floor(availableTerminalHeight - SHELL_HEIGHT_PADDING),
+            1,
+          ),
+        );
+      } catch (e) {
+        // This can happen in a race condition where the pty exits
+        // right before we try to resize it.
+        if (
+          !(
+            e instanceof Error &&
+            e.message.includes('Cannot resize a pty that has already exited')
+          )
+        ) {
+          throw e;
+        }
+      }
+    }
+  }, [terminalWidth, availableTerminalHeight, activePtyId]);
+
+  useEffect(() => {
+    if (
+      initialPrompt &&
+      isConfigInitialized &&
+      !initialPromptSubmitted.current &&
+      !isAuthenticating &&
+      !isAuthDialogOpen &&
+      !isThemeDialogOpen &&
+      !isEditorDialogOpen &&
+      !showPrivacyNotice &&
+      geminiClient?.isInitialized?.()
+    ) {
+      handleFinalSubmit(initialPrompt);
+      initialPromptSubmitted.current = true;
+    }
+  }, [
+    initialPrompt,
+    isConfigInitialized,
+>>>>>>> 1689e9b67 (fix(cli): fix issue updating a component while rendering a different component (#14319))
     handleFinalSubmit,
     todos,
   });
