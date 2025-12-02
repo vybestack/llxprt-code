@@ -66,10 +66,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
       }
 
       const credentials = JSON.parse(data) as OAuthCredentials;
-
-      if (this.isTokenExpired(credentials)) {
-        return null;
-      }
+      this.validateCredentials(credentials);
 
       return credentials;
     } catch (error) {
@@ -163,9 +160,8 @@ export class KeychainTokenStorage extends BaseTokenStorage {
       for (const cred of credentials) {
         try {
           const data = JSON.parse(cred.password) as OAuthCredentials;
-          if (!this.isTokenExpired(data)) {
-            result.set(cred.account, data);
-          }
+          this.validateCredentials(data);
+          result.set(cred.account, data);
         } catch (error) {
           console.error(
             `Failed to parse credentials for ${cred.account}:`,

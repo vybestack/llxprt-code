@@ -74,6 +74,8 @@ export type TrackedToolCall =
   | TrackedCompletedToolCall
   | TrackedCancelledToolCall;
 
+export type CancelAllFn = () => void;
+
 export function useReactToolScheduler(
   onComplete: (
     schedulerId: symbol,
@@ -87,7 +89,7 @@ export function useReactToolScheduler(
   getPreferredEditor: () => EditorType | undefined,
   onEditorClose: () => void,
   onEditorOpen: () => void = () => {},
-): [TrackedToolCall[], ScheduleFn, MarkToolsAsSubmittedFn] {
+): [TrackedToolCall[], ScheduleFn, MarkToolsAsSubmittedFn, CancelAllFn] {
   const [toolCallsByScheduler, setToolCallsByScheduler] = useState<
     Map<symbol, TrackedToolCall[]>
   >(new Map());
@@ -337,7 +339,11 @@ export function useReactToolScheduler(
     [],
   );
 
-  return [toolCalls, schedule, markToolsAsSubmitted];
+  const cancelAllToolCalls = useCallback(() => {
+    scheduler.cancelAll();
+  }, [scheduler]);
+
+  return [toolCalls, schedule, markToolsAsSubmitted, cancelAllToolCalls];
 }
 
 /**

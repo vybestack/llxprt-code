@@ -1,5 +1,7 @@
-import type { Config } from '@vybestack/llxprt-code-core';
+import { DebugLogger, type Config } from '@vybestack/llxprt-code-core';
 import type { SettingDefinition } from '../config/settingsSchema.js';
+
+const logger = new DebugLogger('llxprt:dynamic-settings');
 
 type DynamicSettings = Record<string, SettingDefinition>;
 
@@ -103,9 +105,12 @@ export function generateDynamicToolSettings(
     const toolSettings: Record<string, SettingDefinition> = {};
     const toolRegistryInfo = config.getToolRegistryInfo();
 
-    console.debug(
-      `[generateDynamicToolSettings] Processing ${toolRegistryInfo.registered.length} registered and ${toolRegistryInfo.unregistered.length} unregistered tools`,
+    logger.log(
+      `Processing ${toolRegistryInfo.registered.length} registered and ${toolRegistryInfo.unregistered.length} unregistered tools`,
     );
+
+    // Detailed output only in verbose mode
+    const verboseDebug = process.env.DEBUG?.includes('verbose');
 
     // Process registered tools
     for (const { displayName } of toolRegistryInfo.registered) {
@@ -119,9 +124,9 @@ export function generateDynamicToolSettings(
         description: `Enable the ${displayName} tool`,
         showInDialog: true,
       };
-      console.debug(
-        `[generateDynamicToolSettings]   ✅ REGISTERED: ${displayName}`,
-      );
+      if (verboseDebug) {
+        logger.log(`✅ REGISTERED: ${displayName}`);
+      }
     }
 
     // Process unregistered tools with availability status
@@ -136,14 +141,12 @@ export function generateDynamicToolSettings(
         description: `${displayName} (unavailable: ${reason})`,
         showInDialog: true,
       };
-      console.debug(
-        `[generateDynamicToolSettings]   🚫 UNREGISTERED: ${displayName} - ${reason}`,
-      );
+      if (verboseDebug) {
+        logger.log(`🚫 UNREGISTERED: ${displayName} - ${reason}`);
+      }
     }
 
-    console.debug(
-      `[generateDynamicToolSettings] Final toolSettings count: ${Object.keys(toolSettings).length}`,
-    );
+    logger.log(`Final toolSettings count: ${Object.keys(toolSettings).length}`);
 
     return toolSettings;
   } catch (error) {

@@ -181,7 +181,7 @@ describe('KeychainTokenStorage', () => {
         };
         mockKeytar.getPassword.mockResolvedValue(JSON.stringify(expiredCreds));
         const result = await storage.getCredentials('test-server');
-        expect(result).toBeNull();
+        expect(result).toEqual(expiredCreds);
       });
 
       it('should throw if stored data is corrupted JSON', async () => {
@@ -304,10 +304,10 @@ describe('KeychainTokenStorage', () => {
         ]);
 
         const result = await storage.getAllCredentials();
-        expect(result.size).toBe(2);
+        expect(result.size).toBe(3);
         expect(result.get('test-server')).toEqual(validCredentials);
         expect(result.get('server2')).toEqual(creds2);
-        expect(result.has('expired-server')).toBe(false);
+        expect(result.get('expired-server')).toEqual(expiredCreds);
         expect(result.has('bad-server')).toBe(false);
         expect(result.has('invalid-server')).toBe(false);
       });

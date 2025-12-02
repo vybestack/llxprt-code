@@ -263,66 +263,70 @@ export const useGeminiStream = (
     return new GitService(config.getProjectRoot(), storage);
   }, [config, storage]);
 
-  const [toolCalls, scheduleToolCalls, markToolsAsSubmitted] =
-    useReactToolScheduler(
-      async (schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
-        if (completedToolCallsFromScheduler.length === 0) {
-          return;
-        }
+  const [
+    toolCalls,
+    scheduleToolCalls,
+    markToolsAsSubmitted,
+    cancelAllToolCalls,
+  ] = useReactToolScheduler(
+    async (schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
+      if (completedToolCallsFromScheduler.length === 0) {
+        return;
+      }
 
-        if (isPrimary) {
-          addItem(
-            mapTrackedToolCallsToDisplay(
-              completedToolCallsFromScheduler as TrackedToolCall[],
-            ),
-            Date.now(),
-          );
-
-          // Record tool calls with full metadata before sending responses.
-          try {
-            const currentModel =
-              config.getGeminiClient().getCurrentSequenceModel() ??
-              config.getModel();
-            config
-              .getGeminiClient()
-              .getChat()
-              .recordCompletedToolCalls(
-                currentModel,
-                completedToolCallsFromScheduler,
-              );
-          } catch (error) {
-            console.error(
-              `Error recording completed tool call information: ${error}`,
-            );
-          }
-
-          // Handle tool response submission immediately when tools complete
-          await handleCompletedTools(
-            completedToolCallsFromScheduler as TrackedToolCall[],
-          );
-          return;
-        }
-
-        const callIdsToMark = completedToolCallsFromScheduler.map(
-          (toolCall) => toolCall.request.callId,
-        );
-        if (callIdsToMark.length > 0) {
-          markToolsAsSubmitted(callIdsToMark);
-        }
-
+      if (isPrimary) {
         addItem(
           mapTrackedToolCallsToDisplay(
             completedToolCallsFromScheduler as TrackedToolCall[],
           ),
           Date.now(),
         );
-      },
-      config,
-      setPendingHistoryItem,
-      getPreferredEditor,
-      onEditorClose,
-      onEditorOpen,
-    );
+
+        // Record tool calls with full metadata before sending responses.
+        try {
+          const currentModel =
+            config.getGeminiClient().getCurrentSequenceModel() ??
+            config.getModel();
+          config
+            .getGeminiClient()
+            .getChat()
+            .recordCompletedToolCalls(
+              currentModel,
+              completedToolCallsFromScheduler,
+            );
+        } catch (error) {
+          console.error(
+            `Error recording completed tool call information: ${error}`,
+          );
+        }
+
+        // Handle tool response submission immediately when tools complete
+        await handleCompletedTools(
+          completedToolCallsFromScheduler as TrackedToolCall[],
+        );
+        return;
+      }
+
+      const callIdsToMark = completedToolCallsFromScheduler.map(
+        (toolCall) => toolCall.request.callId,
+      );
+      if (callIdsToMark.length > 0) {
+        markToolsAsSubmitted(callIdsToMark);
+      }
+
+      addItem(
+        mapTrackedToolCallsToDisplay(
+          completedToolCallsFromScheduler as TrackedToolCall[],
+        ),
+        Date.now(),
+      );
+    },
+    config,
+    setPendingHistoryItem,
+    getPreferredEditor,
+    onEditorClose,
+    onEditorOpen,
+  );
 
   const pendingToolCallGroupDisplay = useMemo(
     () =>
@@ -378,6 +382,11 @@ export const useGeminiStream = (
     }
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
+    if (abortControllerRef.current) {
+      // Synchronously clear the tool queue and mark active tools as cancelled in the UI.
+      // This prevents race conditions where late-arriving cancellation events might be missed.
+      cancelAllToolCalls();
+    }
     if (pendingHistoryItemRef.current) {
       flushPendingHistoryItem(Date.now());
     }
@@ -399,6 +408,7 @@ export const useGeminiStream = (
     onCancelSubmit,
     pendingHistoryItemRef,
     flushPendingHistoryItem,
+    cancelAllToolCalls,
   ]);
 
   useKeypress(
