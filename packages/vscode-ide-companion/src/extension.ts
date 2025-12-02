@@ -10,11 +10,7 @@ import semver from 'semver';
 import { IDEServer } from './ide-server.js';
 import { DiffContentProvider, DiffManager } from './diff-manager.js';
 import { createLogger } from './utils/logger.js';
-import {
-  detectIdeFromEnv,
-  IDE_DEFINITIONS,
-  type IdeInfo,
-} from '@vybestack/llxprt-code-core';
+import { detectIdeFromEnv, type IdeInfo } from '@vybestack/llxprt-code-core';
 
 const CLI_IDE_COMPANION_IDENTIFIER =
   'vybestack.llxprt-code-vscode-ide-companion';
@@ -26,8 +22,8 @@ export const DIFF_SCHEME = 'llxprt-diff';
  * In these environments the companion extension is installed and managed by the IDE instead of the user.
  */
 const MANAGED_EXTENSION_SURFACES: ReadonlySet<IdeInfo['name']> = new Set([
-  IDE_DEFINITIONS.firebasestudio.name,
-  IDE_DEFINITIONS.cloudshell.name,
+  'firebasestudio',
+  'cloudshell',
 ]);
 
 let ideServer: IDEServer;

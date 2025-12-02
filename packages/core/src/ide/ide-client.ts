@@ -137,7 +137,16 @@ export class IdeClient {
     // Use the connectionConfig that was fetched during getInstance()
     if (this.connectionConfig?.authToken) {
       this.authToken = this.connectionConfig.authToken;
+      logger.debug('Using auth token from connection config');
+    } else {
+      // Try to get auth token from environment after OAuth process
+      const envToken = process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'];
+      if (envToken) {
+        this.authToken = envToken;
+        logger.debug('Using auth token from environment variable');
+      }
     }
+
     const workspacePath =
       this.connectionConfig?.workspacePath ??
       process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'];
@@ -154,6 +163,9 @@ export class IdeClient {
 
     const portFromFile = this.connectionConfig?.port;
     if (portFromFile) {
+      logger.debug(
+        `Attempting to connect using port from file: ${portFromFile}`,
+      );
       const connected = await this.establishConnection(portFromFile);
       if (connected) {
         return;
@@ -162,6 +174,9 @@ export class IdeClient {
 
     const portFromEnv = this.getPortFromEnv();
     if (portFromEnv) {
+      logger.debug(
+        `Attempting to connect using port from environment: ${portFromEnv}`,
+      );
       const connected = await this.establishConnection(portFromEnv);
       if (connected) {
         return;
@@ -361,24 +376,53 @@ export class IdeClient {
     | undefined
   > {
     if (!this.ideProcessInfo) {
+      logger.debug('No IDE process info available');
       return {};
     }
+
+    const portFilePath = path.join(
+      os.tmpdir(),
+      `llxprt-ide-server-${this.ideProcessInfo.pid}.json`,
+    );
+    const ppidPortFilePath = path.join(
+      os.tmpdir(),
+      `llxprt-ide-server-${process.ppid}.json`,
+    );
+
+    logger.debug(
+      `Looking for port files: ${portFilePath}, ${ppidPortFilePath}`,
+    );
+
+    let ideInfo;
     try {
-      const portFile = path.join(
-        os.tmpdir(),
-        `llxprt-ide-server-${this.ideProcessInfo.pid}.json`,
+      const portFileContents = await fs.promises.readFile(portFilePath, 'utf8');
+      ideInfo = JSON.parse(portFileContents);
+      logger.debug(
+        `Found port info in PID file: port=${ideInfo.port}, authToken=${ideInfo.authToken ? 'present' : 'missing'}`,
       );
-      const portFileContents = await fs.promises.readFile(portFile, 'utf8');
-      const configData = JSON.parse(portFileContents);
-      return {
-        port: configData?.port?.toString(),
-        workspacePath: configData?.workspacePath,
-        authToken: configData?.authToken,
-        ideInfo: configData?.ideInfo,
-      };
     } catch (_) {
-      return {};
+      logger.debug(`Port file not found at ${portFilePath}, trying PPID file`);
+      try {
+        const portFileContents = await fs.promises.readFile(
+          ppidPortFilePath,
+          'utf8',
+        );
+        ideInfo = JSON.parse(portFileContents);
+        logger.debug(
+          `Found port info in PPID file: port=${ideInfo.port}, authToken=${ideInfo.authToken ? 'present' : 'missing'}`,
+        );
+      } catch (_) {
+        logger.debug(`Failed to read PPID port file: ${ppidPortFilePath}`);
+        return {};
+      }
     }
+
+    return {
+      port: ideInfo?.port?.toString(),
+      workspacePath: ideInfo?.workspacePath,
+      authToken: ideInfo?.authToken,
+      ideInfo: ideInfo?.ideInfo,
+    };
   }
 
   private createProxyAwareFetch() {

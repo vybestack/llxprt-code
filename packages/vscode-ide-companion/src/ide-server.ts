@@ -34,6 +34,7 @@ class CORSError extends Error {
 const MCP_SESSION_ID_HEADER = 'mcp-session-id';
 const IDE_SERVER_PORT_ENV_VAR = 'LLXPRT_CODE_IDE_SERVER_PORT';
 const IDE_WORKSPACE_PATH_ENV_VAR = 'LLXPRT_CODE_IDE_WORKSPACE_PATH';
+const IDE_AUTH_TOKEN_ENV_VAR = 'LLXPRT_CODE_IDE_AUTH_TOKEN';
 
 interface WritePortAndWorkspaceArgs {
   context: vscode.ExtensionContext;
@@ -67,27 +68,40 @@ async function writePortAndWorkspace({
     workspacePath,
   );
 
-  const content = JSON.stringify({
-    port,
-    workspacePath,
-    ppid: process.ppid,
-    authToken,
-  });
-
-  log(`Writing port file to: ${portFile}`);
-  log(`Writing ppid port file to: ${ppidPortFile}`);
-
-  try {
-    await Promise.all([
-      fs.writeFile(portFile, content).then(() => fs.chmod(portFile, 0o600)),
-      fs
-        .writeFile(ppidPortFile, content)
-        .then(() => fs.chmod(ppidPortFile, 0o600)),
-    ]);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    log(`Failed to write port to file: ${message}`);
+  // Store the auth token so the CLI can authenticate
+  if (authToken) {
+    context.environmentVariableCollection.replace(
+      IDE_AUTH_TOKEN_ENV_VAR,
+      authToken,
+    );
   }
+
+  // Write the information to a temp file so that the client can connect
+  const content = JSON.stringify(
+    {
+      port,
+      workspacePath,
+      authToken,
+      ideInfo: {
+        name: 'vscode',
+        displayName: 'Visual Studio Code',
+        version: vscode.version,
+      },
+    },
+    undefined,
+    2,
+  );
+
+  await Promise.all([
+    fs
+      .writeFile(portFile, content)
+      .then(() => fs.chmod(portFile, 0o600))
+      .then(() => log(`Writing port file to: ${portFile}`)),
+    fs
+      .writeFile(ppidPortFile, content)
+      .then(() => fs.chmod(ppidPortFile, 0o600))
+      .then(() => log(`Writing ppid port file to: ${ppidPortFile}`)),
+  ]);
 }
 
 function sendIdeContextUpdateNotification(
@@ -344,13 +358,16 @@ export class IDEServer {
           this.port = address.port;
           this.portFile = path.join(
             os.tmpdir(),
-            `llxprt-ide-server-${this.port}.json`,
+            `llxprt-ide-server-${process.pid}.json`,
           );
           this.ppidPortFile = path.join(
             os.tmpdir(),
             `llxprt-ide-server-${process.ppid}.json`,
           );
           this.log(`IDE server listening on http://127.0.0.1:${this.port}`);
+          this.log(
+            `Writing port files: ${this.portFile}, ${this.ppidPortFile}`,
+          );
 
           if (this.authToken) {
             await writePortAndWorkspace({
