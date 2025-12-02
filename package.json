@@ -111,9 +111,11 @@
     "yargs": "^18.0.0"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.74",
     "@lvce-editor/ripgrep": "^1.6.0",
     "@testing-library/dom": "^10.4.1",
     "@vybestack/llxprt-code": "^0.5.0",
+    "ai": "^5.0.104",
     "ajv-formats": "^3.0.1",
     "execa": "^9.6.0",
     "fast-uri": "^3.0.6",

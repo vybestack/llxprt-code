@@ -58,6 +58,9 @@ export interface GenerateChatOptions {
     baseURL?: string;
     authToken?: ResolvedAuthToken;
     telemetry?: ProviderTelemetryContext;
+    temperature?: number;
+    maxTokens?: number;
+    streaming?: boolean;
   };
   userMemory?: UserMemoryInput;
 }

@@ -1,0 +1,1192 @@
+author:	acoliver
+association:	member
+edited:	false
+status:	none
+--
+@coderabbit outline how this would work. Pay close attention to the tool call and context issue i.e. HistoryService. Give code examples for both the OpenAIVercelProvider and the tool stuff. Explain how we'd support both during transition. 
+--
+author:	coderabbitai
+association:	none
+edited:	false
+status:	none
+--
+<!-- This is an auto-generated reply by CodeRabbit -->
+> [!TIP]
+> For best results, initiate chat on the files or code changes.
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Find and examine the current OpenAIProvider implementation
+fd -t f "OpenAIProvider.ts" --exec head -200 {}
+```
+
+Length of output: 7475
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Find the provider interface/abstraction
+fd -t f -e ts "Provider.ts" | grep -v node_modules | head -5
+```
+
+Length of output: 249
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Find HistoryService
+fd -t f "HistoryService" --exec head -150 {}
+```
+
+Length of output: 8867
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look for tool-related code in the OpenAIProvider
+fd -t f "OpenAIProvider.ts" --exec grep -n -A 10 -B 2 "tool" {} | head -300
+```
+
+Length of output: 10781
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Find the tool definitions and handling
+fd -t f -e ts "tool" -i | grep -v node_modules | grep -v test | head -10
+```
+
+Length of output: 485
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Read IProvider interface
+cat packages/core/src/providers/IProvider.ts
+```
+
+Length of output: 3590
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Read BaseProvider to understand the abstraction
+head -300 packages/core/src/providers/BaseProvider.ts
+```
+
+Length of output: 9375
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Read ITool interface
+cat packages/core/src/providers/ITool.ts
+```
+
+Length of output: 730
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Read ToolCallPipeline to understand current tool handling
+head -200 packages/core/src/providers/openai/ToolCallPipeline.ts
+```
+
+Length of output: 5533
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look at how tools are passed to generateChat
+rg -n -A 5 -B 5 "generateChatCompletion.*tools" packages/core/src/providers/ | head -100
+```
+
+Length of output: 4458
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Check how history is used with providers
+rg -n -A 3 "HistoryService" packages/core/src/providers/BaseProvider.ts | head -50
+```
+
+Length of output: 0
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Find IContent definition to understand message structure
+head -150 packages/core/src/services/history/IContent.ts
+```
+
+Length of output: 3375
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look at how streaming works currently in OpenAIProvider
+rg -n -A 10 "async \*generateChatCompletionImpl" packages/core/src/providers/openai/OpenAIProvider.ts | head -150
+```
+
+Length of output: 429
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Check how tools are formatted currently
+head -100 packages/core/src/tools/ToolFormatter.ts
+```
+
+Length of output: 2975
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# See how the core layer calls providers
+rg -n -B 5 -A 10 "generateChatCompletion" packages/core/src/core/ | head -100
+```
+
+Length of output: 7957
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Check existing package.json to see current dependencies
+cat packages/core/package.json | jq '.dependencies'
+```
+
+Length of output: 1422
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look at ContentConverters to understand provider-agnostic conversion
+head -200 packages/core/src/services/history/ContentConverters.ts
+```
+
+Length of output: 6555
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look at how generateChatCompletionImpl creates the streaming loop
+rg -n -A 30 "private async \*generateLegacyChatCompletionImpl" packages/core/src/providers/openai/OpenAIProvider.ts | head -100
+```
+
+Length of output: 1384
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Check how tools are currently executed at the core layer
+head -200 packages/core/src/core/coreToolScheduler.ts
+```
+
+Length of output: 4782
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# See how ProviderToolset is created in the codebase
+rg -n "ProviderToolset" packages/core/src/ --type ts | head -30
+```
+
+Length of output: 1720
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Check structure of existing provider implementations for comparison
+ls -la packages/core/src/providers/
+```
+
+Length of output: 1930
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look at the streaming implementation more closely
+rg -n -A 50 "for await.*stream\.toReadableStream" packages/core/src/providers/openai/OpenAIProvider.ts | head -150
+```
+
+Length of output: 0
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Check how tools are converted from ProviderToolset to OpenAI format
+rg -n -B 5 -A 20 "convertGeminiToOpenAI" packages/core/src/providers/openai/OpenAIProvider.ts | head -100
+```
+
+Length of output: 0
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look at the complete flow of how geminiChat calls providers with tools
+rg -n -B 3 -A 15 "const toolsFromConfig.*functionDeclarations" packages/core/src/core/geminiChat.ts | head -80
+```
+
+Length of output: 0
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Check how HistoryService is used in the core layer
+rg -n -B 5 -A 10 "historyService\.(add|getAll)" packages/core/src/core/geminiChat.ts | head -100
+```
+
+Length of output: 4057
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look at the complete OpenAI client creation to understand the setup
+rg -n -B 5 -A 20 "private async getClient" packages/core/src/providers/openai/OpenAIProvider.ts | head -100
+```
+
+Length of output: 0
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look at the complete streaming loop in OpenAIProvider
+rg -n "stream = await" packages/core/src/providers/openai/OpenAIProvider.ts -A 80 | head -200
+```
+
+Length of output: 0
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Find the getClient method
+rg -n "getClient\(" packages/core/src/providers/openai/OpenAIProvider.ts -B 2 -A 25 | head -100
+```
+
+Length of output: 2172
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look at how tools are built from ProviderToolset
+rg -n "toolFormatter" packages/core/src/providers/openai/OpenAIProvider.ts -B 2 -A 5 | head -80
+```
+
+Length of output: 1939
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Check how the core layer creates ProviderToolset from tool registry
+rg -n "functionDeclarations" packages/core/src/core/geminiChat.ts -B 5 -A 10 | head -150
+```
+
+Length of output: 2380
+
+---
+
+🏁 Script executed:
+```
+#!/bin/bash
+# Look at a complete example from tests showing tool flow
+cat packages/core/src/providers/openai/OpenAIProvider.integration.test.ts | head -250
+```
+
+Length of output: 6921
+
+---
+
+
+
+</details>
+
+@acoliver, here's a comprehensive outline for implementing OpenAIVercelProvider with Vercel AI SDK, including detailed code examples and transition strategy:
+
+## Architecture Overview
+
+The key insight is that **Vercel AI SDK will handle provider protocol quirks, but llxprt's Core layer must still execute tools**. The AI SDK becomes a formatting/streaming layer, not an execution layer.
+
+### High-Level Flow
+
+```
+Core Layer (geminiChat.ts)
+    ↓ [IContent[], ProviderToolset]
+OpenAIVercelProvider
+    ↓ [converts to AI SDK format]
+Vercel AI SDK streamText()
+    ↓ [streams response with tool calls]
+OpenAIVercelProvider
+    ↓ [converts to IContent with tool_call blocks]
+Core Layer (coreToolScheduler.ts)
+    ↓ [executes tools]
+HistoryService
+    ↓ [stores tool_response blocks]
+    → Next iteration with updated context
+```
+
+## 1. OpenAIVercelProvider Implementation
+
+```typescript
+// packages/core/src/providers/vercel/OpenAIVercelProvider.ts
+
+import { createOpenAI } from '@ai-sdk/openai';
+import { streamText, generateText, CoreMessage, CoreTool } from 'ai';
+import { BaseProvider, NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { IProvider, GenerateChatOptions, ProviderToolset } from '../IProvider.js';
+import { IContent, ToolCallBlock, TextBlock, ToolResponseBlock } from '../../services/history/IContent.js';
+import { IModel } from '../IModel.js';
+import { DebugLogger } from '../../debug/index.js';
+
+export class OpenAIVercelProvider extends BaseProvider implements IProvider {
+  private logger = new DebugLogger('llxprt:provider:vercel:openai');
+
+  constructor(
+    apiKey: string | undefined,
+    baseURL?: string,
+    config?: IProviderConfig,
+  ) {
+    super(
+      {
+        name: 'openai-vercel',
+        apiKey,
+        baseURL,
+        envKeyNames: ['OPENAI_API_KEY'],
+      },
+      config,
+    );
+  }
+
+  async getModels(): Promise<IModel[]> {
+    // Use AI SDK's model discovery or maintain static list
+    return [
+      {
+        id: 'gpt-4o',
+        name: 'GPT-4o',
+        provider: 'openai-vercel',
+        contextWindow: 128000,
+        supportedToolFormats: ['openai'],
+      },
+      // ... more models
+    ];
+  }
+
+  getDefaultModel(): string {
+    return 'gpt-4o';
+  }
+
+  getServerTools(): string[] {
+    return [];
+  }
+
+  async invokeServerTool(): Promise<unknown> {
+    throw new Error('Server tools not supported');
+  }
+
+  /**
+   * Main entry point - receives IContent history and tools in Gemini format
+   */
+  async *generateChatCompletion(
+    options: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
+    const normalized = this.normalizeGenerateChatOptions(options);
+    
+    // Convert IContent[] to AI SDK CoreMessage[]
+    const messages = this.convertToAISDKMessages(normalized.contents);
+    
+    // Convert ProviderToolset to AI SDK CoreTool format
+    const tools = this.convertToAISDKTools(normalized.tools);
+    
+    // Get Vercel AI SDK client
+    const openai = this.createAISDKClient(normalized);
+    const model = openai(normalized.resolved.model);
+
+    try {
+      // Stream with AI SDK
+      const result = await streamText({
+        model,
+        messages,
+        tools,
+        maxTokens: this.getMaxTokens(normalized),
+        temperature: this.getTemperature(normalized),
+        // CRITICAL: We handle tool execution, so don't let AI SDK execute
+        maxSteps: 1, // Disable automatic tool execution loop
+      });
+
+      // Convert AI SDK stream to IContent blocks
+      yield* this.streamToIContent(result, normalized);
+      
+    } catch (error) {
+      this.logger.error('Error in generateChatCompletion:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create AI SDK client with auth and baseURL
+   */
+  private createAISDKClient(options: NormalizedGenerateChatOptions) {
+    const authToken = options.resolved.authToken;
+    const baseURL = options.resolved.baseURL;
+
+    return createOpenAI({
+      apiKey: authToken.value,
+      baseURL: baseURL,
+      compatibility: 'strict', // or 'compatible' for OpenRouter/etc
+    });
+  }
+
+  /**
+   * Convert IContent[] (from HistoryService) to AI SDK CoreMessage[]
+   * 
+   * This is the critical bridge between llxprt's universal format
+   * and what AI SDK expects.
+   */
+  private convertToAISDKMessages(contents: IContent[]): CoreMessage[] {
+    const messages: CoreMessage[] = [];
+
+    for (const content of contents) {
+      if (content.speaker === 'human') {
+        // User message
+        const textParts = content.blocks
+          .filter(b => b.type === 'text')
+          .map(b => (b as TextBlock).text)
+          .join('\n');
+        
+        messages.push({
+          role: 'user',
+          content: textParts,
+        });
+      } 
+      else if (content.speaker === 'ai') {
+        // Assistant message - may have text and/or tool calls
+        const textBlocks = content.blocks.filter(b => b.type === 'text') as TextBlock[];
+        const toolCallBlocks = content.blocks.filter(b => b.type === 'tool_call') as ToolCallBlock[];
+
+        if (toolCallBlocks.length > 0) {
+          // Assistant message with tool calls
+          messages.push({
+            role: 'assistant',
+            content: textBlocks.map(b => ({ type: 'text', text: b.text })),
+            toolInvocations: toolCallBlocks.map(tc => ({
+              state: 'call', // Mark as call, not result
+              toolCallId: this.normalizeToolId(tc.id),
+              toolName: tc.name,
+              args: tc.parameters,
+            })),
+          });
+        } else if (textBlocks.length > 0) {
+          // Regular assistant message
+          messages.push({
+            role: 'assistant',
+            content: textBlocks.map(b => b.text).join('\n'),
+          });
+        }
+      }
+      else if (content.speaker === 'tool') {
+        // Tool response - AI SDK needs this in a specific format
+        const toolResponses = content.blocks.filter(
+          b => b.type === 'tool_response'
+        ) as ToolResponseBlock[];
+
+        for (const tr of toolResponses) {
+          // AI SDK expects tool results as 'tool' role messages
+          messages.push({
+            role: 'tool',
+            content: [
+              {
+                type: 'tool-result',
+                toolCallId: this.normalizeToolId(tr.callId),
+                toolName: tr.toolName,
+                result: tr.result,
+                isError: !!tr.error,
+              },
+            ],
+          });
+        }
+      }
+    }
+
+    return messages;
+  }
+
+  /**
+   * Convert ProviderToolset (Gemini format) to AI SDK CoreTool format
+   * 
+   * ProviderToolset uses functionDeclarations, AI SDK uses Zod schemas
+   * or JSON schema directly.
+   */
+  private convertToAISDKTools(
+    toolset?: ProviderToolset,
+  ): Record<string, CoreTool> | undefined {
+    if (!toolset || toolset.length === 0) {
+      return undefined;
+    }
+
+    const tools: Record<string, CoreTool> = {};
+
+    for (const group of toolset) {
+      for (const decl of group.functionDeclarations) {
+        tools[decl.name] = {
+          description: decl.description,
+          parameters: decl.parameters || decl.parametersJsonSchema,
+          // CRITICAL: Empty execute function - we don't execute here!
+          // Core layer will execute based on tool_call blocks we yield
+          execute: async () => {
+            // This should never be called because maxSteps: 1
+            throw new Error(
+              `Tool execution should happen in Core layer, not provider. Tool: ${decl.name}`
+            );
+          },
+        };
+      }
+    }
+
+    return tools;
+  }
+
+  /**
+   * Convert AI SDK streaming response to IContent blocks
+   * 
+   * This is where we extract tool calls WITHOUT executing them,
+   * and yield them as IContent for the Core layer to handle.
+   */
+  private async *streamToIContent(
+    result: Awaited<ReturnType<typeof streamText>>,
+    options: NormalizedGenerateChatOptions,
+  ): AsyncGenerator<IContent> {
+    let currentContent: IContent = {
+      speaker: 'ai',
+      blocks: [],
+      metadata: {
+        model: options.resolved.model,
+        timestamp: Date.now(),
+      },
+    };
+
+    let accumulatedText = '';
+
+    // Stream text deltas
+    for await (const chunk of result.textStream) {
+      accumulatedText += chunk;
+      
+      // Yield incremental text updates
+      yield {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: chunk }],
+        metadata: { model: options.resolved.model },
+      };
+    }
+
+    // Wait for completion to get final state including tool calls
+    const completion = await result;
+
+    // Build final content with text and tool calls
+    const blocks: Array<TextBlock | ToolCallBlock> = [];
+
+    // Add text if present
+    if (accumulatedText) {
+      blocks.push({
+        type: 'text',
+        text: accumulatedText,
+      });
+    }
+
+    // Extract tool calls from AI SDK response
+    // These will be executed by Core layer, not by us
+    if (completion.toolCalls && completion.toolCalls.length > 0) {
+      for (const toolCall of completion.toolCalls) {
+        blocks.push({
+          type: 'tool_call',
+          id: this.normalizeToolId(toolCall.toolCallId),
+          name: toolCall.toolName,
+          parameters: toolCall.args,
+        });
+      }
+    }
+
+    // Yield final content with all blocks
+    if (blocks.length > 0) {
+      yield {
+        speaker: 'ai',
+        blocks,
+        metadata: {
+          model: options.resolved.model,
+          timestamp: Date.now(),
+          usage: completion.usage ? {
+            promptTokens: completion.usage.promptTokens,
+            completionTokens: completion.usage.completionTokens,
+            totalTokens: completion.usage.totalTokens,
+          } : undefined,
+        },
+      };
+    }
+  }
+
+  /**
+   * Normalize tool IDs to history format (hist_tool_xxx)
+   * This maintains compatibility with HistoryService
+   */
+  private normalizeToolId(id: string): string {
+    if (id.startsWith('hist_tool_')) return id;
+    if (id.startsWith('call_')) {
+      return `hist_tool_${id.substring('call_'.length)}`;
+    }
+    return `hist_tool_${id}`;
+  }
+
+  private getMaxTokens(options: NormalizedGenerateChatOptions): number | undefined {
+    return options.invocation?.ephemerals?.['max-tokens'] as number | undefined;
+  }
+
+  private getTemperature(options: NormalizedGenerateChatOptions): number | undefined {
+    return options.invocation?.ephemerals?.['temperature'] as number | undefined;
+  }
+}
+```
+
+## 2. Context & HistoryService Integration
+
+The beauty of this design is that **HistoryService integration is automatic** through the existing architecture:
+
+```typescript
+// In geminiChat.ts or equivalent Core layer
+
+// HistoryService maintains conversation in IContent format
+const history: IContent[] = historyService.getAll();
+
+// Tools from config/registry in Gemini format
+const tools: ProviderToolset = [
+  {
+    functionDeclarations: [
+      {
+        name: 'read_file',
+        description: 'Read a file from disk',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+          },
+          required: ['path'],
+        },
+      },
+    ],
+  },
+];
+
+// Call provider with history + tools
+const provider = providerManager.getActiveProvider(); // Could be OpenAIVercelProvider
+for await (const content of provider.generateChatCompletion({
+  contents: history, // ← Context from HistoryService
+  tools,              // ← Tools available for this turn
+  settings,
+  config,
+  runtime,
+})) {
+  // Stream updates to UI
+  ui.update(content);
+  
+  // Check for tool calls
+  const toolCalls = content.blocks.filter(b => b.type === 'tool_call') as ToolCallBlock[];
+  
+  if (toolCalls.length > 0) {
+    // Add AI response to history
+    historyService.add(content, model);
+    
+    // Execute tools at Core layer
+    for (const toolCall of toolCalls) {
+      const result = await toolScheduler.executeTool(
+        toolCall.name,
+        toolCall.parameters,
+        signal
+      );
+      
+      // Add tool response to history
+      const toolResponse: IContent = {
+        speaker: 'tool',
+        blocks: [{
+          type: 'tool_response',
+          callId: toolCall.id,
+          toolName: toolCall.name,
+          result: result.output,
+          error: result.error,
+        }],
+      };
+      
+      historyService.add(toolResponse, model);
+    }
+    
+    // Continue conversation with tool results now in history
+    // Next call to provider will include tool responses via contents: history
+  }
+}
+```
+
+**Key Points:**
+1. Provider receives **full context** via `options.contents` (from HistoryService)
+2. Provider converts IContent → AI SDK messages (including prior tool calls/responses)
+3. AI SDK formats everything correctly for OpenAI/Anthropic/etc
+4. Provider extracts tool calls and yields as IContent blocks
+5. Core layer executes tools and adds results to HistoryService
+6. Next iteration includes tool results in context automatically
+
+## 3. Tool Handling Details
+
+### Tool Call Flow
+
+```typescript
+// Example: Multi-turn tool conversation
+
+// Turn 1: User asks question
+historyService.add({
+  speaker: 'human',
+  blocks: [{ type: 'text', text: 'Read /tmp/config.json and summarize it' }],
+}, model);
+
+// Turn 2: AI requests tool
+// Provider yields:
+{
+  speaker: 'ai',
+  blocks: [
+    { type: 'text', text: "I'll read that file for you." },
+    {
+      type: 'tool_call',
+      id: 'hist_tool_abc123',
+      name: 'read_file',
+      parameters: { path: '/tmp/config.json' },
+    },
+  ],
+}
+// → Added to HistoryService
+
+// Turn 3: Tool executes (Core layer)
+const result = await toolScheduler.executeTool('read_file', { path: '/tmp/config.json' });
+
+// → Tool response added to HistoryService
+{
+  speaker: 'tool',
+  blocks: [{
+    type: 'tool_response',
+    callId: 'hist_tool_abc123',
+    toolName: 'read_file',
+    result: { content: '{"api": "prod", ...}' },
+  }],
+}
+
+// Turn 4: AI summarizes
+// Provider receives context with tool call AND response
+// AI SDK sees:
+// [
+//   { role: 'user', content: 'Read /tmp/config.json...' },
+//   {
+//     role: 'assistant',
+//     toolInvocations: [{
+//       toolCallId: 'hist_tool_abc123',
+//       toolName: 'read_file',
+//       args: { path: '/tmp/config.json' },
+//       state: 'call',
+//     }],
+//   },
+//   {
+//     role: 'tool',
+//     content: [{ type: 'tool-result', result: {...} }],
+//   },
+// ]
+
+// Provider yields final answer:
+{
+  speaker: 'ai',
+  blocks: [
+    { type: 'text', text: 'The config shows production API settings...' },
+  ],
+}
+```
+
+### Why This Works
+
+- **AI SDK handles protocol quirks**: Different providers expect different message ordering, tool call formats, etc. AI SDK normalizes this.
+- **Core layer controls execution**: llxprt can implement approval flows, streaming output, error handling, etc.
+- **HistoryService provides context**: AI SDK sees full conversation including prior tool interactions.
+- **No double-execution**: `maxSteps: 1` prevents AI SDK from executing tools itself.
+
+## 4. Transition Strategy
+
+### Phase 1: Parallel Providers
+
+Run both implementations side-by-side:
+
+```typescript
+// packages/core/src/providers/ProviderManager.ts
+
+export class ProviderManager {
+  registerProvider(provider: IProvider): void {
+    this.providers.set(provider.name, provider);
+  }
+
+  // During transition, maintain both:
+  // - 'openai' → OpenAIProvider (current)
+  // - 'openai-vercel' → OpenAIVercelProvider (new)
+}
+
+// User can switch via config or command
+/provider openai-vercel  // Try new provider
+/provider openai         // Fall back to old
+```
+
+### Phase 2: Feature Flag
+
+```typescript
+// packages/core/src/config/config.ts
+
+export interface Config {
+  useVercelAISDK?: boolean; // Feature flag
+  // ...
+}
+
+// In provider initialization:
+if (config.useVercelAISDK) {
+  providerManager.registerProvider(new OpenAIVercelProvider(...));
+  providerManager.setActiveProvider('openai-vercel');
+} else {
+  providerManager.registerProvider(new OpenAIProvider(...));
+  providerManager.setActiveProvider('openai');
+}
+```
+
+### Phase 3: Provider Factory
+
+```typescript
+// packages/core/src/providers/factory.ts
+
+export function createOpenAIProvider(
+  apiKey: string,
+  baseURL?: string,
+  config?: IProviderConfig & { useAISDK?: boolean },
+): IProvider {
+  if (config?.useAISDK) {
+    return new OpenAIVercelProvider(apiKey, baseURL, config);
+  }
+  return new OpenAIProvider(apiKey, baseURL, config);
+}
+```
+
+### Phase 4: Gradual Migration
+
+1. **Week 1-2**: Implement OpenAIVercelProvider, test with gpt-4o
+2. **Week 3-4**: Add AnthropicVercelProvider, GoogleVercelProvider
+3. **Week 5-6**: Battle-test on real workloads, compare outputs
+4. **Week 7**: Enable by default for new installations
+5. **Week 8+**: Deprecate old providers, keep as fallback
+
+### Testing During Transition
+
+```typescript
+// Run same prompt through both providers, compare outputs
+const testPrompt: IContent[] = [/*...*/];
+const tools: ProviderToolset = [/*...*/];
+
+const oldProvider = new OpenAIProvider(key, baseURL);
+const newProvider = new OpenAIVercelProvider(key, baseURL);
+
+const oldResults = await collectStream(oldProvider.generateChatCompletion({
+  contents: testPrompt,
+  tools,
+  /*...*/
+}));
+
+const newResults = await collectStream(newProvider.generateChatCompletion({
+  contents: testPrompt,
+  tools,
+  /*...*/
+}));
+
+// Compare tool calls, text outputs, token usage
+compareProviderOutputs(oldResults, newResults);
+```
+
+## 5. Benefits of This Approach
+
+✅ **Reduced maintenance**: Vercel team handles provider quirks  
+✅ **Automatic new models**: AI SDK updates bring new models  
+✅ **Better compatibility**: Tested against OpenRouter, Cerebras, etc.  
+✅ **Same tool execution model**: Core layer still controls tools  
+✅ **Context handled identically**: HistoryService integration unchanged  
+✅ **Gradual migration**: Run both providers in parallel  
+✅ **Fallback safety**: Keep old providers during transition  
+
+## 6. Package Dependencies
+
+```json
+// packages/core/package.json
+{
+  "dependencies": {
+    "ai": "^4.0.0",
+    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/google": "^1.0.0",
+    "@ai-sdk/openai-compatible": "^1.0.0",
+    // ... existing dependencies
+  }
+}
+```
+
+This design maintains llxprt's architecture while delegating provider protocol handling to Vercel AI SDK. The tool execution model, context management, and streaming all work identically to today.
+
+---
+
+<details>
+<summary>🧠 Learnings used</summary>
+
+```
+Learnt from: e2720pjk
+Repo: vybestack/llxprt-code PR: 583
+File: packages/core/src/providers/openai/OpenAIProvider.ts:935-959
+Timestamp: 2025-11-16T22:51:26.374Z
+Learning: In the llxprt-code codebase (packages/core/src/providers/openai/OpenAIProvider.ts), tools like `run_shell_command` use internal streaming only for real-time UI updates during execution, but each tool execution produces exactly ONE final `ToolResponseBlock` containing the full result. The streaming chunks are never sent to the LLM and are not converted into multiple tool messages. The OpenAI Chat Completions API requires that each tool call (tool_call_id) corresponds to exactly one message with role 'tool', so duplicate tool response detection that removes subsequent tool messages with the same tool_call_id is correct and necessary for API compliance.
+```
+
+</details>
+
+
+--
+author:	acoliver
+association:	member
+edited:	false
+status:	none
+--
+@coderabbit so even if we bungle some tool ordering or something vercel ai will take care of it or do we need to do a bit more first? What about shared context (maybe assuming once we've got AnthropicVercelProvider) will we be able to swap back and forth with one shared context?
+--
+author:	coderabbitai
+association:	none
+edited:	false
+status:	none
+--
+<!-- This is an auto-generated reply by CodeRabbit -->
+> [!TIP]
+> For best results, initiate chat on the files or code changes.
+
+@acoliver, great questions! Let me clarify both:
+
+## 1. Will Vercel AI SDK fix tool ordering issues automatically?
+
+**Partially yes, but we still need to get the conversion right.**
+
+Here's what AI SDK **WILL** handle:
+- ✅ Converting `CoreMessage[]` to provider-specific formats (OpenAI vs Anthropic vs Google tool schemas)
+- ✅ Ordering message parts correctly for each provider (e.g., Anthropic wants `[text, tool_use]`, some OpenAI-compatible endpoints are picky about ordering)
+- ✅ Formatting tool calls and tool results per provider expectations
+- ✅ Handling provider-specific quirks like required fields, parameter types, etc.
+
+What AI SDK **WON'T** fix:
+- ❌ Bugs in our `convertToAISDKMessages()` function (e.g., if we map roles incorrectly)
+- ❌ Missing tool results for tool calls (we must ensure each `tool_call` has a matching `tool_response` in IContent[])
+- ❌ Invalid `CoreMessage[]` structure (e.g., tool result without prior tool call)
+
+**The critical insight:** AI SDK expects us to feed it **logically correct** `CoreMessage[]` arrays. It then handles all the provider-specific formatting quirks. So:
+
+```typescript
+// If we do THIS correctly in OpenAIVercelProvider:
+const messages: CoreMessage[] = [
+  { role: 'user', content: 'Read file.txt' },
+  {
+    role: 'assistant',
+    toolInvocations: [{ toolCallId: 'hist_tool_123', toolName: 'read_file', args: {...}, state: 'call' }],
+  },
+  {
+    role: 'tool',
+    content: [{ type: 'tool-result', toolCallId: 'hist_tool_123', result: {...} }],
+  },
+];
+
+// Then AI SDK will format it correctly for:
+// - OpenAI: { role: 'assistant', tool_calls: [...] } + { role: 'tool', tool_call_id: '...' }
+// - Anthropic: { role: 'assistant', content: [{ type: 'tool_use', ... }] } + { role: 'user', content: [{ type: 'tool_result', ... }] }
+// - Google: { role: 'model', parts: [{ functionCall: {...} }] } + { role: 'function', parts: [...] }
+```
+
+**Where we need to be careful:**
+
+1. **Ensure tool_call and tool_response matching** in IContent[] (HistoryService should already guarantee this)
+2. **Correct role mapping** in `convertToAISDKMessages()` - don't mix up user/assistant/tool
+3. **Tool ID normalization** - maintain consistent IDs (`hist_tool_xxx`) across the conversion
+
+The good news: **HistoryService already maintains correct structure** (one `tool_call` block → one `tool_response` block), so as long as we faithfully convert IContent[] → CoreMessage[], AI SDK takes care of the rest.
+
+## 2. Shared context across providers - YES! 🎉
+
+**This is actually one of the most powerful aspects of llxprt's architecture.**
+
+Because context lives in **provider-agnostic IContent[]** format in HistoryService, you CAN switch providers mid-conversation:
+
+```typescript
+// Conversation start with OpenAI Vercel Provider
+historyService.add({
+  speaker: 'human',
+  blocks: [{ type: 'text', text: 'Read config.json' }],
+}, 'gpt-4o');
+
+// AI responds with tool call
+historyService.add({
+  speaker: 'ai',
+  blocks: [
+    { type: 'tool_call', id: 'hist_tool_abc', name: 'read_file', parameters: {...} },
+  ],
+}, 'gpt-4o');
+
+// Tool executes
+historyService.add({
+  speaker: 'tool',
+  blocks: [
+    { type: 'tool_response', callId: 'hist_tool_abc', toolName: 'read_file', result: {...} },
+  ],
+}, 'gpt-4o');
+
+// 🔄 NOW SWITCH TO ANTHROPIC
+/provider anthropic-vercel
+
+// Next turn - AnthropicVercelProvider receives SAME IContent[] history
+// It converts to Anthropic's format:
+// [
+//   { role: 'user', content: [{ type: 'text', text: 'Read config.json' }] },
+//   { role: 'assistant', content: [{ type: 'tool_use', id: '...', name: 'read_file', input: {...} }] },
+//   { role: 'user', content: [{ type: 'tool_result', tool_use_id: '...', content: {...} }] },
+// ]
+
+// User asks follow-up
+historyService.add({
+  speaker: 'human',
+  blocks: [{ type: 'text', text: 'Summarize that file' }],
+}, 'claude-3-5-sonnet');
+
+// Anthropic sees full context and can respond!
+```
+
+**Why this works:**
+
+1. **IContent[] is provider-agnostic** - it's a universal representation
+2. **Each provider converts IContent[] → its own format** - conversion is stateless
+3. **Tool ID normalization** (`hist_tool_xxx`) makes tool calls portable
+4. **HistoryService doesn't care about provider** - it just stores IContent[]
+
+**Caveats to be aware of:**
+
+1. **Token limits vary** - GPT-4o has 128K context, Claude has 200K, Gemini has 2M. Switching to a provider with smaller context might truncate history.
+2. **Model capabilities differ** - not all models support the same tools or understand context equally well
+3. **Provider-specific metadata is lost** - if OpenAI provider stores custom metadata in `IContent.metadata`, Anthropic provider might not use it
+4. **Cost tracking per model** - need to track which model generated which responses (already in metadata)
+
+**Testing this:**
+
+```typescript
+// Integration test: cross-provider conversation
+const history = new HistoryService();
+
+// Turn 1: OpenAI
+history.add({ speaker: 'human', blocks: [{ type: 'text', text: 'What is 2+2?' }] }, 'gpt-4o');
+const openaiProvider = new OpenAIVercelProvider(...);
+for await (const content of openaiProvider.generateChatCompletion({
+  contents: history.getAll(),
+  /*...*/
+})) {
+  history.add(content, 'gpt-4o');
+}
+
+// Turn 2: Anthropic (same context!)
+history.add({ speaker: 'human', blocks: [{ type: 'text', text: 'Now what is 3+3?' }] }, 'claude-3-5-sonnet');
+const anthropicProvider = new AnthropicVercelProvider(...);
+for await (const content of anthropicProvider.generateChatCompletion({
+  contents: history.getAll(), // ← Full history from OpenAI turn
+  /*...*/
+})) {
+  history.add(content, 'claude-3-5-sonnet');
+}
+
+// Both providers see coherent conversation!
+```
+
+**TL;DR:**
+- AI SDK handles provider formatting quirks, but we must convert IContent[] → CoreMessage[] correctly
+- Provider switching mid-conversation works beautifully due to IContent[] abstraction
+- Tool ID normalization (`hist_tool_xxx`) is key to making context portable
+- Main caveats: token limits, model capabilities, and metadata portability
+
+This is actually a huge win for llxprt's multi-provider architecture! 🚀
+
+---
+
+<details>
+<summary>🧠 Learnings used</summary>
+
+```
+Learnt from: e2720pjk
+Repo: vybestack/llxprt-code PR: 583
+File: packages/core/src/providers/openai/OpenAIProvider.ts:935-959
+Timestamp: 2025-11-16T22:51:26.374Z
+Learning: In the llxprt-code codebase (packages/core/src/providers/openai/OpenAIProvider.ts), tools like `run_shell_command` use internal streaming only for real-time UI updates during execution, but each tool execution produces exactly ONE final `ToolResponseBlock` containing the full result. The streaming chunks are never sent to the LLM and are not converted into multiple tool messages. The OpenAI Chat Completions API requires that each tool call (tool_call_id) corresponds to exactly one message with role 'tool', so duplicate tool response detection that removes subsequent tool messages with the same tool_call_id is correct and necessary for API compliance.
+```
+
+</details>
+
+
+--
