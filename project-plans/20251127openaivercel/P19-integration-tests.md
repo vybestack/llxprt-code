@@ -82,8 +82,7 @@ describe('OpenAIVercelProvider End-to-End Integration', () => {
   let provider: OpenAIVercelProvider;
 
   beforeEach(() => {
-    provider = new OpenAIVercelProvider();
-    provider.setKey('sk-test-key');
+    provider = new OpenAIVercelProvider('sk-test-key');
     vi.resetAllMocks();
   });
 
@@ -317,49 +316,47 @@ describe('OpenAIVercelProvider End-to-End Integration', () => {
 // @requirement:REQ-INT-001.2
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { keyCommand } from '../../ui/commands/keyCommand';
-import { keyfileCommand } from '../../ui/commands/keyfileCommand';
-import { baseurlCommand } from '../../ui/commands/baseurlCommand';
-import { modelCommand } from '../../ui/commands/modelCommand';
-import type { CommandContext } from '../../ui/commands/types';
+import { keyCommand } from '../../ui/commands/keyCommand.js';
+import { keyfileCommand } from '../../ui/commands/keyfileCommand.js';
+import { baseurlCommand } from '../../ui/commands/baseurlCommand.js';
+import { modelCommand } from '../../ui/commands/modelCommand.js';
+import type { CommandContext } from '../../ui/commands/types.js';
+import { getRuntimeApi } from '../../ui/contexts/RuntimeContext.js';
 
 // Mock dependencies
-vi.mock('../providerManagerInstance.js', () => ({
-  getProviderManager: vi.fn(),
+vi.mock('../../ui/contexts/RuntimeContext.js', () => ({
+  getRuntimeApi: vi.fn(),
 }));
 
 describe('CLI Commands with OpenAIVercelProvider', () => {
-  let mockProvider: {
-    name: string;
-    setKey: ReturnType<typeof vi.fn>;
-    setKeyFile: ReturnType<typeof vi.fn>;
-    setBaseUrl: ReturnType<typeof vi.fn>;
-    getModels: ReturnType<typeof vi.fn>;
-  };
-  
-  let mockProviderManager: {
-    getActiveProvider: ReturnType<typeof vi.fn>;
+  let runtimeApi: {
+    updateActiveProviderApiKey: ReturnType<typeof vi.fn>;
+    updateActiveProviderKeyFile: ReturnType<typeof vi.fn>;
+    updateActiveProviderBaseUrl: ReturnType<typeof vi.fn>;
+    setActiveModel: ReturnType<typeof vi.fn>;
+    getActiveProviderStatus: ReturnType<typeof vi.fn>;
   };
 
   let mockContext: CommandContext;
 
-  beforeEach(() => {
-    mockProvider = {
-      name: 'openaivercel',
-      setKey: vi.fn(),
-      setKeyFile: vi.fn().mockResolvedValue(undefined),
-      setBaseUrl: vi.fn(),
-      getModels: vi.fn().mockResolvedValue([
-        { id: 'gpt-4o', name: 'GPT-4o', contextWindow: 128000 }
-      ]),
+  beforeEach(async () => {
+    runtimeApi = {
+      updateActiveProviderApiKey: vi.fn().mockResolvedValue({ message: 'ok' }),
+      updateActiveProviderKeyFile: vi.fn().mockResolvedValue({ message: 'ok' }),
+      updateActiveProviderBaseUrl: vi
+        .fn()
+        .mockResolvedValue({ message: 'ok' }),
+      setActiveModel: vi.fn().mockResolvedValue({
+        previousModel: 'gpt-4o',
+        nextModel: 'gpt-4o-mini',
+        providerName: 'openaivercel',
+      }),
+      getActiveProviderStatus: vi.fn().mockReturnValue({
+        providerName: 'openaivercel',
+      }),
     };
 
-    mockProviderManager = {
-      getActiveProvider: vi.fn().mockReturnValue(mockProvider),
-    };
-
-    const { getProviderManager } = await import('../providerManagerInstance.js');
-    vi.mocked(getProviderManager).mockReturnValue(mockProviderManager as any);
+    vi.mocked(getRuntimeApi).mockReturnValue(runtimeApi as never);
 
     mockContext = {} as CommandContext;
   });
@@ -368,7 +365,9 @@ describe('CLI Commands with OpenAIVercelProvider', () => {
     it('should set API key on openaivercel provider', async () => {
       await keyCommand.action?.(mockContext, 'sk-test-key-123');
 
-      expect(mockProvider.setKey).toHaveBeenCalledWith('sk-test-key-123');
+      expect(runtimeApi.updateActiveProviderApiKey).toHaveBeenCalledWith(
+        'sk-test-key-123',
+      );
     });
   });
 
@@ -376,7 +375,9 @@ describe('CLI Commands with OpenAIVercelProvider', () => {
     it('should read key file for openaivercel provider', async () => {
       await keyfileCommand.action?.(mockContext, '~/.openai/key');
 
-      expect(mockProvider.setKeyFile).toHaveBeenCalledWith('~/.openai/key');
+      expect(runtimeApi.updateActiveProviderKeyFile).toHaveBeenCalledWith(
+        '~/.openai/key',
+      );
     });
   });
 
@@ -384,17 +385,17 @@ describe('CLI Commands with OpenAIVercelProvider', () => {
     it('should set base URL on openaivercel provider', async () => {
       await baseurlCommand.action?.(mockContext, 'https://custom.api.com/v1');
 
-      expect(mockProvider.setBaseUrl).toHaveBeenCalledWith('https://custom.api.com/v1');
+      expect(
+        runtimeApi.updateActiveProviderBaseUrl,
+      ).toHaveBeenCalledWith('https://custom.api.com/v1');
     });
   });
 
   describe('/models command', () => {
-    it('should list models from openaivercel provider', async () => {
-      const models = await mockProvider.getModels();
+    it('should switch models via runtime API', async () => {
+      await modelCommand.action?.(mockContext, 'gpt-4o-mini');
 
-      expect(models).toContainEqual(
-        expect.objectContaining({ id: 'gpt-4o' })
-      );
+      expect(runtimeApi.setActiveModel).toHaveBeenCalledWith('gpt-4o-mini');
     });
   });
 });

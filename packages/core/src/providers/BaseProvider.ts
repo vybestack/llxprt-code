@@ -730,7 +730,9 @@ export abstract class BaseProvider implements IProvider {
         includeOAuth: true,
       })) ?? '';
 
-    const providerSettings = settings.getProviderSettings(this.name);
+    const providerSettings =
+      settings.getProviderSettings(this.name) ??
+      ({} as Record<string, unknown>);
     const resolvedTemperature =
       providedOptions.resolved?.temperature ??
       (providerSettings?.temperature as number | undefined);

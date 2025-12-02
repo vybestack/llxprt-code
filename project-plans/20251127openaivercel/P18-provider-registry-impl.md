@@ -80,7 +80,7 @@ export { OpenAIVercelProvider } from './openai-vercel/index.js';
 
 export { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 export * from './errors.js';
-export * from './utils.js';
+export * from './toolIdUtils.js';
 ```
 
 ### Semantic Verification Checklist (5 Behavioral Questions)

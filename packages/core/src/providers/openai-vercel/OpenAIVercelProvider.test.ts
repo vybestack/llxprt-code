@@ -18,7 +18,6 @@ import { IProvider } from '../IProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { createProviderWithRuntime } from '../../test-utils/runtime.js';
 import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
-import type { SettingsService } from '../../settings/SettingsService.js';
 import {
   clearActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,
@@ -229,7 +228,7 @@ describe('OpenAIVercelProvider', () => {
  */
 describe('Authentication (REQ-OAV-003)', () => {
   let originalEnv: NodeJS.ProcessEnv;
-  let runtimeContext: ProviderRuntimeContext;
+  let runtime: ProviderRuntimeContext;
   let settingsService: SettingsService;
 
   beforeEach(() => {
@@ -249,7 +248,7 @@ describe('Authentication (REQ-OAV-003)', () => {
       },
     );
 
-    runtimeContext = result.runtime;
+    runtime = result.runtime;
     settingsService = result.settingsService;
   });
 
@@ -269,7 +268,7 @@ describe('Authentication (REQ-OAV-003)', () => {
         },
       );
 
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       const token = await provider.getAuthToken();
       expect(token).toBe('constructor-api-key');
@@ -284,7 +283,7 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       const token = await provider.getAuthToken();
       expect(token).toBe('env-api-key');
@@ -295,7 +294,7 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       const options = createProviderCallOptions({
         providerName: 'openaivercel',
@@ -306,7 +305,7 @@ describe('Authentication (REQ-OAV-003)', () => {
           },
         ],
         settings: settingsService,
-        runtime: runtimeContext,
+        runtime,
         resolved: { streaming: false },
       });
 
@@ -325,7 +324,7 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       const token = await provider.getAuthToken();
       expect(token).toBe('constructor-key');
@@ -347,7 +346,7 @@ describe('Authentication (REQ-OAV-003)', () => {
         },
       );
 
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       const token = await provider.getAuthToken();
       expect(token).toBe('constructor-api-key');
@@ -373,7 +372,7 @@ describe('Authentication (REQ-OAV-003)', () => {
       });
 
       provider.setRuntimeSettingsService(settingsService);
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       const token = await provider.getAuthToken();
       expect(token).toBe('keyfile-api-key'); // Provider keyfile overrides env per precedence (provider, constructor, global, env, OAuth)
@@ -386,7 +385,7 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       const token = await provider.getAuthToken();
       expect(token).toBe('env-api-key');
@@ -429,7 +428,7 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       const isAuthenticated = await provider.hasNonOAuthAuthentication();
       expect(isAuthenticated).toBe(true);
@@ -442,7 +441,7 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       // Verify the provider has access to authentication methods
       expect(typeof provider.hasNonOAuthAuthentication).toBe('function');
@@ -456,7 +455,7 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       const isAuthenticated = await provider.hasNonOAuthAuthentication();
       expect(isAuthenticated).toBe(true);
@@ -467,7 +466,7 @@ describe('Authentication (REQ-OAV-003)', () => {
         settingsService,
       });
 
-      setActiveProviderRuntimeContext(runtimeContext);
+      setActiveProviderRuntimeContext(runtime);
 
       const isAuthenticated = await provider.hasNonOAuthAuthentication();
       expect(isAuthenticated).toBe(false);
