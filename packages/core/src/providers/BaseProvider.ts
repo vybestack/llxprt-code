@@ -733,13 +733,13 @@ export abstract class BaseProvider implements IProvider {
     const providerSettings = settings.getProviderSettings(this.name);
     const resolvedTemperature =
       providedOptions.resolved?.temperature ??
-      (providerSettings.temperature as number | undefined);
+      (providerSettings?.temperature as number | undefined);
     const resolvedMaxTokens =
       providedOptions.resolved?.maxTokens ??
-      (providerSettings.maxTokens as number | undefined);
+      (providerSettings?.maxTokens as number | undefined);
     const resolvedStreaming =
       providedOptions.resolved?.streaming ??
-      (providerSettings.streaming as boolean | undefined);
+      (providerSettings?.streaming as boolean | undefined);
 
     const resolved = {
       model: resolvedModel,

@@ -21,7 +21,7 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import type { ProviderCallOptions } from '../../services/generation/models/IGenerationProvider.js';
 import { createRuntimeConfigStub } from '../../test-utils/runtime.js';
@@ -47,7 +47,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
     vi.clearAllMocks();
     settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openaivercel');
-    config = createRuntimeConfigStub();
+    config = createRuntimeConfigStub(settingsService);
   });
 
   afterEach(() => {
@@ -108,6 +108,7 @@ describe('OpenAIVercelProvider - Streaming', () => {
     const rejectedPromise = Promise.reject(error);
     rejectedPromise.catch(() => {});
 
+    // biome-ignore lint/correctness/useYield
     // eslint-disable-next-line require-yield
     async function* errorStream() {
       throw error;

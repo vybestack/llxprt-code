@@ -9,11 +9,11 @@
  * @requirement REQ-INT-001.1 - ProviderManager Registration
  * @requirement REQ-OAV-001.1 - Provider Selection via CLI
  *
- * Provider Registry Integration Tests (TDD RED Phase)
+ * Provider Registry Integration Tests
  *
  * These tests verify that OpenAIVercelProvider can be discovered and
- * activated through the ProviderManager. Tests are expected to FAIL
- * until Phase 18 implements the actual registration.
+ * activated through the ProviderManager now that registration wiring
+ * is in place.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';

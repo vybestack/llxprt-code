@@ -46,6 +46,30 @@ import {
   EMPTY_TOOL_RESULT_PLACEHOLDER,
 } from '../utils/toolResponsePayload.js';
 
+function inferMediaEncoding(imageData: string): {
+  encoding: 'base64' | 'url';
+  mimeType: string;
+} {
+  const defaultResult = { encoding: 'url' as const, mimeType: 'image/*' };
+
+  if (imageData.startsWith('data:image/') && imageData.includes(';base64,')) {
+    const mimeMatch = imageData.slice('data:'.length).match(/^([^;]+);base64,/);
+    const mimeType = mimeMatch?.[1] ?? 'image/*';
+    return { encoding: 'base64', mimeType };
+  }
+
+  if (imageData.startsWith('data:')) {
+    return defaultResult;
+  }
+
+  if (imageData.startsWith('http://') || imageData.startsWith('https://')) {
+    return defaultResult;
+  }
+
+  // Fallback: treat as base64 when it is not a recognizable URL
+  return { encoding: 'base64', mimeType: 'image/*' };
+}
+
 /**
  * Convert IContent array to Vercel AI SDK CoreMessage array
  */
@@ -231,11 +255,12 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
               (part as { image?: string; url?: string }).image ??
               (part as { url?: string }).url;
             if (imageData) {
+              const { encoding, mimeType } = inferMediaEncoding(imageData);
               blocks.push({
                 type: 'media',
                 data: imageData,
-                encoding: 'base64',
-                mimeType: 'image/*',
+                encoding,
+                mimeType,
               });
             }
           }
@@ -297,11 +322,12 @@ export function convertFromVercelMessages(messages: CoreMessage[]): IContent[] {
               (part as { image?: string; url?: string }).image ??
               (part as { url?: string }).url;
             if (imageData) {
+              const { encoding, mimeType } = inferMediaEncoding(imageData);
               blocks.push({
                 type: 'media',
                 data: imageData,
-                encoding: 'base64',
-                mimeType: 'image/*',
+                encoding,
+                mimeType,
               });
             }
           } else if (partType === 'tool-call') {

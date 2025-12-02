@@ -21,7 +21,7 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import { IContent } from '../../services/history/IContent.js';
+import type { IContent } from '../../services/history/IContent.js';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import {
   ProviderError,
@@ -34,6 +34,7 @@ import { createRuntimeConfigStub } from '../../test-utils/runtime.js';
 
 interface MockStreamTextResult {
   textStream: AsyncIterable<string>;
+  text?: Promise<unknown>;
   usage: Promise<{
     promptTokens: number;
     completionTokens: number;
@@ -67,7 +68,7 @@ describe('OpenAIVercelProvider - Error Handling', () => {
     vi.clearAllMocks();
     settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openaivercel');
-    config = createRuntimeConfigStub();
+    config = createRuntimeConfigStub(settingsService);
 
     mockStreamText = vi.mocked((await import('ai')).streamText);
     mockGenerateText = vi.mocked((await import('ai')).generateText);
@@ -766,7 +767,7 @@ describe('OpenAIVercelProvider - Error Handling', () => {
         statusCode: 429,
       });
 
-      const wrappedError = wrapError(testError);
+      const wrappedError = wrapError(testError, 'openaivercel');
       expect(wrappedError).toBeInstanceOf(RateLimitError);
     });
   });

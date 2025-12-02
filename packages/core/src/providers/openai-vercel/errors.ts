@@ -183,8 +183,7 @@ function parseRetryAfter(value: unknown): number | undefined {
 }
 
 function getRetryAfter(error: Error): number | undefined {
-  const record: Record<string, unknown> =
-    error && typeof error === 'object' ? { ...(error as object) } : {};
+  const record: Record<string, unknown> = { ...(error as object) };
 
   const retryAfter =
     record.retryAfter ??

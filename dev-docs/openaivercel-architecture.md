@@ -17,7 +17,7 @@ The `openaivercel` provider is a standalone provider implementation that uses th
 
 ## Class Hierarchy
 
-```
+```text
 BaseProvider (abstract)
   ↓
 OpenAIVercelProvider (concrete)
@@ -28,14 +28,13 @@ OpenAIVercelProvider (concrete)
 
 ### 1. IProvider Interface Implementation
 
-The provider implements the following IProvider methods:
+The provider implements the IProvider contract:
 
-- `getProviderName(): string` - Returns "openaivercel"
-- `getDefaultModel(): string` - Returns default model (gpt-4o)
-- `listModels(): Promise<IModel[]>` - Lists available models
-- `generateChat(options: GenerateChatOptions): AsyncGenerator<IContent>` - Main chat completion
-- `sendMessage(options: SendMessageOptions): Promise<IContent>` - Non-streaming alternative
-- `shutdown(): Promise<void>` - Cleanup resources
+- `generateChatCompletion(options: GenerateChatOptions): AsyncIterable<IContent>`
+- `getModels(): Promise<IModel[]>` and `getDefaultModel(): string`
+- `getToolFormat?(): string` and `getModelParams?(): Record<string, unknown> | undefined`
+- `getServerTools(): string[]` and `invokeServerTool(...)`
+- `clearAuth?(): void` / `clearAuthCache?(): void`
 
 ### 2. BaseProvider Extension
 
@@ -80,18 +79,26 @@ The provider converts llxprt-code's IContent format to Vercel AI SDK's CoreMessa
 
 ```typescript
 interface IContent {
-  role: 'user' | 'assistant' | 'system' | 'tool';
-  content?: string;
-  toolCallId?: string;
-  toolCalls?: Array<{
-    id: string;
-    type: 'function';
-    function: {
-      name: string;
-      arguments: string;
-    };
-  }>;
+  speaker: 'human' | 'ai' | 'tool';
+  blocks: ContentBlock[];
+  metadata?: { role?: string };
 }
+
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'media';
+      data: string;
+      encoding: 'url' | 'base64';
+      mimeType?: string;
+    }
+  | { type: 'tool_call'; id: string; name: string; parameters: unknown }
+  | {
+      type: 'tool_response';
+      callId: string;
+      toolName: string;
+      result: unknown;
+    };
 ```
 
 **Vercel AI SDK CoreMessage:**
@@ -100,16 +107,20 @@ interface IContent {
 type CoreMessage =
   | { role: 'system'; content: string }
   | { role: 'user'; content: string | Array<TextPart | ImagePart> }
-  | { role: 'assistant'; content: string; toolCalls?: ToolCall[] }
+  | {
+      role: 'assistant';
+      content: string | Array<TextPart | ImagePart | ToolCallPart>;
+      toolInvocations?: ToolInvocation[];
+    }
   | { role: 'tool'; content: string; toolCallId: string };
 ```
 
 **Conversion Logic:**
 
-- `role: 'system'` → Direct mapping with content
-- `role: 'user'` → Direct mapping with content
-- `role: 'assistant'` → Maps content and toolCalls
-- `role: 'tool'` → Maps content with toolCallId
+- `speaker: 'human'` → `role: 'user'` with text/media parts
+- `speaker: 'ai'` → `role: 'assistant'` with text, tool calls, or images
+- `speaker: 'tool'` → `role: 'tool'` with `toolCallId`
+- Optional metadata.role of `system` → `role: 'system'`
 
 #### Vercel AI SDK Response → IContent
 
@@ -117,17 +128,13 @@ Converts streaming responses back to IContent:
 
 ```typescript
 // Text-only response
-{ role: 'assistant', content: 'text' }
+{ speaker: 'ai', blocks: [{ type: 'text', text: '...' }] }
 
 // Tool call response
-{
-  role: 'assistant',
-  content: '',
-  toolCalls: [{ id, type: 'function', function: { name, arguments } }]
-}
+{ speaker: 'ai', blocks: [{ type: 'tool_call', id, name, parameters }] }
 
 // Tool result
-{ role: 'tool', content: 'result', toolCallId: 'id' }
+{ speaker: 'tool', blocks: [{ type: 'tool_response', callId: 'id', toolName: 'name', result }] }
 ```
 
 ### 5. Tool Handling Strategy
@@ -172,26 +179,27 @@ interface CoreTool {
 1. Provider receives tool calls from Vercel AI SDK
 2. Converts to IContent with toolCalls array
 3. Returns to framework for execution
-4. Receives tool results as IContent with role='tool'
+4. Receives tool results as IContent with speaker='tool'
 5. Converts back to Vercel AI SDK format for next iteration
 
 ### 6. Streaming vs Non-Streaming Approach
 
 #### Streaming (Primary Method)
 
-Uses `generateChat()` with AsyncGenerator:
+Uses `generateChatCompletion()` with an AsyncIterable that forwards `streamText` chunks:
 
 ```typescript
-async *generateChat(options: GenerateChatOptions): AsyncGenerator<IContent> {
-  const client = this.createClient(apiKey, baseUrl);
+async *generateChatCompletion(
+  options: GenerateChatOptions,
+): AsyncIterable<IContent> {
   const { textStream } = await streamText({
     model: client(modelName),
-    messages: convertedMessages,
-    tools: convertedTools,
+    messages,
+    tools,
   });
 
   for await (const delta of textStream) {
-    yield { role: 'assistant', content: delta };
+    yield { speaker: 'ai', blocks: [{ type: 'text', text: delta }] };
   }
 }
 ```
@@ -205,23 +213,27 @@ async *generateChat(options: GenerateChatOptions): AsyncGenerator<IContent> {
 
 #### Non-Streaming (Alternative)
 
-Uses `sendMessage()` for single response:
+Uses `generateChatCompletion()` with `streaming: false` to collect a single response:
 
 ```typescript
-async sendMessage(options: SendMessageOptions): Promise<IContent> {
-  const client = this.createClient(apiKey, baseUrl);
-  const { text, toolCalls } = await generateText({
-    model: client(modelName),
-    messages: convertedMessages,
-    tools: convertedTools,
-  });
+const { text, toolCalls } = await generateText({
+  model: client(modelName),
+  messages,
+  tools,
+});
 
-  return {
-    role: 'assistant',
-    content: text,
-    toolCalls: convertToolCalls(toolCalls),
-  };
-}
+return {
+  speaker: 'ai',
+  blocks: [
+    { type: 'text', text },
+    ...toolCalls.map((call) => ({
+      type: 'tool_call',
+      id: call.toolCallId,
+      name: call.toolName,
+      parameters: call.args,
+    })),
+  ],
+};
 ```
 
 ### 7. Authentication Handling
@@ -462,4 +474,4 @@ Each phase builds incrementally on the previous phase, ensuring testable progres
 - IProvider: `/packages/core/src/providers/IProvider.ts`
 - BaseProvider: `/packages/core/src/providers/BaseProvider.ts`
 - OpenAIProvider: `/packages/core/src/providers/openai/OpenAIProvider.ts`
-- Vercel AI SDK: https://sdk.vercel.ai/docs
+- Vercel AI SDK: [https://sdk.vercel.ai/docs](https://sdk.vercel.ai/docs)

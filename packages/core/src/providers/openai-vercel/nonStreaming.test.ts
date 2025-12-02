@@ -47,7 +47,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
     vi.clearAllMocks();
     settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openaivercel');
-    config = createRuntimeConfigStub();
+    config = createRuntimeConfigStub(settingsService);
   });
 
   afterEach(() => {
@@ -382,7 +382,8 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         r.blocks.some((b) => b.type === 'tool_call'),
       );
 
-      expect(hasText || hasToolCall).toBe(true);
+      expect(hasText).toBe(true);
+      expect(hasToolCall).toBe(true);
     });
 
     it('converts ProviderToolset into Vercel function tools', async () => {
@@ -767,8 +768,8 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
           blocks: [
             {
               type: 'tool_response',
-              id: 'call_123',
-              name: 'get_weather',
+              callId: 'call_123',
+              toolName: 'get_weather',
               result: { temperature: 72, condition: 'sunny' },
             },
           ],

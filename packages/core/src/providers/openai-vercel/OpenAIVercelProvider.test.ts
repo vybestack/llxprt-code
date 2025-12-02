@@ -249,7 +249,7 @@ describe('Authentication (REQ-OAV-003)', () => {
       },
     );
 
-    runtimeContext = result.runtimeContext;
+    runtimeContext = result.runtime;
     settingsService = result.settingsService;
   });
 
@@ -356,16 +356,27 @@ describe('Authentication (REQ-OAV-003)', () => {
     it('should prefer keyfile over environment when no constructor key', async () => {
       process.env.OPENAI_API_KEY = 'env-api-key';
       settingsService.set('activeProvider', 'openaivercel');
+      settingsService.setProviderSetting(
+        'openaivercel',
+        'auth-key',
+        'keyfile-api-key',
+      );
+      settingsService.setProviderSetting(
+        'openaivercel',
+        'apiKey',
+        'keyfile-api-key',
+      );
       settingsService.set('auth-key', 'keyfile-api-key');
 
       const provider = new OpenAIVercelProvider(undefined, undefined, {
         settingsService,
       });
 
+      provider.setRuntimeSettingsService(settingsService);
       setActiveProviderRuntimeContext(runtimeContext);
 
       const token = await provider.getAuthToken();
-      expect(token).toBe('env-api-key'); // Global settings come AFTER constructor, so env wins
+      expect(token).toBe('keyfile-api-key'); // Provider keyfile overrides env per precedence (provider, constructor, global, env, OAuth)
     });
 
     it('should use environment when no constructor key or keyfile', async () => {
