@@ -88,8 +88,9 @@ export function convertToVercelMessages(contents: IContent[]): CoreMessage[] {
         .filter((t) => t.length > 0)
         .join('\n');
       if (hasImages) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const parts: any[] = [];
+        const parts: Array<
+          { type: 'text'; text: string } | { type: 'image'; image: string }
+        > = [];
         if (text) {
           parts.push({ type: 'text', text });
         }
@@ -126,8 +127,9 @@ export function convertToVercelMessages(contents: IContent[]): CoreMessage[] {
         .join('\n');
 
       if (toolCallBlocks.length > 0) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const contentParts: any[] = [];
+        const contentParts: Array<
+          { type: 'text'; text: string } | ToolCallPart
+        > = [];
 
         if (text) {
           contentParts.push({ type: 'text', text });

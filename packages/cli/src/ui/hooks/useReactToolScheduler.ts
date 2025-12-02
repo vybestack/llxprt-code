@@ -190,7 +190,7 @@ export function useReactToolScheduler(
   // 1. config.getToolRegistry() returns different instances during initialization
   // 2. config.getApprovalMode() can change based on user settings
   // 3. The Gemini client initialization depends on having the latest config
-  const scheduler = useMemo(
+  const scheduler: CoreToolScheduler = useMemo(
     () =>
       new CoreToolScheduler({
         outputUpdateHandler: (toolCallId, chunk) =>

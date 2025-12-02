@@ -17,10 +17,10 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ProviderManager } from '../../ProviderManager.js';
-import { OpenAIVercelProvider } from '../OpenAIVercelProvider.js';
-import type { Config } from '../../../config/config.js';
-import type { SettingsService } from '../../../settings/SettingsService.js';
+import { ProviderManager } from '../ProviderManager.js';
+import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
+import type { Config } from '../../config/config.js';
+import type { SettingsService } from '../../settings/SettingsService.js';
 
 describe('OpenAIVercelProvider Registry Integration', () => {
   let providerManager: ProviderManager;

@@ -96,27 +96,11 @@ export function wrapError(error: unknown, provider: string): ProviderError {
 
   // Handle standard Error objects
   if (error instanceof Error) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const errorAny = error as any;
-
-    // Check for status code - support both 'statusCode' and 'status'
-    const statusCode: number | undefined =
-      errorAny.statusCode ?? errorAny.status;
+    const statusCode = getStatusCode(error);
 
     // Check for rate limit (429)
     if (statusCode === 429) {
-      // Check for retry-after in multiple locations
-      let retryAfter =
-        errorAny.retryAfter || errorAny.retry_after || errorAny['retry-after'];
-
-      // Also check responseHeaders if present
-      if (!retryAfter && errorAny.responseHeaders) {
-        const retryAfterHeader = errorAny.responseHeaders['retry-after'];
-        if (retryAfterHeader) {
-          retryAfter = parseInt(retryAfterHeader, 10);
-        }
-      }
-
+      const retryAfter = getRetryAfter(error);
       return new RateLimitError(
         error.message,
         provider,
@@ -164,4 +148,58 @@ export function wrapError(error: unknown, provider: string): ProviderError {
 
   // Handle non-Error objects (strings, etc.)
   return new ProviderError(String(error), provider);
+}
+
+function getStatusCode(error: Error): number | undefined {
+  const candidate = error as Partial<{
+    statusCode?: unknown;
+    status?: unknown;
+    response?: unknown;
+  }>;
+
+  if (typeof candidate.statusCode === 'number') return candidate.statusCode;
+  if (typeof candidate.status === 'number') return candidate.status;
+
+  const response = candidate.response;
+  if (response && typeof response === 'object' && 'status' in response) {
+    const responseStatus = (response as { status?: unknown }).status;
+    if (typeof responseStatus === 'number') {
+      return responseStatus;
+    }
+  }
+
+  return undefined;
+}
+
+function parseRetryAfter(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+  return undefined;
+}
+
+function getRetryAfter(error: Error): number | undefined {
+  const record: Record<string, unknown> =
+    error && typeof error === 'object' ? { ...(error as object) } : {};
+
+  const retryAfter =
+    record.retryAfter ??
+    record.retry_after ??
+    record['retry-after'] ??
+    getRetryAfterFromHeaders(record.responseHeaders);
+
+  return parseRetryAfter(retryAfter);
+}
+
+function getRetryAfterFromHeaders(headers: unknown): number | undefined {
+  if (!headers || typeof headers !== 'object') {
+    return undefined;
+  }
+
+  const headerValue = (headers as Record<string, unknown>)['retry-after'];
+  return parseRetryAfter(headerValue);
 }

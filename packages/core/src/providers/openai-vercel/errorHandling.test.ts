@@ -20,17 +20,17 @@
  */
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { OpenAIVercelProvider } from '../OpenAIVercelProvider.js';
-import { IContent } from '../../../services/history/IContent.js';
-import { createProviderCallOptions } from '../../../test-utils/providerCallOptions.js';
+import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
+import { IContent } from '../../services/history/IContent.js';
+import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import {
   ProviderError,
   RateLimitError,
   AuthenticationError,
   wrapError,
-} from '../errors.js';
-import { SettingsService } from '../../../settings/SettingsService.js';
-import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
+} from './errors.js';
+import { SettingsService } from '../../settings/SettingsService.js';
+import { createRuntimeConfigStub } from '../../test-utils/runtime.js';
 
 interface MockStreamTextResult {
   textStream: AsyncIterable<string>;

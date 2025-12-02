@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { OpenAIVercelProvider } from '../OpenAIVercelProvider.js';
+import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
 
 describe('OpenAIVercelProvider - Model Listing', () => {
   it('returns the expected static model list with provider metadata', async () => {

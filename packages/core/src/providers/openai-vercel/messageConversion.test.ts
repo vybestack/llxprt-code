@@ -520,8 +520,8 @@ describe('messageConversion', () => {
             blocks: [
               {
                 type: 'tool_response',
-                id: 'call_123',
-                name: 'void_tool',
+                callId: 'call_123',
+                toolName: 'void_tool',
                 result: undefined,
               } satisfies ToolResponseBlock,
             ],
