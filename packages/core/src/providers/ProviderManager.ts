@@ -59,6 +59,11 @@ const PROVIDER_CAPABILITY_HINTS: Record<
     hasApiKeyConfig: true,
     hasBaseUrlConfig: true,
   },
+  openaivercel: {
+    hasModelSelection: true,
+    hasApiKeyConfig: true,
+    hasBaseUrlConfig: true,
+  },
 };
 
 const logger = new DebugLogger('llxprt:provider:manager');
@@ -495,6 +500,7 @@ export class ProviderManager implements IProviderManager {
       'openai',
       'openai-responses',
       'anthropic',
+      'openaivercel',
     ]);
     if (!resolved.baseURL && !baseUrlOptionalProviders.has(targetProvider)) {
       missingFields.push('baseURL');

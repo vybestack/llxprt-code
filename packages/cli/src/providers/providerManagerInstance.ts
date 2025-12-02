@@ -9,6 +9,7 @@ import {
   ProviderManager,
   OpenAIProvider,
   OpenAIResponsesProvider,
+  OpenAIVercelProvider,
   AnthropicProvider,
   GeminiProvider,
   sanitizeForByteString,
@@ -342,6 +343,10 @@ export function createProviderManager(
       openaiProviderConfig,
       oauthManager,
     ),
+  );
+
+  manager.registerProvider(
+    new OpenAIVercelProvider(openaiApiKey, openaiBaseUrl),
   );
 
   const aliasEntries = loadProviderAliasEntries();

@@ -6,7 +6,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import ignore, { type Ignore } from 'ignore';
+import ignore, {
+  type Ignore as IgnoreResult,
+  type Options as IgnoreOptions,
+} from 'ignore';
 import { isGitRepository } from './gitUtils.js';
 
 export interface GitIgnoreFilter {
@@ -14,9 +17,13 @@ export interface GitIgnoreFilter {
   getPatterns(): string[];
 }
 
+const createIgnore = ignore as unknown as (
+  options?: IgnoreOptions,
+) => IgnoreResult;
+
 export class GitIgnoreParser implements GitIgnoreFilter {
   private projectRoot: string;
-  private ig: Ignore = ignore();
+  private ig: IgnoreResult = createIgnore();
   private patterns: string[] = [];
 
   constructor(projectRoot: string) {

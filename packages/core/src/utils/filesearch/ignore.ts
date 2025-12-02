@@ -6,10 +6,16 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import ignore from 'ignore';
+import ignore, {
+  type Ignore as IgnoreResult,
+  type Options as IgnoreOptions,
+} from 'ignore';
 import picomatch from 'picomatch';
 
 const hasFileExtension = picomatch('**/*[*.]*');
+const createIgnore = ignore as unknown as (
+  options?: IgnoreOptions,
+) => IgnoreResult;
 
 export interface LoadIgnoreRulesOptions {
   projectRoot: string;
@@ -49,8 +55,8 @@ export function loadIgnoreRules(options: LoadIgnoreRulesOptions): Ignore {
 
 export class Ignore {
   private readonly allPatterns: string[] = [];
-  private dirIgnorer = ignore();
-  private fileIgnorer = ignore();
+  private dirIgnorer = createIgnore();
+  private fileIgnorer = createIgnore();
 
   /**
    * Adds one or more ignore patterns.

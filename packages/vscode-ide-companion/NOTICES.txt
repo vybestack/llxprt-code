@@ -460,7 +460,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 ============================================================
-eventsource-parser@3.0.3
+eventsource-parser@3.0.6
 (git+ssh://git@github.com/rexxars/eventsource-parser.git)
 
 MIT License
