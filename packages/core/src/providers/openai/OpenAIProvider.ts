@@ -1334,6 +1334,31 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const validatedMessages = [...messages];
     let removedCount = 0;
 
+    // Debug: Log the full message sequence for tool call analysis
+    logger.debug(
+      () =>
+        `[OpenAIProvider] validateToolMessageSequence: analyzing ${messages.length} messages`,
+      {
+        messageRoles: messages.map((m) => m.role),
+        toolCallIds: messages
+          .filter(
+            (m) =>
+              m.role === 'assistant' &&
+              'tool_calls' in m &&
+              Array.isArray(m.tool_calls),
+          )
+          .flatMap(
+            (m) =>
+              (
+                m as OpenAI.Chat.ChatCompletionAssistantMessageParam
+              ).tool_calls?.map((tc) => tc.id) ?? [],
+          ),
+        toolResponseIds: messages
+          .filter((m) => m.role === 'tool')
+          .map((m) => (m as { tool_call_id?: string }).tool_call_id),
+      },
+    );
+
     // Check if there are any tool_calls in conversation
     // If no tool_calls exist, this might be isolated tool response testing - skip validation
     const hasToolCallsInConversation = validatedMessages.some(
