@@ -29,18 +29,22 @@ const copyTiktokenWasmPlugin = {
     try {
       sourcePath = require.resolve('@dqbd/tiktoken/tiktoken_bg.wasm');
     } catch (err) {
-      console.warn(
-        '[copy-tiktoken-wasm] Unable to locate tiktoken_bg.wasm:',
+      console.error(
+        '[copy-tiktoken-wasm] Unable to locate tiktoken_bg.wasm (failing build):',
         err,
       );
-      return;
+      throw err;
     }
 
     const copy = async () => {
       try {
         await fs.cp(sourcePath, targetPath);
       } catch (err) {
-        console.warn('[copy-tiktoken-wasm] Failed to copy wasm:', err);
+        console.error(
+          '[copy-tiktoken-wasm] Failed to copy wasm (failing build):',
+          err,
+        );
+        throw err;
       }
     };
 
