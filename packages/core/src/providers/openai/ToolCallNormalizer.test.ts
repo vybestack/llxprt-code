@@ -204,4 +204,127 @@ describe('ToolCallNormalizer', () => {
       expect(normalizer.validateNormalized(invalidCall2)).toBe(false);
     });
   });
+
+  describe('Kimi-K2 style prefix stripping', () => {
+    beforeEach(() => {
+      vi.mocked(processToolParameters).mockReturnValue({});
+    });
+
+    it('should strip "functions" prefix from tool name', () => {
+      const result = normalizer.normalize({
+        index: 0,
+        name: 'functionslist_directory',
+        args: '{}',
+        isValid: true,
+        validationErrors: [],
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('list_directory');
+    });
+
+    it('should strip "call_functions" prefix with trailing number', () => {
+      const result = normalizer.normalize({
+        index: 0,
+        name: 'call_functionslist_directory6',
+        args: '{}',
+        isValid: true,
+        validationErrors: [],
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('list_directory');
+    });
+
+    it('should strip "call_functions" prefix from search_file_content', () => {
+      const result = normalizer.normalize({
+        index: 0,
+        name: 'call_functionssearch_file_content9',
+        args: '{}',
+        isValid: true,
+        validationErrors: [],
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('search_file_content');
+    });
+
+    it('should strip "call_functions" prefix from read_many_files', () => {
+      const result = normalizer.normalize({
+        index: 0,
+        name: 'call_functionsread_many_files14',
+        args: '{}',
+        isValid: true,
+        validationErrors: [],
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('read_many_files');
+    });
+
+    it('should strip "call_functions" prefix from run_shell_command', () => {
+      const result = normalizer.normalize({
+        index: 0,
+        name: 'call_functionsrun_shell_command10',
+        args: '{}',
+        isValid: true,
+        validationErrors: [],
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('run_shell_command');
+    });
+
+    it('should strip "call_functions" prefix from read_file', () => {
+      const result = normalizer.normalize({
+        index: 0,
+        name: 'call_functionsread_file16',
+        args: '{}',
+        isValid: true,
+        validationErrors: [],
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('read_file');
+    });
+
+    it('should not modify normal tool names', () => {
+      const result = normalizer.normalize({
+        index: 0,
+        name: 'list_directory',
+        args: '{}',
+        isValid: true,
+        validationErrors: [],
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('list_directory');
+    });
+
+    it('should not modify tool names that start with "func" but are not malformed', () => {
+      const result = normalizer.normalize({
+        index: 0,
+        name: 'functional_test',
+        args: '{}',
+        isValid: true,
+        validationErrors: [],
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('functional_test');
+    });
+
+    it('should handle mixed case Kimi prefixes', () => {
+      const result = normalizer.normalize({
+        index: 0,
+        name: 'FUNCTIONSlist_directory',
+        args: '{}',
+        isValid: true,
+        validationErrors: [],
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.name).toBe('list_directory');
+    });
+  });
 });

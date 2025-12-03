@@ -171,6 +171,8 @@ export interface MediaBlock {
 
 /**
  * Thinking/reasoning content (for models that support it)
+ * @plan PLAN-20251202-THINKING.P03
+ * @requirement REQ-THINK-001.1, REQ-THINK-001.2
  */
 export interface ThinkingBlock {
   type: 'thinking';
@@ -180,6 +182,12 @@ export interface ThinkingBlock {
 
   /** Whether this thinking should be hidden from the user */
   isHidden?: boolean;
+
+  /** Source field name for round-trip serialization */
+  sourceField?: 'reasoning_content' | 'thinking' | 'thought' | 'think_tags';
+
+  /** Signature for Anthropic extended thinking */
+  signature?: string;
 }
 
 /**

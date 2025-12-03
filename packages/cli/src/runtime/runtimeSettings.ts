@@ -885,6 +885,15 @@ const PROFILE_EPHEMERAL_KEYS: readonly string[] = [
   'retries',
   'retrywait',
   'maxTurnsPerPrompt',
+  // @plan:PLAN-20251202-THINKING.P03b
+  // @requirement:REQ-THINK-006.6 - reasoning.* saveable via /profile save
+  'reasoning.enabled',
+  'reasoning.includeInContext',
+  'reasoning.includeInResponse',
+  'reasoning.format',
+  'reasoning.stripFromContext',
+  'reasoning.effort',
+  'reasoning.maxTokens',
 ];
 
 const SENSITIVE_MODEL_PARAM_KEYS = new Set([
@@ -910,6 +919,39 @@ function stripSensitiveModelParams<T extends Record<string, unknown>>(
     }
   }
   return params;
+}
+
+/**
+ * Gets a value from an object using a dot-notation key path.
+ * For example, getNestedValue({ reasoning: { enabled: true } }, 'reasoning.enabled') returns true.
+ * Falls back to direct key lookup for non-nested keys.
+ */
+function getNestedValue(
+  obj: Record<string, unknown>,
+  keyPath: string,
+): unknown {
+  // First try direct lookup (for flat keys like 'streaming')
+  if (keyPath in obj) {
+    return obj[keyPath];
+  }
+
+  // Handle dot-notation keys (e.g., 'reasoning.enabled')
+  const parts = keyPath.split('.');
+  if (parts.length === 1) {
+    return undefined;
+  }
+
+  let current: unknown = obj;
+  for (const part of parts) {
+    if (current === null || current === undefined) {
+      return undefined;
+    }
+    if (typeof current !== 'object') {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
 }
 
 export function buildRuntimeProfileSnapshot(): Profile {
@@ -940,7 +982,8 @@ export function buildRuntimeProfileSnapshot(): Profile {
     if (key === 'auth-key' && hasAuthKeyfile) {
       continue;
     }
-    const value = ephemeralRecord[key];
+    // Use getNestedValue to handle dot-notation keys like 'reasoning.enabled'
+    const value = getNestedValue(ephemeralRecord, key);
     if (value !== undefined) {
       snapshot[key] = value;
     }

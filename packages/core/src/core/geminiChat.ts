@@ -22,6 +22,10 @@ import {
 import { retryWithBackoff } from '../utils/retry.js';
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
+import {
+  extractThinkingBlocks,
+  estimateThinkingTokens,
+} from '../providers/reasoning/reasoningUtils.js';
 import { ContentGenerator } from './contentGenerator.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
@@ -1506,6 +1510,65 @@ export class GeminiChat {
   }
 
   /**
+   * Calculate effective token count based on reasoning settings.
+   * This accounts for whether reasoning will be included in API calls.
+   *
+   * @plan PLAN-20251202-THINKING.P15
+   * @requirement REQ-THINK-005.1, REQ-THINK-005.2
+   */
+  private getEffectiveTokenCount(): number {
+    const includeInContext =
+      this.runtimeContext.ephemerals.reasoning.includeInContext();
+    const stripPolicy =
+      this.runtimeContext.ephemerals.reasoning.stripFromContext();
+
+    // If reasoning IS included in context, all tokens count
+    if (includeInContext) {
+      return this.historyService.getTotalTokens();
+    }
+
+    // If reasoning is NOT included, calculate actual reduction
+    const allContents = this.historyService.getCurated();
+    const rawTokens = this.historyService.getTotalTokens();
+
+    let thinkingTokensToStrip = 0;
+
+    if (stripPolicy === 'all') {
+      // Sum up all thinking tokens
+      for (const content of allContents) {
+        const thinkingBlocks = extractThinkingBlocks(content);
+        thinkingTokensToStrip += estimateThinkingTokens(thinkingBlocks);
+      }
+    } else if (stripPolicy === 'allButLast') {
+      // Find last content with thinking blocks
+      let lastIndexWithThinking = -1;
+      for (let i = allContents.length - 1; i >= 0; i--) {
+        if (extractThinkingBlocks(allContents[i]).length > 0) {
+          lastIndexWithThinking = i;
+          break;
+        }
+      }
+
+      // Strip thinking from all except that last one
+      for (let i = 0; i < allContents.length; i++) {
+        if (i !== lastIndexWithThinking) {
+          const thinkingBlocks = extractThinkingBlocks(allContents[i]);
+          thinkingTokensToStrip += estimateThinkingTokens(thinkingBlocks);
+        }
+      }
+    } else {
+      // stripPolicy === 'none': but includeInContext=false means they won't be sent
+      // Strip ALL thinking for effective count
+      for (const content of allContents) {
+        const thinkingBlocks = extractThinkingBlocks(content);
+        thinkingTokensToStrip += estimateThinkingTokens(thinkingBlocks);
+      }
+    }
+
+    return Math.max(0, rawTokens - thinkingTokensToStrip);
+  }
+
+  /**
    * Check if compression is needed based on token count
    * @plan PLAN-20251028-STATELESS6.P10
    * @requirement REQ-STAT6-002.2
@@ -1527,7 +1590,7 @@ export class GeminiChat {
     }
 
     const currentTokens =
-      this.historyService.getTotalTokens() + Math.max(0, pendingTokens);
+      this.getEffectiveTokenCount() + Math.max(0, pendingTokens);
     const shouldCompress = currentTokens >= this.cachedCompressionThreshold;
 
     if (shouldCompress) {
@@ -1719,7 +1782,7 @@ export class GeminiChat {
     );
 
     const projected =
-      this.historyService.getTotalTokens() +
+      this.getEffectiveTokenCount() +
       Math.max(0, pendingTokens) +
       completionBudget;
 
@@ -1742,7 +1805,7 @@ export class GeminiChat {
     await this.historyService.waitForTokenUpdates();
 
     const recomputed =
-      this.historyService.getTotalTokens() +
+      this.getEffectiveTokenCount() +
       Math.max(0, pendingTokens) +
       completionBudget;
 
@@ -2042,8 +2105,13 @@ export class GeminiChat {
     const allChunks: GenerateContentResponse[] = [];
 
     for await (const chunk of streamResponse) {
-      hasFinishReason =
-        chunk?.candidates?.some((candidate) => candidate.finishReason) ?? false;
+      // Accumulate hasFinishReason - once we see a finishReason, it stays true
+      // Bug fix: Previously this was overwritten on each iteration, causing
+      // the final thinking block (with no finishReason) to reset it to false
+      // @plan PLAN-20251202-THINKING.P16
+      if (chunk?.candidates?.some((candidate) => candidate.finishReason)) {
+        hasFinishReason = true;
+      }
       if (isValidResponse(chunk)) {
         const content = chunk.candidates?.[0]?.content;
         if (content?.parts) {

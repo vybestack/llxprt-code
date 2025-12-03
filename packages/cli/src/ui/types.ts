@@ -8,6 +8,7 @@ import {
   CompressionStatus,
   ToolCallConfirmationDetails,
   ToolResultDisplay,
+  type ThinkingBlock,
 } from '@vybestack/llxprt-code-core';
 
 // Only defining the state enum needed by the UI
@@ -74,12 +75,14 @@ export type HistoryItemGemini = HistoryItemBase & {
   type: 'gemini';
   text: string;
   model?: string;
+  thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
 };
 
 export type HistoryItemGeminiContent = HistoryItemBase & {
   type: 'gemini_content';
   text: string;
   model?: string;
+  thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
 };
 
 export type HistoryItemOAuthURL = HistoryItemBase & {

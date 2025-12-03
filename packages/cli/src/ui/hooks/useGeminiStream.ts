@@ -32,6 +32,7 @@ import {
   EmojiFilter,
   type EmojiFilterMode,
   DEFAULT_AGENT_ID,
+  type ThinkingBlock,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -167,6 +168,10 @@ export const useGeminiStream = (
   const { startNewPrompt, getPromptCount } = useSessionStats();
   const storage = config.storage;
 
+  // @plan:PLAN-20251202-THINKING-UI.P08
+  // @requirement:REQ-THINK-UI-001
+  const thinkingBlocksRef = useRef<ThinkingBlock[]>([]);
+
   // Initialize emoji filter
   const emojiFilter = useMemo(() => {
     const emojiFilterMode =
@@ -242,7 +247,18 @@ export const useGeminiStream = (
           return;
         }
 
-        addItem({ ...pending, text: sanitized }, timestamp);
+        // @plan:PLAN-20251202-THINKING-UI.P08
+        // @requirement:REQ-THINK-UI-003
+        // Always include thinkingBlocks for storage (display is controlled separately)
+        const itemWithThinking = {
+          ...pending,
+          text: sanitized,
+          ...(thinkingBlocksRef.current.length > 0
+            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+            : {}),
+        };
+
+        addItem(itemWithThinking, timestamp);
 
         if (feedback) {
           addItem({ type: MessageType.INFO, text: feedback }, timestamp);
@@ -610,14 +626,27 @@ export const useGeminiStream = (
         if (pendingHistoryItemRef.current) {
           flushPendingHistoryItem(userMessageTimestamp);
         }
-        setPendingHistoryItem({ type: 'gemini', text: '' });
+        // @plan:PLAN-20251202-THINKING-UI.P08
+        // Include thinkingBlocks in pending item so they display during streaming
+        setPendingHistoryItem({
+          type: 'gemini',
+          text: '',
+          ...(thinkingBlocksRef.current.length > 0
+            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+            : {}),
+        });
       }
 
       const splitPoint = findLastSafeSplitPoint(sanitizedCombined);
       if (splitPoint === sanitizedCombined.length) {
+        // @plan:PLAN-20251202-THINKING-UI.P08
+        // Preserve thinkingBlocks during streaming updates
         setPendingHistoryItem((item) => ({
           type: item?.type as 'gemini' | 'gemini_content',
           text: sanitizedCombined,
+          ...(thinkingBlocksRef.current.length > 0
+            ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+            : {}),
         }));
         return sanitizedCombined;
       }
@@ -631,16 +660,30 @@ export const useGeminiStream = (
           : 'gemini';
 
       if (beforeText) {
+        // @plan:PLAN-20251202-THINKING-UI.P08
+        // @requirement:REQ-THINK-UI-003
+        // Always include thinkingBlocks for storage (display is controlled separately)
         addItem(
           {
             type: pendingType,
             text: beforeText,
+            ...(thinkingBlocksRef.current.length > 0
+              ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+              : {}),
           },
           userMessageTimestamp,
         );
       }
 
-      setPendingHistoryItem({ type: 'gemini_content', text: afterText });
+      // @plan:PLAN-20251202-THINKING-UI.P08
+      // Preserve thinkingBlocks in continuation pending item
+      setPendingHistoryItem({
+        type: 'gemini_content',
+        text: afterText,
+        ...(thinkingBlocksRef.current.length > 0
+          ? { thinkingBlocks: [...thinkingBlocksRef.current] }
+          : {}),
+      });
       return afterText;
     },
     [
@@ -851,7 +894,20 @@ export const useGeminiStream = (
         }
         switch (event.type) {
           case ServerGeminiEventType.Thought:
+            // @plan:PLAN-20251202-THINKING-UI.P08
+            // @requirement:REQ-THINK-UI-001
             setThought(event.value);
+
+            // Accumulate as ThinkingBlock for history
+            {
+              const thinkingBlock: ThinkingBlock = {
+                type: 'thinking',
+                thought:
+                  `${event.value.subject || ''}: ${event.value.description || ''}`.trim(),
+                sourceField: 'thought',
+              };
+              thinkingBlocksRef.current.push(thinkingBlock);
+            }
             break;
           case ServerGeminiEventType.Content:
             geminiMessageBuffer = handleContentEvent(
@@ -984,6 +1040,8 @@ export const useGeminiStream = (
       if (!options?.isContinuation) {
         startNewPrompt();
         setThought(null); // Reset thought when starting a new prompt
+        // @plan:PLAN-20251202-THINKING-UI.P08
+        thinkingBlocksRef.current = [];
       }
 
       setIsResponding(true);

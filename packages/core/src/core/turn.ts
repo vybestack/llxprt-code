@@ -329,14 +329,20 @@ export class Turn {
 
         this.debugResponses.push(resp);
 
-        const thoughtPart = resp.candidates?.[0]?.content?.parts?.[0];
-        if (thoughtPart?.thought) {
-          const thought = parseThought(thoughtPart.text ?? '');
-          yield {
-            type: GeminiEventType.Thought,
-            value: thought,
-          };
-          continue;
+        // Check ALL parts for thinking, not just parts[0]
+        // Bug fix: Previously only checked parts[0], missing thoughts in other positions
+        // @plan PLAN-20251202-THINKING.P16
+        const allParts = resp.candidates?.[0]?.content?.parts ?? [];
+        for (const part of allParts) {
+          if ((part as unknown as { thought?: boolean }).thought) {
+            const thought = parseThought(
+              (part as unknown as { text?: string }).text ?? '',
+            );
+            yield {
+              type: GeminiEventType.Thought,
+              value: thought,
+            };
+          }
         }
 
         const text = getResponseText(resp);

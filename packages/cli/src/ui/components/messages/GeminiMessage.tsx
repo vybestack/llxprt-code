@@ -9,6 +9,9 @@ import { Text, Box } from 'ink';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { Colors } from '../../colors.js';
 import { SCREEN_READER_MODEL_PREFIX } from '../../textConstants.js';
+import { ThinkingBlockDisplay } from './ThinkingBlockDisplay.js';
+import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
+import { useRuntimeApi } from '../../contexts/RuntimeContext.js';
 
 interface GeminiMessageProps {
   text: string;
@@ -16,6 +19,7 @@ interface GeminiMessageProps {
   availableTerminalHeight?: number;
   terminalWidth: number;
   model?: string;
+  thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
 }
 
 export const GeminiMessage: React.FC<GeminiMessageProps> = ({
@@ -24,7 +28,17 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
   availableTerminalHeight,
   terminalWidth,
   model,
+  thinkingBlocks,
 }) => {
+  /**
+   * @plan:PLAN-20251202-THINKING-UI.P06
+   * @requirement:REQ-THINK-UI-001
+   * @requirement:REQ-THINK-UI-003
+   */
+  const { getEphemeralSetting } = useRuntimeApi();
+  const showThinking = (getEphemeralSetting('reasoning.includeInResponse') ??
+    true) as boolean;
+
   const prefix = '✦ ';
   const prefixWidth = prefix.length;
 
@@ -37,6 +51,14 @@ export const GeminiMessage: React.FC<GeminiMessageProps> = ({
           </Text>
         </Box>
       )}
+      {showThinking &&
+        thinkingBlocks?.map((block, index) => (
+          <ThinkingBlockDisplay
+            key={`thinking-${index}`}
+            block={block}
+            visible={true}
+          />
+        ))}
       <Box flexDirection="row">
         <Box width={prefixWidth}>
           <Text

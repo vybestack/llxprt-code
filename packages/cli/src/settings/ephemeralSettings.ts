@@ -55,6 +55,19 @@ export const ephemeralSettingHelp: Record<string, string> = {
     'Percentage threshold for rate limit throttling (1-100, default: 5, Anthropic only)',
   'rate-limit-max-wait':
     'Maximum wait time in milliseconds for rate limit throttling (default: 60000, Anthropic only)',
+  'reasoning.enabled':
+    'Enable reasoning/thinking token support (true/false, default: false)',
+  'reasoning.includeInContext':
+    'Include reasoning_content in subsequent API requests (true/false, default: true)',
+  'reasoning.includeInResponse':
+    'Include thinking blocks in responses to user (true/false, default: true)',
+  'reasoning.format': 'Reasoning format to use (native/field, default: native)',
+  'reasoning.stripFromContext':
+    'Strip policy for thinking blocks (all/allButLast/none, default: none)',
+  'reasoning.effort':
+    'Reasoning effort level (minimal/low/medium/high, default: undefined)',
+  'reasoning.maxTokens':
+    'Maximum tokens for reasoning output (positive integer, default: undefined)',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
@@ -298,6 +311,76 @@ export function parseEphemeralSettingValue(
         success: false,
         message:
           'rate-limit-max-wait must be a positive integer in milliseconds',
+      };
+    }
+  }
+
+  // Reasoning boolean settings
+  if (
+    key === 'reasoning.enabled' ||
+    key === 'reasoning.includeInContext' ||
+    key === 'reasoning.includeInResponse'
+  ) {
+    if (typeof parsedValue !== 'boolean') {
+      return {
+        success: false,
+        message: `${key} must be either 'true' or 'false'`,
+      };
+    }
+  }
+
+  // Reasoning format setting
+  if (key === 'reasoning.format') {
+    const validModes = ['native', 'field'];
+    if (
+      typeof parsedValue !== 'string' ||
+      !validModes.includes(parsedValue.toLowerCase())
+    ) {
+      return {
+        success: false,
+        message: `${key} must be one of: ${validModes.join(', ')}`,
+      };
+    }
+    parsedValue = parsedValue.toLowerCase();
+  }
+
+  // Reasoning strip policy setting
+  if (key === 'reasoning.stripFromContext') {
+    const validModes = ['all', 'allButLast', 'none'];
+    if (typeof parsedValue !== 'string' || !validModes.includes(parsedValue)) {
+      return {
+        success: false,
+        message: `${key} must be one of: ${validModes.join(', ')}`,
+      };
+    }
+  }
+
+  // Reasoning effort setting
+  if (key === 'reasoning.effort') {
+    const validModes = ['minimal', 'low', 'medium', 'high'];
+    if (
+      typeof parsedValue !== 'string' ||
+      !validModes.includes(parsedValue.toLowerCase())
+    ) {
+      return {
+        success: false,
+        message: `${key} must be one of: ${validModes.join(', ')}`,
+      };
+    }
+    parsedValue = parsedValue.toLowerCase();
+  }
+
+  // Reasoning maxTokens setting
+  if (key === 'reasoning.maxTokens') {
+    const numValue = parsedValue as number;
+    if (
+      typeof numValue !== 'number' ||
+      numValue <= 0 ||
+      !Number.isInteger(numValue)
+    ) {
+      return {
+        success: false,
+        message: `${key} must be a positive integer`,
       };
     }
   }
