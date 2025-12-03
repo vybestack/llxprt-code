@@ -36,9 +36,13 @@ const copyTiktokenWasmPlugin = {
       throw err;
     }
 
-    const copy = async () => {
+    const copy = async (result) => {
+      if (result.errors?.length) {
+        return;
+      }
       try {
-        await fs.cp(sourcePath, targetPath);
+        // fs.copyFile is supported back to Node 16; prefer it for portability.
+        await fs.copyFile(sourcePath, targetPath);
       } catch (err) {
         console.error(
           '[copy-tiktoken-wasm] Failed to copy wasm (failing build):',
