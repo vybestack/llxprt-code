@@ -17,7 +17,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
-import { Colors } from '../../colors.js';
 
 export interface ThinkingBlockDisplayProps {
   /** The ThinkingBlock to display */
@@ -55,14 +54,8 @@ export const ThinkingBlockDisplay: React.FC<ThinkingBlockDisplayProps> = ({
   }
 
   return (
-    <Box
-      flexDirection="column"
-      marginY={0}
-      paddingX={1}
-      borderStyle="single"
-      borderColor={Colors.Gray}
-    >
-      <Text italic color={Colors.Gray}>
+    <Box flexDirection="column" marginY={0} paddingX={1}>
+      <Text italic dimColor>
         {block.thought}
       </Text>
     </Box>
