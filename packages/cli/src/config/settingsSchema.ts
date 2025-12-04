@@ -559,7 +559,7 @@ export const SETTINGS_SCHEMA = {
           { value: 'default', label: 'Default (LLxprt + Custom Override)' },
           { value: 'llxprt', label: 'LLxprt Built-in' },
           { value: 'gemini-cli', label: 'Gemini-cli Built-in' },
-          { value: 'community', label: 'Community Suggestions' },
+          { value: 'whimsical', label: 'Whimsical' },
           { value: 'custom', label: 'Custom Phrases Only' },
         ] satisfies ReadonlyArray<{ value: WittyPhraseStyle; label: string }>,
       },
@@ -1348,6 +1348,32 @@ export const SETTINGS_SCHEMA = {
     default: false,
     description: 'Enable debug logging of keystrokes to the console.',
     showInDialog: true,
+  },
+  customWittyPhrases: {
+    type: 'array',
+    label: 'Custom Witty Phrases',
+    category: 'UI',
+    requiresRestart: false,
+    default: [] as string[],
+    description: 'Custom witty phrases to display during loading.',
+    showInDialog: false,
+  },
+  wittyPhraseStyle: {
+    type: 'enum',
+    label: 'Witty Phrase Style',
+    category: 'UI',
+    requiresRestart: false,
+    default: 'default',
+    description:
+      'Choose which collection of witty phrases to display during loading.',
+    showInDialog: true,
+    options: [
+      { value: 'default', label: 'Default (LLxprt + Custom Override)' },
+      { value: 'llxprt', label: 'LLxprt Built-in' },
+      { value: 'gemini-cli', label: 'Gemini-cli Built-in' },
+      { value: 'whimsical', label: 'Whimsical' },
+      { value: 'custom', label: 'Custom Phrases Only' },
+    ] satisfies ReadonlyArray<{ value: WittyPhraseStyle; label: string }>,
   },
 } as const;
 

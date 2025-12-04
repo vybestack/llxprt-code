@@ -11,7 +11,7 @@ export type WittyPhraseStyle =
   | 'default'
   | 'llxprt'
   | 'gemini-cli'
-  | 'community'
+  | 'whimsical'
   | 'custom';
 
 /**
@@ -205,7 +205,7 @@ export const GEMINI_CLI_PHRASES = [
 ];
 
 /**
- * Community-contributed phrases (My Little Pony themed)
+ * Whimsical phrases (My Little Pony themed)
  */
 export const COMMUNITY_PHRASES = [
   'The first rule of the Friendship Circle is: We all talk about our feelings.',
@@ -229,7 +229,7 @@ export function getPhraseCollection(
       return LLXPRT_PHRASES;
     case 'gemini-cli':
       return GEMINI_CLI_PHRASES;
-    case 'community':
+    case 'whimsical':
       return COMMUNITY_PHRASES;
     case 'custom':
       return customPhrases && customPhrases.length > 0
