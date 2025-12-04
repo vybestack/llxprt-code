@@ -195,6 +195,7 @@ export class IdeClient {
   ): Promise<DiffUpdateResult> {
     return new Promise<DiffUpdateResult>((resolve, reject) => {
       this.diffResponses.set(filePath, resolve);
+      logger.debug(`openDiff -> tools/call openDiff for ${filePath}`);
       this.client
         ?.callTool({
           name: `openDiff`,
@@ -204,7 +205,7 @@ export class IdeClient {
           },
         })
         .catch((err) => {
-          logger.debug(`callTool for ${filePath} failed:`, err);
+          logger.debug(`openDiff callTool for ${filePath} failed:`, err);
           reject(err);
         });
     });
@@ -215,6 +216,7 @@ export class IdeClient {
     options?: { suppressNotification?: boolean },
   ): Promise<string | undefined> {
     try {
+      logger.debug(`closeDiff -> tools/call closeDiff for ${filePath}`);
       const result = await this.client?.callTool({
         name: `closeDiff`,
         arguments: {
@@ -228,7 +230,7 @@ export class IdeClient {
         return parsed.content;
       }
     } catch (err) {
-      logger.debug(`callTool for ${filePath} failed:`, err);
+      logger.debug(`closeDiff callTool for ${filePath} failed:`, err);
     }
     return;
   }

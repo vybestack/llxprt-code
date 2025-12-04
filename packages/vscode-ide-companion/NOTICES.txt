@@ -1,6 +1,12 @@
 This file contains third-party software notices and license terms.
 
 ============================================================
+@dqbd/tiktoken@1.0.22
+(https://github.com/dqbd/tiktoken)
+
+License text not found.
+
+============================================================
 @modelcontextprotocol/sdk@1.22.0
 (git+https://github.com/modelcontextprotocol/typescript-sdk.git)
 
