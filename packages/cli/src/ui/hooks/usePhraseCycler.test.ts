@@ -14,7 +14,6 @@ import {
   LLXPRT_PHRASES,
   GEMINI_CLI_PHRASES,
   COMMUNITY_PHRASES,
-  getPhraseCollection,
 } from '../constants/phrasesCollections.js';
 
 describe('usePhraseCycler', () => {

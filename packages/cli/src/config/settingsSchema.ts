@@ -14,6 +14,7 @@ import {
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
 } from '@vybestack/llxprt-code-core';
 import { CustomTheme } from '../ui/themes/theme.js';
+import { type WittyPhraseStyle } from '../ui/constants/phrasesCollections.js';
 import type { SessionRetentionSettings } from './settings.js';
 
 export type SettingsType =
@@ -560,7 +561,7 @@ export const SETTINGS_SCHEMA = {
           { value: 'gemini-cli', label: 'Gemini-cli Built-in' },
           { value: 'community', label: 'Community Suggestions' },
           { value: 'custom', label: 'Custom Phrases Only' },
-        ] as const,
+        ] satisfies ReadonlyArray<{ value: WittyPhraseStyle; label: string }>,
       },
       vimMode: {
         type: 'boolean',

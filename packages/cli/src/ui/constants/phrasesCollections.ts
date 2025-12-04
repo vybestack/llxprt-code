@@ -5,6 +5,16 @@
  */
 
 /**
+ * Available witty phrase style options
+ */
+export type WittyPhraseStyle =
+  | 'default'
+  | 'llxprt'
+  | 'gemini-cli'
+  | 'community'
+  | 'custom';
+
+/**
  * LLxprt built-in phrases (current default)
  * Source: Fight Club, Salvador Dalí, Office Space, René Magritte, Marcel Duchamp, André Breton
  */
@@ -211,7 +221,7 @@ export const COMMUNITY_PHRASES = [
  * @returns Array of phrases to use for cycling
  */
 export function getPhraseCollection(
-  style: 'default' | 'llxprt' | 'gemini-cli' | 'community' | 'custom',
+  style: WittyPhraseStyle,
   customPhrases?: string[],
 ): string[] {
   switch (style) {

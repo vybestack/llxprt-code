@@ -5,7 +5,10 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { getPhraseCollection } from '../constants/phrasesCollections.js';
+import {
+  getPhraseCollection,
+  type WittyPhraseStyle,
+} from '../constants/phrasesCollections.js';
 
 export const PHRASE_CHANGE_INTERVAL_MS = 15000; // 15 seconds between phrase changes
 
@@ -20,12 +23,7 @@ export const PHRASE_CHANGE_INTERVAL_MS = 15000; // 15 seconds between phrase cha
 export const usePhraseCycler = (
   isActive: boolean,
   isWaiting: boolean,
-  style:
-    | 'default'
-    | 'llxprt'
-    | 'gemini-cli'
-    | 'community'
-    | 'custom' = 'default',
+  style: WittyPhraseStyle = 'default',
   customPhrases?: string[],
 ) => {
   const loadingPhrases = getPhraseCollection(style, customPhrases);
