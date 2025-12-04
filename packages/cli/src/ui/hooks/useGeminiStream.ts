@@ -902,8 +902,9 @@ export const useGeminiStream = (
             {
               const thinkingBlock: ThinkingBlock = {
                 type: 'thinking',
-                thought:
-                  `${event.value.subject || ''}: ${event.value.description || ''}`.trim(),
+                thought: [event.value.subject, event.value.description]
+                  .filter(Boolean)
+                  .join(': '),
                 sourceField: 'thought',
               };
               thinkingBlocksRef.current.push(thinkingBlock);

@@ -153,10 +153,12 @@ function convertPropertySchema(
   // Handle array items
   if (prop.items) {
     if (Array.isArray(prop.items)) {
-      // Tuple type - use first item as representative
-      result.items = convertPropertySchema(
-        prop.items[0] as Record<string, unknown>,
-      );
+      // Tuple type - use first item as representative (skip empty tuples)
+      if (prop.items.length > 0) {
+        result.items = convertPropertySchema(
+          prop.items[0] as Record<string, unknown>,
+        );
+      }
     } else {
       result.items = convertPropertySchema(
         prop.items as Record<string, unknown>,

@@ -4067,14 +4067,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         pipelineKimiCleanContent = kimiParsed.cleanedText;
         pipelineKimiToolBlocks = kimiParsed.toolCalls;
 
+        // Always use sanitized text - even Kimi-K2 should have consistent tag stripping
         const cleanedText = this.sanitizeProviderText(pipelineKimiCleanContent);
-        const displayText = model.toLowerCase().includes('kimi-k2')
-          ? pipelineKimiCleanContent
-          : cleanedText;
-        if (displayText) {
+        if (cleanedText) {
           blocks.push({
             type: 'text',
-            text: displayText,
+            text: cleanedText,
           } as TextBlock);
         }
       }
