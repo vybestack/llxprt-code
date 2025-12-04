@@ -35,11 +35,13 @@ import {
 import { DebugLogger } from '../../debug/index.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
+import { convertToolsToOpenAI, OpenAITool } from './schemaConverter.js';
 import { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
 import {
   ToolCallBlock,
   TextBlock,
   ToolResponseBlock,
+  ThinkingBlock,
 } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { IModel } from '../IModel.js';
@@ -56,6 +58,12 @@ import {
   EMPTY_TOOL_RESULT_PLACEHOLDER,
 } from '../utils/toolResponsePayload.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
+import {
+  filterThinkingForContext,
+  thinkingToReasoningField,
+  extractThinkingBlocks,
+  type StripPolicy,
+} from '../reasoning/reasoningUtils.js';
 
 const MAX_TOOL_RESPONSE_CHARS = 1024;
 const MAX_TOOL_RESPONSE_RETRY_CHARS = 512;
@@ -295,6 +303,319 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return new OpenAI(
       clientOptions as unknown as ConstructorParameters<typeof OpenAI>[0],
     );
+  }
+
+  /**
+   * Coerce provider "content" (which may be a string or an array-of-parts)
+   * into a plain string. Defensive for OpenAI-compatible providers that emit
+   * structured content blocks.
+   */
+  private coerceMessageContentToString(content: unknown): string | undefined {
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (Array.isArray(content)) {
+      const parts: string[] = [];
+      for (const part of content) {
+        if (!part) continue;
+        if (typeof part === 'string') {
+          parts.push(part);
+        } else if (
+          typeof part === 'object' &&
+          part !== null &&
+          'text' in part &&
+          typeof (part as { text?: unknown }).text === 'string'
+        ) {
+          parts.push((part as { text: string }).text);
+        }
+      }
+      return parts.length ? parts.join('') : undefined;
+    }
+    return undefined;
+  }
+
+  /**
+   * Strip provider-specific "thinking" / reasoning markup from visible text.
+   * This prevents DeepSeek / Kimi-style <think> blocks from leaking into
+   * user-visible output or tool arguments.
+   */
+  private sanitizeProviderText(text: unknown): string {
+    if (text === null || text === undefined) {
+      return '';
+    }
+
+    const logger = this.getLogger();
+    let str = typeof text === 'string' ? text : String(text);
+    const beforeLen = str.length;
+    const hadReasoningTags =
+      /<(?:think|thinking|analysis)>|<\/(?:think|thinking|analysis)>/i.test(
+        str,
+      );
+
+    // DeepSeek / generic <think>...</think> blocks.
+    str = str.replace(/<think>[\s\S]*?<\/think>/gi, '');
+
+    // Alternative reasoning tags some providers use.
+    str = str.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+    str = str.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '');
+
+    // Clean up stray unmatched tags.
+    str = str.replace(/<\/?(?:think|thinking|analysis)>/gi, '');
+
+    const afterLen = str.length;
+    if (hadReasoningTags && afterLen !== beforeLen) {
+      logger.debug(() => `[OpenAIProvider] Stripped reasoning tags`, {
+        beforeLen,
+        afterLen,
+      });
+    }
+
+    return str;
+  }
+
+  /**
+   * Extract thinking content from <think>, <thinking>, or <analysis> tags
+   * and return it as a ThinkingBlock. Returns null if no thinking tags found.
+   *
+   * This must be called BEFORE sanitizeProviderText which strips these tags.
+   *
+   * Handles two formats:
+   * 1. Standard: <think>Full thinking paragraph here...</think>
+   * 2. Fragmented (Synthetic API): <think>word</think><think>word</think>...
+   *
+   * For fragmented format, joins with spaces. For standard, joins with newlines.
+   *
+   * @plan PLAN-20251202-THINKING.P16
+   * @requirement REQ-THINK-003
+   */
+  private extractThinkTagsAsBlock(text: string): ThinkingBlock | null {
+    if (!text) {
+      return null;
+    }
+
+    // Collect all thinking content from various tag formats
+    const thinkingParts: string[] = [];
+
+    // Match <think>...</think>
+    const thinkMatches = text.matchAll(/<think>([\s\S]*?)<\/think>/gi);
+    for (const match of thinkMatches) {
+      if (match[1]?.trim()) {
+        thinkingParts.push(match[1].trim());
+      }
+    }
+
+    // Match <thinking>...</thinking>
+    const thinkingMatches = text.matchAll(/<thinking>([\s\S]*?)<\/thinking>/gi);
+    for (const match of thinkingMatches) {
+      if (match[1]?.trim()) {
+        thinkingParts.push(match[1].trim());
+      }
+    }
+
+    // Match <analysis>...</analysis>
+    const analysisMatches = text.matchAll(/<analysis>([\s\S]*?)<\/analysis>/gi);
+    for (const match of analysisMatches) {
+      if (match[1]?.trim()) {
+        thinkingParts.push(match[1].trim());
+      }
+    }
+
+    if (thinkingParts.length === 0) {
+      return null;
+    }
+
+    // Detect fragmented format: many short parts (likely token-by-token streaming)
+    // If average part length is very short (< 10 chars) and we have many parts,
+    // it's likely fragmented and should be joined with spaces
+    const avgPartLength =
+      thinkingParts.reduce((sum, p) => sum + p.length, 0) /
+      thinkingParts.length;
+    const isFragmented = thinkingParts.length > 5 && avgPartLength < 15;
+
+    // Join with space for fragmented, newlines for standard multi-paragraph thinking
+    const combinedThought = isFragmented
+      ? thinkingParts.join(' ')
+      : thinkingParts.join('\n\n');
+
+    this.getLogger().debug(
+      () =>
+        `[OpenAIProvider] Extracted thinking from tags: ${combinedThought.length} chars`,
+      { tagCount: thinkingParts.length, isFragmented, avgPartLength },
+    );
+
+    return {
+      type: 'thinking',
+      thought: combinedThought,
+      sourceField: 'think_tags',
+      isHidden: false,
+    };
+  }
+
+  /**
+   * Normalize tool name by stripping Kimi-K2 style prefixes.
+   *
+   * Handles malformed tool names where the model concatenates prefixes like
+   * "functions" or "call_functions" with the actual tool name:
+   * - "functionslist_directory" -> "list_directory"
+   * - "call_functionslist_directory6" -> "list_directory"
+   * - "call_functionsglob7" -> "glob"
+   */
+  private normalizeToolName(name: string): string {
+    let normalized = (name || '').trim();
+
+    // Strip Kimi-K2 style prefixes where model concatenates "functions" or "call_functions"
+    // with the actual tool name (e.g., "functionslist_directory" -> "list_directory")
+    // Pattern: (call_)?functions<actual_tool_name><optional_number>
+    const kimiPrefixMatch = /^(?:call_)?functions([a-z_]+[a-z])(\d*)$/i.exec(
+      normalized,
+    );
+    if (kimiPrefixMatch) {
+      const originalName = normalized;
+      normalized = kimiPrefixMatch[1];
+      this.getLogger().debug(
+        () =>
+          `[OpenAIProvider] Stripped Kimi-style prefix from tool name: "${originalName}" -> "${normalized}"`,
+      );
+    }
+
+    return normalized.toLowerCase();
+  }
+
+  /**
+   * Sanitize raw tool argument payloads before JSON parsing:
+   * - Remove thinking blocks (<think>...</think>, etc.).
+   * - Strip Markdown code fences (```json ... ```).
+   * - Try to isolate the main JSON object if wrapped in prose.
+   */
+  private sanitizeToolArgumentsString(raw: unknown): string {
+    if (raw === null || raw === undefined) {
+      return '{}';
+    }
+
+    let text: string;
+    if (typeof raw === 'string') {
+      text = raw;
+    } else {
+      try {
+        text = JSON.stringify(raw);
+      } catch {
+        text = String(raw);
+      }
+    }
+
+    text = text.trim();
+
+    // Strip fenced code blocks like ```json { ... } ```.
+    if (text.startsWith('```')) {
+      text = text.replace(/^```[a-zA-Z0-9_-]*\s*/m, '');
+      text = text.replace(/```$/m, '');
+      text = text.trim();
+    }
+
+    // Remove provider reasoning / thinking markup.
+    text = this.sanitizeProviderText(text);
+
+    // If provider wrapped JSON in explanation text, try to isolate the object.
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      const candidate = text.slice(firstBrace, lastBrace + 1).trim();
+      if (candidate.startsWith('{') && candidate.endsWith('}')) {
+        return candidate;
+      }
+    }
+
+    return text.length ? text : '{}';
+  }
+
+  /**
+   * Parse Kimi-K2 `<|tool_calls_section_begin|> ... <|tool_calls_section_end|>`
+   * blocks out of a text string.
+   *
+   * - Returns cleanedText with the whole section removed.
+   * - Returns ToolCallBlock[] constructed from the section contents.
+   *
+   * This is used for HF/vLLM-style Kimi deployments where `tool_calls` is empty
+   * and all tool info is only encoded in the text template.
+   */
+  private extractKimiToolCallsFromText(raw: string): {
+    cleanedText: string;
+    toolCalls: ToolCallBlock[];
+  } {
+    if (!raw || !raw.includes('<|tool_calls_section_begin|>')) {
+      return { cleanedText: raw, toolCalls: [] };
+    }
+
+    const logger = this.getLogger();
+    const toolCalls: ToolCallBlock[] = [];
+    let text = raw;
+
+    const sectionRegex =
+      /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/g;
+
+    text = text.replace(
+      sectionRegex,
+      (_sectionMatch: string, sectionBody: string) => {
+        try {
+          const callRegex =
+            /<\|tool_call_begin\|>\s*([^<]+?)\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/g;
+
+          let m: RegExpExecArray | null;
+          while ((m = callRegex.exec(sectionBody)) !== null) {
+            const rawId = m[1].trim();
+            const rawArgs = m[2].trim();
+
+            // Infer tool name from ID.
+            let toolName = '';
+            const match =
+              /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ||
+              /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
+            if (match) {
+              toolName = match[1];
+            } else {
+              const colonParts = rawId.split(':');
+              const head = colonParts[0] || rawId;
+              const dotParts = head.split('.');
+              toolName = dotParts[dotParts.length - 1] || head;
+            }
+
+            // Normalize tool name (handles Kimi-K2 style prefixes like call_functionsglob7)
+            toolName = this.normalizeToolName(toolName);
+
+            const sanitizedArgs = this.sanitizeToolArgumentsString(rawArgs);
+            const processedParameters = processToolParameters(
+              sanitizedArgs,
+              toolName,
+            );
+
+            toolCalls.push({
+              type: 'tool_call',
+              id: this.normalizeToHistoryToolId(rawId),
+              name: toolName,
+              parameters: processedParameters,
+            } as ToolCallBlock);
+          }
+        } catch (err) {
+          logger.debug(
+            () =>
+              `[OpenAIProvider] Failed to parse Kimi tool_calls_section: ${err}`,
+          );
+        }
+
+        // Strip the entire tool section from user-visible text
+        return '';
+      },
+    );
+
+    if (toolCalls.length > 0) {
+      logger.debug(() => `[OpenAIProvider] Parsed Kimi tool_calls_section`, {
+        toolCallCount: toolCalls.length,
+        originalLength: raw.length,
+        cleanedLength: text.length,
+      });
+    }
+
+    return { cleanedText: text.trim(), toolCalls };
   }
 
   /**
@@ -885,6 +1206,120 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
+   * Build messages with optional reasoning_content based on settings.
+   *
+   * @plan PLAN-20251202-THINKING.P14
+   * @requirement REQ-THINK-004, REQ-THINK-006
+   */
+  private buildMessagesWithReasoning(
+    contents: IContent[],
+    options: NormalizedGenerateChatOptions,
+  ): OpenAI.Chat.ChatCompletionMessageParam[] {
+    // Read settings with defaults
+    const stripPolicy =
+      (options.settings.get('reasoning.stripFromContext') as StripPolicy) ??
+      'none';
+    const includeInContext =
+      (options.settings.get('reasoning.includeInContext') as boolean) ?? false;
+
+    // Apply strip policy first
+    const filteredContents = filterThinkingForContext(contents, stripPolicy);
+
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+
+    for (const content of filteredContents) {
+      if (content.speaker === 'human') {
+        // Convert human messages to user messages
+        const textBlocks = content.blocks.filter(
+          (b): b is TextBlock => b.type === 'text',
+        );
+        const text = textBlocks.map((b) => b.text).join('\n');
+        if (text) {
+          messages.push({
+            role: 'user',
+            content: text,
+          });
+        }
+      } else if (content.speaker === 'ai') {
+        // Convert AI messages with optional reasoning_content
+        const textBlocks = content.blocks.filter(
+          (b): b is TextBlock => b.type === 'text',
+        );
+        const text = textBlocks.map((b) => b.text).join('\n');
+        const thinkingBlocks = extractThinkingBlocks(content);
+        const toolCalls = content.blocks.filter(
+          (b) => b.type === 'tool_call',
+        ) as ToolCallBlock[];
+
+        if (toolCalls.length > 0) {
+          // Assistant message with tool calls
+          const baseMessage: OpenAI.Chat.ChatCompletionAssistantMessageParam = {
+            role: 'assistant',
+            content: text || null,
+            tool_calls: toolCalls.map((tc) => ({
+              id: this.normalizeToOpenAIToolId(tc.id),
+              type: 'function' as const,
+              function: {
+                name: tc.name,
+                arguments: this.normalizeToolCallArguments(tc.parameters),
+              },
+            })),
+          };
+
+          if (includeInContext && thinkingBlocks.length > 0) {
+            const messageWithReasoning = baseMessage as unknown as Record<
+              string,
+              unknown
+            >;
+            messageWithReasoning.reasoning_content =
+              thinkingToReasoningField(thinkingBlocks);
+            messages.push(
+              messageWithReasoning as unknown as OpenAI.Chat.ChatCompletionMessageParam,
+            );
+          } else {
+            messages.push(baseMessage);
+          }
+        } else if (textBlocks.length > 0 || thinkingBlocks.length > 0) {
+          // Plain assistant message
+          const baseMessage: OpenAI.Chat.ChatCompletionAssistantMessageParam = {
+            role: 'assistant',
+            content: text,
+          };
+
+          if (includeInContext && thinkingBlocks.length > 0) {
+            const messageWithReasoning = baseMessage as unknown as Record<
+              string,
+              unknown
+            >;
+            messageWithReasoning.reasoning_content =
+              thinkingToReasoningField(thinkingBlocks);
+            messages.push(
+              messageWithReasoning as unknown as OpenAI.Chat.ChatCompletionMessageParam,
+            );
+          } else {
+            messages.push(baseMessage);
+          }
+        }
+      } else if (content.speaker === 'tool') {
+        // Convert tool responses
+        const toolResponses = content.blocks.filter(
+          (b) => b.type === 'tool_response',
+        ) as ToolResponseBlock[];
+        for (const tr of toolResponses) {
+          messages.push({
+            role: 'tool',
+            content: this.buildToolResponseContent(tr, options.config),
+            tool_call_id: this.normalizeToOpenAIToolId(tr.callId),
+          });
+        }
+      }
+    }
+
+    // Validate tool message sequence to prevent API errors
+    return this.validateToolMessageSequence(messages);
+  }
+
+  /**
    * Validates tool message sequence to ensure each tool message has a corresponding tool_calls
    * This prevents "messages with role 'tool' must be a response to a preceeding message with 'tool_calls'" errors
    *
@@ -899,6 +1334,31 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const logger = this.getLogger();
     const validatedMessages = [...messages];
     let removedCount = 0;
+
+    // Debug: Log the full message sequence for tool call analysis
+    logger.debug(
+      () =>
+        `[OpenAIProvider] validateToolMessageSequence: analyzing ${messages.length} messages`,
+      {
+        messageRoles: messages.map((m) => m.role),
+        toolCallIds: messages
+          .filter(
+            (m) =>
+              m.role === 'assistant' &&
+              'tool_calls' in m &&
+              Array.isArray(m.tool_calls),
+          )
+          .flatMap(
+            (m) =>
+              (
+                m as OpenAI.Chat.ChatCompletionAssistantMessageParam
+              ).tool_calls?.map((tc) => tc.id) ?? [],
+          ),
+        toolResponseIds: messages
+          .filter((m) => m.role === 'tool')
+          .map((m) => (m as { tool_call_id?: string }).tool_call_id),
+      },
+    );
 
     // Check if there are any tool_calls in conversation
     // If no tool_calls exist, this might be isolated tool response testing - skip validation
@@ -1067,13 +1527,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Convert IContent to OpenAI messages format
-    const configForMessages =
-      options.config ?? options.runtime?.config ?? this.globalConfig;
-    const messages = this.convertToOpenAIMessages(
-      contents,
-      toolReplayMode,
-      configForMessages,
-    );
+    // Use buildMessagesWithReasoning for reasoning-aware message building
+    const messages =
+      toolReplayMode === 'native'
+        ? this.buildMessagesWithReasoning(contents, options)
+        : this.convertToOpenAIMessages(
+            contents,
+            toolReplayMode,
+            options.config ?? options.runtime?.config ?? this.globalConfig,
+          );
     if (logger.enabled && toolReplayMode !== 'native') {
       logger.debug(
         () =>
@@ -1095,20 +1557,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       },
     );
 
-    // Convert Gemini format tools to the detected format
-    let formattedTools = toolFormatter.convertGeminiToFormat(
-      tools,
-      detectedFormat,
-    ) as
-      | Array<{
-          type: 'function';
-          function: {
-            name: string;
-            description: string;
-            parameters: Record<string, unknown>;
-          };
-        }>
-      | undefined;
+    // Convert Gemini format tools to OpenAI format using the schema converter
+    // This ensures required fields are always present in tool schemas
+    let formattedTools: OpenAITool[] | undefined = convertToolsToOpenAI(tools);
 
     // CRITICAL FIX: Ensure we never pass an empty tools array
     // The OpenAI API errors when tools=[] but a tool call is attempted
@@ -1468,8 +1919,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Buffer for accumulating text chunks for providers that need it
       let textBuffer = '';
       // Use the same detected format from earlier for consistency
-      // Buffer text for Qwen format providers to avoid stanza formatting
-      const shouldBufferText = detectedFormat === 'qwen';
+      const isKimiModel = model.toLowerCase().includes('kimi-k2');
+      // Buffer text for Qwen format providers and Kimi-K2 to avoid stanza formatting
+      const shouldBufferText = detectedFormat === 'qwen' || isKimiModel;
+
+      // Accumulate thinking content across the entire stream to emit as ONE block
+      // This handles fragmented <think>word</think> streaming from Synthetic API
+      // @plan PLAN-20251202-THINKING.P16
+      let accumulatedThinkingContent = '';
+      let hasEmittedThinking = false;
+
+      // Accumulate reasoning_content from streaming deltas (legacy path)
+      // Synthetic API sends reasoning token-by-token, so we accumulate to emit ONE block
+      // @plan PLAN-20251202-THINKING.P16
+      let accumulatedReasoningContent = '';
 
       // Track token usage from streaming chunks
       let streamingUsage: {
@@ -1478,11 +1941,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         total_tokens?: number;
       } | null = null;
 
+      // Track total chunks for debugging empty responses
+      let totalChunksReceived = 0;
+
       try {
         // Handle streaming response
         for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+          totalChunksReceived++;
           if (abortSignal?.aborted) {
             break;
+          }
+
+          // Debug: Log first few chunks and every 10th chunk to understand stream behavior
+          if (totalChunksReceived <= 3 || totalChunksReceived % 10 === 0) {
+            logger.debug(
+              () => `[Streaming legacy] Chunk #${totalChunksReceived} received`,
+              {
+                hasChoices: !!chunk.choices?.length,
+                firstChoiceDelta: chunk.choices?.[0]?.delta,
+                finishReason: chunk.choices?.[0]?.finish_reason,
+              },
+            );
           }
 
           const chunkRecord = chunk as unknown as Record<string, unknown>;
@@ -1529,6 +2008,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           const choice = chunk.choices?.[0];
           if (!choice) continue;
 
+          // Parse reasoning_content from streaming delta (Phase 16 integration)
+          // ACCUMULATE instead of yielding immediately to handle token-by-token streaming
+          // @plan PLAN-20251202-THINKING.P16
+          const reasoningBlock = this.parseStreamingReasoningDelta(
+            choice.delta,
+          );
+          if (reasoningBlock) {
+            // Accumulate reasoning content - will emit ONE block later
+            accumulatedReasoningContent += reasoningBlock.thought;
+          }
+
           // Check for finish_reason to detect proper stream ending
           if (choice.finish_reason) {
             logger.debug(
@@ -1551,24 +2041,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               );
             }
 
-            // Flush any buffered text when stream finishes
-            if (textBuffer.length > 0) {
-              yield {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'text',
-                    text: textBuffer,
-                  } as TextBlock,
-                ],
-              } as IContent;
-              textBuffer = '';
-            }
+            // Don't flush buffer here on finish - let the final buffer handling
+            // after the loop process it with proper sanitization and think tag extraction
+            // This was causing unsanitized <think> tags to leak into output (legacy path)
+            // @plan PLAN-20251202-THINKING.P16
           }
 
           // Handle text content - buffer for Qwen format, emit immediately for others
-          const deltaContent = choice.delta?.content;
-          if (deltaContent) {
+          // Note: Synthetic API sends content that may duplicate reasoning_content.
+          // This is the model's behavior - we don't filter it here.
+          // @plan PLAN-20251202-THINKING.P16
+          const rawDeltaContent = this.coerceMessageContentToString(
+            choice.delta?.content as unknown,
+          );
+          if (rawDeltaContent) {
+            const deltaContent = isKimiModel
+              ? rawDeltaContent
+              : this.sanitizeProviderText(rawDeltaContent);
+            if (!deltaContent) {
+              continue;
+            }
+
             _accumulatedText += deltaContent;
 
             // Debug log for providers that need buffering
@@ -1587,24 +2080,134 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               // Buffer text to avoid stanza formatting
               textBuffer += deltaContent;
 
+              const hasKimiBegin = textBuffer.includes(
+                '<|tool_calls_section_begin|>',
+              );
+              const hasKimiEnd = textBuffer.includes(
+                '<|tool_calls_section_end|>',
+              );
+              const hasOpenKimiSection = hasKimiBegin && !hasKimiEnd;
+
               // Emit buffered text when we have a complete sentence or paragraph
-              // Look for natural break points
+              // Look for natural break points, but avoid flushing mid Kimi section
               if (
-                textBuffer.includes('\n') ||
-                textBuffer.endsWith('. ') ||
-                textBuffer.endsWith('! ') ||
-                textBuffer.endsWith('? ') ||
-                textBuffer.length > 100
+                !hasOpenKimiSection &&
+                (textBuffer.includes('\n') ||
+                  textBuffer.endsWith('. ') ||
+                  textBuffer.endsWith('! ') ||
+                  textBuffer.endsWith('? ') ||
+                  textBuffer.length > 100)
               ) {
-                yield {
-                  speaker: 'ai',
-                  blocks: [
+                const parsedToolCalls: ToolCallBlock[] = [];
+                let workingText = textBuffer;
+
+                // Extract <think> tags and ACCUMULATE instead of emitting immediately (legacy path)
+                // This handles fragmented <think>word</think> streaming from Synthetic API
+                // @plan PLAN-20251202-THINKING.P16
+                // @requirement REQ-THINK-003
+                const tagBasedThinking =
+                  this.extractThinkTagsAsBlock(workingText);
+                if (tagBasedThinking) {
+                  // Accumulate thinking content - don't emit yet
+                  if (accumulatedThinkingContent.length > 0) {
+                    accumulatedThinkingContent += ' ';
+                  }
+                  accumulatedThinkingContent += tagBasedThinking.thought;
+                  logger.debug(
+                    () =>
+                      `[Streaming legacy] Accumulated thinking: ${accumulatedThinkingContent.length} chars total`,
+                  );
+                }
+
+                const kimiParsed =
+                  this.extractKimiToolCallsFromText(workingText);
+                if (kimiParsed.toolCalls.length > 0) {
+                  parsedToolCalls.push(...kimiParsed.toolCalls);
+                  logger.debug(
+                    () =>
+                      `[OpenAIProvider] Streaming buffer (legacy) parsed Kimi tool calls`,
                     {
-                      type: 'text',
-                      text: textBuffer,
-                    } as TextBlock,
-                  ],
-                } as IContent;
+                      count: kimiParsed.toolCalls.length,
+                      bufferLength: workingText.length,
+                      cleanedLength: kimiParsed.cleanedText.length,
+                    },
+                  );
+                }
+                workingText = kimiParsed.cleanedText;
+
+                const parsingText = this.sanitizeProviderText(workingText);
+                let cleanedText = parsingText;
+                try {
+                  const parsedResult = this.textToolParser.parse(parsingText);
+                  if (parsedResult.toolCalls.length > 0) {
+                    parsedToolCalls.push(
+                      ...parsedResult.toolCalls.map((call) => ({
+                        type: 'tool_call' as const,
+                        id: `text_tool_${Date.now()}_${Math.random()
+                          .toString(36)
+                          .substring(7)}`,
+                        name: this.normalizeToolName(call.name),
+                        parameters: call.arguments,
+                      })),
+                    );
+                    cleanedText = parsedResult.cleanedContent;
+                  }
+                } catch (error) {
+                  const logger = this.getLogger();
+                  logger.debug(
+                    () =>
+                      `TextToolCallParser failed on buffered text: ${error}`,
+                  );
+                }
+
+                // Emit accumulated thinking BEFORE tool calls or text content (legacy path)
+                // This ensures thinking appears first in the response
+                // @plan PLAN-20251202-THINKING.P16
+                if (
+                  !hasEmittedThinking &&
+                  accumulatedThinkingContent.length > 0 &&
+                  (parsedToolCalls.length > 0 || cleanedText.trim().length > 0)
+                ) {
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'thinking',
+                        thought: accumulatedThinkingContent,
+                        sourceField: 'think_tags',
+                        isHidden: false,
+                      } as ThinkingBlock,
+                    ],
+                  } as IContent;
+                  hasEmittedThinking = true;
+                  logger.debug(
+                    () =>
+                      `[Streaming legacy] Emitted accumulated thinking: ${accumulatedThinkingContent.length} chars`,
+                  );
+                }
+
+                if (parsedToolCalls.length > 0) {
+                  yield {
+                    speaker: 'ai',
+                    blocks: parsedToolCalls,
+                  } as IContent;
+                }
+
+                // Always use sanitized text to strip <think> tags (legacy streaming)
+                // Bug fix: Previously Kimi used unsanitized workingText
+                // @plan PLAN-20251202-THINKING.P16
+                if (cleanedText.trim().length > 0) {
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'text',
+                        text: cleanedText,
+                      } as TextBlock,
+                    ],
+                  } as IContent;
+                }
+
                 textBuffer = '';
               }
             } else {
@@ -1729,21 +2332,53 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Check buffered text for <tool_call> format before flushing as plain text
       if (textBuffer.length > 0) {
-        // Try to parse <tool_call> format from buffered text
-        let parsedToolCalls: ToolCallBlock[] = [];
-        let cleanedText = textBuffer;
+        const parsedToolCalls: ToolCallBlock[] = [];
+        let workingText = textBuffer;
 
+        // Note: Synthetic API sends reasoning via both reasoning_content AND content fields.
+        // This is the model's behavior - we don't strip it since the model is the source.
+        // The user can configure reasoning display settings if they don't want duplicates.
+        // @plan PLAN-20251202-THINKING.P16
+
+        // Extract any remaining <think> tags from final buffer (legacy path)
+        // @plan PLAN-20251202-THINKING.P16
+        const tagBasedThinking = this.extractThinkTagsAsBlock(workingText);
+        if (tagBasedThinking) {
+          if (accumulatedThinkingContent.length > 0) {
+            accumulatedThinkingContent += ' ';
+          }
+          accumulatedThinkingContent += tagBasedThinking.thought;
+        }
+
+        const kimiParsed = this.extractKimiToolCallsFromText(workingText);
+        if (kimiParsed.toolCalls.length > 0) {
+          parsedToolCalls.push(...kimiParsed.toolCalls);
+          this.getLogger().debug(
+            () =>
+              `[OpenAIProvider] Final buffer flush (legacy) parsed Kimi tool calls`,
+            {
+              count: kimiParsed.toolCalls.length,
+              bufferLength: workingText.length,
+              cleanedLength: kimiParsed.cleanedText.length,
+            },
+          );
+        }
+        workingText = kimiParsed.cleanedText;
+
+        const parsingText = this.sanitizeProviderText(workingText);
+        let cleanedText = parsingText;
         try {
-          const parsedResult = this.textToolParser.parse(textBuffer);
+          const parsedResult = this.textToolParser.parse(parsingText);
           if (parsedResult.toolCalls.length > 0) {
-            // Convert parsed tool calls to ToolCallBlock format
-            parsedToolCalls = parsedResult.toolCalls.map(
-              (call: { name: string; arguments: Record<string, unknown> }) => ({
+            parsedToolCalls.push(
+              ...parsedResult.toolCalls.map((call) => ({
                 type: 'tool_call' as const,
-                id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-                name: call.name,
+                id: `text_tool_${Date.now()}_${Math.random()
+                  .toString(36)
+                  .substring(7)}`,
+                name: this.normalizeToolName(call.name),
                 parameters: call.arguments,
-              }),
+              })),
             );
             cleanedText = parsedResult.cleanedContent;
           }
@@ -1754,7 +2389,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           );
         }
 
-        // Emit tool calls from text parsing first
+        // Emit accumulated thinking BEFORE tool calls or text content (legacy path)
+        // @plan PLAN-20251202-THINKING.P16
+        if (
+          !hasEmittedThinking &&
+          accumulatedThinkingContent.length > 0 &&
+          (parsedToolCalls.length > 0 || cleanedText.trim().length > 0)
+        ) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'thinking',
+                thought: accumulatedThinkingContent,
+                sourceField: 'think_tags',
+                isHidden: false,
+              } as ThinkingBlock,
+            ],
+          } as IContent;
+          hasEmittedThinking = true;
+        }
+
         if (parsedToolCalls.length > 0) {
           yield {
             speaker: 'ai',
@@ -1762,7 +2417,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           } as IContent;
         }
 
-        // Then emit any remaining cleaned text
+        // Always use sanitized text to strip <think> tags (legacy final buffer)
+        // Bug fix: Previously Kimi used unsanitized workingText
+        // @plan PLAN-20251202-THINKING.P16
         if (cleanedText.trim().length > 0) {
           yield {
             speaker: 'ai',
@@ -1778,6 +2435,41 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         textBuffer = '';
       }
 
+      // Emit any remaining accumulated thinking that wasn't emitted yet (legacy path)
+      // (e.g., if entire response was just thinking with no content)
+      // @plan PLAN-20251202-THINKING.P16
+      if (!hasEmittedThinking && accumulatedThinkingContent.length > 0) {
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: accumulatedThinkingContent,
+              sourceField: 'think_tags',
+              isHidden: false,
+            } as ThinkingBlock,
+          ],
+        } as IContent;
+        hasEmittedThinking = true;
+      }
+
+      // Emit accumulated reasoning_content as ONE ThinkingBlock (legacy path)
+      // This consolidates token-by-token reasoning from Synthetic API into a single block
+      // @plan PLAN-20251202-THINKING.P16
+      if (accumulatedReasoningContent.length > 0) {
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: accumulatedReasoningContent,
+              sourceField: 'reasoning_content',
+              isHidden: false,
+            } as ThinkingBlock,
+          ],
+        } as IContent;
+      }
+
       // Process and emit tool calls using legacy accumulated approach
       if (accumulatedToolCalls.length > 0) {
         const blocks: ToolCallBlock[] = [];
@@ -1785,16 +2477,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         for (const tc of accumulatedToolCalls) {
           if (!tc) continue;
 
+          const sanitizedArgs = this.sanitizeToolArgumentsString(
+            tc.function.arguments,
+          );
+
+          // Normalize tool name (handles Kimi-K2 style prefixes)
+          const normalizedName = this.normalizeToolName(tc.function.name || '');
+
           // Process tool parameters with double-escape handling
           const processedParameters = processToolParameters(
-            tc.function.arguments || '',
-            tc.function.name || '',
+            sanitizedArgs,
+            normalizedName,
           );
 
           blocks.push({
             type: 'tool_call',
             id: this.normalizeToHistoryToolId(tc.id),
-            name: tc.function.name || '',
+            name: normalizedName,
             parameters: processedParameters,
           });
         }
@@ -1840,6 +2539,51 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           },
         } as IContent;
       }
+
+      // Detect and warn about empty streaming responses (common with Kimi K2 after tool calls)
+      // Only warn if we truly got nothing - not even reasoning content
+      if (
+        _accumulatedText.length === 0 &&
+        accumulatedToolCalls.length === 0 &&
+        textBuffer.length === 0 &&
+        accumulatedReasoningContent.length === 0 &&
+        accumulatedThinkingContent.length === 0
+      ) {
+        // Provide actionable guidance for users
+        const isKimi = model.toLowerCase().includes('kimi');
+        const isSynthetic =
+          (baseURL ?? this.getBaseURL())?.includes('synthetic') ?? false;
+        const troubleshooting = isKimi
+          ? isSynthetic
+            ? ' To fix: use streaming: "disabled" in your profile settings. Synthetic API streaming does not work reliably with tool calls.'
+            : ' This provider may not support streaming with tool calls.'
+          : ' Consider using streaming: "disabled" in your profile settings.';
+
+        logger.warn(
+          () =>
+            `[OpenAIProvider] Empty streaming response for model '${model}' (received ${totalChunksReceived} chunks with no content).${troubleshooting}`,
+          {
+            model,
+            baseURL: baseURL ?? this.getBaseURL(),
+            isKimiModel: isKimi,
+            isSyntheticAPI: isSynthetic,
+            totalChunksReceived,
+          },
+        );
+      } else {
+        // Log what we DID get for debugging
+        logger.debug(
+          () => `[Streaming legacy] Stream completed with accumulated content`,
+          {
+            textLength: _accumulatedText.length,
+            toolCallCount: accumulatedToolCalls.length,
+            textBufferLength: textBuffer.length,
+            reasoningLength: accumulatedReasoningContent.length,
+            thinkingLength: accumulatedThinkingContent.length,
+            totalChunksReceived,
+          },
+        );
+      }
     } else {
       // Handle non-streaming response
       const completion = response as OpenAI.Chat.Completions.ChatCompletion;
@@ -1876,14 +2620,65 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
       }
 
-      const blocks: Array<TextBlock | ToolCallBlock> = [];
+      const blocks: Array<TextBlock | ToolCallBlock | ThinkingBlock> = [];
 
-      // Handle text content
-      if (choice.message?.content) {
-        blocks.push({
-          type: 'text',
-          text: choice.message.content,
-        } as TextBlock);
+      // Parse reasoning_content from response (Phase 16 integration)
+      const reasoningBlock = this.parseNonStreamingReasoning(choice.message);
+      logger.debug(
+        () =>
+          `[Non-streaming] parseNonStreamingReasoning result: ${reasoningBlock ? `found (${reasoningBlock.thought?.length} chars)` : 'not found'}`,
+        {
+          hasReasoningContent:
+            'reasoning_content' in
+            ((choice.message as unknown as Record<string, unknown>) ?? {}),
+          messageKeys: Object.keys(
+            (choice.message as unknown as Record<string, unknown>) ?? {},
+          ),
+        },
+      );
+      if (reasoningBlock) {
+        blocks.push(reasoningBlock);
+      }
+
+      // Handle text content (strip thinking / reasoning blocks) and Kimi tool sections
+      const rawMessageContent = this.coerceMessageContentToString(
+        choice.message?.content as unknown,
+      );
+      let kimiCleanContent: string | undefined;
+      let kimiToolBlocks: ToolCallBlock[] = [];
+
+      if (rawMessageContent) {
+        // Extract <think> tags as ThinkingBlock BEFORE stripping them
+        // Only do this if we didn't already get reasoning from reasoning_content field
+        // @plan PLAN-20251202-THINKING.P16
+        // @requirement REQ-THINK-003
+        if (!reasoningBlock) {
+          const tagBasedThinking =
+            this.extractThinkTagsAsBlock(rawMessageContent);
+          if (tagBasedThinking) {
+            blocks.push(tagBasedThinking);
+            logger.debug(
+              () =>
+                `[Non-streaming] Extracted thinking from <think> tags: ${tagBasedThinking.thought.length} chars`,
+            );
+          }
+        }
+
+        const kimiParsed = this.extractKimiToolCallsFromText(rawMessageContent);
+        kimiCleanContent = kimiParsed.cleanedText;
+        kimiToolBlocks = kimiParsed.toolCalls;
+
+        // Always sanitize text content to remove <think> tags
+        // Bug fix: Previously Kimi-K2 used unsanitized kimiCleanContent,
+        // which caused <think> tags to leak into visible output
+        // @plan PLAN-20251202-THINKING.P16
+        const cleanedText = this.sanitizeProviderText(kimiCleanContent);
+        if (cleanedText) {
+          blocks.push({
+            type: 'text',
+            text: cleanedText,
+          } as TextBlock);
+        }
       }
 
       // Handle tool calls
@@ -1892,12 +2687,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         for (const toolCall of choice.message.tool_calls) {
           if (toolCall.type === 'function') {
-            // Use tool name directly without normalization for legacy compatibility
-            const toolName = toolCall.function.name || '';
+            // Normalize tool name (handles Kimi-K2 style prefixes)
+            const toolName = this.normalizeToolName(
+              toolCall.function.name || '',
+            );
+
+            const sanitizedArgs = this.sanitizeToolArgumentsString(
+              toolCall.function.arguments,
+            );
 
             // Process tool parameters with double-escape handling
             const processedParameters = processToolParameters(
-              toolCall.function.arguments || '',
+              sanitizedArgs,
               toolName,
             );
 
@@ -1911,49 +2712,57 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
       }
 
-      // Additionally check for <tool_call> format in text content
-      if (
-        choice.message?.content &&
-        typeof choice.message.content === 'string'
-      ) {
-        try {
-          const parsedResult = this.textToolParser.parse(
-            choice.message.content,
-          );
-          if (parsedResult.toolCalls.length > 0) {
-            // Add tool calls found in text content
-            for (const call of parsedResult.toolCalls) {
-              blocks.push({
-                type: 'tool_call',
-                id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-                name: call.name,
-                parameters: call.arguments,
-              } as ToolCallBlock);
-            }
+      // Add any tool calls parsed from Kimi inline sections
+      if (kimiToolBlocks.length > 0) {
+        blocks.push(...kimiToolBlocks);
+        this.getLogger().debug(
+          () =>
+            `[OpenAIProvider] Non-stream legacy added Kimi tool calls from text`,
+          { count: kimiToolBlocks.length },
+        );
+      }
 
-            // Update the text content to remove the tool call parts
-            if (choice.message.content !== parsedResult.cleanedContent) {
-              // Find the text block and update it
-              const textBlockIndex = blocks.findIndex(
-                (block) => block.type === 'text',
-              );
-              if (textBlockIndex >= 0) {
-                (blocks[textBlockIndex] as TextBlock).text =
-                  parsedResult.cleanedContent;
-              } else if (parsedResult.cleanedContent.trim()) {
-                // Add cleaned text if it doesn't exist
-                blocks.unshift({
-                  type: 'text',
-                  text: parsedResult.cleanedContent,
-                } as TextBlock);
+      // Additionally check for <tool_call> format in text content
+      if (kimiCleanContent) {
+        const cleanedSource = this.sanitizeProviderText(kimiCleanContent);
+        if (cleanedSource) {
+          try {
+            const parsedResult = this.textToolParser.parse(cleanedSource);
+            if (parsedResult.toolCalls.length > 0) {
+              // Add tool calls found in text content
+              for (const call of parsedResult.toolCalls) {
+                blocks.push({
+                  type: 'tool_call',
+                  id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                  name: this.normalizeToolName(call.name),
+                  parameters: call.arguments,
+                } as ToolCallBlock);
+              }
+
+              // Update the text content to remove the tool call parts
+              if (choice.message.content !== parsedResult.cleanedContent) {
+                // Find the text block and update it
+                const textBlockIndex = blocks.findIndex(
+                  (block) => block.type === 'text',
+                );
+                if (textBlockIndex >= 0) {
+                  (blocks[textBlockIndex] as TextBlock).text =
+                    parsedResult.cleanedContent;
+                } else if (parsedResult.cleanedContent.trim()) {
+                  // Add cleaned text if it doesn't exist
+                  blocks.unshift({
+                    type: 'text',
+                    text: parsedResult.cleanedContent,
+                  } as TextBlock);
+                }
               }
             }
+          } catch (error) {
+            const logger = this.getLogger();
+            logger.debug(
+              () => `TextToolCallParser failed on message content: ${error}`,
+            );
           }
-        } catch (error) {
-          const logger = this.getLogger();
-          logger.debug(
-            () => `TextToolCallParser failed on message content: ${error}`,
-          );
         }
       }
 
@@ -2119,13 +2928,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const toolReplayMode = this.determineToolReplayMode(model);
 
     // Convert IContent to OpenAI messages format
-    const configForMessages =
-      options.config ?? options.runtime?.config ?? this.globalConfig;
-    const messages = this.convertToOpenAIMessages(
-      contents,
-      toolReplayMode,
-      configForMessages,
-    );
+    // Use buildMessagesWithReasoning for reasoning-aware message building
+    const messages =
+      toolReplayMode === 'native'
+        ? this.buildMessagesWithReasoning(contents, options)
+        : this.convertToOpenAIMessages(
+            contents,
+            toolReplayMode,
+            options.config ?? options.runtime?.config ?? this.globalConfig,
+          );
 
     // Log tool replay mode usage for debugging
     if (logger.enabled && toolReplayMode !== 'native') {
@@ -2149,20 +2960,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       },
     );
 
-    // Convert Gemini format tools to the detected format
-    let formattedTools = toolFormatter.convertGeminiToFormat(
-      tools,
-      detectedFormat,
-    ) as
-      | Array<{
-          type: 'function';
-          function: {
-            name: string;
-            description: string;
-            parameters: Record<string, unknown>;
-          };
-        }>
-      | undefined;
+    // Convert Gemini format tools to OpenAI format using the schema converter
+    // This ensures required fields are always present in tool schemas
+    let formattedTools: OpenAITool[] | undefined = convertToolsToOpenAI(tools);
 
     // CRITICAL FIX: Ensure we never pass an empty tools array
     // The OpenAI API errors when tools=[] but a tool call is attempted
@@ -2551,8 +3351,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Buffer for accumulating text chunks for providers that need it
       let textBuffer = '';
       // Use the same detected format from earlier for consistency
-      // Buffer text for Qwen format providers to avoid stanza formatting
-      const shouldBufferText = detectedFormat === 'qwen';
+      const isKimiModel = model.toLowerCase().includes('kimi-k2');
+      // Buffer text for Qwen format providers and Kimi-K2 to avoid stanza formatting
+      const shouldBufferText = detectedFormat === 'qwen' || isKimiModel;
+
+      // Accumulate thinking content across the entire stream to emit as ONE block
+      // This handles fragmented <think>word</think> streaming from Synthetic API
+      // @plan PLAN-20251202-THINKING.P16
+      let accumulatedThinkingContent = '';
+      let hasEmittedThinking = false;
+
+      // Accumulate reasoning_content from streaming deltas (pipeline path)
+      // Synthetic API sends reasoning token-by-token, so we accumulate to emit ONE block
+      // @plan PLAN-20251202-THINKING.P16
+      let accumulatedReasoningContent = '';
 
       // Track token usage from streaming chunks
       let streamingUsage: {
@@ -2571,6 +3383,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           }
           allChunks.push(chunk);
         }
+
+        // Debug: Log how many chunks were received
+        logger.debug(
+          () =>
+            `[Streaming pipeline] Collected ${allChunks.length} chunks from stream`,
+          {
+            firstChunkDelta: allChunks[0]?.choices?.[0]?.delta,
+            lastChunkFinishReason:
+              allChunks[allChunks.length - 1]?.choices?.[0]?.finish_reason,
+          },
+        );
 
         // Now process all collected chunks
         for (const chunk of allChunks) {
@@ -2622,6 +3445,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           const choice = chunk.choices?.[0];
           if (!choice) continue;
 
+          // Parse reasoning_content from streaming delta (Pipeline path)
+          // ACCUMULATE instead of yielding immediately to handle token-by-token streaming
+          // @plan PLAN-20251202-THINKING.P16
+          // @requirement REQ-THINK-003.1
+          const reasoningBlock = this.parseStreamingReasoningDelta(
+            choice.delta,
+          );
+          if (reasoningBlock) {
+            // Accumulate reasoning content - will emit ONE block later
+            accumulatedReasoningContent += reasoningBlock.thought;
+          }
+
           // Check for finish_reason to detect proper stream ending
           if (choice.finish_reason) {
             logger.debug(
@@ -2645,24 +3480,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               );
             }
 
-            // Flush any buffered text when stream finishes
-            if (textBuffer.length > 0) {
-              yield {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'text',
-                    text: textBuffer,
-                  } as TextBlock,
-                ],
-              } as IContent;
-              textBuffer = '';
-            }
+            // Don't flush buffer here on finish - let the final buffer handling
+            // after the loop process it with proper sanitization and think tag extraction
+            // This was causing unsanitized <think> tags to leak into output (pipeline path)
+            // @plan PLAN-20251202-THINKING.P16
           }
 
           // Handle text content - buffer for Qwen format, emit immediately for others
-          const deltaContent = choice.delta?.content;
-          if (deltaContent) {
+          // Note: Synthetic API sends content that may duplicate reasoning_content.
+          // This is the model's behavior - we don't filter it here.
+          // @plan PLAN-20251202-THINKING.P16
+          const rawDeltaContent = this.coerceMessageContentToString(
+            choice.delta?.content as unknown,
+          );
+          if (rawDeltaContent) {
+            const deltaContent = isKimiModel
+              ? rawDeltaContent
+              : this.sanitizeProviderText(rawDeltaContent);
+            if (!deltaContent) {
+              continue;
+            }
+
             _accumulatedText += deltaContent;
 
             // Debug log for providers that need buffering
@@ -2681,24 +3519,134 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               // Buffer text to avoid stanza formatting
               textBuffer += deltaContent;
 
+              const hasKimiBegin = textBuffer.includes(
+                '<|tool_calls_section_begin|>',
+              );
+              const hasKimiEnd = textBuffer.includes(
+                '<|tool_calls_section_end|>',
+              );
+              const hasOpenKimiSection = hasKimiBegin && !hasKimiEnd;
+
               // Emit buffered text when we have a complete sentence or paragraph
-              // Look for natural break points
+              // Look for natural break points, avoiding flush mid Kimi section
               if (
-                textBuffer.includes('\n') ||
-                textBuffer.endsWith('. ') ||
-                textBuffer.endsWith('! ') ||
-                textBuffer.endsWith('? ') ||
-                textBuffer.length > 100
+                !hasOpenKimiSection &&
+                (textBuffer.includes('\n') ||
+                  textBuffer.endsWith('. ') ||
+                  textBuffer.endsWith('! ') ||
+                  textBuffer.endsWith('? ') ||
+                  textBuffer.length > 100)
               ) {
-                yield {
-                  speaker: 'ai',
-                  blocks: [
+                const parsedToolCalls: ToolCallBlock[] = [];
+                let workingText = textBuffer;
+
+                // Extract <think> tags and ACCUMULATE instead of emitting immediately
+                // This handles fragmented <think>word</think> streaming from Synthetic API
+                // @plan PLAN-20251202-THINKING.P16
+                // @requirement REQ-THINK-003
+                const tagBasedThinking =
+                  this.extractThinkTagsAsBlock(workingText);
+                if (tagBasedThinking) {
+                  // Accumulate thinking content - don't emit yet
+                  if (accumulatedThinkingContent.length > 0) {
+                    accumulatedThinkingContent += ' ';
+                  }
+                  accumulatedThinkingContent += tagBasedThinking.thought;
+                  logger.debug(
+                    () =>
+                      `[Streaming] Accumulated thinking: ${accumulatedThinkingContent.length} chars total`,
+                  );
+                }
+
+                const kimiParsed =
+                  this.extractKimiToolCallsFromText(workingText);
+                if (kimiParsed.toolCalls.length > 0) {
+                  parsedToolCalls.push(...kimiParsed.toolCalls);
+                  logger.debug(
+                    () =>
+                      `[OpenAIProvider] Streaming buffer (pipeline) parsed Kimi tool calls`,
                     {
-                      type: 'text',
-                      text: textBuffer,
-                    } as TextBlock,
-                  ],
-                } as IContent;
+                      count: kimiParsed.toolCalls.length,
+                      bufferLength: workingText.length,
+                      cleanedLength: kimiParsed.cleanedText.length,
+                    },
+                  );
+                }
+                workingText = kimiParsed.cleanedText;
+
+                const parsingText = this.sanitizeProviderText(workingText);
+                let cleanedText = parsingText;
+                try {
+                  const parsedResult = this.textToolParser.parse(parsingText);
+                  if (parsedResult.toolCalls.length > 0) {
+                    parsedToolCalls.push(
+                      ...parsedResult.toolCalls.map((call) => ({
+                        type: 'tool_call' as const,
+                        id: `text_tool_${Date.now()}_${Math.random()
+                          .toString(36)
+                          .substring(7)}`,
+                        name: this.normalizeToolName(call.name),
+                        parameters: call.arguments,
+                      })),
+                    );
+                    cleanedText = parsedResult.cleanedContent;
+                  }
+                } catch (error) {
+                  const logger = this.getLogger();
+                  logger.debug(
+                    () =>
+                      `TextToolCallParser failed on buffered text: ${error}`,
+                  );
+                }
+
+                // Emit accumulated thinking BEFORE tool calls or text content
+                // This ensures thinking appears first in the response
+                // @plan PLAN-20251202-THINKING.P16
+                if (
+                  !hasEmittedThinking &&
+                  accumulatedThinkingContent.length > 0 &&
+                  (parsedToolCalls.length > 0 || cleanedText.trim().length > 0)
+                ) {
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'thinking',
+                        thought: accumulatedThinkingContent,
+                        sourceField: 'think_tags',
+                        isHidden: false,
+                      } as ThinkingBlock,
+                    ],
+                  } as IContent;
+                  hasEmittedThinking = true;
+                  logger.debug(
+                    () =>
+                      `[Streaming pipeline] Emitted accumulated thinking: ${accumulatedThinkingContent.length} chars`,
+                  );
+                }
+
+                if (parsedToolCalls.length > 0) {
+                  yield {
+                    speaker: 'ai',
+                    blocks: parsedToolCalls,
+                  } as IContent;
+                }
+
+                // Always use sanitized text to strip <think> tags (pipeline streaming)
+                // Bug fix: Previously Kimi used unsanitized workingText
+                // @plan PLAN-20251202-THINKING.P16
+                if (cleanedText.trim().length > 0) {
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'text',
+                        text: cleanedText,
+                      } as TextBlock,
+                    ],
+                  } as IContent;
+                }
+
                 textBuffer = '';
               }
             } else {
@@ -2804,21 +3752,53 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Check buffered text for <tool_call> format before flushing as plain text
       if (textBuffer.length > 0) {
-        // Try to parse <tool_call> format from buffered text
-        let parsedToolCalls: ToolCallBlock[] = [];
-        let cleanedText = textBuffer;
+        const parsedToolCalls: ToolCallBlock[] = [];
+        let workingText = textBuffer;
 
+        // Note: Synthetic API sends reasoning via both reasoning_content AND content fields.
+        // This is the model's behavior - we don't strip it since the model is the source.
+        // The user can configure reasoning display settings if they don't want duplicates.
+        // @plan PLAN-20251202-THINKING.P16
+
+        // Extract any remaining <think> tags from final buffer
+        // @plan PLAN-20251202-THINKING.P16
+        const tagBasedThinking = this.extractThinkTagsAsBlock(workingText);
+        if (tagBasedThinking) {
+          if (accumulatedThinkingContent.length > 0) {
+            accumulatedThinkingContent += ' ';
+          }
+          accumulatedThinkingContent += tagBasedThinking.thought;
+        }
+
+        const kimiParsed = this.extractKimiToolCallsFromText(workingText);
+        if (kimiParsed.toolCalls.length > 0) {
+          parsedToolCalls.push(...kimiParsed.toolCalls);
+          this.getLogger().debug(
+            () =>
+              `[OpenAIProvider] Final buffer flush (pipeline) parsed Kimi tool calls`,
+            {
+              count: kimiParsed.toolCalls.length,
+              bufferLength: workingText.length,
+              cleanedLength: kimiParsed.cleanedText.length,
+            },
+          );
+        }
+        workingText = kimiParsed.cleanedText;
+
+        const parsingText = this.sanitizeProviderText(workingText);
+        let cleanedText = parsingText;
         try {
-          const parsedResult = this.textToolParser.parse(textBuffer);
+          const parsedResult = this.textToolParser.parse(parsingText);
           if (parsedResult.toolCalls.length > 0) {
-            // Convert parsed tool calls to ToolCallBlock format
-            parsedToolCalls = parsedResult.toolCalls.map(
-              (call: { name: string; arguments: Record<string, unknown> }) => ({
+            parsedToolCalls.push(
+              ...parsedResult.toolCalls.map((call) => ({
                 type: 'tool_call' as const,
-                id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-                name: call.name,
+                id: `text_tool_${Date.now()}_${Math.random()
+                  .toString(36)
+                  .substring(7)}`,
+                name: this.normalizeToolName(call.name),
                 parameters: call.arguments,
-              }),
+              })),
             );
             cleanedText = parsedResult.cleanedContent;
           }
@@ -2829,7 +3809,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           );
         }
 
-        // Emit tool calls from text parsing first
+        // Emit accumulated thinking BEFORE tool calls or text content
+        // @plan PLAN-20251202-THINKING.P16
+        if (
+          !hasEmittedThinking &&
+          accumulatedThinkingContent.length > 0 &&
+          (parsedToolCalls.length > 0 || cleanedText.trim().length > 0)
+        ) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'thinking',
+                thought: accumulatedThinkingContent,
+                sourceField: 'think_tags',
+                isHidden: false,
+              } as ThinkingBlock,
+            ],
+          } as IContent;
+          hasEmittedThinking = true;
+        }
+
         if (parsedToolCalls.length > 0) {
           yield {
             speaker: 'ai',
@@ -2837,7 +3837,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           } as IContent;
         }
 
-        // Then emit any remaining cleaned text
+        // Always use sanitized text to strip <think> tags (pipeline final buffer)
+        // Bug fix: Previously Kimi used unsanitized workingText
+        // @plan PLAN-20251202-THINKING.P16
         if (cleanedText.trim().length > 0) {
           yield {
             speaker: 'ai',
@@ -2853,6 +3855,41 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         textBuffer = '';
       }
 
+      // Emit any remaining accumulated thinking that wasn't emitted yet
+      // (e.g., if entire response was just thinking with no content)
+      // @plan PLAN-20251202-THINKING.P16
+      if (!hasEmittedThinking && accumulatedThinkingContent.length > 0) {
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: accumulatedThinkingContent,
+              sourceField: 'think_tags',
+              isHidden: false,
+            } as ThinkingBlock,
+          ],
+        } as IContent;
+        hasEmittedThinking = true;
+      }
+
+      // Emit accumulated reasoning_content as ONE ThinkingBlock (pipeline path)
+      // This consolidates token-by-token reasoning from Synthetic API into a single block
+      // @plan PLAN-20251202-THINKING.P16
+      if (accumulatedReasoningContent.length > 0) {
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: accumulatedReasoningContent,
+              sourceField: 'reasoning_content',
+              isHidden: false,
+            } as ThinkingBlock,
+          ],
+        } as IContent;
+      }
+
       // Process and emit tool calls using the pipeline
       const pipelineResult = await this.toolCallPipeline.process(abortSignal);
       if (
@@ -2863,9 +3900,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         // Process successful tool calls
         for (const normalizedCall of pipelineResult.normalized) {
+          const sanitizedArgs = this.sanitizeToolArgumentsString(
+            normalizedCall.originalArgs ?? normalizedCall.args,
+          );
+
           // Process tool parameters with double-escape handling
           const processedParameters = processToolParameters(
-            normalizedCall.originalArgs || JSON.stringify(normalizedCall.args),
+            sanitizedArgs,
             normalizedCall.name,
           );
 
@@ -2928,6 +3969,53 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           },
         } as IContent;
       }
+
+      // Detect and warn about empty streaming responses (common with Kimi K2 after tool calls)
+      // Only warn if we truly got nothing - not even reasoning content
+      const pipelineStats = this.toolCallPipeline.getStats();
+      if (
+        _accumulatedText.length === 0 &&
+        pipelineStats.collector.totalCalls === 0 &&
+        textBuffer.length === 0 &&
+        accumulatedReasoningContent.length === 0 &&
+        accumulatedThinkingContent.length === 0
+      ) {
+        // Provide actionable guidance for users
+        const isKimi = model.toLowerCase().includes('kimi');
+        const isSynthetic =
+          (baseURL ?? this.getBaseURL())?.includes('synthetic') ?? false;
+        const troubleshooting = isKimi
+          ? isSynthetic
+            ? ' To fix: use streaming: "disabled" in your profile settings. Synthetic API streaming does not work reliably with tool calls.'
+            : ' This provider may not support streaming with tool calls.'
+          : ' Consider using streaming: "disabled" in your profile settings.';
+
+        logger.warn(
+          () =>
+            `[OpenAIProvider] Empty streaming response for model '${model}' (received ${allChunks.length} chunks with no content).${troubleshooting}`,
+          {
+            model,
+            baseURL: baseURL ?? this.getBaseURL(),
+            isKimiModel: isKimi,
+            isSyntheticAPI: isSynthetic,
+            totalChunksReceived: allChunks.length,
+          },
+        );
+      } else {
+        // Log what we DID get for debugging
+        logger.debug(
+          () =>
+            `[Streaming pipeline] Stream completed with accumulated content`,
+          {
+            textLength: _accumulatedText.length,
+            toolCallCount: pipelineStats.collector.totalCalls,
+            textBufferLength: textBuffer.length,
+            reasoningLength: accumulatedReasoningContent.length,
+            thinkingLength: accumulatedThinkingContent.length,
+            totalChunksReceived: allChunks.length,
+          },
+        );
+      }
     } else {
       // Handle non-streaming response
       const completion = response as OpenAI.Chat.Completions.ChatCompletion;
@@ -2966,12 +4054,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       const blocks: Array<TextBlock | ToolCallBlock> = [];
 
-      // Handle text content
-      if (choice.message?.content) {
-        blocks.push({
-          type: 'text',
-          text: choice.message.content,
-        } as TextBlock);
+      // Handle text content (strip thinking / reasoning blocks) and Kimi tool sections
+      const pipelineRawMessageContent = this.coerceMessageContentToString(
+        choice.message?.content as unknown,
+      );
+      let pipelineKimiCleanContent: string | undefined;
+      let pipelineKimiToolBlocks: ToolCallBlock[] = [];
+      if (pipelineRawMessageContent) {
+        const kimiParsed = this.extractKimiToolCallsFromText(
+          pipelineRawMessageContent,
+        );
+        pipelineKimiCleanContent = kimiParsed.cleanedText;
+        pipelineKimiToolBlocks = kimiParsed.toolCalls;
+
+        // Always use sanitized text - even Kimi-K2 should have consistent tag stripping
+        const cleanedText = this.sanitizeProviderText(pipelineKimiCleanContent);
+        if (cleanedText) {
+          blocks.push({
+            type: 'text',
+            text: cleanedText,
+          } as TextBlock);
+        }
       }
 
       // Handle tool calls
@@ -2986,9 +4089,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               toolCall.function.arguments,
             );
 
+            const sanitizedArgs = this.sanitizeToolArgumentsString(
+              toolCall.function.arguments,
+            );
+
             // Process tool parameters with double-escape handling
             const processedParameters = processToolParameters(
-              toolCall.function.arguments || '',
+              sanitizedArgs,
               normalizedName,
             );
 
@@ -3002,49 +4109,58 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
       }
 
-      // Additionally check for <tool_call> format in text content
-      if (
-        choice.message?.content &&
-        typeof choice.message.content === 'string'
-      ) {
-        try {
-          const parsedResult = this.textToolParser.parse(
-            choice.message.content,
-          );
-          if (parsedResult.toolCalls.length > 0) {
-            // Add tool calls found in text content
-            for (const call of parsedResult.toolCalls) {
-              blocks.push({
-                type: 'tool_call',
-                id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-                name: call.name,
-                parameters: call.arguments,
-              } as ToolCallBlock);
-            }
+      if (pipelineKimiToolBlocks.length > 0) {
+        blocks.push(...pipelineKimiToolBlocks);
+        this.getLogger().debug(
+          () =>
+            `[OpenAIProvider] Non-stream pipeline added Kimi tool calls from text`,
+          { count: pipelineKimiToolBlocks.length },
+        );
+      }
 
-            // Update the text content to remove the tool call parts
-            if (choice.message.content !== parsedResult.cleanedContent) {
-              // Find the text block and update it
-              const textBlockIndex = blocks.findIndex(
-                (block) => block.type === 'text',
-              );
-              if (textBlockIndex >= 0) {
-                (blocks[textBlockIndex] as TextBlock).text =
-                  parsedResult.cleanedContent;
-              } else if (parsedResult.cleanedContent.trim()) {
-                // Add cleaned text if it doesn't exist
-                blocks.unshift({
-                  type: 'text',
-                  text: parsedResult.cleanedContent,
-                } as TextBlock);
+      // Additionally check for <tool_call> format in text content
+      if (pipelineKimiCleanContent) {
+        const cleanedSource = this.sanitizeProviderText(
+          pipelineKimiCleanContent,
+        );
+        if (cleanedSource) {
+          try {
+            const parsedResult = this.textToolParser.parse(cleanedSource);
+            if (parsedResult.toolCalls.length > 0) {
+              // Add tool calls found in text content
+              for (const call of parsedResult.toolCalls) {
+                blocks.push({
+                  type: 'tool_call',
+                  id: `text_tool_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                  name: this.normalizeToolName(call.name),
+                  parameters: call.arguments,
+                } as ToolCallBlock);
+              }
+
+              // Update the text content to remove the tool call parts
+              if (choice.message.content !== parsedResult.cleanedContent) {
+                // Find the text block and update it
+                const textBlockIndex = blocks.findIndex(
+                  (block) => block.type === 'text',
+                );
+                if (textBlockIndex >= 0) {
+                  (blocks[textBlockIndex] as TextBlock).text =
+                    parsedResult.cleanedContent;
+                } else if (parsedResult.cleanedContent.trim()) {
+                  // Add cleaned text if it doesn't exist
+                  blocks.unshift({
+                    type: 'text',
+                    text: parsedResult.cleanedContent,
+                  } as TextBlock);
+                }
               }
             }
+          } catch (error) {
+            const logger = this.getLogger();
+            logger.debug(
+              () => `TextToolCallParser failed on message content: ${error}`,
+            );
           }
-        } catch (error) {
-          const logger = this.getLogger();
-          logger.debug(
-            () => `TextToolCallParser failed on message content: ${error}`,
-          );
         }
       }
 
@@ -3213,5 +4329,75 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     return shouldRetry;
+  }
+
+  /**
+   * Parse reasoning_content from streaming delta.
+   *
+   * @plan PLAN-20251202-THINKING.P11, PLAN-20251202-THINKING.P16
+   * @requirement REQ-THINK-003.1, REQ-THINK-003.3, REQ-THINK-003.4
+   */
+  private parseStreamingReasoningDelta(
+    delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta | undefined,
+  ): ThinkingBlock | null {
+    if (!delta) {
+      return null;
+    }
+
+    // Access reasoning_content via type assertion since OpenAI SDK doesn't declare it
+    const reasoningContent = (delta as unknown as Record<string, unknown>)
+      .reasoning_content;
+
+    // Handle absent, null, or non-string
+    if (!reasoningContent || typeof reasoningContent !== 'string') {
+      return null;
+    }
+
+    // Handle empty string or whitespace-only
+    if (reasoningContent.trim().length === 0) {
+      return null;
+    }
+
+    return {
+      type: 'thinking',
+      thought: reasoningContent,
+      sourceField: 'reasoning_content',
+      isHidden: false,
+    };
+  }
+
+  /**
+   * Parse reasoning_content from non-streaming message.
+   *
+   * @plan PLAN-20251202-THINKING.P11, PLAN-20251202-THINKING.P16
+   * @requirement REQ-THINK-003.2, REQ-THINK-003.3, REQ-THINK-003.4
+   */
+  private parseNonStreamingReasoning(
+    message: OpenAI.Chat.Completions.ChatCompletionMessage | null | undefined,
+  ): ThinkingBlock | null {
+    if (!message) {
+      return null;
+    }
+
+    // Access reasoning_content via type assertion since OpenAI SDK doesn't declare it
+    const reasoningContent = (message as unknown as Record<string, unknown>)
+      .reasoning_content;
+
+    // Handle absent, null, or non-string
+    if (!reasoningContent || typeof reasoningContent !== 'string') {
+      return null;
+    }
+
+    // Handle empty string or whitespace-only
+    if (reasoningContent.trim().length === 0) {
+      return null;
+    }
+
+    return {
+      type: 'thinking',
+      thought: reasoningContent,
+      sourceField: 'reasoning_content',
+      isHidden: false,
+    };
   }
 }

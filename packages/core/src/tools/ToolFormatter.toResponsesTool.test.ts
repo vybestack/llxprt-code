@@ -120,6 +120,7 @@ describe('ToolFormatter.toResponsesTool', () => {
     expect(result[0].parameters).toEqual({
       type: 'object',
       properties: {},
+      required: [], // Always present for K2 model compatibility
     });
   });
 
@@ -210,12 +211,30 @@ describe('ToolFormatter.toResponsesTool', () => {
 
     const result = formatter.toResponsesTool(tools);
 
-    expect(result[0].parameters).toEqual(tools[0].function.parameters);
     const params = result[0].parameters as {
+      type: string;
       properties: Record<string, unknown>;
+      required: string[];
     };
-    const properties = params.properties;
-    expect(properties['property-with-dash']).toBeDefined();
+
+    // Verify the structure is preserved correctly
+    expect(params.type).toBe('object');
+    expect(params.required).toContain('property-with-dash');
+    expect(params.properties['property-with-dash']).toBeDefined();
+    expect(params.properties['mixed_array']).toBeDefined();
+    expect(params.properties['very']).toBeDefined();
+    expect(params.properties['dynamic_object']).toBeDefined();
+
+    // Verify nested objects have required arrays (K2 model compatibility)
+    const very = params.properties['very'] as Record<string, unknown>;
+    expect(very.type).toBe('object');
+    expect(Array.isArray(very.required)).toBe(true);
+
+    const deeply = (very.properties as Record<string, unknown>)[
+      'deeply'
+    ] as Record<string, unknown>;
+    expect(deeply.type).toBe('object');
+    expect(Array.isArray(deeply.required)).toBe(true);
   });
 
   it('should preserve all schema attributes', () => {

@@ -84,6 +84,7 @@
     "src/ui/hooks/useFocus.test.ts",
     "src/ui/hooks/useFolderTrust.test.ts",
     "src/ui/hooks/useGeminiStream.test.tsx",
+    "src/ui/hooks/useGeminiStream.thinking.test.tsx",
     "src/ui/hooks/useMemoryMonitor.test.ts",
     "src/ui/hooks/useKeypress.test.ts",
     "src/ui/hooks/usePhraseCycler.test.ts",

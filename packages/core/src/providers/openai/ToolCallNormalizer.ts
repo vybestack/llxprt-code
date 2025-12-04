@@ -86,10 +86,30 @@ export class ToolCallNormalizer {
 
   /**
    * Normalize tool name
+   *
+   * Handles Kimi-K2 style malformed tool names where the model concatenates
+   * prefixes like "functions" or "call_functions" with the actual tool name:
+   * - "functionslist_directory" -> "list_directory"
+   * - "call_functionslist_directory6" -> "list_directory"
+   * - "call_functionssearch_file_content9" -> "search_file_content"
    */
   private normalizeToolName(name: string): string {
-    // Remove leading/trailing whitespace and convert to lowercase
-    return name.trim().toLowerCase();
+    let normalized = name.trim();
+
+    // Strip Kimi-K2 style prefixes where model concatenates "functions" or "call_functions"
+    // with the actual tool name (e.g., "functionslist_directory" -> "list_directory")
+    // Pattern: (call_)?functions<actual_tool_name><optional_number>
+    const kimiPrefixMatch = /^(?:call_)?functions([a-z_]+[a-z])(\d*)$/i.exec(
+      normalized,
+    );
+    if (kimiPrefixMatch) {
+      normalized = kimiPrefixMatch[1];
+      logger.debug(
+        `Stripped Kimi-style prefix from tool name: "${name}" -> "${normalized}"`,
+      );
+    }
+
+    return normalized.toLowerCase();
   }
 
   /**

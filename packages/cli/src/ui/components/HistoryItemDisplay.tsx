@@ -90,6 +90,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
           }
           terminalWidth={terminalWidth}
           model={itemForDisplay.model}
+          thinkingBlocks={itemForDisplay.thinkingBlocks} // @plan:PLAN-20251202-THINKING-UI.P06
         />
       )}
       {itemForDisplay.type === 'gemini_content' && (

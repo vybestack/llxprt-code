@@ -32,6 +32,20 @@ export interface ReadonlySettingsSnapshot {
     allowed?: string[];
     disabled?: string[];
   };
+  /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.1 */
+  'reasoning.enabled'?: boolean;
+  /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.2 */
+  'reasoning.includeInContext'?: boolean;
+  /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.3 */
+  'reasoning.includeInResponse'?: boolean;
+  /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.4 */
+  'reasoning.format'?: 'native' | 'field';
+  /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.5 */
+  'reasoning.stripFromContext'?: 'all' | 'allButLast' | 'none';
+  /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.6 */
+  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high';
+  /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.7 */
+  'reasoning.maxTokens'?: number;
 }
 
 /**
@@ -168,6 +182,19 @@ export interface AgentRuntimeContext {
     contextLimit(): number;
     preserveThreshold(): number;
     toolFormatOverride(): string | undefined;
+    /**
+     * @plan PLAN-20251202-THINKING.P03b
+     * @requirement REQ-THINK-006
+     */
+    reasoning: {
+      enabled(): boolean;
+      includeInContext(): boolean;
+      includeInResponse(): boolean;
+      format(): 'native' | 'field';
+      stripFromContext(): 'all' | 'allButLast' | 'none';
+      effort(): 'minimal' | 'low' | 'medium' | 'high' | undefined;
+      maxTokens(): number | undefined;
+    };
   };
 
   /** Telemetry logging adapter with metadata enrichment */

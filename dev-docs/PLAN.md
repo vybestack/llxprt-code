@@ -787,6 +787,15 @@ npm test 2>&1 | head -20
 
 **CRITICAL**: Must follow pseudocode line-by-line
 
+#### Implementation Phase Requirements
+
+Every implementation phase MUST include:
+
+1. **Clear Statement of What Will Be Implemented** - Not just "implement feature X" but exactly what code will be written
+2. **Explicit Code Examples** - Show the actual TypeScript that should result, not just pseudocode
+3. **Integration Points** - Where does this code connect to existing code?
+4. **Expected Outcome** - What should happen when this code runs?
+
 **Worker Prompt**:
 
 ```bash
@@ -1137,6 +1146,53 @@ The verification worker MUST:
 3. **VERIFY behavior matches requirement** - not just that something was written
 4. **IDENTIFY missing pieces** - what should be there but isn't?
 5. **BLOCK progression** if implementation is incomplete or fraudulent
+6. **DOCUMENT FINDINGS** - write a holistic assessment explaining what was verified and why it satisfies the requirements
+
+#### Holistic Functionality Assessment (MANDATORY)
+
+**The verifier MUST write a documented assessment answering:**
+
+```markdown
+## Holistic Functionality Assessment
+
+### What was implemented?
+
+[Describe in your own words what the code actually does - not what markers say, but what you observed by reading the code]
+
+### Does it satisfy the requirements?
+
+[For each requirement in this phase, explain HOW the implementation satisfies it. Cite specific code locations.]
+
+### What is the data flow?
+
+[Trace one complete path: input → processing → output. Show the actual function calls and transformations.]
+
+### What could go wrong?
+
+[Identify edge cases, error conditions, or integration risks you observed]
+
+### Verdict
+
+[PASS/FAIL with explanation. If PASS, explain why you're confident. If FAIL, explain what's missing.]
+```
+
+**This assessment MUST be included in the phase completion marker file.** The verifier cannot simply check boxes - they must demonstrate understanding of what was built.
+
+#### Why Documentation is Required
+
+Historical analysis shows that verification phases that only run grep commands and check boxes:
+
+- Miss 60% of incomplete implementations
+- Allow placeholder code to pass
+- Don't catch integration gaps
+- Permit "technically correct but useless" code
+
+By requiring written assessment, the verifier must:
+
+- Actually read and understand the code
+- Form a mental model of how it works
+- Identify gaps through the act of explanation
+- Create an audit trail for future debugging
 
 #### Questions the Verifier MUST Answer
 

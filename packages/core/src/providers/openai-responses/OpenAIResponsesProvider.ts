@@ -42,77 +42,13 @@ import {
   NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
+import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
-  // TODO(P08) @plan:PLAN-20251018-STATELESSPROVIDER2.P07 @requirement:REQ-SP2-001
-  // Align per-call stateless flow with openai-responses-stateless.md steps.
-  /**
-   * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
-   */
-  private convertGeminiSchemaToStandard(schema: unknown): unknown {
-    if (!schema || typeof schema !== 'object') {
-      return schema;
-    }
-
-    const newSchema: Record<string, unknown> = { ...schema };
-
-    // Handle properties
-    if (newSchema.properties && typeof newSchema.properties === 'object') {
-      const newProperties: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(newSchema.properties)) {
-        newProperties[key] = this.convertGeminiSchemaToStandard(value);
-      }
-      newSchema.properties = newProperties;
-    }
-
-    // Handle items
-    if (newSchema.items) {
-      if (Array.isArray(newSchema.items)) {
-        newSchema.items = newSchema.items.map((item) =>
-          this.convertGeminiSchemaToStandard(item),
-        );
-      } else {
-        newSchema.items = this.convertGeminiSchemaToStandard(newSchema.items);
-      }
-    }
-
-    // Convert type from UPPERCASE enum to lowercase string
-    if (newSchema.type) {
-      newSchema.type = String(newSchema.type).toLowerCase();
-    }
-
-    // Convert enum values if present
-    if (newSchema.enum && Array.isArray(newSchema.enum)) {
-      newSchema.enum = newSchema.enum.map((v) => String(v));
-    }
-
-    // Convert minLength from string to number if present
-    if (newSchema.minLength && typeof newSchema.minLength === 'string') {
-      const minLengthNum = parseInt(newSchema.minLength, 10);
-      if (!isNaN(minLengthNum)) {
-        newSchema.minLength = minLengthNum;
-      } else {
-        delete newSchema.minLength;
-      }
-    }
-
-    // Convert maxLength from string to number if present
-    if (newSchema.maxLength && typeof newSchema.maxLength === 'string') {
-      const maxLengthNum = parseInt(newSchema.maxLength, 10);
-      if (!isNaN(maxLengthNum)) {
-        newSchema.maxLength = maxLengthNum;
-      } else {
-        delete newSchema.maxLength;
-      }
-    }
-
-    return newSchema;
-  }
-
   private logger: DebugLogger;
   // @plan:PLAN-20251023-STATELESS-HARDENING.P08
   // @requirement:REQ-SP4-002/REQ-SP4-003
@@ -428,30 +364,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
       }
     }
 
-    const responsesTools = tools
-      ? tools[0].functionDeclarations.map((decl) => {
-          const toolParameters =
-            'parametersJsonSchema' in decl
-              ? (decl as { parametersJsonSchema?: unknown })
-                  .parametersJsonSchema
-              : decl.parameters;
-
-          const convertedParams = toolParameters
-            ? (this.convertGeminiSchemaToStandard(toolParameters) as Record<
-                string,
-                unknown
-              >)
-            : { type: 'object', properties: {} };
-
-          return {
-            type: 'function' as const,
-            name: decl.name,
-            description: decl.description || null,
-            parameters: convertedParams,
-            strict: null,
-          };
-        })
-      : undefined;
+    // Convert Gemini tools to OpenAI Responses format using provider-specific converter
+    const responsesTools = convertToolsToOpenAIResponses(tools);
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002/REQ-SP4-003

@@ -140,6 +140,13 @@ Different providers support different parameters:
 - `enable_thinking` (boolean to enable/disable thinking mode)
 - `top_k`
 
+**Reasoning Model Settings (Kimi K2-Thinking, etc.):**
+
+- `reasoning.enabled` - enable reasoning/thinking mode
+- `reasoning.includeInContext` - include reasoning in conversation context
+- `reasoning.includeInResponse` - show reasoning in responses
+- `reasoning.stripFromContext` (`none`, `all`, `allButLast`) - control reasoning in context history
+
 **Gemini Specific:**
 
 - `maxOutputTokens` (camelCase)
@@ -456,6 +463,21 @@ LLxprt Code provides fine-grained control over tool outputs to prevent context o
 /model claude-3-5-sonnet-20240620
 /set modelparam thinking {"type":"enabled","budget_tokens":8192}
 /profile save deep-thinking
+```
+
+### Example 5: Using Reasoning Models (Kimi K2-Thinking)
+
+```bash
+# Configure for Kimi K2-Thinking via OpenAI-compatible API
+/provider openai
+/baseurl https://api.synthetic.new/openai/v1
+/model hf:moonshotai/Kimi-K2-Thinking
+/set reasoning.enabled true
+/set reasoning.includeInContext true
+/set reasoning.includeInResponse true
+/set reasoning.stripFromContext none
+/set streaming disabled  # Non-streaming recommended for reasoning models
+/profile save k2-thinking
 ```
 
 ## Important Notes

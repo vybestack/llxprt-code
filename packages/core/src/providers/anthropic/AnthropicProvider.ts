@@ -13,8 +13,8 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages/index.js';
 import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
-import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
+import { convertToolsToAnthropic, AnthropicTool } from './schemaConverter.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import {
   BaseProvider,
@@ -232,10 +232,6 @@ export class AnthropicProvider extends BaseProvider {
     });
 
     return { client, authToken };
-  }
-
-  private createToolFormatter(): ToolFormatter {
-    return new ToolFormatter();
   }
 
   /**
@@ -768,7 +764,6 @@ export class AnthropicProvider extends BaseProvider {
       options,
       options.resolved.telemetry,
     );
-    const callFormatter = this.createToolFormatter();
     const { contents: content, tools } = options;
     // Convert IContent directly to Anthropic API format (no IMessage!)
     const anthropicMessages: Array<{
@@ -1063,26 +1058,8 @@ export class AnthropicProvider extends BaseProvider {
       });
     }
 
-    // Detect if we need qwen-style parameter processing (for GLM-4.5, qwen models)
-    // but ALWAYS use anthropic format for the tool structure sent to the API
-    const detectedFormat = this.detectToolFormat();
-    const needsQwenParameterProcessing = detectedFormat === 'qwen';
-
-    // Convert Gemini format tools to anthropic format (always for Anthropic API)
-    let anthropicTools = callFormatter.convertGeminiToFormat(
-      tools,
-      'anthropic', // Always use anthropic format for the API structure
-    ) as
-      | Array<{
-          name: string;
-          description: string;
-          input_schema: {
-            type: 'object';
-            properties?: Record<string, unknown>;
-            required?: string[];
-          };
-        }>
-      | undefined;
+    // Convert Gemini format tools to Anthropic format using provider-specific converter
+    let anthropicTools = convertToolsToAnthropic(tools);
 
     // Stabilize tool ordering and JSON schema keys to prevent cache invalidation
     if (anthropicTools && anthropicTools.length > 0) {
@@ -1100,7 +1077,7 @@ export class AnthropicProvider extends BaseProvider {
             };
           }
           return tool;
-        });
+        }) as AnthropicTool[];
     }
 
     const toolNamesForPrompt =
@@ -1490,7 +1467,7 @@ export class AnthropicProvider extends BaseProvider {
             logDoubleEscapingInChunk(
               jsonDelta.partial_json,
               currentToolCall.name,
-              needsQwenParameterProcessing ? 'qwen' : 'anthropic',
+              'anthropic',
             );
           }
         } else if (chunk.type === 'content_block_stop') {
@@ -1503,7 +1480,7 @@ export class AnthropicProvider extends BaseProvider {
             const processedParameters = processToolParameters(
               activeToolCall.input,
               activeToolCall.name,
-              needsQwenParameterProcessing ? 'qwen' : 'anthropic',
+              'anthropic',
             );
 
             yield {
@@ -1566,7 +1543,7 @@ export class AnthropicProvider extends BaseProvider {
           const processedParameters = processToolParameters(
             JSON.stringify(contentBlock.input),
             contentBlock.name,
-            needsQwenParameterProcessing ? 'qwen' : 'anthropic',
+            'anthropic',
           );
 
           blocks.push({

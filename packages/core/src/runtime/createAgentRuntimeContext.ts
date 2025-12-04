@@ -24,6 +24,14 @@ const EPHEMERAL_DEFAULTS = {
   compressionThreshold: 0.8,
   contextLimit: 60_000,
   preserveThreshold: 0.2,
+  /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006 */
+  reasoning: {
+    enabled: true, // REQ-THINK-006.1
+    includeInContext: false, // REQ-THINK-006.2
+    includeInResponse: true, // REQ-THINK-006.3
+    format: 'field' as const, // REQ-THINK-006.4
+    stripFromContext: 'none' as const, // REQ-THINK-006.5
+  },
 } as const;
 
 export function createAgentRuntimeContext(
@@ -70,6 +78,40 @@ export function createAgentRuntimeContext(
       EPHEMERAL_DEFAULTS.preserveThreshold,
     toolFormatOverride: (): string | undefined =>
       options.settings.toolFormatOverride,
+    /**
+     * @plan PLAN-20251202-THINKING.P03b
+     * @requirement REQ-THINK-006
+     */
+    reasoning: {
+      enabled: (): boolean =>
+        options.settings['reasoning.enabled'] ??
+        EPHEMERAL_DEFAULTS.reasoning.enabled,
+      includeInContext: (): boolean =>
+        options.settings['reasoning.includeInContext'] ??
+        EPHEMERAL_DEFAULTS.reasoning.includeInContext,
+      includeInResponse: (): boolean =>
+        options.settings['reasoning.includeInResponse'] ??
+        EPHEMERAL_DEFAULTS.reasoning.includeInResponse,
+      format: (): 'native' | 'field' =>
+        (options.settings['reasoning.format'] as 'native' | 'field') ??
+        EPHEMERAL_DEFAULTS.reasoning.format,
+      stripFromContext: (): 'all' | 'allButLast' | 'none' =>
+        (options.settings['reasoning.stripFromContext'] as
+          | 'all'
+          | 'allButLast'
+          | 'none') ?? EPHEMERAL_DEFAULTS.reasoning.stripFromContext,
+      effort: (): 'minimal' | 'low' | 'medium' | 'high' | undefined =>
+        options.settings['reasoning.effort'] as
+          | 'minimal'
+          | 'low'
+          | 'medium'
+          | 'high'
+          | undefined,
+      maxTokens: (): number | undefined =>
+        typeof options.settings['reasoning.maxTokens'] === 'number'
+          ? options.settings['reasoning.maxTokens']
+          : undefined,
+    },
   };
 
   const providerRuntime = Object.freeze({

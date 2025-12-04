@@ -16,6 +16,7 @@ import {
   FatalTurnLimitedError,
   EmojiFilter,
   type EmojiFilterMode,
+  type ServerGeminiThoughtEvent,
 } from '@vybestack/llxprt-code-core';
 import { Content, Part } from '@google/genai';
 import { isSlashCommand } from './ui/utils/commandUtils.js';
@@ -125,11 +126,39 @@ export async function runNonInteractive(
           return;
         }
 
-        if (event.type === GeminiEventType.Content) {
+        if (event.type === GeminiEventType.Thought) {
+          // Output thinking/reasoning content with <think> tags
+          // Check if reasoning.includeInResponse is enabled
+          const includeThinking =
+            typeof config.getEphemeralSetting === 'function'
+              ? (config.getEphemeralSetting('reasoning.includeInResponse') ??
+                true)
+              : true;
+
+          if (includeThinking) {
+            const thoughtEvent = event as ServerGeminiThoughtEvent;
+            const thought = thoughtEvent.value;
+            // Format thought with subject and description
+            const thoughtText =
+              thought.subject && thought.description
+                ? `${thought.subject}: ${thought.description}`
+                : thought.subject || thought.description || '';
+
+            if (thoughtText.trim()) {
+              process.stdout.write(`<think>${thoughtText}</think>\n`);
+            }
+          }
+        } else if (event.type === GeminiEventType.Content) {
           // Apply emoji filtering to content output
           let outputValue = event.value;
+
+          // Strip fragmented <think>word</think> tags from streaming content
+          // These are handled separately via GeminiEventType.Thought events
+          // The Synthetic API sends thinking token-by-token with individual tags
+          outputValue = outputValue.replace(/<\/?think>/gi, '');
+
           if (emojiFilter) {
-            const filterResult = emojiFilter.filterStreamChunk(event.value);
+            const filterResult = emojiFilter.filterStreamChunk(outputValue);
 
             if (filterResult.blocked) {
               // In error mode: output error message and continue
