@@ -14,10 +14,7 @@ import type {
 import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
-import {
-  convertToolsToAnthropic,
-  AnthropicTool,
-} from './schemaConverter.js';
+import { convertToolsToAnthropic, AnthropicTool } from './schemaConverter.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import {
   BaseProvider,
