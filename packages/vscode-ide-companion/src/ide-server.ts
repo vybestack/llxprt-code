@@ -476,7 +476,7 @@ const createMcpServer = (
       filePath: string;
       newContent?: string;
     }) => {
-      log(`Received openDiff request for filePath: ${filePath}`);
+      log(`openDiff tool invoked for filePath=${filePath}`);
       await diffManager.showDiff(filePath, newContent ?? '');
       return {
         content: [
@@ -504,7 +504,9 @@ const createMcpServer = (
       filePath: string;
       suppressNotification?: boolean;
     }) => {
-      log(`Received closeDiff request for filePath: ${filePath}`);
+      log(
+        `closeDiff tool invoked for filePath=${filePath}, suppressNotification=${suppressNotification}`,
+      );
       const content = await diffManager.closeDiff(
         filePath,
         suppressNotification,

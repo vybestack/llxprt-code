@@ -71,6 +71,9 @@ export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
     baseURL?: string;
     authToken: ResolvedAuthToken;
     telemetry?: ProviderTelemetryContext; // @plan PLAN-20251023-STATELESS-HARDENING.P08: Telemetry service
+    temperature?: number;
+    maxTokens?: number;
+    streaming?: boolean;
   };
 }
 
@@ -727,11 +730,27 @@ export abstract class BaseProvider implements IProvider {
         includeOAuth: true,
       })) ?? '';
 
+    const providerSettings =
+      settings.getProviderSettings(this.name) ??
+      ({} as Record<string, unknown>);
+    const resolvedTemperature =
+      providedOptions.resolved?.temperature ??
+      (providerSettings?.temperature as number | undefined);
+    const resolvedMaxTokens =
+      providedOptions.resolved?.maxTokens ??
+      (providerSettings?.maxTokens as number | undefined);
+    const resolvedStreaming =
+      providedOptions.resolved?.streaming ??
+      (providerSettings?.streaming as boolean | undefined);
+
     const resolved = {
       model: resolvedModel,
       baseURL: resolvedBaseURL,
       authToken: resolvedAuth,
       telemetry: providedOptions.resolved?.telemetry,
+      temperature: resolvedTemperature,
+      maxTokens: resolvedMaxTokens,
+      streaming: resolvedStreaming,
     };
 
     const guard = this.assertRuntimeContext({

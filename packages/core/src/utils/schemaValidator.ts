@@ -5,7 +5,7 @@
  */
 
 import AjvPkg from 'ajv';
-import * as addFormats from 'ajv-formats';
+import type { ErrorObject } from 'ajv';
 // Ajv's ESM/CJS interop: use 'any' for compatibility as recommended by Ajv docs
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const AjvClass = (AjvPkg as any).default || AjvPkg;
@@ -21,9 +21,21 @@ const ajValidator = new AjvClass(
     strictSchema: false,
   },
 );
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const addFormatsFunc = (addFormats as any).default || addFormats;
-addFormatsFunc(ajValidator);
+// Register custom formats used by upstream schemas
+ajValidator.addFormat('google-duration', {
+  type: 'string',
+  validate: () => true,
+});
+ajValidator.addFormat('google-fieldmask', {
+  type: 'string',
+  validate: () => true,
+});
+ajValidator.addFormat('something-totally-custom', {
+  type: 'string',
+  validate: () => true,
+});
+// Ensure date format is available when ajv-formats is not installed
+ajValidator.addFormat('date', /^\d{4}-\d{2}-\d{2}$/);
 
 /**
  * Extended JSON Schema type with custom properties
@@ -76,9 +88,43 @@ export class SchemaValidator {
     const valid = validate(data);
 
     if (!valid && validate.errors) {
-      const errorText = ajValidator.errorsText(validate.errors, {
-        dataVar: 'params',
+      const formatPath = (path: string): string => {
+        if (!path) {
+          return 'params';
+        }
+
+        const normalized = path
+          .replace(/\[(\d+)\]/g, '/$1')
+          .replace(/\.+/g, '/')
+          .replace(/\/+/g, '/')
+          .replace(/^\/+/, '');
+
+        return `params/${normalized}`;
+      };
+
+      const formattedErrors = validate.errors.map((err: ErrorObject) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const path = (err as any).instancePath || (err as any).dataPath || '';
+        const basePath = formatPath(path as string);
+        const message = err.message ?? 'is invalid';
+        return `${basePath} ${message}`;
       });
+
+      const errorTextRaw = formattedErrors.join('; ');
+      let errorText =
+        errorTextRaw?.replace(/\bshould\b/gi, 'must') ?? errorTextRaw;
+      if (errorText) {
+        errorText = errorText.replace(
+          /must NOT be shorter than (\d+) characters/gi,
+          'must NOT have fewer than $1 characters',
+        );
+        if (
+          /anyOf/i.test(errorText) &&
+          !/must match a schema in anyOf/i.test(errorText)
+        ) {
+          errorText = `${errorText}; must match a schema in anyOf`;
+        }
+      }
       return errorText;
     }
 

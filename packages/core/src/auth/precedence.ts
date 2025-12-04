@@ -8,12 +8,11 @@
  * Authentication precedence utility for providers
  *
  * Implements the authentication precedence chain:
- * 1. /key command key
- * 2. /keyfile command keyfile
- * 3. --key CLI argument
- * 4. --keyfile CLI argument
- * 5. Environment variables
- * 6. OAuth (if enabled)
+ * 1. Provider-specific auth-key/keyfile (from getProviderSettings)
+ * 2. Constructor API key
+ * 3. Global auth-key/keyfile (from settings when activeProvider matches)
+ * 4. Environment variables
+ * 5. OAuth (if enabled)
  */
 
 import * as fs from 'node:fs/promises';
@@ -623,6 +622,13 @@ export class AuthPrecedenceResolver {
         }
       }
 
+      const normalizedConfigKey = this.normalizeAuthValue(
+        this.config.apiKey ?? null,
+      );
+      if (normalizedConfigKey) {
+        return normalizedConfigKey;
+      }
+
       if (this.shouldUseGlobalAuth(settingsService, providerKey)) {
         const authKey = this.normalizeAuthValue(
           settingsService.get('auth-key'),
@@ -640,13 +646,6 @@ export class AuthPrecedenceResolver {
             return keyFromFile;
           }
         }
-      }
-
-      const normalizedConfigKey = this.normalizeAuthValue(
-        this.config.apiKey ?? null,
-      );
-      if (normalizedConfigKey) {
-        return normalizedConfigKey;
       }
 
       if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
