@@ -270,6 +270,13 @@ export class ToolFormatter implements IToolFormatter {
       newSchema.type = String(newSchema.type).toLowerCase();
     }
 
+    // Ensure required is always present for object types
+    // This is critical for some models like K2 to use structured function calls
+    // instead of falling back to text-based tool call format
+    if (newSchema.type === 'object' && !newSchema.required) {
+      newSchema.required = [];
+    }
+
     // Convert enum values if present (they should remain as-is)
     // But ensure they're arrays of strings, not some other type
     if (newSchema.enum && Array.isArray(newSchema.enum)) {

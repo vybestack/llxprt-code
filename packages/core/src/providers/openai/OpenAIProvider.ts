@@ -35,6 +35,7 @@ import {
 import { DebugLogger } from '../../debug/index.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
+import { convertToolsToOpenAI, OpenAITool } from './schemaConverter.js';
 import { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
 import {
   ToolCallBlock,
@@ -1556,20 +1557,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       },
     );
 
-    // Convert Gemini format tools to the detected format
-    let formattedTools = toolFormatter.convertGeminiToFormat(
-      tools,
-      detectedFormat,
-    ) as
-      | Array<{
-          type: 'function';
-          function: {
-            name: string;
-            description: string;
-            parameters: Record<string, unknown>;
-          };
-        }>
-      | undefined;
+    // Convert Gemini format tools to OpenAI format using the schema converter
+    // This ensures required fields are always present in tool schemas
+    let formattedTools: OpenAITool[] | undefined = convertToolsToOpenAI(tools);
 
     // CRITICAL FIX: Ensure we never pass an empty tools array
     // The OpenAI API errors when tools=[] but a tool call is attempted
@@ -2970,20 +2960,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       },
     );
 
-    // Convert Gemini format tools to the detected format
-    let formattedTools = toolFormatter.convertGeminiToFormat(
-      tools,
-      detectedFormat,
-    ) as
-      | Array<{
-          type: 'function';
-          function: {
-            name: string;
-            description: string;
-            parameters: Record<string, unknown>;
-          };
-        }>
-      | undefined;
+    // Convert Gemini format tools to OpenAI format using the schema converter
+    // This ensures required fields are always present in tool schemas
+    let formattedTools: OpenAITool[] | undefined = convertToolsToOpenAI(tools);
 
     // CRITICAL FIX: Ensure we never pass an empty tools array
     // The OpenAI API errors when tools=[] but a tool call is attempted

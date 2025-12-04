@@ -44,7 +44,10 @@ import {
 } from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
 import { OAuthManager } from '../../auth/precedence.js';
-import { ToolFormatter } from '../../tools/ToolFormatter.js';
+import {
+  convertToolsToOpenAIVercel,
+  OpenAIVercelTool,
+} from './schemaConverter.js';
 import { ToolCallBlock, TextBlock } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { IModel } from '../IModel.js';
@@ -162,14 +165,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     };
   }
 
-  /**
-   * Tool formatter instances cannot be shared between stateless calls,
-   * so construct a fresh one for every invocation.
-   */
-  private createToolFormatter(): ToolFormatter {
-    return new ToolFormatter();
-  }
-
   private getAiJsonSchema(): ((schema: JSONSchema7) => unknown) | undefined {
     try {
       const candidate = (Ai as { jsonSchema?: unknown }).jsonSchema;
@@ -267,19 +262,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   /**
    * Build an AI SDK ToolSet from already-normalized OpenAI-style tool definitions.
    *
-   * Input is the same array produced by ToolFormatter.convertGeminiToFormat(…, 'openai'|'qwen').
+   * Input is the array produced by convertToolsToOpenAIVercel().
    */
   private buildVercelTools(
-    formattedTools?:
-      | Array<{
-          type: 'function';
-          function: {
-            name: string;
-            description?: string;
-            parameters?: Record<string, unknown>;
-          };
-        }>
-      | undefined,
+    formattedTools?: OpenAIVercelTool[] | undefined,
   ): VercelTools | undefined {
     if (!formattedTools || formattedTools.length === 0) {
       return undefined;
@@ -419,7 +405,6 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
     const ephemerals = options.invocation?.ephemerals ?? {};
 
-    const toolFormatter = this.createToolFormatter();
     const resolved = options.resolved;
 
     if (logger.enabled) {
@@ -478,25 +463,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       });
     }
 
-    // Detect tool format ('openai' or 'qwen') and convert Gemini tools to OpenAI-style definitions
-    const detectedFormat = this.detectToolFormat();
-    const formattedTools = toolFormatter.convertGeminiToFormat(
-      tools,
-      detectedFormat,
-    ) as
-      | Array<{
-          type: 'function';
-          function: {
-            name: string;
-            description?: string;
-            parameters?: Record<string, unknown>;
-          };
-        }>
-      | undefined;
+    // Convert Gemini tools to OpenAI-style definitions using provider-specific converter
+    const formattedTools = convertToolsToOpenAIVercel(tools);
 
     if (logger.enabled && formattedTools) {
       logger.debug(() => `[OpenAIVercelProvider] Tool conversion summary`, {
-        detectedFormat,
         hasTools: !!formattedTools,
         toolCount: formattedTools.length,
         toolNames: formattedTools.map((t) => t.function.name),

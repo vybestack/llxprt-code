@@ -977,29 +977,19 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
-      // Verify ToolFormatter was used with the new convertGeminiToFormat method
-      const ToolFormatterMock = vi.mocked(
-        (await import('../../tools/ToolFormatter.js')).ToolFormatter,
-      );
-      const toolFormatterInstance = ToolFormatterMock.mock.results[0].value;
-
-      expect(toolFormatterInstance.convertGeminiToFormat).toHaveBeenCalledWith(
-        [
-          {
-            functionDeclarations: [
-              {
-                name: 'test_tool',
-                description: 'A test tool',
-                parameters: {
-                  type: 'object',
-                  properties: { foo: { type: 'string' } },
-                },
-              },
-            ],
-          },
-        ],
-        'anthropic', // The detected format for AnthropicProvider
-      );
+      // Verify tools were converted and passed to the Anthropic API in correct format
+      const createCall = mockAnthropicInstance.messages.create.mock.calls[0][0];
+      expect(createCall.tools).toBeDefined();
+      expect(createCall.tools).toHaveLength(1);
+      expect(createCall.tools[0]).toEqual({
+        name: 'test_tool',
+        description: 'A test tool',
+        input_schema: {
+          type: 'object',
+          properties: { foo: { type: 'string' } },
+          required: [], // schemaConverter always adds required array
+        },
+      });
     });
 
     it('should retry on rate limit errors', { timeout: 10000 }, async () => {
