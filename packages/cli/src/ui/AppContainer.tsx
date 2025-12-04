@@ -1136,7 +1136,8 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
-    settings.merged.ui?.customWittyPhrases,
+    settings.merged.wittyPhraseStyle || 'default',
+    settings.merged.customWittyPhrases,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
 

@@ -11,6 +11,12 @@ import { useState, useEffect, useRef } from 'react'; // Added useRef
 
 export const useLoadingIndicator = (
   streamingState: StreamingState,
+  wittyPhraseStyle:
+    | 'default'
+    | 'llxprt'
+    | 'gemini-cli'
+    | 'community'
+    | 'custom' = 'default',
   customWittyPhrases?: string[],
 ) => {
   const [timerResetKey, setTimerResetKey] = useState(0);
@@ -23,6 +29,7 @@ export const useLoadingIndicator = (
   const currentLoadingPhrase = usePhraseCycler(
     isPhraseCyclingActive,
     isWaiting,
+    wittyPhraseStyle,
     customWittyPhrases,
   );
 

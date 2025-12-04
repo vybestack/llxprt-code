@@ -545,6 +545,23 @@ export const SETTINGS_SCHEMA = {
         description: 'Custom witty phrases to display during loading.',
         showInDialog: false,
       },
+      wittyPhraseStyle: {
+        type: 'enum',
+        label: 'Witty Phrase Style',
+        category: 'UI',
+        requiresRestart: false,
+        default: 'default',
+        description:
+          'Choose which collection of witty phrases to display during loading.',
+        showInDialog: true,
+        options: [
+          { value: 'default', label: 'Default (LLxprt + Custom Override)' },
+          { value: 'llxprt', label: 'LLxprt Built-in' },
+          { value: 'gemini-cli', label: 'Gemini-cli Built-in' },
+          { value: 'community', label: 'Community Suggestions' },
+          { value: 'custom', label: 'Custom Phrases Only' },
+        ] as const,
+      },
       vimMode: {
         type: 'boolean',
         label: 'Vim Mode',
