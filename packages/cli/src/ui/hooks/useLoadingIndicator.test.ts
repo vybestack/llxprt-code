@@ -8,10 +8,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useLoadingIndicator } from './useLoadingIndicator.js';
 import { StreamingState } from '../types.js';
-import {
-  WITTY_LOADING_PHRASES,
-  PHRASE_CHANGE_INTERVAL_MS,
-} from './usePhraseCycler.js';
+import { PHRASE_CHANGE_INTERVAL_MS } from './usePhraseCycler.js';
+import { LLXPRT_PHRASES } from '../constants/phrasesCollections.js';
 
 describe('useLoadingIndicator', () => {
   beforeEach(() => {
@@ -28,9 +26,7 @@ describe('useLoadingIndicator', () => {
       useLoadingIndicator(StreamingState.Idle),
     );
     expect(result.current.elapsedTime).toBe(0);
-    expect(WITTY_LOADING_PHRASES).toContain(
-      result.current.currentLoadingPhrase,
-    );
+    expect(LLXPRT_PHRASES).toContain(result.current.currentLoadingPhrase);
   });
 
   it('should reflect values when Responding', async () => {
@@ -40,18 +36,14 @@ describe('useLoadingIndicator', () => {
 
     // Initial state before timers advance
     expect(result.current.elapsedTime).toBe(0);
-    expect(WITTY_LOADING_PHRASES).toContain(
-      result.current.currentLoadingPhrase,
-    );
+    expect(LLXPRT_PHRASES).toContain(result.current.currentLoadingPhrase);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(PHRASE_CHANGE_INTERVAL_MS + 1);
     });
 
     // Phrase should cycle if PHRASE_CHANGE_INTERVAL_MS has passed
-    expect(WITTY_LOADING_PHRASES).toContain(
-      result.current.currentLoadingPhrase,
-    );
+    expect(LLXPRT_PHRASES).toContain(result.current.currentLoadingPhrase);
   });
 
   it('should show waiting phrase and retain elapsedTime when WaitingForConfirmation', async () => {
@@ -104,9 +96,7 @@ describe('useLoadingIndicator', () => {
       rerender({ streamingState: StreamingState.Responding });
     });
     expect(result.current.elapsedTime).toBe(0); // Should reset
-    expect(WITTY_LOADING_PHRASES).toContain(
-      result.current.currentLoadingPhrase,
-    );
+    expect(LLXPRT_PHRASES).toContain(result.current.currentLoadingPhrase);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000);
@@ -130,9 +120,7 @@ describe('useLoadingIndicator', () => {
     });
 
     expect(result.current.elapsedTime).toBe(0);
-    expect(WITTY_LOADING_PHRASES).toContain(
-      result.current.currentLoadingPhrase,
-    );
+    expect(LLXPRT_PHRASES).toContain(result.current.currentLoadingPhrase);
 
     // Timer should not advance
     await act(async () => {
@@ -144,7 +132,7 @@ describe('useLoadingIndicator', () => {
   it('should use custom witty phrases when provided', async () => {
     const customPhrases = ['Custom phrase 1', 'Custom phrase 2'];
     const { result } = renderHook(() =>
-      useLoadingIndicator(StreamingState.Responding, customPhrases),
+      useLoadingIndicator(StreamingState.Responding, 'custom', customPhrases),
     );
 
     // Should use a custom phrase

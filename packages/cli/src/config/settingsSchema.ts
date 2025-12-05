@@ -14,6 +14,7 @@ import {
   DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
 } from '@vybestack/llxprt-code-core';
 import { CustomTheme } from '../ui/themes/theme.js';
+import { type WittyPhraseStyle } from '../ui/constants/phrasesCollections.js';
 import type { SessionRetentionSettings } from './settings.js';
 
 export type SettingsType =
@@ -544,6 +545,23 @@ export const SETTINGS_SCHEMA = {
         default: [] as string[],
         description: 'Custom witty phrases to display during loading.',
         showInDialog: false,
+      },
+      wittyPhraseStyle: {
+        type: 'enum',
+        label: 'Witty Phrase Style',
+        category: 'UI',
+        requiresRestart: false,
+        default: 'default',
+        description:
+          'Choose which collection of witty phrases to display during loading.',
+        showInDialog: true,
+        options: [
+          { value: 'default', label: 'Default (LLxprt + Custom Override)' },
+          { value: 'llxprt', label: 'LLxprt Built-in' },
+          { value: 'gemini-cli', label: 'Gemini-cli Built-in' },
+          { value: 'whimsical', label: 'Whimsical' },
+          { value: 'custom', label: 'Custom Phrases Only' },
+        ] satisfies ReadonlyArray<{ value: WittyPhraseStyle; label: string }>,
       },
       vimMode: {
         type: 'boolean',
@@ -1330,6 +1348,32 @@ export const SETTINGS_SCHEMA = {
     default: false,
     description: 'Enable debug logging of keystrokes to the console.',
     showInDialog: true,
+  },
+  customWittyPhrases: {
+    type: 'array',
+    label: 'Custom Witty Phrases',
+    category: 'UI',
+    requiresRestart: false,
+    default: [] as string[],
+    description: 'Custom witty phrases to display during loading.',
+    showInDialog: false,
+  },
+  wittyPhraseStyle: {
+    type: 'enum',
+    label: 'Witty Phrase Style',
+    category: 'UI',
+    requiresRestart: false,
+    default: 'default',
+    description:
+      'Choose which collection of witty phrases to display during loading.',
+    showInDialog: true,
+    options: [
+      { value: 'default', label: 'Default (LLxprt + Custom Override)' },
+      { value: 'llxprt', label: 'LLxprt Built-in' },
+      { value: 'gemini-cli', label: 'Gemini-cli Built-in' },
+      { value: 'whimsical', label: 'Whimsical' },
+      { value: 'custom', label: 'Custom Phrases Only' },
+    ] satisfies ReadonlyArray<{ value: WittyPhraseStyle; label: string }>,
   },
 } as const;
 

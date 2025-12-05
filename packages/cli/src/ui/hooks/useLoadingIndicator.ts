@@ -7,10 +7,12 @@
 import { StreamingState } from '../types.js';
 import { useTimer } from './useTimer.js';
 import { usePhraseCycler } from './usePhraseCycler.js';
+import { type WittyPhraseStyle } from '../constants/phrasesCollections.js';
 import { useState, useEffect, useRef } from 'react'; // Added useRef
 
 export const useLoadingIndicator = (
   streamingState: StreamingState,
+  wittyPhraseStyle: WittyPhraseStyle = 'default',
   customWittyPhrases?: string[],
 ) => {
   const [timerResetKey, setTimerResetKey] = useState(0);
@@ -23,6 +25,7 @@ export const useLoadingIndicator = (
   const currentLoadingPhrase = usePhraseCycler(
     isPhraseCyclingActive,
     isWaiting,
+    wittyPhraseStyle,
     customWittyPhrases,
   );
 
