@@ -1460,7 +1460,7 @@ export class AnthropicProvider extends BaseProvider {
             thinking: {
               type: 'enabled' as const,
               budget_tokens:
-                (reasoningBudgetTokens as number | undefined) || 10000,
+                (reasoningBudgetTokens as number | undefined) ?? 10000,
             },
           }
         : {}),
