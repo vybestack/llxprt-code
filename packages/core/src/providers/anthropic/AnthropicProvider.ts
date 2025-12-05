@@ -1140,13 +1140,6 @@ export class AnthropicProvider extends BaseProvider {
                     `[AnthropicProvider] Found orphaned thinking block in previous content item, merging with tool_use message`,
                 );
                 anthropicThinkingBlocks = prevThinkingBlocks;
-                // Mark the previous index for redaction too since we're using its thinking
-                if (
-                  shouldRedactThinking ||
-                  redactedThinkingIndices.has(contentIndex - 1)
-                ) {
-                  // Use the redaction status from the previous item or current item
-                }
               }
             }
           }
