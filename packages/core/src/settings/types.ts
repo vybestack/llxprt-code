@@ -48,6 +48,7 @@ export interface ProviderSettings {
     | 'auto'
     | 'openai'
     | 'qwen'
+    | 'kimi'
     | 'hermes'
     | 'xml'
     | 'anthropic'
