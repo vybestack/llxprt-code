@@ -28,7 +28,11 @@ import { IContent } from '../../services/history/IContent.js';
 import type { Config } from '../../config/config.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
-import { isKimiModel } from '../../tools/ToolIdStrategy.js';
+import {
+  isKimiModel,
+  getToolIdStrategy,
+  type ToolIdMapper,
+} from '../../tools/ToolIdStrategy.js';
 import {
   BaseProvider,
   NormalizedGenerateChatOptions,
@@ -1215,6 +1219,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private buildMessagesWithReasoning(
     contents: IContent[],
     options: NormalizedGenerateChatOptions,
+    toolFormat?: ToolFormat,
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
     // Read settings with defaults
     const stripPolicy =
@@ -1227,6 +1232,29 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const filteredContents = filterThinkingForContext(contents, stripPolicy);
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+
+    // Create a ToolIdMapper based on the tool format
+    // For Kimi K2, this generates sequential IDs in the format functions.{name}:{index}
+    const toolIdMapper: ToolIdMapper | null =
+      toolFormat === 'kimi'
+        ? getToolIdStrategy('kimi').createMapper(filteredContents)
+        : null;
+
+    // Helper to resolve tool call IDs based on format
+    const resolveToolCallId = (tc: ToolCallBlock): string => {
+      if (toolIdMapper) {
+        return toolIdMapper.resolveToolCallId(tc);
+      }
+      return this.normalizeToOpenAIToolId(tc.id);
+    };
+
+    // Helper to resolve tool response IDs based on format
+    const resolveToolResponseId = (tr: ToolResponseBlock): string => {
+      if (toolIdMapper) {
+        return toolIdMapper.resolveToolResponseId(tr);
+      }
+      return this.normalizeToOpenAIToolId(tr.callId);
+    };
 
     for (const content of filteredContents) {
       if (content.speaker === 'human') {
@@ -1258,7 +1286,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             role: 'assistant',
             content: text || null,
             tool_calls: toolCalls.map((tc) => ({
-              id: this.normalizeToOpenAIToolId(tc.id),
+              id: resolveToolCallId(tc),
               type: 'function' as const,
               function: {
                 name: tc.name,
@@ -1310,7 +1338,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           messages.push({
             role: 'tool',
             content: this.buildToolResponseContent(tr, options.config),
-            tool_call_id: this.normalizeToOpenAIToolId(tr.callId),
+            tool_call_id: resolveToolResponseId(tr),
           });
         }
       }
@@ -1527,24 +1555,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
-    // Convert IContent to OpenAI messages format
-    // Use buildMessagesWithReasoning for reasoning-aware message building
-    const messages =
-      toolReplayMode === 'native'
-        ? this.buildMessagesWithReasoning(contents, options)
-        : this.convertToOpenAIMessages(
-            contents,
-            toolReplayMode,
-            options.config ?? options.runtime?.config ?? this.globalConfig,
-          );
-    if (logger.enabled && toolReplayMode !== 'native') {
-      logger.debug(
-        () =>
-          `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
-      );
-    }
-
-    // Detect the tool format to use (once at the start of the method)
+    // Detect the tool format to use BEFORE building messages
+    // This is needed so that Kimi K2 tool IDs can be generated in the correct format
     const detectedFormat = this.detectToolFormat();
 
     // Log the detected format for debugging
@@ -1557,6 +1569,24 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         provider: this.name,
       },
     );
+
+    // Convert IContent to OpenAI messages format
+    // Use buildMessagesWithReasoning for reasoning-aware message building
+    // Pass detectedFormat so that Kimi K2 tool IDs are generated correctly
+    const messages =
+      toolReplayMode === 'native'
+        ? this.buildMessagesWithReasoning(contents, options, detectedFormat)
+        : this.convertToOpenAIMessages(
+            contents,
+            toolReplayMode,
+            options.config ?? options.runtime?.config ?? this.globalConfig,
+          );
+    if (logger.enabled && toolReplayMode !== 'native') {
+      logger.debug(
+        () =>
+          `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
+      );
+    }
 
     // Convert Gemini format tools to OpenAI format using the schema converter
     // This ensures required fields are always present in tool schemas
@@ -2928,11 +2958,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Determine tool replay mode for model compatibility (e.g., polaris-alpha)
     const toolReplayMode = this.determineToolReplayMode(model);
 
+    // Detect the tool format to use BEFORE building messages
+    // This is needed so that Kimi K2 tool IDs can be generated in the correct format
+    const detectedFormat = this.detectToolFormat();
+
+    // Log the detected format for debugging
+    logger.debug(
+      () =>
+        `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
+      {
+        model,
+        detectedFormat,
+        provider: this.name,
+      },
+    );
+
     // Convert IContent to OpenAI messages format
     // Use buildMessagesWithReasoning for reasoning-aware message building
+    // Pass detectedFormat so that Kimi K2 tool IDs are generated correctly
     const messages =
       toolReplayMode === 'native'
-        ? this.buildMessagesWithReasoning(contents, options)
+        ? this.buildMessagesWithReasoning(contents, options, detectedFormat)
         : this.convertToOpenAIMessages(
             contents,
             toolReplayMode,
@@ -2946,20 +2992,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
       );
     }
-
-    // Detect the tool format to use (once at the start of the method)
-    const detectedFormat = this.detectToolFormat();
-
-    // Log the detected format for debugging
-    logger.debug(
-      () =>
-        `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
-      {
-        model,
-        detectedFormat,
-        provider: this.name,
-      },
-    );
 
     // Convert Gemini format tools to OpenAI format using the schema converter
     // This ensures required fields are always present in tool schemas
