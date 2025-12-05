@@ -30,6 +30,7 @@ describe('PromptResolver', () => {
         hasIdeCompanion: false,
       },
       enabledTools: ['delete_line_range', 'insert_at_line', 'read_line_range'],
+      enableToolPrompts: true, // Explicitly enable for tests that check tool prompts
     };
   });
 

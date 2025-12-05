@@ -180,6 +180,12 @@ const directSettingSpecs: SettingLiteralSpec[] = [
     options: booleanOptions,
   },
   {
+    value: 'include-folder-structure',
+    hint: 'true or false',
+    description: 'Include folder structure in system prompts',
+    options: booleanOptions,
+  },
+  {
     value: 'dumponerror',
     hint: 'enabled or disabled',
     description: 'dump mode',

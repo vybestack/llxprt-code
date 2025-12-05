@@ -36,4 +36,5 @@ export interface PromptContext {
   model: string;
   enabledTools: string[];
   environment: PromptEnvironment;
+  enableToolPrompts?: boolean;
 }
