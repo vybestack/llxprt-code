@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useCallback } from 'react';
 import { Box, Newline, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { useKeypress } from '../hooks/useKeypress.js';
@@ -98,14 +99,16 @@ export const MultiProviderPrivacyNotice = ({
   providerName,
   onExit,
 }: MultiProviderPrivacyNoticeProps) => {
-  useKeypress(
-    (key) => {
+  const handleKeypress = useCallback(
+    (key: { name?: string }) => {
       if (key.name === 'escape') {
         onExit();
       }
     },
-    { isActive: true },
+    [onExit],
   );
+
+  useKeypress(handleKeypress, { isActive: true });
 
   const providerInfo = getProviderInfo(providerName);
   const displayName = formatProviderName(providerName);

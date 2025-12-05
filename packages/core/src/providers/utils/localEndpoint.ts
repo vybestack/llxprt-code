@@ -86,8 +86,14 @@ function isIPv4LoopbackRange(ip: string): boolean {
     return false;
   }
 
-  const firstOctet = Number(ipv4Match[1]);
-  return firstOctet === 127;
+  const octets = ipv4Match.slice(1).map(Number);
+
+  // Validate octets are in valid range (consistent with isPrivateIPv4)
+  if (octets.some((octet) => octet < 0 || octet > 255)) {
+    return false;
+  }
+
+  return octets[0] === 127;
 }
 
 /**

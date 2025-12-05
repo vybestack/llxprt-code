@@ -22,7 +22,6 @@ import { tokenLimit } from '../core/tokenLimits.js';
 
 const EPHEMERAL_DEFAULTS = {
   compressionThreshold: 0.8,
-  contextLimit: 60_000,
   preserveThreshold: 0.2,
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006 */
   reasoning: {
