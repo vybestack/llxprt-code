@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getPhraseCollection,
   type WittyPhraseStyle,
@@ -26,7 +26,10 @@ export const usePhraseCycler = (
   style: WittyPhraseStyle = 'default',
   customPhrases?: string[],
 ) => {
-  const loadingPhrases = getPhraseCollection(style, customPhrases);
+  const loadingPhrases = useMemo(
+    () => getPhraseCollection(style, customPhrases),
+    [style, customPhrases],
+  );
 
   const [currentLoadingPhrase, setCurrentLoadingPhrase] = useState(
     loadingPhrases[0],

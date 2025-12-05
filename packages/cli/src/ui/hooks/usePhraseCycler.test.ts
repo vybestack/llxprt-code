@@ -214,9 +214,9 @@ describe('usePhraseCycler', () => {
       expect(GEMINI_CLI_PHRASES).toContain(result.current);
     });
 
-    it('should use Community phrases for "community" style', () => {
+    it('should use Community phrases for "whimsical" style', () => {
       const { result } = renderHook(() =>
-        usePhraseCycler(true, false, 'community'),
+        usePhraseCycler(true, false, 'whimsical'),
       );
       expect(COMMUNITY_PHRASES).toContain(result.current);
     });
