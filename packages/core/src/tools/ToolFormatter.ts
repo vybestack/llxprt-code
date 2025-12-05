@@ -202,8 +202,13 @@ export class ToolFormatter implements IToolFormatter {
       () => `Converting ${geminiTools.length} tool groups to ${format} format`,
     );
 
-    // For OpenAI-compatible formats (openai, qwen, deepseek), use the OpenAI conversion
-    if (format === 'openai' || format === 'qwen' || format === 'deepseek') {
+    // For OpenAI-compatible formats (openai, qwen, deepseek, kimi), use the OpenAI conversion
+    if (
+      format === 'openai' ||
+      format === 'qwen' ||
+      format === 'deepseek' ||
+      format === 'kimi'
+    ) {
       return this.convertGeminiToOpenAI(geminiTools);
     }
 
@@ -313,6 +318,7 @@ export class ToolFormatter implements IToolFormatter {
       case 'openai':
       case 'deepseek': // DeepSeek uses same format as OpenAI for now
       case 'qwen': // Qwen uses same format as OpenAI for now
+      case 'kimi': // Kimi K2 uses same format as OpenAI
         // Guard verbose conversion logging
         if (this.logger.enabled) {
           this.logger.debug(
@@ -384,6 +390,7 @@ export class ToolFormatter implements IToolFormatter {
       case 'openai':
       case 'deepseek':
       case 'qwen':
+      case 'kimi':
       case 'gemma': {
         const openAiToolCall = rawToolCall as {
           id: string;
@@ -520,6 +527,7 @@ export class ToolFormatter implements IToolFormatter {
       case 'openai':
       case 'deepseek':
       case 'qwen':
+      case 'kimi':
       case 'gemma':
         // All use same accumulation logic for now
         if (deltaToolCall.index !== undefined) {
