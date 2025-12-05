@@ -20,6 +20,10 @@
  * limitations under the License.
  */
 
+import { DebugLogger } from '../debug/index.js';
+
+const logger = new DebugLogger('llxprt:parser:textToolCall');
+
 export interface TextToolCall {
   name: string;
   arguments: Record<string, unknown>;
@@ -218,9 +222,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
           continue;
         }
       } catch (error) {
-        console.error(
-          `[GemmaToolCallParser] Failed to parse structured tool call JSON: ${error}`,
-        );
+        logger.error(`Failed to parse structured tool call JSON: ${error}`);
       }
 
       searchIndex = candidateIndex + marker.length;
@@ -620,13 +622,10 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         }
       }
 
-      console.error(
-        `[GemmaToolCallParser] Failed to parse tool arguments for ${toolName}:`,
-        error,
+      logger.error(
+        `Failed to parse tool arguments for ${toolName}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      console.error(
-        `[GemmaToolCallParser] Raw arguments excerpt: ${fullMatch.slice(0, 200)}`,
-      );
+      logger.error(`Raw arguments excerpt: ${fullMatch.slice(0, 200)}`);
       return null;
     }
   }

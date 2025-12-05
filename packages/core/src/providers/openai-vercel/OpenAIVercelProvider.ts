@@ -741,7 +741,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         return openCount > closeCount;
       };
 
-      // Helper to flush buffered text, extracting thinking and sanitizing
+      // Helper to flush buffered text, extracting thinking and sanitizing.
+      // Note: This generator intentionally captures and mutates outer scope variables
+      // (accumulatedThinkingContent, hasEmittedThinking) via closure. This is by design
+      // to maintain state across multiple flush calls during streaming, allowing thinking
+      // content to be accumulated across chunks and emitted as a single block.
       const flushBuffer = function* (
         buffer: string,
         isEnd: boolean,

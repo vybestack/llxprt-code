@@ -53,12 +53,26 @@ export interface ToolIdStrategy {
  * Checks if a model name indicates a Kimi K2 model that requires
  * the special functions.{name}:{index} ID format.
  *
+ * Uses specific pattern matching to avoid false positives from models
+ * that happen to contain 'k2' as part of their name (e.g., "gptk2-turbo").
+ *
  * @param model - The model name to check
  * @returns true if this is a K2 model requiring special ID handling
  */
 export function isKimiModel(model: string): boolean {
   const lowerModel = model.toLowerCase();
-  return lowerModel.includes('kimi') || lowerModel.includes('k2');
+
+  // Explicit kimi branding
+  if (lowerModel.includes('kimi')) {
+    return true;
+  }
+
+  // Check for k2 at word boundaries:
+  // - starts with k2 (e.g., "k2-0527-preview")
+  // - ends with k2 or -k2 (e.g., "model-k2")
+  // - has k2 surrounded by non-alphanumeric (e.g., "kimi-k2-chat")
+  const k2Pattern = /(?:^|[^a-z0-9])k2(?:[^a-z0-9]|$)/;
+  return k2Pattern.test(lowerModel);
 }
 
 /**
