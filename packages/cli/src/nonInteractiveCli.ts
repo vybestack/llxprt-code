@@ -150,12 +150,8 @@ export async function runNonInteractive(
           }
         } else if (event.type === GeminiEventType.Content) {
           // Apply emoji filtering to content output
+          // Note: <think> tags are preserved in output to show thinking vs non-thinking content
           let outputValue = event.value;
-
-          // Strip fragmented <think>word</think> tags from streaming content
-          // These are handled separately via GeminiEventType.Thought events
-          // The Synthetic API sends thinking token-by-token with individual tags
-          outputValue = outputValue.replace(/<\/?think>/gi, '');
 
           if (emojiFilter) {
             const filterResult = emojiFilter.filterStreamChunk(outputValue);

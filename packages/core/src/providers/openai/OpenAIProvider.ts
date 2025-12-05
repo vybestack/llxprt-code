@@ -29,6 +29,11 @@ import type { Config } from '../../config/config.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
 import {
+  isKimiModel,
+  getToolIdStrategy,
+  type ToolIdMapper,
+} from '../../tools/ToolIdStrategy.js';
+import {
   BaseProvider,
   NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
@@ -353,14 +358,31 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
 
     // DeepSeek / generic <think>...</think> blocks.
-    str = str.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    // Replace with a single space to preserve word spacing when tags appear mid-sentence.
+    // This prevents "these<think>...</think>5" from becoming "these5" instead of "these 5".
+    // Multiple consecutive spaces will be collapsed below.
+    str = str.replace(/<think>[\s\S]*?<\/think>/gi, ' ');
 
     // Alternative reasoning tags some providers use.
-    str = str.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
-    str = str.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '');
+    str = str.replace(/<thinking>[\s\S]*?<\/thinking>/gi, ' ');
+    str = str.replace(/<analysis>[\s\S]*?<\/analysis>/gi, ' ');
 
-    // Clean up stray unmatched tags.
-    str = str.replace(/<\/?(?:think|thinking|analysis)>/gi, '');
+    // Clean up stray unmatched tags - replace with space to preserve word separation.
+    str = str.replace(/<\/?(?:think|thinking|analysis)>/gi, ' ');
+
+    // Only clean up whitespace if we had reasoning tags to strip
+    // This preserves meaningful whitespace in regular text chunks during streaming
+    // (e.g., " 5 Biggest" should remain " 5 Biggest", not become "5 Biggest")
+    if (hadReasoningTags) {
+      // Clean up multiple consecutive spaces/whitespace that may result from stripping
+      str = str.replace(/[ \t]+/g, ' ');
+      str = str.replace(/\n{3,}/g, '\n\n');
+
+      // Only trim leading whitespace when think tags were at the beginning
+      // This prevents leading spaces from "<think>...</think>text" -> " text"
+      // but preserves trailing whitespace for streaming chunk concatenation
+      str = str.trimStart();
+    }
 
     const afterLen = str.length;
     if (hadReasoningTags && afterLen !== beforeLen) {
@@ -394,29 +416,35 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Collect all thinking content from various tag formats
+    // Note: We only trim leading/trailing whitespace from each part, not internal newlines
+    // This preserves formatting like numbered lists within thinking content
     const thinkingParts: string[] = [];
 
     // Match <think>...</think>
     const thinkMatches = text.matchAll(/<think>([\s\S]*?)<\/think>/gi);
     for (const match of thinkMatches) {
-      if (match[1]?.trim()) {
-        thinkingParts.push(match[1].trim());
+      const content = match[1];
+      if (content?.trim()) {
+        // Preserve internal newlines but remove leading/trailing whitespace
+        thinkingParts.push(content.trim());
       }
     }
 
     // Match <thinking>...</thinking>
     const thinkingMatches = text.matchAll(/<thinking>([\s\S]*?)<\/thinking>/gi);
     for (const match of thinkingMatches) {
-      if (match[1]?.trim()) {
-        thinkingParts.push(match[1].trim());
+      const content = match[1];
+      if (content?.trim()) {
+        thinkingParts.push(content.trim());
       }
     }
 
     // Match <analysis>...</analysis>
     const analysisMatches = text.matchAll(/<analysis>([\s\S]*?)<\/analysis>/gi);
     for (const match of analysisMatches) {
-      if (match[1]?.trim()) {
-        thinkingParts.push(match[1].trim());
+      const content = match[1];
+      if (content?.trim()) {
+        thinkingParts.push(content.trim());
       }
     }
 
@@ -615,7 +643,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
-    return { cleanedText: text.trim(), toolCalls };
+    // Don't trim - preserve leading/trailing newlines that are important for formatting
+    // (e.g., numbered lists from Kimi K2 that have newlines between items)
+    return { cleanedText: text, toolCalls };
   }
 
   /**
@@ -1214,6 +1244,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private buildMessagesWithReasoning(
     contents: IContent[],
     options: NormalizedGenerateChatOptions,
+    toolFormat?: ToolFormat,
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
     // Read settings with defaults
     const stripPolicy =
@@ -1226,6 +1257,29 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const filteredContents = filterThinkingForContext(contents, stripPolicy);
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+
+    // Create a ToolIdMapper based on the tool format
+    // For Kimi K2, this generates sequential IDs in the format functions.{name}:{index}
+    const toolIdMapper: ToolIdMapper | null =
+      toolFormat === 'kimi'
+        ? getToolIdStrategy('kimi').createMapper(filteredContents)
+        : null;
+
+    // Helper to resolve tool call IDs based on format
+    const resolveToolCallId = (tc: ToolCallBlock): string => {
+      if (toolIdMapper) {
+        return toolIdMapper.resolveToolCallId(tc);
+      }
+      return this.normalizeToOpenAIToolId(tc.id);
+    };
+
+    // Helper to resolve tool response IDs based on format
+    const resolveToolResponseId = (tr: ToolResponseBlock): string => {
+      if (toolIdMapper) {
+        return toolIdMapper.resolveToolResponseId(tr);
+      }
+      return this.normalizeToOpenAIToolId(tr.callId);
+    };
 
     for (const content of filteredContents) {
       if (content.speaker === 'human') {
@@ -1257,7 +1311,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             role: 'assistant',
             content: text || null,
             tool_calls: toolCalls.map((tc) => ({
-              id: this.normalizeToOpenAIToolId(tc.id),
+              id: resolveToolCallId(tc),
               type: 'function' as const,
               function: {
                 name: tc.name,
@@ -1309,7 +1363,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           messages.push({
             role: 'tool',
             content: this.buildToolResponseContent(tr, options.config),
-            tool_call_id: this.normalizeToOpenAIToolId(tr.callId),
+            tool_call_id: resolveToolResponseId(tr),
           });
         }
       }
@@ -1526,24 +1580,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
-    // Convert IContent to OpenAI messages format
-    // Use buildMessagesWithReasoning for reasoning-aware message building
-    const messages =
-      toolReplayMode === 'native'
-        ? this.buildMessagesWithReasoning(contents, options)
-        : this.convertToOpenAIMessages(
-            contents,
-            toolReplayMode,
-            options.config ?? options.runtime?.config ?? this.globalConfig,
-          );
-    if (logger.enabled && toolReplayMode !== 'native') {
-      logger.debug(
-        () =>
-          `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
-      );
-    }
-
-    // Detect the tool format to use (once at the start of the method)
+    // Detect the tool format to use BEFORE building messages
+    // This is needed so that Kimi K2 tool IDs can be generated in the correct format
     const detectedFormat = this.detectToolFormat();
 
     // Log the detected format for debugging
@@ -1556,6 +1594,24 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         provider: this.name,
       },
     );
+
+    // Convert IContent to OpenAI messages format
+    // Use buildMessagesWithReasoning for reasoning-aware message building
+    // Pass detectedFormat so that Kimi K2 tool IDs are generated correctly
+    const messages =
+      toolReplayMode === 'native'
+        ? this.buildMessagesWithReasoning(contents, options, detectedFormat)
+        : this.convertToOpenAIMessages(
+            contents,
+            toolReplayMode,
+            options.config ?? options.runtime?.config ?? this.globalConfig,
+          );
+    if (logger.enabled && toolReplayMode !== 'native') {
+      logger.debug(
+        () =>
+          `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
+      );
+    }
 
     // Convert Gemini format tools to OpenAI format using the schema converter
     // This ensures required fields are always present in tool schemas
@@ -2109,8 +2165,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                   this.extractThinkTagsAsBlock(workingText);
                 if (tagBasedThinking) {
                   // Accumulate thinking content - don't emit yet
+                  // Use newline to preserve formatting between chunks (not space)
                   if (accumulatedThinkingContent.length > 0) {
-                    accumulatedThinkingContent += ' ';
+                    accumulatedThinkingContent += '\n';
                   }
                   accumulatedThinkingContent += tagBasedThinking.thought;
                   logger.debug(
@@ -2344,8 +2401,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // @plan PLAN-20251202-THINKING.P16
         const tagBasedThinking = this.extractThinkTagsAsBlock(workingText);
         if (tagBasedThinking) {
+          // Use newline to preserve formatting between chunks (not space)
           if (accumulatedThinkingContent.length > 0) {
-            accumulatedThinkingContent += ' ';
+            accumulatedThinkingContent += '\n';
           }
           accumulatedThinkingContent += tagBasedThinking.thought;
         }
@@ -2927,11 +2985,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Determine tool replay mode for model compatibility (e.g., polaris-alpha)
     const toolReplayMode = this.determineToolReplayMode(model);
 
+    // Detect the tool format to use BEFORE building messages
+    // This is needed so that Kimi K2 tool IDs can be generated in the correct format
+    const detectedFormat = this.detectToolFormat();
+
+    // Log the detected format for debugging
+    logger.debug(
+      () =>
+        `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
+      {
+        model,
+        detectedFormat,
+        provider: this.name,
+      },
+    );
+
     // Convert IContent to OpenAI messages format
     // Use buildMessagesWithReasoning for reasoning-aware message building
+    // Pass detectedFormat so that Kimi K2 tool IDs are generated correctly
     const messages =
       toolReplayMode === 'native'
-        ? this.buildMessagesWithReasoning(contents, options)
+        ? this.buildMessagesWithReasoning(contents, options, detectedFormat)
         : this.convertToOpenAIMessages(
             contents,
             toolReplayMode,
@@ -2945,20 +3019,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
       );
     }
-
-    // Detect the tool format to use (once at the start of the method)
-    const detectedFormat = this.detectToolFormat();
-
-    // Log the detected format for debugging
-    logger.debug(
-      () =>
-        `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
-      {
-        model,
-        detectedFormat,
-        provider: this.name,
-      },
-    );
 
     // Convert Gemini format tools to OpenAI format using the schema converter
     // This ensures required fields are always present in tool schemas
@@ -3548,8 +3608,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                   this.extractThinkTagsAsBlock(workingText);
                 if (tagBasedThinking) {
                   // Accumulate thinking content - don't emit yet
+                  // Use newline to preserve formatting between chunks (not space)
                   if (accumulatedThinkingContent.length > 0) {
-                    accumulatedThinkingContent += ' ';
+                    accumulatedThinkingContent += '\n';
                   }
                   accumulatedThinkingContent += tagBasedThinking.thought;
                   logger.debug(
@@ -3764,8 +3825,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // @plan PLAN-20251202-THINKING.P16
         const tagBasedThinking = this.extractThinkTagsAsBlock(workingText);
         if (tagBasedThinking) {
+          // Use newline to preserve formatting between chunks (not space)
           if (accumulatedThinkingContent.length > 0) {
-            accumulatedThinkingContent += ' ';
+            accumulatedThinkingContent += '\n';
           }
           accumulatedThinkingContent += tagBasedThinking.thought;
         }
@@ -4224,15 +4286,25 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   /**
    * Detects the tool call format based on the model being used
-   * @returns The detected tool format ('openai' or 'qwen')
+   * @returns The detected tool format ('openai', 'qwen', or 'kimi')
    */
   private detectToolFormat(): ToolFormat {
     // Auto-detect based on model name if set to 'auto' or not set
-    const modelName = (this.getModel() || this.getDefaultModel()).toLowerCase();
+    const modelName = this.getModel() || this.getDefaultModel();
     const logger = new DebugLogger('llxprt:provider:openai');
 
+    // Check for Kimi K2 models (requires special ID format: functions.{name}:{index})
+    if (isKimiModel(modelName)) {
+      logger.debug(
+        () => `Auto-detected 'kimi' format for K2 model: ${modelName}`,
+      );
+      return 'kimi';
+    }
+
+    const lowerModelName = modelName.toLowerCase();
+
     // Check for GLM-4 models (glm-4, glm-4.5, glm-4.6, glm-4-5, etc.)
-    if (modelName.includes('glm-4')) {
+    if (lowerModelName.includes('glm-4')) {
       logger.debug(
         () => `Auto-detected 'qwen' format for GLM-4.x model: ${modelName}`,
       );
@@ -4240,7 +4312,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Check for qwen models
-    if (modelName.includes('qwen')) {
+    if (lowerModelName.includes('qwen')) {
       logger.debug(
         () => `Auto-detected 'qwen' format for Qwen model: ${modelName}`,
       );
