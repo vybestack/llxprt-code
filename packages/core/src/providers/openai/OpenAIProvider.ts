@@ -28,6 +28,7 @@ import { IContent } from '../../services/history/IContent.js';
 import type { Config } from '../../config/config.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
+import { isKimiModel } from '../../tools/ToolIdStrategy.js';
 import {
   BaseProvider,
   NormalizedGenerateChatOptions,
@@ -4224,15 +4225,25 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   /**
    * Detects the tool call format based on the model being used
-   * @returns The detected tool format ('openai' or 'qwen')
+   * @returns The detected tool format ('openai', 'qwen', or 'kimi')
    */
   private detectToolFormat(): ToolFormat {
     // Auto-detect based on model name if set to 'auto' or not set
-    const modelName = (this.getModel() || this.getDefaultModel()).toLowerCase();
+    const modelName = this.getModel() || this.getDefaultModel();
     const logger = new DebugLogger('llxprt:provider:openai');
 
+    // Check for Kimi K2 models (requires special ID format: functions.{name}:{index})
+    if (isKimiModel(modelName)) {
+      logger.debug(
+        () => `Auto-detected 'kimi' format for K2 model: ${modelName}`,
+      );
+      return 'kimi';
+    }
+
+    const lowerModelName = modelName.toLowerCase();
+
     // Check for GLM-4 models (glm-4, glm-4.5, glm-4.6, glm-4-5, etc.)
-    if (modelName.includes('glm-4')) {
+    if (lowerModelName.includes('glm-4')) {
       logger.debug(
         () => `Auto-detected 'qwen' format for GLM-4.x model: ${modelName}`,
       );
@@ -4240,7 +4251,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Check for qwen models
-    if (modelName.includes('qwen')) {
+    if (lowerModelName.includes('qwen')) {
       logger.debug(
         () => `Auto-detected 'qwen' format for Qwen model: ${modelName}`,
       );
