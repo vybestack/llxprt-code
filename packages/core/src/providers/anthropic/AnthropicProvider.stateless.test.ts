@@ -4,21 +4,21 @@
  * @project-plans/debuglogging/requirements.md
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SettingsService } from '../../../settings/SettingsService.js';
+import { SettingsService } from '../../settings/SettingsService.js';
 import {
   clearActiveProviderRuntimeContext,
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
-} from '../../../runtime/providerRuntimeContext.js';
-import { createRuntimeInvocationContext } from '../../../runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
-import type { Config } from '../../../config/config.js';
-import { AnthropicProvider } from '../AnthropicProvider.js';
+} from '../../runtime/providerRuntimeContext.js';
+import { createRuntimeInvocationContext } from '../../runtime/RuntimeInvocationContext.js';
+import { createRuntimeConfigStub } from '../../test-utils/runtime.js';
+import type { Config } from '../../config/config.js';
+import { AnthropicProvider } from './AnthropicProvider.js';
 import Anthropic from '@anthropic-ai/sdk';
 import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
-} from '../../../test-utils/providerCallOptions.js';
+} from '../../test-utils/providerCallOptions.js';
 
 vi.mock('../../core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
