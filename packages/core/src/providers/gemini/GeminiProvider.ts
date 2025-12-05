@@ -13,6 +13,7 @@ import {
   TextBlock,
   ToolCallBlock,
   ToolResponseBlock,
+  ThinkingBlock,
 } from '../../services/history/IContent.js';
 import { Config } from '../../config/config.js';
 import { AuthType } from '../../core/contentGenerator.js';
@@ -33,6 +34,11 @@ import {
 import { OAuthManager } from '../../auth/precedence.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
+import {
+  ensureActiveLoopHasThoughtSignatures,
+  stripThoughtsFromHistory,
+} from './thoughtSignatures.js';
+// ThinkingLevel is not directly exported, use string literals
 
 /**
  * @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -1093,6 +1099,62 @@ export class GeminiProvider extends BaseProvider {
       }
     }
 
+    // Extract reasoning ephemerals for Gemini 3.x thinking support
+    // @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006
+    const earlyEphemerals = options.invocation?.ephemerals ?? {};
+    // Ephemerals can be stored as flat keys ('reasoning.enabled') or nested objects ('reasoning': {enabled: true})
+    // Handle both formats for compatibility
+    const reasoningObj = (earlyEphemerals as Record<string, unknown>)[
+      'reasoning'
+    ] as Record<string, unknown> | undefined;
+    const reasoningEnabled =
+      (earlyEphemerals as Record<string, unknown>)['reasoning.enabled'] ===
+        true || reasoningObj?.enabled === true;
+    const reasoningIncludeInResponse =
+      (earlyEphemerals as Record<string, unknown>)[
+        'reasoning.includeInResponse'
+      ] !== false && reasoningObj?.includeInResponse !== false;
+    const reasoningStripFromContext =
+      ((earlyEphemerals as Record<string, unknown>)[
+        'reasoning.stripFromContext'
+      ] as 'all' | 'allButLast' | 'none') ??
+      (reasoningObj?.stripFromContext as 'all' | 'allButLast' | 'none') ??
+      'all';
+    // Extract reasoning.effort for future use (could map to thinkingLevel in Gemini 3)
+    // Currently unused but extracted for completeness
+    const reasoningEffort =
+      ((earlyEphemerals as Record<string, unknown>)['reasoning.effort'] as
+        | 'minimal'
+        | 'low'
+        | 'medium'
+        | 'high'
+        | undefined) ??
+      (reasoningObj?.effort as
+        | 'minimal'
+        | 'low'
+        | 'medium'
+        | 'high'
+        | undefined);
+    void reasoningEffort; // Mark as intentionally unused (reserved for future effort-to-thinkingLevel mapping)
+    const reasoningMaxTokens =
+      ((earlyEphemerals as Record<string, unknown>)['reasoning.maxTokens'] as
+        | number
+        | undefined) ?? (reasoningObj?.maxTokens as number | undefined);
+
+    // Strip thought content from history before sending to API
+    // This prevents sending previous thinking back which can cause issues
+    const contentsWithThoughtsStripped = stripThoughtsFromHistory(
+      contents,
+      reasoningStripFromContext,
+    );
+
+    // Gemini 3.x requires thoughtSignature on functionCall parts in the "active loop"
+    // (from the last user text message to end of history). Apply synthetic signatures
+    // where missing to bypass validation. See: https://ai.google.dev/gemini-api/docs/thought-signatures
+    const contentsWithSignatures = ensureActiveLoopHasThoughtSignatures(
+      contentsWithThoughtsStripped,
+    );
+
     // Ensure tools have proper type: 'object' for Gemini
     const geminiTools = tools
       ? tools.map((toolGroup) => ({
@@ -1181,6 +1243,19 @@ export class GeminiProvider extends BaseProvider {
     if (toolConfigOverride) {
       requestConfig.toolConfig = toolConfigOverride;
     }
+
+    // Configure thinkingConfig for Gemini models when reasoning is enabled
+    // @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006
+    // ThinkingConfig uses:
+    //   - includeThoughts: boolean - whether to include thoughts in response
+    //   - thinkingBudget: number - token budget (0=DISABLED, -1=AUTOMATIC, or specific number)
+    if (reasoningEnabled) {
+      requestConfig.thinkingConfig = {
+        includeThoughts: true,
+        thinkingBudget: reasoningMaxTokens ?? -1, // -1 = AUTOMATIC
+      };
+    }
+
     const requestLogger = new DebugLogger('llxprt:provider:gemini:logging');
     requestLogger.log(() => '[GeminiProvider] request config overrides', {
       hasDirectOverrides: !!directOverrides,
@@ -1188,22 +1263,87 @@ export class GeminiProvider extends BaseProvider {
       toolConfigOverride: toolConfigOverride ? 'present' : 'absent',
     });
 
+    // Debug: Log thinking configuration
+    const thinkingConfigLogger = new DebugLogger(
+      'llxprt:provider:gemini:thinking',
+    );
+    thinkingConfigLogger.log(() => '[GeminiProvider] Thinking configuration', {
+      reasoningEnabled,
+      reasoningIncludeInResponse,
+      reasoningStripFromContext,
+      model: currentModel,
+      thinkingConfig: requestConfig.thinkingConfig,
+    });
+
     // Create appropriate client and generate content
     const baseURL = options.resolved.baseURL ?? this.getBaseURL();
     const httpOptions = this.createHttpOptions();
 
+    const thinkingLogger = new DebugLogger('llxprt:provider:gemini:thinking');
     const mapResponseToChunks = (
       response: GenerateContentResponse,
+      includeThoughts = true,
     ): IContent[] => {
       const chunks: IContent[] = [];
-      const text =
-        response.candidates?.[0]?.content?.parts
-          ?.filter((part: Part) => 'text' in part)
-          ?.map((part: Part) => (part as { text: string }).text)
-          ?.join('') || '';
+      const parts = response.candidates?.[0]?.content?.parts || [];
+
+      // Debug: Log all parts with their thought property for debugging
+      thinkingLogger.log(
+        () => '[GeminiProvider] Response parts received',
+        parts.map((p: Part) => ({
+          hasText: 'text' in p,
+          thought: (p as Part & { thought?: boolean }).thought,
+          hasThoughtSignature: !!(p as Part & { thoughtSignature?: string })
+            .thoughtSignature,
+          hasFunctionCall: 'functionCall' in p,
+          textPreview:
+            'text' in p
+              ? (p as { text: string }).text.substring(0, 100)
+              : undefined,
+        })),
+      );
+
+      // Separate thought parts from non-thought text parts
+      // Gemini returns thought content with `thought: true` on parts
+      const thoughtParts = parts.filter(
+        (part: Part) =>
+          'text' in part && (part as Part & { thought?: boolean }).thought,
+      );
+      const nonThoughtTextParts = parts.filter(
+        (part: Part) =>
+          'text' in part && !(part as Part & { thought?: boolean }).thought,
+      );
+
+      // Extract thoughtSignature from the first part that has one (for Gemini 3.x)
+      const firstPartWithSig = parts.find(
+        (part: Part) =>
+          (part as Part & { thoughtSignature?: string }).thoughtSignature,
+      );
+      const thoughtSignature = firstPartWithSig
+        ? (firstPartWithSig as Part & { thoughtSignature?: string })
+            .thoughtSignature
+        : undefined;
+
+      const text = nonThoughtTextParts
+        .map((part: Part) => (part as { text: string }).text)
+        .join('');
+
+      const thoughtText = thoughtParts
+        .map((part: Part) => (part as { text: string }).text)
+        .join('');
+
+      // Debug: Log thought extraction results
+      thinkingLogger.log(() => '[GeminiProvider] Thought extraction results', {
+        thoughtPartsCount: thoughtParts.length,
+        nonThoughtTextPartsCount: nonThoughtTextParts.length,
+        thoughtTextLength: thoughtText.length,
+        thoughtTextPreview: thoughtText.substring(0, 200),
+        includeThoughts,
+        willYieldThinkingBlock: !!(thoughtText && includeThoughts),
+      });
 
       const functionCalls =
-        response.candidates?.[0]?.content?.parts
+        parts
           ?.filter((part: Part) => 'functionCall' in part)
           ?.map(
             (part: Part) =>
@@ -1211,6 +1351,24 @@ export class GeminiProvider extends BaseProvider {
           ) || [];
 
       const usageMetadata = (response as GeminiResponseWithUsage).usageMetadata;
+
+      // Yield ThinkingBlock first if there's thought content and includeThoughts is true
+      if (thoughtText && includeThoughts) {
+        const thinkingBlock: ThinkingBlock = {
+          type: 'thinking',
+          thought: thoughtText,
+          sourceField: 'thought', // Gemini uses `thought: true` on parts
+          isHidden: false, // Not hidden since includeThoughts is true
+        };
+        if (thoughtSignature) {
+          thinkingBlock.signature = thoughtSignature;
+        }
+        const thinkingContent: IContent = {
+          speaker: 'ai',
+          blocks: [thinkingBlock],
+        };
+        chunks.push(thinkingContent);
+      }
 
       if (text) {
         const textContent: IContent = {
@@ -1334,7 +1492,7 @@ export class GeminiProvider extends BaseProvider {
             },
           ],
         },
-        ...contents,
+        ...contentsWithSignatures,
       ];
 
       const oauthConfig = { ...requestConfig };
@@ -1371,6 +1529,7 @@ export class GeminiProvider extends BaseProvider {
         let yielded = false;
         for (const chunk of mapResponseToChunks(
           response as GenerateContentResponse,
+          reasoningIncludeInResponse,
         )) {
           yielded = true;
           yield chunk;
@@ -1425,7 +1584,7 @@ export class GeminiProvider extends BaseProvider {
 
       const apiRequest = {
         model: currentModel,
-        contents,
+        contents: contentsWithSignatures,
         systemInstruction,
         config: { ...requestConfig },
       };
@@ -1435,7 +1594,10 @@ export class GeminiProvider extends BaseProvider {
       } else {
         const response = await contentGenerator.generateContent(apiRequest);
         let yielded = false;
-        for (const chunk of mapResponseToChunks(response)) {
+        for (const chunk of mapResponseToChunks(
+          response,
+          reasoningIncludeInResponse,
+        )) {
           yielded = true;
           yield chunk;
         }
@@ -1460,7 +1622,7 @@ export class GeminiProvider extends BaseProvider {
         if (done) {
           break;
         }
-        const mapped = mapResponseToChunks(value);
+        const mapped = mapResponseToChunks(value, reasoningIncludeInResponse);
         if (mapped.length === 0) {
           continue;
         }

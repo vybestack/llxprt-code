@@ -193,6 +193,67 @@ const directSettingSpecs: SettingLiteralSpec[] = [
     value: 'retrywait',
     hint: 'positive integer in milliseconds (e.g., 1000)',
   },
+  // Reasoning/thinking settings
+  {
+    value: 'reasoning.enabled',
+    hint: 'true or false',
+    description: 'Show AI thinking process (Claude, Gemini 3, DeepSeek, etc)',
+    options: booleanOptions,
+  },
+  {
+    value: 'reasoning.includeInContext',
+    hint: 'true or false',
+    description:
+      'Send thinking to API on follow-up requests (uses more tokens)',
+    options: booleanOptions,
+  },
+  {
+    value: 'reasoning.includeInResponse',
+    hint: 'true or false',
+    description: 'Display thinking blocks in the UI',
+    options: booleanOptions,
+  },
+  {
+    value: 'reasoning.format',
+    hint: 'native or field',
+    description: 'API format: native=provider default, field=reasoning_content',
+    options: [
+      { value: 'native', description: 'Use provider default format' },
+      {
+        value: 'field',
+        description: 'Use reasoning_content field (OpenAI style)',
+      },
+    ],
+  },
+  {
+    value: 'reasoning.stripFromContext',
+    hint: 'all, allButLast, or none',
+    description: 'Control thinking in history sent to API',
+    options: [
+      {
+        value: 'all',
+        description: 'Remove all thinking from history (saves tokens)',
+      },
+      { value: 'allButLast', description: 'Keep only most recent thinking' },
+      { value: 'none', description: 'Keep all thinking in history' },
+    ],
+  },
+  {
+    value: 'reasoning.effort',
+    hint: 'minimal, low, medium, or high',
+    description: 'How much the AI should think before responding',
+    options: [
+      { value: 'minimal', description: 'Quick responses, less deliberation' },
+      { value: 'low', description: 'Light thinking for simple tasks' },
+      { value: 'medium', description: 'Balanced thinking for most tasks' },
+      { value: 'high', description: 'Deep thinking for complex problems' },
+    ],
+  },
+  {
+    value: 'reasoning.maxTokens',
+    hint: 'positive integer (e.g., 8000)',
+    description: 'Cap on thinking tokens (limits thinking length)',
+  },
 ];
 
 const createSettingLiteral = (spec: SettingLiteralSpec): LiteralArgument => ({
