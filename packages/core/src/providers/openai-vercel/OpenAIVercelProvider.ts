@@ -38,6 +38,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { IContent } from '../../services/history/IContent.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
+import { isKimiModel } from '../../tools/ToolIdStrategy.js';
 import {
   BaseProvider,
   NormalizedGenerateChatOptions,
@@ -1089,17 +1090,27 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
    * Mirrors OpenAIProvider behavior so existing ToolFormatter logic works.
    */
   private detectToolFormat(): ToolFormat {
-    const modelName = (this.getModel() || this.getDefaultModel()).toLowerCase();
+    const modelName = this.getModel() || this.getDefaultModel();
     const logger = new DebugLogger('llxprt:provider:openaivercel');
 
-    if (modelName.includes('glm-4')) {
+    // Check for Kimi K2 models (requires special ID format: functions.{name}:{index})
+    if (isKimiModel(modelName)) {
+      logger.debug(
+        () => `Auto-detected 'kimi' format for K2 model: ${modelName}`,
+      );
+      return 'kimi';
+    }
+
+    const lowerModelName = modelName.toLowerCase();
+
+    if (lowerModelName.includes('glm-4')) {
       logger.debug(
         () => `Auto-detected 'qwen' format for GLM-4.x model: ${modelName}`,
       );
       return 'qwen';
     }
 
-    if (modelName.includes('qwen')) {
+    if (lowerModelName.includes('qwen')) {
       logger.debug(
         () => `Auto-detected 'qwen' format for Qwen model: ${modelName}`,
       );
