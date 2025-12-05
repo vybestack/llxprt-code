@@ -9,6 +9,7 @@
 ## logging
 
 - We have a whole sophisticated logging system you designed do not use console.out or debug -- use our debug logging system
+- The log files are written to ~/.llxprt/debug/ - do not look for them in stderr or stdout
 
 ## Linting and Formatting
 
@@ -98,14 +99,6 @@ Task(
 
 NEVER include the Claude commit signature/co-authorship.
 
-**Do NOT add:**
-
-```
-🤖 Generated with [Claude Code](https://claude.ai/code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-```
-
 ## Code Verification and Deployment Rules
 
 ### Never Declare Done Without Full Verification
@@ -124,14 +117,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 Run these checks in this exact order to match GitHub Actions CI:
 
-1. `npm run format:check` - Ensure all files are formatted
-2. `npm run lint:ci` - Zero warnings allowed (eslint with --max-warnings 0)
-3. `npx eslint integration-tests --max-warnings 0` - Integration tests lint
-4. `npx prettier --check integration-tests` - Integration tests format
-5. `npm run typecheck` - Type safety check
-6. `npm run build` - Build all packages
-7. `npm run bundle` - Create bundle
-8. `npm run test:ci` - Run all tests with CI configuration
+1. `npm run lint:ci` - Zero warnings allowed (eslint with --max-warnings 0)
+2. `npm run typecheck` - Type safety check
+3. `npm run format`
+4. `npm run build` - Build all packages
+5. `npm run bundle` - Create bundle
+6. `node scripts/start.js --profile-load synthetic --prompt "write me a haiku"`
 
 For shell scripts:
 
