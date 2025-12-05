@@ -199,7 +199,9 @@ Third line with conclusion.
         '<think>First.</think>Middle content.<think>Second.</think>End.';
       const result = sanitizeProviderText(text);
 
-      expect(result).toBe('Middle content.End.');
+      // Think tags are replaced with spaces to preserve word separation
+      // (prevents "these5" instead of "these 5")
+      expect(result).toBe('Middle content. End.');
     });
 
     it('should strip orphaned/unmatched tags', () => {
@@ -217,7 +219,9 @@ Third line with conclusion.
         '<think>A</think>B<thinking>C</thinking>D<analysis>E</analysis>F';
       const result = sanitizeProviderText(text);
 
-      expect(result).toBe('BDF');
+      // Think tags are replaced with spaces to preserve word separation
+      // (prevents "these5" instead of "these 5")
+      expect(result).toBe('B D F');
     });
 
     it('should be case-insensitive', () => {

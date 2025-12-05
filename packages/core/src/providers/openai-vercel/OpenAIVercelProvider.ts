@@ -49,13 +49,18 @@ import {
   convertToolsToOpenAIVercel,
   OpenAIVercelTool,
 } from './schemaConverter.js';
-import { ToolCallBlock, TextBlock } from '../../services/history/IContent.js';
+import {
+  ToolCallBlock,
+  TextBlock,
+  ThinkingBlock,
+} from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { IModel } from '../IModel.js';
 import { IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { convertToVercelMessages } from './messageConversion.js';
+import { getToolIdStrategy } from '../../tools/ToolIdStrategy.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
@@ -255,9 +260,24 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
    *
    * This implementation uses textual tool replay for past tool calls/results.
    * New tool calls in the current response still use structured ToolCallBlocks.
+   *
+   * For Kimi K2 models, uses ToolIdStrategy to generate proper tool IDs
+   * in the format functions.{name}:{index} instead of call_xxx.
    */
   private convertToModelMessages(contents: IContent[]): ModelMessage[] {
-    return convertToVercelMessages(contents) as unknown as ModelMessage[];
+    const toolFormat = this.detectToolFormat();
+
+    // Create a ToolIdMapper based on the tool format
+    // For Kimi K2, this generates sequential IDs in the format functions.{name}:{index}
+    const toolIdMapper =
+      toolFormat === 'kimi'
+        ? getToolIdStrategy('kimi').createMapper(contents)
+        : undefined;
+
+    return convertToVercelMessages(
+      contents,
+      toolIdMapper,
+    ) as unknown as ModelMessage[];
   }
 
   /**
@@ -334,6 +354,129 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       completionTokens,
       totalTokens,
     };
+  }
+
+  /**
+   * Extract thinking content from <think>, <thinking>, or <analysis> tags
+   * and return it as a ThinkingBlock. Returns null if no thinking tags found.
+   *
+   * This must be called BEFORE sanitizeText which strips these tags.
+   *
+   * Handles two formats:
+   * 1. Standard: <think>Full thinking paragraph here...</think>
+   * 2. Fragmented (Synthetic API): <think>word</think><think>word</think>...
+   *
+   * For fragmented format, joins with spaces. For standard, joins with newlines.
+   */
+  private extractThinkTagsAsBlock(text: string): ThinkingBlock | null {
+    if (!text) {
+      return null;
+    }
+
+    const thinkingParts: string[] = [];
+
+    // Match <think>...</think>
+    const thinkMatches = text.matchAll(/<think>([\s\S]*?)<\/think>/gi);
+    for (const match of thinkMatches) {
+      if (match[1]?.trim()) {
+        thinkingParts.push(match[1].trim());
+      }
+    }
+
+    // Match <thinking>...</thinking>
+    const thinkingMatches = text.matchAll(/<thinking>([\s\S]*?)<\/thinking>/gi);
+    for (const match of thinkingMatches) {
+      if (match[1]?.trim()) {
+        thinkingParts.push(match[1].trim());
+      }
+    }
+
+    // Match <analysis>...</analysis>
+    const analysisMatches = text.matchAll(/<analysis>([\s\S]*?)<\/analysis>/gi);
+    for (const match of analysisMatches) {
+      if (match[1]?.trim()) {
+        thinkingParts.push(match[1].trim());
+      }
+    }
+
+    if (thinkingParts.length === 0) {
+      return null;
+    }
+
+    // Detect fragmented format: many short parts (likely token-by-token streaming)
+    const avgPartLength =
+      thinkingParts.reduce((sum, p) => sum + p.length, 0) /
+      thinkingParts.length;
+    const isFragmented = thinkingParts.length > 5 && avgPartLength < 15;
+
+    // Join with space for fragmented, newlines for standard multi-paragraph thinking
+    const combinedThought = isFragmented
+      ? thinkingParts.join(' ')
+      : thinkingParts.join('\n\n');
+
+    const logger = this.getLogger();
+    logger.debug(
+      () =>
+        `[OpenAIVercelProvider] Extracted thinking from tags: ${combinedThought.length} chars`,
+      { tagCount: thinkingParts.length, isFragmented, avgPartLength },
+    );
+
+    return {
+      type: 'thinking',
+      thought: combinedThought,
+      sourceField: 'think_tags',
+      isHidden: false,
+    };
+  }
+
+  /**
+   * Sanitize text content from provider response by removing thinking tags and artifacts.
+   * This prevents <think>...</think> tags from leaking into visible output.
+   */
+  private sanitizeText(text: string): string {
+    if (!text) {
+      return text;
+    }
+
+    // Check if there are any reasoning tags before modification
+    const hadReasoningTags =
+      /<(?:think|thinking|analysis)>|<\/(?:think|thinking|analysis)>/i.test(
+        text,
+      );
+
+    let cleaned = text;
+
+    // Remove <think>...</think> tags and their content
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '\n');
+
+    // Remove <thinking>...</thinking> tags and their content
+    cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '\n');
+
+    // Remove <analysis>...</analysis> tags and their content
+    cleaned = cleaned.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '\n');
+
+    // Remove unclosed tags (streaming edge case)
+    cleaned = cleaned.replace(/<think>[\s\S]*$/gi, '');
+    cleaned = cleaned.replace(/<thinking>[\s\S]*$/gi, '');
+    cleaned = cleaned.replace(/<analysis>[\s\S]*$/gi, '');
+
+    // Also remove opening tags without closing (another streaming edge case)
+    cleaned = cleaned.replace(/<think>/gi, '');
+    cleaned = cleaned.replace(/<thinking>/gi, '');
+    cleaned = cleaned.replace(/<analysis>/gi, '');
+
+    // Only clean up whitespace if we had reasoning tags to strip
+    // This preserves meaningful whitespace in regular text chunks during streaming
+    // (e.g., " 5 Biggest" should remain " 5 Biggest", not become "5 Biggest")
+    if (hadReasoningTags) {
+      // Normalize multiple consecutive newlines to at most two
+      cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+      // Trim leading/trailing whitespace only when we stripped tags
+      cleaned = cleaned.trim();
+    }
+
+    return cleaned;
   }
 
   /**
@@ -582,6 +725,88 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         typeof result === 'object' &&
         'fullStream' in (result as { fullStream?: unknown });
 
+      // Buffer for accumulating text chunks for <think> tag processing
+      let textBuffer = '';
+      let accumulatedThinkingContent = '';
+      let hasEmittedThinking = false;
+
+      // Capture method references for use in nested functions
+      const extractThinkTags = this.extractThinkTagsAsBlock.bind(this);
+      const sanitizeTextFn = this.sanitizeText.bind(this);
+
+      // Helper to check if buffer has an open think tag without closing
+      const hasOpenThinkTag = (text: string): boolean => {
+        const openCount = (text.match(/<think>/gi) ?? []).length;
+        const closeCount = (text.match(/<\/think>/gi) ?? []).length;
+        return openCount > closeCount;
+      };
+
+      // Helper to flush buffered text, extracting thinking and sanitizing
+      const flushBuffer = function* (
+        buffer: string,
+        isEnd: boolean,
+      ): Generator<IContent, string, unknown> {
+        if (!buffer) return '';
+
+        // Don't flush if we have unclosed think tags (unless this is the end)
+        if (!isEnd && hasOpenThinkTag(buffer)) {
+          return buffer;
+        }
+
+        // Extract thinking tags and accumulate
+        const thinkBlock = extractThinkTags(buffer);
+        if (thinkBlock) {
+          if (accumulatedThinkingContent.length > 0) {
+            accumulatedThinkingContent += ' ';
+          }
+          accumulatedThinkingContent += thinkBlock.thought;
+          logger.debug(
+            () =>
+              `[OpenAIVercelProvider] Accumulated thinking: ${accumulatedThinkingContent.length} chars`,
+          );
+        }
+
+        // Emit accumulated thinking block before other content
+        if (
+          !hasEmittedThinking &&
+          accumulatedThinkingContent.length > 0 &&
+          (isEnd || buffer.includes('</think>'))
+        ) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'thinking',
+                thought: accumulatedThinkingContent,
+                sourceField: 'think_tags',
+                isHidden: false,
+              } as ThinkingBlock,
+            ],
+          } as IContent;
+          hasEmittedThinking = true;
+          logger.debug(
+            () =>
+              `[OpenAIVercelProvider] Emitted thinking block: ${accumulatedThinkingContent.length} chars`,
+          );
+        }
+
+        // Sanitize and yield visible text
+        const sanitizedText = sanitizeTextFn(buffer);
+        if (sanitizedText) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'text',
+                text: sanitizedText,
+              } as TextBlock,
+            ],
+          } as IContent;
+        }
+
+        return '';
+      };
+
       if (hasFullStream && (result as { fullStream?: unknown }).fullStream) {
         try {
           for await (const part of (
@@ -607,16 +832,42 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
                 const text: string =
                   typeof part.text === 'string' ? part.text : '';
                 if (text) {
-                  const content: IContent = {
-                    speaker: 'ai',
-                    blocks: [
-                      {
-                        type: 'text',
-                        text,
-                      } as TextBlock,
-                    ],
-                  };
-                  yield content;
+                  // Check if this chunk or buffer contains think tags
+                  const hasThinkContent =
+                    text.includes('<think') ||
+                    text.includes('</think') ||
+                    textBuffer.includes('<think');
+
+                  if (hasThinkContent) {
+                    // Buffer mode: accumulate text for think tag processing
+                    textBuffer += text;
+
+                    // Flush buffer at natural break points if no open think tags
+                    if (
+                      !hasOpenThinkTag(textBuffer) &&
+                      (textBuffer.includes('\n') ||
+                        textBuffer.endsWith('. ') ||
+                        textBuffer.endsWith('! ') ||
+                        textBuffer.endsWith('? ') ||
+                        textBuffer.length > 100)
+                    ) {
+                      for (const content of flushBuffer(textBuffer, false)) {
+                        yield content;
+                      }
+                      textBuffer = '';
+                    }
+                  } else {
+                    // Direct streaming mode: no think tags, stream text directly
+                    yield {
+                      speaker: 'ai',
+                      blocks: [
+                        {
+                          type: 'text',
+                          text,
+                        } as TextBlock,
+                      ],
+                    } as IContent;
+                  }
                 }
                 break;
               }
@@ -634,6 +885,15 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
               case 'finish': {
                 totalUsage = part.totalUsage as LanguageModelUsage | undefined;
                 finishReason = part.finishReason;
+
+                // Flush any remaining buffer on finish
+                if (textBuffer) {
+                  for (const content of flushBuffer(textBuffer, true)) {
+                    yield content;
+                  }
+                  textBuffer = '';
+                }
+
                 if (logger.enabled) {
                   logger.debug(
                     () =>
@@ -650,10 +910,55 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
               case 'error': {
                 throw part.error ?? new Error('Streaming error from AI SDK');
               }
+              case 'reasoning': {
+                // Handle reasoning/thinking content from models like Kimi K2
+                // Accumulate reasoning content rather than emitting immediately
+                // This allows combining with <think> tags from text-delta
+                const reasoning = (part as { text?: string }).text;
+                if (reasoning) {
+                  if (accumulatedThinkingContent.length > 0) {
+                    accumulatedThinkingContent += ' ';
+                  }
+                  accumulatedThinkingContent += reasoning;
+                  logger.debug(
+                    () =>
+                      `[OpenAIVercelProvider] Accumulated reasoning: ${accumulatedThinkingContent.length} chars`,
+                  );
+                }
+                break;
+              }
               default:
-                // Ignore other parts: reasoning, source, start-step, finish-step, etc.
+                // Ignore other parts: source, start-step, finish-step, etc.
                 break;
             }
+          }
+
+          // Final buffer flush if not caught by finish event (e.g., aborted early)
+          if (textBuffer) {
+            for (const content of flushBuffer(textBuffer, true)) {
+              yield content;
+            }
+            textBuffer = '';
+          }
+
+          // Emit any remaining accumulated thinking content that wasn't emitted yet
+          if (!hasEmittedThinking && accumulatedThinkingContent.length > 0) {
+            yield {
+              speaker: 'ai',
+              blocks: [
+                {
+                  type: 'thinking',
+                  thought: accumulatedThinkingContent,
+                  sourceField: 'reasoning_content',
+                  isHidden: false,
+                } as ThinkingBlock,
+              ],
+            } as IContent;
+            hasEmittedThinking = true;
+            logger.debug(
+              () =>
+                `[OpenAIVercelProvider] Emitted final thinking block: ${accumulatedThinkingContent.length} chars`,
+            );
           }
         } catch (error) {
           if (

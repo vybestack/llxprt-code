@@ -358,14 +358,31 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
 
     // DeepSeek / generic <think>...</think> blocks.
-    str = str.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    // Replace with a single space to preserve word spacing when tags appear mid-sentence.
+    // This prevents "these<think>...</think>5" from becoming "these5" instead of "these 5".
+    // Multiple consecutive spaces will be collapsed below.
+    str = str.replace(/<think>[\s\S]*?<\/think>/gi, ' ');
 
     // Alternative reasoning tags some providers use.
-    str = str.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
-    str = str.replace(/<analysis>[\s\S]*?<\/analysis>/gi, '');
+    str = str.replace(/<thinking>[\s\S]*?<\/thinking>/gi, ' ');
+    str = str.replace(/<analysis>[\s\S]*?<\/analysis>/gi, ' ');
 
-    // Clean up stray unmatched tags.
-    str = str.replace(/<\/?(?:think|thinking|analysis)>/gi, '');
+    // Clean up stray unmatched tags - replace with space to preserve word separation.
+    str = str.replace(/<\/?(?:think|thinking|analysis)>/gi, ' ');
+
+    // Only clean up whitespace if we had reasoning tags to strip
+    // This preserves meaningful whitespace in regular text chunks during streaming
+    // (e.g., " 5 Biggest" should remain " 5 Biggest", not become "5 Biggest")
+    if (hadReasoningTags) {
+      // Clean up multiple consecutive spaces/whitespace that may result from stripping
+      str = str.replace(/[ \t]+/g, ' ');
+      str = str.replace(/\n{3,}/g, '\n\n');
+
+      // Only trim leading whitespace when think tags were at the beginning
+      // This prevents leading spaces from "<think>...</think>text" -> " text"
+      // but preserves trailing whitespace for streaming chunk concatenation
+      str = str.trimStart();
+    }
 
     const afterLen = str.length;
     if (hadReasoningTags && afterLen !== beforeLen) {
@@ -399,29 +416,35 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Collect all thinking content from various tag formats
+    // Note: We only trim leading/trailing whitespace from each part, not internal newlines
+    // This preserves formatting like numbered lists within thinking content
     const thinkingParts: string[] = [];
 
     // Match <think>...</think>
     const thinkMatches = text.matchAll(/<think>([\s\S]*?)<\/think>/gi);
     for (const match of thinkMatches) {
-      if (match[1]?.trim()) {
-        thinkingParts.push(match[1].trim());
+      const content = match[1];
+      if (content?.trim()) {
+        // Preserve internal newlines but remove leading/trailing whitespace
+        thinkingParts.push(content.trim());
       }
     }
 
     // Match <thinking>...</thinking>
     const thinkingMatches = text.matchAll(/<thinking>([\s\S]*?)<\/thinking>/gi);
     for (const match of thinkingMatches) {
-      if (match[1]?.trim()) {
-        thinkingParts.push(match[1].trim());
+      const content = match[1];
+      if (content?.trim()) {
+        thinkingParts.push(content.trim());
       }
     }
 
     // Match <analysis>...</analysis>
     const analysisMatches = text.matchAll(/<analysis>([\s\S]*?)<\/analysis>/gi);
     for (const match of analysisMatches) {
-      if (match[1]?.trim()) {
-        thinkingParts.push(match[1].trim());
+      const content = match[1];
+      if (content?.trim()) {
+        thinkingParts.push(content.trim());
       }
     }
 
@@ -620,7 +643,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
-    return { cleanedText: text.trim(), toolCalls };
+    // Don't trim - preserve leading/trailing newlines that are important for formatting
+    // (e.g., numbered lists from Kimi K2 that have newlines between items)
+    return { cleanedText: text, toolCalls };
   }
 
   /**
@@ -2140,8 +2165,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                   this.extractThinkTagsAsBlock(workingText);
                 if (tagBasedThinking) {
                   // Accumulate thinking content - don't emit yet
+                  // Use newline to preserve formatting between chunks (not space)
                   if (accumulatedThinkingContent.length > 0) {
-                    accumulatedThinkingContent += ' ';
+                    accumulatedThinkingContent += '\n';
                   }
                   accumulatedThinkingContent += tagBasedThinking.thought;
                   logger.debug(
@@ -2375,8 +2401,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // @plan PLAN-20251202-THINKING.P16
         const tagBasedThinking = this.extractThinkTagsAsBlock(workingText);
         if (tagBasedThinking) {
+          // Use newline to preserve formatting between chunks (not space)
           if (accumulatedThinkingContent.length > 0) {
-            accumulatedThinkingContent += ' ';
+            accumulatedThinkingContent += '\n';
           }
           accumulatedThinkingContent += tagBasedThinking.thought;
         }
@@ -3581,8 +3608,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                   this.extractThinkTagsAsBlock(workingText);
                 if (tagBasedThinking) {
                   // Accumulate thinking content - don't emit yet
+                  // Use newline to preserve formatting between chunks (not space)
                   if (accumulatedThinkingContent.length > 0) {
-                    accumulatedThinkingContent += ' ';
+                    accumulatedThinkingContent += '\n';
                   }
                   accumulatedThinkingContent += tagBasedThinking.thought;
                   logger.debug(
@@ -3797,8 +3825,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // @plan PLAN-20251202-THINKING.P16
         const tagBasedThinking = this.extractThinkTagsAsBlock(workingText);
         if (tagBasedThinking) {
+          // Use newline to preserve formatting between chunks (not space)
           if (accumulatedThinkingContent.length > 0) {
-            accumulatedThinkingContent += ' ';
+            accumulatedThinkingContent += '\n';
           }
           accumulatedThinkingContent += tagBasedThinking.thought;
         }

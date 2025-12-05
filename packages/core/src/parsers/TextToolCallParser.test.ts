@@ -28,8 +28,8 @@ describe('GemmaToolCallParser', () => {
 
     const { cleanedContent, toolCalls } = parser.parse(content);
 
-    // Whitespace collapsed by parser, expect spaces only
-    expect(cleanedContent).toBe('Files in different places: More files:');
+    // Newlines are preserved between text segments
+    expect(cleanedContent).toBe('Files in different places:\nMore files:');
     expect(toolCalls).toHaveLength(2);
     expect(toolCalls[0]).toMatchObject({
       name: 'list_directory',
@@ -94,8 +94,9 @@ And also:
 
       const result = parser.parse(content);
 
+      // Newlines are preserved between text segments
       expect(result.cleanedContent).toBe(
-        'Let me check that for you. And also:',
+        'Let me check that for you.\nAnd also:',
       );
       expect(result.toolCalls).toHaveLength(2);
       expect(result.toolCalls[0].name).toBe('get_stock_fundamentals');

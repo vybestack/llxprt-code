@@ -56,18 +56,19 @@ export const ephemeralSettingHelp: Record<string, string> = {
   'rate-limit-max-wait':
     'Maximum wait time in milliseconds for rate limit throttling (default: 60000, Anthropic only)',
   'reasoning.enabled':
-    'Enable reasoning/thinking token support (true/false, default: false)',
+    'Enable thinking/reasoning for models that support it (true/false, default: false)',
   'reasoning.includeInContext':
-    'Include reasoning_content in subsequent API requests (true/false, default: true)',
+    'Keep thinking blocks in context for subsequent API requests (true/false, default: true)',
   'reasoning.includeInResponse':
-    'Include thinking blocks in responses to user (true/false, default: true)',
-  'reasoning.format': 'Reasoning format to use (native/field, default: native)',
+    'Show thinking blocks in output content (UI or non-interactive, true/false, default: true)',
+  'reasoning.format':
+    'API format for reasoning: native=provider default, field=reasoning_content field (default: native)',
   'reasoning.stripFromContext':
-    'Strip policy for thinking blocks (all/allButLast/none, default: none)',
+    'Remove thinking blocks from context before sending back to model (all/allButLast/none, default: none)',
   'reasoning.effort':
-    'Reasoning effort level (minimal/low/medium/high, default: undefined)',
+    'How much the model should think before responding (minimal/low/medium/high, default: undefined)',
   'reasoning.maxTokens':
-    'Maximum tokens for reasoning output (positive integer, default: undefined)',
+    'Maximum token budget the model can use for reasoning (positive integer, default: undefined)',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);

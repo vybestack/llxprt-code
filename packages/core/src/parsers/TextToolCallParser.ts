@@ -577,8 +577,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       .replace(/<tool_call>\s*\{[^}]*$/gm, '')
       .replace(/\{"name"\s*:\s*"[^"]*"\s*,?\s*"arguments"\s*:\s*\{[^}]*$/gm, '')
       .replace(/✦\s*<think>/g, '')
-      .replace(/\n\s*\n/g, '\n')
-      .replace(/\n/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
 
