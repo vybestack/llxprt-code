@@ -669,9 +669,8 @@ export class OAuthManager {
     try {
       // Import ProviderManager to access active providers
       // Use dynamic import to avoid circular dependencies
-      const { getCliProviderManager, getCliRuntimeContext } = await import(
-        '../runtime/runtimeSettings.js'
-      );
+      const { getCliProviderManager, getCliRuntimeContext } =
+        await import('../runtime/runtimeSettings.js');
       const providerManager = getCliProviderManager();
 
       // Get the provider instance to clear its auth cache
