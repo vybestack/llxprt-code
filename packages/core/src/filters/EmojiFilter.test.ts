@@ -1079,11 +1079,10 @@ function validate(input) {
       expect(result.filtered).toBeDefined();
       expect(typeof result.emojiDetected).toBe('boolean');
       expect(typeof result.blocked).toBe('boolean');
-      // If blocked, filtered should be null and error should exist
-      if (result.blocked) {
-        expect(result.filtered).toBeNull();
-        expect(result.error).toBeDefined();
-      }
+      // Error mode with emojis should block and have null filtered with error
+      expect(result.blocked).toBe(true);
+      expect(result.filtered).toBeNull();
+      expect(result.error).toBeDefined();
     });
 
     it('should handle any object in tool args without crashing', () => {
@@ -1129,10 +1128,10 @@ function validate(input) {
       expect(typeof result.emojiDetected).toBe('boolean');
       expect(typeof result.blocked).toBe('boolean');
       expect(result.blocked).toBe(false); // Warn mode never blocks
-
-      if (result.systemFeedback) {
-        expect(result.systemFeedback).toContain(toolName);
-      }
+      // Warn mode should detect emoji and provide feedback
+      expect(result.emojiDetected).toBe(true);
+      expect(result.systemFeedback).toBeDefined();
+      expect(result.systemFeedback).toContain(toolName);
     });
 
     it('should create valid filter for any mode', () => {
@@ -1166,11 +1165,12 @@ function validate(input) {
       const filter = new EmojiFilter({ mode: 'warn' });
       const result = filter.filterText(input);
 
-      if (result.filtered) {
-        expect((result.filtered as string).length).toBeLessThanOrEqual(
-          input.length + 20,
-        ); // Allow for emoji replacements
-      }
+      // Warn mode always returns filtered string
+      expect(result.filtered).toBeDefined();
+      expect(typeof result.filtered).toBe('string');
+      expect((result.filtered as string).length).toBeLessThanOrEqual(
+        input.length + 20,
+      ); // Allow for emoji replacements
     });
   });
 });

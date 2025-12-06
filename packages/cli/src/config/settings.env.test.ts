@@ -29,19 +29,28 @@ describe('Settings configuration with LLXPRT_CODE environment variables', () => 
     expect(systemSettingsPath).toBe('/new/path/settings.json');
   });
 
-  it('should fall back to platform-specific defaults when neither environment variable is set', () => {
-    const systemSettingsPath = getSystemSettingsPath();
-
-    if (process.platform === 'darwin') {
-      expect(systemSettingsPath).toBe(
+  it.skipIf(process.platform !== 'darwin')(
+    'should return darwin path when neither environment variable is set',
+    () => {
+      expect(getSystemSettingsPath()).toBe(
         '/Library/Application Support/LLxprt-Code/settings.json',
       );
-    } else if (process.platform === 'win32') {
-      expect(systemSettingsPath).toBe(
+    },
+  );
+
+  it.skipIf(process.platform !== 'win32')(
+    'should return windows path when neither environment variable is set',
+    () => {
+      expect(getSystemSettingsPath()).toBe(
         'C:\\ProgramData\\llxprt-code\\settings.json',
       );
-    } else {
-      expect(systemSettingsPath).toBe('/etc/llxprt-code/settings.json');
-    }
-  });
+    },
+  );
+
+  it.skipIf(process.platform === 'darwin' || process.platform === 'win32')(
+    'should return linux path when neither environment variable is set',
+    () => {
+      expect(getSystemSettingsPath()).toBe('/etc/llxprt-code/settings.json');
+    },
+  );
 });

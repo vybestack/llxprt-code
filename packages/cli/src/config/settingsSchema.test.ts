@@ -153,10 +153,11 @@ describe('SettingsSchema', () => {
               default?: unknown;
               properties?: Record<string, unknown>;
             };
-            if (def.type === 'boolean') {
-              // Boolean settings can have boolean or undefined defaults (for optional settings)
-              expect(['boolean', 'undefined']).toContain(typeof def.default);
-            }
+            // Boolean settings can have boolean or undefined defaults (for optional settings)
+            expect(
+              def.type !== 'boolean' ||
+                ['boolean', 'undefined'].includes(typeof def.default),
+            ).toBe(true);
             if (def.properties) {
               checkBooleanDefaults(def.properties);
             }

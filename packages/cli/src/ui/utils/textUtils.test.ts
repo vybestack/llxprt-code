@@ -45,13 +45,14 @@ describe('textUtils', () => {
 
           const sanitized = escapeAnsiCtrlCodes(details);
 
-          if (sanitized.type === 'exec') {
-            expect(sanitized.title).toBe('\\u001b[34mfake-title\\u001b[0m');
-            expect(sanitized.command).toBe('\\u001b[31mmls -l\\u001b[0m');
-            expect(sanitized.rootCommand).toBe(
-              '\\u001b[32msudo apt-get update\\u001b[0m',
-            );
-          }
+          expect(sanitized.type).toBe('exec');
+          expect(sanitized.title).toBe('\\u001b[34mfake-title\\u001b[0m');
+          expect((sanitized as { command: string }).command).toBe(
+            '\\u001b[31mmls -l\\u001b[0m',
+          );
+          expect((sanitized as { rootCommand: string }).rootCommand).toBe(
+            '\\u001b[32msudo apt-get update\\u001b[0m',
+          );
         });
 
         it('should sanitize properties for edit type', () => {
@@ -67,16 +68,17 @@ describe('textUtils', () => {
 
           const sanitized = escapeAnsiCtrlCodes(details);
 
-          if (sanitized.type === 'edit') {
-            expect(sanitized.title).toBe('\\u001b[34mEdit File\\u001b[0m');
-            expect(sanitized.fileName).toBe('\\u001b[31mfile.txt\\u001b[0m');
-            expect(sanitized.filePath).toBe(
-              '/path/to/\\u001b[32mfile.txt\\u001b[0m',
-            );
-            expect(sanitized.fileDiff).toBe(
-              'diff --git a/file.txt b/file.txt\n--- a/\\u001b[33mfile.txt\\u001b[0m\n+++ b/file.txt',
-            );
-          }
+          expect(sanitized.type).toBe('edit');
+          expect(sanitized.title).toBe('\\u001b[34mEdit File\\u001b[0m');
+          expect((sanitized as { fileName: string }).fileName).toBe(
+            '\\u001b[31mfile.txt\\u001b[0m',
+          );
+          expect((sanitized as { filePath: string }).filePath).toBe(
+            '/path/to/\\u001b[32mfile.txt\\u001b[0m',
+          );
+          expect((sanitized as { fileDiff: string }).fileDiff).toBe(
+            'diff --git a/file.txt b/file.txt\n--- a/\\u001b[33mfile.txt\\u001b[0m\n+++ b/file.txt',
+          );
         });
 
         it('should sanitize properties for mcp type', () => {
@@ -91,14 +93,17 @@ describe('textUtils', () => {
 
           const sanitized = escapeAnsiCtrlCodes(details);
 
-          if (sanitized.type === 'mcp') {
-            expect(sanitized.title).toBe('\\u001b[34mCloud Run\\u001b[0m');
-            expect(sanitized.serverName).toBe('\\u001b[31mmy-server\\u001b[0m');
-            expect(sanitized.toolName).toBe('\\u001b[32mdeploy\\u001b[0m');
-            expect(sanitized.toolDisplayName).toBe(
-              '\\u001b[33mDeploy Service\\u001b[0m',
-            );
-          }
+          expect(sanitized.type).toBe('mcp');
+          expect(sanitized.title).toBe('\\u001b[34mCloud Run\\u001b[0m');
+          expect((sanitized as { serverName: string }).serverName).toBe(
+            '\\u001b[31mmy-server\\u001b[0m',
+          );
+          expect((sanitized as { toolName: string }).toolName).toBe(
+            '\\u001b[32mdeploy\\u001b[0m',
+          );
+          expect(
+            (sanitized as { toolDisplayName: string }).toolDisplayName,
+          ).toBe('\\u001b[33mDeploy Service\\u001b[0m');
         });
 
         it('should sanitize properties for info type', () => {
@@ -112,15 +117,13 @@ describe('textUtils', () => {
 
           const sanitized = escapeAnsiCtrlCodes(details);
 
-          if (sanitized.type === 'info') {
-            expect(sanitized.title).toBe('\\u001b[34mWeb Search\\u001b[0m');
-            expect(sanitized.prompt).toBe(
-              '\\u001b[31mSearch for cats\\u001b[0m',
-            );
-            expect(sanitized.urls?.[0]).toBe(
-              'https://\\u001b[32mgoogle.com\\u001b[0m',
-            );
-          }
+          expect(sanitized.type).toBe('info');
+          expect(sanitized.title).toBe('\\u001b[34mWeb Search\\u001b[0m');
+          expect((sanitized as { prompt: string }).prompt).toBe(
+            '\\u001b[31mSearch for cats\\u001b[0m',
+          );
+          const urls = (sanitized as { urls?: string[] }).urls;
+          expect(urls?.[0]).toBe('https://\\u001b[32mgoogle.com\\u001b[0m');
         });
       });
 
@@ -152,15 +155,15 @@ describe('textUtils', () => {
         const sanitized = escapeAnsiCtrlCodes(details);
 
         expect(sanitized.a).toBe('\\u001b[31mred\\u001b[0m');
-        if (typeof sanitized.b === 'object' && sanitized.b !== null) {
-          const b = sanitized.b as { c: string; d: Array<string | object> };
-          expect(b.c).toBe('\\u001b[32mgreen\\u001b[0m');
-          expect(b.d[0]).toBe('\\u001b[33myellow\\u001b[0m');
-          if (typeof b.d[1] === 'object' && b.d[1] !== null) {
-            const e = b.d[1] as { e: string };
-            expect(e.e).toBe('\\u001b[34mblue\\u001b[0m');
-          }
-        }
+        expect(typeof sanitized.b).toBe('object');
+        expect(sanitized.b).not.toBeNull();
+        const b = sanitized.b as { c: string; d: Array<string | object> };
+        expect(b.c).toBe('\\u001b[32mgreen\\u001b[0m');
+        expect(b.d[0]).toBe('\\u001b[33myellow\\u001b[0m');
+        expect(typeof b.d[1]).toBe('object');
+        expect(b.d[1]).not.toBeNull();
+        const e = b.d[1] as { e: string };
+        expect(e.e).toBe('\\u001b[34mblue\\u001b[0m');
         expect(sanitized.f).toBe(123);
         expect(sanitized.g).toBe(null);
         expect(sanitized.h()).toBe('\u001b[35mpurple\u001b[0m');

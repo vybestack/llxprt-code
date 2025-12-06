@@ -136,62 +136,55 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
   });
 
   describe('GitHub #305 Edge Cases', () => {
-    it('should simulate various qwen model problematic scenarios', () => {
-      // These are the exact scenarios reported in GitHub #305
-      const scenarios = [
-        {
-          description: 'Null name',
-          functionCall: {
-            name: undefined,
-            args: { file: 'test.txt' },
-          } as Partial<FunctionCall>,
-        },
-        {
-          description: 'Explicit undefined name',
-          functionCall: {
-            name: undefined,
-            args: { file: 'test.txt' },
-          } as Partial<FunctionCall>,
-        },
-        {
-          description: 'Null name',
-          functionCall: {
-            name: undefined,
-            args: { file: 'test.txt' },
-          } as Partial<FunctionCall>,
-        },
-        {
-          description: 'Empty string name',
-          functionCall: {
-            name: '',
-            args: { file: 'test.txt' },
-          } as Partial<FunctionCall>,
-        },
-        {
-          description: 'Whitespace-only name',
-          functionCall: {
-            name: '   \t\n   ',
-            args: { file: 'test.txt' },
-          } as Partial<FunctionCall>,
-        },
-      ];
-
-      for (const scenario of scenarios) {
-        expect(scenario.functionCall.args).toEqual({ file: 'test.txt' });
-
-        if (scenario.description.includes('missing')) {
-          expect(scenario.functionCall.name).toBeUndefined();
-        } else if (scenario.description.includes('undefined')) {
-          expect(scenario.functionCall.name).toBeUndefined();
-        } else if (scenario.description.includes('null')) {
-          expect(scenario.functionCall.name).toBeUndefined();
-        } else if (scenario.description.includes('Empty')) {
-          expect(scenario.functionCall.name).toBe('');
-        } else if (scenario.description.includes('Whitespace')) {
-          expect(scenario.functionCall.name).toBe('   \t\n   ');
-        }
-      }
-    });
+    it.each([
+      {
+        description: 'Null name',
+        functionCall: {
+          name: undefined,
+          args: { file: 'test.txt' },
+        } as Partial<FunctionCall>,
+        expectedName: undefined,
+      },
+      {
+        description: 'Explicit undefined name',
+        functionCall: {
+          name: undefined,
+          args: { file: 'test.txt' },
+        } as Partial<FunctionCall>,
+        expectedName: undefined,
+      },
+      {
+        description: 'Null name (duplicate)',
+        functionCall: {
+          name: undefined,
+          args: { file: 'test.txt' },
+        } as Partial<FunctionCall>,
+        expectedName: undefined,
+      },
+      {
+        description: 'Empty string name',
+        functionCall: {
+          name: '',
+          args: { file: 'test.txt' },
+        } as Partial<FunctionCall>,
+        expectedName: '',
+      },
+      {
+        description: 'Whitespace-only name',
+        functionCall: {
+          name: '   \t\n   ',
+          args: { file: 'test.txt' },
+        } as Partial<FunctionCall>,
+        expectedName: '   \t\n   ',
+      },
+    ])(
+      'should simulate qwen model problematic scenario: $description',
+      ({ functionCall, expectedName }) => {
+        // These are the exact scenarios reported in GitHub #305
+        expect(functionCall.args).toEqual({ file: 'test.txt' });
+        expect(functionCall.name).toBe(expectedName);
+      },
+    );
 
     it('should test tool name patterns that cause issues', () => {
       // Test various tool name patterns that might cause normalization issues
@@ -247,28 +240,27 @@ describe('Turn GitHub Issue #305: undefined_tool_name Integration Tests', () => 
       expect(normalizeToolName('   ')).toBeNull();
     });
 
-    it('should handle the same scenarios as Turn.ts handlePendingFunctionCall', async () => {
-      const { normalizeToolName } = await import('../tools/toolNameUtils.js');
+    it.each([
+      { input: 'writeFile', expected: 'write_file' },
+      { input: 'read_data', expected: 'read_data' },
+      { input: '', expected: null },
+      { input: '   ', expected: null },
+      { input: 'invalid@tool', expected: null },
+    ])(
+      'should handle Turn.ts scenario: input="$input"',
+      async ({ input, expected }) => {
+        const { normalizeToolName } = await import('../tools/toolNameUtils.js');
 
-      // Test the same logic as in turn.ts:444-456
-      const testCases = [
-        { input: 'writeFile', expected: 'write_file' },
-        { input: 'read_data', expected: 'read_data' },
-        { input: '', expected: null },
-        { input: '   ', expected: null },
-        { input: 'invalid@tool', expected: null },
-      ];
+        // Test the same logic as in turn.ts:444-456
+        const result = normalizeToolName(input);
+        expect(result).toBe(expected);
+      },
+    );
 
-      for (const testCase of testCases) {
-        const result = normalizeToolName(testCase.input);
-        expect(result).toBe(testCase.expected);
-
-        // Simulate the fallback logic from turn.ts
-        if (!result) {
-          const fallbackName = 'undefined_tool_name';
-          expect(fallbackName).toBe('undefined_tool_name');
-        }
-      }
+    it('should use fallback name for invalid tool names', () => {
+      // Simulate the fallback logic from turn.ts when normalizeToolName returns null
+      const fallbackName = 'undefined_tool_name';
+      expect(fallbackName).toBe('undefined_tool_name');
     });
   });
 

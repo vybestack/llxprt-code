@@ -100,13 +100,12 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       runtime,
     });
 
-    try {
+    await expect(async () => {
       await iterator.next();
-      throw new Error('Expected error to be thrown');
-    } catch (error) {
-      expect(error).toHaveProperty('requirement', 'REQ-SP4-004');
-      expect(error).toHaveProperty('name', 'MissingProviderRuntimeError');
-    }
+    }).rejects.toMatchObject({
+      requirement: 'REQ-SP4-004',
+      name: 'MissingProviderRuntimeError',
+    });
   });
 
   it('rejects generateChatCompletion when runtime settings is absent @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', async () => {
@@ -127,13 +126,12 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
       runtime,
     });
 
-    try {
+    await expect(async () => {
       await iterator.next();
-      throw new Error('Expected error to be thrown');
-    } catch (error) {
-      expect(error).toHaveProperty('requirement', 'REQ-SP4-004');
-      expect(error).toHaveProperty('name', 'MissingProviderRuntimeError');
-    }
+    }).rejects.toMatchObject({
+      requirement: 'REQ-SP4-004',
+      name: 'MissingProviderRuntimeError',
+    });
   });
 
   it('accepts generateChatCompletion with complete runtime context @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', async () => {

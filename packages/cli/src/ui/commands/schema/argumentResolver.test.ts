@@ -687,14 +687,12 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
             );
 
             // Property 3: All suggestions should be from original options (handle empty case)
-            if (options.length > 0) {
-              suggestionValues.forEach((value) => {
-                expect(options).toContain(value);
-              });
-            } else {
-              // Empty options should result in empty suggestions
-              expect(suggestionValues.length).toBe(0);
-            }
+            const hasOptions = options.length > 0;
+            const allSuggestionsValid =
+              (!hasOptions && suggestionValues.length === 0) ||
+              (hasOptions &&
+                suggestionValues.every((value) => options.includes(value)));
+            expect(allSuggestionsValid).toBe(true);
           },
         ),
       );

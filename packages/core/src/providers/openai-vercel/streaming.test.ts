@@ -325,12 +325,12 @@ describe('OpenAIVercelProvider - Streaming', () => {
         c.blocks.some((b) => b.type === 'tool_call'),
       );
       expect(toolCallChunk).toBeDefined();
-      if (toolCallChunk) {
-        const toolCallBlock = toolCallChunk.blocks.find(
-          (b) => b.type === 'tool_call',
-        );
-        expect(toolCallBlock?.id).toBe('hist_tool_1');
-      }
+
+      // Type assertion after verification
+      const toolCallBlock = toolCallChunk!.blocks.find(
+        (b) => b.type === 'tool_call',
+      );
+      expect(toolCallBlock?.id).toBe('hist_tool_1');
 
       const lastChunk = chunks[chunks.length - 1];
       expect(lastChunk.metadata?.finishReason).toBe('tool-calls');

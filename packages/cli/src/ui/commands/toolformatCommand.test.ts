@@ -47,9 +47,10 @@ describe('toolformatCommand', () => {
   it('shows the current format when invoked without arguments', async () => {
     const result = await toolformatCommand.action!(mockContext, '');
     expect(result?.type).toBe('message');
-    if (result?.type === 'message') {
-      expect(result.content).toContain('Current tool format: openai');
-    }
+    expect(result).toBeDefined();
+    type MessageAction = Extract<typeof result, { type: 'message' }>;
+    const msgResult = result as MessageAction;
+    expect(msgResult.content).toContain('Current tool format: openai');
     expect(mockRuntime.getActiveToolFormatState).toHaveBeenCalled();
   });
 
@@ -57,19 +58,21 @@ describe('toolformatCommand', () => {
     const result = await toolformatCommand.action!(mockContext, 'auto');
     expect(mockRuntime.setActiveToolFormatOverride).toHaveBeenCalledWith(null);
     expect(result?.type).toBe('message');
-    if (result?.type === 'message') {
-      expect(result.messageType).toBe('info');
-      expect(result.content).toContain('override cleared');
-    }
+    expect(result).toBeDefined();
+    type MessageAction2 = Extract<typeof result, { type: 'message' }>;
+    const msgResult = result as MessageAction2;
+    expect(msgResult.messageType).toBe('info');
+    expect(msgResult.content).toContain('override cleared');
   });
 
   it('rejects invalid formats', async () => {
     const result = await toolformatCommand.action!(mockContext, 'invalid');
     expect(result?.type).toBe('message');
-    if (result?.type === 'message') {
-      expect(result.messageType).toBe('error');
-      expect(result.content).toContain('Invalid tool format');
-    }
+    expect(result).toBeDefined();
+    type MessageAction3 = Extract<typeof result, { type: 'message' }>;
+    const msgResult = result as MessageAction3;
+    expect(msgResult.messageType).toBe('error');
+    expect(msgResult.content).toContain('Invalid tool format');
   });
 
   it('persists valid overrides through SettingsService', async () => {
@@ -86,10 +89,11 @@ describe('toolformatCommand', () => {
       'hermes',
     );
     expect(result?.type).toBe('message');
-    if (result?.type === 'message') {
-      expect(result.messageType).toBe('info');
-      expect(result.content).toContain("override set to 'hermes'");
-    }
+    expect(result).toBeDefined();
+    type MessageAction4 = Extract<typeof result, { type: 'message' }>;
+    const msgResult = result as MessageAction4;
+    expect(msgResult.messageType).toBe('info');
+    expect(msgResult.content).toContain("override set to 'hermes'");
   });
 
   it('works when settings service is unavailable', async () => {
@@ -103,9 +107,10 @@ describe('toolformatCommand', () => {
       'hermes',
     );
     expect(result?.type).toBe('message');
-    if (result?.type === 'message') {
-      expect(result.messageType).toBe('info');
-    }
+    expect(result).toBeDefined();
+    type MessageAction5 = Extract<typeof result, { type: 'message' }>;
+    const msgResult = result as MessageAction5;
+    expect(msgResult.messageType).toBe('info');
   });
 
   it('surfaces runtime errors when override update fails', async () => {
@@ -116,9 +121,10 @@ describe('toolformatCommand', () => {
     const result = await toolformatCommand.action!(mockContext, 'xml');
 
     expect(result?.type).toBe('message');
-    if (result?.type === 'message') {
-      expect(result.messageType).toBe('error');
-      expect(result.content).toContain('failure');
-    }
+    expect(result).toBeDefined();
+    type MessageAction6 = Extract<typeof result, { type: 'message' }>;
+    const msgResult = result as MessageAction6;
+    expect(msgResult.messageType).toBe('error');
+    expect(msgResult.content).toContain('failure');
   });
 });

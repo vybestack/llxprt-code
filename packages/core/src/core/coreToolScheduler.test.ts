@@ -880,13 +880,12 @@ describe('CoreToolScheduler with payload', () => {
     )) as WaitingToolCall;
     const confirmationDetails = awaitingCall.confirmationDetails;
 
-    if (confirmationDetails) {
-      const payload: ToolConfirmationPayload = { newContent: 'final version' };
-      await confirmationDetails.onConfirm(
-        ToolConfirmationOutcome.ProceedOnce,
-        payload,
-      );
-    }
+    expect(confirmationDetails).toBeDefined();
+    const payload: ToolConfirmationPayload = { newContent: 'final version' };
+    await confirmationDetails!.onConfirm(
+      ToolConfirmationOutcome.ProceedOnce,
+      payload,
+    );
 
     await vi.waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
@@ -1553,9 +1552,7 @@ describe('CoreToolScheduler YOLO mode', () => {
     expect(completedCalls).toHaveLength(1);
     const completedCall = completedCalls[0];
     expect(completedCall.status).toBe('success');
-    if (completedCall.status === 'success') {
-      expect(completedCall.response.resultDisplay).toBe('Tool executed');
-    }
+    expect(completedCall.response.resultDisplay).toBe('Tool executed');
   });
 });
 
@@ -1770,9 +1767,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
     expect(completedCalls).toHaveLength(1);
     const completedCall = completedCalls[0];
     expect(completedCall.status).toBe('success');
-    if (completedCall.status === 'success') {
-      expect(completedCall.response.resultDisplay).toBe('Tool executed');
-    }
+    expect(completedCall.response.resultDisplay).toBe('Tool executed');
   });
 
   it('should handle two synchronous calls to schedule', async () => {

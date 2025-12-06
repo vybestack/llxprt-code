@@ -112,7 +112,8 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
       ).parseStreamingReasoningDelta(delta);
 
       expect(result).not.toBeNull();
-      expect(result?.sourceField).toBe('reasoning_content');
+      // Type assertion after verification
+      expect(result!.sourceField).toBe('reasoning_content');
     });
   });
 
@@ -224,7 +225,8 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
       ).parseNonStreamingReasoning(message);
 
       expect(result).not.toBeNull();
-      expect(result?.sourceField).toBe('reasoning_content');
+      // Type assertion after verification
+      expect(result!.sourceField).toBe('reasoning_content');
     });
   });
 
@@ -901,11 +903,11 @@ describe('OpenAIProvider buildMessagesWithReasoning @plan:PLAN-20251202-THINKING
       expect(result).toHaveLength(1);
       // Empty thinking should result in no reasoning_content or empty reasoning_content
       const hasReasoningContent = 'reasoning_content' in result[0];
-      if (hasReasoningContent) {
-        expect(
-          (result[0] as { reasoning_content?: string }).reasoning_content,
-        ).toBe('');
-      }
+      // Verify that if reasoning_content exists, it's empty
+      expect(hasReasoningContent).toBe(true);
+      expect(
+        (result[0] as { reasoning_content?: string }).reasoning_content,
+      ).toBe('');
     });
 
     it('should handle undefined settings (use defaults)', () => {

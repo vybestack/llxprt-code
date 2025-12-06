@@ -85,10 +85,12 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     expect(firstModel.supportedToolFormats).toEqual(['openai']);
 
     // If LLXPRT_DEFAULT_MODEL is set, verify it's in the list
-    if (process.env.LLXPRT_DEFAULT_MODEL) {
-      const modelIds = models.map((m) => m.id);
-      expect(modelIds).toContain(process.env.LLXPRT_DEFAULT_MODEL);
-    }
+    const defaultModel = process.env.LLXPRT_DEFAULT_MODEL;
+    const modelIds = models.map((m) => m.id);
+    // Verify that if default model is set, it's in the list
+    const isDefaultModelValid =
+      !defaultModel || modelIds.includes(defaultModel);
+    expect(isDefaultModelValid).toBe(true);
 
     console.log(`Found ${models.length} OpenAI models`);
   });
@@ -188,26 +190,24 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
       toolCallMessage?.blocks.filter((b) => b.type === 'tool_call') || [];
     expect(toolCallBlocks.length).toBeGreaterThan(0);
 
-    if (toolCallBlocks.length > 0) {
-      const toolCall = toolCallBlocks[0] as {
-        type: 'tool_call';
-        name: string;
-        parameters: { location: string };
-      };
-      expect(toolCall.name).toBe('get_weather');
-      expect(toolCall.parameters).toBeTruthy();
+    const toolCall = toolCallBlocks[0] as {
+      type: 'tool_call';
+      name: string;
+      parameters: { location: string };
+    };
+    expect(toolCall.name).toBe('get_weather');
+    expect(toolCall.parameters).toBeTruthy();
 
-      // Verify parameters
-      const args = toolCall.parameters;
-      // Check if args exists and has location property
-      if (args && typeof args === 'object' && 'location' in args) {
-        const location = (args as Record<string, unknown>).location;
-        if (typeof location === 'string') {
-          expect(location.toLowerCase()).toContain('san francisco');
-        }
-      }
+    // Verify parameters
+    const args = toolCall.parameters;
+    // Check if args exists and has location property
+    expect(args).toBeTruthy();
+    expect(typeof args).toBe('object');
+    expect('location' in args).toBe(true);
+    const location = (args as Record<string, unknown>).location;
+    expect(typeof location).toBe('string');
+    expect((location as string).toLowerCase()).toContain('san francisco');
 
-      console.log('Tool call received:', toolCall);
-    }
+    console.log('Tool call received:', toolCall);
   });
 });

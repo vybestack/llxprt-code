@@ -289,25 +289,25 @@ describe('ProviderModelDialog Responsive Behavior', () => {
         (line) => line.includes('○') || line.includes('●'),
       );
 
-      if (modelLines.length > 0) {
-        // Each model line should have consistent column widths
-        // Models should be spaced with proper fixed-width columns, not just single spaces
-        const firstLine = modelLines[0];
+      // Each model line should have consistent column widths
+      // Models should be spaced with proper fixed-width columns, not just single spaces
+      expect(modelLines.length).toBeGreaterThan(0);
+      const firstLine = modelLines[0];
 
-        // Should NOT have models separated by only single spaces (the zigzag issue)
-        // Instead should have proper column alignment
-        const modelMatches = firstLine.match(/[○●]\s+[^\s]+/g);
-        if (modelMatches && modelMatches.length > 1) {
-          // Check spacing between first two models on same line
+      // Should NOT have models separated by only single spaces (the zigzag issue)
+      // Instead should have proper column alignment
+      const modelMatches = firstLine.match(/[○●]\s+[^\s]+/g);
+      // Verify proper column spacing if multiple models on same line
+      const hasProperSpacing =
+        !modelMatches ||
+        modelMatches.length <= 1 ||
+        (() => {
           const model1End =
             firstLine.indexOf(modelMatches[0]) + modelMatches[0].length;
           const model2Start = firstLine.indexOf(modelMatches[1]);
-          const spacing = model2Start - model1End;
-
-          // Should have proper column spacing
-          expect(spacing).toBeGreaterThanOrEqual(2); // Fixed-width columns should have adequate spacing
-        }
-      }
+          return model2Start - model1End >= 2;
+        })();
+      expect(hasProperSpacing).toBe(true); // Fixed-width columns should have adequate spacing
     });
   });
 

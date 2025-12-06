@@ -21,8 +21,9 @@ describe('OpenAIProvider model resolution', () => {
         metadata: { source: 'OpenAIProvider.setModel.test.ts' },
       },
     ));
+  });
 
-    // Sanity check that provider sees the same settings service
+  it('should have provider see the same settings service', () => {
     const internal = provider as unknown as {
       defaultSettingsService?: SettingsService;
     };

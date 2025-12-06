@@ -226,12 +226,15 @@ describe('gemini.tsx deferred initialization', () => {
       throw new Error('PROCESS_EXIT');
     });
 
+    let caughtError: Error | null = null;
     try {
       await main();
     } catch (e) {
-      // Expected to throw from process.exit mock
-      expect((e as Error).message).toBe('PROCESS_EXIT');
+      caughtError = e as Error;
     }
+
+    // Expected to throw from process.exit mock
+    expect(caughtError?.message).toBe('PROCESS_EXIT');
 
     // Verify relaunch check happened
     expect(shouldRelaunchMock).toHaveBeenCalled();
@@ -259,12 +262,15 @@ describe('gemini.tsx deferred initialization', () => {
       throw new Error('SETTINGS_LOADED');
     });
 
+    let caughtError: Error | null = null;
     try {
       await main();
     } catch (e) {
-      // Should reach settings loading, not relaunch
-      expect((e as Error).message).toBe('SETTINGS_LOADED');
+      caughtError = e as Error;
     }
+
+    // Should reach settings loading, not relaunch
+    expect(caughtError?.message).toBe('SETTINGS_LOADED');
 
     // Relaunch should NOT happen in sandbox
     expect(relaunchMock).not.toHaveBeenCalled();
@@ -285,11 +291,14 @@ describe('gemini.tsx deferred initialization', () => {
       throw new Error('SETTINGS_LOADED');
     });
 
+    let caughtError: Error | null = null;
     try {
       await main();
     } catch (e) {
-      expect((e as Error).message).toBe('SETTINGS_LOADED');
+      caughtError = e as Error;
     }
+
+    expect(caughtError?.message).toBe('SETTINGS_LOADED');
 
     // Verify no relaunch occurred
     expect(relaunchMock).not.toHaveBeenCalled();

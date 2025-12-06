@@ -251,17 +251,17 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         r.blocks.some((b) => b.type === 'tool_call'),
       );
       expect(toolCallContent).toBeDefined();
-      if (toolCallContent) {
-        const toolCallBlock = toolCallContent.blocks.find(
-          (b) => b.type === 'tool_call',
-        );
-        expect(toolCallBlock).toMatchObject({
-          type: 'tool_call',
-          id: 'hist_tool_123',
-          name: 'get_weather',
-          parameters: { location: 'San Francisco' },
-        });
-      }
+
+      // Type assertion after verification
+      const toolCallBlock = toolCallContent!.blocks.find(
+        (b) => b.type === 'tool_call',
+      );
+      expect(toolCallBlock).toMatchObject({
+        type: 'tool_call',
+        id: 'hist_tool_123',
+        name: 'get_weather',
+        parameters: { location: 'San Francisco' },
+      });
     });
 
     it('should generate multiple tool calls', async () => {

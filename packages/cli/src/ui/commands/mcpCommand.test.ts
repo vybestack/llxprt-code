@@ -248,34 +248,35 @@ describe('mcpCommand', () => {
       });
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        // Server 1 - Connected
-        expect(message).toContain(
-          '[READY] \u001b[1mserver1\u001b[0m - Ready (2 tools)',
-        );
-        expect(message).toContain('server1_tool1');
-        expect(message).toContain('server1_tool2');
+      expect(isMessageAction(result) && result.content).toBeTruthy();
 
-        // Server 2 - Connected
-        expect(message).toContain(
-          '[READY] \u001b[1mserver2\u001b[0m - Ready (1 tool)',
-        );
-        expect(message).toContain('server2_tool1');
+      const message = isMessageAction(result) ? result.content : '';
 
-        // Server 3 - Disconnected but with cached tools, so shows as Ready
-        expect(message).toContain(
-          '[READY] \u001b[1mserver3\u001b[0m - Ready (1 tool)',
-        );
-        expect(message).toContain('server3_tool1');
+      // Server 1 - Connected
+      expect(message).toContain(
+        '[READY] \u001b[1mserver1\u001b[0m - Ready (2 tools)',
+      );
+      expect(message).toContain('server1_tool1');
+      expect(message).toContain('server1_tool2');
 
-        // Check that helpful tips are displayed when no arguments are provided
-        expect(message).toContain('TIP: Tips:');
-        expect(message).toContain('/mcp desc');
-        expect(message).toContain('/mcp schema');
-        expect(message).toContain('/mcp nodesc');
-        expect(message).toContain('Ctrl+T');
-      }
+      // Server 2 - Connected
+      expect(message).toContain(
+        '[READY] \u001b[1mserver2\u001b[0m - Ready (1 tool)',
+      );
+      expect(message).toContain('server2_tool1');
+
+      // Server 3 - Disconnected but with cached tools, so shows as Ready
+      expect(message).toContain(
+        '[READY] \u001b[1mserver3\u001b[0m - Ready (1 tool)',
+      );
+      expect(message).toContain('server3_tool1');
+
+      // Check that helpful tips are displayed when no arguments are provided
+      expect(message).toContain('TIP: Tips:');
+      expect(message).toContain('/mcp desc');
+      expect(message).toContain('/mcp schema');
+      expect(message).toContain('/mcp nodesc');
+      expect(message).toContain('Ctrl+T');
     });
 
     it('should display tool descriptions when desc argument is used', async () => {
@@ -318,30 +319,28 @@ describe('mcpCommand', () => {
       });
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
+      expect(isMessageAction(result) && result.content).toBeTruthy();
 
-        // Check that server description is included
-        expect(message).toContain(
-          '\u001b[1mserver1\u001b[0m - Ready (2 tools)',
-        );
-        expect(message).toContain(
-          '\u001b[32mThis is a server description\u001b[0m',
-        );
+      const message = isMessageAction(result) ? result.content : '';
 
-        // Check that tool descriptions are included
-        expect(message).toContain('\u001b[36mtool1\u001b[0m');
-        expect(message).toContain(
-          '\u001b[32mThis is tool 1 description\u001b[0m',
-        );
-        expect(message).toContain('\u001b[36mtool2\u001b[0m');
-        expect(message).toContain(
-          '\u001b[32mThis is tool 2 description\u001b[0m',
-        );
+      // Check that server description is included
+      expect(message).toContain('\u001b[1mserver1\u001b[0m - Ready (2 tools)');
+      expect(message).toContain(
+        '\u001b[32mThis is a server description\u001b[0m',
+      );
 
-        // Check that tips are NOT displayed when arguments are provided
-        expect(message).not.toContain('TIP: Tips:');
-      }
+      // Check that tool descriptions are included
+      expect(message).toContain('\u001b[36mtool1\u001b[0m');
+      expect(message).toContain(
+        '\u001b[32mThis is tool 1 description\u001b[0m',
+      );
+      expect(message).toContain('\u001b[36mtool2\u001b[0m');
+      expect(message).toContain(
+        '\u001b[32mThis is tool 2 description\u001b[0m',
+      );
+
+      // Check that tips are NOT displayed when arguments are provided
+      expect(message).not.toContain('TIP: Tips:');
     });
 
     it('should not display descriptions when nodesc argument is used', async () => {
@@ -382,17 +381,17 @@ describe('mcpCommand', () => {
       });
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
+      expect(isMessageAction(result) && result.content).toBeTruthy();
 
-        // Check that descriptions are not included
-        expect(message).not.toContain('This is a server description');
-        expect(message).not.toContain('This is tool 1 description');
-        expect(message).toContain('\u001b[36mtool1\u001b[0m');
+      const message = isMessageAction(result) ? result.content : '';
 
-        // Check that tips are NOT displayed when arguments are provided
-        expect(message).not.toContain('TIP: Tips:');
-      }
+      // Check that descriptions are not included
+      expect(message).not.toContain('This is a server description');
+      expect(message).not.toContain('This is tool 1 description');
+      expect(message).toContain('\u001b[36mtool1\u001b[0m');
+
+      // Check that tips are NOT displayed when arguments are provided
+      expect(message).not.toContain('TIP: Tips:');
     });
 
     it('should indicate when a server has no tools', async () => {
@@ -431,17 +430,18 @@ describe('mcpCommand', () => {
       const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain(
-          '[READY] \u001b[1mserver1\u001b[0m - Ready (1 tool)',
-        );
-        expect(message).toContain('\u001b[36mserver1_tool1\u001b[0m');
-        expect(message).toContain(
-          '[DISCONNECTED] \u001b[1mserver2\u001b[0m - Disconnected (0 tools cached)',
-        );
-        expect(message).toContain('No tools or prompts available');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain(
+        '[READY] \u001b[1mserver1\u001b[0m - Ready (1 tool)',
+      );
+      expect(message).toContain('\u001b[36mserver1_tool1\u001b[0m');
+      expect(message).toContain(
+        '[DISCONNECTED] \u001b[1mserver2\u001b[0m - Disconnected (0 tools cached)',
+      );
+      expect(message).toContain('No tools or prompts available');
     });
 
     it('should show startup indicator when servers are connecting', async () => {
@@ -488,25 +488,25 @@ describe('mcpCommand', () => {
       const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
+      expect(isMessageAction(result) && result.content).toBeTruthy();
 
-        // Check that startup indicator is shown
-        expect(message).toContain(
-          'MCP servers are starting up (1 initializing)...',
-        );
-        expect(message).toContain(
-          'Note: First startup may take longer. Tool availability will update automatically.',
-        );
+      const message = isMessageAction(result) ? result.content : '';
 
-        // Check server statuses
-        expect(message).toContain(
-          '[READY] \u001b[1mserver1\u001b[0m - Ready (1 tool)',
-        );
-        expect(message).toContain(
-          '[STARTING] \u001b[1mserver2\u001b[0m - Starting... (first startup may take longer) (tools and prompts will appear when ready)',
-        );
-      }
+      // Check that startup indicator is shown
+      expect(message).toContain(
+        'MCP servers are starting up (1 initializing)...',
+      );
+      expect(message).toContain(
+        'Note: First startup may take longer. Tool availability will update automatically.',
+      );
+
+      // Check server statuses
+      expect(message).toContain(
+        '[READY] \u001b[1mserver1\u001b[0m - Ready (1 tool)',
+      );
+      expect(message).toContain(
+        '[STARTING] \u001b[1mserver2\u001b[0m - Starting... (first startup may take longer) (tools and prompts will appear when ready)',
+      );
     });
 
     it('should display the extension name for servers from extensions', async () => {
@@ -528,10 +528,11 @@ describe('mcpCommand', () => {
       const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain('server1 (from my-extension)');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain('server1 (from my-extension)');
     });
 
     it('should display blocked MCP servers', async () => {
@@ -554,12 +555,13 @@ describe('mcpCommand', () => {
       const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain(
-          '[BLOCKED] \u001b[1mblocked-server (from my-extension)\u001b[0m - Blocked',
-        );
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain(
+        '[BLOCKED] \u001b[1mblocked-server (from my-extension)\u001b[0m - Blocked',
+      );
     });
 
     it('should display both active and blocked servers correctly', async () => {
@@ -585,13 +587,14 @@ describe('mcpCommand', () => {
       const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain('server1 (from my-extension)');
-        expect(message).toContain(
-          '[BLOCKED] \u001b[1mblocked-server (from another-extension)\u001b[0m - Blocked',
-        );
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain('server1 (from my-extension)');
+      expect(message).toContain(
+        '[BLOCKED] \u001b[1mblocked-server (from another-extension)\u001b[0m - Blocked',
+      );
     });
   });
 
@@ -672,22 +675,22 @@ describe('mcpCommand', () => {
       });
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
+      expect(isMessageAction(result) && result.content).toBeTruthy();
 
-        // Check that server description is included
-        expect(message).toContain('Ready (2 tools)');
-        expect(message).toContain('This is a server description');
+      const message = isMessageAction(result) ? result.content : '';
 
-        // Check that tool descriptions and schemas are included
-        expect(message).toContain('This is tool 1 description');
-        expect(message).toContain('Parameters:');
-        expect(message).toContain('param1');
-        expect(message).toContain('STRING');
-        expect(message).toContain('This is tool 2 description');
-        expect(message).toContain('param2');
-        expect(message).toContain('NUMBER');
-      }
+      // Check that server description is included
+      expect(message).toContain('Ready (2 tools)');
+      expect(message).toContain('This is a server description');
+
+      // Check that tool descriptions and schemas are included
+      expect(message).toContain('This is tool 1 description');
+      expect(message).toContain('Parameters:');
+      expect(message).toContain('param1');
+      expect(message).toContain('STRING');
+      expect(message).toContain('This is tool 2 description');
+      expect(message).toContain('param2');
+      expect(message).toContain('NUMBER');
     });
 
     it('should handle tools without parameter schemas gracefully', async () => {
@@ -726,12 +729,13 @@ describe('mcpCommand', () => {
       });
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain('tool1');
-        expect(message).toContain('Tool without schema');
-        // Should not crash when parameterSchema is undefined
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain('tool1');
+      expect(message).toContain('Tool without schema');
+      // Should not crash when parameterSchema is undefined
     });
   });
 
@@ -770,96 +774,104 @@ describe('mcpCommand', () => {
       const result = await mcpCommand.action!(mockContext, 'descriptions');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain('Test tool');
-        expect(message).toContain('Server description');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain('Test tool');
+      expect(message).toContain('Server description');
     });
 
     it('should handle "nodescriptions" as alias for "nodesc"', async () => {
       const result = await mcpCommand.action!(mockContext, 'nodescriptions');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).not.toContain('Test tool');
-        expect(message).not.toContain('Server description');
-        expect(message).toContain('\u001b[36mtool1\u001b[0m');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).not.toContain('Test tool');
+      expect(message).not.toContain('Server description');
+      expect(message).toContain('\u001b[36mtool1\u001b[0m');
     });
 
     it('should handle mixed case arguments', async () => {
       const result = await mcpCommand.action!(mockContext, 'DESC');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain('Test tool');
-        expect(message).toContain('Server description');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain('Test tool');
+      expect(message).toContain('Server description');
     });
 
     it('should handle multiple arguments - "schema desc"', async () => {
       const result = await mcpCommand.action!(mockContext, 'schema desc');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain('Test tool');
-        expect(message).toContain('Server description');
-        expect(message).toContain('Parameters:');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain('Test tool');
+      expect(message).toContain('Server description');
+      expect(message).toContain('Parameters:');
     });
 
     it('should handle multiple arguments - "desc schema"', async () => {
       const result = await mcpCommand.action!(mockContext, 'desc schema');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain('Test tool');
-        expect(message).toContain('Server description');
-        expect(message).toContain('Parameters:');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain('Test tool');
+      expect(message).toContain('Server description');
+      expect(message).toContain('Parameters:');
     });
 
     it('should handle "schema" alone showing descriptions', async () => {
       const result = await mcpCommand.action!(mockContext, 'schema');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain('Test tool');
-        expect(message).toContain('Server description');
-        expect(message).toContain('Parameters:');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain('Test tool');
+      expect(message).toContain('Server description');
+      expect(message).toContain('Parameters:');
     });
 
     it('should handle "nodesc" overriding "schema" - "schema nodesc"', async () => {
       const result = await mcpCommand.action!(mockContext, 'schema nodesc');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).not.toContain('Test tool');
-        expect(message).not.toContain('Server description');
-        expect(message).toContain('Parameters:'); // Schema should still show
-        expect(message).toContain('\u001b[36mtool1\u001b[0m');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).not.toContain('Test tool');
+      expect(message).not.toContain('Server description');
+      expect(message).toContain('Parameters:'); // Schema should still show
+      expect(message).toContain('\u001b[36mtool1\u001b[0m');
     });
 
     it('should handle "nodesc" overriding "desc" - "desc nodesc"', async () => {
       const result = await mcpCommand.action!(mockContext, 'desc nodesc');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).not.toContain('Test tool');
-        expect(message).not.toContain('Server description');
-        expect(message).not.toContain('Parameters:');
-        expect(message).toContain('\u001b[36mtool1\u001b[0m');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).not.toContain('Test tool');
+      expect(message).not.toContain('Server description');
+      expect(message).not.toContain('Parameters:');
+      expect(message).toContain('\u001b[36mtool1\u001b[0m');
     });
 
     it('should handle "nodesc" overriding both "desc" and "schema" - "desc schema nodesc"', async () => {
@@ -869,51 +881,55 @@ describe('mcpCommand', () => {
       );
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).not.toContain('Test tool');
-        expect(message).not.toContain('Server description');
-        expect(message).toContain('Parameters:'); // Schema should still show
-        expect(message).toContain('\u001b[36mtool1\u001b[0m');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).not.toContain('Test tool');
+      expect(message).not.toContain('Server description');
+      expect(message).toContain('Parameters:'); // Schema should still show
+      expect(message).toContain('\u001b[36mtool1\u001b[0m');
     });
 
     it('should handle extra whitespace in arguments', async () => {
       const result = await mcpCommand.action!(mockContext, '  desc   schema  ');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain('Test tool');
-        expect(message).toContain('Server description');
-        expect(message).toContain('Parameters:');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain('Test tool');
+      expect(message).toContain('Server description');
+      expect(message).toContain('Parameters:');
     });
 
     it('should handle empty arguments gracefully', async () => {
       const result = await mcpCommand.action!(mockContext, '');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).not.toContain('Test tool');
-        expect(message).not.toContain('Server description');
-        expect(message).not.toContain('Parameters:');
-        expect(message).toContain('\u001b[36mtool1\u001b[0m');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).not.toContain('Test tool');
+      expect(message).not.toContain('Server description');
+      expect(message).not.toContain('Parameters:');
+      expect(message).toContain('\u001b[36mtool1\u001b[0m');
     });
 
     it('should handle unknown arguments gracefully', async () => {
       const result = await mcpCommand.action!(mockContext, 'unknown arg');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).not.toContain('Test tool');
-        expect(message).not.toContain('Server description');
-        expect(message).not.toContain('Parameters:');
-        expect(message).toContain('\u001b[36mtool1\u001b[0m');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).not.toContain('Test tool');
+      expect(message).not.toContain('Server description');
+      expect(message).not.toContain('Parameters:');
+      expect(message).toContain('\u001b[36mtool1\u001b[0m');
     });
   });
 
@@ -974,12 +990,13 @@ describe('mcpCommand', () => {
       const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        const message = result.content;
-        expect(message).toContain('server-with-dashes');
-        expect(message).toContain('server_with_underscores');
-        expect(message).toContain('server.with.dots');
-      }
+      expect(isMessageAction(result) && result.content).toBeTruthy();
+
+      const message = isMessageAction(result) ? result.content : '';
+
+      expect(message).toContain('server-with-dashes');
+      expect(message).toContain('server_with_underscores');
+      expect(message).toContain('server.with.dots');
     });
   });
 
@@ -1008,13 +1025,14 @@ describe('mcpCommand', () => {
 
       const result = await authCommand!.action!(context, '');
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('info');
-        expect(result.content).toContain('oauth-server');
-        expect(result.content).toContain('another-oauth');
-        expect(result.content).not.toContain('regular-server');
-        expect(result.content).toContain('/mcp auth <server-name>');
-      }
+
+      if (!isMessageAction(result)) throw new Error('Expected message action');
+
+      expect(result.messageType).toBe('info');
+      expect(result.content).toContain('oauth-server');
+      expect(result.content).toContain('another-oauth');
+      expect(result.content).not.toContain('regular-server');
+      expect(result.content).toContain('/mcp auth <server-name>');
     });
 
     it('should show message when no OAuth servers are configured', async () => {
@@ -1034,12 +1052,13 @@ describe('mcpCommand', () => {
       const result = await authCommand!.action!(context, '');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('info');
-        expect(result.content).toBe(
-          'No MCP servers configured with OAuth authentication.',
-        );
-      }
+
+      if (!isMessageAction(result)) throw new Error('Expected message action');
+
+      expect(result.messageType).toBe('info');
+      expect(result.content).toBe(
+        'No MCP servers configured with OAuth authentication.',
+      );
     });
 
     it('should authenticate with a specific server', async () => {
@@ -1090,10 +1109,11 @@ describe('mcpCommand', () => {
       expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('info');
-        expect(result.content).toContain('Successfully authenticated');
-      }
+
+      if (!isMessageAction(result)) throw new Error('Expected message action');
+
+      expect(result.messageType).toBe('info');
+      expect(result.content).toContain('Successfully authenticated');
     });
 
     it('should handle authentication errors', async () => {
@@ -1118,11 +1138,12 @@ describe('mcpCommand', () => {
       const result = await authCommand!.action!(context, 'test-server');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('error');
-        expect(result.content).toContain('Failed to authenticate');
-        expect(result.content).toContain('Auth failed');
-      }
+
+      if (!isMessageAction(result)) throw new Error('Expected message action');
+
+      expect(result.messageType).toBe('error');
+      expect(result.content).toContain('Failed to authenticate');
+      expect(result.content).toContain('Auth failed');
     });
 
     it('should handle non-existent server', async () => {
@@ -1142,10 +1163,11 @@ describe('mcpCommand', () => {
       const result = await authCommand!.action!(context, 'non-existent');
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('error');
-        expect(result.content).toContain("MCP server 'non-existent' not found");
-      }
+
+      if (!isMessageAction(result)) throw new Error('Expected message action');
+
+      expect(result.messageType).toBe('error');
+      expect(result.content).toContain("MCP server 'non-existent' not found");
     });
   });
 
@@ -1194,10 +1216,11 @@ describe('mcpCommand', () => {
       expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
 
       expect(isMessageAction(result)).toBe(true);
-      if (isMessageAction(result)) {
-        expect(result.messageType).toBe('info');
-        expect(result.content).toContain('Configured MCP servers:');
-      }
+
+      if (!isMessageAction(result)) throw new Error('Expected message action');
+
+      expect(result.messageType).toBe('info');
+      expect(result.content).toContain('Configured MCP servers:');
     });
 
     it('should show an error if config is not available', async () => {

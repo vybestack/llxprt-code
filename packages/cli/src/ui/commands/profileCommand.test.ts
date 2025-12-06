@@ -67,10 +67,11 @@ describe('profileCommand', () => {
       expect(runtimeMocks.loadProfileByName).toHaveBeenCalledWith('demo');
       expect(runtimeMocks.switchActiveProvider).toHaveBeenCalledWith('openai');
       expect(result?.type).toBe('message');
-      if (result?.type === 'message') {
-        expect(result.content).toContain('message one');
-        expect(result.content).toContain('fallback provider used');
-      }
+      expect(result).toBeDefined();
+      expect((result as { content: string }).content).toContain('message one');
+      expect((result as { content: string }).content).toContain(
+        'fallback provider used',
+      );
     });
 
     it('refreshes Gemini tools after profile load', async () => {
@@ -137,10 +138,9 @@ describe('profileCommand', () => {
       const result = await list.action!(context, '');
       expect(runtimeMocks.listSavedProfiles).toHaveBeenCalled();
       expect(result?.type).toBe('message');
-      if (result?.type === 'message') {
-        expect(result.content).toContain('alpha');
-        expect(result.content).toContain('beta');
-      }
+      expect(result).toBeDefined();
+      expect((result as { content: string }).content).toContain('alpha');
+      expect((result as { content: string }).content).toContain('beta');
     });
   });
 });

@@ -57,9 +57,10 @@ describe('keyCommand', () => {
 
     expect(mockRuntime.updateActiveProviderApiKey).toHaveBeenCalledWith(null);
     expect(result?.type).toBe('message');
-    if (result?.type === 'message') {
-      expect(result.content).toContain('API key removed');
-    }
+    expect(result).toBeDefined();
+    expect((result as { content: string }).content).toContain(
+      'API key removed',
+    );
   });
 
   it('returns error when updateActiveProviderApiKey throws', async () => {
@@ -70,10 +71,9 @@ describe('keyCommand', () => {
     const result = await keyCommand.action!(context, 'abc123');
 
     expect(result?.type).toBe('message');
-    if (result?.type === 'message') {
-      expect(result.messageType).toBe('error');
-      expect(result.content).toContain('unsupported');
-    }
+    expect(result).toBeDefined();
+    expect((result as { messageType: string }).messageType).toBe('error');
+    expect((result as { content: string }).content).toContain('unsupported');
   });
 
   it('invokes payment mode callback asynchronously', async () => {

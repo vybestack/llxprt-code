@@ -233,16 +233,10 @@ describe('ShellProcessor', () => {
       disallowedCommands: ['rm -rf /'],
     });
 
-    try {
-      await processor.process(prompt, context);
-      // Fail if it doesn't throw
-      expect(true).toBe(false);
-    } catch (e) {
-      expect(e).toBeInstanceOf(ConfirmationRequiredError);
-      if (e instanceof ConfirmationRequiredError) {
-        expect(e.commandsToConfirm).toEqual(['rm -rf /']);
-      }
-    }
+    const promise = processor.process(prompt, context);
+    await expect(promise).rejects.toBeInstanceOf(ConfirmationRequiredError);
+    const error = await promise.catch((e) => e);
+    expect(error.commandsToConfirm).toEqual(['rm -rf /']);
 
     expect(mockShellExecute).not.toHaveBeenCalled();
   });
@@ -260,16 +254,10 @@ describe('ShellProcessor', () => {
       return { allAllowed: true, disallowedCommands: [] };
     });
 
-    try {
-      await processor.process(prompt, context);
-      // Fail if it doesn't throw
-      expect(true).toBe(false);
-    } catch (e) {
-      expect(e).toBeInstanceOf(ConfirmationRequiredError);
-      if (e instanceof ConfirmationRequiredError) {
-        expect(e.commandsToConfirm).toEqual(['cmd1', 'cmd2']);
-      }
-    }
+    const promise = processor.process(prompt, context);
+    await expect(promise).rejects.toBeInstanceOf(ConfirmationRequiredError);
+    const error = await promise.catch((e) => e);
+    expect(error.commandsToConfirm).toEqual(['cmd1', 'cmd2']);
   });
 
   it('should not execute any commands if at least one requires confirmation', async () => {
@@ -300,15 +288,10 @@ describe('ShellProcessor', () => {
       disallowedCommands: cmd.includes('rm') ? [cmd] : [],
     }));
 
-    try {
-      await processor.process(prompt, context);
-      expect.fail('Should have thrown ConfirmationRequiredError');
-    } catch (e) {
-      expect(e).toBeInstanceOf(ConfirmationRequiredError);
-      if (e instanceof ConfirmationRequiredError) {
-        expect(e.commandsToConfirm).toEqual(['rm -rf /']);
-      }
-    }
+    const promise = processor.process(prompt, context);
+    await expect(promise).rejects.toBeInstanceOf(ConfirmationRequiredError);
+    const error = await promise.catch((e) => e);
+    expect(error.commandsToConfirm).toEqual(['rm -rf /']);
   });
 
   it('should execute all commands if they are on the session allowlist', async () => {

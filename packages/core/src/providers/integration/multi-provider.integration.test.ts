@@ -219,29 +219,26 @@ describe('Multi-Provider Integration Tests', () => {
 
         // Test switching to a different model (pick first different model from list)
         const differentModel = models.find((m) => m.id !== initialModel);
-        if (differentModel) {
-          localSettings.set('model', differentModel.id);
-          localSettings.setProviderSetting(
-            openaiProvider.name,
-            'model',
-            differentModel.id,
-          );
-          // Model might be different if defaults changed
-          const currentModel = openaiProvider.getCurrentModel();
-          expect(currentModel).toBeTruthy();
+        expect(differentModel).toBeTruthy();
 
-          // Switch back to initial model
-          localSettings.set('model', initialModel);
-          localSettings.setProviderSetting(
-            openaiProvider.name,
-            'model',
-            initialModel,
-          );
-          expect(openaiProvider.getCurrentModel()).toBe(initialModel);
-        } else {
-          // If only one model available, at least verify the current model works
-          expect(openaiProvider.getCurrentModel()).toBe(initialModel);
-        }
+        localSettings.set('model', differentModel!.id);
+        localSettings.setProviderSetting(
+          openaiProvider.name,
+          'model',
+          differentModel!.id,
+        );
+        // Model might be different if defaults changed
+        const currentModel = openaiProvider.getCurrentModel();
+        expect(currentModel).toBeTruthy();
+
+        // Switch back to initial model
+        localSettings.set('model', initialModel);
+        localSettings.setProviderSetting(
+          openaiProvider.name,
+          'model',
+          initialModel,
+        );
+        expect(openaiProvider.getCurrentModel()).toBe(initialModel);
       },
     );
   });
@@ -536,28 +533,29 @@ describe('Multi-Provider Integration Tests', () => {
             const toolCallBlocks = message.blocks.filter(
               (b) => b.type === 'tool_call',
             );
-            if (toolCallBlocks.length > 0) {
-              toolCallReceived = true;
-              const toolCall = toolCallBlocks[0] as {
-                type: 'tool_call';
-                name: string;
-                parameters: { location: string };
-              };
-              console.log(`\n[OK] Tool call received: ${toolCall.name}`);
-              console.log(
-                `   Arguments: ${JSON.stringify(toolCall.parameters)}`,
-              );
+            if (toolCallBlocks.length === 0) continue;
 
-              expect(toolCall.name).toBe('get_weather');
-              const args = toolCall.parameters;
-              // Check if args exists and has location property
-              if (args && typeof args === 'object' && 'location' in args) {
-                const location = (args as Record<string, unknown>).location;
-                if (typeof location === 'string') {
-                  expect(location.toLowerCase()).toContain('san francisco');
-                }
-              }
-            }
+            expect(toolCallBlocks.length).toBeGreaterThan(0);
+            toolCallReceived = true;
+            const toolCall = toolCallBlocks[0] as {
+              type: 'tool_call';
+              name: string;
+              parameters: { location: string };
+            };
+            console.log(`\n[OK] Tool call received: ${toolCall.name}`);
+            console.log(`   Arguments: ${JSON.stringify(toolCall.parameters)}`);
+
+            expect(toolCall.name).toBe('get_weather');
+            const args = toolCall.parameters;
+            // Check if args exists and has location property
+            expect(args).toBeTruthy();
+            expect(typeof args).toBe('object');
+            expect('location' in args).toBe(true);
+            const location = (args as Record<string, unknown>).location;
+            expect(typeof location).toBe('string');
+            expect((location as string).toLowerCase()).toContain(
+              'san francisco',
+            );
           }
 
           expect(toolCallReceived).toBe(true);
@@ -624,28 +622,30 @@ describe('Multi-Provider Integration Tests', () => {
         },
       ];
 
+      let errorThrown = false;
+      let errorMessage = '';
+      let successReceived = false;
+
       try {
         const stream = openaiProvider.generateChatCompletion(messages);
         // Try to consume the stream
-        let messageReceived = false;
         for await (const _message of stream) {
           // Model might handle gracefully and return a response
-          messageReceived = true;
+          successReceived = true;
           break;
         }
-        // Either success or error is acceptable for invalid models
-        if (!messageReceived) {
-          expect.fail('Should have thrown an error');
-        }
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
+        errorThrown = true;
+        errorMessage = error instanceof Error ? error.message : String(error);
         console.log(
           `\n[OK] Correctly caught error for invalid model: ${errorMessage}`,
         );
-        // Either error is acceptable
-        expect(errorMessage).toBeTruthy();
       }
+
+      // Either success or error is acceptable for invalid models
+      expect(errorThrown || successReceived).toBe(true);
+      // If error was thrown, verify it has a message
+      expect(!errorThrown || errorMessage.length > 0).toBe(true);
     });
 
     it('should handle missing API key', async () => {
@@ -658,6 +658,10 @@ describe('Multi-Provider Integration Tests', () => {
       const savedGoogleKey = process.env.GOOGLE_API_KEY;
       delete process.env.GEMINI_API_KEY;
       delete process.env.GOOGLE_API_KEY;
+
+      let testErrorThrown = false;
+      let testError: unknown = null;
+      let modelsReturned = false;
 
       try {
         // Explicitly create provider with no auth methods available
@@ -673,13 +677,12 @@ describe('Multi-Provider Integration Tests', () => {
           const models = await provider.getModels();
           // If it doesn't throw, verify it returns an array (may be empty without auth)
           expect(Array.isArray(models)).toBe(true);
+          modelsReturned = true;
           // An empty array is acceptable when no authentication is provided
         } catch (error) {
-          // If it throws, verify it's the expected error
-          expect(error).toBeInstanceOf(Error);
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          expect(errorMessage).toMatch(/authentication|API key/i);
+          // If it throws, capture the error for verification outside the catch
+          testErrorThrown = true;
+          testError = error;
         }
       } finally {
         // Restore the original API keys if they existed
@@ -693,6 +696,16 @@ describe('Multi-Provider Integration Tests', () => {
           process.env.GOOGLE_API_KEY = savedGoogleKey;
         }
       }
+
+      // Verify either models were returned OR an error was thrown
+      expect(testErrorThrown || modelsReturned).toBe(true);
+      // If error was thrown, verify it's the right type and has expected message
+      const errorMessage =
+        testError instanceof Error ? testError.message : String(testError);
+      expect(!testErrorThrown || testError instanceof Error).toBe(true);
+      expect(
+        !testErrorThrown || /authentication|API key/i.test(errorMessage),
+      ).toBe(true);
     });
   });
 });
