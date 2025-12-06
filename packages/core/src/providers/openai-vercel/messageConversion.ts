@@ -45,6 +45,7 @@ import {
   buildToolResponsePayload,
   EMPTY_TOOL_RESULT_PLACEHOLDER,
 } from '../utils/toolResponsePayload.js';
+import type { ToolIdMapper } from '../../tools/ToolIdStrategy.js';
 
 function inferMediaEncoding(imageData: string): {
   encoding: 'base64' | 'url';
@@ -72,9 +73,30 @@ function inferMediaEncoding(imageData: string): {
 
 /**
  * Convert IContent array to Vercel AI SDK CoreMessage array
+ * @param contents - The contents to convert
+ * @param toolIdMapper - Optional mapper for tool IDs (for Kimi K2 format)
  */
-export function convertToVercelMessages(contents: IContent[]): CoreMessage[] {
+export function convertToVercelMessages(
+  contents: IContent[],
+  toolIdMapper?: ToolIdMapper,
+): CoreMessage[] {
   const messages: CoreMessage[] = [];
+
+  // Helper to resolve tool call IDs based on format
+  const resolveToolCallId = (block: ToolCallBlock): string => {
+    if (toolIdMapper) {
+      return toolIdMapper.resolveToolCallId(block);
+    }
+    return normalizeToOpenAIToolId(block.id);
+  };
+
+  // Helper to resolve tool response IDs based on format
+  const resolveToolResponseId = (block: ToolResponseBlock): string => {
+    if (toolIdMapper) {
+      return toolIdMapper.resolveToolResponseId(block);
+    }
+    return normalizeToOpenAIToolId(block.callId || '');
+  };
 
   for (const content of contents) {
     const metadata = (content as { metadata?: { role?: string } }).metadata;
@@ -165,7 +187,7 @@ export function convertToVercelMessages(contents: IContent[]): CoreMessage[] {
             toolCall.input !== undefined ? toolCall.input : block.parameters;
           contentParts.push({
             type: 'tool-call',
-            toolCallId: normalizeToOpenAIToolId(block.id),
+            toolCallId: resolveToolCallId(block),
             toolName: block.name,
             input,
           });
@@ -200,9 +222,7 @@ export function convertToVercelMessages(contents: IContent[]): CoreMessage[] {
             };
             return {
               type: 'tool-result' as const,
-              toolCallId: normalizeToOpenAIToolId(
-                extBlock.callId || extBlock.id || '',
-              ),
+              toolCallId: resolveToolResponseId(block),
               toolName: extBlock.name || extBlock.toolName || '',
               output: {
                 type: 'text',

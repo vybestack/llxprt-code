@@ -1261,6 +1261,7 @@ export type ToolFormatOverrideLiteral =
   | 'auto'
   | 'openai'
   | 'qwen'
+  | 'kimi'
   | 'hermes'
   | 'xml'
   | 'anthropic'

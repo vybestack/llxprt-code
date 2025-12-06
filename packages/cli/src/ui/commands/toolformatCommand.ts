@@ -13,7 +13,14 @@ import { CommandKind } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { ToolFormatOverrideLiteral } from '../../runtime/runtimeSettings.js';
 
-const STRUCTURED_FORMATS = ['openai', 'anthropic', 'deepseek', 'qwen', 'gemma'];
+const STRUCTURED_FORMATS = [
+  'openai',
+  'anthropic',
+  'deepseek',
+  'qwen',
+  'kimi',
+  'gemma',
+];
 const TEXT_FORMATS = ['hermes', 'xml', 'llama'];
 const ALL_FORMATS = [...STRUCTURED_FORMATS, ...TEXT_FORMATS];
 

@@ -28,6 +28,7 @@ export type ToolFormat =
   | 'anthropic'
   | 'deepseek'
   | 'qwen'
+  | 'kimi'
   | 'hermes'
   | 'xml'
   | 'llama'
