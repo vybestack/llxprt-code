@@ -99,6 +99,10 @@ describe('replace', () => {
     const fileContent = 'hello world';
     rig.createFile(fileName, fileContent);
 
+    // Ensure file is flushed to disk before spawning child process
+    // This prevents race conditions where the child reads empty/partial content
+    rig.sync();
+
     const prompt = `replace "goodbye" with "farewell" in ${fileName}`;
     await rig.run(prompt);
 
@@ -118,23 +122,54 @@ describe('replace', () => {
       'Expected model to attempt a read_file or replace',
     ).toBeDefined();
 
-    // If the model tried to replace, that specific attempt must have failed.
+    // CRITICAL ASSERTION FIRST: The file content MUST remain unchanged
+    // This is the most robust check - regardless of what tools the LLM called
+    // or how it reported success/failure, the file should not be modified.
+    const newFileContent = rig.readFile(fileName);
+    expect(
+      newFileContent,
+      `File content was modified! Original: "${fileContent}", Current: "${newFileContent}". ` +
+        `This indicates the replace tool succeeded when "goodbye" should not match "hello world".`,
+    ).toBe(fileContent);
+
+    // If the model tried to replace, add defensive logging and verify it failed
     if (replaceAttempt) {
+      // Defensive logging to help diagnose future flakiness
       if (replaceAttempt.toolRequest.success) {
+        console.error('=== FLAKY TEST DIAGNOSTIC INFO ===');
         console.error(
           'The replace tool succeeded when it was expected to fail',
         );
-        console.error('Tool call args:', replaceAttempt.toolRequest.args);
+        console.error('Raw tool call args:', replaceAttempt.toolRequest.args);
+
+        // Try to parse and log structured args for better debugging
+        try {
+          const args = JSON.parse(replaceAttempt.toolRequest.args);
+          console.error('Parsed args:', {
+            file_path: args.file_path,
+            old_string: args.old_string,
+            new_string: args.new_string,
+            old_string_length: args.old_string?.length,
+          });
+          console.error(
+            `Expected old_string to be "goodbye" but LLM used: "${args.old_string}"`,
+          );
+        } catch {
+          console.error('Failed to parse tool args as JSON');
+        }
+
+        console.error(
+          'All tool calls:',
+          toolLogs.map((t) => t.toolRequest),
+        );
+        console.error('=== END DIAGNOSTIC INFO ===');
       }
+
       expect(
         replaceAttempt.toolRequest.success,
-        'If replace is called, it must fail',
+        'If replace is called with old_string="goodbye", it must fail because "goodbye" is not in "hello world"',
       ).toBe(false);
     }
-
-    // CRITICAL: The final content of the file must be unchanged.
-    const newFileContent = rig.readFile(fileName);
-    expect(newFileContent).toBe(fileContent);
   });
 
   it('should insert a multi-line block of text', async () => {
