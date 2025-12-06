@@ -325,6 +325,7 @@ describe('PromptService', () => {
         provider: 'openai',
         model: 'gpt-4',
         enabledTools: ['ReadFile'],
+        enableToolPrompts: true, // Explicitly enable for tests that check tool prompts
         environment: {
           isGitRepository: true,
           isSandboxed: false,
@@ -354,6 +355,7 @@ describe('PromptService', () => {
         provider: 'anthropic',
         model: 'claude-3',
         enabledTools: ['ReadFile'],
+        enableToolPrompts: true, // Explicitly enable for tests that check tool prompts
         environment: {
           isGitRepository: false,
           isSandboxed: false,

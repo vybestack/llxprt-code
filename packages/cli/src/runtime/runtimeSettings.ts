@@ -894,6 +894,10 @@ const PROFILE_EPHEMERAL_KEYS: readonly string[] = [
   'reasoning.stripFromContext',
   'reasoning.effort',
   'reasoning.maxTokens',
+  // Prompt caching settings (Issue #680)
+  'prompt-caching',
+  'include-folder-structure',
+  'enable-tool-prompts',
 ];
 
 const SENSITIVE_MODEL_PARAM_KEYS = new Set([

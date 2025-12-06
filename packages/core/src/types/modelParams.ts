@@ -84,6 +84,12 @@ export interface EphemeralSettings {
   GOOGLE_CLOUD_PROJECT?: string;
   /** Google Cloud location identifier for Gemini auth */
   GOOGLE_CLOUD_LOCATION?: string;
+  /** Whether to include folder structure in system prompts (default: false for better cache hit rates) */
+  'include-folder-structure'?: boolean;
+  /** Anthropic prompt caching configuration: 'off' | '5m' | '1h' (default: '1h', Anthropic only) */
+  'prompt-caching'?: 'off' | '5m' | '1h';
+  /** Load tool-specific prompts from ~/.llxprt/prompts/tools/** (default: false) */
+  'enable-tool-prompts'?: boolean;
 }
 
 /**

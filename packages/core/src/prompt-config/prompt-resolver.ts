@@ -5,7 +5,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import { PromptContext } from './types.js';
+
+const logger = new DebugLogger('llxprt:prompt-config:resolver');
 
 /**
  * Result of resolving a single file
@@ -212,71 +215,73 @@ export class PromptResolver {
       }
     }
 
-    // 5. Resolve tool prompts
-    for (const tool of context.enabledTools) {
-      const toolFileName = this.convertToKebabCase(tool) + '.md';
-      const toolPath = 'tools/' + toolFileName;
-      const toolResult = this.resolveFile(baseDir, toolPath, context);
+    // 5. Resolve tool prompts (only if enabled via setting, default: false)
+    if (context.enableToolPrompts) {
+      for (const tool of context.enabledTools) {
+        const toolFileName = this.convertToKebabCase(tool) + '.md';
+        const toolPath = 'tools/' + toolFileName;
+        const toolResult = this.resolveFile(baseDir, toolPath, context);
 
-      if (toolResult.found && toolResult.path && toolResult.source) {
-        resolvedFiles.push({
-          type: 'tool',
-          path: toolResult.path,
-          source: toolResult.source,
-          toolName: tool,
-        });
-      } else {
-        // Try alternative approaches before warning
-        // First try PascalCase (the original format before change)
-        const pascalCaseFile = tool + '.md';
-        const pascalCaseResult = this.resolveFile(
-          baseDir,
-          'tools/' + pascalCaseFile,
-          context,
-        );
-
-        if (
-          pascalCaseResult.found &&
-          pascalCaseResult.path &&
-          pascalCaseResult.source
-        ) {
+        if (toolResult.found && toolResult.path && toolResult.source) {
           resolvedFiles.push({
             type: 'tool',
-            path: pascalCaseResult.path,
-            source: pascalCaseResult.source,
+            path: toolResult.path,
+            source: toolResult.source,
             toolName: tool,
           });
-          continue;
+        } else {
+          // Try alternative approaches before warning
+          // First try PascalCase (the original format before change)
+          const pascalCaseFile = tool + '.md';
+          const pascalCaseResult = this.resolveFile(
+            baseDir,
+            'tools/' + pascalCaseFile,
+            context,
+          );
+
+          if (
+            pascalCaseResult.found &&
+            pascalCaseResult.path &&
+            pascalCaseResult.source
+          ) {
+            resolvedFiles.push({
+              type: 'tool',
+              path: pascalCaseResult.path,
+              source: pascalCaseResult.source,
+              toolName: tool,
+            });
+            continue;
+          }
+
+          // Try snake_case format
+          const snakeCaseFile =
+            tool
+              .replace(/([A-Z])/g, '_$1')
+              .toLowerCase()
+              .replace(/^_/, '') + '.md';
+          const snakeCaseResult = this.resolveFile(
+            baseDir,
+            'tools/' + snakeCaseFile,
+            context,
+          );
+
+          if (
+            snakeCaseResult.found &&
+            snakeCaseResult.path &&
+            snakeCaseResult.source
+          ) {
+            resolvedFiles.push({
+              type: 'tool',
+              path: snakeCaseResult.path,
+              source: snakeCaseResult.source,
+              toolName: tool,
+            });
+            continue;
+          }
+
+          // Log warning "Tool prompt not found: " + tool
+          logger.warn(() => `Tool prompt not found: ${tool}`);
         }
-
-        // Try snake_case format
-        const snakeCaseFile =
-          tool
-            .replace(/([A-Z])/g, '_$1')
-            .toLowerCase()
-            .replace(/^_/, '') + '.md';
-        const snakeCaseResult = this.resolveFile(
-          baseDir,
-          'tools/' + snakeCaseFile,
-          context,
-        );
-
-        if (
-          snakeCaseResult.found &&
-          snakeCaseResult.path &&
-          snakeCaseResult.source
-        ) {
-          resolvedFiles.push({
-            type: 'tool',
-            path: snakeCaseResult.path,
-            source: snakeCaseResult.source,
-            toolName: tool,
-          });
-          continue;
-        }
-
-        // Log warning "Tool prompt not found: " + tool
-        console.warn(`Tool prompt not found: ${tool}`);
       }
     }
 

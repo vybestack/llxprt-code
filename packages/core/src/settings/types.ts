@@ -57,11 +57,13 @@ export interface ProviderSettings {
     | 'llama';
   /**
    * Anthropic prompt caching configuration
-   * - 'off': No caching (default)
+   * - 'off': No caching
    * - '5m': 5-minute cache TTL
-   * - '1h': 1-hour cache TTL (requires extended-cache-ttl beta header)
+   * - '1h': 1-hour cache TTL (default, requires extended-cache-ttl beta header)
    */
   'prompt-caching'?: 'off' | '5m' | '1h';
+  /** Whether to include folder structure in system prompts (default: false) */
+  'include-folder-structure'?: boolean;
   [key: string]: unknown;
 }
 

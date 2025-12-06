@@ -189,6 +189,9 @@ export class ProfileManager {
       ephemeralSettings: {
         'base-url': providerSettings?.baseUrl,
         'auth-key': providerSettings?.apiKey,
+        'prompt-caching': providerSettings?.['prompt-caching'],
+        'include-folder-structure':
+          providerSettings?.['include-folder-structure'],
       },
     };
 
@@ -240,6 +243,9 @@ export class ProfileManager {
           maxTokens: profile.modelParams.max_tokens,
           baseUrl: profile.ephemeralSettings['base-url'],
           apiKey: profile.ephemeralSettings['auth-key'],
+          'prompt-caching': profile.ephemeralSettings['prompt-caching'],
+          'include-folder-structure':
+            profile.ephemeralSettings['include-folder-structure'],
         },
       },
       tools: {

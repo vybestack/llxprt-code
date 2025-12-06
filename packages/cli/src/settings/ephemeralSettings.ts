@@ -48,7 +48,9 @@ export const ephemeralSettingHelp: Record<string, string> = {
   dumponerror:
     'Dump API request body to ~/.llxprt/dumps/ on errors (enabled/disabled, default: disabled)',
   'prompt-caching':
-    'Enable Anthropic prompt caching (off, 5m, 1h - default: off, Anthropic only)',
+    'Enable Anthropic prompt caching (off, 5m, 1h - default: 1h, Anthropic only)',
+  'include-folder-structure':
+    'Include folder structure in system prompts (true/false, default: false). Set true if you need directory context.',
   'rate-limit-throttle':
     'Enable proactive rate limit throttling (on/off, default: on, Anthropic only)',
   'rate-limit-throttle-threshold':
@@ -69,6 +71,8 @@ export const ephemeralSettingHelp: Record<string, string> = {
     'How much the model should think before responding (minimal/low/medium/high, default: undefined)',
   'reasoning.maxTokens':
     'Maximum token budget the model can use for reasoning (positive integer, default: undefined)',
+  'enable-tool-prompts':
+    'Load tool-specific prompts from ~/.llxprt/prompts/tools/** (true/false, default: false)',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
@@ -221,6 +225,15 @@ export function parseEphemeralSettingValue(
       return {
         success: false,
         message: `authOnly must be either 'true' or 'false'`,
+      };
+    }
+  }
+
+  if (key === 'include-folder-structure') {
+    if (typeof parsedValue !== 'boolean') {
+      return {
+        success: false,
+        message: `include-folder-structure must be either 'true' or 'false'`,
       };
     }
   }
@@ -382,6 +395,15 @@ export function parseEphemeralSettingValue(
       return {
         success: false,
         message: `${key} must be a positive integer`,
+      };
+    }
+  }
+
+  if (key === 'enable-tool-prompts') {
+    if (typeof parsedValue !== 'boolean') {
+      return {
+        success: false,
+        message: `enable-tool-prompts must be either 'true' or 'false'`,
       };
     }
   }

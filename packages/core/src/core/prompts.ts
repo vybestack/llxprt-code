@@ -174,16 +174,39 @@ async function buildPromptContext(
 ): Promise<PromptContext> {
   const cwd = process.cwd();
 
+  // Check if folder structure should be included (default: false for better cache hit rates)
+  let includeFolderStructure = false;
+  let enableToolPrompts = false;
+  try {
+    const settingsService = getSettingsService();
+    const folderStructureSetting = settingsService.get(
+      'include-folder-structure',
+    ) as boolean | undefined;
+    if (folderStructureSetting !== undefined) {
+      includeFolderStructure = folderStructureSetting;
+    }
+    const toolPromptsSetting = settingsService.get('enable-tool-prompts') as
+      | boolean
+      | undefined;
+    if (toolPromptsSetting !== undefined) {
+      enableToolPrompts = toolPromptsSetting;
+    }
+  } catch (_error) {
+    // If we can't get settings, use default
+  }
+
   // Generate folder structure for the current working directory
   let folderStructure: string | undefined;
-  try {
-    folderStructure = await getFolderStructure(cwd, {
-      maxItems: 100, // Limit for startup performance
-    });
-    folderStructure = compactFolderStructureSnapshot(folderStructure);
-  } catch (error) {
-    // If folder structure generation fails, continue without it
-    console.warn('Failed to generate folder structure:', error);
+  if (includeFolderStructure) {
+    try {
+      folderStructure = await getFolderStructure(cwd, {
+        maxItems: 100, // Limit for startup performance
+      });
+      folderStructure = compactFolderStructureSnapshot(folderStructure);
+    } catch (error) {
+      // If folder structure generation fails, continue without it
+      console.warn('Failed to generate folder structure:', error);
+    }
   }
 
   const workspaceDirectories = [cwd];
@@ -279,6 +302,7 @@ async function buildPromptContext(
     model: model || 'gemini-1.5-pro',
     enabledTools,
     environment,
+    enableToolPrompts,
   };
 }
 
