@@ -127,9 +127,7 @@ describe('FileCommandLoader', () => {
   // available in the standard CI environment. Therefore, we skip these tests
   // on Windows to prevent CI failures. The core functionality is still
   // validated on Linux and macOS.
-  const itif = (condition: boolean) => (condition ? it : it.skip);
-
-  itif(process.platform !== 'win32')(
+  it.skipIf(process.platform === 'win32')(
     'loads commands from a symlinked directory',
     async () => {
       const userCommandsDir = Storage.getUserCommandsDir();
@@ -154,7 +152,7 @@ describe('FileCommandLoader', () => {
     },
   );
 
-  itif(process.platform !== 'win32')(
+  it.skipIf(process.platform === 'win32')(
     'loads commands from a symlinked subdirectory',
     async () => {
       const userCommandsDir = Storage.getUserCommandsDir();
