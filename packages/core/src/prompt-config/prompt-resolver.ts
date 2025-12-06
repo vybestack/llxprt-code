@@ -5,7 +5,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import { PromptContext } from './types.js';
+
+const logger = new DebugLogger('llxprt:prompt-config:resolver');
 
 /**
  * Result of resolving a single file
@@ -277,7 +280,7 @@ export class PromptResolver {
           }
 
           // Log warning "Tool prompt not found: " + tool
-          console.warn(`Tool prompt not found: ${tool}`);
+          logger.warn(() => `Tool prompt not found: ${tool}`);
         }
       }
     }

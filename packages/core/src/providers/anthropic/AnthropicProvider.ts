@@ -1685,10 +1685,13 @@ export class AnthropicProvider extends BaseProvider {
             const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
             // Track cumulative session metrics
+            // Note: input_tokens includes cached tokens, so uncached = input - cacheRead
+            const inputTokens = usage.input_tokens ?? 0;
+            const uncachedTokens = Math.max(inputTokens - cacheRead, 0);
             this.cacheSessionMetrics.totalRequests++;
             this.cacheSessionMetrics.cacheReadsTotal += cacheRead;
             this.cacheSessionMetrics.cacheCreationTotal += cacheCreation;
-            this.cacheSessionMetrics.uncachedTotal += usage.input_tokens ?? 0;
+            this.cacheSessionMetrics.uncachedTotal += uncachedTokens;
 
             cacheLogger.debug(
               () =>
@@ -1926,10 +1929,12 @@ export class AnthropicProvider extends BaseProvider {
         const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
         // Track cumulative session metrics
+        // Note: input_tokens includes cached tokens, so uncached = input - cacheRead
+        const uncachedTokens = Math.max(usage.input_tokens - cacheRead, 0);
         this.cacheSessionMetrics.totalRequests++;
         this.cacheSessionMetrics.cacheReadsTotal += cacheRead;
         this.cacheSessionMetrics.cacheCreationTotal += cacheCreation;
-        this.cacheSessionMetrics.uncachedTotal += usage.input_tokens;
+        this.cacheSessionMetrics.uncachedTotal += uncachedTokens;
 
         cacheLogger.debug(
           () =>

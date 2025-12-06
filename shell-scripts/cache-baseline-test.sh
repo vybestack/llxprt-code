@@ -58,20 +58,20 @@ INPUT_TOKENS_TOTAL=0
 if [[ -d "${DEBUG_DIR}" ]]; then
     for logfile in "${DEBUG_DIR}"/*.log; do
         if [[ -f "${logfile}" ]]; then
-            # Extract cache_read_input_tokens
-            read_tokens=$(grep -oP 'cache_read_input_tokens["\s:]+\K\d+' "${logfile}" 2>/dev/null | awk '{sum+=$1} END {print sum}') || true
+            # Extract cache_read_input_tokens (portable sed/awk instead of grep -P)
+            read_tokens=$(sed -n 's/.*cache_read_input_tokens[": ]*\([0-9][0-9]*\).*/\1/p' "${logfile}" 2>/dev/null | awk '{sum+=$1} END {print sum+0}') || true
             if [[ -n "${read_tokens}" ]] && [[ "${read_tokens}" -gt 0 ]]; then
                 CACHE_READ_TOTAL=$((CACHE_READ_TOTAL + read_tokens))
             fi
 
-            # Extract cache_creation_input_tokens
-            creation_tokens=$(grep -oP 'cache_creation_input_tokens["\s:]+\K\d+' "${logfile}" 2>/dev/null | awk '{sum+=$1} END {print sum}') || true
+            # Extract cache_creation_input_tokens (portable sed/awk instead of grep -P)
+            creation_tokens=$(sed -n 's/.*cache_creation_input_tokens[": ]*\([0-9][0-9]*\).*/\1/p' "${logfile}" 2>/dev/null | awk '{sum+=$1} END {print sum+0}') || true
             if [[ -n "${creation_tokens}" ]] && [[ "${creation_tokens}" -gt 0 ]]; then
                 CACHE_CREATION_TOTAL=$((CACHE_CREATION_TOTAL + creation_tokens))
             fi
 
-            # Extract input_tokens (for reference)
-            input_tokens=$(grep -oP 'input_tokens["\s:]+\K\d+' "${logfile}" 2>/dev/null | awk '{sum+=$1} END {print sum}') || true
+            # Extract input_tokens (for reference - portable sed/awk)
+            input_tokens=$(sed -n 's/.*"input_tokens"[": ]*\([0-9][0-9]*\).*/\1/p' "${logfile}" 2>/dev/null | awk '{sum+=$1} END {print sum+0}') || true
             if [[ -n "${input_tokens}" ]] && [[ "${input_tokens}" -gt 0 ]]; then
                 INPUT_TOKENS_TOTAL=$((INPUT_TOKENS_TOTAL + input_tokens))
             fi
@@ -81,12 +81,13 @@ fi
 
 # Also check the main log file
 if [[ -f "${LOG_FILE}" ]]; then
-    read_tokens=$(grep -oP 'cache_read_input_tokens["\s:]+\K\d+' "${LOG_FILE}" 2>/dev/null | awk '{sum+=$1} END {print sum}') || true
+    # Portable sed/awk instead of grep -P (macOS compatible)
+    read_tokens=$(sed -n 's/.*cache_read_input_tokens[": ]*\([0-9][0-9]*\).*/\1/p' "${LOG_FILE}" 2>/dev/null | awk '{sum+=$1} END {print sum+0}') || true
     if [[ -n "${read_tokens}" ]] && [[ "${read_tokens}" -gt 0 ]]; then
         CACHE_READ_TOTAL=$((CACHE_READ_TOTAL + read_tokens))
     fi
 
-    creation_tokens=$(grep -oP 'cache_creation_input_tokens["\s:]+\K\d+' "${LOG_FILE}" 2>/dev/null | awk '{sum+=$1} END {print sum}') || true
+    creation_tokens=$(sed -n 's/.*cache_creation_input_tokens[": ]*\([0-9][0-9]*\).*/\1/p' "${LOG_FILE}" 2>/dev/null | awk '{sum+=$1} END {print sum+0}') || true
     if [[ -n "${creation_tokens}" ]] && [[ "${creation_tokens}" -gt 0 ]]; then
         CACHE_CREATION_TOTAL=$((CACHE_CREATION_TOTAL + creation_tokens))
     fi
