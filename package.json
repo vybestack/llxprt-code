@@ -58,11 +58,6 @@
     "clean": "node scripts/clean.js"
   },
   "overrides": {
-    "wrap-ansi": "9.0.2",
-    "ansi-regex": "5.0.1",
-    "cliui": {
-      "wrap-ansi": "7.0.0"
-    },
     "jws": "^4.0.1",
     "jsonwebtoken": {
       "jws": "^3.2.3"
