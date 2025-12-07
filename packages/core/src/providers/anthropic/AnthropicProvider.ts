@@ -83,14 +83,6 @@ export class AnthropicProvider extends BaseProvider {
   // Rate limit state tracking - updated on each API response
   private lastRateLimitInfo?: AnthropicRateLimitInfo;
 
-  // Cache session metrics - cumulative tracking across requests
-  private cacheSessionMetrics = {
-    totalRequests: 0,
-    cacheReadsTotal: 0,
-    cacheCreationTotal: 0,
-    uncachedTotal: 0,
-  };
-
   constructor(
     apiKey?: string,
     baseURL?: string,
@@ -775,14 +767,6 @@ export class AnthropicProvider extends BaseProvider {
     );
     const { contents: content, tools } = options;
 
-    // Log request counter at the START of each request
-    const cacheLogger = this.getCacheLogger();
-    const nextRequestNum = this.cacheSessionMetrics.totalRequests + 1;
-    cacheLogger.debug(
-      () =>
-        `Request #${nextRequestNum}: session totals so far - reads=${this.cacheSessionMetrics.cacheReadsTotal}, writes=${this.cacheSessionMetrics.cacheCreationTotal}, uncached=${this.cacheSessionMetrics.uncachedTotal}`,
-    );
-
     // Read reasoning settings from options.settings (SettingsService) - same pattern as OpenAI
     // This is the correct way to access ephemeral settings that are applied via profiles
     const reasoningEnabled = options.settings.get('reasoning.enabled') as
@@ -1383,6 +1367,7 @@ export class AnthropicProvider extends BaseProvider {
       '1h';
     const wantCaching = cachingSetting !== 'off';
     const ttl = cachingSetting === '1h' ? '1h' : '5m';
+    const cacheLogger = this.getCacheLogger();
 
     if (wantCaching) {
       cacheLogger.debug(() => `Prompt caching enabled with TTL: ${ttl}`);
@@ -1684,24 +1669,10 @@ export class AnthropicProvider extends BaseProvider {
             const cacheRead = usage.cache_read_input_tokens ?? 0;
             const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
-            // Track cumulative session metrics
-            // Note: input_tokens includes cached tokens, so uncached = input - cacheRead
-            const inputTokens = usage.input_tokens ?? 0;
-            const uncachedTokens = Math.max(inputTokens - cacheRead, 0);
-            this.cacheSessionMetrics.totalRequests++;
-            this.cacheSessionMetrics.cacheReadsTotal += cacheRead;
-            this.cacheSessionMetrics.cacheCreationTotal += cacheCreation;
-            this.cacheSessionMetrics.uncachedTotal += uncachedTokens;
-
             cacheLogger.debug(
               () =>
                 `[AnthropicProvider streaming] Emitting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
             );
-
-            // Log running totals every 5 requests
-            if (this.cacheSessionMetrics.totalRequests % 5 === 0) {
-              this.logSessionCacheSummary();
-            }
 
             if (cacheRead > 0 || cacheCreation > 0) {
               cacheLogger.debug(() => {
@@ -1928,23 +1899,10 @@ export class AnthropicProvider extends BaseProvider {
         const cacheRead = usage.cache_read_input_tokens ?? 0;
         const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
-        // Track cumulative session metrics
-        // Note: input_tokens includes cached tokens, so uncached = input - cacheRead
-        const uncachedTokens = Math.max(usage.input_tokens - cacheRead, 0);
-        this.cacheSessionMetrics.totalRequests++;
-        this.cacheSessionMetrics.cacheReadsTotal += cacheRead;
-        this.cacheSessionMetrics.cacheCreationTotal += cacheCreation;
-        this.cacheSessionMetrics.uncachedTotal += uncachedTokens;
-
         cacheLogger.debug(
           () =>
             `[AnthropicProvider non-streaming] Setting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
         );
-
-        // Log running totals every 5 requests
-        if (this.cacheSessionMetrics.totalRequests % 5 === 0) {
-          this.logSessionCacheSummary();
-        }
 
         if (cacheRead > 0 || cacheCreation > 0) {
           cacheLogger.debug(() => {
@@ -2013,12 +1971,6 @@ export class AnthropicProvider extends BaseProvider {
       );
       return true;
     }
-
-    // Log session summary on non-retryable errors (session likely ending)
-    this.getCacheLogger().debug(
-      () => 'Non-retryable error encountered, logging session summary',
-    );
-    this.logSessionCacheSummary();
 
     return false;
   }
@@ -2290,39 +2242,4 @@ export class AnthropicProvider extends BaseProvider {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  /**
-   * Log session cache summary metrics
-   * Call this at the end of a session to report cumulative cache performance
-   */
-  logSessionCacheSummary(): void {
-    const cacheLogger = this.getCacheLogger();
-    const metrics = this.cacheSessionMetrics;
-
-    if (metrics.totalRequests === 0) {
-      return;
-    }
-
-    const totalCached = metrics.cacheReadsTotal + metrics.cacheCreationTotal;
-    const totalTokens = totalCached + metrics.uncachedTotal;
-    const hitRate =
-      totalTokens > 0 ? (metrics.cacheReadsTotal / totalTokens) * 100 : 0;
-
-    cacheLogger.debug(
-      () =>
-        `Session cache summary: hit_rate=${hitRate.toFixed(1)}%, reads=${metrics.cacheReadsTotal}, writes=${metrics.cacheCreationTotal}, uncached=${metrics.uncachedTotal}, requests=${metrics.totalRequests}`,
-    );
-  }
-
-  /**
-   * Reset session cache metrics
-   * Call this to start tracking a new session
-   */
-  resetSessionCacheMetrics(): void {
-    this.cacheSessionMetrics = {
-      totalRequests: 0,
-      cacheReadsTotal: 0,
-      cacheCreationTotal: 0,
-      uncachedTotal: 0,
-    };
-  }
 }

@@ -91,6 +91,12 @@ if [[ -f "${LOG_FILE}" ]]; then
     if [[ -n "${creation_tokens}" ]] && [[ "${creation_tokens}" -gt 0 ]]; then
         CACHE_CREATION_TOTAL=$((CACHE_CREATION_TOTAL + creation_tokens))
     fi
+
+    # Extract input_tokens from main log file (portable sed/awk)
+    input_tokens=$(sed -n 's/.*"input_tokens"[": ]*\([0-9][0-9]*\).*/\1/p' "${LOG_FILE}" 2>/dev/null | awk '{sum+=$1} END {print sum+0}') || true
+    if [[ -n "${input_tokens}" ]] && [[ "${input_tokens}" -gt 0 ]]; then
+        INPUT_TOKENS_TOTAL=$((INPUT_TOKENS_TOTAL + input_tokens))
+    fi
 fi
 
 echo "Cache Read Tokens (hits):     ${CACHE_READ_TOTAL}"

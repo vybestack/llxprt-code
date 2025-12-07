@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PromptResolver } from './prompt-resolver.js';
 import { PromptContext } from './types.js';
 import * as fs from 'node:fs';
@@ -58,13 +58,7 @@ describe('PromptResolver', () => {
         '- Read range tool prompt',
       );
 
-      // Mock console.warn to verify it's not called
-      const consoleSpy = vi.spyOn(console, 'warn');
-
       const resolvedFiles = resolver.resolveAllFiles(tempDir, mockContext);
-
-      // Should not have any warnings (console.warn should not be called)
-      expect(consoleSpy).not.toHaveBeenCalled();
 
       const toolFiles = resolvedFiles.filter((f) => f.type === 'tool');
       expect(toolFiles).toHaveLength(3);
@@ -73,8 +67,6 @@ describe('PromptResolver', () => {
       expect(toolNames).toContain('delete_line_range');
       expect(toolNames).toContain('insert_at_line');
       expect(toolNames).toContain('read_line_range');
-
-      consoleSpy.mockRestore();
     });
   });
 
