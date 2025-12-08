@@ -1768,9 +1768,17 @@ describe('AnthropicProvider', () => {
         expect(rateLimitInfo?.tokensRemaining).toBeUndefined();
       });
 
-      it('should not extract headers in streaming mode', async () => {
-        // Disable streaming setting to enable actual streaming (confusing naming)
+      it('should extract rate limit headers in streaming mode using withResponse()', async () => {
         settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
+
+        const mockHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '950',
+          'anthropic-ratelimit-requests-reset': '2025-11-21T12:00:00Z',
+          'anthropic-ratelimit-tokens-limit': '100000',
+          'anthropic-ratelimit-tokens-remaining': '95000',
+          'anthropic-ratelimit-tokens-reset': '2025-11-21T12:00:00Z',
+        });
 
         const mockStream = {
           async *[Symbol.asyncIterator]() {
@@ -1781,7 +1789,14 @@ describe('AnthropicProvider', () => {
           },
         };
 
-        mockMessagesCreate.mockResolvedValue(mockStream);
+        const mockWithResponse = vi.fn().mockResolvedValue({
+          data: mockStream,
+          response: { headers: mockHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValue({
+          withResponse: mockWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
 
         const messages: IContent[] = [
           {
@@ -1796,11 +1811,149 @@ describe('AnthropicProvider', () => {
 
         await generator.next();
 
-        // Rate limit info should not be updated in streaming mode
         const rateLimitInfo = provider.getRateLimitInfo();
-        // It will be undefined or unchanged from previous state
-        // We're testing that streaming doesn't crash trying to access headers
-        expect(rateLimitInfo).toBeUndefined();
+        expect(rateLimitInfo).toBeDefined();
+        expect(rateLimitInfo?.requestsLimit).toBe(1000);
+        expect(rateLimitInfo?.requestsRemaining).toBe(950);
+        expect(rateLimitInfo?.tokensLimit).toBe(100000);
+        expect(rateLimitInfo?.tokensRemaining).toBe(95000);
+      });
+
+      it('should handle streaming errors and wrap them for retry', async () => {
+        settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
+
+        const mockHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '950',
+        });
+
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: 'Hello' },
+            };
+            throw new Error('Connection terminated');
+          },
+        };
+
+        const mockWithResponse = vi.fn().mockResolvedValue({
+          data: mockStream,
+          response: { headers: mockHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValue({
+          withResponse: mockWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Say hello' }],
+          },
+        ];
+
+        const generator = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+
+        await generator.next();
+
+        await expect(generator.next()).rejects.toThrow('Connection terminated');
+      });
+
+      it('should work with proactive throttling when streaming', async () => {
+        settingsService.setProviderSetting('anthropic', 'streaming', 'enabled');
+        settingsService.setProviderSetting(
+          'anthropic',
+          'rate-limit-throttle',
+          'on',
+        );
+
+        // First call establishes low rate limit
+        const firstHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '40', // 4% remaining
+          'anthropic-ratelimit-requests-reset': new Date(
+            Date.now() + 5000,
+          ).toISOString(),
+        });
+
+        const firstStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: 'First' },
+            };
+          },
+        };
+
+        const firstWithResponse = vi.fn().mockResolvedValue({
+          data: firstStream,
+          response: { headers: firstHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: firstWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First request' }],
+          },
+        ];
+
+        const generator1 = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator1.next();
+
+        // Verify rate limit was extracted
+        const rateLimitInfo = provider.getRateLimitInfo();
+        expect(rateLimitInfo).toBeDefined();
+        expect(rateLimitInfo?.requestsRemaining).toBe(40);
+
+        // Second call should be throttled
+        const secondHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '39',
+        });
+
+        const secondStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: 'Second' },
+            };
+          },
+        };
+
+        const secondWithResponse = vi.fn().mockResolvedValue({
+          data: secondStream,
+          response: { headers: secondHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: secondWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        // Use fake timers to simulate throttling
+        vi.useFakeTimers();
+
+        const generator2Promise = (async () => {
+          const gen = provider.generateChatCompletion(
+            buildCallOptions(messages),
+          );
+          await gen.next();
+        })();
+
+        await vi.runAllTimersAsync();
+        await generator2Promise;
+
+        vi.useRealTimers();
+
+        expect(secondWithResponse).toHaveBeenCalled();
       });
 
       it('should handle partial rate limit headers', async () => {
