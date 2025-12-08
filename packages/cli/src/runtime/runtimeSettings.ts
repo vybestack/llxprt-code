@@ -1434,10 +1434,15 @@ export async function switchActiveProvider(
     }
   }
 
+  // @requirement:Issue-181 - Capture authOnly and user-set OAuth defaults before clearing
   const existingEphemerals =
     typeof config.getEphemeralSettings === 'function'
       ? config.getEphemeralSettings()
       : {};
+  const authOnlyBeforeSwitch = existingEphemerals.authOnly;
+  const contextLimitBeforeSwitch = existingEphemerals['context-limit'];
+  const maxTokensBeforeSwitch = existingEphemerals.max_tokens;
+
   const keysBeforeClearing = Object.keys(existingEphemerals);
   for (const key of keysBeforeClearing) {
     const shouldPreserve =
@@ -1684,6 +1689,50 @@ export async function switchActiveProvider(
           );
         }
       }
+    }
+  }
+
+  // @requirement:Issue-181 - Apply sensible defaults for Anthropic OAuth (subscription mode)
+  if (name === 'anthropic') {
+    const oauthManager = getCliOAuthManager();
+    const authOnlyEnabled =
+      authOnlyBeforeSwitch === true || authOnlyBeforeSwitch === 'true';
+    const oauthIsEnabled = oauthManager?.isOAuthEnabled('anthropic') ?? false;
+
+    // Apply defaults when OAuth is being used (either explicitly enabled or via authOnly)
+    if (authOnlyEnabled || oauthIsEnabled) {
+      // Set context_limit default if not already set by user (restore user value or use default)
+      if (contextLimitBeforeSwitch !== undefined) {
+        config.setEphemeralSetting('context-limit', contextLimitBeforeSwitch);
+        logger.debug(
+          () =>
+            `[cli-runtime] Preserved user-set context-limit=${contextLimitBeforeSwitch} for Anthropic OAuth mode (Issue #181)`,
+        );
+      } else {
+        config.setEphemeralSetting('context-limit', 190000);
+        logger.debug(
+          () =>
+            '[cli-runtime] Set default context-limit=190000 for Anthropic OAuth mode (Issue #181)',
+        );
+      }
+
+      // Set max_tokens default if not already set by user (restore user value or use default)
+      if (maxTokensBeforeSwitch !== undefined) {
+        config.setEphemeralSetting('max_tokens', maxTokensBeforeSwitch);
+        logger.debug(
+          () =>
+            `[cli-runtime] Preserved user-set max_tokens=${maxTokensBeforeSwitch} for Anthropic OAuth mode (Issue #181)`,
+        );
+      } else {
+        config.setEphemeralSetting('max_tokens', 10000);
+        logger.debug(
+          () =>
+            '[cli-runtime] Set default max_tokens=10000 for Anthropic OAuth mode (Issue #181)',
+        );
+      }
+
+      // Restore authOnly setting
+      config.setEphemeralSetting('authOnly', authOnlyBeforeSwitch);
     }
   }
 
