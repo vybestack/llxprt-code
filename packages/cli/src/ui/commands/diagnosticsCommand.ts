@@ -140,6 +140,20 @@ export const diagnosticsCommand: SlashCommand = {
         }
       }
 
+      // Add dumpcontext status
+      const dumpcontextMode =
+        (ephemeralSettings['dumpcontext'] ??
+        ephemeralSettings['dumponerror'] === 'enabled')
+          ? 'error'
+          : 'off';
+      if (dumpcontextMode && dumpcontextMode !== 'off') {
+        diagnostics.push(`\n## Context Dumping`);
+        diagnostics.push(`- Mode: ${dumpcontextMode}`);
+        diagnostics.push(
+          `- Dump Directory: ${process.env.HOME || '~'}/.llxprt/dumps/`,
+        );
+      }
+
       diagnostics.push('\n## System Information');
       diagnostics.push(`- Platform: ${process.platform}`);
       diagnostics.push(`- Node Version: ${process.version}`);
