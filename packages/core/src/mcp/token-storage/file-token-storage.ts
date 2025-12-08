@@ -79,7 +79,8 @@ export class FileTokenStorage extends BaseTokenStorage {
     } catch (error: unknown) {
       const err = error as NodeJS.ErrnoException & { message?: string };
       if (err.code === 'ENOENT') {
-        throw new Error('Token file does not exist');
+        // No token file exists yet - return empty collection
+        return new Map();
       }
       if (
         err.message?.includes('Invalid encrypted data format') ||
