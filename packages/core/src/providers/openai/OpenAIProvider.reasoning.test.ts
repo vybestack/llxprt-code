@@ -5,12 +5,12 @@
  * @requirement REQ-THINK-003
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { OpenAIProvider } from '../OpenAIProvider';
+import { OpenAIProvider } from './OpenAIProvider.js';
 import type {
   ThinkingBlock,
   IContent,
-} from '../../../services/history/IContent';
-import type { NormalizedGenerateChatOptions } from '../../BaseProvider';
+} from '../../services/history/IContent.js';
+import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type OpenAI from 'openai';
 
 describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', () => {
@@ -901,9 +901,7 @@ describe('OpenAIProvider buildMessagesWithReasoning @plan:PLAN-20251202-THINKING
       ).buildMessagesWithReasoning(contents, options);
 
       expect(result).toHaveLength(1);
-      // Empty thinking should result in no reasoning_content or empty reasoning_content
       const hasReasoningContent = 'reasoning_content' in result[0];
-      // Verify that if reasoning_content exists, it's empty
       expect(hasReasoningContent).toBe(true);
       expect(
         (result[0] as { reasoning_content?: string }).reasoning_content,

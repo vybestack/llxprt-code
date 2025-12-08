@@ -406,8 +406,8 @@ decision = "deny"
       rules.forEach((rule) => {
         const priority = rule.priority ?? 0;
         expect(priority).toBeGreaterThanOrEqual(0);
-        // If priority > 0, it must be < 4.0
-        const isValidPriority = priority === 0 || priority < 4.0;
+        const isValidPriority =
+          priority === 0 || (priority >= 1.0 && priority < 4.0);
         expect(isValidPriority).toBe(true);
       });
     });

@@ -115,9 +115,6 @@ describe('ShellExecutionService programmatic integration tests', () => {
 
       const result = await handle.result;
 
-      // For debugging the flaky test.
-      console.log('Abort test result:', result);
-
       expect(result.aborted).toBe(true);
       // Unix: Should not have exited cleanly
       const exitedCleanly = result.exitCode === 0 && result.signal === null;
@@ -146,9 +143,6 @@ describe('ShellExecutionService programmatic integration tests', () => {
       setTimeout(() => abortController.abort(), 50);
 
       const result = await handle.result;
-
-      // For debugging the flaky test.
-      console.log('Abort test result:', result);
 
       // Windows: Just verify it was marked as aborted
       expect(result.aborted).toBe(true);
