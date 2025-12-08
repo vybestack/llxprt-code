@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ApiError } from '@google/genai';
 import type { HttpError } from './retry.js';
@@ -182,8 +181,9 @@ describe('retryWithBackoff', () => {
 
   it('should use default shouldRetry if not provided, retrying on generic error with status 429', async () => {
     const mockFn = vi.fn(async () => {
-      const error = new Error('Too Many Requests') as any;
-      error.status = 429;
+      const error = Object.assign(new Error('Too Many Requests'), {
+        status: 429,
+      });
       throw error;
     });
 
@@ -203,8 +203,7 @@ describe('retryWithBackoff', () => {
 
   it('should use default shouldRetry if not provided, not retrying on generic error with status 400', async () => {
     const mockFn = vi.fn(async () => {
-      const error = new Error('Bad Request') as any;
-      error.status = 400;
+      const error = Object.assign(new Error('Bad Request'), { status: 400 });
       throw error;
     });
 
@@ -294,6 +293,115 @@ describe('retryWithBackoff', () => {
     [...firstDelaySet, ...secondDelaySet].forEach((d) => {
       expect(d).toBeGreaterThanOrEqual(100 * 0.7);
       expect(d).toBeLessThanOrEqual(100 * 1.3);
+    });
+  });
+
+  describe('network transient errors', () => {
+    it('should retry on undici "terminated" error', async () => {
+      let attempts = 0;
+      const mockFn = vi.fn(async () => {
+        attempts++;
+        if (attempts === 1) {
+          // Simulate undici termination error
+          const error = new TypeError('terminated');
+          throw error;
+        }
+        return 'success';
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toBe('success');
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry on connection terminated error', async () => {
+      let attempts = 0;
+      const mockFn = vi.fn(async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw new Error('connection terminated');
+        }
+        return 'success';
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toBe('success');
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry on ECONNRESET error code', async () => {
+      let attempts = 0;
+      const mockFn = vi.fn(async () => {
+        attempts++;
+        if (attempts === 1) {
+          const error = Object.assign(new Error('socket hang up'), {
+            code: 'ECONNRESET',
+          });
+          throw error;
+        }
+        return 'success';
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toBe('success');
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry on fetch failed error', async () => {
+      let attempts = 0;
+      const mockFn = vi.fn(async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw new Error('fetch failed');
+        }
+        return 'success';
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toBe('success');
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not retry on non-transient errors', async () => {
+      const mockFn = vi.fn(async () => {
+        throw new Error('Some non-transient error');
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      await expect(promise).rejects.toThrow('Some non-transient error');
+      expect(mockFn).toHaveBeenCalledTimes(1);
     });
   });
 
