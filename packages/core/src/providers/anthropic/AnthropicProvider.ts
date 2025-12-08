@@ -44,6 +44,11 @@ import {
   isNetworkTransientError,
 } from '../../utils/retry.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import {
+  shouldDumpSDKContext,
+  dumpSDKContext,
+} from '../utils/dumpSDKContext.js';
+import type { DumpMode } from '../utils/dumpContext.js';
 
 /**
  * Rate limit information from Anthropic API response headers
@@ -1332,7 +1337,10 @@ export class AnthropicProvider extends BaseProvider {
     const isOAuth = authToken.startsWith('sk-ant-oat');
 
     // Get streaming setting from ephemeral settings (default: enabled)
+    // Check invocation ephemerals first, then fall back to provider config
+    const invocationEphemerals = options.invocation?.ephemerals ?? {};
     const streamingSetting =
+      (invocationEphemerals['streaming'] as string | undefined) ??
       this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
     const streamingEnabled = streamingSetting !== 'disabled';
 
@@ -1543,10 +1551,26 @@ export class AnthropicProvider extends BaseProvider {
     // Proactively throttle if approaching rate limits
     await this.waitForRateLimitIfNeeded(configEphemeralSettings);
 
+    // Get dump mode from ephemeral settings
+    const dumpMode = options.invocation?.ephemerals?.dumpcontext as
+      | DumpMode
+      | undefined;
+    const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
+    const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
+
+    // Prepare SDK dump request data if dumping is enabled
+    const baseURL =
+      options.resolved.baseURL ||
+      this.getBaseURL() ||
+      'https://api.anthropic.com';
+
     // Use withResponse() to access headers in both streaming and non-streaming modes
     const rateLimitLogger = this.getRateLimitLogger();
 
     let responseHeaders: Headers | undefined;
+    let response:
+      | Anthropic.Message
+      | AsyncIterable<Anthropic.MessageStreamEvent>;
 
     // Create a wrapper that calls withResponse() to get headers
     const apiCallWithResponse = async () => {
@@ -1568,54 +1592,86 @@ export class AnthropicProvider extends BaseProvider {
       return { data: await promise, response: undefined };
     };
 
-    const result = await retryWithBackoff(apiCallWithResponse, {
-      maxAttempts,
-      initialDelayMs,
-      shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
-      trackThrottleWaitTime: this.throttleTracker,
-    });
-
-    const response = result.data;
-    if (result.response) {
-      responseHeaders = result.response.headers;
-
-      // Extract and process rate limit headers
-      const rateLimitInfo = this.extractRateLimitHeaders(responseHeaders);
-      this.lastRateLimitInfo = rateLimitInfo;
-
-      rateLimitLogger.debug(() => {
-        const parts: string[] = [];
-        if (
-          rateLimitInfo.requestsRemaining !== undefined &&
-          rateLimitInfo.requestsLimit !== undefined
-        ) {
-          parts.push(
-            `requests=${rateLimitInfo.requestsRemaining}/${rateLimitInfo.requestsLimit}`,
-          );
-        }
-        if (
-          rateLimitInfo.tokensRemaining !== undefined &&
-          rateLimitInfo.tokensLimit !== undefined
-        ) {
-          parts.push(
-            `tokens=${rateLimitInfo.tokensRemaining}/${rateLimitInfo.tokensLimit}`,
-          );
-        }
-        if (
-          rateLimitInfo.inputTokensRemaining !== undefined &&
-          rateLimitInfo.inputTokensLimit !== undefined
-        ) {
-          parts.push(
-            `input_tokens=${rateLimitInfo.inputTokensRemaining}/${rateLimitInfo.inputTokensLimit}`,
-          );
-        }
-        return parts.length > 0
-          ? `Rate limits: ${parts.join(', ')}`
-          : 'Rate limits: no data';
+    try {
+      const result = await retryWithBackoff(apiCallWithResponse, {
+        maxAttempts,
+        initialDelayMs,
+        shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
+        trackThrottleWaitTime: this.throttleTracker,
       });
 
-      // Check and warn if approaching limits
-      this.checkRateLimits(rateLimitInfo);
+      response = result.data;
+
+      // Dump successful request if enabled
+      if (shouldDumpSuccess) {
+        await dumpSDKContext(
+          'anthropic',
+          '/v1/messages',
+          requestBody,
+          streamingEnabled ? { streaming: true } : response,
+          false,
+          baseURL,
+        );
+      }
+
+      if (result.response) {
+        responseHeaders = result.response.headers;
+
+        // Extract and process rate limit headers
+        const rateLimitInfo = this.extractRateLimitHeaders(responseHeaders);
+        this.lastRateLimitInfo = rateLimitInfo;
+
+        rateLimitLogger.debug(() => {
+          const parts: string[] = [];
+          if (
+            rateLimitInfo.requestsRemaining !== undefined &&
+            rateLimitInfo.requestsLimit !== undefined
+          ) {
+            parts.push(
+              `requests=${rateLimitInfo.requestsRemaining}/${rateLimitInfo.requestsLimit}`,
+            );
+          }
+          if (
+            rateLimitInfo.tokensRemaining !== undefined &&
+            rateLimitInfo.tokensLimit !== undefined
+          ) {
+            parts.push(
+              `tokens=${rateLimitInfo.tokensRemaining}/${rateLimitInfo.tokensLimit}`,
+            );
+          }
+          if (
+            rateLimitInfo.inputTokensRemaining !== undefined &&
+            rateLimitInfo.inputTokensLimit !== undefined
+          ) {
+            parts.push(
+              `input_tokens=${rateLimitInfo.inputTokensRemaining}/${rateLimitInfo.inputTokensLimit}`,
+            );
+          }
+          return parts.length > 0
+            ? `Rate limits: ${parts.join(', ')}`
+            : 'Rate limits: no data';
+        });
+
+        // Check and warn if approaching limits
+        this.checkRateLimits(rateLimitInfo);
+      }
+    } catch (error) {
+      // Dump error if enabled
+      if (shouldDumpError) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        await dumpSDKContext(
+          'anthropic',
+          '/v1/messages',
+          requestBody,
+          { error: errorMessage },
+          true,
+          baseURL,
+        );
+      }
+
+      // Re-throw the error
+      throw error;
     }
 
     if (streamingEnabled) {

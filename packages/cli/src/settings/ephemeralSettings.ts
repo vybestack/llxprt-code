@@ -46,7 +46,9 @@ export const ephemeralSettingHelp: Record<string, string> = {
   authOnly:
     'Force providers to use OAuth authentication only, ignoring API keys and environment variables',
   dumponerror:
-    'Dump API request body to ~/.llxprt/dumps/ on errors (enabled/disabled, default: disabled)',
+    'Dump API request body to ~/.llxprt/dumps/ on errors (enabled/disabled, default: disabled) - DEPRECATED: use dumpcontext instead',
+  dumpcontext:
+    'Control context dumping: now (immediate), status (show current), on (before every request), error (only on errors), off (disabled, default)',
   'prompt-caching':
     'Enable Anthropic prompt caching (off, 5m, 1h - default: 1h, Anthropic only)',
   'include-folder-structure':
@@ -258,6 +260,21 @@ export function parseEphemeralSettingValue(
     ) {
       parsedValue =
         parsedValue.toLowerCase() === 'true' ? 'enabled' : 'disabled';
+    } else {
+      return {
+        success: false,
+        message: `Invalid ${key} mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
+      };
+    }
+  }
+
+  if (key === 'dumpcontext') {
+    const validModes = ['now', 'status', 'on', 'error', 'off'];
+    if (
+      typeof parsedValue === 'string' &&
+      validModes.includes(parsedValue.toLowerCase())
+    ) {
+      parsedValue = parsedValue.toLowerCase();
     } else {
       return {
         success: false,

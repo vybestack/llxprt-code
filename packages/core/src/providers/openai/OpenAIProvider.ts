@@ -69,6 +69,11 @@ import {
   extractThinkingBlocks,
   type StripPolicy,
 } from '../reasoning/reasoningUtils.js';
+import {
+  shouldDumpSDKContext,
+  dumpSDKContext,
+} from '../utils/dumpSDKContext.js';
+import type { DumpMode } from '../utils/dumpContext.js';
 
 const MAX_TOOL_RESPONSE_CHARS = 1024;
 const MAX_TOOL_RESPONSE_RETRY_CHARS = 512;
@@ -3208,6 +3213,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
+    // Get dump mode from ephemeral settings
+    const dumpMode = ephemeralSettings.dumpcontext as DumpMode | undefined;
+    const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
+    const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
+
     if (streamingEnabled) {
       // Streaming mode - use retry loop with compression support
       let compressedOnce = false;
@@ -3226,6 +3236,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               trackThrottleWaitTime: this.throttleTracker,
             },
           );
+
+          // Dump successful streaming request if enabled
+          if (shouldDumpSuccess) {
+            await dumpSDKContext(
+              'openai',
+              '/v1/chat/completions',
+              requestBody,
+              { streaming: true },
+              false,
+              baseURL || 'https://api.openai.com',
+            );
+          }
+
           break;
         } catch (error) {
           // Special handling for Cerebras/Qwen "Tool not present" errors
@@ -3273,6 +3296,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             continue;
           }
 
+          // Dump error if enabled
+          if (shouldDumpError) {
+            const dumpErrorMessage =
+              error instanceof Error ? error.message : String(error);
+            await dumpSDKContext(
+              'openai',
+              '/v1/chat/completions',
+              requestBody,
+              { error: dumpErrorMessage },
+              true,
+              baseURL || 'https://api.openai.com',
+            );
+          }
+
           // Re-throw other errors as-is
           const capturedErrorMessage =
             error instanceof Error ? error.message : String(error);
@@ -3317,6 +3354,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               trackThrottleWaitTime: this.throttleTracker,
             },
           )) as OpenAI.Chat.Completions.ChatCompletion;
+
+          // Dump successful non-streaming request if enabled
+          if (shouldDumpSuccess) {
+            await dumpSDKContext(
+              'openai',
+              '/v1/chat/completions',
+              requestBody,
+              response,
+              false,
+              baseURL || 'https://api.openai.com',
+            );
+          }
+
           break;
         } catch (error) {
           const errorMessage = String(error);
@@ -3371,6 +3421,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 `[OpenAIProvider] Retrying request after compressing tool responses due to provider 400`,
             );
             continue;
+          }
+
+          // Dump error if enabled
+          if (shouldDumpError) {
+            const dumpErrorMessage =
+              error instanceof Error ? error.message : String(error);
+            await dumpSDKContext(
+              'openai',
+              '/v1/chat/completions',
+              requestBody,
+              { error: dumpErrorMessage },
+              true,
+              baseURL || 'https://api.openai.com',
+            );
           }
 
           const capturedErrorMessage =
