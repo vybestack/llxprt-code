@@ -283,13 +283,7 @@ describe('PromptInstaller', () => {
       expect(reviewFiles).toHaveLength(1);
     });
 
-    it('should set correct file permissions', async () => {
-      // Skip this test entirely on Windows
-      if (isWindows()) {
-        expect(true).toBe(true); // Placeholder assertion
-        return;
-      }
-
+    it.skipIf(isWindows())('should set correct file permissions', async () => {
       const result = await installer.install(testBaseDir, defaultFiles);
       expect(result.success).toBe(true);
 
@@ -304,14 +298,19 @@ describe('PromptInstaller', () => {
       expect(fileMode).toBe(parseInt('644', 8));
     });
 
-    it('should handle permission errors gracefully', async () => {
-      // Skip permission tests on Windows as chmod has no effect
-      if (isWindows()) {
+    it.runIf(isWindows())(
+      'should handle permission errors gracefully on Windows',
+      async () => {
         // On Windows, create a scenario that would fail (e.g., invalid path)
         const result = await installer.install('/invalid:path', defaultFiles);
         expect(result.success).toBe(false);
         expect(result.errors.length).toBeGreaterThan(0);
-      } else {
+      },
+    );
+
+    it.skipIf(isWindows())(
+      'should handle permission errors gracefully on Unix',
+      async () => {
         // Create directory with no write permission
         await fs.mkdir(testBaseDir, { recursive: true, mode: 0o555 });
 
@@ -320,8 +319,8 @@ describe('PromptInstaller', () => {
         expect(result.success).toBe(false);
         expect(result.errors.length).toBeGreaterThan(0);
         expect(result.errors[0]).toContain('Permission denied');
-      }
-    });
+      },
+    );
 
     it('should create parent directories for nested files', async () => {
       const nestedFiles = {
@@ -452,22 +451,27 @@ describe('PromptInstaller', () => {
       expect(result.missing).toHaveLength(0);
     });
 
-    it('should check directory permissions', async () => {
-      // Skip permission tests on Windows as chmod has no effect
-      if (isWindows()) {
+    it.runIf(isWindows())(
+      'should check directory permissions on Windows',
+      async () => {
         // On Windows, just create a directory and verify it exists
         await fs.mkdir(testBaseDir, { recursive: true });
         const result = await installer.validate(testBaseDir);
         // Windows directories are generally writable if they exist
         expect(result.warnings.length).toBeGreaterThanOrEqual(0);
-      } else {
+      },
+    );
+
+    it.skipIf(isWindows())(
+      'should check directory permissions on Unix',
+      async () => {
         await fs.mkdir(testBaseDir, { mode: 0o444, recursive: true });
 
         const result = await installer.validate(testBaseDir);
 
         expect(result.warnings).toContain('Cannot write to directory');
-      }
-    });
+      },
+    );
 
     it('should detect empty files that should have content', async () => {
       await fs.mkdir(testBaseDir, { recursive: true });
@@ -531,16 +535,28 @@ describe('PromptInstaller', () => {
 
       expect(result.success).toBe(true);
 
-      // Skip permission checks on Windows as chmod has no effect
-      if (!isWindows()) {
-        // Verify permissions were fixed
-        const stats = await fs.stat(path.join(testBaseDir, 'core.md'));
-        const mode = stats.mode & parseInt('777', 8);
-        expect(mode).toBe(parseInt('644', 8));
-      } else {
-        // On Windows, just verify the file exists
-        expect(existsSync(path.join(testBaseDir, 'core.md'))).toBe(true);
-      }
+      // Verify the file exists (works on all platforms)
+      expect(existsSync(path.join(testBaseDir, 'core.md'))).toBe(true);
+    });
+
+    it.skipIf(isWindows())('should fix file permissions on Unix', async () => {
+      // Create valid structure with wrong permissions
+      await fs.mkdir(path.join(testBaseDir, 'env'), { recursive: true });
+      await fs.mkdir(path.join(testBaseDir, 'tools'), { recursive: true });
+      await fs.writeFile(
+        path.join(testBaseDir, 'core.md'),
+        defaultFiles['core.md'],
+      );
+      await fs.chmod(path.join(testBaseDir, 'core.md'), 0o600); // Wrong permissions
+
+      const result = await installer.repair(testBaseDir, defaultFiles);
+
+      expect(result.success).toBe(true);
+
+      // Verify permissions were fixed
+      const stats = await fs.stat(path.join(testBaseDir, 'core.md'));
+      const mode = stats.mode & parseInt('777', 8);
+      expect(mode).toBe(parseInt('644', 8));
     });
 
     it('should return success immediately if already valid', async () => {
@@ -556,14 +572,19 @@ describe('PromptInstaller', () => {
       expect(result.repaired).toHaveLength(0);
     });
 
-    it('should report errors that could not be repaired', async () => {
-      // Skip permission tests on Windows as chmod has no effect
-      if (isWindows()) {
+    it.runIf(isWindows())(
+      'should report errors that could not be repaired on Windows',
+      async () => {
         // On Windows, try to create in an invalid location
         const result = await installer.repair('/invalid:path', defaultFiles);
         expect(result.success).toBe(false);
         expect(result.errors.length).toBeGreaterThan(0);
-      } else {
+      },
+    );
+
+    it.skipIf(isWindows())(
+      'should report errors that could not be repaired on Unix',
+      async () => {
         // Create directory with no write permission
         await fs.mkdir(testBaseDir, { recursive: true, mode: 0o555 });
 
@@ -572,8 +593,8 @@ describe('PromptInstaller', () => {
         expect(result.success).toBe(false);
         expect(result.errors.length).toBeGreaterThan(0);
         expect(result.stillInvalid.length).toBeGreaterThan(0);
-      }
-    });
+      },
+    );
   });
 
   describe('backup', () => {
@@ -700,35 +721,39 @@ describe('PromptInstaller', () => {
       expect(result.installed.length + result.skipped.length).toBe(2);
     });
 
-    it('should clean up temp files on write failure', async () => {
-      // Make directory read-only after creation
-      await fs.mkdir(testBaseDir, { recursive: true });
-
-      // Attempt to write a file that will fail
-      const files = { 'test.md': 'content' };
-
-      // Skip permission tests on Windows as chmod has no effect
-      if (isWindows()) {
+    it.runIf(isWindows())(
+      'should clean up temp files on write failure - Windows',
+      async () => {
+        const files = { 'test.md': 'content' };
         // On Windows, simulate a failure by using an invalid path
         const result = await installer.install('/invalid:path', files);
         expect(result.success).toBe(false);
-        return; // Skip temp file check on Windows
-      }
+      },
+    );
 
-      // Make directory read-only
-      await fs.chmod(testBaseDir, 0o555);
+    it.skipIf(isWindows())(
+      'should clean up temp files on write failure - Unix',
+      async () => {
+        // Make directory read-only after creation
+        await fs.mkdir(testBaseDir, { recursive: true });
 
-      const result = await installer.install(testBaseDir, files);
+        const files = { 'test.md': 'content' };
 
-      expect(result.success).toBe(false);
+        // Make directory read-only
+        await fs.chmod(testBaseDir, 0o555);
 
-      // Reset permissions to check for temp files
-      await fs.chmod(testBaseDir, 0o755);
+        const result = await installer.install(testBaseDir, files);
 
-      // No temp files should remain
-      const contents = await fs.readdir(testBaseDir);
-      const tempFiles = contents.filter((f) => f.includes('.tmp'));
-      expect(tempFiles).toHaveLength(0);
-    });
+        expect(result.success).toBe(false);
+
+        // Reset permissions to check for temp files
+        await fs.chmod(testBaseDir, 0o755);
+
+        // No temp files should remain
+        const contents = await fs.readdir(testBaseDir);
+        const tempFiles = contents.filter((f) => f.includes('.tmp'));
+        expect(tempFiles).toHaveLength(0);
+      },
+    );
   });
 });

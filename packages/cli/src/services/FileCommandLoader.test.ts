@@ -116,20 +116,17 @@ describe('FileCommandLoader', () => {
       }),
       '',
     );
-    if (result?.type === 'submit_prompt') {
-      expect(result.content).toBe('This is a test prompt');
-    } else {
-      assert.fail('Incorrect action type');
-    }
+    expect(result?.type).toBe('submit_prompt');
+    type SubmitPromptAction = Extract<typeof result, { type: 'submit_prompt' }>;
+    const submitResult = result as SubmitPromptAction;
+    expect(submitResult.content).toBe('This is a test prompt');
   });
 
   // Symlink creation on Windows requires special permissions that are not
   // available in the standard CI environment. Therefore, we skip these tests
   // on Windows to prevent CI failures. The core functionality is still
   // validated on Linux and macOS.
-  const itif = (condition: boolean) => (condition ? it : it.skip);
-
-  itif(process.platform !== 'win32')(
+  it.skipIf(process.platform === 'win32')(
     'loads commands from a symlinked directory',
     async () => {
       const userCommandsDir = Storage.getUserCommandsDir();
@@ -154,7 +151,7 @@ describe('FileCommandLoader', () => {
     },
   );
 
-  itif(process.platform !== 'win32')(
+  it.skipIf(process.platform === 'win32')(
     'loads commands from a symlinked subdirectory',
     async () => {
       const userCommandsDir = Storage.getUserCommandsDir();
@@ -272,11 +269,13 @@ describe('FileCommandLoader', () => {
       }),
       '',
     );
-    if (userResult?.type === 'submit_prompt') {
-      expect(userResult.content).toBe('User prompt');
-    } else {
-      assert.fail('Incorrect action type for user command');
-    }
+    expect(userResult?.type).toBe('submit_prompt');
+    type SubmitPromptAction2 = Extract<
+      typeof userResult,
+      { type: 'submit_prompt' }
+    >;
+    const submitResult = userResult as SubmitPromptAction2;
+    expect(submitResult.content).toBe('User prompt');
     const projectResult = await commands[1].action?.(
       createMockCommandContext({
         invocation: {
@@ -287,11 +286,17 @@ describe('FileCommandLoader', () => {
       }),
       '',
     );
-    if (projectResult?.type === 'submit_prompt') {
-      expect(projectResult.content).toBe('Project prompt');
-    } else {
-      assert.fail('Incorrect action type for project command');
-    }
+    expect(projectResult?.type).toBe('submit_prompt');
+    assert(
+      projectResult?.type === 'submit_prompt',
+      'Incorrect action type for project command',
+    );
+    type SubmitPromptAction3 = Extract<
+      typeof projectResult,
+      { type: 'submit_prompt' }
+    >;
+    const submitResult2 = projectResult as SubmitPromptAction3;
+    expect(submitResult2.content).toBe('Project prompt');
   });
 
   it('ignores files with TOML syntax errors', async () => {
@@ -573,9 +578,11 @@ describe('FileCommandLoader', () => {
         '',
       );
       expect(result0?.type).toBe('submit_prompt');
-      if (result0?.type === 'submit_prompt') {
-        expect(result0.content).toBe('User deploy command');
-      }
+      assert(
+        result0?.type === 'submit_prompt',
+        'Incorrect action type for user command',
+      );
+      expect(result0.content).toBe('User deploy command');
 
       expect(commands[1].name).toBe('deploy');
       expect(commands[1].extensionName).toBeUndefined();
@@ -590,9 +597,11 @@ describe('FileCommandLoader', () => {
         '',
       );
       expect(result1?.type).toBe('submit_prompt');
-      if (result1?.type === 'submit_prompt') {
-        expect(result1.content).toBe('Project deploy command');
-      }
+      assert(
+        result1?.type === 'submit_prompt',
+        'Incorrect action type for project command',
+      );
+      expect(result1.content).toBe('Project deploy command');
 
       expect(commands[2].name).toBe('deploy');
       expect(commands[2].extensionName).toBe('test-ext');
@@ -608,9 +617,11 @@ describe('FileCommandLoader', () => {
         '',
       );
       expect(result2?.type).toBe('submit_prompt');
-      if (result2?.type === 'submit_prompt') {
-        expect(result2.content).toBe('Extension deploy command');
-      }
+      assert(
+        result2?.type === 'submit_prompt',
+        'Incorrect action type for extension command',
+      );
+      expect(result2.content).toBe('Extension deploy command');
     });
 
     it('only loads commands from active extensions', async () => {
@@ -757,11 +768,8 @@ describe('FileCommandLoader', () => {
         }),
         '',
       );
-      if (result?.type === 'submit_prompt') {
-        expect(result.content).toBe('Nested command from extension a');
-      } else {
-        assert.fail('Incorrect action type');
-      }
+      assert(result?.type === 'submit_prompt', 'Incorrect action type');
+      expect(result.content).toBe('Nested command from extension a');
     });
   });
 
@@ -791,9 +799,8 @@ describe('FileCommandLoader', () => {
         'do something cool',
       );
       expect(result?.type).toBe('submit_prompt');
-      if (result?.type === 'submit_prompt') {
-        expect(result.content).toBe('The user wants to: do something cool');
-      }
+      assert(result?.type === 'submit_prompt', 'Incorrect action type');
+      expect(result.content).toBe('The user wants to: do something cool');
     });
   });
 
@@ -823,11 +830,10 @@ describe('FileCommandLoader', () => {
         '1.2.0 added "a feature"',
       );
       expect(result?.type).toBe('submit_prompt');
-      if (result?.type === 'submit_prompt') {
-        const expectedContent =
-          'This is the instruction.\n\n/model_led 1.2.0 added "a feature"';
-        expect(result.content).toBe(expectedContent);
-      }
+      assert(result?.type === 'submit_prompt', 'Incorrect action type');
+      const expectedContent =
+        'This is the instruction.\n\n/model_led 1.2.0 added "a feature"';
+      expect(result.content).toBe(expectedContent);
     });
   });
 
@@ -895,9 +901,8 @@ describe('FileCommandLoader', () => {
       );
 
       expect(result?.type).toBe('submit_prompt');
-      if (result?.type === 'submit_prompt') {
-        expect(result.content).toBe('Run hello');
-      }
+      assert(result?.type === 'submit_prompt', 'Incorrect action type');
+      expect(result.content).toBe('Run hello');
     });
 
     it('returns a "confirm_shell_commands" action if shell processing requires it', async () => {
@@ -928,10 +933,12 @@ describe('FileCommandLoader', () => {
       );
 
       expect(result?.type).toBe('confirm_shell_commands');
-      if (result?.type === 'confirm_shell_commands') {
-        expect(result.commandsToConfirm).toEqual(['rm -rf /']);
-        expect(result.originalInvocation.raw).toBe(rawInvocation);
-      }
+      assert(
+        result?.type === 'confirm_shell_commands',
+        'Incorrect action type',
+      );
+      expect(result.commandsToConfirm).toEqual(['rm -rf /']);
+      expect(result.originalInvocation.raw).toBe(rawInvocation);
     });
 
     it('re-throws other errors from the processor', async () => {
@@ -1017,11 +1024,8 @@ describe('FileCommandLoader', () => {
         expect.any(Object),
       );
 
-      if (result?.type === 'submit_prompt') {
-        expect(result.content).toContain('-shell-processed-default-processed');
-      } else {
-        assert.fail('Incorrect action type');
-      }
+      assert(result?.type === 'submit_prompt', 'Incorrect action type');
+      expect(result.content).toContain('-shell-processed-default-processed');
     });
   });
 
@@ -1075,11 +1079,10 @@ describe('FileCommandLoader', () => {
         '',
       );
       expect(result?.type).toBe('submit_prompt');
-      if (result?.type === 'submit_prompt') {
-        // AtFileProcessor is not actually used by FileCommandLoader
-        // so the @{} syntax is not processed
-        expect(result.content).toEqual('Context from file: @{./test.txt}');
-      }
+      assert(result?.type === 'submit_prompt', 'Incorrect action type');
+      // AtFileProcessor is not actually used by FileCommandLoader
+      // so the @{} syntax is not processed
+      expect(result.content).toEqual('Context from file: @{./test.txt}');
     });
   });
 

@@ -173,10 +173,11 @@ describe('EmojiFilter Property-Based Tests', () => {
             expect(typeof result.filtered).toBe('string');
 
             // If emojis detected, should provide feedback
-            if (result.emojiDetected) {
-              expect(result.systemFeedback).toBeDefined();
-              expect(result.systemFeedback).toContain('avoid using emojis');
-            }
+            expect(
+              !result.emojiDetected ||
+                (result.systemFeedback !== undefined &&
+                  result.systemFeedback.includes('avoid using emojis')),
+            ).toBe(true);
           },
         ),
         { numRuns: 50 },
@@ -244,12 +245,12 @@ describe('EmojiFilter Property-Based Tests', () => {
 
             // Content should be equivalent (allowing for buffering differences)
             expect(typeof streamOutput).toBe('string');
-            if (typeof singleResult.filtered === 'string') {
-              // Both should have similar emoji detection behavior
-              expect(singleResult.emojiDetected).toBe(
-                streamOutput !== text || singleResult.filtered !== text,
-              );
-            }
+            // Verify that filtered result is a string before checking emoji detection
+            expect(typeof singleResult.filtered).toBe('string');
+            // Both should have similar emoji detection behavior
+            expect(singleResult.emojiDetected).toBe(
+              streamOutput !== text || singleResult.filtered !== text,
+            );
           },
         ),
         { numRuns: 30 },
@@ -274,26 +275,25 @@ describe('EmojiFilter Property-Based Tests', () => {
             let pos = 0;
             let totalOutput = '';
 
+            // Process all chunks
+            const allChunks: string[] = [];
             for (const size of chunkSizes) {
               if (pos >= text.length) break;
-
-              const chunk = text.slice(pos, pos + size);
+              allChunks.push(text.slice(pos, pos + size));
               pos += size;
-
-              const result = filter.filterStreamChunk(chunk);
-              if (typeof result.filtered === 'string') {
-                totalOutput += result.filtered;
-              }
             }
 
-            // Process remaining text
+            // Add remaining text as final chunk if any
             if (pos < text.length) {
-              const remaining = text.slice(pos);
-              const result = filter.filterStreamChunk(remaining);
-              if (typeof result.filtered === 'string') {
-                totalOutput += result.filtered;
-              }
+              allChunks.push(text.slice(pos));
             }
+
+            // Process all chunks and verify each result
+            allChunks.forEach((chunk) => {
+              const result = filter.filterStreamChunk(chunk);
+              expect(typeof result.filtered).toBe('string');
+              totalOutput += result.filtered as string;
+            });
 
             // Flush any remaining buffer
             totalOutput += filter.flushBuffer();
@@ -324,17 +324,13 @@ describe('EmojiFilter Property-Based Tests', () => {
             for (let i = 0; i < textWithEmoji.length; i += chunkSize) {
               const chunk = textWithEmoji.slice(i, i + chunkSize);
               const result = filter2.filterStreamChunk(chunk);
-              if (result.emojiDetected) {
-                streamDetected = true;
-              }
+              streamDetected = streamDetected || result.emojiDetected;
             }
 
             // Final flush might also detect emojis
             const flushed = filter2.flushBuffer();
             const flushResult = filter2.filterText(flushed);
-            if (flushResult.emojiDetected) {
-              streamDetected = true;
-            }
+            streamDetected = streamDetected || flushResult.emojiDetected;
 
             // Both should detect emojis if present
             expect(singleResult.emojiDetected).toBe(true);
@@ -390,22 +386,23 @@ describe('EmojiFilter Property-Based Tests', () => {
             const filter = new EmojiFilter({ mode });
             const result = filter.filterToolArgs(obj);
 
-            if (result.filtered && typeof result.filtered === 'object') {
-              const filtered = result.filtered as Record<string, unknown>;
+            // Verify filtered is an object
+            expect(result.filtered).toBeDefined();
+            expect(typeof result.filtered).toBe('object');
+            const filtered = result.filtered as Record<string, unknown>;
 
-              // Structure should be preserved
-              expect(typeof filtered.str).toBe('string');
-              expect(typeof filtered.num).toBe('number');
-              expect(typeof filtered.bool).toBe('boolean');
-              expect(typeof filtered.nested).toBe('object');
-              expect(
-                typeof (filtered.nested as Record<string, unknown>).value,
-              ).toBe('string');
+            // Structure should be preserved
+            expect(typeof filtered.str).toBe('string');
+            expect(typeof filtered.num).toBe('number');
+            expect(typeof filtered.bool).toBe('boolean');
+            expect(typeof filtered.nested).toBe('object');
+            expect(
+              typeof (filtered.nested as Record<string, unknown>).value,
+            ).toBe('string');
 
-              // Non-string values should be unchanged
-              expect(filtered.num).toBe(obj.num);
-              expect(filtered.bool).toBe(obj.bool);
-            }
+            // Non-string values should be unchanged
+            expect(filtered.num).toBe(obj.num);
+            expect(filtered.bool).toBe(obj.bool);
           },
         ),
         { numRuns: 30 },
@@ -432,20 +429,21 @@ describe('EmojiFilter Property-Based Tests', () => {
             const filter = new EmojiFilter({ mode });
             const result = filter.filterToolArgs(obj);
 
-            if (result.filtered && typeof result.filtered === 'object') {
-              const filtered = result.filtered as Record<string, unknown>;
+            // Verify filtered is an object
+            expect(result.filtered).toBeDefined();
+            expect(typeof result.filtered).toBe('object');
+            const filtered = result.filtered as Record<string, unknown>;
 
-              // Array should be preserved
-              expect(Array.isArray(filtered.items)).toBe(true);
-              expect((filtered.items as unknown[]).length).toBe(arr.length);
+            // Array should be preserved
+            expect(Array.isArray(filtered.items)).toBe(true);
+            expect((filtered.items as unknown[]).length).toBe(arr.length);
 
-              // Type structure should be maintained
-              (filtered.items as unknown[]).forEach(
-                (item: unknown, _index: number) => {
-                  expect(typeof item).toBe(typeof arr[_index]);
-                },
-              );
-            }
+            // Type structure should be maintained
+            (filtered.items as unknown[]).forEach(
+              (item: unknown, _index: number) => {
+                expect(typeof item).toBe(typeof arr[_index]);
+              },
+            );
           },
         ),
         { numRuns: 30 },
@@ -468,17 +466,18 @@ describe('EmojiFilter Property-Based Tests', () => {
             const filter = new EmojiFilter({ mode });
             const result = filter.filterToolArgs(obj);
 
-            if (result.filtered && typeof result.filtered === 'object') {
-              const filtered = result.filtered as Record<string, unknown>;
+            // Verify filtered is an object
+            expect(result.filtered).toBeDefined();
+            expect(typeof result.filtered).toBe('object');
+            const filtered = result.filtered as Record<string, unknown>;
 
-              // Null and undefined should be preserved
-              expect(filtered.nullValue).toBe(null);
-              expect(filtered.undefinedValue).toBe(undefined);
-              expect(
-                (filtered.nestedNull as Record<string, unknown>).inner,
-              ).toBe(null);
-              expect(typeof filtered.stringValue).toBe('string');
-            }
+            // Null and undefined should be preserved
+            expect(filtered.nullValue).toBe(null);
+            expect(filtered.undefinedValue).toBe(undefined);
+            expect((filtered.nestedNull as Record<string, unknown>).inner).toBe(
+              null,
+            );
+            expect(typeof filtered.stringValue).toBe('string');
           },
         ),
         { numRuns: 30 },
@@ -496,13 +495,13 @@ describe('EmojiFilter Property-Based Tests', () => {
             const filter = new EmojiFilter({ mode });
             const result = filter.filterText(text);
 
-            if (typeof result.filtered === 'string') {
-              // Allow for reasonable conversion overhead (emoji -> text replacements)
-              const maxExpectedLength = text.length + 50; // Generous overhead for conversions
-              expect(result.filtered.length).toBeLessThanOrEqual(
-                maxExpectedLength,
-              );
-            }
+            // Verify filtered is a string
+            expect(typeof result.filtered).toBe('string');
+            // Allow for reasonable conversion overhead (emoji -> text replacements)
+            const maxExpectedLength = text.length + 50; // Generous overhead for conversions
+            expect((result.filtered as string).length).toBeLessThanOrEqual(
+              maxExpectedLength,
+            );
           },
         ),
         { numRuns: 50 },
@@ -520,14 +519,14 @@ describe('EmojiFilter Property-Based Tests', () => {
 
             const result1 = filter1.filterText(text);
 
-            if (typeof result1.filtered === 'string') {
-              const result2 = filter2.filterText(result1.filtered);
+            // Verify first result is a string
+            expect(typeof result1.filtered).toBe('string');
+            const result2 = filter2.filterText(result1.filtered as string);
 
-              // Second filtering should not change result
-              expect(result2.filtered).toBe(result1.filtered);
-              // Should not detect emojis in already-filtered text
-              expect(result2.emojiDetected).toBe(false);
-            }
+            // Second filtering should not change result
+            expect(result2.filtered).toBe(result1.filtered);
+            // Should not detect emojis in already-filtered text
+            expect(result2.emojiDetected).toBe(false);
           },
         ),
         { numRuns: 50 },
@@ -547,14 +546,15 @@ describe('EmojiFilter Property-Based Tests', () => {
             const filter = new EmojiFilter({ mode });
             const result = filter.filterText(text);
 
-            if (typeof result.filtered === 'string') {
-              // Should be valid Unicode string
-              expect(() => JSON.stringify(result.filtered)).not.toThrow();
-              expect(result.filtered.length).toBeGreaterThanOrEqual(0);
+            // Verify filtered is a string
+            expect(typeof result.filtered).toBe('string');
+            const filtered = result.filtered as string;
+            // Should be valid Unicode string
+            expect(() => JSON.stringify(filtered)).not.toThrow();
+            expect(filtered.length).toBeGreaterThanOrEqual(0);
 
-              // Should not contain replacement characters indicating corruption
-              expect(result.filtered).not.toContain('\uFFFD');
-            }
+            // Should not contain replacement characters indicating corruption
+            expect(filtered).not.toContain('\uFFFD');
           },
         ),
         { numRuns: 50 },
@@ -579,18 +579,19 @@ describe('EmojiFilter Property-Based Tests', () => {
             const filter = new EmojiFilter({ mode: 'warn' });
             const result = filter.filterText(text);
 
-            if (typeof result.filtered === 'string') {
-              // All original words should still be present
-              words.forEach((word) => {
-                expect(result.filtered).toContain(word);
-              });
+            // Verify filtered is a string
+            expect(typeof result.filtered).toBe('string');
+            const filtered = result.filtered as string;
+            // All original words should still be present
+            words.forEach((word) => {
+              expect(filtered).toContain(word);
+            });
 
-              // Words should remain separated (not concatenated)
-              const filteredWords = result.filtered
-                .split(/\s+/)
-                .filter((w) => w.length > 0);
-              expect(filteredWords.length).toBeGreaterThanOrEqual(words.length);
-            }
+            // Words should remain separated (not concatenated)
+            const filteredWords = filtered
+              .split(/\s+/)
+              .filter((w) => w.length > 0);
+            expect(filteredWords.length).toBeGreaterThanOrEqual(words.length);
           },
         ),
         { numRuns: 30 },
@@ -621,9 +622,12 @@ describe('EmojiFilter Property-Based Tests', () => {
             expect(result.blocked).toBe(false);
             expect(typeof result.filtered).toBe('string');
 
-            if (result.systemFeedback) {
-              expect(result.systemFeedback).toContain(toolName);
-            }
+            // If system feedback exists, it should contain the tool name
+            // Verify the invariant without conditional expects
+            const feedbackValid =
+              result.systemFeedback === undefined ||
+              result.systemFeedback.includes(toolName);
+            expect(feedbackValid).toBe(true);
           },
         ),
         { numRuns: 30 },
@@ -641,12 +645,12 @@ describe('EmojiFilter Property-Based Tests', () => {
             const filter = new EmojiFilter({ mode });
             const result = filter.filterFileContent(content, 'TestTool');
 
-            if (typeof result.filtered === 'string') {
-              const filteredLines = result.filtered.split('\n');
+            // Verify filtered is a string
+            expect(typeof result.filtered).toBe('string');
+            const filteredLines = (result.filtered as string).split('\n');
 
-              // Should preserve line count
-              expect(filteredLines.length).toBe(lines.length);
-            }
+            // Should preserve line count
+            expect(filteredLines.length).toBe(lines.length);
           },
         ),
         { numRuns: 30 },
@@ -818,11 +822,11 @@ describe('EmojiFilter Property-Based Tests', () => {
             expect(result.blocked).toBe(false); // Auto/warn never block
 
             // Structure should be preserved in filtered result
-            if (result.filtered && typeof result.filtered === 'object') {
-              const filtered = result.filtered as Record<string, unknown>;
-              expect(typeof filtered.level1).toBe('object');
-              expect(typeof filtered.metadata).toBe('object');
-            }
+            expect(result.filtered).toBeDefined();
+            expect(typeof result.filtered).toBe('object');
+            const filtered = result.filtered as Record<string, unknown>;
+            expect(typeof filtered.level1).toBe('object');
+            expect(typeof filtered.metadata).toBe('object');
           },
         ),
         { numRuns: 20 },
@@ -849,15 +853,13 @@ describe('EmojiFilter Property-Based Tests', () => {
             let totalOutput = '';
             chunks.forEach((chunk) => {
               const result = filter.filterStreamChunk(chunk);
-              if (typeof result.filtered === 'string') {
-                totalOutput += result.filtered;
-              }
-
               // Each chunk result should be valid
-              expect(result.filtered !== undefined).toBe(true);
+              expect(result.filtered).toBeDefined();
+              expect(typeof result.filtered).toBe('string');
               expect(typeof result.emojiDetected).toBe('boolean');
               expect(typeof result.blocked).toBe('boolean');
               expect(result.blocked).toBe(false);
+              totalOutput += result.filtered as string;
             });
 
             // Flush should complete successfully
@@ -927,18 +929,25 @@ describe('EmojiFilter Property-Based Tests', () => {
             expect(typeof result.emojiDetected).toBe('boolean');
             expect(typeof result.blocked).toBe('boolean');
 
-            // Mode-specific invariants
-            if (mode === 'allowed') {
-              expect(result.filtered).toBe(text);
-              expect(result.emojiDetected).toBe(false);
-              expect(result.blocked).toBe(false);
-            } else if (mode === 'auto') {
-              expect(result.systemFeedback).toBeUndefined();
-              expect(result.blocked).toBe(false);
-            } else if (mode === 'warn') {
-              expect(result.blocked).toBe(false);
-              expect(typeof result.filtered).toBe('string');
-            }
+            // Mode-specific invariants - build boolean checks to avoid conditional expects
+            const allowedValid =
+              mode !== 'allowed' ||
+              (result.filtered === text &&
+                result.emojiDetected === false &&
+                result.blocked === false);
+            const autoValid =
+              mode !== 'auto' ||
+              (result.systemFeedback === undefined && result.blocked === false);
+            const warnValid =
+              mode !== 'warn' ||
+              (result.blocked === false && typeof result.filtered === 'string');
+            const errorValid =
+              mode !== 'error' || typeof result.blocked === 'boolean';
+
+            expect(allowedValid).toBe(true);
+            expect(autoValid).toBe(true);
+            expect(warnValid).toBe(true);
+            expect(errorValid).toBe(true);
           });
         }),
         { numRuns: 30 },

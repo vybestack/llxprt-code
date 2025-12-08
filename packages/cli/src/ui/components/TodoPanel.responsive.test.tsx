@@ -285,20 +285,18 @@ describe('TodoPanel Responsive Behavior', () => {
 
       // Count visible characters before truncation
       const contentMatch = output!.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
-      if (contentMatch) {
-        const visibleContent = contentMatch[1];
+      expect(contentMatch).toBeDefined();
+      const visibleContent = contentMatch![1];
 
-        // With better truncation (80-90%), we should see more content
-        // Old logic (50%): ~25 chars visible before "..."
-        // New logic (80-90%): ~40+ chars visible before "..."
-        if (visibleContent.endsWith('...')) {
-          const visibleCharsBeforeDots = visibleContent.length - 3;
-          expect(visibleCharsBeforeDots).toBeGreaterThan(30); // Should show more content
-        } else {
-          // If not truncated, that's even better - means we're using more width
-          expect(visibleContent.length).toBeGreaterThan(30);
-        }
-      }
+      // With better truncation (80-90%), we should see more content
+      // Old logic (50%): ~25 chars visible before "..."
+      // New logic (80-90%): ~40+ chars visible before "..."
+      const isTruncated = visibleContent.endsWith('...');
+      const visibleChars = isTruncated
+        ? visibleContent.length - 3
+        : visibleContent.length;
+
+      expect(visibleChars).toBeGreaterThan(30); // Should show more content
     });
 
     it('should show significantly more content at wider breakpoints due to less aggressive truncation', () => {
@@ -335,14 +333,13 @@ describe('TodoPanel Responsive Behavior', () => {
         const output = lastFrame();
         const contentMatch = output!.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
 
-        if (contentMatch) {
-          const visibleContent = contentMatch[1];
-          const visibleChars = visibleContent.endsWith('...')
-            ? visibleContent.length - 3
-            : visibleContent.length;
+        expect(contentMatch).toBeDefined();
+        const visibleContent = contentMatch![1];
+        const visibleChars = visibleContent.endsWith('...')
+          ? visibleContent.length - 3
+          : visibleContent.length;
 
-          expect(visibleChars).toBeGreaterThanOrEqual(expectedMinChars);
-        }
+        expect(visibleChars).toBeGreaterThanOrEqual(expectedMinChars);
       });
     });
   });

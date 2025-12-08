@@ -284,13 +284,11 @@ describe('retryWithBackoff', () => {
 
     // Check that the delays are not exactly the same due to jitter
     // This is a probabilistic test, but with +/-30% jitter, it's highly likely they differ.
-    if (firstDelaySet.length > 0 && secondDelaySet.length > 0) {
-      // Check the first delay of each set
-      expect(firstDelaySet[0]).not.toBe(secondDelaySet[0]);
-    } else {
-      // If somehow no delays were captured (e.g. test setup issue), fail explicitly
-      throw new Error('Delays were not captured for jitter test');
-    }
+    // Verify delays were captured
+    expect(firstDelaySet.length).toBeGreaterThan(0);
+    expect(secondDelaySet.length).toBeGreaterThan(0);
+    // Check the first delay of each set
+    expect(firstDelaySet[0]).not.toBe(secondDelaySet[0]);
 
     // Ensure delays are within the expected jitter range [70, 130] for initialDelayMs = 100
     [...firstDelaySet, ...secondDelaySet].forEach((d) => {

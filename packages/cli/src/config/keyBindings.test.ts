@@ -33,18 +33,19 @@ describe('keyBindings config', () => {
           expect(hasKey && hasSequence).toBe(false);
 
           // Modifier properties should be boolean or undefined
-          if (binding.ctrl !== undefined) {
-            expect(typeof binding.ctrl).toBe('boolean');
-          }
-          if (binding.shift !== undefined) {
-            expect(typeof binding.shift).toBe('boolean');
-          }
-          if (binding.command !== undefined) {
-            expect(typeof binding.command).toBe('boolean');
-          }
-          if (binding.paste !== undefined) {
-            expect(typeof binding.paste).toBe('boolean');
-          }
+          expect(
+            binding.ctrl === undefined || typeof binding.ctrl === 'boolean',
+          ).toBe(true);
+          expect(
+            binding.shift === undefined || typeof binding.shift === 'boolean',
+          ).toBe(true);
+          expect(
+            binding.command === undefined ||
+              typeof binding.command === 'boolean',
+          ).toBe(true);
+          expect(
+            binding.paste === undefined || typeof binding.paste === 'boolean',
+          ).toBe(true);
         }
       }
     });

@@ -757,9 +757,8 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
 
     const historyItem = secondGeminiCall[0] as HistoryItemGemini;
     // Second query should have no thinking blocks or an empty array
-    if (historyItem.thinkingBlocks) {
-      expect(historyItem.thinkingBlocks).toHaveLength(0);
-    }
+    const thinkingBlocks = historyItem.thinkingBlocks ?? [];
+    expect(thinkingBlocks).toHaveLength(0);
   });
 
   it('should handle Thought events with empty subject or description', async () => {

@@ -742,12 +742,11 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(assistantMsg).toBeDefined();
 
       // Should not have thinking block (stripped by policy)
-      if (Array.isArray(assistantMsg?.content)) {
-        const hasThinking = assistantMsg.content.some(
-          (block) => (block as AnthropicContentBlock).type === 'thinking',
-        );
-        expect(hasThinking).toBe(false);
-      }
+      expect(Array.isArray(assistantMsg?.content)).toBe(true);
+      const hasThinking = (
+        assistantMsg!.content as AnthropicContentBlock[]
+      ).some((block) => block.type === 'thinking');
+      expect(hasThinking).toBe(false);
     });
 
     it('should apply reasoning.stripFromContext policy "allButLast"', async () => {
@@ -811,21 +810,19 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(assistantMsgs.length).toBeGreaterThan(0);
 
       // First assistant message should not have thinking (stripped)
-      if (Array.isArray(assistantMsgs[0]?.content)) {
-        const hasThinking = assistantMsgs[0].content.some(
-          (block) => (block as AnthropicContentBlock).type === 'thinking',
-        );
-        expect(hasThinking).toBe(false);
-      }
+      expect(Array.isArray(assistantMsgs[0]?.content)).toBe(true);
+      const hasThinking = (
+        assistantMsgs[0]!.content as AnthropicContentBlock[]
+      ).some((block) => block.type === 'thinking');
+      expect(hasThinking).toBe(false);
 
       // Last assistant message should have thinking (kept)
       const lastAssistantMsg = assistantMsgs[assistantMsgs.length - 1];
-      if (Array.isArray(lastAssistantMsg?.content)) {
-        const thinkingBlock = lastAssistantMsg.content.find(
-          (block) => (block as AnthropicContentBlock).type === 'thinking',
-        );
-        expect(thinkingBlock).toBeDefined();
-      }
+      expect(Array.isArray(lastAssistantMsg?.content)).toBe(true);
+      const thinkingBlock = (
+        lastAssistantMsg!.content as AnthropicContentBlock[]
+      ).find((block) => block.type === 'thinking');
+      expect(thinkingBlock).toBeDefined();
     });
 
     it('should apply reasoning.stripFromContext policy "none"', async () => {
@@ -871,12 +868,11 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(assistantMsg).toBeDefined();
 
       // Should have thinking block (not stripped)
-      if (Array.isArray(assistantMsg?.content)) {
-        const thinkingBlock = assistantMsg.content.find(
-          (block) => (block as AnthropicContentBlock).type === 'thinking',
-        );
-        expect(thinkingBlock).toBeDefined();
-      }
+      expect(Array.isArray(assistantMsg?.content)).toBe(true);
+      const thinkingBlock = (
+        assistantMsg!.content as AnthropicContentBlock[]
+      ).find((block) => block.type === 'thinking');
+      expect(thinkingBlock).toBeDefined();
     });
 
     it('should respect reasoning.includeInContext false', async () => {
@@ -921,12 +917,11 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       expect(assistantMsg).toBeDefined();
 
       // Should not have thinking block (includeInContext is false)
-      if (Array.isArray(assistantMsg?.content)) {
-        const hasThinking = assistantMsg.content.some(
-          (block) => (block as AnthropicContentBlock).type === 'thinking',
-        );
-        expect(hasThinking).toBe(false);
-      }
+      expect(Array.isArray(assistantMsg?.content)).toBe(true);
+      const hasThinking = (
+        assistantMsg!.content as AnthropicContentBlock[]
+      ).some((block) => block.type === 'thinking');
+      expect(hasThinking).toBe(false);
     });
 
     it('should handle thinking blocks round-trip in conversation history', async () => {
@@ -987,16 +982,15 @@ describe('AnthropicProvider Extended Thinking @plan:PLAN-ANTHROPIC-THINKING', ()
       );
       expect(assistantMsg).toBeDefined();
 
-      if (Array.isArray(assistantMsg?.content)) {
-        const thinkingBlock = assistantMsg.content.find(
-          (block) => (block as AnthropicContentBlock).type === 'thinking',
-        ) as
-          | { type: 'thinking'; thinking: string; signature: string }
-          | undefined;
+      expect(Array.isArray(assistantMsg?.content)).toBe(true);
+      const thinkingBlock = (
+        assistantMsg!.content as AnthropicContentBlock[]
+      ).find((block) => block.type === 'thinking') as
+        | { type: 'thinking'; thinking: string; signature: string }
+        | undefined;
 
-        expect(thinkingBlock).toBeDefined();
-        expect(thinkingBlock?.thinking).toBe('Original thought');
-      }
+      expect(thinkingBlock).toBeDefined();
+      expect(thinkingBlock?.thinking).toBe('Original thought');
     });
   });
 });

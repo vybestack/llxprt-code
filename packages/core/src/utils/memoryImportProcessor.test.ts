@@ -732,18 +732,19 @@ describe('memoryImportProcessor', () => {
 
       // Test parent directory access (should be allowed if parent is in allowed paths)
       const parentPath = path.dirname(basePath);
-      if (parentPath !== basePath) {
-        // Only test if parent is different
-        const parentRelativePath = '../file.md';
-        path.resolve(basePath, parentRelativePath);
-        expect(
-          validateImportPath(parentRelativePath, basePath, [parentPath]),
-        ).toBe(true);
+      const parentIsDifferent = parentPath !== basePath;
+      expect(parentIsDifferent).toBe(true); // Should have a parent directory
 
-        path.resolve(basePath, 'sub');
-        const resultSub = validateImportPath('sub', basePath, [basePath]);
-        expect(resultSub).toBe(true);
-      }
+      // Only test if parent is different
+      const parentRelativePath = '../file.md';
+      path.resolve(basePath, parentRelativePath);
+      expect(
+        validateImportPath(parentRelativePath, basePath, [parentPath]),
+      ).toBe(true);
+
+      path.resolve(basePath, 'sub');
+      const resultSub = validateImportPath('sub', basePath, [basePath]);
+      expect(resultSub).toBe(true);
 
       // Test allowed path access - use a file within the allowed directory
       const allowedSubPath = 'nested';

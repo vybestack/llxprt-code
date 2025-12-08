@@ -452,11 +452,14 @@ describe('Git Statistics Tracking', () => {
         );
 
         // Should either return valid stats or null, never throw
-        if (stats !== null) {
-          expect(stats).toHaveProperty('linesAdded');
-          expect(stats).toHaveProperty('linesRemoved');
-          expect(stats).toHaveProperty('filesChanged');
-        }
+        // Verify the result is either null or has the expected properties
+        const isValidStats =
+          stats === null ||
+          (Object.prototype.hasOwnProperty.call(stats, 'linesAdded') &&
+            Object.prototype.hasOwnProperty.call(stats, 'linesRemoved') &&
+            Object.prototype.hasOwnProperty.call(stats, 'filesChanged'));
+
+        expect(isValidStats).toBe(true);
       }
     });
 
@@ -483,11 +486,14 @@ describe('Git Statistics Tracking', () => {
         const stats = await tracker.trackFileEdit(path as string, 'old', 'new');
 
         // Should handle gracefully, either track or return null
-        if (stats !== null) {
-          expect(typeof stats.linesAdded).toBe('number');
-          expect(typeof stats.linesRemoved).toBe('number');
-          expect(typeof stats.filesChanged).toBe('number');
-        }
+        // Verify stats structure when not null
+        const isValidOrNull =
+          stats === null ||
+          (typeof stats.linesAdded === 'number' &&
+            typeof stats.linesRemoved === 'number' &&
+            typeof stats.filesChanged === 'number');
+
+        expect(isValidOrNull).toBe(true);
       }
     });
 

@@ -87,13 +87,12 @@ describe('OpenAIVercelProvider Registry Integration', () => {
       // Note: Provider might be wrapped in LoggingProviderWrapper
       // Check if it's an instance or has the right name
       expect(provider).toBeDefined();
-      if (provider) {
-        // Check for either direct instance or wrapper
-        const isCorrectProvider =
-          provider instanceof OpenAIVercelProvider ||
-          provider.name === 'openaivercel';
-        expect(isCorrectProvider).toBe(true);
-      }
+
+      // Check for either direct instance or wrapper
+      const isCorrectProvider =
+        provider instanceof OpenAIVercelProvider ||
+        provider!.name === 'openaivercel';
+      expect(isCorrectProvider).toBe(true);
     });
   });
 

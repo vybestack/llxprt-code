@@ -398,14 +398,12 @@ describe.skip('Conversation Logging Performance Impact', () => {
     // In test environments, performance measurements can be extremely variable
     // Windows environments particularly show high variance
     // We just ensure both versions work and complete successfully
-    if (process.platform === 'win32') {
-      // Windows has extremely high variance in test environments
-      expect(overheadPercent).toBeLessThan(1000000); // Very high limit for Windows CI
-    } else {
-      expect(overheadPercent).toBeLessThan(100000); // Generous limit for other environments
-    }
     expect(enabledMetrics.throughput).toBeGreaterThan(0);
     expect(disabledMetrics.throughput).toBeGreaterThan(0);
+
+    // Platform-specific overhead assertions
+    const platformLimit = process.platform === 'win32' ? 1000000 : 100000;
+    expect(overheadPercent).toBeLessThan(platformLimit);
   }, 30000);
 
   /**

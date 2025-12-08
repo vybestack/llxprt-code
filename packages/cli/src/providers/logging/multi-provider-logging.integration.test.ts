@@ -634,12 +634,10 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     await consumeAsyncIterable(reliableWrapper.generateChatCompletion(message));
 
     // Test error provider (should handle error gracefully)
-    try {
-      await consumeAsyncIterable(errorWrapper.generateChatCompletion(message));
-    } catch (error) {
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe('Provider API error');
-    }
+    const promise = consumeAsyncIterable(
+      errorWrapper.generateChatCompletion(message),
+    );
+    await expect(promise).rejects.toThrow('Provider API error');
 
     // Verify that logging occurred even when provider errored
     const entries = storage.getEntries();

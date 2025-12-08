@@ -86,9 +86,9 @@ describe('bootstrap utilities', () => {
       delete process.env.LLXPRT_CODE_NO_RELAUNCH;
       const result = shouldRelaunchForMemory(false);
       // The result should either be empty or contain a --max-old-space-size flag
-      if (result.length > 0) {
-        expect(result[0]).toMatch(/--max-old-space-size=\d+/);
-      }
+      expect(
+        result.length === 0 || result[0].match(/--max-old-space-size=\d+/),
+      ).toBeTruthy();
     });
 
     it('should not include debug logging when debug is false', () => {

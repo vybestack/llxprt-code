@@ -200,10 +200,9 @@ describe('<LoadingIndicator />', () => {
     );
     const output = lastFrame();
     expect(output).toBeDefined();
-    if (output) {
-      expect(output).toContain('Thinking about something...');
-      expect(output).not.toContain('and other stuff.');
-    }
+    expect(output).not.toBeNull();
+    expect(output).toContain('Thinking about something...');
+    expect(output).not.toContain('and other stuff.');
   });
 
   it('should prioritize thought.subject over currentLoadingPhrase', () => {

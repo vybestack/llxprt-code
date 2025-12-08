@@ -282,11 +282,8 @@ describe('Profile with Keyfile Integration Tests', () => {
         const keyContent = (await fs.readFile(keyfilePath, 'utf-8')).trim();
 
         // Empty or whitespace-only files result in empty string after trim
-        if (content.trim() === '') {
-          expect(keyContent).toBe('');
-        } else {
-          expect(keyContent).toBe(content.trim());
-        }
+        const trimmedContent = content.trim();
+        expect(keyContent).toBe(trimmedContent);
       }
     });
   });

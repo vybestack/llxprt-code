@@ -204,16 +204,12 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    try {
-      await validateNonInteractiveAuth(
-        AuthType.USE_GEMINI,
-        undefined,
-        nonInteractiveConfig,
-      );
-      expect.fail('Should have exited');
-    } catch (e) {
-      expect((e as Error).message).toContain('process.exit(1) called');
-    }
+    const promise = validateNonInteractiveAuth(
+      AuthType.USE_GEMINI,
+      undefined,
+      nonInteractiveConfig,
+    );
+    await expect(promise).rejects.toThrow('process.exit(1) called');
     expect(consoleErrorSpy).toHaveBeenCalledWith('Auth error!');
     expect(processExitSpy).toHaveBeenCalledWith(1);
   });

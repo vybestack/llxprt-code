@@ -89,12 +89,12 @@ describe('API Key Security Integration Tests', () => {
 
       // In a properly secured system, this should be filtered out
       // For now, we're documenting the current behavior
-      if (typeof savedSettings === 'object' && savedSettings !== null) {
-        const settingsObj = savedSettings as Record<string, unknown>;
-        // This test documents that providerApiKeys currently DO get saved
-        // This is a security issue that should be fixed
-        expect(settingsObj.providerApiKeys).toBeDefined();
-      }
+      expect(typeof savedSettings).toBe('object');
+      expect(savedSettings).not.toBeNull();
+      const settingsObj = savedSettings as Record<string, unknown>;
+      // This test documents that providerApiKeys currently DO get saved
+      // This is a security issue that should be fixed
+      expect(settingsObj.providerApiKeys).toBeDefined();
     });
 
     it('should not write base URLs with embedded credentials to settings.json', async () => {
@@ -168,58 +168,73 @@ describe('API Key Security Integration Tests', () => {
       await writeSettingsFile(tempDir, settings);
       const savedSettings = await readSettingsFile(tempDir);
 
-      if (typeof savedSettings === 'object' && savedSettings !== null) {
-        const settingsObj = savedSettings as Record<string, unknown>;
-        const baseUrls = settingsObj.providerBaseUrls as Record<string, string>;
+      expect(typeof savedSettings).toBe('object');
+      expect(savedSettings).not.toBeNull();
+      const settingsObj = savedSettings as Record<string, unknown>;
+      const baseUrls = settingsObj.providerBaseUrls as Record<string, string>;
 
-        // Verify each provider maintains its own settings
-        expect(baseUrls.openai).toBe('https://api.openai.com/v1');
-        expect(baseUrls.anthropic).toBe('https://api.anthropic.com/v1');
-        expect(baseUrls.groq).toBe('https://api.groq.com/v1');
-      }
+      // Verify each provider maintains its own settings
+      expect(baseUrls.openai).toBe('https://api.openai.com/v1');
+      expect(baseUrls.anthropic).toBe('https://api.anthropic.com/v1');
+      expect(baseUrls.groq).toBe('https://api.groq.com/v1');
     });
   });
 
   describe('Keyfile security', () => {
-    it('should create keyfiles with restrictive permissions (600)', async () => {
-      const apiKey = 'sk-test-secure-key-12345';
-      const keyfilePath = await createTempKeyfile(tempDir, apiKey);
+    it.skipIf(process.platform === 'win32')(
+      'should create keyfiles with restrictive permissions (600) on Unix',
+      async () => {
+        const apiKey = 'sk-test-secure-key-12345';
+        const keyfilePath = await createTempKeyfile(tempDir, apiKey);
 
-      // Check file permissions
-      const stats = await fs.stat(keyfilePath);
-      const mode = stats.mode & parseInt('777', 8);
+        // Check file permissions
+        const stats = await fs.stat(keyfilePath);
+        const mode = stats.mode & parseInt('777', 8);
 
-      // On Unix-like systems, verify 600 permissions
-      if (process.platform !== 'win32') {
+        // On Unix-like systems, verify 600 permissions
         expect(mode).toBe(parseInt('600', 8));
-      }
 
-      // Verify content
-      const content = await fs.readFile(keyfilePath, 'utf8');
-      expect(content).toBe(apiKey);
-    });
+        // Verify content
+        const content = await fs.readFile(keyfilePath, 'utf8');
+        expect(content).toBe(apiKey);
+      },
+    );
 
-    it('should handle keyfiles with wrong permissions', async () => {
-      const apiKey = 'sk-test-key-with-bad-perms';
-      const keyfilePath = await createTempKeyfile(tempDir, apiKey);
+    it.skipIf(process.platform !== 'win32')(
+      'should create keyfiles on Windows',
+      async () => {
+        const apiKey = 'sk-test-secure-key-12345';
+        const keyfilePath = await createTempKeyfile(tempDir, apiKey);
 
-      // Change permissions to be too permissive
-      if (process.platform !== 'win32') {
+        // Verify content
+        const content = await fs.readFile(keyfilePath, 'utf8');
+        expect(content).toBe(apiKey);
+      },
+    );
+
+    it.skipIf(process.platform === 'win32')(
+      'should handle keyfiles with wrong permissions on Unix',
+      async () => {
+        const apiKey = 'sk-test-key-with-bad-perms';
+        const keyfilePath = await createTempKeyfile(tempDir, apiKey);
+
+        // Change permissions to be too permissive
         await fs.chmod(keyfilePath, 0o644);
 
         // In a real implementation, the system should reject or warn about this
         const stats = await fs.stat(keyfilePath);
         const mode = stats.mode & parseInt('777', 8);
         expect(mode).toBe(parseInt('644', 8));
-      }
-    });
+      },
+    );
 
-    it('should fail to read inaccessible keyfiles', async () => {
-      const apiKey = 'sk-test-inaccessible';
-      const keyfilePath = await createTempKeyfile(tempDir, apiKey);
+    it.skipIf(process.platform === 'win32')(
+      'should fail to read inaccessible keyfiles on Unix',
+      async () => {
+        const apiKey = 'sk-test-inaccessible';
+        const keyfilePath = await createTempKeyfile(tempDir, apiKey);
 
-      // Make file inaccessible
-      if (process.platform !== 'win32') {
+        // Make file inaccessible
         await fs.chmod(keyfilePath, 0o000);
 
         // Attempt to read should fail
@@ -227,8 +242,8 @@ describe('API Key Security Integration Tests', () => {
 
         // Restore permissions for cleanup
         await fs.chmod(keyfilePath, 0o600);
-      }
-    });
+      },
+    );
 
     it('should store keyfile paths but not contents in settings', async () => {
       const keyfilePath = await createTempKeyfile(

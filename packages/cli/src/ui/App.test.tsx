@@ -1175,7 +1175,7 @@ describe('App UI', () => {
     expect(lastFrame()).toMatchSnapshot();
   });
 
-  it('should render correctly with the prompt input box', () => {
+  it('should render correctly with the prompt input box - common checks', () => {
     vi.mocked(useGeminiStream).mockReturnValue({
       streamingState: StreamingState.Idle,
       submitQuery: vi.fn(),
@@ -1198,16 +1198,59 @@ describe('App UI', () => {
     expect(frame).toContain('Context: 0.0k/1049k');
     expect(frame).toContain('/test/dir');
     expect(frame).toContain('gemini-pro');
+  });
 
-    // Check for platform-specific placeholder
-    if (isPowerShell()) {
+  it.runIf(isPowerShell())(
+    'should render PowerShell-specific placeholder',
+    () => {
+      vi.mocked(useGeminiStream).mockReturnValue({
+        streamingState: StreamingState.Idle,
+        submitQuery: vi.fn(),
+        initError: null,
+        pendingHistoryItems: [],
+        thought: null,
+      });
+
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+
+      const frame = lastFrame();
       expect(frame).toContain(
         'Type your message, @path/to/file or +path/to/file',
       );
-    } else {
+    },
+  );
+
+  it.skipIf(isPowerShell())(
+    'should render standard placeholder on non-PowerShell',
+    () => {
+      vi.mocked(useGeminiStream).mockReturnValue({
+        streamingState: StreamingState.Idle,
+        submitQuery: vi.fn(),
+        initError: null,
+        pendingHistoryItems: [],
+        thought: null,
+      });
+
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+
+      const frame = lastFrame();
       expect(frame).toContain('Type your message or @path/to/file');
-    }
-  });
+    },
+  );
 
   describe('with initial prompt from --prompt-interactive', () => {
     it('should submit the initial prompt automatically', async () => {
@@ -1332,7 +1375,7 @@ describe('App UI', () => {
   });
 
   describe('when in a narrow terminal', () => {
-    it('should render with a column layout', () => {
+    it('should render with a column layout - common checks', () => {
       vi.spyOn(useTerminalSize, 'useTerminalSize').mockReturnValue({
         columns: 60,
         rows: 24,
@@ -1351,16 +1394,53 @@ describe('App UI', () => {
       const frame = lastFrame();
       expect(frame).toContain('Ctx: 0.0k/1049k'); // Narrow terminal shows abbreviated context
       expect(frame).toContain('/test/dir');
+    });
 
-      // Check for platform-specific placeholder
-      if (isPowerShell()) {
+    it.runIf(isPowerShell())(
+      'should render PowerShell-specific placeholder in narrow terminal',
+      () => {
+        vi.spyOn(useTerminalSize, 'useTerminalSize').mockReturnValue({
+          columns: 60,
+          rows: 24,
+        });
+
+        const { lastFrame, unmount } = renderWithProviders(
+          <App
+            config={mockConfig as unknown as ServerConfig}
+            settings={mockSettings}
+            version={mockVersion}
+          />,
+        );
+        currentUnmount = unmount;
+
+        const frame = lastFrame();
         expect(frame).toContain(
           'Type your message, @path/to/file or +path/to/file',
         );
-      } else {
+      },
+    );
+
+    it.skipIf(isPowerShell())(
+      'should render standard placeholder in narrow terminal on non-PowerShell',
+      () => {
+        vi.spyOn(useTerminalSize, 'useTerminalSize').mockReturnValue({
+          columns: 60,
+          rows: 24,
+        });
+
+        const { lastFrame, unmount } = renderWithProviders(
+          <App
+            config={mockConfig as unknown as ServerConfig}
+            settings={mockSettings}
+            version={mockVersion}
+          />,
+        );
+        currentUnmount = unmount;
+
+        const frame = lastFrame();
         expect(frame).toContain('Type your message or @path/to/file');
-      }
-    });
+      },
+    );
   });
 
   describe('NO_COLOR smoke test', () => {

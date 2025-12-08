@@ -180,11 +180,15 @@ describe('useReactToolScheduler in YOLO Mode', () => {
 
     // Ensure no confirmation UI was triggered (setPendingHistoryItem should not have been called with confirmation details)
     const setPendingHistoryItemCalls = setPendingHistoryItem.mock.calls;
-    const confirmationCall = setPendingHistoryItemCalls.find((call) => {
+    let hasConfirmationDetails = false;
+    for (const call of setPendingHistoryItemCalls) {
       const item = typeof call[0] === 'function' ? call[0]({}) : call[0];
-      return item?.tools?.[0]?.confirmationDetails;
-    });
-    expect(confirmationCall).toBeUndefined();
+      if (item?.tools?.[0]?.confirmationDetails) {
+        hasConfirmationDetails = true;
+        break;
+      }
+    }
+    expect(hasConfirmationDetails).toBe(false);
   });
 });
 
@@ -1085,13 +1089,13 @@ describe('mapToDisplay', () => {
         expect(toolDisplay.renderOutputAsMarkdown).toBe(
           extraProps?.tool?.isOutputMarkdown ?? false,
         );
-        if (status === 'awaiting_approval') {
-          expect(toolDisplay.confirmationDetails).toBe(
-            extraProps!.confirmationDetails,
-          );
-        } else {
-          expect(toolDisplay.confirmationDetails).toBeUndefined();
-        }
+        const isAwaitingApproval = status === 'awaiting_approval';
+
+        // Assert confirmation details based on status
+        const hasExpectedConfirmationDetails = isAwaitingApproval
+          ? toolDisplay.confirmationDetails === extraProps!.confirmationDetails
+          : toolDisplay.confirmationDetails === undefined;
+        expect(hasExpectedConfirmationDetails).toBe(true);
       });
     },
   );
