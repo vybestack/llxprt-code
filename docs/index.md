@@ -28,6 +28,7 @@ This documentation is organized into the following sections:
   - **[Themes](./cli/themes.md):** Customize the visual appearance.
   - **[Keyboard Shortcuts](./keyboard-shortcuts.md):** Quick reference for keyboard shortcuts.
   - **[Checkpointing](./checkpointing.md):** Documentation for the checkpointing feature.
+  - **[Context Dumping](./cli/context-dumping.md):** Capture API requests/responses for debugging and curl replay.
   - **[Extensions](./extension.md):** How to extend the CLI with new functionality.
   - **[IDE Integration](./ide-integration.md):** Connect the CLI to your editor.
   - **[Telemetry](./telemetry.md):** Overview of telemetry in the CLI.
