@@ -27,6 +27,10 @@ export const dumpcontextCommand: SlashCommand = {
   description:
     'Control context dumping: now, status, on, error, off (default: status)',
   kind: CommandKind.BUILT_IN,
+  completion: async (_context, partialArg) => {
+    const lowerArg = partialArg.toLowerCase();
+    return validModes.filter((mode) => mode.startsWith(lowerArg));
+  },
   action: async (
     context: CommandContext,
     args: string,
