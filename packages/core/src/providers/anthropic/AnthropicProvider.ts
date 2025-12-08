@@ -1543,98 +1543,79 @@ export class AnthropicProvider extends BaseProvider {
     // Proactively throttle if approaching rate limits
     await this.waitForRateLimitIfNeeded(configEphemeralSettings);
 
-    // For non-streaming, use withResponse() to access headers
-    // For streaming, we can't access headers easily, so we skip rate limit extraction
+    // Use withResponse() to access headers in both streaming and non-streaming modes
     const rateLimitLogger = this.getRateLimitLogger();
 
     let responseHeaders: Headers | undefined;
-    let response:
-      | Anthropic.Message
-      | AsyncIterable<Anthropic.MessageStreamEvent>;
 
-    if (streamingEnabled) {
-      // Streaming mode - can't easily access headers
-      response = await retryWithBackoff(apiCall, {
-        maxAttempts,
-        initialDelayMs,
-        shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
-        trackThrottleWaitTime: this.throttleTracker,
-      });
-      rateLimitLogger.debug(
-        () => 'Streaming mode - rate limit headers not extracted',
-      );
-    } else {
-      // Non-streaming mode - use withResponse() to get headers
-      const apiCallWithResponse = async () => {
-        const promise = apiCall();
-        // The promise has a withResponse() method we can call
-        if (
-          promise &&
-          typeof promise === 'object' &&
-          'withResponse' in promise
-        ) {
-          return (
-            promise as {
-              withResponse: () => Promise<{
-                data: Anthropic.Message;
-                response: Response;
-              }>;
-            }
-          ).withResponse();
-        }
-        // Fallback if withResponse is not available
-        return { data: await promise, response: undefined };
-      };
-
-      const result = await retryWithBackoff(apiCallWithResponse, {
-        maxAttempts,
-        initialDelayMs,
-        shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
-        trackThrottleWaitTime: this.throttleTracker,
-      });
-
-      response = result.data;
-      if (result.response) {
-        responseHeaders = result.response.headers;
-
-        // Extract and process rate limit headers
-        const rateLimitInfo = this.extractRateLimitHeaders(responseHeaders);
-        this.lastRateLimitInfo = rateLimitInfo;
-
-        rateLimitLogger.debug(() => {
-          const parts: string[] = [];
-          if (
-            rateLimitInfo.requestsRemaining !== undefined &&
-            rateLimitInfo.requestsLimit !== undefined
-          ) {
-            parts.push(
-              `requests=${rateLimitInfo.requestsRemaining}/${rateLimitInfo.requestsLimit}`,
-            );
+    // Create a wrapper that calls withResponse() to get headers
+    const apiCallWithResponse = async () => {
+      const promise = apiCall();
+      // The promise has a withResponse() method we can call
+      if (promise && typeof promise === 'object' && 'withResponse' in promise) {
+        return (
+          promise as {
+            withResponse: () => Promise<{
+              data:
+                | Anthropic.Message
+                | AsyncIterable<Anthropic.MessageStreamEvent>;
+              response: Response;
+            }>;
           }
-          if (
-            rateLimitInfo.tokensRemaining !== undefined &&
-            rateLimitInfo.tokensLimit !== undefined
-          ) {
-            parts.push(
-              `tokens=${rateLimitInfo.tokensRemaining}/${rateLimitInfo.tokensLimit}`,
-            );
-          }
-          if (
-            rateLimitInfo.inputTokensRemaining !== undefined &&
-            rateLimitInfo.inputTokensLimit !== undefined
-          ) {
-            parts.push(
-              `input_tokens=${rateLimitInfo.inputTokensRemaining}/${rateLimitInfo.inputTokensLimit}`,
-            );
-          }
-          return parts.length > 0
-            ? `Rate limits: ${parts.join(', ')}`
-            : 'Rate limits: no data';
-        });
-
-        // Check and warn if approaching limits
-        this.checkRateLimits(rateLimitInfo);
+        ).withResponse();
       }
+      // Fallback if withResponse is not available
+      return { data: await promise, response: undefined };
+    };
+
+    const result = await retryWithBackoff(apiCallWithResponse, {
+      maxAttempts,
+      initialDelayMs,
+      shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
+      trackThrottleWaitTime: this.throttleTracker,
+    });
+
+    const response = result.data;
+    if (result.response) {
+      responseHeaders = result.response.headers;
+
+      // Extract and process rate limit headers
+      const rateLimitInfo = this.extractRateLimitHeaders(responseHeaders);
+      this.lastRateLimitInfo = rateLimitInfo;
+
+      rateLimitLogger.debug(() => {
+        const parts: string[] = [];
+        if (
+          rateLimitInfo.requestsRemaining !== undefined &&
+          rateLimitInfo.requestsLimit !== undefined
+        ) {
+          parts.push(
+            `requests=${rateLimitInfo.requestsRemaining}/${rateLimitInfo.requestsLimit}`,
+          );
+        }
+        if (
+          rateLimitInfo.tokensRemaining !== undefined &&
+          rateLimitInfo.tokensLimit !== undefined
+        ) {
+          parts.push(
+            `tokens=${rateLimitInfo.tokensRemaining}/${rateLimitInfo.tokensLimit}`,
+          );
+        }
+        if (
+          rateLimitInfo.inputTokensRemaining !== undefined &&
+          rateLimitInfo.inputTokensLimit !== undefined
+        ) {
+          parts.push(
+            `input_tokens=${rateLimitInfo.inputTokensRemaining}/${rateLimitInfo.inputTokensLimit}`,
+          );
+        }
+        return parts.length > 0
+          ? `Rate limits: ${parts.join(', ')}`
+          : 'Rate limits: no data';
+      });
+
+      // Check and warn if approaching limits
+      this.checkRateLimits(rateLimitInfo);
     }
 
     if (streamingEnabled) {
@@ -1650,198 +1631,206 @@ export class AnthropicProvider extends BaseProvider {
 
       this.getStreamingLogger().debug(() => 'Processing streaming response');
 
-      for await (const chunk of stream) {
-        if (chunk.type === 'message_start') {
-          // Extract cache metrics from message_start event
-          const usage = (
-            chunk as unknown as {
-              message?: {
-                usage?: {
-                  input_tokens?: number;
-                  output_tokens?: number;
-                  cache_read_input_tokens?: number;
-                  cache_creation_input_tokens?: number;
+      try {
+        for await (const chunk of stream) {
+          if (chunk.type === 'message_start') {
+            // Extract cache metrics from message_start event
+            const usage = (
+              chunk as unknown as {
+                message?: {
+                  usage?: {
+                    input_tokens?: number;
+                    output_tokens?: number;
+                    cache_read_input_tokens?: number;
+                    cache_creation_input_tokens?: number;
+                  };
                 };
+              }
+            ).message?.usage;
+            if (usage) {
+              const cacheRead = usage.cache_read_input_tokens ?? 0;
+              const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+
+              cacheLogger.debug(
+                () =>
+                  `[AnthropicProvider streaming] Emitting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
+              );
+
+              if (cacheRead > 0 || cacheCreation > 0) {
+                cacheLogger.debug(() => {
+                  const hitRate =
+                    cacheRead + (usage.input_tokens ?? 0) > 0
+                      ? (cacheRead / (cacheRead + (usage.input_tokens ?? 0))) *
+                        100
+                      : 0;
+                  return `Cache metrics: read=${cacheRead}, creation=${cacheCreation}, hit_rate=${hitRate.toFixed(1)}%`;
+                });
+              }
+
+              yield {
+                speaker: 'ai',
+                blocks: [],
+                metadata: {
+                  usage: {
+                    promptTokens: usage.input_tokens ?? 0,
+                    completionTokens: usage.output_tokens ?? 0,
+                    totalTokens:
+                      (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+                    cache_read_input_tokens: cacheRead,
+                    cache_creation_input_tokens: cacheCreation,
+                  },
+                },
+              } as IContent;
+            }
+          } else if (chunk.type === 'content_block_start') {
+            if (chunk.content_block.type === 'tool_use') {
+              const toolBlock = chunk.content_block as ToolUseBlock;
+              this.getStreamingLogger().debug(
+                () => `Starting tool use: ${toolBlock.name}`,
+              );
+              currentToolCall = {
+                id: toolBlock.id,
+                name: toolBlock.name,
+                input: '',
+              };
+            } else if (chunk.content_block.type === 'thinking') {
+              this.getStreamingLogger().debug(() => 'Starting thinking block');
+              currentThinkingBlock = {
+                thinking: '',
               };
             }
-          ).message?.usage;
-          if (usage) {
+          } else if (chunk.type === 'content_block_delta') {
+            if (chunk.delta.type === 'text_delta') {
+              const textDelta = chunk.delta as TextDelta;
+              this.getStreamingLogger().debug(
+                () => `Received text delta: ${textDelta.text.length} chars`,
+              );
+              // Emit text immediately as IContent
+              yield {
+                speaker: 'ai',
+                blocks: [{ type: 'text', text: textDelta.text }],
+              } as IContent;
+            } else if (
+              chunk.delta.type === 'input_json_delta' &&
+              currentToolCall
+            ) {
+              const jsonDelta = chunk.delta as InputJSONDelta;
+              currentToolCall.input += jsonDelta.partial_json;
+
+              // Check for double-escaping patterns
+              logDoubleEscapingInChunk(
+                jsonDelta.partial_json,
+                currentToolCall.name,
+                'anthropic',
+              );
+            } else if (
+              chunk.delta.type === 'thinking_delta' &&
+              currentThinkingBlock
+            ) {
+              const thinkingDelta = chunk.delta as {
+                type: 'thinking_delta';
+                thinking: string;
+              };
+              currentThinkingBlock.thinking += thinkingDelta.thinking;
+            }
+          } else if (chunk.type === 'content_block_stop') {
+            if (currentToolCall) {
+              const activeToolCall = currentToolCall;
+              this.getStreamingLogger().debug(
+                () => `Completed tool use: ${activeToolCall.name}`,
+              );
+              // Process tool parameters with double-escape handling
+              const processedParameters = processToolParameters(
+                activeToolCall.input,
+                activeToolCall.name,
+                'anthropic',
+              );
+
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'tool_call',
+                    id: this.normalizeToHistoryToolId(activeToolCall.id),
+                    name: activeToolCall.name,
+                    parameters: processedParameters,
+                  },
+                ],
+              } as IContent;
+              currentToolCall = undefined;
+            } else if (currentThinkingBlock) {
+              const activeThinkingBlock = currentThinkingBlock;
+              this.getStreamingLogger().debug(
+                () =>
+                  `Completed thinking block: ${activeThinkingBlock.thinking.length} chars`,
+              );
+
+              // Extract signature from content_block if present
+              const contentBlock = (
+                chunk as unknown as {
+                  content_block?: {
+                    type: string;
+                    thinking?: string;
+                    signature?: string;
+                  };
+                }
+              ).content_block;
+              if (contentBlock?.signature) {
+                activeThinkingBlock.signature = contentBlock.signature;
+              }
+
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'thinking',
+                    thought: activeThinkingBlock.thinking,
+                    sourceField: 'thinking',
+                    signature: activeThinkingBlock.signature,
+                  } as ThinkingBlock,
+                ],
+              } as IContent;
+              currentThinkingBlock = undefined;
+            }
+          } else if (chunk.type === 'message_delta' && chunk.usage) {
+            // Emit usage metadata including cache fields
+            const usage = chunk.usage as {
+              input_tokens: number;
+              output_tokens: number;
+              cache_read_input_tokens?: number;
+              cache_creation_input_tokens?: number;
+            };
+
             const cacheRead = usage.cache_read_input_tokens ?? 0;
             const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
-            cacheLogger.debug(
+            this.getStreamingLogger().debug(
               () =>
-                `[AnthropicProvider streaming] Emitting usage metadata: cacheRead=${cacheRead}, cacheCreation=${cacheCreation}, raw values: cache_read_input_tokens=${usage.cache_read_input_tokens}, cache_creation_input_tokens=${usage.cache_creation_input_tokens}`,
+                `Received usage metadata from message_delta: promptTokens=${usage.input_tokens || 0}, completionTokens=${usage.output_tokens || 0}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}`,
             );
-
-            if (cacheRead > 0 || cacheCreation > 0) {
-              cacheLogger.debug(() => {
-                const hitRate =
-                  cacheRead + (usage.input_tokens ?? 0) > 0
-                    ? (cacheRead / (cacheRead + (usage.input_tokens ?? 0))) *
-                      100
-                    : 0;
-                return `Cache metrics: read=${cacheRead}, creation=${cacheCreation}, hit_rate=${hitRate.toFixed(1)}%`;
-              });
-            }
 
             yield {
               speaker: 'ai',
               blocks: [],
               metadata: {
                 usage: {
-                  promptTokens: usage.input_tokens ?? 0,
-                  completionTokens: usage.output_tokens ?? 0,
+                  promptTokens: usage.input_tokens || 0,
+                  completionTokens: usage.output_tokens || 0,
                   totalTokens:
-                    (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+                    (usage.input_tokens || 0) + (usage.output_tokens || 0),
                   cache_read_input_tokens: cacheRead,
                   cache_creation_input_tokens: cacheCreation,
                 },
               },
             } as IContent;
           }
-        } else if (chunk.type === 'content_block_start') {
-          if (chunk.content_block.type === 'tool_use') {
-            const toolBlock = chunk.content_block as ToolUseBlock;
-            this.getStreamingLogger().debug(
-              () => `Starting tool use: ${toolBlock.name}`,
-            );
-            currentToolCall = {
-              id: toolBlock.id,
-              name: toolBlock.name,
-              input: '',
-            };
-          } else if (chunk.content_block.type === 'thinking') {
-            this.getStreamingLogger().debug(() => 'Starting thinking block');
-            currentThinkingBlock = {
-              thinking: '',
-            };
-          }
-        } else if (chunk.type === 'content_block_delta') {
-          if (chunk.delta.type === 'text_delta') {
-            const textDelta = chunk.delta as TextDelta;
-            this.getStreamingLogger().debug(
-              () => `Received text delta: ${textDelta.text.length} chars`,
-            );
-            // Emit text immediately as IContent
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: textDelta.text }],
-            } as IContent;
-          } else if (
-            chunk.delta.type === 'input_json_delta' &&
-            currentToolCall
-          ) {
-            const jsonDelta = chunk.delta as InputJSONDelta;
-            currentToolCall.input += jsonDelta.partial_json;
-
-            // Check for double-escaping patterns
-            logDoubleEscapingInChunk(
-              jsonDelta.partial_json,
-              currentToolCall.name,
-              'anthropic',
-            );
-          } else if (
-            chunk.delta.type === 'thinking_delta' &&
-            currentThinkingBlock
-          ) {
-            const thinkingDelta = chunk.delta as {
-              type: 'thinking_delta';
-              thinking: string;
-            };
-            currentThinkingBlock.thinking += thinkingDelta.thinking;
-          }
-        } else if (chunk.type === 'content_block_stop') {
-          if (currentToolCall) {
-            const activeToolCall = currentToolCall;
-            this.getStreamingLogger().debug(
-              () => `Completed tool use: ${activeToolCall.name}`,
-            );
-            // Process tool parameters with double-escape handling
-            const processedParameters = processToolParameters(
-              activeToolCall.input,
-              activeToolCall.name,
-              'anthropic',
-            );
-
-            yield {
-              speaker: 'ai',
-              blocks: [
-                {
-                  type: 'tool_call',
-                  id: this.normalizeToHistoryToolId(activeToolCall.id),
-                  name: activeToolCall.name,
-                  parameters: processedParameters,
-                },
-              ],
-            } as IContent;
-            currentToolCall = undefined;
-          } else if (currentThinkingBlock) {
-            const activeThinkingBlock = currentThinkingBlock;
-            this.getStreamingLogger().debug(
-              () =>
-                `Completed thinking block: ${activeThinkingBlock.thinking.length} chars`,
-            );
-
-            // Extract signature from content_block if present
-            const contentBlock = (
-              chunk as unknown as {
-                content_block?: {
-                  type: string;
-                  thinking?: string;
-                  signature?: string;
-                };
-              }
-            ).content_block;
-            if (contentBlock?.signature) {
-              activeThinkingBlock.signature = contentBlock.signature;
-            }
-
-            yield {
-              speaker: 'ai',
-              blocks: [
-                {
-                  type: 'thinking',
-                  thought: activeThinkingBlock.thinking,
-                  sourceField: 'thinking',
-                  signature: activeThinkingBlock.signature,
-                } as ThinkingBlock,
-              ],
-            } as IContent;
-            currentThinkingBlock = undefined;
-          }
-        } else if (chunk.type === 'message_delta' && chunk.usage) {
-          // Emit usage metadata including cache fields
-          const usage = chunk.usage as {
-            input_tokens: number;
-            output_tokens: number;
-            cache_read_input_tokens?: number;
-            cache_creation_input_tokens?: number;
-          };
-
-          const cacheRead = usage.cache_read_input_tokens ?? 0;
-          const cacheCreation = usage.cache_creation_input_tokens ?? 0;
-
-          this.getStreamingLogger().debug(
-            () =>
-              `Received usage metadata from message_delta: promptTokens=${usage.input_tokens || 0}, completionTokens=${usage.output_tokens || 0}, cacheRead=${cacheRead}, cacheCreation=${cacheCreation}`,
-          );
-
-          yield {
-            speaker: 'ai',
-            blocks: [],
-            metadata: {
-              usage: {
-                promptTokens: usage.input_tokens || 0,
-                completionTokens: usage.output_tokens || 0,
-                totalTokens:
-                  (usage.input_tokens || 0) + (usage.output_tokens || 0),
-                cache_read_input_tokens: cacheRead,
-                cache_creation_input_tokens: cacheCreation,
-              },
-            },
-          } as IContent;
         }
+      } catch (error) {
+        // Streaming errors should be propagated for retry logic
+        this.getStreamingLogger().debug(
+          () => `Streaming iteration error: ${error}`,
+        );
+        throw error;
       }
     } else {
       // Handle non-streaming response
