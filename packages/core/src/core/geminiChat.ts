@@ -1211,11 +1211,18 @@ export class GeminiChat {
           });
 
           let lastResponse: IContent | undefined;
+          let lastBlockWasNonText = false;
           for await (const iContent of streamResponse) {
             lastResponse = iContent;
             for (const block of iContent.blocks ?? []) {
               if (block.type === 'text') {
+                if (lastBlockWasNonText && aggregatedText.length > 0) {
+                  aggregatedText += ' ';
+                }
                 aggregatedText += block.text;
+                lastBlockWasNonText = false;
+              } else {
+                lastBlockWasNonText = true;
               }
             }
           }
@@ -2032,11 +2039,18 @@ export class GeminiChat {
 
     // Collect response
     let summary = '';
+    let lastBlockWasNonText = false;
     for await (const chunk of stream) {
       if (chunk.blocks) {
         for (const block of chunk.blocks) {
           if (block.type === 'text') {
+            if (lastBlockWasNonText && summary.length > 0) {
+              summary += ' ';
+            }
             summary += block.text;
+            lastBlockWasNonText = false;
+          } else {
+            lastBlockWasNonText = true;
           }
         }
       }
