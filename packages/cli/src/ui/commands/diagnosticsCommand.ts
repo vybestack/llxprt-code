@@ -14,7 +14,7 @@ import {
   CommandKind,
 } from './types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { DebugLogger, MCPOAuthTokenStorage } from '@vybestack/llxprt-code-core';
 import process from 'node:process';
 
 function maskSensitive(value: string): string {
@@ -220,6 +220,109 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push(
         `- Usage Statistics: ${merged.ui?.usageStatisticsEnabled ? 'Enabled' : 'Disabled'}`,
       );
+
+      diagnostics.push('\n## OAuth Tokens');
+
+      try {
+        const runtimeApi = getRuntimeApi();
+        const oauthManager = runtimeApi.getCliOAuthManager();
+
+        if (!oauthManager) {
+          diagnostics.push('- No OAuth tokens configured');
+        } else {
+          const supportedProviders = oauthManager.getSupportedProviders();
+
+          let hasProviderTokens = false;
+          let hasMCPTokens = false;
+
+          if (supportedProviders.length > 0) {
+            diagnostics.push('### Provider Tokens');
+
+            for (const provider of supportedProviders) {
+              const isAuthenticated =
+                await oauthManager.isAuthenticated(provider);
+
+              if (isAuthenticated) {
+                const token = await oauthManager.peekStoredToken(provider);
+
+                if (token && typeof token.expiry === 'number') {
+                  hasProviderTokens = true;
+                  const expiryDate = new Date(token.expiry * 1000);
+                  const timeUntilExpiry = Math.max(
+                    0,
+                    token.expiry - Date.now() / 1000,
+                  );
+                  const hours = Math.floor(timeUntilExpiry / 3600);
+                  const minutes = Math.floor((timeUntilExpiry % 3600) / 60);
+
+                  diagnostics.push(`- ${provider}:`);
+                  diagnostics.push(`  - Status: Authenticated`);
+                  diagnostics.push(`  - Expires: ${expiryDate.toISOString()}`);
+                  diagnostics.push(`  - Time Remaining: ${hours}h ${minutes}m`);
+                  diagnostics.push(
+                    `  - Refresh Token: ${token.refresh_token ? 'Available' : 'None'}`,
+                  );
+                }
+              } else {
+                hasProviderTokens = true;
+                diagnostics.push(`- ${provider}: Not authenticated`);
+              }
+            }
+          }
+
+          const mcpTokenStorage = new MCPOAuthTokenStorage();
+          const mcpTokens = await mcpTokenStorage.getAllCredentials();
+
+          if (mcpTokens.size > 0) {
+            hasMCPTokens = true;
+            diagnostics.push('\n### MCP Server Tokens');
+
+            for (const [serverName, credentials] of mcpTokens) {
+              const token = credentials.token;
+              const isExpired = MCPOAuthTokenStorage.isTokenExpired(token);
+
+              diagnostics.push(`- ${serverName}:`);
+              diagnostics.push(
+                `  - Status: ${isExpired ? 'Expired' : 'Valid'}`,
+              );
+
+              if (token.expiresAt) {
+                const expiryDate = new Date(token.expiresAt);
+                const timeUntilExpiry = Math.max(
+                  0,
+                  (token.expiresAt - Date.now()) / 1000,
+                );
+                const hours = Math.floor(timeUntilExpiry / 3600);
+                const minutes = Math.floor((timeUntilExpiry % 3600) / 60);
+
+                diagnostics.push(`  - Expires: ${expiryDate.toISOString()}`);
+                diagnostics.push(`  - Time Remaining: ${hours}h ${minutes}m`);
+              }
+
+              diagnostics.push(
+                `  - Refresh Token: ${token.refreshToken ? 'Available' : 'None'}`,
+              );
+
+              if (token.tokenType) {
+                diagnostics.push(`  - Token Type: ${token.tokenType}`);
+              }
+
+              if (token.scope) {
+                diagnostics.push(`  - Scopes: ${token.scope}`);
+              }
+            }
+          }
+
+          if (!hasProviderTokens && !hasMCPTokens) {
+            diagnostics.push('- No OAuth tokens configured');
+          }
+        }
+      } catch (error) {
+        logger.debug(
+          () => `[diagnostics] Failed to retrieve OAuth tokens: ${error}`,
+        );
+        diagnostics.push('- Unable to retrieve OAuth token information');
+      }
 
       return {
         type: 'message',
