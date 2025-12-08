@@ -13,6 +13,7 @@ import { existsSync } from 'fs';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import type { Stats } from 'fs';
+import { createHash } from 'node:crypto';
 
 // Constants
 export const DEFAULT_BASE_DIR = '~/.llxprt/prompts';
@@ -33,7 +34,25 @@ export interface InstallOptions {
 export type PromptConflictReason =
   | 'default-newer'
   | 'user-newer'
-  | 'content-diff';
+  | 'content-diff'
+  | 'user-modified'
+  | 'user-protected'
+  | 'unknown-baseline';
+
+// Manifest file constants
+const MANIFEST_FILE = '.installed-manifest.json';
+const MANIFEST_VERSION = 1;
+
+// Manifest types
+interface InstalledFileEntry {
+  hash: string;
+  installedAt: string;
+}
+
+interface InstalledManifest {
+  version: number;
+  files: Record<string, InstalledFileEntry>;
+}
 
 export interface PromptConflictDetails {
   path: string;
@@ -49,6 +68,7 @@ export interface PromptConflictSummary extends PromptConflictDetails {
 
 type ExistingFileDecision =
   | { action: 'same' }
+  | { action: 'overwrite' }
   | { action: 'keep'; conflict: PromptConflictSummary; notice: string | null }
   | { action: 'resolved' };
 
@@ -176,6 +196,16 @@ export class PromptInstaller {
       }
     }
 
+    // Load manifest for hash-based modification tracking
+    let manifest: InstalledManifest | null = null;
+    if (!options?.dryRun && existsSync(expandedBaseDir)) {
+      manifest = await this.loadManifest(expandedBaseDir);
+    }
+    // Initialize manifest if it doesn't exist
+    if (!manifest && !options?.dryRun) {
+      manifest = { version: MANIFEST_VERSION, files: {} };
+    }
+
     // Install default files
     for (const [relativePath, content] of Object.entries(defaults)) {
       const fullPath = path.join(expandedBaseDir, relativePath);
@@ -193,6 +223,9 @@ export class PromptInstaller {
         }
       }
 
+      // Track if we should write file (for overwrite action)
+      let shouldWriteFile = false;
+
       // Check existing file
       if (existsSync(fullPath) && !options?.force) {
         const decision = await this.handleExistingFile(
@@ -201,6 +234,7 @@ export class PromptInstaller {
           fullPath,
           content,
           !options?.dryRun,
+          manifest,
         ).catch((error) => {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -235,9 +269,24 @@ export class PromptInstaller {
           skipped.push(relativePath);
           continue;
         }
+
+        if (decision.action === 'overwrite') {
+          // User never modified - safe to silently overwrite
+          shouldWriteFile = true;
+          if (options?.verbose) {
+            console.log('Updating unmodified file:', relativePath);
+          }
+        }
+      } else {
+        // File doesn't exist or force mode - write it
+        shouldWriteFile = true;
       }
 
-      // Write file
+      // Write file only if shouldWriteFile is true
+      if (!shouldWriteFile) {
+        continue;
+      }
+
       if (options?.dryRun) {
         if (options?.verbose) {
           console.log('Would write:', fullPath);
@@ -252,6 +301,14 @@ export class PromptInstaller {
           try {
             await fs.rename(tempPath, fullPath);
             installed.push(relativePath);
+            // Update manifest with new hash
+            if (manifest) {
+              this.updateManifestEntry(
+                manifest,
+                relativePath,
+                this.hashContent(content),
+              );
+            }
             if (options?.verbose) {
               console.log('Installed:', relativePath);
             }
@@ -327,6 +384,18 @@ export class PromptInstaller {
       }
     }
 
+    // Save manifest (if not dry run and we have a manifest)
+    if (!options?.dryRun && manifest && installed.length > 0) {
+      try {
+        await this.saveManifest(expandedBaseDir, manifest);
+      } catch (error) {
+        // Non-critical error, don't fail the installation
+        if (options?.verbose) {
+          console.log('Could not save manifest:', error);
+        }
+      }
+    }
+
     return {
       success: errors.length === 0,
       installed,
@@ -344,16 +413,67 @@ export class PromptInstaller {
     fullPath: string,
     content: string,
     createReviewCopy: boolean,
+    manifest: InstalledManifest | null,
   ): Promise<ExistingFileDecision> {
     const existingContent = await fs.readFile(fullPath, 'utf-8');
+
+    // 1. Content identical - skip (no change needed)
     if (existingContent === content) {
       return { action: 'same' };
     }
 
-    const userStats = await fs.stat(fullPath);
-    const defaultStats = await this.getDefaultFileStats(relativePath);
-    const reason = this.determineConflictReason(userStats, defaultStats);
+    // 2. Check for NO OVERWRITE flag - user explicitly protects this file
+    if (this.hasNoOverwriteFlag(existingContent)) {
+      return this.createKeepDecision(
+        expandedBaseDir,
+        relativePath,
+        content,
+        'user-protected',
+        createReviewCopy,
+      );
+    }
 
+    // 3. Get installed hash to determine if user modified the file
+    const installedHash = this.getInstalledHash(manifest, relativePath);
+    const currentHash = this.hashContent(existingContent);
+
+    // 4. No manifest entry - first run or corrupt manifest (conservative: assume modified)
+    if (installedHash === null) {
+      return this.createKeepDecision(
+        expandedBaseDir,
+        relativePath,
+        content,
+        'unknown-baseline',
+        createReviewCopy,
+      );
+    }
+
+    // 5. User never modified file - safe to overwrite silently
+    if (currentHash === installedHash) {
+      return { action: 'overwrite' };
+    }
+
+    // 6. User DID modify file - preserve their changes, create review file
+    return this.createKeepDecision(
+      expandedBaseDir,
+      relativePath,
+      content,
+      'user-modified',
+      createReviewCopy,
+    );
+  }
+
+  /**
+   * Create a keep decision with optional review file
+   */
+  private async createKeepDecision(
+    expandedBaseDir: string,
+    relativePath: string,
+    content: string,
+    reason: PromptConflictReason,
+    createReviewCopy: boolean,
+  ): Promise<ExistingFileDecision> {
+    const defaultStats = await this.getDefaultFileStats(relativePath);
     const timestamp = this.getReviewTimestamp(defaultStats);
     const reviewRelativePath = this.generateReviewFilename(
       relativePath,
@@ -361,6 +481,7 @@ export class PromptInstaller {
     );
     const reviewFullPath = path.join(expandedBaseDir, reviewRelativePath);
 
+    // Check if review file already exists
     if (existsSync(reviewFullPath)) {
       return { action: 'resolved' };
     }
@@ -378,8 +499,6 @@ export class PromptInstaller {
       action: 'kept',
       reviewFile: reviewRelativePath,
       reason,
-      userTimestamp: userStats.mtime.toISOString(),
-      defaultTimestamp: defaultStats?.mtime.toISOString(),
     };
 
     const notice = this.buildConflictNotice(
@@ -431,21 +550,6 @@ export class PromptInstaller {
       }
     }
     return null;
-  }
-
-  private determineConflictReason(
-    userStats: Stats | null,
-    defaultStats: Stats | null,
-  ): PromptConflictReason {
-    if (userStats && defaultStats) {
-      if (defaultStats.mtimeMs > userStats.mtimeMs) {
-        return 'default-newer';
-      }
-      if (userStats.mtimeMs > defaultStats.mtimeMs) {
-        return 'user-newer';
-      }
-    }
-    return 'content-diff';
   }
 
   private generateReviewFilename(
@@ -1101,5 +1205,85 @@ export class PromptInstaller {
 
     // Normalize path (remove redundant separators, resolve . and ..)
     return path.normalize(expandedPath);
+  }
+
+  /**
+   * Compute SHA-256 hash of content
+   * @param content - Content to hash
+   * @returns Hex-encoded SHA-256 hash
+   */
+  hashContent(content: string): string {
+    return createHash('sha256').update(content, 'utf-8').digest('hex');
+  }
+
+  /**
+   * Check if content has NO OVERWRITE flag
+   */
+  private hasNoOverwriteFlag(content: string): boolean {
+    const patterns = [
+      /^#\s*NO\s*OVERWRITE/im,
+      /^#\s*LLXPRT:\s*NO\s*OVERWRITE/im,
+      /<!--\s*NO\s*OVERWRITE\s*-->/i,
+    ];
+    return patterns.some((p) => p.test(content));
+  }
+
+  /**
+   * Load installed manifest from disk
+   */
+  private async loadManifest(
+    baseDir: string,
+  ): Promise<InstalledManifest | null> {
+    const manifestPath = path.join(baseDir, MANIFEST_FILE);
+    try {
+      const content = await fs.readFile(manifestPath, 'utf-8');
+      const manifest = JSON.parse(content) as InstalledManifest;
+      if (manifest.version && manifest.files) {
+        return manifest;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Save manifest to disk
+   */
+  private async saveManifest(
+    baseDir: string,
+    manifest: InstalledManifest,
+  ): Promise<void> {
+    const manifestPath = path.join(baseDir, MANIFEST_FILE);
+    await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), {
+      mode: 0o644,
+    });
+  }
+
+  /**
+   * Get installed hash for a file from manifest
+   */
+  private getInstalledHash(
+    manifest: InstalledManifest | null,
+    relativePath: string,
+  ): string | null {
+    if (!manifest || !manifest.files[relativePath]) {
+      return null;
+    }
+    return manifest.files[relativePath].hash;
+  }
+
+  /**
+   * Update manifest entry for a file
+   */
+  private updateManifestEntry(
+    manifest: InstalledManifest,
+    relativePath: string,
+    hash: string,
+  ): void {
+    manifest.files[relativePath] = {
+      hash,
+      installedAt: new Date().toISOString(),
+    };
   }
 }

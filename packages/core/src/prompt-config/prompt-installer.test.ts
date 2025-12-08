@@ -671,6 +671,303 @@ describe('PromptInstaller', () => {
     });
   });
 
+  describe('hash-based modification tracking (issue #734)', () => {
+    const MANIFEST_FILE = '.installed-manifest.json';
+
+    const defaultFiles = {
+      'core.md': '# Core Prompt\nDefault content',
+      'env/development.md': '# Development Environment',
+    };
+
+    describe('manifest file management', () => {
+      it('should create manifest file on first install', async () => {
+        const result = await installer.install(testBaseDir, defaultFiles);
+
+        expect(result.success).toBe(true);
+        const manifestPath = path.join(testBaseDir, MANIFEST_FILE);
+        expect(existsSync(manifestPath)).toBe(true);
+
+        const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8'));
+        expect(manifest.version).toBe(1);
+        expect(manifest.files['core.md']).toBeDefined();
+        expect(manifest.files['core.md'].hash).toBeDefined();
+        expect(manifest.files['env/development.md']).toBeDefined();
+      });
+
+      it('should update manifest when file is overwritten', async () => {
+        // First install
+        await installer.install(testBaseDir, defaultFiles);
+
+        // Get original hash
+        const manifestPath = path.join(testBaseDir, MANIFEST_FILE);
+        const manifest1 = JSON.parse(await fs.readFile(manifestPath, 'utf-8'));
+        const originalHash = manifest1.files['core.md'].hash;
+
+        // Change the default content
+        const newDefaults = {
+          'core.md': '# Core Prompt\nNew default content v2',
+        };
+
+        // Second install - should silently overwrite (file wasn't modified by user)
+        const result = await installer.install(testBaseDir, newDefaults);
+
+        expect(result.success).toBe(true);
+
+        // Verify manifest was updated with new hash
+        const manifest2 = JSON.parse(await fs.readFile(manifestPath, 'utf-8'));
+        expect(manifest2.files['core.md'].hash).not.toBe(originalHash);
+
+        // Verify file content was updated
+        const content = await fs.readFile(
+          path.join(testBaseDir, 'core.md'),
+          'utf-8',
+        );
+        expect(content).toBe('# Core Prompt\nNew default content v2');
+      });
+
+      it('should handle corrupted manifest gracefully', async () => {
+        await fs.mkdir(testBaseDir, { recursive: true });
+        const manifestPath = path.join(testBaseDir, MANIFEST_FILE);
+        await fs.writeFile(manifestPath, 'not valid json');
+        await fs.writeFile(
+          path.join(testBaseDir, 'core.md'),
+          'User modified content',
+        );
+
+        const result = await installer.install(testBaseDir, defaultFiles);
+
+        // Should succeed and treat file as potentially modified (conservative)
+        expect(result.success).toBe(true);
+        // File should be preserved (conservative when manifest is corrupt)
+        expect(result.skipped).toContain('core.md');
+      });
+    });
+
+    describe('user modification detection', () => {
+      it('should silently overwrite file that user never modified', async () => {
+        // First install
+        await installer.install(testBaseDir, defaultFiles);
+
+        // Verify file was installed
+        expect(existsSync(path.join(testBaseDir, 'core.md'))).toBe(true);
+
+        // Ship new defaults without user touching anything
+        const newDefaults = {
+          'core.md': '# Core Prompt\nUpdated default content',
+        };
+
+        const result = await installer.install(testBaseDir, newDefaults);
+
+        expect(result.success).toBe(true);
+        // File should be overwritten, not skipped
+        expect(result.installed).toContain('core.md');
+        expect(result.skipped).not.toContain('core.md');
+        expect(result.conflicts).toHaveLength(0);
+
+        // Verify content was updated
+        const content = await fs.readFile(
+          path.join(testBaseDir, 'core.md'),
+          'utf-8',
+        );
+        expect(content).toBe('# Core Prompt\nUpdated default content');
+      });
+
+      it('should create review file when user actually modified the file', async () => {
+        // First install
+        await installer.install(testBaseDir, defaultFiles);
+
+        // User modifies the file
+        await fs.writeFile(
+          path.join(testBaseDir, 'core.md'),
+          '# My Custom Prompt\nI changed this!',
+        );
+
+        // Ship new defaults
+        const newDefaults = {
+          'core.md': '# Core Prompt\nUpdated default content',
+        };
+
+        const result = await installer.install(testBaseDir, newDefaults);
+
+        expect(result.success).toBe(true);
+        // User's file should be preserved
+        expect(result.skipped).toContain('core.md');
+        // Conflict should be reported
+        expect(result.conflicts).toHaveLength(1);
+        expect(result.conflicts[0].reason).toBe('user-modified');
+
+        // User's content should be preserved
+        const content = await fs.readFile(
+          path.join(testBaseDir, 'core.md'),
+          'utf-8',
+        );
+        expect(content).toBe('# My Custom Prompt\nI changed this!');
+
+        // Review file should exist with new defaults
+        const reviewFile = result.conflicts[0].reviewFile;
+        expect(reviewFile).toBeDefined();
+        expect(existsSync(path.join(testBaseDir, reviewFile!))).toBe(true);
+      });
+
+      it('should not create duplicate review files on subsequent installs', async () => {
+        // First install
+        await installer.install(testBaseDir, defaultFiles);
+
+        // User modifies the file
+        await fs.writeFile(
+          path.join(testBaseDir, 'core.md'),
+          '# My Custom Prompt\nI changed this!',
+        );
+
+        const newDefaults = {
+          'core.md': '# Core Prompt\nUpdated default content',
+        };
+
+        // First install with new defaults - creates review file
+        const result1 = await installer.install(testBaseDir, newDefaults);
+        expect(result1.conflicts).toHaveLength(1);
+        const reviewFile1 = result1.conflicts[0].reviewFile;
+
+        // Second install with same defaults - should NOT create another review file
+        const result2 = await installer.install(testBaseDir, newDefaults);
+        expect(result2.conflicts).toHaveLength(0);
+        expect(result2.notices).toHaveLength(0);
+
+        // Count review files - should be just one
+        const files = await fs.readdir(testBaseDir);
+        const reviewFiles = files.filter(
+          (f) => f.startsWith('core.md.') && f !== 'core.md',
+        );
+        expect(reviewFiles).toHaveLength(1);
+        expect(reviewFiles[0]).toBe(reviewFile1);
+      });
+
+      it('should treat file as potentially modified when no manifest exists', async () => {
+        // Create existing file without ever running installer
+        await fs.mkdir(testBaseDir, { recursive: true });
+        await fs.writeFile(
+          path.join(testBaseDir, 'core.md'),
+          'Some existing content',
+        );
+
+        const result = await installer.install(testBaseDir, defaultFiles);
+
+        // Should be conservative - assume user modified
+        expect(result.success).toBe(true);
+        expect(result.skipped).toContain('core.md');
+        expect(result.conflicts).toHaveLength(1);
+        expect(result.conflicts[0].reason).toBe('unknown-baseline');
+      });
+    });
+
+    describe('NO OVERWRITE flag', () => {
+      it('should preserve file with # NO OVERWRITE at start', async () => {
+        // First install
+        await installer.install(testBaseDir, defaultFiles);
+
+        // User adds NO OVERWRITE flag (but content otherwise unchanged)
+        await fs.writeFile(
+          path.join(testBaseDir, 'core.md'),
+          '# NO OVERWRITE\n# Core Prompt\nDefault content',
+        );
+
+        // Update manifest to mark this as unmodified (simulate clean state)
+        const manifestPath = path.join(testBaseDir, MANIFEST_FILE);
+        const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8'));
+        manifest.files['core.md'].hash = installer.hashContent(
+          '# NO OVERWRITE\n# Core Prompt\nDefault content',
+        );
+        await fs.writeFile(manifestPath, JSON.stringify(manifest));
+
+        const newDefaults = {
+          'core.md': '# Core Prompt\nUpdated default content',
+        };
+
+        const result = await installer.install(testBaseDir, newDefaults);
+
+        expect(result.success).toBe(true);
+        expect(result.skipped).toContain('core.md');
+        expect(result.conflicts).toHaveLength(1);
+        expect(result.conflicts[0].reason).toBe('user-protected');
+
+        // File should NOT be overwritten
+        const content = await fs.readFile(
+          path.join(testBaseDir, 'core.md'),
+          'utf-8',
+        );
+        expect(content).toContain('# NO OVERWRITE');
+      });
+
+      it('should preserve file with # LLXPRT: NO OVERWRITE', async () => {
+        await installer.install(testBaseDir, defaultFiles);
+
+        await fs.writeFile(
+          path.join(testBaseDir, 'core.md'),
+          '# LLXPRT: NO OVERWRITE\n# Core Prompt\nDefault content',
+        );
+
+        const manifestPath = path.join(testBaseDir, MANIFEST_FILE);
+        const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8'));
+        manifest.files['core.md'].hash = installer.hashContent(
+          '# LLXPRT: NO OVERWRITE\n# Core Prompt\nDefault content',
+        );
+        await fs.writeFile(manifestPath, JSON.stringify(manifest));
+
+        const newDefaults = {
+          'core.md': '# Core Prompt\nUpdated default content',
+        };
+
+        const result = await installer.install(testBaseDir, newDefaults);
+
+        expect(result.success).toBe(true);
+        expect(result.conflicts[0].reason).toBe('user-protected');
+      });
+
+      it('should preserve file with <!-- NO OVERWRITE --> comment', async () => {
+        await installer.install(testBaseDir, defaultFiles);
+
+        await fs.writeFile(
+          path.join(testBaseDir, 'core.md'),
+          '<!-- NO OVERWRITE -->\n# Core Prompt\nDefault content',
+        );
+
+        const manifestPath = path.join(testBaseDir, MANIFEST_FILE);
+        const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8'));
+        manifest.files['core.md'].hash = installer.hashContent(
+          '<!-- NO OVERWRITE -->\n# Core Prompt\nDefault content',
+        );
+        await fs.writeFile(manifestPath, JSON.stringify(manifest));
+
+        const newDefaults = {
+          'core.md': '# Core Prompt\nUpdated default content',
+        };
+
+        const result = await installer.install(testBaseDir, newDefaults);
+
+        expect(result.success).toBe(true);
+        expect(result.conflicts[0].reason).toBe('user-protected');
+      });
+    });
+
+    describe('content hashing', () => {
+      it('should produce consistent hashes for same content', () => {
+        const content = '# Test content\nWith multiple lines';
+        const hash1 = installer.hashContent(content);
+        const hash2 = installer.hashContent(content);
+
+        expect(hash1).toBe(hash2);
+        expect(hash1).toMatch(/^[a-f0-9]{64}$/); // SHA-256 produces 64 hex chars
+      });
+
+      it('should produce different hashes for different content', () => {
+        const hash1 = installer.hashContent('Content A');
+        const hash2 = installer.hashContent('Content B');
+
+        expect(hash1).not.toBe(hash2);
+      });
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle symbolic links in base directory', async () => {
       const realDir = path.join(tempDir, 'real-prompts');
