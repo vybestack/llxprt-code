@@ -38,6 +38,11 @@ import {
   ensureActiveLoopHasThoughtSignatures,
   stripThoughtsFromHistory,
 } from './thoughtSignatures.js';
+import {
+  shouldDumpSDKContext,
+  dumpSDKContext,
+} from '../utils/dumpSDKContext.js';
+import type { DumpMode } from '../utils/dumpContext.js';
 // ThinkingLevel is not directly exported, use string literals
 
 /**
@@ -1101,6 +1106,12 @@ export class GeminiProvider extends BaseProvider {
     // Extract reasoning ephemerals for Gemini 3.x thinking support
     // @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006
     const earlyEphemerals = options.invocation?.ephemerals ?? {};
+
+    // Get dump mode from ephemeral settings
+    const dumpMode = earlyEphemerals.dumpcontext as DumpMode | undefined;
+    const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
+    const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
+
     // Ephemerals can be stored as flat keys ('reasoning.enabled') or nested objects ('reasoning': {enabled: true})
     // Handle both formats for compatibility
     const reasoningObj = (earlyEphemerals as Record<string, unknown>)[
@@ -1521,40 +1532,100 @@ export class GeminiProvider extends BaseProvider {
       };
 
       if (!streamingEnabled && generatorWithStream.generateContent) {
-        const response = await generatorWithStream.generateContent(
+        try {
+          const response = await generatorWithStream.generateContent(
+            oauthRequest,
+            sessionId,
+          );
+
+          // Dump successful non-streaming request if enabled
+          if (shouldDumpSuccess) {
+            await dumpSDKContext(
+              'gemini',
+              '/v1/models/generateContent',
+              oauthRequest,
+              response,
+              false,
+              baseURL || 'https://generativelanguage.googleapis.com',
+            );
+          }
+
+          let yielded = false;
+          for (const chunk of mapResponseToChunks(
+            response as GenerateContentResponse,
+            reasoningIncludeInResponse,
+          )) {
+            yielded = true;
+            yield chunk;
+          }
+          if (!yielded) {
+            yield { speaker: 'ai', blocks: [] } as IContent;
+          }
+          return;
+        } catch (error) {
+          // Dump error if enabled
+          if (shouldDumpError) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            await dumpSDKContext(
+              'gemini',
+              '/v1/models/generateContent',
+              oauthRequest,
+              { error: errorMessage },
+              true,
+              baseURL || 'https://generativelanguage.googleapis.com',
+            );
+          }
+          throw error;
+        }
+      }
+
+      try {
+        const oauthStream = await generatorWithStream.generateContentStream(
           oauthRequest,
           sessionId,
         );
-        let yielded = false;
-        for (const chunk of mapResponseToChunks(
-          response as GenerateContentResponse,
-          reasoningIncludeInResponse,
-        )) {
-          yielded = true;
-          yield chunk;
-        }
-        if (!yielded) {
-          yield { speaker: 'ai', blocks: [] } as IContent;
-        }
-        return;
-      }
 
-      const oauthStream = await generatorWithStream.generateContentStream(
-        oauthRequest,
-        sessionId,
-      );
-      stream = oauthStream as AsyncIterable<GenerateContentResponse>;
-      if (streamingEnabled) {
-        emitted = true;
-        yield {
-          speaker: 'ai',
-          blocks: [],
-          metadata: {
-            session: sessionId,
-            runtime: runtimeId,
-            authMode: 'oauth',
-          },
-        } as IContent;
+        // Dump successful streaming request if enabled
+        if (shouldDumpSuccess) {
+          await dumpSDKContext(
+            'gemini',
+            '/v1/models/streamGenerateContent',
+            oauthRequest,
+            { streaming: true },
+            false,
+            baseURL || 'https://generativelanguage.googleapis.com',
+          );
+        }
+
+        stream = oauthStream as AsyncIterable<GenerateContentResponse>;
+        if (streamingEnabled) {
+          emitted = true;
+          yield {
+            speaker: 'ai',
+            blocks: [],
+            metadata: {
+              session: sessionId,
+              runtime: runtimeId,
+              authMode: 'oauth',
+            },
+          } as IContent;
+        }
+      } catch (error) {
+        // Dump error if enabled
+        if (shouldDumpError) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          await dumpSDKContext(
+            'gemini',
+            '/v1/models/streamGenerateContent',
+            oauthRequest,
+            { error: errorMessage },
+            true,
+            baseURL || 'https://generativelanguage.googleapis.com',
+          );
+        }
+        throw error;
       }
     } else {
       // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
@@ -1589,21 +1660,80 @@ export class GeminiProvider extends BaseProvider {
       };
 
       if (streamingEnabled) {
-        stream = await contentGenerator.generateContentStream(apiRequest);
+        try {
+          stream = await contentGenerator.generateContentStream(apiRequest);
+
+          // Dump successful streaming request if enabled
+          if (shouldDumpSuccess) {
+            await dumpSDKContext(
+              'gemini',
+              '/v1/models/streamGenerateContent',
+              apiRequest,
+              { streaming: true },
+              false,
+              baseURL || 'https://generativelanguage.googleapis.com',
+            );
+          }
+        } catch (error) {
+          // Dump error if enabled
+          if (shouldDumpError) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            await dumpSDKContext(
+              'gemini',
+              '/v1/models/streamGenerateContent',
+              apiRequest,
+              { error: errorMessage },
+              true,
+              baseURL || 'https://generativelanguage.googleapis.com',
+            );
+          }
+          throw error;
+        }
       } else {
-        const response = await contentGenerator.generateContent(apiRequest);
-        let yielded = false;
-        for (const chunk of mapResponseToChunks(
-          response,
-          reasoningIncludeInResponse,
-        )) {
-          yielded = true;
-          yield chunk;
+        try {
+          const response = await contentGenerator.generateContent(apiRequest);
+
+          // Dump successful non-streaming request if enabled
+          if (shouldDumpSuccess) {
+            await dumpSDKContext(
+              'gemini',
+              '/v1/models/generateContent',
+              apiRequest,
+              response,
+              false,
+              baseURL || 'https://generativelanguage.googleapis.com',
+            );
+          }
+
+          let yielded = false;
+          for (const chunk of mapResponseToChunks(
+            response,
+            reasoningIncludeInResponse,
+          )) {
+            yielded = true;
+            yield chunk;
+          }
+          if (!yielded) {
+            yield { speaker: 'ai', blocks: [] } as IContent;
+          }
+          return;
+        } catch (error) {
+          // Dump error if enabled
+          if (shouldDumpError) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            await dumpSDKContext(
+              'gemini',
+              '/v1/models/generateContent',
+              apiRequest,
+              { error: errorMessage },
+              true,
+              baseURL || 'https://generativelanguage.googleapis.com',
+            );
+          }
+          throw error;
         }
-        if (!yielded) {
-          yield { speaker: 'ai', blocks: [] } as IContent;
-        }
-        return;
       }
     }
 
