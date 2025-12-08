@@ -10,6 +10,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
+import type { CommandArgumentSchema } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -22,15 +23,43 @@ function isValidMode(mode: string): mode is DumpMode {
   return validModes.includes(mode as DumpMode);
 }
 
+/**
+ * Schema for /dumpcontext command argument completion
+ */
+const dumpcontextSchema: CommandArgumentSchema = [
+  {
+    kind: 'literal',
+    value: 'now',
+    description: 'Dump context on next request only',
+  },
+  {
+    kind: 'literal',
+    value: 'status',
+    description: 'Show current dump status (default)',
+  },
+  {
+    kind: 'literal',
+    value: 'on',
+    description: 'Dump context before every request',
+  },
+  {
+    kind: 'literal',
+    value: 'error',
+    description: 'Dump context only on errors',
+  },
+  {
+    kind: 'literal',
+    value: 'off',
+    description: 'Disable context dumping',
+  },
+];
+
 export const dumpcontextCommand: SlashCommand = {
   name: 'dumpcontext',
   description:
     'Control context dumping: now, status, on, error, off (default: status)',
   kind: CommandKind.BUILT_IN,
-  completion: async (_context, partialArg) => {
-    const lowerArg = partialArg.toLowerCase();
-    return validModes.filter((mode) => mode.startsWith(lowerArg));
-  },
+  schema: dumpcontextSchema,
   action: async (
     context: CommandContext,
     args: string,
