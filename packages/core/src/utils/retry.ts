@@ -39,6 +39,7 @@ export const STREAM_INTERRUPTED_ERROR_CODE = 'LLXPRT_STREAM_INTERRUPTED';
 const TRANSIENT_ERROR_PHRASES = [
   'connection error',
   'connection terminated',
+  'terminated',
   'connection reset',
   'socket hang up',
   'socket hung up',
