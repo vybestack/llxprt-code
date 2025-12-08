@@ -1367,8 +1367,8 @@ export class AnthropicProvider extends BaseProvider {
       '1h';
     const wantCaching = cachingSetting !== 'off';
     const ttl = cachingSetting === '1h' ? '1h' : '5m';
-
     const cacheLogger = this.getCacheLogger();
+
     if (wantCaching) {
       cacheLogger.debug(() => `Prompt caching enabled with TTL: ${ttl}`);
     }
