@@ -228,10 +228,6 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 
-vi.mock('./providers/providerManagerInstance.js', () => ({
-  getProviderManager: vi.fn(() => mockProviderManager),
-}));
-
 const {
   switchActiveProvider,
   setCliRuntimeContext,

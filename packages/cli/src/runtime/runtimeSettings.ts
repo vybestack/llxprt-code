@@ -1732,7 +1732,9 @@ export async function switchActiveProvider(
       }
 
       // Restore authOnly setting
-      config.setEphemeralSetting('authOnly', authOnlyBeforeSwitch);
+      if (authOnlyBeforeSwitch !== undefined) {
+        config.setEphemeralSetting('authOnly', authOnlyBeforeSwitch);
+      }
     }
   }
 
