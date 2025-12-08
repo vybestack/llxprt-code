@@ -835,9 +835,7 @@ describe('PromptInstaller', () => {
 
         // Count review files - should be just one
         const files = await fs.readdir(testBaseDir);
-        const reviewFiles = files.filter(
-          (f) => f.startsWith('core.md.') && f !== 'core.md',
-        );
+        const reviewFiles = files.filter((f) => f.startsWith('core.md.'));
         expect(reviewFiles).toHaveLength(1);
         expect(reviewFiles[0]).toBe(reviewFile1);
       });

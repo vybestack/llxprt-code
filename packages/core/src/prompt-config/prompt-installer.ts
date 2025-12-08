@@ -14,6 +14,9 @@ import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import type { Stats } from 'fs';
 import { createHash } from 'node:crypto';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const logger = new DebugLogger('llxprt:prompt-config:installer');
 
 // Constants
 export const DEFAULT_BASE_DIR = '~/.llxprt/prompts';
@@ -43,16 +46,19 @@ export type PromptConflictReason =
 const MANIFEST_FILE = '.installed-manifest.json';
 const MANIFEST_VERSION = 1;
 
-// Manifest types
-interface InstalledFileEntry {
-  hash: string;
-  installedAt: string;
-}
+// Manifest Zod schema for safe deserialization
+const InstalledFileEntrySchema = z.object({
+  hash: z.string(),
+  installedAt: z.string(),
+});
 
-interface InstalledManifest {
-  version: number;
-  files: Record<string, InstalledFileEntry>;
-}
+const InstalledManifestSchema = z.object({
+  version: z.number(),
+  files: z.record(z.string(), InstalledFileEntrySchema),
+});
+
+// Manifest type (inferred from schema)
+type InstalledManifest = z.infer<typeof InstalledManifestSchema>;
 
 export interface PromptConflictDetails {
   path: string;
@@ -173,13 +179,13 @@ export class PromptInstaller {
 
       if (options?.dryRun) {
         if (options?.verbose) {
-          console.log('Would create:', fullPath);
+          logger.debug('Would create:', fullPath);
         }
       } else {
         try {
           await fs.mkdir(fullPath, { recursive: true, mode: 0o755 });
           if (options?.verbose) {
-            console.log('Created directory:', fullPath);
+            logger.debug('Created directory:', fullPath);
           }
         } catch (error) {
           const errorMsg =
@@ -245,7 +251,7 @@ export class PromptInstaller {
         if (decision.action === 'same') {
           skipped.push(relativePath);
           if (options?.verbose) {
-            console.log('Preserving existing:', relativePath);
+            logger.debug('Preserving existing:', relativePath);
           }
           continue;
         }
@@ -253,7 +259,7 @@ export class PromptInstaller {
         if (decision.action === 'resolved') {
           skipped.push(relativePath);
           if (options?.verbose) {
-            console.log(
+            logger.debug(
               'Default update already provided for review:',
               relativePath,
             );
@@ -274,7 +280,7 @@ export class PromptInstaller {
           // User never modified - safe to silently overwrite
           shouldWriteFile = true;
           if (options?.verbose) {
-            console.log('Updating unmodified file:', relativePath);
+            logger.debug('Updating unmodified file:', relativePath);
           }
         }
       } else {
@@ -289,7 +295,7 @@ export class PromptInstaller {
 
       if (options?.dryRun) {
         if (options?.verbose) {
-          console.log('Would write:', fullPath);
+          logger.debug('Would write:', fullPath);
         }
         installed.push(relativePath);
       } else {
@@ -310,7 +316,7 @@ export class PromptInstaller {
               );
             }
             if (options?.verbose) {
-              console.log('Installed:', relativePath);
+              logger.debug('Installed:', relativePath);
             }
           } catch (renameError) {
             // If rename failed because file already exists, it's OK (race condition)
@@ -379,7 +385,7 @@ export class PromptInstaller {
       } catch (error) {
         // Non-critical error, don't fail the installation
         if (options?.verbose) {
-          console.log('Could not set permissions:', error);
+          logger.debug('Could not set permissions:', error);
         }
       }
     }
@@ -391,7 +397,7 @@ export class PromptInstaller {
       } catch (error) {
         // Non-critical error, don't fail the installation
         if (options?.verbose) {
-          console.log('Could not save manifest:', error);
+          logger.debug('Could not save manifest:', error);
         }
       }
     }
@@ -643,7 +649,7 @@ export class PromptInstaller {
       const fullPath = path.join(expandedBaseDir, file);
 
       if (options?.dryRun) {
-        console.log('Would remove:', fullPath);
+        logger.debug('Would remove:', fullPath);
         removed.push(file);
       } else {
         try {
@@ -866,7 +872,7 @@ export class PromptInstaller {
         await fs.mkdir(expandedBaseDir, { recursive: true, mode: 0o755 });
         repaired.push('base directory');
         if (options?.verbose) {
-          console.log('Created base directory:', expandedBaseDir);
+          logger.debug('Created base directory:', expandedBaseDir);
         }
       } catch (error) {
         errors.push(
@@ -894,7 +900,7 @@ export class PromptInstaller {
           await fs.mkdir(dirPath, { recursive: true, mode: 0o755 });
           repaired.push(missingItem);
           if (options?.verbose) {
-            console.log('Created directory:', dirPath);
+            logger.debug('Created directory:', dirPath);
           }
         } catch (error) {
           errors.push(
@@ -928,7 +934,7 @@ export class PromptInstaller {
           await fs.rename(tempPath, filePath);
           repaired.push(missingItem);
           if (options?.verbose) {
-            console.log('Restored file:', filePath);
+            logger.debug('Restored file:', filePath);
           }
         } catch (error) {
           errors.push(
@@ -954,7 +960,7 @@ export class PromptInstaller {
       permissionsFixed = true;
 
       if (options?.verbose) {
-        console.log('Fixed file permissions');
+        logger.debug('Fixed file permissions');
       }
     } catch (error) {
       errors.push(
@@ -1051,7 +1057,7 @@ export class PromptInstaller {
       const verifyCount = await this.countFiles(backupDir);
       if (verifyCount !== fileCount + 1) {
         // +1 for manifest
-        console.warn(
+        logger.warn(
           `Backup verification warning: expected ${fileCount + 1} files, found ${verifyCount}`,
         );
       }
@@ -1218,18 +1224,20 @@ export class PromptInstaller {
 
   /**
    * Check if content has NO OVERWRITE flag
+   * Hash-based patterns (#, # LLXPRT:) must be at absolute start of file
+   * HTML comment pattern (<!-- -->) can be anywhere in file
    */
   private hasNoOverwriteFlag(content: string): boolean {
     const patterns = [
-      /^#\s*NO\s*OVERWRITE/im,
-      /^#\s*LLXPRT:\s*NO\s*OVERWRITE/im,
-      /<!--\s*NO\s*OVERWRITE\s*-->/i,
+      /^#\s*NO\s*OVERWRITE/i, // Must be at absolute start of file (no /m flag)
+      /^#\s*LLXPRT:\s*NO\s*OVERWRITE/i, // Must be at absolute start of file (no /m flag)
+      /<!--\s*NO\s*OVERWRITE\s*-->/i, // Can be anywhere in file
     ];
     return patterns.some((p) => p.test(content));
   }
 
   /**
-   * Load installed manifest from disk
+   * Load installed manifest from disk with Zod validation
    */
   private async loadManifest(
     baseDir: string,
@@ -1237,10 +1245,12 @@ export class PromptInstaller {
     const manifestPath = path.join(baseDir, MANIFEST_FILE);
     try {
       const content = await fs.readFile(manifestPath, 'utf-8');
-      const manifest = JSON.parse(content) as InstalledManifest;
-      if (manifest.version && manifest.files) {
-        return manifest;
+      const parsed = JSON.parse(content);
+      const result = InstalledManifestSchema.safeParse(parsed);
+      if (result.success) {
+        return result.data;
       }
+      logger.debug('Invalid manifest format:', result.error.message);
       return null;
     } catch {
       return null;
