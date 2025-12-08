@@ -223,6 +223,13 @@ export default tseslint.config(
       ...vitest.configs.recommended.rules,
       'vitest/expect-expect': 'off',
       'vitest/no-commented-out-tests': 'off',
+      'vitest/no-disabled-tests': 'off',
+      'vitest/no-standalone-expect': [
+        'error',
+        {
+          additionalTestBlockFunctions: ['itProp'],
+        },
+      ],
     },
   },
   // Settings for eslint-rules directory

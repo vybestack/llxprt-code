@@ -266,15 +266,11 @@ priority = 4.0
         const content = `invalid toml`;
         await writeFile(path, content);
 
-        try {
-          await loadPolicyFromToml(path);
-          expect.fail('Should have thrown');
-        } catch (error) {
-          expect(error).toBeInstanceOf(PolicyLoadError);
-          const policyError = error as PolicyLoadError;
-          expect(policyError.path).toBe(path);
-          expect(policyError.message).toContain('custom-policy.toml');
-        }
+        await expect(loadPolicyFromToml(path)).rejects.toMatchObject({
+          name: 'PolicyLoadError',
+          path,
+          message: expect.stringContaining('custom-policy.toml'),
+        });
       });
     });
 
@@ -406,13 +402,14 @@ decision = "deny"
     it('all default rules have valid priorities', async () => {
       const rules = await loadDefaultPolicies();
 
-      for (const rule of rules) {
+      // Verify each rule's priority falls within valid range
+      rules.forEach((rule) => {
         const priority = rule.priority ?? 0;
         expect(priority).toBeGreaterThanOrEqual(0);
-        if (priority > 0) {
-          expect(priority).toBeLessThan(4.0);
-        }
-      }
+        const isValidPriority =
+          priority === 0 || (priority >= 1.0 && priority < 4.0);
+        expect(isValidPriority).toBe(true);
+      });
     });
 
     it('all default rules have valid decisions', async () => {

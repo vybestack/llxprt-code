@@ -2487,9 +2487,8 @@ describe('Gemini Client (client.ts)', () => {
 
     it.skip('should stop infinite loop after MAX_TURNS when nextSpeaker always returns model', async () => {
       // Get the mocked checkNextSpeaker function and configure it to trigger infinite loop
-      const { checkNextSpeaker } = await import(
-        '../utils/nextSpeakerChecker.js'
-      );
+      const { checkNextSpeaker } =
+        await import('../utils/nextSpeakerChecker.js');
       const mockCheckNextSpeaker = vi.mocked(checkNextSpeaker);
       mockCheckNextSpeaker.mockResolvedValue({
         next_speaker: 'model',
@@ -2577,18 +2576,17 @@ describe('Gemini Client (client.ts)', () => {
         throw new Error(
           'checkNextSpeaker was never called - the recursive condition was not met',
         );
-      } else if (callCount === 1) {
-        // This might be expected behavior if the turn has pending tool calls or other conditions prevent recursion
-        console.log(
-          'checkNextSpeaker called only once - no infinite loop occurred',
-        );
-      } else {
-        console.log(
-          `checkNextSpeaker called ${callCount} times - infinite loop protection worked`,
-        );
-        // If called multiple times, we expect it to be stopped before MAX_TURNS
-        expect(callCount).toBeLessThanOrEqual(100); // Should not exceed MAX_TURNS
       }
+
+      // Verify protection worked - should be called at least once but not exceed MAX_TURNS
+      expect(callCount).toBeGreaterThanOrEqual(1);
+      expect(callCount).toBeLessThanOrEqual(100); // Should not exceed MAX_TURNS
+
+      console.log(
+        callCount === 1
+          ? 'checkNextSpeaker called only once - no infinite loop occurred'
+          : `checkNextSpeaker called ${callCount} times - infinite loop protection worked`,
+      );
 
       // The stream should produce events and eventually terminate
       expect(eventCount).toBeGreaterThanOrEqual(1);
@@ -2653,9 +2651,8 @@ describe('Gemini Client (client.ts)', () => {
       // someone tries to bypass it by calling with a very large turns value
 
       // Get the mocked checkNextSpeaker function and configure it to trigger infinite loop
-      const { checkNextSpeaker } = await import(
-        '../utils/nextSpeakerChecker.js'
-      );
+      const { checkNextSpeaker } =
+        await import('../utils/nextSpeakerChecker.js');
       const mockCheckNextSpeaker = vi.mocked(checkNextSpeaker);
       mockCheckNextSpeaker.mockResolvedValue({
         next_speaker: 'model',
@@ -2914,19 +2911,20 @@ describe('Gemini Client (client.ts)', () => {
             addHistory: (typeof vi)['fn'];
           };
 
-          if (shouldSendContext) {
-            const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
-            const contextCall = addHistoryCalls.find((call) =>
-              JSON.stringify(call[0]).includes('summary of changes'),
-            );
-            expect(contextCall).toBeDefined();
-          } else {
-            const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
-            const contextCall = addHistoryCalls.find((call) =>
-              JSON.stringify(call[0]).includes('editor context'),
-            );
-            expect(contextCall).toBeUndefined();
-          }
+          const addHistoryCalls = vi.mocked(mockChat.addHistory).mock.calls;
+
+          // Check for the appropriate context based on shouldSendContext flag
+          const summaryCall = addHistoryCalls.find((call) =>
+            JSON.stringify(call[0]).includes('summary of changes'),
+          );
+          const editorContextCall = addHistoryCalls.find((call) =>
+            JSON.stringify(call[0]).includes('editor context'),
+          );
+
+          // Assert expectations based on the test case
+          expect(shouldSendContext ? summaryCall : editorContextCall)[
+            shouldSendContext ? 'toBeDefined' : 'toBeUndefined'
+          ]();
         },
       );
 

@@ -95,55 +95,10 @@ describe('ShellExecutionService programmatic integration tests', () => {
     },
   );
 
-  it('should abort a running process', async () => {
-    // A command that runs for a bit. On Windows, use ping with a long delay.
-    // The timeout command doesn't reliably abort on Windows.
-    const command =
-      process.platform === 'win32'
-        ? 'ping -n 20 127.0.0.1' // Ping localhost 20 times (~20 seconds)
-        : 'sleep 20';
-    const onOutputEvent = vi.fn();
-    const abortController = new AbortController();
-
-    const handle = await ShellExecutionService.execute(
-      command,
-      testDir,
-      onOutputEvent,
-      abortController.signal,
-      false,
-    );
-
-    // Abort shortly after starting
-    setTimeout(() => abortController.abort(), 50);
-
-    const result = await handle.result;
-
-    // For debugging the flaky test.
-    console.log('Abort test result:', result);
-
-    expect(result.aborted).toBe(true);
-    // On Windows, the process might exit with code 0 or 1 when terminated
-    // On Unix, it should have a signal or non-zero exit code
-    if (process.platform === 'win32') {
-      // Windows: Just verify it was marked as aborted
-      expect(result.aborted).toBe(true);
-    } else {
-      // Unix: Should not have exited cleanly
-      const exitedCleanly = result.exitCode === 0 && result.signal === null;
-      expect(exitedCleanly, 'Process should not have exited cleanly').toBe(
-        false,
-      );
-    }
-  });
-
-  it('should propagate environment variables to the child process', async () => {
-    const varName = 'LLXPRT_CODE_TEST_VAR';
-    const varValue = `test-value`;
-    process.env[varName] = varValue;
-
-    try {
-      const command =
-        process.platform === 'win32' ? `echo %${varName}%` : `echo $${varName}`;
+  it.skipIf(process.platform === 'win32')(
+    'should abort a running process on Unix',
+    async () => {
+      const command = 'sleep 20';
       const onOutputEvent = vi.fn();
       const abortController = new AbortController();
 
@@ -155,14 +110,106 @@ describe('ShellExecutionService programmatic integration tests', () => {
         false,
       );
 
+      // Abort shortly after starting
+      setTimeout(() => abortController.abort(), 50);
+
       const result = await handle.result;
 
-      expect(result.error).toBeNull();
-      expect(result.exitCode).toBe(0);
-      expect(result.output).toContain(varValue);
-    } finally {
-      // Clean up the env var to prevent side-effects on other tests.
-      delete process.env[varName];
-    }
-  });
+      expect(result.aborted).toBe(true);
+      // Unix: Should not have exited cleanly
+      const exitedCleanly = result.exitCode === 0 && result.signal === null;
+      expect(exitedCleanly, 'Process should not have exited cleanly').toBe(
+        false,
+      );
+    },
+  );
+
+  it.skipIf(process.platform !== 'win32')(
+    'should abort a running process on Windows',
+    async () => {
+      const command = 'ping -n 20 127.0.0.1'; // Ping localhost 20 times (~20 seconds)
+      const onOutputEvent = vi.fn();
+      const abortController = new AbortController();
+
+      const handle = await ShellExecutionService.execute(
+        command,
+        testDir,
+        onOutputEvent,
+        abortController.signal,
+        false,
+      );
+
+      // Abort shortly after starting
+      setTimeout(() => abortController.abort(), 50);
+
+      const result = await handle.result;
+
+      // Windows: Just verify it was marked as aborted
+      expect(result.aborted).toBe(true);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'should propagate environment variables to the child process on Unix',
+    async () => {
+      const varName = 'LLXPRT_CODE_TEST_VAR';
+      const varValue = `test-value`;
+      process.env[varName] = varValue;
+
+      try {
+        const command = `echo $${varName}`;
+        const onOutputEvent = vi.fn();
+        const abortController = new AbortController();
+
+        const handle = await ShellExecutionService.execute(
+          command,
+          testDir,
+          onOutputEvent,
+          abortController.signal,
+          false,
+        );
+
+        const result = await handle.result;
+
+        expect(result.error).toBeNull();
+        expect(result.exitCode).toBe(0);
+        expect(result.output).toContain(varValue);
+      } finally {
+        // Clean up the env var to prevent side-effects on other tests.
+        delete process.env[varName];
+      }
+    },
+  );
+
+  it.skipIf(process.platform !== 'win32')(
+    'should propagate environment variables to the child process on Windows',
+    async () => {
+      const varName = 'LLXPRT_CODE_TEST_VAR';
+      const varValue = `test-value`;
+      process.env[varName] = varValue;
+
+      try {
+        const command = `echo %${varName}%`;
+        const onOutputEvent = vi.fn();
+        const abortController = new AbortController();
+
+        const handle = await ShellExecutionService.execute(
+          command,
+          testDir,
+          onOutputEvent,
+          abortController.signal,
+          false,
+        );
+
+        const result = await handle.result;
+
+        expect(result.error).toBeNull();
+        expect(result.exitCode).toBe(0);
+        expect(result.output).toContain(varValue);
+      } finally {
+        // Clean up the env var to prevent side-effects on other tests.
+        delete process.env[varName];
+      }
+    },
+  );
 });

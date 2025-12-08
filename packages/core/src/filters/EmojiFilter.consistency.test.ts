@@ -48,30 +48,64 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
   const emojiModes = ['auto', 'warn', 'error'] as const;
 
   describe('Consistent emoji detection across all modes', () => {
-    it.each(commonEmojis)(
-      'should consistently detect emoji "%s" in all filtering modes',
-      (emoji) => {
-        emojiModes.forEach((mode) => {
-          const filter = new EmojiFilter({ mode });
+    describe('allowed mode', () => {
+      it.each(commonEmojis)(
+        'should not detect emoji "%s" in allowed mode',
+        (emoji) => {
+          const filter = new EmojiFilter({ mode: 'allowed' });
           const input = `Test message with ${emoji} emoji`;
           const result = filter.filterText(input);
 
-          if (mode === 'allowed') {
-            expect(result.emojiDetected).toBe(false);
-            expect(result.filtered).toBe(input);
-          } else {
-            expect(result.emojiDetected).toBe(true);
-            if (mode === 'error') {
-              expect(result.blocked).toBe(true);
-              expect(result.filtered).toBeNull();
-            } else {
-              expect(result.blocked).toBe(false);
-              expect(result.filtered).toBeDefined();
-            }
-          }
-        });
-      },
-    );
+          expect(result.emojiDetected).toBe(false);
+          expect(result.filtered).toBe(input);
+        },
+      );
+    });
+
+    describe('auto mode', () => {
+      it.each(commonEmojis)(
+        'should detect and filter emoji "%s" in auto mode',
+        (emoji) => {
+          const filter = new EmojiFilter({ mode: 'auto' });
+          const input = `Test message with ${emoji} emoji`;
+          const result = filter.filterText(input);
+
+          expect(result.emojiDetected).toBe(true);
+          expect(result.blocked).toBe(false);
+          expect(result.filtered).toBeDefined();
+        },
+      );
+    });
+
+    describe('warn mode', () => {
+      it.each(commonEmojis)(
+        'should detect and filter emoji "%s" in warn mode',
+        (emoji) => {
+          const filter = new EmojiFilter({ mode: 'warn' });
+          const input = `Test message with ${emoji} emoji`;
+          const result = filter.filterText(input);
+
+          expect(result.emojiDetected).toBe(true);
+          expect(result.blocked).toBe(false);
+          expect(result.filtered).toBeDefined();
+        },
+      );
+    });
+
+    describe('error mode', () => {
+      it.each(commonEmojis)(
+        'should detect and block emoji "%s" in error mode',
+        (emoji) => {
+          const filter = new EmojiFilter({ mode: 'error' });
+          const input = `Test message with ${emoji} emoji`;
+          const result = filter.filterText(input);
+
+          expect(result.emojiDetected).toBe(true);
+          expect(result.blocked).toBe(true);
+          expect(result.filtered).toBeNull();
+        },
+      );
+    });
   });
 
   describe('Consistent emoji removal in output content', () => {
@@ -280,19 +314,15 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
 
       chunks.forEach((chunk) => {
         const result = filter.filterStreamChunk(chunk);
-        if (result.filtered) {
-          fullResult += result.filtered;
-        }
-        if (result.emojiDetected) {
-          detectedEmojis = true;
-        }
+        expect(result.filtered).toBeDefined();
+        fullResult += result.filtered || '';
+        detectedEmojis = detectedEmojis || result.emojiDetected;
       });
 
       // Flush any remaining content
       const flushed = filter.flushBuffer();
-      if (flushed) {
-        fullResult += flushed;
-      }
+      expect(typeof flushed).toBe('string');
+      fullResult += flushed;
 
       expect(detectedEmojis).toBe(true);
       expect(fullResult).toContain('[OK]');
@@ -312,27 +342,67 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
       'Error: Connection timeout after 30 seconds',
     ];
 
-    cleanTexts.forEach((text) => {
-      it(`should pass through emoji-free text unchanged: "${text}"`, () => {
-        emojiModes.forEach((mode) => {
-          const filter = new EmojiFilter({ mode });
-          const result = filter.filterText(text);
+    const testCases = cleanTexts.flatMap((text) =>
+      emojiModes.map((mode) => ({ text, mode })),
+    );
 
-          expect(result.filtered).toBe(text);
-          expect(result.emojiDetected).toBe(false);
-          expect(result.blocked).toBe(false);
-          expect(result.error).toBeUndefined();
-          expect(result.systemFeedback).toBeUndefined();
-        });
-      });
-    });
+    it.each(testCases)(
+      'should pass through emoji-free text unchanged in $mode mode: "$text"',
+      ({ text, mode }) => {
+        const filter = new EmojiFilter({ mode });
+        const result = filter.filterText(text);
+
+        expect(result.filtered).toBe(text);
+        expect(result.emojiDetected).toBe(false);
+        expect(result.blocked).toBe(false);
+        expect(result.error).toBeUndefined();
+        expect(result.systemFeedback).toBeUndefined();
+      },
+    );
   });
 
   describe('Configuration consistency validation', () => {
-    it('should create consistent filter instances for each mode', () => {
-      const modes = ['allowed', 'auto', 'warn', 'error'] as const;
-
-      modes.forEach((mode) => {
+    it.each([
+      {
+        mode: 'allowed' as const,
+        expectedEmojiDetected: false,
+        expectedBlocked: false,
+        expectedFilteredCheck: (filtered: string | null, testInput: string) => {
+          expect(filtered).toBe(testInput);
+        },
+      },
+      {
+        mode: 'auto' as const,
+        expectedEmojiDetected: true,
+        expectedBlocked: false,
+        expectedFilteredCheck: (filtered: string | null) => {
+          expect(filtered).not.toContain('✅');
+        },
+      },
+      {
+        mode: 'warn' as const,
+        expectedEmojiDetected: true,
+        expectedBlocked: false,
+        expectedFilteredCheck: (filtered: string | null) => {
+          expect(filtered).not.toContain('✅');
+        },
+      },
+      {
+        mode: 'error' as const,
+        expectedEmojiDetected: true,
+        expectedBlocked: true,
+        expectedFilteredCheck: (filtered: string | null) => {
+          expect(filtered).toBeNull();
+        },
+      },
+    ])(
+      'should create consistent filter instance for $mode mode',
+      ({
+        mode,
+        expectedEmojiDetected,
+        expectedBlocked,
+        expectedFilteredCheck,
+      }) => {
         const config: FilterConfiguration = { mode };
         const filter = new EmojiFilter(config);
 
@@ -346,33 +416,12 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
         expect(typeof result.emojiDetected).toBe('boolean');
         expect(typeof result.blocked).toBe('boolean');
 
-        if (result.filtered !== null) {
-          expect(typeof result.filtered).toBe('string');
-        }
-
         // Mode-specific assertions
-        switch (mode) {
-          case 'allowed':
-            expect(result.emojiDetected).toBe(false);
-            expect(result.blocked).toBe(false);
-            expect(result.filtered).toBe(testInput);
-            break;
-          case 'auto':
-          case 'warn':
-            expect(result.emojiDetected).toBe(true);
-            expect(result.blocked).toBe(false);
-            expect(result.filtered).not.toContain('✅');
-            break;
-          case 'error':
-            expect(result.emojiDetected).toBe(true);
-            expect(result.blocked).toBe(true);
-            expect(result.filtered).toBeNull();
-            break;
-          default:
-            throw new Error(`Unknown mode: ${mode}`);
-        }
-      });
-    });
+        expect(result.emojiDetected).toBe(expectedEmojiDetected);
+        expect(result.blocked).toBe(expectedBlocked);
+        expectedFilteredCheck(result.filtered, testInput);
+      },
+    );
   });
 
   describe('Performance and memory consistency', () => {

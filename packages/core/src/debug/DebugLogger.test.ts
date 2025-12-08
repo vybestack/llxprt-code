@@ -479,13 +479,12 @@ describe('DebugLogger', () => {
         const writeSpy = vi.spyOn(logger.fileOutput, 'write');
         logger.log(message);
 
-        if (writeSpy.mock.calls.length > 0) {
-          const logEntry = writeSpy.mock.calls[0][0];
-          expect(logEntry).toHaveProperty('message', message);
-          expect(logEntry).toHaveProperty('namespace', 'test');
-          expect(logEntry).toHaveProperty('level');
-          expect(logEntry).toHaveProperty('timestamp');
-        }
+        expect(writeSpy.mock.calls.length).toBeGreaterThan(0);
+        const logEntry = writeSpy.mock.calls[0][0];
+        expect(logEntry).toHaveProperty('message', message);
+        expect(logEntry).toHaveProperty('namespace', 'test');
+        expect(logEntry).toHaveProperty('level');
+        expect(logEntry).toHaveProperty('timestamp');
       }),
     );
   });
@@ -545,7 +544,7 @@ describe('DebugLogger', () => {
     fc.assert(
       fc.property(
         fc.string(),
-        fc.array(fc.anything(), { maxLength: 5 }),
+        fc.array(fc.anything(), { minLength: 1, maxLength: 5 }),
         (message, args) => {
           const logger = new DebugLogger('test');
           logger.enabled = true;
@@ -553,13 +552,13 @@ describe('DebugLogger', () => {
           const writeSpy = vi.spyOn(logger.fileOutput, 'write');
           logger.log(message, ...args);
 
-          if (writeSpy.mock.calls.length > 0) {
-            const logEntry = writeSpy.mock.calls[0][0];
-            expect(logEntry).toHaveProperty('message', message);
-            if (args.length > 0) {
-              expect(logEntry).toHaveProperty('args', args);
-            }
-          }
+          expect(writeSpy.mock.calls.length).toBeGreaterThan(0);
+          const logEntry = writeSpy.mock.calls[0][0];
+          expect(logEntry).toHaveProperty('message', message);
+
+          // Since minLength: 1, we know args always has elements
+          expect(logEntry).toHaveProperty('args');
+          expect(logEntry.args).toEqual(args);
         },
       ),
     );
@@ -613,11 +612,10 @@ describe('DebugLogger', () => {
             logger.error(message);
           }
 
-          if (writeSpy.mock.calls.length > 0) {
-            const logEntry = writeSpy.mock.calls[0][0];
-            expect(logEntry).toHaveProperty('level', level);
-            expect(logEntry).toHaveProperty('message', message);
-          }
+          expect(writeSpy.mock.calls.length).toBeGreaterThan(0);
+          const logEntry = writeSpy.mock.calls[0][0];
+          expect(logEntry).toHaveProperty('level', level);
+          expect(logEntry).toHaveProperty('message', message);
         },
       ),
     );
@@ -671,17 +669,14 @@ describe('DebugLogger', () => {
 
         logger.log(testFn);
 
-        if (enabled) {
-          expect(testFn).toHaveBeenCalledOnce();
-          expect(writeSpy).toHaveBeenCalledWith(
-            expect.objectContaining({
-              message: returnValue,
-            }),
-          );
-        } else {
-          expect(testFn).not.toHaveBeenCalled();
-          expect(writeSpy).not.toHaveBeenCalled();
-        }
+        // Only verify function evaluation and write when enabled
+        expect(typeof enabled).toBe('boolean');
+        const wasEvaluated = testFn.mock.calls.length > 0;
+        expect(wasEvaluated).toBe(enabled);
+
+        // Verify write was called if enabled
+        const writeCallCount = writeSpy.mock.calls.length;
+        expect(writeCallCount > 0).toBe(enabled);
       }),
     );
   });

@@ -186,10 +186,8 @@ describe('toolNameUtils Integration Tests', () => {
       const undefinedName = '';
       const normalized = normalizeToolName(undefinedName);
 
-      if (!normalized) {
-        // This is where turn.ts would use 'undefined_tool_name' fallback
-        expect(normalized).toBeNull();
-      }
+      // This is where turn.ts would use 'undefined_tool_name' fallback
+      expect(normalized).toBeNull();
     });
   });
 

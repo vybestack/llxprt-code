@@ -291,11 +291,10 @@ describe('generateDynamicToolSettings', () => {
         newExcludeTools = newExcludeTools.filter((name) => name !== toolName);
 
         // If allowedTools is being used (not empty), add the tool to it
-        if (currentAllowedTools.length > 0) {
-          // This would modify newAllowedTools, but since allowedTools is empty, this doesn't run
-        }
+        // (In this test, allowedTools is empty, so this branch would not run)
       }
 
+      expect(currentAllowedTools.length).toBe(0);
       expect(newExcludeTools).not.toContain('WriteFile');
       expect(newExcludeTools).toContain('Shell');
       expect(newAllowedTools).toHaveLength(0);
@@ -339,11 +338,10 @@ describe('generateDynamicToolSettings', () => {
         newExcludeTools = newExcludeTools.filter((name) => name !== toolName);
 
         // If allowedTools is being used (not empty), add the tool to it
-        if (currentAllowedTools.length > 0) {
-          // This would modify newAllowedTools, but it's const for this test
-        }
+        // (In this test, allowedTools has items, so this branch would run in real implementation)
       }
 
+      expect(currentAllowedTools.length).toBeGreaterThan(0);
       expect(newExcludeTools).not.toContain('WriteFile');
       expect(newAllowedTools).toContain('ReadFile');
       // In the actual implementation, WriteFile would be added to newAllowedTools

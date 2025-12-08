@@ -106,8 +106,9 @@ describe('Agent Server Endpoints', () => {
     });
 
     // On Windows, give the server a moment to fully initialize
-    if (process.platform === 'win32') {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    const initDelay = process.platform === 'win32' ? 100 : 0;
+    if (initDelay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, initDelay));
     }
   });
 
@@ -122,8 +123,9 @@ describe('Agent Server Endpoints', () => {
     }
 
     // On Windows, give the server a moment to fully close before cleanup
-    if (process.platform === 'win32') {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    const closeDelay = process.platform === 'win32' ? 100 : 0;
+    if (closeDelay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, closeDelay));
     }
 
     if (testWorkspace) {

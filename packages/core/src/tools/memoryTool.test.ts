@@ -315,18 +315,29 @@ describe('MemoryTool', () => {
       expect(result).toBeDefined();
       expect(result).not.toBe(false);
 
-      if (result && result.type === 'edit') {
-        const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
-        expect(result.title).toBe(`Confirm Memory Save: ${expectedPath}`);
-        expect(result.fileName).toContain(path.join('mock', 'home', '.llxprt'));
-        expect(result.fileName).toContain('LLXPRT.md');
-        expect(result.fileDiff).toContain('Index: LLXPRT.md');
-        expect(result.fileDiff).toContain('+## Gemini Added Memories');
-        expect(result.fileDiff).toContain('+- Test fact');
-        expect(result.originalContent).toBe('');
-        expect(result.newContent).toContain('## Gemini Added Memories');
-        expect(result.newContent).toContain('- Test fact');
+      // Verify result is an edit confirmation
+      expect(result).not.toBe(false);
+      if (result === false) {
+        throw new Error('Expected result to be a confirmation, not false');
       }
+
+      // Assert type and cast to non-false value
+      type EditConfirmation = Exclude<typeof result, false>;
+      const editResult = result as EditConfirmation;
+      expect(editResult.type).toBe('edit');
+
+      const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
+      expect(editResult.title).toBe(`Confirm Memory Save: ${expectedPath}`);
+      expect(editResult.fileName).toContain(
+        path.join('mock', 'home', '.llxprt'),
+      );
+      expect(editResult.fileName).toContain('LLXPRT.md');
+      expect(editResult.fileDiff).toContain('Index: LLXPRT.md');
+      expect(editResult.fileDiff).toContain('+## Gemini Added Memories');
+      expect(editResult.fileDiff).toContain('+- Test fact');
+      expect(editResult.originalContent).toBe('');
+      expect(editResult.newContent).toContain('## Gemini Added Memories');
+      expect(editResult.newContent).toContain('- Test fact');
     });
 
     it('should return false when memory file is already allowlisted', async () => {
@@ -361,16 +372,23 @@ describe('MemoryTool', () => {
       expect(result).toBeDefined();
       expect(result).not.toBe(false);
 
-      if (result && result.type === 'edit') {
-        // Simulate the onConfirm callback
-        await result.onConfirm(ToolConfirmationOutcome.ProceedAlways);
-
-        // Check that the memory file was added to the allowlist
-        expect(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (invocation.constructor as any).allowlist.has(memoryFilePath),
-        ).toBe(true);
+      // Verify result is an edit confirmation
+      if (result === false) {
+        throw new Error('Expected result to be a confirmation, not false');
       }
+
+      type EditResult = Exclude<typeof result, false>;
+      const editResult = result as EditResult;
+      expect(editResult.type).toBe('edit');
+
+      // Simulate the onConfirm callback
+      await editResult.onConfirm(ToolConfirmationOutcome.ProceedAlways);
+
+      // Check that the memory file was added to the allowlist
+      expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (invocation.constructor as any).allowlist.has(memoryFilePath),
+      ).toBe(true);
     });
 
     it('should not add memory file to allowlist when other outcomes are confirmed', async () => {
@@ -387,16 +405,23 @@ describe('MemoryTool', () => {
       expect(result).toBeDefined();
       expect(result).not.toBe(false);
 
-      if (result && result.type === 'edit') {
-        // Simulate the onConfirm callback with different outcomes
-        await result.onConfirm(ToolConfirmationOutcome.ProceedOnce);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const allowlist = (invocation.constructor as any).allowlist;
-        expect(allowlist.has(memoryFilePath)).toBe(false);
-
-        await result.onConfirm(ToolConfirmationOutcome.Cancel);
-        expect(allowlist.has(memoryFilePath)).toBe(false);
+      // Verify result is an edit confirmation
+      if (result === false) {
+        throw new Error('Expected result to be a confirmation, not false');
       }
+
+      type EditResult2 = Exclude<typeof result, false>;
+      const editResult = result as EditResult2;
+      expect(editResult.type).toBe('edit');
+
+      // Simulate the onConfirm callback with different outcomes
+      await editResult.onConfirm(ToolConfirmationOutcome.ProceedOnce);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const allowlist = (invocation.constructor as any).allowlist;
+      expect(allowlist.has(memoryFilePath)).toBe(false);
+
+      await editResult.onConfirm(ToolConfirmationOutcome.Cancel);
+      expect(allowlist.has(memoryFilePath)).toBe(false);
     });
 
     it('should handle existing memory file with content', async () => {
@@ -413,15 +438,22 @@ describe('MemoryTool', () => {
       expect(result).toBeDefined();
       expect(result).not.toBe(false);
 
-      if (result && result.type === 'edit') {
-        const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
-        expect(result.title).toBe(`Confirm Memory Save: ${expectedPath}`);
-        expect(result.fileDiff).toContain('Index: LLXPRT.md');
-        expect(result.fileDiff).toContain('+- New fact');
-        expect(result.originalContent).toBe(existingContent);
-        expect(result.newContent).toContain('- Old fact');
-        expect(result.newContent).toContain('- New fact');
+      // Verify result is an edit confirmation
+      if (result === false) {
+        throw new Error('Expected result to be a confirmation, not false');
       }
+
+      type EditResult3 = Exclude<typeof result, false>;
+      const editResult = result as EditResult3;
+      expect(editResult.type).toBe('edit');
+
+      const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
+      expect(editResult.title).toBe(`Confirm Memory Save: ${expectedPath}`);
+      expect(editResult.fileDiff).toContain('Index: LLXPRT.md');
+      expect(editResult.fileDiff).toContain('+- New fact');
+      expect(editResult.originalContent).toBe(existingContent);
+      expect(editResult.newContent).toContain('- Old fact');
+      expect(editResult.newContent).toContain('- New fact');
     });
   });
 });

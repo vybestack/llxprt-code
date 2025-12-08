@@ -2116,17 +2116,17 @@ describe('Settings Loading and Merging', () => {
 
       expect(() => loadSettings(MOCK_WORKSPACE_DIR)).toThrow(FatalConfigError);
 
+      // Test the error message content
+      let caughtError: FatalConfigError | null = null;
       try {
         loadSettings(MOCK_WORKSPACE_DIR);
       } catch (error) {
-        expect(error).toBeInstanceOf(FatalConfigError);
-        expect((error as FatalConfigError).message).toContain(
-          USER_SETTINGS_PATH,
-        );
-        expect((error as FatalConfigError).message).toContain(
-          parseError.message,
-        );
+        caughtError = error as FatalConfigError;
       }
+
+      expect(caughtError).toBeInstanceOf(FatalConfigError);
+      expect(caughtError?.message).toContain(USER_SETTINGS_PATH);
+      expect(caughtError?.message).toContain(parseError.message);
 
       vi.restoreAllMocks();
     });

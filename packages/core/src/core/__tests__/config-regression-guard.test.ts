@@ -29,13 +29,15 @@ describe('Config Regression Guards', () => {
         );
 
       // Either no Config import at all, or only type imports
-      if (
+      const hasConfigImport =
         content.includes("from '../config/config.js'") ||
-        content.includes('from "../config/config.js"')
-      ) {
-        expect(hasTypeOnlyConfigImport).toBe(true);
-        expect(hasNonTypeConfigImport).toBe(false);
-      }
+        content.includes('from "../config/config.js"');
+
+      // Assert: if there's a config import, it must be type-only
+      const isValid =
+        !hasConfigImport ||
+        (hasTypeOnlyConfigImport && !hasNonTypeConfigImport);
+      expect(isValid).toBe(true);
     });
 
     it('should not use Config static methods for provider/model/auth', () => {

@@ -1184,16 +1184,17 @@ describe('AnthropicProvider', () => {
         const request = mockMessagesCreate.mock.calls[0][0];
         expect(request.system).toBeDefined();
 
-        if (Array.isArray(request.system)) {
-          const systemBlocks = request.system as Array<{
-            type: string;
-            text: string;
-            cache_control?: unknown;
-          }>;
-          systemBlocks.forEach((block) => {
-            expect(block.cache_control).toBeUndefined();
-          });
-        }
+        // When caching is off, system can be a string (no cache_control possible)
+        // or an array (cache_control should be undefined on all blocks)
+        // We test that if it's an array, no blocks have cache_control
+        const isArray = Array.isArray(request.system);
+        const hasNoCacheControl = isArray
+          ? (request.system as Array<{ cache_control?: unknown }>).every(
+              (block) => block.cache_control === undefined,
+            )
+          : true; // String has no cache_control, which is correct
+
+        expect(hasNoCacheControl).toBe(true);
       });
 
       it('should add cache_control with 5m TTL when prompt-caching is 5m', async () => {
@@ -1340,11 +1341,13 @@ describe('AnthropicProvider', () => {
         const call = mockMessagesCreate.mock.calls[0];
         const options = call?.[1];
 
-        if (options?.headers?.['anthropic-beta']) {
-          expect(options.headers['anthropic-beta']).not.toContain(
-            'extended-cache-ttl-2025-04-11',
-          );
-        }
+        // Check beta header - should not contain extended TTL
+        const betaHeader = options?.headers?.['anthropic-beta'];
+        // Either undefined or doesn't contain the extended TTL
+        const isValidHeader =
+          betaHeader === undefined ||
+          !betaHeader.includes('extended-cache-ttl-2025-04-11');
+        expect(isValidHeader).toBe(true);
       });
     });
 

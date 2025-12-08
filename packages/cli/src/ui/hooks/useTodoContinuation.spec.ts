@@ -556,11 +556,12 @@ describe('useTodoContinuation - Behavioral Tests', () => {
       }).not.toThrow();
 
       // Should either skip malformed todos or handle them safely
-      if (mockGeminiClient.sendMessageStream.mock.calls.length > 0) {
-        const callArgs = mockGeminiClient.sendMessageStream.mock.calls[0];
-        expect(callArgs[0]).toBeTypeOf('string');
-        expect(callArgs[1]).toEqual({ ephemeral: true });
-      }
+      expect(
+        mockGeminiClient.sendMessageStream.mock.calls.length,
+      ).toBeGreaterThan(0);
+      const callArgs = mockGeminiClient.sendMessageStream.mock.calls[0];
+      expect(callArgs[0]).toBeTypeOf('string');
+      expect(callArgs[1]).toEqual({ ephemeral: true });
     });
 
     it('@requirement REQ-005.4 should prevent continuation loops', () => {

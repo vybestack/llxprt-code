@@ -13,52 +13,54 @@ import {
 
 describe('clipboardUtils', () => {
   describe('clipboardHasImage', () => {
-    it('should return false on non-macOS platforms', async () => {
-      if (process.platform !== 'darwin') {
+    it.skipIf(process.platform === 'darwin')(
+      'should return false on non-macOS platforms',
+      async () => {
         const result = await clipboardHasImage();
         expect(result).toBe(false);
-      } else {
-        // Skip on macOS as it would require actual clipboard state
-        expect(true).toBe(true);
-      }
-    });
+      },
+    );
 
-    it('should return boolean on macOS', async () => {
-      if (process.platform === 'darwin') {
+    it.skipIf(process.platform !== 'darwin')(
+      'should return boolean on macOS',
+      async () => {
         const result = await clipboardHasImage();
         expect(typeof result).toBe('boolean');
-      } else {
-        // Skip on non-macOS
-        expect(true).toBe(true);
-      }
-    });
+      },
+    );
   });
 
   describe('saveClipboardImage', () => {
-    it('should return null on non-macOS platforms', async () => {
-      if (process.platform !== 'darwin') {
+    it.skipIf(process.platform === 'darwin')(
+      'should return null on non-macOS platforms',
+      async () => {
         const result = await saveClipboardImage();
         expect(result).toBe(null);
-      } else {
-        // Skip on macOS
-        expect(true).toBe(true);
-      }
-    });
+      },
+    );
 
-    it('should handle errors gracefully', async () => {
-      // Test with invalid directory (should not throw)
-      const result = await saveClipboardImage(
-        '/invalid/path/that/does/not/exist',
-      );
-
-      if (process.platform === 'darwin') {
+    it.skipIf(process.platform !== 'darwin')(
+      'should handle errors gracefully on macOS',
+      async () => {
+        // Test with invalid directory (should not throw)
+        const result = await saveClipboardImage(
+          '/invalid/path/that/does/not/exist',
+        );
         // On macOS, might return null due to various errors
         expect(result === null || typeof result === 'string').toBe(true);
-      } else {
+      },
+    );
+
+    it.skipIf(process.platform === 'darwin')(
+      'should return null on non-macOS platforms with invalid path',
+      async () => {
+        const result = await saveClipboardImage(
+          '/invalid/path/that/does/not/exist',
+        );
         // On other platforms, should always return null
         expect(result).toBe(null);
-      }
-    });
+      },
+    );
   });
 
   describe('cleanupOldClipboardImages', () => {

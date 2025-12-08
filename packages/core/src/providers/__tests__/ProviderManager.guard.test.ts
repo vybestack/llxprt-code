@@ -184,7 +184,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     const config = createRuntimeConfigStub(settingsService) as Config;
     const manager = new ProviderManager({ settingsService, config });
 
-    try {
+    expect(() =>
       manager.normalizeRuntimeInputs({
         contents: [prompt],
         runtime: {
@@ -192,12 +192,13 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
           settingsService: undefined as unknown as SettingsService,
           config,
         },
-      });
-      throw new Error('Expected error to be thrown');
-    } catch (error) {
-      expect(error).toHaveProperty('requirement', 'REQ-SP4-002');
-      expect(error).toHaveProperty('name', 'ProviderRuntimeNormalizationError');
-    }
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        requirement: 'REQ-SP4-002',
+        name: 'ProviderRuntimeNormalizationError',
+      }),
+    );
   });
 
   it('throws ProviderRuntimeNormalizationError when config is missing @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002', () => {
@@ -206,7 +207,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     const config = createRuntimeConfigStub(settingsService) as Config;
     const manager = new ProviderManager({ settingsService, config });
 
-    try {
+    expect(() =>
       manager.normalizeRuntimeInputs({
         contents: [prompt],
         runtime: {
@@ -214,12 +215,13 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
           settingsService,
           config: undefined as unknown as Config,
         },
-      });
-      throw new Error('Expected error to be thrown');
-    } catch (error) {
-      expect(error).toHaveProperty('requirement', 'REQ-SP4-002');
-      expect(error).toHaveProperty('name', 'ProviderRuntimeNormalizationError');
-    }
+      }),
+    ).toThrow(
+      expect.objectContaining({
+        requirement: 'REQ-SP4-002',
+        name: 'ProviderRuntimeNormalizationError',
+      }),
+    );
   });
 
   it('throws ProviderRuntimeNormalizationError when resolved fields are incomplete @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003', () => {
@@ -231,7 +233,7 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     // Set up a provider with no model configured
     settingsService.set('activeProvider', 'openai');
 
-    try {
+    expect(() =>
       manager.normalizeRuntimeInputs(
         {
           contents: [prompt],
@@ -244,12 +246,13 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
           },
         },
         'openai',
-      );
-      throw new Error('Expected error to be thrown');
-    } catch (error) {
-      expect(error).toHaveProperty('requirement', 'REQ-SP4-003');
-      expect(error).toHaveProperty('name', 'ProviderRuntimeNormalizationError');
-    }
+      ),
+    ).toThrow(
+      expect.objectContaining({
+        requirement: 'REQ-SP4-003',
+        name: 'ProviderRuntimeNormalizationError',
+      }),
+    );
   });
 
   it('successfully normalizes options with complete runtime context @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003', () => {

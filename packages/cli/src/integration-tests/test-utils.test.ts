@@ -106,27 +106,45 @@ describe('Test Utilities', () => {
   });
 
   describe('createTempKeyfile', () => {
-    it('should create a keyfile with correct permissions', async () => {
-      const dir = await createTempDirectory();
-      tempDirs.push(dir);
+    it.skipIf(process.platform === 'win32')(
+      'should create a keyfile with correct permissions on Unix',
+      async () => {
+        const dir = await createTempDirectory();
+        tempDirs.push(dir);
 
-      const apiKey = 'test-api-key-12345';
-      const keyfilePath = await createTempKeyfile(dir, apiKey);
+        const apiKey = 'test-api-key-12345';
+        const keyfilePath = await createTempKeyfile(dir, apiKey);
 
-      expect(keyfilePath).toBe(path.join(dir, '.keys', 'api-key'));
+        expect(keyfilePath).toBe(path.join(dir, '.keys', 'api-key'));
 
-      const content = await fs.readFile(keyfilePath, 'utf8');
-      expect(content).toBe(apiKey);
+        const content = await fs.readFile(keyfilePath, 'utf8');
+        expect(content).toBe(apiKey);
 
-      const stats = await fs.stat(keyfilePath);
-      // Check that only owner can read/write (600)
-      // On Windows, permissions work differently
-      if (process.platform === 'win32') {
-        expect(stats.mode & 0o777).toBe(0o666);
-      } else {
+        const stats = await fs.stat(keyfilePath);
+        // Check that only owner can read/write (600)
         expect(stats.mode & 0o777).toBe(0o600);
-      }
-    });
+      },
+    );
+
+    it.skipIf(process.platform !== 'win32')(
+      'should create a keyfile with correct permissions on Windows',
+      async () => {
+        const dir = await createTempDirectory();
+        tempDirs.push(dir);
+
+        const apiKey = 'test-api-key-12345';
+        const keyfilePath = await createTempKeyfile(dir, apiKey);
+
+        expect(keyfilePath).toBe(path.join(dir, '.keys', 'api-key'));
+
+        const content = await fs.readFile(keyfilePath, 'utf8');
+        expect(content).toBe(apiKey);
+
+        const stats = await fs.stat(keyfilePath);
+        // On Windows, permissions work differently
+        expect(stats.mode & 0o777).toBe(0o666);
+      },
+    );
   });
 
   describe('readSettingsFile', () => {

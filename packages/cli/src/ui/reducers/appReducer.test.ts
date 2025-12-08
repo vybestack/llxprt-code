@@ -116,10 +116,9 @@ describe('appReducer', () => {
 
         expect(result.openDialogs[dialogType]).toBe(true);
         // Check all other dialogs remain closed
-        dialogTypes.forEach((otherType) => {
-          if (otherType !== dialogType) {
-            expect(result.openDialogs[otherType]).toBe(false);
-          }
+        const otherDialogs = dialogTypes.filter((t) => t !== dialogType);
+        otherDialogs.forEach((otherType) => {
+          expect(result.openDialogs[otherType]).toBe(false);
         });
       });
     });

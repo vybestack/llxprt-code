@@ -73,8 +73,7 @@ export interface ToolInvocation<
 export abstract class BaseToolInvocation<
   TParams extends object,
   TResult extends ToolResult,
-> implements ToolInvocation<TParams, TResult>
-{
+> implements ToolInvocation<TParams, TResult> {
   constructor(
     readonly params: TParams,
     protected readonly messageBus?: MessageBus,
@@ -221,8 +220,7 @@ export interface ToolBuilder<
 export abstract class DeclarativeTool<
   TParams extends object,
   TResult extends ToolResult,
-> implements ToolBuilder<TParams, TResult>
-{
+> implements ToolBuilder<TParams, TResult> {
   protected messageBus?: MessageBus;
 
   constructor(
@@ -632,9 +630,9 @@ export interface ToolLocation {
  * @deprecated Use BaseDeclarativeTool for new tools
  */
 export abstract class BaseTool<
-    TParams extends object,
-    TResult extends ToolResult,
-  >
+  TParams extends object,
+  TResult extends ToolResult,
+>
   extends DeclarativeTool<TParams, TResult>
   implements ContextAwareTool
 {

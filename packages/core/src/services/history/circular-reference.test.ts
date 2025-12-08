@@ -110,12 +110,10 @@ describe('Circular Reference Bug', () => {
     // getCurated called during tool execution (before response)
     let curated = historyService.getCurated();
 
-    // At this point we have an orphan - check if synthetic was added
-    const toolResponses = curated.filter((c) => c.speaker === 'tool');
-    if (toolResponses.length > 0) {
-      // Synthetic was added - make sure it's serializable
-      expect(() => JSON.stringify(curated)).not.toThrow();
-    }
+    // At this point we have an orphan tool call (no response yet)
+    // The main concern is that the curated history is serializable
+    // regardless of whether synthetic responses are added or not
+    expect(() => JSON.stringify(curated)).not.toThrow();
 
     // Tool response arrives
     historyService.add({

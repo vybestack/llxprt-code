@@ -6,11 +6,11 @@
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
-import { mockControl } from '../__mocks__/fs/promises.js';
 import { ReadManyFilesTool } from './read-many-files.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import path from 'path';
 import fs from 'fs'; // Actual fs for setup
+import { readFile as mockReadFile } from 'fs/promises';
 import os from 'os';
 import { Config } from '../config/config.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
@@ -23,6 +23,16 @@ import {
 import * as glob from 'glob';
 
 vi.mock('glob', { spy: true });
+
+// Mock fs/promises with inline factory
+vi.mock('fs/promises', async () => {
+  const actualFsPromises =
+    await vi.importActual<typeof import('fs/promises')>('fs/promises');
+  return {
+    ...actualFsPromises,
+    readFile: vi.fn(),
+  };
+});
 
 vi.mock('mime-types', () => {
   const lookup = (filename: string) => {
@@ -87,7 +97,7 @@ describe('ReadManyFilesTool', () => {
     } as Partial<Config> as Config;
     tool = new ReadManyFilesTool(mockConfig);
 
-    mockReadFileFn = mockControl.mockReadFile;
+    mockReadFileFn = mockReadFile as Mock;
     mockReadFileFn.mockReset();
 
     mockReadFileFn.mockImplementation(

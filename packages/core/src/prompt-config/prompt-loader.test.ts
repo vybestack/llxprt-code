@@ -120,18 +120,11 @@ describe('PromptLoader', () => {
       expect(result.error).toBe('Invalid UTF-8 encoding');
     });
 
-    it('should handle permission errors gracefully', async () => {
-      const filePath = path.join(tempDir, 'no-read.md');
-      await fs.writeFile(filePath, 'content', 'utf8');
-
-      // Skip permission tests on Windows as chmod has no effect
-      if (isWindows()) {
-        // On Windows, test with a file that's locked by another process
-        // Since we can't easily simulate this, just test the file exists and can be read
-        const result = await loader.loadFile(filePath, false);
-        expect(result.success).toBe(true);
-        expect(result.content).toBe('content');
-      } else {
+    it.skipIf(isWindows())(
+      'should handle permission errors gracefully on Unix',
+      async () => {
+        const filePath = path.join(tempDir, 'no-read.md');
+        await fs.writeFile(filePath, 'content', 'utf8');
         await fs.chmod(filePath, 0o000); // Remove all permissions
 
         const result = await loader.loadFile(filePath, false);
@@ -142,7 +135,18 @@ describe('PromptLoader', () => {
 
         // Restore permissions for cleanup
         await fs.chmod(filePath, 0o644);
-      }
+      },
+    );
+
+    it.skipIf(!isWindows())('should handle files on Windows', async () => {
+      const filePath = path.join(tempDir, 'no-read.md');
+      await fs.writeFile(filePath, 'content', 'utf8');
+
+      // On Windows, test with a file that's locked by another process
+      // Since we can't easily simulate this, just test the file exists and can be read
+      const result = await loader.loadFile(filePath, false);
+      expect(result.success).toBe(true);
+      expect(result.content).toBe('content');
     });
 
     it('should return error for null or undefined file path', async () => {

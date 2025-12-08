@@ -502,13 +502,15 @@ describe('editCommand @requirement:REQ-008', () => {
       profileManager,
       subagentManager,
     });
-
-    expect(vi.isMockFunction(spawnSync)).toBe(true);
   });
 
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
     vi.clearAllMocks();
+  });
+
+  it('should have spawnSync mocked', () => {
+    expect(vi.isMockFunction(spawnSync)).toBe(true);
   });
 
   it('should error when name not provided', async () => {
@@ -743,10 +745,11 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     // Verify success message type and content
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
-    if (result && result.type === 'message') {
-      expect(result.messageType).toBe('info');
-      expect(result.content).toMatch(/created successfully/i);
+    if (!result || result.type !== 'message') {
+      throw new Error('Expected message action return');
     }
+    expect(result.messageType).toBe('info');
+    expect(result.content).toMatch(/created successfully/i);
 
     // Verify the subagent was saved with the generated prompt
     const loaded = await subagentManager.loadSubagent('testagent');
@@ -766,10 +769,11 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
-    if (result && result.type === 'message') {
-      expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/Network error/);
+    if (!result || result.type !== 'message') {
+      throw new Error('Expected message action return');
     }
+    expect(result.messageType).toBe('error');
+    expect(result.content).toMatch(/Network error/);
     expect(mockGeminiClient.generateDirectMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         config: {
@@ -796,10 +800,11 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
-    if (result && result.type === 'message') {
-      expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/empty.*response|manual mode/i);
+    if (!result || result.type !== 'message') {
+      throw new Error('Expected message action return');
     }
+    expect(result.messageType).toBe('error');
+    expect(result.content).toMatch(/empty.*response|manual mode/i);
     expect(mockGeminiClient.generateDirectMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         config: {
@@ -866,10 +871,11 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     expect(runWithScopeMock).not.toHaveBeenCalled();
     expect(actionResult).toBeDefined();
     expect(actionResult?.type).toBe('message');
-    if (actionResult?.type === 'message') {
-      expect(actionResult.messageType).toBe('info');
-      expect(actionResult.content).toContain('Subagent');
+    if (!actionResult || actionResult.type !== 'message') {
+      throw new Error('Expected message action return');
     }
+    expect(actionResult.messageType).toBe('info');
+    expect(actionResult.content).toContain('Subagent');
     helperSpy.mockRestore();
   });
 

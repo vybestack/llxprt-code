@@ -496,19 +496,35 @@ describe('ShellExecutionService child_process fallback', () => {
 
           expect(result.aborted).toBe(true);
 
-          if (platform === 'linux') {
-            expect(mockProcessKill).toHaveBeenCalledWith(
-              -mockChildProcess.pid!,
-              expectedSignal,
-            );
-          } else {
-            expect(mockCpSpawn).toHaveBeenCalledWith(expectedCommand, [
-              '/pid',
-              String(mockChildProcess.pid),
-              '/f',
-              '/t',
-            ]);
-          }
+          // Verify platform-specific abort behavior
+          const isLinux = platform === 'linux';
+          expect(isLinux ? expectedSignal : expectedCommand).toBeDefined();
+
+          // Verify the appropriate kill method was called based on platform
+          const processKillCalls = mockProcessKill.mock.calls;
+          const cpSpawnCalls = mockCpSpawn.mock.calls;
+
+          // For Linux: check process.kill was called with SIGTERM
+          const linuxKillMatches = processKillCalls.some(
+            (call) =>
+              call[0] === -mockChildProcess.pid! && call[1] === expectedSignal,
+          );
+
+          // For Windows: check taskkill was spawned
+          const windowsKillMatches = cpSpawnCalls.some(
+            (call) =>
+              call[0] === expectedCommand &&
+              JSON.stringify(call[1]) ===
+                JSON.stringify([
+                  '/pid',
+                  String(mockChildProcess.pid),
+                  '/f',
+                  '/t',
+                ]),
+          );
+
+          // Exactly one of these should be true based on platform
+          expect(isLinux ? linuxKillMatches : windowsKillMatches).toBe(true);
         });
       },
     );

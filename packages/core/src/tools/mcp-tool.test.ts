@@ -727,11 +727,9 @@ describe('DiscoveredMCPTool', () => {
 
         const invocation = tool.build(params);
 
-        try {
-          await invocation.execute(controller.signal);
-        } catch (error) {
-          expect(error).toBe(expectedError);
-        }
+        await expect(invocation.execute(controller.signal)).rejects.toThrow(
+          'Tool execution failed',
+        );
 
         // Verify cleanup by aborting after error
         controller.abort();
@@ -780,22 +778,20 @@ describe('DiscoveredMCPTool', () => {
       const confirmation = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
+
+      // Assert confirmation is not false and has the expected structure
       expect(confirmation).not.toBe(false);
-      if (confirmation && confirmation.type === 'mcp') {
-        // Type guard for ToolMcpConfirmationDetails
-        expect(confirmation.type).toBe('mcp');
-        expect(confirmation.serverName).toBe(serverName);
-        expect(confirmation.toolName).toBe(serverToolName);
-      } else if (confirmation) {
-        // Handle other possible confirmation types if necessary, or strengthen test if only MCP is expected
-        throw new Error(
-          'Confirmation was not of expected type MCP or was false',
-        );
-      } else {
-        throw new Error(
-          'Confirmation details not in expected format or was false',
-        );
-      }
+      expect(confirmation).toBeTruthy();
+
+      // Type assertion after verification
+      const typedConfirmation = confirmation as {
+        type: string;
+        serverName?: string;
+        toolName?: string;
+      };
+      expect(typedConfirmation.type).toBe('mcp');
+      expect(typedConfirmation.serverName).toBe(serverName);
+      expect(typedConfirmation.toolName).toBe(serverToolName);
     });
 
     it('should add server to allowlist on ProceedAlwaysServer', async () => {
@@ -803,22 +799,20 @@ describe('DiscoveredMCPTool', () => {
       const confirmation = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
+
+      // Assert confirmation has expected structure
       expect(confirmation).not.toBe(false);
-      if (
-        confirmation &&
-        typeof confirmation === 'object' &&
-        'onConfirm' in confirmation &&
-        typeof confirmation.onConfirm === 'function'
-      ) {
-        await confirmation.onConfirm(
-          ToolConfirmationOutcome.ProceedAlwaysServer,
-        );
-        expect(invocation.constructor.allowlist.has(serverName)).toBe(true);
-      } else {
-        throw new Error(
-          'Confirmation details or onConfirm not in expected format',
-        );
-      }
+      expect(confirmation).toBeTruthy();
+      expect(confirmation).toHaveProperty('onConfirm');
+
+      // Type assertion after verification
+      const typedConfirmation = confirmation as {
+        onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
+      };
+      await typedConfirmation.onConfirm(
+        ToolConfirmationOutcome.ProceedAlwaysServer,
+      );
+      expect(invocation.constructor.allowlist.has(serverName)).toBe(true);
     });
 
     it('should add tool to allowlist on ProceedAlwaysTool', async () => {
@@ -827,22 +821,20 @@ describe('DiscoveredMCPTool', () => {
       const confirmation = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
+
+      // Assert confirmation has expected structure
       expect(confirmation).not.toBe(false);
-      if (
-        confirmation &&
-        typeof confirmation === 'object' &&
-        'onConfirm' in confirmation &&
-        typeof confirmation.onConfirm === 'function'
-      ) {
-        await confirmation.onConfirm(ToolConfirmationOutcome.ProceedAlwaysTool);
-        expect(invocation.constructor.allowlist.has(toolAllowlistKey)).toBe(
-          true,
-        );
-      } else {
-        throw new Error(
-          'Confirmation details or onConfirm not in expected format',
-        );
-      }
+      expect(confirmation).toBeTruthy();
+      expect(confirmation).toHaveProperty('onConfirm');
+
+      // Type assertion after verification
+      const typedConfirmation = confirmation as {
+        onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
+      };
+      await typedConfirmation.onConfirm(
+        ToolConfirmationOutcome.ProceedAlwaysTool,
+      );
+      expect(invocation.constructor.allowlist.has(toolAllowlistKey)).toBe(true);
     });
 
     it('should handle Cancel confirmation outcome', async () => {
@@ -850,26 +842,21 @@ describe('DiscoveredMCPTool', () => {
       const confirmation = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
+
+      // Assert confirmation has expected structure
       expect(confirmation).not.toBe(false);
-      if (
-        confirmation &&
-        typeof confirmation === 'object' &&
-        'onConfirm' in confirmation &&
-        typeof confirmation.onConfirm === 'function'
-      ) {
-        // Cancel should not add anything to allowlist
-        await confirmation.onConfirm(ToolConfirmationOutcome.Cancel);
-        expect(invocation.constructor.allowlist.has(serverName)).toBe(false);
-        expect(
-          invocation.constructor.allowlist.has(
-            `${serverName}.${serverToolName}`,
-          ),
-        ).toBe(false);
-      } else {
-        throw new Error(
-          'Confirmation details or onConfirm not in expected format',
-        );
-      }
+      expect(confirmation).toBeTruthy();
+      expect(confirmation).toHaveProperty('onConfirm');
+
+      // Type assertion after verification - Cancel should not add anything to allowlist
+      const typedConfirmation = confirmation as {
+        onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
+      };
+      await typedConfirmation.onConfirm(ToolConfirmationOutcome.Cancel);
+      expect(invocation.constructor.allowlist.has(serverName)).toBe(false);
+      expect(
+        invocation.constructor.allowlist.has(`${serverName}.${serverToolName}`),
+      ).toBe(false);
     });
 
     it('should handle ProceedOnce confirmation outcome', async () => {
@@ -877,26 +864,21 @@ describe('DiscoveredMCPTool', () => {
       const confirmation = await invocation.shouldConfirmExecute(
         new AbortController().signal,
       );
+
+      // Assert confirmation has expected structure
       expect(confirmation).not.toBe(false);
-      if (
-        confirmation &&
-        typeof confirmation === 'object' &&
-        'onConfirm' in confirmation &&
-        typeof confirmation.onConfirm === 'function'
-      ) {
-        // ProceedOnce should not add anything to allowlist
-        await confirmation.onConfirm(ToolConfirmationOutcome.ProceedOnce);
-        expect(invocation.constructor.allowlist.has(serverName)).toBe(false);
-        expect(
-          invocation.constructor.allowlist.has(
-            `${serverName}.${serverToolName}`,
-          ),
-        ).toBe(false);
-      } else {
-        throw new Error(
-          'Confirmation details or onConfirm not in expected format',
-        );
-      }
+      expect(confirmation).toBeTruthy();
+      expect(confirmation).toHaveProperty('onConfirm');
+
+      // Type assertion after verification - ProceedOnce should not add anything to allowlist
+      const typedConfirmation = confirmation as {
+        onConfirm: (outcome: ToolConfirmationOutcome) => Promise<void>;
+      };
+      await typedConfirmation.onConfirm(ToolConfirmationOutcome.ProceedOnce);
+      expect(invocation.constructor.allowlist.has(serverName)).toBe(false);
+      expect(
+        invocation.constructor.allowlist.has(`${serverName}.${serverToolName}`),
+      ).toBe(false);
     });
   });
 

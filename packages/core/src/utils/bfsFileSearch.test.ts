@@ -224,12 +224,13 @@ describe('bfsFileSearch', () => {
       durations.push(duration);
 
       // Verify consistency: all iterations should find the exact same files
+      const sortedResult = result.sort();
       if (firstResultSorted === undefined) {
         foundFiles = result.length;
-        firstResultSorted = result.sort();
-      } else {
-        expect(result.sort()).toEqual(firstResultSorted);
+        firstResultSorted = sortedResult;
       }
+      // Verify consistency across all iterations
+      expect(sortedResult).toEqual(firstResultSorted);
 
       console.log(`📊 Iteration ${i + 1}: ${duration.toFixed(2)}ms`);
     }

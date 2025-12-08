@@ -172,29 +172,21 @@ describe('WriteFileTool', () => {
     const abortSignal = new AbortController().signal;
     it('should return false if params are invalid (relative path)', async () => {
       const params = { file_path: 'relative.txt', content: 'test' };
-      // For invalid params, build should validate and we should handle appropriately
-      try {
+      // For invalid params, build should throw during validation
+      await expect(async () => {
         const invocation = tool.build(params);
-        const confirmation = await invocation.shouldConfirmExecute(abortSignal);
-        expect(confirmation).toBe(false);
-      } catch (error) {
-        // If validation fails during build, that's expected for invalid params
-        expect(error).toBeDefined();
-      }
+        await invocation.shouldConfirmExecute(abortSignal);
+      }).rejects.toThrow();
     });
 
     it('should return false if params are invalid (outside root)', async () => {
       const outsidePath = path.resolve(tempDir, 'outside-root.txt');
       const params = { file_path: outsidePath, content: 'test' };
-      // For invalid params, build should validate and we should handle appropriately
-      try {
+      // For invalid params, build should throw during validation
+      await expect(async () => {
         const invocation = tool.build(params);
-        const confirmation = await invocation.shouldConfirmExecute(abortSignal);
-        expect(confirmation).toBe(false);
-      } catch (error) {
-        // If validation fails during build, that's expected for invalid params
-        expect(error).toBeDefined();
-      }
+        await invocation.shouldConfirmExecute(abortSignal);
+      }).rejects.toThrow();
     });
 
     it('should return false if getCorrectedFileContent returns an error', async () => {
@@ -268,41 +260,23 @@ describe('WriteFileTool', () => {
     const abortSignal = new AbortController().signal;
     it('should return error if params are invalid (relative path)', async () => {
       const params = { file_path: 'relative.txt', content: 'test' };
-      // For invalid params, build should validate and we should handle appropriately
-      try {
+      // For invalid params, build should throw during validation
+      await expect(async () => {
         const invocation = tool.build(params);
-        const result = await invocation.execute(abortSignal);
-        expect(result.llmContent).toContain(
-          'Could not write file due to invalid parameters',
-        );
-        expect(result.returnDisplay).toContain('File path must be absolute');
-      } catch (error) {
-        // If validation fails during build, that's expected for invalid params
-        expect(error).toBeDefined();
-        expect(String(error)).toContain('File path must be absolute');
-      }
+        await invocation.execute(abortSignal);
+      }).rejects.toThrow('File path must be absolute');
     });
 
     it('should return error if params are invalid (path outside root)', async () => {
       const outsidePath = path.resolve(tempDir, 'outside-root.txt');
       const params = { file_path: outsidePath, content: 'test' };
-      // For invalid params, build should validate and we should handle appropriately
-      try {
+      // For invalid params, build should throw during validation
+      await expect(async () => {
         const invocation = tool.build(params);
-        const result = await invocation.execute(abortSignal);
-        expect(result.llmContent).toContain(
-          'Could not write file due to invalid parameters',
-        );
-        expect(result.returnDisplay).toContain(
-          'File path must be within one of the workspace directories',
-        );
-      } catch (error) {
-        // If validation fails during build, that's expected for invalid params
-        expect(error).toBeDefined();
-        expect(String(error)).toContain(
-          'File path must be within one of the workspace directories',
-        );
-      }
+        await invocation.execute(abortSignal);
+      }).rejects.toThrow(
+        'File path must be within one of the workspace directories',
+      );
     });
 
     it('should return error if getCorrectedFileContent returns an error during execute', async () => {
