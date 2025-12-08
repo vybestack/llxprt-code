@@ -16,10 +16,11 @@
 
 import { describe, it, expect } from 'vitest';
 import type { IContent, ContentBlock } from '../services/history/IContent.js';
+import { aggregateTextWithSpacing } from './geminiChat.js';
 
 /**
- * Simulates the text aggregation logic used in geminiChat.ts
- * This function tests the core logic for preserving spacing around non-text blocks
+ * Helper function that simulates streaming text aggregation by iterating
+ * over IContent chunks and using the exported aggregateTextWithSpacing function.
  *
  * @param streamChunks - Array of IContent chunks simulating a stream response
  * @returns Aggregated text with proper spacing
@@ -29,24 +30,57 @@ function aggregateTextFromStream(streamChunks: IContent[]): string {
   let lastBlockWasNonText = false;
 
   for (const iContent of streamChunks) {
-    for (const block of iContent.blocks ?? []) {
-      if (block.type === 'text') {
-        if (lastBlockWasNonText && aggregatedText.length > 0) {
-          aggregatedText += ' ';
-        }
-        aggregatedText += block.text;
-        lastBlockWasNonText = false;
-      } else {
-        lastBlockWasNonText = true;
-      }
-    }
+    const result = aggregateTextWithSpacing(
+      iContent.blocks ?? [],
+      aggregatedText,
+      lastBlockWasNonText,
+    );
+    aggregatedText = result.text;
+    lastBlockWasNonText = result.lastBlockWasNonText;
   }
 
   return aggregatedText;
 }
 
 describe('geminiChat text aggregation with thinking blocks', () => {
-  describe('aggregateTextFromStream', () => {
+  describe('aggregateTextWithSpacing (direct function tests)', () => {
+    it('should add space after non-text block when text follows', () => {
+      const blocks: ContentBlock[] = [{ type: 'text', text: 'Hello' }];
+      const result = aggregateTextWithSpacing(blocks, 'Previous', true);
+
+      expect(result.text).toBe('Previous Hello');
+      expect(result.lastBlockWasNonText).toBe(false);
+    });
+
+    it('should not add space when no previous text exists', () => {
+      const blocks: ContentBlock[] = [{ type: 'text', text: 'Hello' }];
+      const result = aggregateTextWithSpacing(blocks, '', true);
+
+      expect(result.text).toBe('Hello');
+      expect(result.lastBlockWasNonText).toBe(false);
+    });
+
+    it('should track non-text block at end', () => {
+      const blocks: ContentBlock[] = [
+        { type: 'text', text: 'Hello' },
+        { type: 'thinking', thought: 'pondering' },
+      ];
+      const result = aggregateTextWithSpacing(blocks, '', false);
+
+      expect(result.text).toBe('Hello');
+      expect(result.lastBlockWasNonText).toBe(true);
+    });
+
+    it('should handle empty blocks array', () => {
+      const blocks: ContentBlock[] = [];
+      const result = aggregateTextWithSpacing(blocks, 'existing', false);
+
+      expect(result.text).toBe('existing');
+      expect(result.lastBlockWasNonText).toBe(false);
+    });
+  });
+
+  describe('aggregateTextFromStream (integration with stream chunks)', () => {
     it('should preserve spacing when thinking block appears between text chunks', () => {
       const chunks: IContent[] = [
         {
@@ -110,7 +144,7 @@ describe('geminiChat text aggregation with thinking blocks', () => {
       expect(result).toBe('The response');
     });
 
-    it('should preserve trailing space from text when thinking appears at end', () => {
+    it('should preserve existing trailing space in text when followed by thinking block', () => {
       const chunks: IContent[] = [
         {
           speaker: 'ai',
