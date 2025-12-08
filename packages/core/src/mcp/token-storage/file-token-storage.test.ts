@@ -57,12 +57,11 @@ describe('FileTokenStorage', () => {
   });
 
   describe('getCredentials', () => {
-    it('should throw error when file does not exist', async () => {
+    it('should return null when file does not exist', async () => {
       mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
 
-      await expect(storage.getCredentials('test-server')).rejects.toThrow(
-        'Token file does not exist',
-      );
+      const result = await storage.getCredentials('test-server');
+      expect(result).toBeNull();
     });
 
     it('should return null for expired tokens', async () => {
@@ -115,6 +114,35 @@ describe('FileTokenStorage', () => {
   });
 
   describe('setCredentials', () => {
+    it('should create new file when file does not exist', async () => {
+      mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockResolvedValue(undefined);
+
+      const credentials: MCPOAuthCredentials = {
+        serverName: 'new-server',
+        token: {
+          accessToken: 'new-token',
+          tokenType: 'Bearer',
+        },
+        updatedAt: Date.now(),
+      };
+
+      await storage.setCredentials(credentials);
+
+      expect(mockFs.mkdir).toHaveBeenCalledWith(
+        path.join('/home/test', '.llxprt'),
+        { recursive: true, mode: 0o700 },
+      );
+      expect(mockFs.writeFile).toHaveBeenCalled();
+
+      const writeCall = mockFs.writeFile.mock.calls[0];
+      const decrypted = storage['decrypt'](writeCall[1]);
+      const saved = JSON.parse(decrypted);
+
+      expect(saved['new-server'].token.accessToken).toBe('new-token');
+    });
+
     it('should save credentials with encryption', async () => {
       const encryptedData = storage['encrypt'](
         JSON.stringify({ 'existing-server': existingCredentials }),
@@ -174,11 +202,11 @@ describe('FileTokenStorage', () => {
   });
 
   describe('deleteCredentials', () => {
-    it('should throw when credentials do not exist', async () => {
+    it('should throw when credentials do not exist in empty storage', async () => {
       mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
 
       await expect(storage.deleteCredentials('test-server')).rejects.toThrow(
-        'Token file does not exist',
+        'No credentials found for test-server',
       );
     });
 
@@ -245,12 +273,11 @@ describe('FileTokenStorage', () => {
   });
 
   describe('listServers', () => {
-    it('should throw error when file does not exist', async () => {
+    it('should return empty array when file does not exist', async () => {
       mockFs.readFile.mockRejectedValue({ code: 'ENOENT' });
 
-      await expect(storage.listServers()).rejects.toThrow(
-        'Token file does not exist',
-      );
+      const result = await storage.listServers();
+      expect(result).toEqual([]);
     });
 
     it('should return list of server names', async () => {
