@@ -3298,13 +3298,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Dump error if enabled
           if (shouldDumpError) {
-            const errorMessage =
+            const dumpErrorMessage =
               error instanceof Error ? error.message : String(error);
             await dumpSDKContext(
               'openai',
               '/v1/chat/completions',
               requestBody,
-              { error: errorMessage },
+              { error: dumpErrorMessage },
               true,
               baseURL || 'https://api.openai.com',
             );
@@ -3425,13 +3425,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Dump error if enabled
           if (shouldDumpError) {
-            const errorMessage =
+            const dumpErrorMessage =
               error instanceof Error ? error.message : String(error);
             await dumpSDKContext(
               'openai',
               '/v1/chat/completions',
               requestBody,
-              { error: errorMessage },
+              { error: dumpErrorMessage },
               true,
               baseURL || 'https://api.openai.com',
             );

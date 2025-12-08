@@ -209,6 +209,9 @@ export { GeminiProvider } from './providers/gemini/GeminiProvider.js';
 export * from './providers/ProviderManager.js';
 export * from './providers/errors.js';
 
+// Export provider utilities
+export type { DumpMode } from './providers/utils/dumpContext.js';
+
 // Export tokenizers
 export * from './providers/tokenizers/ITokenizer.js';
 export * from './providers/tokenizers/OpenAITokenizer.js';

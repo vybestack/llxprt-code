@@ -12,10 +12,9 @@ import {
 } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { DumpMode } from '@vybestack/llxprt-code-core';
 import * as os from 'node:os';
 import * as path from 'node:path';
-
-type DumpMode = 'now' | 'status' | 'on' | 'error' | 'off';
 
 const validModes: DumpMode[] = ['now', 'status', 'on', 'error', 'off'];
 

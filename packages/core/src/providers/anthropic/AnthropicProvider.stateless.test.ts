@@ -56,6 +56,52 @@ vi.mock('@anthropic-ai/sdk', () => {
       this.messages = {
         create: vi.fn(async (request: unknown) => {
           FakeAnthropic.requests.push({ request });
+          const req = request as { stream?: boolean };
+
+          if (req.stream) {
+            // Return async iterable for streaming
+            return {
+              async *[Symbol.asyncIterator]() {
+                yield {
+                  type: 'message_start',
+                  message: {
+                    id: 'msg_test',
+                    type: 'message',
+                    role: 'assistant',
+                    content: [],
+                    model: 'claude-3-sonnet-20240229',
+                    stop_reason: null,
+                    stop_sequence: null,
+                    usage: { input_tokens: 10, output_tokens: 0 },
+                  },
+                };
+                yield {
+                  type: 'content_block_start',
+                  index: 0,
+                  content_block: { type: 'text', text: '' },
+                };
+                yield {
+                  type: 'content_block_delta',
+                  index: 0,
+                  delta: { type: 'text_delta', text: 'ok' },
+                };
+                yield {
+                  type: 'content_block_stop',
+                  index: 0,
+                };
+                yield {
+                  type: 'message_delta',
+                  delta: { stop_reason: 'end_turn', stop_sequence: null },
+                  usage: { output_tokens: 1 },
+                };
+                yield {
+                  type: 'message_stop',
+                };
+              },
+            };
+          }
+
+          // Non-streaming response
           return {
             content: [
               {

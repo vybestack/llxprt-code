@@ -12,19 +12,23 @@ import { dumpContext, redactSensitiveData } from './dumpContext.js';
 
 describe('dumpContext', () => {
   const testDumpDir = path.join(os.homedir(), '.llxprt', 'dumps');
+  const createdFiles: string[] = [];
 
   beforeEach(async () => {
     // Ensure dump directory exists
     await fs.mkdir(testDumpDir, { recursive: true });
+    // Clear the list of created files
+    createdFiles.length = 0;
   });
 
   afterEach(async () => {
     // Clean up test dump files
     try {
-      const files = await fs.readdir(testDumpDir);
-      for (const file of files) {
-        if (file.startsWith('test-')) {
+      for (const file of createdFiles) {
+        try {
           await fs.unlink(path.join(testDumpDir, file));
+        } catch {
+          // Ignore errors for individual file cleanup
         }
       }
     } catch {
@@ -144,6 +148,7 @@ describe('dumpContext', () => {
       };
 
       const filename = await dumpContext(request, response, 'openai');
+      createdFiles.push(filename);
       expect(filename).toMatch(/^\d{8}-\d{6}-openai-\w+\.json$/);
 
       const filepath = path.join(testDumpDir, filename);
@@ -190,6 +195,7 @@ describe('dumpContext', () => {
       };
 
       const filename = await dumpContext(request, response, 'anthropic');
+      createdFiles.push(filename);
       expect(filename).toMatch(/^\d{8}-\d{6}-anthropic-\w+\.json$/);
 
       const filepath = path.join(testDumpDir, filename);
@@ -237,6 +243,7 @@ describe('dumpContext', () => {
       };
 
       const filename = await dumpContext(request, response, 'gemini');
+      createdFiles.push(filename);
       expect(filename).toMatch(/^\d{8}-\d{6}-gemini-\w+\.json$/);
 
       const filepath = path.join(testDumpDir, filename);
@@ -266,6 +273,7 @@ describe('dumpContext', () => {
 
       // Should not throw even if there are issues
       const filename = await dumpContext(request, response, 'openai');
+      createdFiles.push(filename);
       expect(filename).toBeDefined();
     });
   });
@@ -292,6 +300,7 @@ describe('dumpContext', () => {
       };
 
       const filename = await dumpContext(request, response, 'openai');
+      createdFiles.push(filename);
       const filepath = path.join(testDumpDir, filename);
       const content = await fs.readFile(filepath, 'utf-8');
       const dump = JSON.parse(content);

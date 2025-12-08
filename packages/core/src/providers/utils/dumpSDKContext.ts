@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { dumpContext, type DumpMode } from './dumpContext.js';
+import { dumpContext, shouldDump } from './dumpContext.js';
 import { DebugLogger } from '../../debug/index.js';
 
 const logger = new DebugLogger('llxprt:core:dumpSDKContext');
@@ -52,24 +52,5 @@ export async function dumpSDKContext(
   return await dumpContext(request, dumpResponse, providerName);
 }
 
-/**
- * Determines if dumping should occur based on ephemeral settings
- */
-export function shouldDumpSDKContext(
-  mode: DumpMode | string | undefined,
-  isError: boolean,
-): boolean {
-  if (!mode || mode === 'off' || mode === 'status') {
-    return false;
-  }
-
-  if (mode === 'now' || mode === 'on') {
-    return true;
-  }
-
-  if (mode === 'error' && isError) {
-    return true;
-  }
-
-  return false;
-}
+// Re-export shouldDump as shouldDumpSDKContext for backwards compatibility
+export { shouldDump as shouldDumpSDKContext };
