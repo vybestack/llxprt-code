@@ -379,14 +379,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // This preserves meaningful whitespace in regular text chunks during streaming
     // (e.g., " 5 Biggest" should remain " 5 Biggest", not become "5 Biggest")
     if (hadReasoningTags) {
-      // Clean up multiple consecutive spaces/whitespace that may result from stripping
+      // Collapse multiple spaces/tabs but preserve newlines for proper paragraph/line breaks
       str = str.replace(/[ \t]+/g, ' ');
       str = str.replace(/\n{3,}/g, '\n\n');
 
-      // Only trim leading whitespace when think tags were at the beginning
-      // This prevents leading spaces from "<think>...</think>text" -> " text"
-      // but preserves trailing whitespace for streaming chunk concatenation
-      str = str.trimStart();
+      // Only trim leading horizontal whitespace (spaces/tabs), NOT newlines
+      // This preserves line breaks between think tags and content (fixes #721)
+      str = str.replace(/^[ \t]+/, '');
     }
 
     const afterLen = str.length;

@@ -249,6 +249,36 @@ Third line with conclusion.
 
       expect(result).toBe(text);
     });
+
+    it('should preserve newlines after think tag content when think tags were stripped', () => {
+      const text = '<think>My analysis</think>\nHere is the result.';
+      const result = sanitizeProviderText(text);
+      // The newline after the think tag should be preserved
+      expect(result).toBe('\nHere is the result.');
+    });
+
+    it('should preserve paragraph breaks after think tags', () => {
+      const text =
+        '<think>Deep analysis here</think>\n\nParagraph 1.\n\nParagraph 2.';
+      const result = sanitizeProviderText(text);
+      // Should preserve the paragraph structure
+      expect(result).toBe('\n\nParagraph 1.\n\nParagraph 2.');
+    });
+
+    it('should handle streaming chunk with closing think tag followed by newline', () => {
+      const text = '</think>\n';
+      const result = sanitizeProviderText(text);
+      // The newline should be preserved
+      expect(result).toBe('\n');
+    });
+
+    it('should only trim leading spaces and tabs, not newlines, after think tag removal', () => {
+      const text = '<think>thought</think>   \n\nContent here';
+      const result = sanitizeProviderText(text);
+      // Spaces before newline collapsed to single space, then removed as leading horizontal whitespace
+      // But newlines are preserved
+      expect(result).toBe('\n\nContent here');
+    });
   });
 
   describe('Bug #1: Kimi-K2 text content sanitization', () => {
