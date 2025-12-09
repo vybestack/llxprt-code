@@ -320,7 +320,9 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
       expect(result).toBeNull();
     });
 
-    it('should handle whitespace-only reasoning_content (streaming)', () => {
+    it('should preserve whitespace-only reasoning_content (streaming) for proper formatting', () => {
+      // For streaming, whitespace-only chunks must be preserved to maintain
+      // proper spacing between tokens (fixes issue #721)
       const delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta = {
         reasoning_content: '   \n\t  ',
       };
@@ -333,8 +335,9 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
         }
       ).parseStreamingReasoningDelta(delta);
 
-      // Whitespace-only should be treated as empty and return null
-      expect(result).toBeNull();
+      // Whitespace should be preserved for proper formatting during accumulation
+      expect(result).not.toBeNull();
+      expect(result?.thought).toBe('   \n\t  ');
     });
 
     it('should handle whitespace-only reasoning_content (non-streaming)', () => {

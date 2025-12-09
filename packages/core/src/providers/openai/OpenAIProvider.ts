@@ -4501,8 +4501,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return null;
     }
 
-    // Handle empty string or whitespace-only
-    if (reasoningContent.trim().length === 0) {
+    // Handle empty string only - preserve whitespace-only content (spaces, tabs)
+    // to maintain proper formatting in accumulated reasoning (fixes issue #721)
+    if (reasoningContent.length === 0) {
       return null;
     }
 
@@ -4536,7 +4537,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return null;
     }
 
-    // Handle empty string or whitespace-only
+    // Handle empty string or whitespace-only - for non-streaming complete responses,
+    // whitespace-only reasoning is unusual and should be treated as no reasoning
     if (reasoningContent.trim().length === 0) {
       return null;
     }
