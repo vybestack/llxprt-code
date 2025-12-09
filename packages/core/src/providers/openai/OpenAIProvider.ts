@@ -2109,7 +2109,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Handle text content - buffer for Qwen format, emit immediately for others
           // Note: Synthetic API sends content that may duplicate reasoning_content.
-          // This is the model's behavior - we don't filter it here.
+          // We now filter duplicates by tracking when content starts matching reasoning_content.
+          // fixes #721
           // @plan PLAN-20251202-THINKING.P16
           const rawDeltaContent = this.coerceMessageContentToString(
             choice.delta?.content as unknown,
@@ -3611,7 +3612,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Handle text content - buffer for Qwen format, emit immediately for others
           // Note: Synthetic API sends content that may duplicate reasoning_content.
-          // This is the model's behavior - we don't filter it here.
+          // This is the model's behavior - we don't filter it here as detection is unreliable.
           // @plan PLAN-20251202-THINKING.P16
           const rawDeltaContent = this.coerceMessageContentToString(
             choice.delta?.content as unknown,
