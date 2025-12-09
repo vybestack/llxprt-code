@@ -574,7 +574,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     cleanedText: string;
     toolCalls: ToolCallBlock[];
   } {
-    if (!raw || !raw.includes('<|tool_calls_section_begin|>')) {
+    // Return early only if input is null/undefined/empty
+    if (!raw) {
       return { cleanedText: raw, toolCalls: [] };
     }
 
@@ -582,74 +583,94 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const toolCalls: ToolCallBlock[] = [];
     let text = raw;
 
-    const sectionRegex =
-      /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/g;
+    // Extract tool calls from complete sections if present
+    if (raw.includes('<|tool_calls_section_begin|>')) {
+      const sectionRegex =
+        /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/g;
 
-    text = text.replace(
-      sectionRegex,
-      (_sectionMatch: string, sectionBody: string) => {
-        try {
-          const callRegex =
-            /<\|tool_call_begin\|>\s*([^<]+?)\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/g;
+      text = text.replace(
+        sectionRegex,
+        (_sectionMatch: string, sectionBody: string) => {
+          try {
+            const callRegex =
+              /<\|tool_call_begin\|>\s*([^<]+?)\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/g;
 
-          let m: RegExpExecArray | null;
-          while ((m = callRegex.exec(sectionBody)) !== null) {
-            const rawId = m[1].trim();
-            const rawArgs = m[2].trim();
+            let m: RegExpExecArray | null;
+            while ((m = callRegex.exec(sectionBody)) !== null) {
+              const rawId = m[1].trim();
+              const rawArgs = m[2].trim();
 
-            // Infer tool name from ID.
-            let toolName = '';
-            const match =
-              /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ||
-              /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
-            if (match) {
-              toolName = match[1];
-            } else {
-              const colonParts = rawId.split(':');
-              const head = colonParts[0] || rawId;
-              const dotParts = head.split('.');
-              toolName = dotParts[dotParts.length - 1] || head;
+              // Infer tool name from ID.
+              let toolName = '';
+              const match =
+                /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ||
+                /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
+              if (match) {
+                toolName = match[1];
+              } else {
+                const colonParts = rawId.split(':');
+                const head = colonParts[0] || rawId;
+                const dotParts = head.split('.');
+                toolName = dotParts[dotParts.length - 1] || head;
+              }
+
+              // Normalize tool name (handles Kimi-K2 style prefixes like call_functionsglob7)
+              toolName = this.normalizeToolName(toolName);
+
+              const sanitizedArgs = this.sanitizeToolArgumentsString(rawArgs);
+              const processedParameters = processToolParameters(
+                sanitizedArgs,
+                toolName,
+              );
+
+              toolCalls.push({
+                type: 'tool_call',
+                id: this.normalizeToHistoryToolId(rawId),
+                name: toolName,
+                parameters: processedParameters,
+              } as ToolCallBlock);
             }
-
-            // Normalize tool name (handles Kimi-K2 style prefixes like call_functionsglob7)
-            toolName = this.normalizeToolName(toolName);
-
-            const sanitizedArgs = this.sanitizeToolArgumentsString(rawArgs);
-            const processedParameters = processToolParameters(
-              sanitizedArgs,
-              toolName,
+          } catch (err) {
+            logger.debug(
+              () =>
+                `[OpenAIProvider] Failed to parse Kimi tool_calls_section: ${err}`,
             );
-
-            toolCalls.push({
-              type: 'tool_call',
-              id: this.normalizeToHistoryToolId(rawId),
-              name: toolName,
-              parameters: processedParameters,
-            } as ToolCallBlock);
           }
-        } catch (err) {
-          logger.debug(
-            () =>
-              `[OpenAIProvider] Failed to parse Kimi tool_calls_section: ${err}`,
-          );
-        }
 
-        // Strip the entire tool section from user-visible text
-        return '';
-      },
-    );
+          // Strip the entire tool section from user-visible text
+          return '';
+        },
+      );
 
-    if (toolCalls.length > 0) {
-      logger.debug(() => `[OpenAIProvider] Parsed Kimi tool_calls_section`, {
-        toolCallCount: toolCalls.length,
-        originalLength: raw.length,
-        cleanedLength: text.length,
-      });
+      if (toolCalls.length > 0) {
+        logger.debug(() => `[OpenAIProvider] Parsed Kimi tool_calls_section`, {
+          toolCallCount: toolCalls.length,
+          originalLength: raw.length,
+          cleanedLength: text.length,
+        });
+      }
     }
+
+    // ALWAYS run stray token cleanup, even if no complete sections were found
+    // This handles partial sections, malformed tokens, orphaned markers, etc.
+    text = text.replace(
+      /<\|tool_call(?:_(?:begin|end|argument_begin))?\|>/g,
+      '',
+    );
+    text = text.replace(/<\|tool_calls_section_(?:begin|end)\|>/g, '');
 
     // Don't trim - preserve leading/trailing newlines that are important for formatting
     // (e.g., numbered lists from Kimi K2 that have newlines between items)
     return { cleanedText: text, toolCalls };
+  }
+
+  /**
+   * Clean Kimi K2 tool call tokens from thinking content.
+   * Used when extracting thinking from <think> tags that may contain embedded tool calls.
+   * @issue #749
+   */
+  private cleanThinkingContent(thought: string): string {
+    return this.extractKimiToolCallsFromText(thought).cleanedText;
   }
 
   /**
@@ -1979,9 +2000,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Buffer for accumulating text chunks for providers that need it
       let textBuffer = '';
       // Use the same detected format from earlier for consistency
-      const isKimiModel = model.toLowerCase().includes('kimi-k2');
+      const isKimiK2Model = model.toLowerCase().includes('kimi-k2');
       // Buffer text for Qwen format providers and Kimi-K2 to avoid stanza formatting
-      const shouldBufferText = detectedFormat === 'qwen' || isKimiModel;
+      const shouldBufferText = detectedFormat === 'qwen' || isKimiK2Model;
 
       // Accumulate thinking content across the entire stream to emit as ONE block
       // This handles fragmented <think>word</think> streaming from Synthetic API
@@ -2070,13 +2091,29 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Parse reasoning_content from streaming delta (Phase 16 integration)
           // ACCUMULATE instead of yielding immediately to handle token-by-token streaming
+          // Extract embedded Kimi K2 tool calls from reasoning_content (fixes #749)
           // @plan PLAN-20251202-THINKING.P16
-          const reasoningBlock = this.parseStreamingReasoningDelta(
-            choice.delta,
-          );
+          // @requirement REQ-KIMI-REASONING-001.1
+          const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
+            this.parseStreamingReasoningDelta(choice.delta);
           if (reasoningBlock) {
             // Accumulate reasoning content - will emit ONE block later
             accumulatedReasoningContent += reasoningBlock.thought;
+          }
+          // Accumulate tool calls extracted from reasoning_content
+          if (reasoningToolCalls.length > 0) {
+            for (const toolCall of reasoningToolCalls) {
+              // Convert ToolCallBlock to accumulated format
+              const index = accumulatedToolCalls.length;
+              accumulatedToolCalls[index] = {
+                id: toolCall.id,
+                type: 'function',
+                function: {
+                  name: toolCall.name,
+                  arguments: JSON.stringify(toolCall.parameters),
+                },
+              };
+            }
           }
 
           // Check for finish_reason to detect proper stream ending
@@ -2116,9 +2153,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             choice.delta?.content as unknown,
           );
           if (rawDeltaContent) {
-            const deltaContent = isKimiModel
-              ? rawDeltaContent
-              : this.sanitizeProviderText(rawDeltaContent);
+            // For Kimi models, we need to buffer the RAW content without processing
+            // because Kimi tokens stream incrementally and partial tokens would leak
+            // through if we try to process them immediately. The buffer will be
+            // processed when flushed (at sentence boundaries or end of stream).
+            let deltaContent: string;
+            if (isKimiK2Model) {
+              // For Kimi: Don't process yet - just pass through and let buffering handle it
+              // We'll extract tool calls and sanitize when we flush the buffer
+              deltaContent = rawDeltaContent;
+            } else {
+              // For non-Kimi models: sanitize immediately as before
+              deltaContent = this.sanitizeProviderText(rawDeltaContent);
+            }
             if (!deltaContent) {
               continue;
             }
@@ -2141,13 +2188,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               // Buffer text to avoid stanza formatting
               textBuffer += deltaContent;
 
-              const hasKimiBegin = textBuffer.includes(
-                '<|tool_calls_section_begin|>',
-              );
-              const hasKimiEnd = textBuffer.includes(
-                '<|tool_calls_section_end|>',
-              );
-              const hasOpenKimiSection = hasKimiBegin && !hasKimiEnd;
+              const kimiBeginCount = (
+                textBuffer.match(/<\|tool_calls_section_begin\|>/g) || []
+              ).length;
+              const kimiEndCount = (
+                textBuffer.match(/<\|tool_calls_section_end\|>/g) || []
+              ).length;
+              const hasOpenKimiSection = kimiBeginCount > kimiEndCount;
 
               // Emit buffered text when we have a complete sentence or paragraph
               // Look for natural break points, but avoid flushing mid Kimi section
@@ -2169,12 +2216,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 const tagBasedThinking =
                   this.extractThinkTagsAsBlock(workingText);
                 if (tagBasedThinking) {
+                  // Clean Kimi tokens from thinking content before accumulating
+                  const cleanedThought = this.cleanThinkingContent(
+                    tagBasedThinking.thought,
+                  );
                   // Accumulate thinking content - don't emit yet
                   // Use newline to preserve formatting between chunks (not space)
                   if (accumulatedThinkingContent.length > 0) {
                     accumulatedThinkingContent += '\n';
                   }
-                  accumulatedThinkingContent += tagBasedThinking.thought;
+                  accumulatedThinkingContent += cleanedThought;
                   logger.debug(
                     () =>
                       `[Streaming legacy] Accumulated thinking: ${accumulatedThinkingContent.length} chars total`,
@@ -2409,11 +2460,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // @plan PLAN-20251202-THINKING.P16
         const tagBasedThinking = this.extractThinkTagsAsBlock(workingText);
         if (tagBasedThinking) {
+          // Clean Kimi tokens from thinking content before accumulating
+          const cleanedThought = this.cleanThinkingContent(
+            tagBasedThinking.thought,
+          );
           // Use newline to preserve formatting between chunks (not space)
           if (accumulatedThinkingContent.length > 0) {
             accumulatedThinkingContent += '\n';
           }
-          accumulatedThinkingContent += tagBasedThinking.thought;
+          accumulatedThinkingContent += cleanedThought;
         }
 
         const kimiParsed = this.extractKimiToolCallsFromText(workingText);
@@ -2524,19 +2579,35 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Emit accumulated reasoning_content as ONE ThinkingBlock (legacy path)
       // This consolidates token-by-token reasoning from Synthetic API into a single block
+      // Clean Kimi tokens from the accumulated content (not per-chunk) to handle split tokens
       // @plan PLAN-20251202-THINKING.P16
       if (accumulatedReasoningContent.length > 0) {
-        yield {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: accumulatedReasoningContent,
-              sourceField: 'reasoning_content',
-              isHidden: false,
-            } as ThinkingBlock,
-          ],
-        } as IContent;
+        // Extract Kimi tool calls from the complete accumulated reasoning content
+        const { cleanedText: cleanedReasoning, toolCalls: reasoningToolCalls } =
+          this.extractKimiToolCallsFromText(accumulatedReasoningContent);
+
+        // Emit the cleaned thinking block
+        if (cleanedReasoning.length > 0) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'thinking',
+                thought: cleanedReasoning,
+                sourceField: 'reasoning_content',
+                isHidden: false,
+              } as ThinkingBlock,
+            ],
+          } as IContent;
+        }
+
+        // Emit any tool calls extracted from reasoning content
+        if (reasoningToolCalls.length > 0) {
+          yield {
+            speaker: 'ai',
+            blocks: reasoningToolCalls,
+          } as IContent;
+        }
       }
 
       // Process and emit tool calls using legacy accumulated approach
@@ -2692,10 +2763,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       const blocks: Array<TextBlock | ToolCallBlock | ThinkingBlock> = [];
 
       // Parse reasoning_content from response (Phase 16 integration)
-      const reasoningBlock = this.parseNonStreamingReasoning(choice.message);
+      // Extract embedded Kimi K2 tool calls from reasoning_content (fixes #749)
+      // @requirement REQ-KIMI-REASONING-001.2
+      const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
+        this.parseNonStreamingReasoning(choice.message);
       logger.debug(
         () =>
-          `[Non-streaming] parseNonStreamingReasoning result: ${reasoningBlock ? `found (${reasoningBlock.thought?.length} chars)` : 'not found'}`,
+          `[Non-streaming] parseNonStreamingReasoning result: ${reasoningBlock ? `found (${reasoningBlock.thought?.length} chars)` : 'not found'}, tool calls: ${reasoningToolCalls.length}`,
         {
           hasReasoningContent:
             'reasoning_content' in
@@ -2707,6 +2781,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
       if (reasoningBlock) {
         blocks.push(reasoningBlock);
+      }
+      // Add tool calls extracted from reasoning_content
+      if (reasoningToolCalls.length > 0) {
+        blocks.push(...reasoningToolCalls);
+        logger.debug(
+          () =>
+            `[Non-streaming] Added ${reasoningToolCalls.length} tool calls from reasoning_content`,
+        );
       }
 
       // Handle text content (strip thinking / reasoning blocks) and Kimi tool sections
@@ -3481,9 +3563,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Buffer for accumulating text chunks for providers that need it
       let textBuffer = '';
       // Use the same detected format from earlier for consistency
-      const isKimiModel = model.toLowerCase().includes('kimi-k2');
+      const isKimiK2Model = model.toLowerCase().includes('kimi-k2');
       // Buffer text for Qwen format providers and Kimi-K2 to avoid stanza formatting
-      const shouldBufferText = detectedFormat === 'qwen' || isKimiModel;
+      const shouldBufferText = detectedFormat === 'qwen' || isKimiK2Model;
 
       // Accumulate thinking content across the entire stream to emit as ONE block
       // This handles fragmented <think>word</think> streaming from Synthetic API
@@ -3577,14 +3659,29 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Parse reasoning_content from streaming delta (Pipeline path)
           // ACCUMULATE instead of yielding immediately to handle token-by-token streaming
+          // Extract embedded Kimi K2 tool calls from reasoning_content (fixes #749)
           // @plan PLAN-20251202-THINKING.P16
-          // @requirement REQ-THINK-003.1
-          const reasoningBlock = this.parseStreamingReasoningDelta(
-            choice.delta,
-          );
+          // @requirement REQ-THINK-003.1, REQ-KIMI-REASONING-001.1
+          const { thinking: reasoningBlock, toolCalls: reasoningToolCalls } =
+            this.parseStreamingReasoningDelta(choice.delta);
           if (reasoningBlock) {
             // Accumulate reasoning content - will emit ONE block later
             accumulatedReasoningContent += reasoningBlock.thought;
+          }
+          // Add tool calls extracted from reasoning_content to pipeline
+          if (reasoningToolCalls.length > 0) {
+            // Get current pipeline stats to determine next index
+            const stats = this.toolCallPipeline.getStats();
+            let baseIndex = stats.collector.totalCalls;
+
+            for (const toolCall of reasoningToolCalls) {
+              // Add complete tool call as fragments to pipeline
+              this.toolCallPipeline.addFragment(baseIndex, {
+                name: toolCall.name,
+                args: JSON.stringify(toolCall.parameters),
+              });
+              baseIndex++;
+            }
           }
 
           // Check for finish_reason to detect proper stream ending
@@ -3624,9 +3721,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             choice.delta?.content as unknown,
           );
           if (rawDeltaContent) {
-            const deltaContent = isKimiModel
-              ? rawDeltaContent
-              : this.sanitizeProviderText(rawDeltaContent);
+            // For Kimi models, we need to buffer the RAW content without processing
+            // because Kimi tokens stream incrementally and partial tokens would leak
+            // through if we try to process them immediately. The buffer will be
+            // processed when flushed (at sentence boundaries or end of stream).
+            let deltaContent: string;
+            if (isKimiK2Model) {
+              // For Kimi: Don't process yet - just pass through and let buffering handle it
+              // We'll extract tool calls and sanitize when we flush the buffer
+              deltaContent = rawDeltaContent;
+            } else {
+              // For non-Kimi models: sanitize immediately as before
+              deltaContent = this.sanitizeProviderText(rawDeltaContent);
+            }
             if (!deltaContent) {
               continue;
             }
@@ -3649,13 +3756,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               // Buffer text to avoid stanza formatting
               textBuffer += deltaContent;
 
-              const hasKimiBegin = textBuffer.includes(
-                '<|tool_calls_section_begin|>',
-              );
-              const hasKimiEnd = textBuffer.includes(
-                '<|tool_calls_section_end|>',
-              );
-              const hasOpenKimiSection = hasKimiBegin && !hasKimiEnd;
+              const kimiBeginCount = (
+                textBuffer.match(/<\|tool_calls_section_begin\|>/g) || []
+              ).length;
+              const kimiEndCount = (
+                textBuffer.match(/<\|tool_calls_section_end\|>/g) || []
+              ).length;
+              const hasOpenKimiSection = kimiBeginCount > kimiEndCount;
 
               // Emit buffered text when we have a complete sentence or paragraph
               // Look for natural break points, avoiding flush mid Kimi section
@@ -3677,12 +3784,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 const tagBasedThinking =
                   this.extractThinkTagsAsBlock(workingText);
                 if (tagBasedThinking) {
+                  // Clean Kimi tokens from thinking content before accumulating
+                  const cleanedThought = this.cleanThinkingContent(
+                    tagBasedThinking.thought,
+                  );
                   // Accumulate thinking content - don't emit yet
                   // Use newline to preserve formatting between chunks (not space)
                   if (accumulatedThinkingContent.length > 0) {
                     accumulatedThinkingContent += '\n';
                   }
-                  accumulatedThinkingContent += tagBasedThinking.thought;
+                  accumulatedThinkingContent += cleanedThought;
                   logger.debug(
                     () =>
                       `[Streaming] Accumulated thinking: ${accumulatedThinkingContent.length} chars total`,
@@ -3898,11 +4009,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // @plan PLAN-20251202-THINKING.P16
         const tagBasedThinking = this.extractThinkTagsAsBlock(workingText);
         if (tagBasedThinking) {
+          // Clean Kimi tokens from thinking content before accumulating
+          const cleanedThought = this.cleanThinkingContent(
+            tagBasedThinking.thought,
+          );
           // Use newline to preserve formatting between chunks (not space)
           if (accumulatedThinkingContent.length > 0) {
             accumulatedThinkingContent += '\n';
           }
-          accumulatedThinkingContent += tagBasedThinking.thought;
+          accumulatedThinkingContent += cleanedThought;
         }
 
         const kimiParsed = this.extractKimiToolCallsFromText(workingText);
@@ -4013,19 +4128,35 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Emit accumulated reasoning_content as ONE ThinkingBlock (pipeline path)
       // This consolidates token-by-token reasoning from Synthetic API into a single block
+      // Clean Kimi tokens from the accumulated content (not per-chunk) to handle split tokens
       // @plan PLAN-20251202-THINKING.P16
       if (accumulatedReasoningContent.length > 0) {
-        yield {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'thinking',
-              thought: accumulatedReasoningContent,
-              sourceField: 'reasoning_content',
-              isHidden: false,
-            } as ThinkingBlock,
-          ],
-        } as IContent;
+        // Extract Kimi tool calls from the complete accumulated reasoning content
+        const { cleanedText: cleanedReasoning, toolCalls: reasoningToolCalls } =
+          this.extractKimiToolCallsFromText(accumulatedReasoningContent);
+
+        // Emit the cleaned thinking block
+        if (cleanedReasoning.length > 0) {
+          yield {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'thinking',
+                thought: cleanedReasoning,
+                sourceField: 'reasoning_content',
+                isHidden: false,
+              } as ThinkingBlock,
+            ],
+          } as IContent;
+        }
+
+        // Emit any tool calls extracted from reasoning content
+        if (reasoningToolCalls.length > 0) {
+          yield {
+            speaker: 'ai',
+            blocks: reasoningToolCalls,
+          } as IContent;
+        }
       }
 
       // Process and emit tool calls using the pipeline
@@ -4483,13 +4614,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Parse reasoning_content from streaming delta.
    *
    * @plan PLAN-20251202-THINKING.P11, PLAN-20251202-THINKING.P16
-   * @requirement REQ-THINK-003.1, REQ-THINK-003.3, REQ-THINK-003.4
+   * @requirement REQ-THINK-003.1, REQ-THINK-003.3, REQ-THINK-003.4, REQ-KIMI-REASONING-001.1
+   * @issue #749
    */
   private parseStreamingReasoningDelta(
     delta: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta | undefined,
-  ): ThinkingBlock | null {
+  ): { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] } {
     if (!delta) {
-      return null;
+      return { thinking: null, toolCalls: [] };
     }
 
     // Access reasoning_content via type assertion since OpenAI SDK doesn't declare it
@@ -4498,34 +4630,46 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Handle absent, null, or non-string
     if (!reasoningContent || typeof reasoningContent !== 'string') {
-      return null;
+      return { thinking: null, toolCalls: [] };
     }
 
     // Handle empty string only - preserve whitespace-only content (spaces, tabs)
     // to maintain proper formatting in accumulated reasoning (fixes issue #721)
     if (reasoningContent.length === 0) {
-      return null;
+      return { thinking: null, toolCalls: [] };
     }
 
-    return {
-      type: 'thinking',
-      thought: reasoningContent,
-      sourceField: 'reasoning_content',
-      isHidden: false,
-    };
+    // Extract Kimi K2 tool calls embedded in reasoning_content (fixes issue #749)
+    const { cleanedText, toolCalls } =
+      this.extractKimiToolCallsFromText(reasoningContent);
+
+    // For streaming, preserve whitespace-only content for proper formatting (issue #721)
+    // Only return null if the cleaned text is empty (length 0)
+    const thinkingBlock =
+      cleanedText.length === 0
+        ? null
+        : {
+            type: 'thinking' as const,
+            thought: cleanedText,
+            sourceField: 'reasoning_content' as const,
+            isHidden: false,
+          };
+
+    return { thinking: thinkingBlock, toolCalls };
   }
 
   /**
    * Parse reasoning_content from non-streaming message.
    *
    * @plan PLAN-20251202-THINKING.P11, PLAN-20251202-THINKING.P16
-   * @requirement REQ-THINK-003.2, REQ-THINK-003.3, REQ-THINK-003.4
+   * @requirement REQ-THINK-003.2, REQ-THINK-003.3, REQ-THINK-003.4, REQ-KIMI-REASONING-001.2
+   * @issue #749
    */
   private parseNonStreamingReasoning(
     message: OpenAI.Chat.Completions.ChatCompletionMessage | null | undefined,
-  ): ThinkingBlock | null {
+  ): { thinking: ThinkingBlock | null; toolCalls: ToolCallBlock[] } {
     if (!message) {
-      return null;
+      return { thinking: null, toolCalls: [] };
     }
 
     // Access reasoning_content via type assertion since OpenAI SDK doesn't declare it
@@ -4534,20 +4678,31 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Handle absent, null, or non-string
     if (!reasoningContent || typeof reasoningContent !== 'string') {
-      return null;
+      return { thinking: null, toolCalls: [] };
     }
 
     // Handle empty string or whitespace-only - for non-streaming complete responses,
     // whitespace-only reasoning is unusual and should be treated as no reasoning
     if (reasoningContent.trim().length === 0) {
-      return null;
+      return { thinking: null, toolCalls: [] };
     }
 
-    return {
-      type: 'thinking',
-      thought: reasoningContent,
-      sourceField: 'reasoning_content',
-      isHidden: false,
-    };
+    // Extract Kimi K2 tool calls embedded in reasoning_content (fixes issue #749)
+    const { cleanedText, toolCalls } =
+      this.extractKimiToolCallsFromText(reasoningContent);
+
+    // For non-streaming, trim whitespace after extraction
+    const trimmedText = cleanedText.trim();
+    const thinkingBlock =
+      trimmedText.length === 0
+        ? null
+        : {
+            type: 'thinking' as const,
+            thought: trimmedText,
+            sourceField: 'reasoning_content' as const,
+            isHidden: false,
+          };
+
+    return { thinking: thinkingBlock, toolCalls };
   }
 }
