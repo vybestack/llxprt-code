@@ -69,6 +69,39 @@ export type StreamEvent =
   | { type: StreamEventType.RETRY };
 
 /**
+ * Aggregates text from content blocks while preserving spacing around non-text blocks.
+ * When thinking blocks (or other non-text blocks) appear between text chunks, this ensures
+ * proper spacing is maintained in the aggregated output.
+ *
+ * @param blocks - Array of content blocks to process
+ * @param currentText - The current accumulated text
+ * @param lastBlockWasNonText - Whether the previous block was a non-text block
+ * @returns Object containing the aggregated text and the updated non-text flag
+ */
+export function aggregateTextWithSpacing(
+  blocks: ContentBlock[],
+  currentText: string,
+  lastBlockWasNonText: boolean,
+): { text: string; lastBlockWasNonText: boolean } {
+  let aggregatedText = currentText;
+  let wasNonText = lastBlockWasNonText;
+
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      if (wasNonText && aggregatedText.length > 0) {
+        aggregatedText += ' ';
+      }
+      aggregatedText += block.text;
+      wasNonText = false;
+    } else {
+      wasNonText = true;
+    }
+  }
+
+  return { text: aggregatedText, lastBlockWasNonText: wasNonText };
+}
+
+/**
  * Custom createUserContent function that properly handles function response arrays.
  * This fixes the issue where multiple function responses are incorrectly nested.
  *
@@ -1211,13 +1244,16 @@ export class GeminiChat {
           });
 
           let lastResponse: IContent | undefined;
+          let lastBlockWasNonText = false;
           for await (const iContent of streamResponse) {
             lastResponse = iContent;
-            for (const block of iContent.blocks ?? []) {
-              if (block.type === 'text') {
-                aggregatedText += block.text;
-              }
-            }
+            const result = aggregateTextWithSpacing(
+              iContent.blocks ?? [],
+              aggregatedText,
+              lastBlockWasNonText,
+            );
+            aggregatedText = result.text;
+            lastBlockWasNonText = result.lastBlockWasNonText;
           }
 
           if (!lastResponse) {
@@ -2032,13 +2068,16 @@ export class GeminiChat {
 
     // Collect response
     let summary = '';
+    let lastBlockWasNonText = false;
     for await (const chunk of stream) {
       if (chunk.blocks) {
-        for (const block of chunk.blocks) {
-          if (block.type === 'text') {
-            summary += block.text;
-          }
-        }
+        const result = aggregateTextWithSpacing(
+          chunk.blocks,
+          summary,
+          lastBlockWasNonText,
+        );
+        summary = result.text;
+        lastBlockWasNonText = result.lastBlockWasNonText;
       }
     }
 
