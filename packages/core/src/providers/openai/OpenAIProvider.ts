@@ -2258,7 +2258,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 // Always use sanitized text to strip <think> tags (legacy streaming)
                 // Bug fix: Previously Kimi used unsanitized workingText
                 // @plan PLAN-20251202-THINKING.P16
-                if (cleanedText.trim().length > 0) {
+                // Bug fix #721: Emit whitespace-only chunks (e.g., " " between words)
+                // Previously we used cleanedText.trim().length > 0 which dropped spaces,
+                // causing "list 5" to become "list5". Now we emit any non-empty cleanedText.
+                if (cleanedText.length > 0) {
                   yield {
                     speaker: 'ai',
                     blocks: [
@@ -2483,7 +2486,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // Always use sanitized text to strip <think> tags (legacy final buffer)
         // Bug fix: Previously Kimi used unsanitized workingText
         // @plan PLAN-20251202-THINKING.P16
-        if (cleanedText.trim().length > 0) {
+        // Bug fix #721: Emit whitespace-only chunks (e.g., " " between words)
+        // Previously we used cleanedText.trim().length > 0 which dropped spaces,
+        // causing "list 5" to become "list5". Now we emit any non-empty cleanedText.
+        if (cleanedText.length > 0) {
           yield {
             speaker: 'ai',
             blocks: [
@@ -3760,7 +3766,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 // Always use sanitized text to strip <think> tags (pipeline streaming)
                 // Bug fix: Previously Kimi used unsanitized workingText
                 // @plan PLAN-20251202-THINKING.P16
-                if (cleanedText.trim().length > 0) {
+                // Bug fix #721: Emit whitespace-only chunks (e.g., " " between words)
+                // Previously we used cleanedText.trim().length > 0 which dropped spaces,
+                // causing "list 5" to become "list5". Now we emit any non-empty cleanedText.
+                if (cleanedText.length > 0) {
                   yield {
                     speaker: 'ai',
                     blocks: [
@@ -3966,7 +3975,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // Always use sanitized text to strip <think> tags (pipeline final buffer)
         // Bug fix: Previously Kimi used unsanitized workingText
         // @plan PLAN-20251202-THINKING.P16
-        if (cleanedText.trim().length > 0) {
+        // Bug fix #721: Emit whitespace-only chunks (e.g., " " between words)
+        // Previously we used cleanedText.trim().length > 0 which dropped spaces,
+        // causing "list 5" to become "list5". Now we emit any non-empty cleanedText.
+        if (cleanedText.length > 0) {
           yield {
             speaker: 'ai',
             blocks: [
