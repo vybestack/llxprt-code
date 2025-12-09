@@ -379,14 +379,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // This preserves meaningful whitespace in regular text chunks during streaming
     // (e.g., " 5 Biggest" should remain " 5 Biggest", not become "5 Biggest")
     if (hadReasoningTags) {
-      // Clean up multiple consecutive spaces/whitespace that may result from stripping
+      // Collapse multiple spaces/tabs but preserve newlines for proper paragraph/line breaks
       str = str.replace(/[ \t]+/g, ' ');
       str = str.replace(/\n{3,}/g, '\n\n');
 
-      // Only trim leading whitespace when think tags were at the beginning
-      // This prevents leading spaces from "<think>...</think>text" -> " text"
-      // but preserves trailing whitespace for streaming chunk concatenation
-      str = str.trimStart();
+      // Only trim leading horizontal whitespace (spaces/tabs), NOT newlines
+      // This preserves line breaks between think tags and content (fixes #721)
+      str = str.replace(/^[ \t]+/, '');
     }
 
     const afterLen = str.length;
@@ -2110,7 +2109,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Handle text content - buffer for Qwen format, emit immediately for others
           // Note: Synthetic API sends content that may duplicate reasoning_content.
-          // This is the model's behavior - we don't filter it here.
+          // We now filter duplicates by tracking when content starts matching reasoning_content.
+          // fixes #721
           // @plan PLAN-20251202-THINKING.P16
           const rawDeltaContent = this.coerceMessageContentToString(
             choice.delta?.content as unknown,
@@ -2258,7 +2258,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 // Always use sanitized text to strip <think> tags (legacy streaming)
                 // Bug fix: Previously Kimi used unsanitized workingText
                 // @plan PLAN-20251202-THINKING.P16
-                if (cleanedText.trim().length > 0) {
+                // Bug fix #721: Emit whitespace-only chunks (e.g., " " between words)
+                // Previously we used cleanedText.trim().length > 0 which dropped spaces,
+                // causing "list 5" to become "list5". Now we emit any non-empty cleanedText.
+                if (cleanedText.length > 0) {
                   yield {
                     speaker: 'ai',
                     blocks: [
@@ -2483,7 +2486,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // Always use sanitized text to strip <think> tags (legacy final buffer)
         // Bug fix: Previously Kimi used unsanitized workingText
         // @plan PLAN-20251202-THINKING.P16
-        if (cleanedText.trim().length > 0) {
+        // Bug fix #721: Emit whitespace-only chunks (e.g., " " between words)
+        // Previously we used cleanedText.trim().length > 0 which dropped spaces,
+        // causing "list 5" to become "list5". Now we emit any non-empty cleanedText.
+        if (cleanedText.length > 0) {
           yield {
             speaker: 'ai',
             blocks: [
@@ -3612,7 +3618,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Handle text content - buffer for Qwen format, emit immediately for others
           // Note: Synthetic API sends content that may duplicate reasoning_content.
-          // This is the model's behavior - we don't filter it here.
+          // This is the model's behavior - we don't filter it here as detection is unreliable.
           // @plan PLAN-20251202-THINKING.P16
           const rawDeltaContent = this.coerceMessageContentToString(
             choice.delta?.content as unknown,
@@ -3760,7 +3766,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 // Always use sanitized text to strip <think> tags (pipeline streaming)
                 // Bug fix: Previously Kimi used unsanitized workingText
                 // @plan PLAN-20251202-THINKING.P16
-                if (cleanedText.trim().length > 0) {
+                // Bug fix #721: Emit whitespace-only chunks (e.g., " " between words)
+                // Previously we used cleanedText.trim().length > 0 which dropped spaces,
+                // causing "list 5" to become "list5". Now we emit any non-empty cleanedText.
+                if (cleanedText.length > 0) {
                   yield {
                     speaker: 'ai',
                     blocks: [
@@ -3966,7 +3975,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // Always use sanitized text to strip <think> tags (pipeline final buffer)
         // Bug fix: Previously Kimi used unsanitized workingText
         // @plan PLAN-20251202-THINKING.P16
-        if (cleanedText.trim().length > 0) {
+        // Bug fix #721: Emit whitespace-only chunks (e.g., " " between words)
+        // Previously we used cleanedText.trim().length > 0 which dropped spaces,
+        // causing "list 5" to become "list5". Now we emit any non-empty cleanedText.
+        if (cleanedText.length > 0) {
           yield {
             speaker: 'ai',
             blocks: [
@@ -4489,8 +4501,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return null;
     }
 
-    // Handle empty string or whitespace-only
-    if (reasoningContent.trim().length === 0) {
+    // Handle empty string only - preserve whitespace-only content (spaces, tabs)
+    // to maintain proper formatting in accumulated reasoning (fixes issue #721)
+    if (reasoningContent.length === 0) {
       return null;
     }
 
@@ -4524,7 +4537,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return null;
     }
 
-    // Handle empty string or whitespace-only
+    // Handle empty string or whitespace-only - for non-streaming complete responses,
+    // whitespace-only reasoning is unusual and should be treated as no reasoning
     if (reasoningContent.trim().length === 0) {
       return null;
     }

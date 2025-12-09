@@ -1900,9 +1900,15 @@ export async function getActiveToolFormatState(): Promise<ToolFormatState> {
 
   const isAutoDetected = !override || override === 'auto';
 
+  // When auto-detecting, call the provider's getToolFormat() to get the actual detected format
+  // This shows users what format will actually be used based on the model name
+  const detectedFormat = isAutoDetected
+    ? (provider.getToolFormat?.() ?? null)
+    : null;
+
   return {
     providerName: provider.name,
-    currentFormat: isAutoDetected ? null : override,
+    currentFormat: isAutoDetected ? detectedFormat : override,
     override: isAutoDetected ? null : override,
     isAutoDetected,
   };

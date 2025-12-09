@@ -13,7 +13,11 @@ export function getResponseText(
   if (!parts) {
     return undefined;
   }
+  // Filter out thought parts - thinking content should only go through Thought events,
+  // not be duplicated in Content events. Model context path handles thinking separately
+  // via IContent blocks and reasoning ephemerals. (fixes #721 duplicate thinking)
   const textSegments = parts
+    .filter((part) => !(part as { thought?: boolean }).thought)
     .map((part) => part.text)
     .filter((text): text is string => typeof text === 'string');
 
@@ -27,7 +31,9 @@ export function getResponseTextFromParts(parts: Part[]): string | undefined {
   if (!parts) {
     return undefined;
   }
+  // Filter out thought parts - same as getResponseText (fixes #721)
   const textSegments = parts
+    .filter((part) => !(part as { thought?: boolean }).thought)
     .map((part) => part.text)
     .filter((text): text is string => typeof text === 'string');
 
