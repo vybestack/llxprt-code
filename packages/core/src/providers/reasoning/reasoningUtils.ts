@@ -8,7 +8,9 @@
 import type {
   IContent,
   ThinkingBlock,
+  ToolCallBlock,
 } from '../../services/history/IContent.js';
+import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 
 /** Policy for stripping thinking blocks from context */
 export type StripPolicy = 'all' | 'allButLast' | 'none';
@@ -110,4 +112,218 @@ export function removeThinkingFromContent(content: IContent): IContent {
     ...content,
     blocks: content.blocks.filter((block) => block.type !== 'thinking'),
   };
+}
+
+/**
+ * Extract and remove Kimi K2 tool call special tokens from text.
+ * Handles both complete tool call sections and stray/malformed tokens.
+ *
+ * @param raw - Raw text that may contain Kimi K2 tool call tokens
+ * @returns Object with cleanedText (tokens removed) and extracted toolCalls array
+ *
+ * @issue #722
+ * @plan PLAN-20251202-THINKING.P06
+ */
+export function extractKimiToolCallsFromText(raw: string): {
+  cleanedText: string;
+  toolCalls: ToolCallBlock[];
+} {
+  // Return early only if input is null/undefined/empty
+  if (!raw) {
+    return { cleanedText: raw, toolCalls: [] };
+  }
+
+  const toolCalls: ToolCallBlock[] = [];
+  let text = raw;
+
+  // Extract tool calls from complete sections if present
+  if (raw.includes('<|tool_calls_section_begin|>')) {
+    const sectionRegex =
+      /<\|tool_calls_section_begin\|>([\s\S]*?)<\|tool_calls_section_end\|>/g;
+
+    text = text.replace(
+      sectionRegex,
+      (_sectionMatch: string, sectionBody: string) => {
+        try {
+          const callRegex =
+            /<\|tool_call_begin\|>\s*([^<]+?)\s*<\|tool_call_argument_begin\|>\s*([\s\S]*?)\s*<\|tool_call_end\|>/g;
+
+          let m: RegExpExecArray | null;
+          while ((m = callRegex.exec(sectionBody)) !== null) {
+            const rawId = m[1].trim();
+            const rawArgs = m[2].trim();
+
+            // Infer tool name from ID.
+            let toolName = '';
+            const match =
+              /^functions\.([A-Za-z0-9_]+):\d+/i.exec(rawId) ||
+              /^[A-Za-z0-9_]+\.([A-Za-z0-9_]+):\d+/.exec(rawId);
+            if (match) {
+              toolName = match[1];
+            } else {
+              const colonParts = rawId.split(':');
+              const head = colonParts[0] || rawId;
+              const dotParts = head.split('.');
+              toolName = dotParts[dotParts.length - 1] || head;
+            }
+
+            // Normalize tool name (handles Kimi-K2 style prefixes like call_functionsglob7)
+            toolName = normalizeToolName(toolName);
+
+            const sanitizedArgs = sanitizeToolArgumentsString(rawArgs);
+            const processedParameters = processToolParameters(
+              sanitizedArgs,
+              toolName,
+            );
+
+            toolCalls.push({
+              type: 'tool_call',
+              id: normalizeToHistoryToolId(rawId),
+              name: toolName,
+              parameters: processedParameters,
+            } as ToolCallBlock);
+          }
+        } catch (_err) {
+          // Silent failure - just skip malformed tool sections
+          // Providers can log this if needed
+        }
+
+        // Strip the entire tool section from user-visible text
+        return '';
+      },
+    );
+  }
+
+  // ALWAYS run stray token cleanup, even if no complete sections were found
+  // This handles partial sections, malformed tokens, orphaned markers, etc.
+  text = text.replace(/<\|tool_call(?:_(?:begin|end|argument_begin))?\|>/g, '');
+  text = text.replace(/<\|tool_calls_section_(?:begin|end)\|>/g, '');
+
+  // Don't trim - preserve leading/trailing newlines that are important for formatting
+  // (e.g., numbered lists from Kimi K2 that have newlines between items)
+  return { cleanedText: text, toolCalls };
+}
+
+/**
+ * Clean Kimi K2 tool call tokens from thinking content.
+ * Simple wrapper that just returns cleaned text without extracting tool calls.
+ *
+ * @param thought - Thinking content that may contain Kimi K2 tool call tokens
+ * @returns Cleaned text with all K2 tool tokens removed
+ *
+ * @issue #722
+ * @plan PLAN-20251202-THINKING.P06
+ */
+export function cleanKimiTokensFromThinking(thought: string): string {
+  return extractKimiToolCallsFromText(thought).cleanedText;
+}
+
+/**
+ * Helper: Normalize tool name by stripping Kimi-K2 style prefixes.
+ * Handles cases where model concatenates "functions" or "call_functions" with tool name.
+ *
+ * @internal
+ */
+function normalizeToolName(name: string): string {
+  let normalized = (name || '').trim();
+
+  // Strip Kimi-K2 style prefixes where model concatenates "functions" or "call_functions"
+  // with the actual tool name (e.g., "functionslist_directory" -> "list_directory")
+  // Pattern: (call_)?functions<actual_tool_name><optional_number>
+  const kimiPrefixMatch = /^(?:call_)?functions([a-z_]+[a-z])(\d*)$/i.exec(
+    normalized,
+  );
+  if (kimiPrefixMatch) {
+    normalized = kimiPrefixMatch[1];
+  }
+
+  return normalized.toLowerCase();
+}
+
+/**
+ * Helper: Sanitize raw tool argument payloads before JSON parsing.
+ * Removes thinking blocks, markdown code fences, and prose wrappers.
+ *
+ * @internal
+ */
+function sanitizeToolArgumentsString(raw: unknown): string {
+  if (raw === null || raw === undefined) {
+    return '{}';
+  }
+
+  let text: string;
+  if (typeof raw === 'string') {
+    text = raw;
+  } else {
+    try {
+      text = JSON.stringify(raw);
+    } catch {
+      text = String(raw);
+    }
+  }
+
+  text = text.trim();
+
+  // Strip fenced code blocks like ```json { ... } ```.
+  if (text.startsWith('```')) {
+    text = text.replace(/^```[a-zA-Z0-9_-]*\s*/m, '');
+    text = text.replace(/```$/m, '');
+    text = text.trim();
+  }
+
+  // Remove provider reasoning / thinking markup
+  text = sanitizeProviderText(text);
+
+  // If provider wrapped JSON in explanation text, try to isolate the object.
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    const candidate = text.slice(firstBrace, lastBrace + 1).trim();
+    if (candidate.startsWith('{') && candidate.endsWith('}')) {
+      return candidate;
+    }
+  }
+
+  return text.length ? text : '{}';
+}
+
+/**
+ * Helper: Remove provider-specific thinking/reasoning markup from text.
+ *
+ * @internal
+ */
+function sanitizeProviderText(text: string): string {
+  // Remove <think>...</think> blocks (and variations)
+  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+  text = text.replace(/<thought>[\s\S]*?<\/thought>/gi, '');
+
+  return text.trim();
+}
+
+/**
+ * Helper: Normalize tool call ID to history format (hist_tool_*).
+ *
+ * @internal
+ */
+function normalizeToHistoryToolId(id: string): string {
+  // If already in history format, return as-is
+  if (id.startsWith('hist_tool_')) {
+    return id;
+  }
+
+  // For OpenAI format, extract the UUID and add history prefix
+  if (id.startsWith('call_')) {
+    const uuid = id.substring('call_'.length);
+    return 'hist_tool_' + uuid;
+  }
+
+  // For Anthropic format, extract the UUID and add history prefix
+  if (id.startsWith('toolu_')) {
+    const uuid = id.substring('toolu_'.length);
+    return 'hist_tool_' + uuid;
+  }
+
+  // Unknown format - assume it's a raw UUID
+  return 'hist_tool_' + id;
 }
