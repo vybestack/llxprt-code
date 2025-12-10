@@ -91,6 +91,16 @@ const truncateModeOptions = [
   { value: 'sample', description: 'sample' },
 ];
 
+// Common model parameters - used for deep path completion flattening
+const commonParamOptions = [
+  { value: 'temperature', description: 'Sampling temperature (0-2)' },
+  { value: 'max_tokens', description: 'Maximum tokens to generate' },
+  { value: 'top_p', description: 'Nucleus sampling probability' },
+  { value: 'top_k', description: 'Top-k sampling' },
+  { value: 'frequency_penalty', description: 'Frequency penalty (-2 to 2)' },
+  { value: 'presence_penalty', description: 'Presence penalty (-2 to 2)' },
+];
+
 const directSettingSpecs: SettingLiteralSpec[] = [
   {
     value: 'emojifilter',
@@ -386,8 +396,12 @@ const setSchema: CommandArgumentSchema = [
         name: 'param-name',
         description: 'parameter name',
         hint: 'parameter name',
+        // Static options for deep path completion flattening
+        options: commonParamOptions,
+        // Dynamic completer also checks active model params at runtime
         completer: async (ctx, partial) => {
           const enableFuzzy = getFuzzyEnabled(ctx);
+          // First check for active model params (dynamic)
           const modelParams = getRuntimeApi().getActiveModelParams();
           if (modelParams && Object.keys(modelParams).length > 0) {
             const paramNames = Object.keys(modelParams);
@@ -400,21 +414,10 @@ const setSchema: CommandArgumentSchema = [
             }
           }
 
-          const commonParams = [
-            'temperature',
-            'max_tokens',
-            'top_p',
-            'top_k',
-            'frequency_penalty',
-            'presence_penalty',
-          ];
-          const filtered = filterStrings(commonParams, partial, {
+          // Fall back to common params (same as static options)
+          return filterCompletions(commonParamOptions, partial, {
             enableFuzzy,
           });
-          return filtered.map((name) => ({
-            value: name,
-            description: `Parameter: ${name}`,
-          }));
         },
         next: [
           {
