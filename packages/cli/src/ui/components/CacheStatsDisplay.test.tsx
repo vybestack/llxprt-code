@@ -53,7 +53,7 @@ describe('<CacheStatsDisplay />', () => {
   it('should render "no cache data" message when there are no cache reads or writes', () => {
     const { lastFrame } = renderWithMockedCacheStats({
       totalCacheReads: 0,
-      totalCacheWrites: 0,
+      totalCacheWrites: null, // No cache writes reported
       requestsWithCacheHits: 0,
       requestsWithCacheWrites: 0,
       hitRate: 0,
@@ -141,5 +141,39 @@ describe('<CacheStatsDisplay />', () => {
     // Token savings: 10000 * 0.9 = 9000
     // Cost savings: (9000 / 1000) * 0.003 * 0.9 = $0.0243
     expect(output).toMatch(/\$0\.024[0-9]/);
+  });
+
+  it('should hide cache writes row when provider does not report it (null)', () => {
+    const { lastFrame } = renderWithMockedCacheStats({
+      totalCacheReads: 5000,
+      totalCacheWrites: null, // Provider doesn't report cache writes (e.g., OpenAI/vLLM)
+      requestsWithCacheHits: 3,
+      requestsWithCacheWrites: 0,
+      hitRate: 25.0,
+    });
+
+    const output = lastFrame();
+    // Should show cache reads
+    expect(output).toContain('Total Cache Reads');
+    expect(output).toMatch(/5[,\s]?000/);
+    // Should NOT show cache writes when null
+    expect(output).not.toContain('Total Cache Writes');
+    // Should still show other stats
+    expect(output).toContain('Cache Hit Rate');
+    expect(output).toMatch(/25\.0%/);
+  });
+
+  it('should show cache writes row when provider reports it as zero', () => {
+    const { lastFrame } = renderWithMockedCacheStats({
+      totalCacheReads: 5000,
+      totalCacheWrites: 0, // Provider explicitly reported 0 cache writes
+      requestsWithCacheHits: 3,
+      requestsWithCacheWrites: 0,
+      hitRate: 25.0,
+    });
+
+    const output = lastFrame();
+    // Should show cache writes when explicitly 0
+    expect(output).toContain('Total Cache Writes');
   });
 });

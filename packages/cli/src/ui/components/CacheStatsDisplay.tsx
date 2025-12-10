@@ -88,7 +88,8 @@ export const CacheStatsDisplay: React.FC = () => {
     (tokenSavings / 1000) * costSavingsPerThousandTokens;
 
   // Check if we have any cache data
-  const hasCacheData = totalCacheReads > 0 || totalCacheWrites > 0;
+  // totalCacheWrites can be null (not reported by provider) vs 0 (explicitly reported as zero)
+  const hasCacheData = totalCacheReads > 0 || (totalCacheWrites ?? 0) > 0;
 
   if (!hasCacheData) {
     return (
@@ -129,14 +130,17 @@ export const CacheStatsDisplay: React.FC = () => {
           </Text>
         }
       />
-      <StatRow
-        title="Total Cache Writes (tokens)"
-        value={
-          <Text color={Colors.Foreground}>
-            {totalCacheWrites.toLocaleString()}
-          </Text>
-        }
-      />
+      {/* Only show cache writes if the provider reports them (not null) */}
+      {totalCacheWrites !== null && (
+        <StatRow
+          title="Total Cache Writes (tokens)"
+          value={
+            <Text color={Colors.Foreground}>
+              {totalCacheWrites.toLocaleString()}
+            </Text>
+          }
+        />
+      )}
       <StatRow
         title="Cache Hit Rate"
         value={
