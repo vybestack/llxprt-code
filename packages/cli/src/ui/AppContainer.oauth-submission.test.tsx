@@ -76,32 +76,16 @@ describe('AppContainer OAuth Code Submission', () => {
     const provider = globalObj.__oauth_provider;
 
     const oauthManager = mockRuntime.getCliOAuthManager();
-    if (!oauthManager) {
-      throw new Error('OAuth manager not available');
+    if (!oauthManager || !provider) {
+      throw new Error('OAuth manager or provider not available');
     }
 
-    // Fixed behavior - handles all OAuth providers
-    if (provider === 'anthropic') {
-      const anthropicProvider = oauthManager.getProvider('anthropic');
-      if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
-        (
-          anthropicProvider as { submitAuthCode: (code: string) => void }
-        ).submitAuthCode(code);
-      }
-    } else if (provider === 'gemini') {
-      const geminiProvider = oauthManager.getProvider('gemini');
-      if (geminiProvider && 'submitAuthCode' in geminiProvider) {
-        (
-          geminiProvider as { submitAuthCode: (code: string) => void }
-        ).submitAuthCode(code);
-      }
-    } else if (provider === 'qwen') {
-      const qwenProvider = oauthManager.getProvider('qwen');
-      if (qwenProvider && 'submitAuthCode' in qwenProvider) {
-        (
-          qwenProvider as { submitAuthCode: (code: string) => void }
-        ).submitAuthCode(code);
-      }
+    // Refactored behavior - handles any OAuth provider that supports submitAuthCode
+    const oauthProvider = oauthManager.getProvider(provider);
+    if (oauthProvider && 'submitAuthCode' in oauthProvider) {
+      (
+        oauthProvider as { submitAuthCode: (code: string) => void }
+      ).submitAuthCode(code);
     }
 
     // The test should now PASS
@@ -121,32 +105,16 @@ describe('AppContainer OAuth Code Submission', () => {
     const provider = globalObj.__oauth_provider;
 
     const oauthManager = mockRuntime.getCliOAuthManager();
-    if (!oauthManager) {
-      throw new Error('OAuth manager not available');
+    if (!oauthManager || !provider) {
+      throw new Error('OAuth manager or provider not available');
     }
 
-    // Fixed behavior - handles all OAuth providers
-    if (provider === 'anthropic') {
-      const anthropicProvider = oauthManager.getProvider('anthropic');
-      if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
-        (
-          anthropicProvider as { submitAuthCode: (code: string) => void }
-        ).submitAuthCode(code);
-      }
-    } else if (provider === 'gemini') {
-      const geminiProvider = oauthManager.getProvider('gemini');
-      if (geminiProvider && 'submitAuthCode' in geminiProvider) {
-        (
-          geminiProvider as { submitAuthCode: (code: string) => void }
-        ).submitAuthCode(code);
-      }
-    } else if (provider === 'qwen') {
-      const qwenProvider = oauthManager.getProvider('qwen');
-      if (qwenProvider && 'submitAuthCode' in qwenProvider) {
-        (
-          qwenProvider as { submitAuthCode: (code: string) => void }
-        ).submitAuthCode(code);
-      }
+    // Refactored behavior - handles any OAuth provider that supports submitAuthCode
+    const oauthProvider = oauthManager.getProvider(provider);
+    if (oauthProvider && 'submitAuthCode' in oauthProvider) {
+      (
+        oauthProvider as { submitAuthCode: (code: string) => void }
+      ).submitAuthCode(code);
     }
 
     // The test should now PASS
@@ -166,18 +134,16 @@ describe('AppContainer OAuth Code Submission', () => {
     const provider = globalObj.__oauth_provider;
 
     const oauthManager = mockRuntime.getCliOAuthManager();
-    if (!oauthManager) {
-      throw new Error('OAuth manager not available');
+    if (!oauthManager || !provider) {
+      throw new Error('OAuth manager or provider not available');
     }
 
-    // Current behavior - only handles anthropic
-    if (provider === 'anthropic') {
-      const anthropicProvider = oauthManager.getProvider('anthropic');
-      if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
-        (
-          anthropicProvider as { submitAuthCode: (code: string) => void }
-        ).submitAuthCode(code);
-      }
+    // Refactored behavior - handles any OAuth provider that supports submitAuthCode
+    const oauthProvider = oauthManager.getProvider(provider);
+    if (oauthProvider && 'submitAuthCode' in oauthProvider) {
+      (
+        oauthProvider as { submitAuthCode: (code: string) => void }
+      ).submitAuthCode(code);
     }
 
     // This should pass - Anthropic is handled correctly

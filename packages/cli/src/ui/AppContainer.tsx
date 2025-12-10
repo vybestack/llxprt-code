@@ -1027,32 +1027,17 @@ export const AppContainer = (props: AppContainerProps) => {
         .__oauth_provider;
 
       const oauthManager = runtime.getCliOAuthManager();
-      if (!oauthManager) {
+      if (!oauthManager || !provider) {
         return;
       }
 
-      // Handle all OAuth providers that support code submission
-      if (provider === 'anthropic') {
-        const anthropicProvider = oauthManager.getProvider('anthropic');
-        if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
-          (
-            anthropicProvider as { submitAuthCode: (code: string) => void }
-          ).submitAuthCode(code);
-        }
-      } else if (provider === 'gemini') {
-        const geminiProvider = oauthManager.getProvider('gemini');
-        if (geminiProvider && 'submitAuthCode' in geminiProvider) {
-          (
-            geminiProvider as { submitAuthCode: (code: string) => void }
-          ).submitAuthCode(code);
-        }
-      } else if (provider === 'qwen') {
-        const qwenProvider = oauthManager.getProvider('qwen');
-        if (qwenProvider && 'submitAuthCode' in qwenProvider) {
-          (
-            qwenProvider as { submitAuthCode: (code: string) => void }
-          ).submitAuthCode(code);
-        }
+      // Handle any OAuth provider that supports code submission
+      // This automatically works for anthropic, gemini, qwen, and any future providers
+      const oauthProvider = oauthManager.getProvider(provider);
+      if (oauthProvider && 'submitAuthCode' in oauthProvider) {
+        (
+          oauthProvider as { submitAuthCode: (code: string) => void }
+        ).submitAuthCode(code);
       }
     },
     [runtime],
