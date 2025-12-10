@@ -325,7 +325,6 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       // Last assistant message SHOULD have reasoning_content
       const lastMsg = assistantMessages[assistantMessages.length - 1];
       expect(lastMsg).toHaveProperty('reasoning_content');
-      expect(lastMsg).toHaveProperty('reasoning_content');
       const reasoning = (lastMsg as { reasoning_content?: unknown })
         .reasoning_content;
       expect(reasoning).toBeTruthy();

@@ -1410,18 +1410,27 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         }
       }
 
-      // 2. Extract from reasoning field (Kimi K2, etc.)
+      // 2. Extract from reasoning field (from extractReasoningMiddleware)
       if (rsEnabled && rsIncludeInResponse) {
-        // AI SDK v5 returns reasoning as an array of ReasoningOutput objects
-        const reasoningArray = (
-          result as { reasoning?: Array<{ text: string }> }
+        // AI SDK's extractReasoningMiddleware can return reasoning as either:
+        // - A string (AI SDK v5 format)
+        // - An array of { text: string } objects (older format)
+        const reasoningField = (
+          result as { reasoning?: string | Array<{ text: string }> }
         ).reasoning;
-        if (reasoningArray && Array.isArray(reasoningArray)) {
-          const reasoningTexts = reasoningArray
-            .map((r) => r.text)
-            .filter((text): text is string => !!text);
-          if (reasoningTexts.length > 0) {
-            const reasoning = reasoningTexts.join(' ');
+        if (reasoningField) {
+          let reasoning: string;
+          if (typeof reasoningField === 'string') {
+            reasoning = reasoningField;
+          } else if (Array.isArray(reasoningField)) {
+            reasoning = reasoningField
+              .map((r) => r.text)
+              .filter((text): text is string => !!text)
+              .join(' ');
+          } else {
+            reasoning = '';
+          }
+          if (reasoning) {
             if (thinkingContent.length > 0) {
               thinkingContent += ' ';
             }
