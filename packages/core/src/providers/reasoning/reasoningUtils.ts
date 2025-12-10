@@ -11,6 +11,10 @@ import type {
   ToolCallBlock,
 } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
+import { normalizeToHistoryToolId } from '../openai-vercel/toolIdUtils.js';
+import { DebugLogger } from '../../debug/DebugLogger.js';
+
+const logger = new DebugLogger('llxprt:provider:reasoning');
 
 /** Policy for stripping thinking blocks from context */
 export type StripPolicy = 'all' | 'allButLast' | 'none';
@@ -183,9 +187,13 @@ export function extractKimiToolCallsFromText(raw: string): {
               parameters: processedParameters,
             } as ToolCallBlock);
           }
-        } catch (_err) {
-          // Silent failure - just skip malformed tool sections
-          // Providers can log this if needed
+        } catch (err) {
+          // Log malformed tool sections for debugging, then skip
+          logger.debug(
+            () =>
+              `Failed to parse K2 tool section: ${err instanceof Error ? err.message : String(err)}`,
+            { sectionPreview: sectionBody.substring(0, 200) },
+          );
         }
 
         // Strip the entire tool section from user-visible text
@@ -301,29 +309,4 @@ function sanitizeProviderText(text: string): string {
   return text.trim();
 }
 
-/**
- * Helper: Normalize tool call ID to history format (hist_tool_*).
- *
- * @internal
- */
-function normalizeToHistoryToolId(id: string): string {
-  // If already in history format, return as-is
-  if (id.startsWith('hist_tool_')) {
-    return id;
-  }
-
-  // For OpenAI format, extract the UUID and add history prefix
-  if (id.startsWith('call_')) {
-    const uuid = id.substring('call_'.length);
-    return 'hist_tool_' + uuid;
-  }
-
-  // For Anthropic format, extract the UUID and add history prefix
-  if (id.startsWith('toolu_')) {
-    const uuid = id.substring('toolu_'.length);
-    return 'hist_tool_' + uuid;
-  }
-
-  // Unknown format - assume it's a raw UUID
-  return 'hist_tool_' + id;
-}
+// normalizeToHistoryToolId is imported from toolIdUtils.js

@@ -388,17 +388,18 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
       const { streamText } = await import('ai');
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
-      // Mock stream with K2 tokens in reasoning
+      // Mock stream with K2 tokens in reasoning events (how Kimi K2 actually sends them)
       const mockStream = {
         textStream: (async function* () {
           yield 'Response';
         })(),
         fullStream: (async function* () {
-          // Simulate Vercel SDK emitting reasoning with K2 tokens
+          // Simulate Kimi K2 emitting reasoning content with K2 tokens via reasoning event
           yield {
-            type: 'text-delta' as const,
-            text: 'Let me search<|tool_call_begin|>for this',
+            type: 'reasoning' as const,
+            text: 'Let me think<|tool_call_begin|>about this<|tool_call_end|>problem',
           };
+          yield { type: 'text-delta' as const, text: 'Response' };
           yield { type: 'finish' as const, finishReason: 'stop' };
         })(),
         usage: Promise.resolve({
@@ -425,24 +426,46 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
         blocks.push(block);
       }
 
-      // Find thinking blocks and verify K2 tokens are removed
+      // Find thinking blocks - should have content from reasoning event
       const thinkingBlocks = blocks.filter(
         (b) =>
           typeof b === 'object' &&
           b !== null &&
-          'type' in b &&
-          b.type === 'thinking' &&
-          'thought' in b &&
-          typeof b.thought === 'string',
+          'blocks' in b &&
+          Array.isArray((b as { blocks: unknown[] }).blocks) &&
+          (b as { blocks: Array<{ type: string }> }).blocks.some(
+            (inner) => inner.type === 'thinking',
+          ),
       );
 
-      thinkingBlocks.forEach((block) => {
-        const thought = (block as { thought: string }).thought;
+      // Should have at least one thinking block from the reasoning event
+      expect(thinkingBlocks.length).toBeGreaterThan(0);
+
+      // Extract all thinking blocks from the content
+      const allThinkingThoughts: string[] = [];
+      thinkingBlocks.forEach((content) => {
+        const innerBlocks = (
+          content as { blocks: Array<{ type: string; thought?: string }> }
+        ).blocks;
+        innerBlocks
+          .filter((block) => block.type === 'thinking' && block.thought)
+          .forEach((block) => {
+            allThinkingThoughts.push(block.thought!);
+          });
+      });
+
+      // Should have extracted at least one thinking thought
+      expect(allThinkingThoughts.length).toBeGreaterThan(0);
+
+      // Verify K2 tokens are removed from all thinking content
+      allThinkingThoughts.forEach((thought) => {
         expect(thought).not.toContain('<|tool_call_begin|>');
         expect(thought).not.toContain('<|tool_call_end|>');
         expect(thought).not.toContain('<|tool_calls_section_begin|>');
         expect(thought).not.toContain('<|tool_calls_section_end|>');
         expect(thought).not.toContain('<|tool_call_argument_begin|>');
+        // Verify the actual content is preserved (without K2 tokens)
+        expect(thought).toContain('think');
       });
     });
   });
