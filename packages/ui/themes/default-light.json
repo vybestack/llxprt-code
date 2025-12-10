@@ -1,0 +1,59 @@
+{
+  "name": "Default Light",
+  "slug": "default-light",
+  "kind": "light",
+  "colors": {
+    "background": "#FAFAFA",
+    "panel": {
+      "bg": "#FAFAFA",
+      "border": "#97a0b0",
+      "headerBg": "#FAFAFA",
+      "headerFg": "#1f2937"
+    },
+    "text": {
+      "primary": "#1f2937",
+      "muted": "#008000",
+      "user": "#89BDCD",
+      "responder": "#D5A40A",
+      "thinking": "#97a0b0",
+      "tool": "#3CA84B"
+    },
+    "input": {
+      "bg": "#FAFAFA",
+      "fg": "#1f2937",
+      "placeholder": "#008000",
+      "border": "#97a0b0"
+    },
+    "status": {
+      "fg": "#3CA84B",
+      "muted": "#008000"
+    },
+    "accent": {
+      "primary": "#3B82F6",
+      "secondary": "#8B5CF6",
+      "warning": "#D5A40A",
+      "error": "#DD4C4C",
+      "success": "#3CA84B"
+    },
+    "selection": {
+      "fg": "#f8fafc",
+      "bg": "#3B82F6"
+    },
+    "diff": {
+      "addedBg": "#C6EAD8",
+      "addedFg": "#1f2937",
+      "removedBg": "#FFCCCC",
+      "removedFg": "#1f2937"
+    },
+    "scrollbar": {
+      "thumb": "#3B82F6",
+      "track": "#97a0b0"
+    },
+    "message": {
+      "userBorder": "#89BDCD",
+      "systemBorder": "#D5A40A",
+      "systemText": "#D5A40A",
+      "systemBg": "#f2f2f2"
+    }
+  }
+}

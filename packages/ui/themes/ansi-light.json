@@ -1,0 +1,59 @@
+{
+  "name": "ANSI Light",
+  "slug": "ansi-light",
+  "kind": "light",
+  "colors": {
+    "background": "white",
+    "panel": {
+      "bg": "white",
+      "border": "gray",
+      "headerBg": "white",
+      "headerFg": "#444"
+    },
+    "text": {
+      "primary": "#444",
+      "muted": "gray",
+      "user": "blue",
+      "responder": "orange",
+      "thinking": "gray",
+      "tool": "green"
+    },
+    "input": {
+      "bg": "white",
+      "fg": "#444",
+      "placeholder": "gray",
+      "border": "gray"
+    },
+    "status": {
+      "fg": "green",
+      "muted": "gray"
+    },
+    "accent": {
+      "primary": "blue",
+      "secondary": "purple",
+      "warning": "orange",
+      "error": "red",
+      "success": "green"
+    },
+    "selection": {
+      "fg": "#f8fafc",
+      "bg": "blue"
+    },
+    "diff": {
+      "addedBg": "#E5F2E5",
+      "addedFg": "black",
+      "removedBg": "#FFE5E5",
+      "removedFg": "black"
+    },
+    "scrollbar": {
+      "thumb": "blue",
+      "track": "gray"
+    },
+    "message": {
+      "userBorder": "blue",
+      "systemBorder": "orange",
+      "systemText": "orange",
+      "systemBg": "#f0f0f0"
+    }
+  }
+}

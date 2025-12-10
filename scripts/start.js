@@ -57,8 +57,17 @@ if (process.env.DEBUG && !sandboxCommand) {
   }
 }
 
-nodeArgs.push('./packages/cli');
-nodeArgs.push(...process.argv.slice(2));
+// Check if --experimental-ui flag is present
+const args = process.argv.slice(2);
+if (args.includes('--experimental-ui')) {
+  // For experimental UI, we need to launch it differently during development
+  // The flag will be passed through to the CLI which will handle the dynamic import
+  nodeArgs.push('./packages/cli');
+  nodeArgs.push(...args);
+} else {
+  nodeArgs.push('./packages/cli');
+  nodeArgs.push(...args);
+}
 
 const env = {
   ...process.env,

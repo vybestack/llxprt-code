@@ -1,0 +1,59 @@
+{
+  "name": "Xcode",
+  "slug": "xcode",
+  "kind": "light",
+  "colors": {
+    "background": "#fff",
+    "panel": {
+      "bg": "#fff",
+      "border": "#c0c0c0",
+      "headerBg": "#fff",
+      "headerFg": "#444"
+    },
+    "text": {
+      "primary": "#444",
+      "muted": "#007400",
+      "user": "#0E0EFF",
+      "responder": "#836C28",
+      "thinking": "#c0c0c0",
+      "tool": "#007400"
+    },
+    "input": {
+      "bg": "#fff",
+      "fg": "#444",
+      "placeholder": "#007400",
+      "border": "#c0c0c0"
+    },
+    "status": {
+      "fg": "#007400",
+      "muted": "#007400"
+    },
+    "accent": {
+      "primary": "#1c00cf",
+      "secondary": "#aa0d91",
+      "warning": "#836C28",
+      "error": "#c41a16",
+      "success": "#007400"
+    },
+    "selection": {
+      "fg": "#f8fafc",
+      "bg": "#1c00cf"
+    },
+    "diff": {
+      "addedBg": "#C6EAD8",
+      "addedFg": "#444",
+      "removedBg": "#FEDEDE",
+      "removedFg": "#444"
+    },
+    "scrollbar": {
+      "thumb": "#1c00cf",
+      "track": "#c0c0c0"
+    },
+    "message": {
+      "userBorder": "#0E0EFF",
+      "systemBorder": "#836C28",
+      "systemText": "#836C28",
+      "systemBg": "#f5f5f5"
+    }
+  }
+}

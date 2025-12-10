@@ -1,0 +1,59 @@
+{
+  "name": "GitHub Light",
+  "slug": "github-light",
+  "kind": "light",
+  "colors": {
+    "background": "#f8f8f8",
+    "panel": {
+      "bg": "#f8f8f8",
+      "border": "#999",
+      "headerBg": "#f8f8f8",
+      "headerFg": "#24292E"
+    },
+    "text": {
+      "primary": "#24292E",
+      "muted": "#998",
+      "user": "#0086b3",
+      "responder": "#990073",
+      "thinking": "#999",
+      "tool": "#008080"
+    },
+    "input": {
+      "bg": "#f8f8f8",
+      "fg": "#24292E",
+      "placeholder": "#998",
+      "border": "#999"
+    },
+    "status": {
+      "fg": "#008080",
+      "muted": "#998"
+    },
+    "accent": {
+      "primary": "#458",
+      "secondary": "#900",
+      "warning": "#990073",
+      "error": "#d14",
+      "success": "#008080"
+    },
+    "selection": {
+      "fg": "#f8fafc",
+      "bg": "#458"
+    },
+    "diff": {
+      "addedBg": "#C6EAD8",
+      "addedFg": "#24292E",
+      "removedBg": "#FFCCCC",
+      "removedFg": "#24292E"
+    },
+    "scrollbar": {
+      "thumb": "#458",
+      "track": "#999"
+    },
+    "message": {
+      "userBorder": "#0086b3",
+      "systemBorder": "#990073",
+      "systemText": "#990073",
+      "systemBg": "#f0f0f0"
+    }
+  }
+}

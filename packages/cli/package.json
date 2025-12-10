@@ -78,6 +78,14 @@
     "yargs": "^17.7.2",
     "zod": "^3.23.8"
   },
+  "peerDependencies": {
+    "@vybestack/llxprt-ui": "file:../ui"
+  },
+  "peerDependenciesMeta": {
+    "@vybestack/llxprt-ui": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@babel/runtime": "^7.27.6",
     "@fast-check/vitest": "^0.2.2",

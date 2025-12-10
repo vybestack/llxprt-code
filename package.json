@@ -6,7 +6,14 @@
   },
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/core",
+    "packages/cli",
+    "packages/ui",
+    "packages/a2a-server",
+    "packages/test-utils",
+    "packages/vscode-ide-companion",
+    "packages/opentui/packages/core",
+    "packages/opentui/packages/react"
   ],
   "private": "true",
   "repository": {
