@@ -51,6 +51,8 @@ interface MockStreamTextResult {
 vi.mock('ai', () => ({
   generateText: vi.fn(),
   streamText: vi.fn(),
+  extractReasoningMiddleware: vi.fn(() => ({})),
+  wrapLanguageModel: vi.fn((model) => model),
 }));
 
 vi.mock('@ai-sdk/openai', () => ({
