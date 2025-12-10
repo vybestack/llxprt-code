@@ -99,8 +99,9 @@ export const CacheStatsDisplay: React.FC = () => {
         paddingX={2}
       >
         <Text color={Colors.Foreground}>
-          No cache data available. Cache statistics are only available for
-          Anthropic requests with prompt caching enabled.
+          No cache data available. Cache statistics are available for providers
+          with prompt caching support (Anthropic, OpenAI, Groq, Deepseek,
+          Fireworks, OpenRouter).
         </Text>
       </Box>
     );

@@ -59,9 +59,14 @@ describe('<CacheStatsDisplay />', () => {
       hitRate: 0,
     });
 
-    expect(lastFrame()).toContain('No cache data available');
-    expect(lastFrame()).toContain('Anthropic');
-    expect(lastFrame()).toContain('prompt caching');
+    const output = lastFrame();
+    expect(output).toContain('No cache data available');
+    expect(output).not.toMatch(/Anthropic only/i);
+    expect(output).toContain('OpenAI');
+    expect(output).toContain('Groq');
+    expect(output).toContain('Deepseek');
+    expect(output).toContain('Fireworks');
+    expect(output).toContain('OpenRouter');
   });
 
   it('should display cache statistics when cache data is available', () => {

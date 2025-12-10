@@ -74,6 +74,7 @@ import {
   dumpSDKContext,
 } from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
+import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
 
 const MAX_TOOL_RESPONSE_CHARS = 1024;
 const MAX_TOOL_RESPONSE_RETRY_CHARS = 512;
@@ -2646,6 +2647,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Add usage metadata if we captured it from streaming
           if (streamingUsage) {
+            const cacheMetrics = extractCacheMetrics(streamingUsage);
             toolCallsContent.metadata = {
               usage: {
                 promptTokens: streamingUsage.prompt_tokens || 0,
@@ -2654,6 +2656,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                   streamingUsage.total_tokens ||
                   (streamingUsage.prompt_tokens || 0) +
                     (streamingUsage.completion_tokens || 0),
+                cachedTokens: cacheMetrics.cachedTokens,
+                cacheCreationTokens: cacheMetrics.cacheCreationTokens,
+                cacheMissTokens: cacheMetrics.cacheMissTokens,
               },
             };
           }
@@ -2664,6 +2669,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // If we have usage information but no tool calls, emit a metadata-only response
       if (streamingUsage && accumulatedToolCalls.length === 0) {
+        const cacheMetrics = extractCacheMetrics(streamingUsage);
         yield {
           speaker: 'ai',
           blocks: [],
@@ -2675,6 +2681,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 streamingUsage.total_tokens ||
                 (streamingUsage.prompt_tokens || 0) +
                   (streamingUsage.completion_tokens || 0),
+              cachedTokens: cacheMetrics.cachedTokens,
+              cacheCreationTokens: cacheMetrics.cacheCreationTokens,
+              cacheMissTokens: cacheMetrics.cacheMissTokens,
             },
           },
         } as IContent;
@@ -2926,6 +2935,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         // Add usage metadata from non-streaming response
         if (completion.usage) {
+          const cacheMetrics = extractCacheMetrics(completion.usage);
           responseContent.metadata = {
             usage: {
               promptTokens: completion.usage.prompt_tokens || 0,
@@ -2934,6 +2944,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 completion.usage.total_tokens ||
                 (completion.usage.prompt_tokens || 0) +
                   (completion.usage.completion_tokens || 0),
+              cachedTokens: cacheMetrics.cachedTokens,
+              cacheCreationTokens: cacheMetrics.cacheCreationTokens,
+              cacheMissTokens: cacheMetrics.cacheMissTokens,
             },
           };
         }
@@ -2941,6 +2954,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         yield responseContent;
       } else if (completion.usage) {
         // Emit metadata-only response if no content blocks but have usage info
+        const cacheMetrics = extractCacheMetrics(completion.usage);
         yield {
           speaker: 'ai',
           blocks: [],
@@ -2952,6 +2966,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 completion.usage.total_tokens ||
                 (completion.usage.prompt_tokens || 0) +
                   (completion.usage.completion_tokens || 0),
+              cachedTokens: cacheMetrics.cachedTokens,
+              cacheCreationTokens: cacheMetrics.cacheCreationTokens,
+              cacheMissTokens: cacheMetrics.cacheMissTokens,
             },
           },
         } as IContent;
@@ -4202,6 +4219,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Add usage metadata if we captured it from streaming
           if (streamingUsage) {
+            const cacheMetrics = extractCacheMetrics(streamingUsage);
             toolCallsContent.metadata = {
               usage: {
                 promptTokens: streamingUsage.prompt_tokens || 0,
@@ -4210,6 +4228,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                   streamingUsage.total_tokens ||
                   (streamingUsage.prompt_tokens || 0) +
                     (streamingUsage.completion_tokens || 0),
+                cachedTokens: cacheMetrics.cachedTokens,
+                cacheCreationTokens: cacheMetrics.cacheCreationTokens,
+                cacheMissTokens: cacheMetrics.cacheMissTokens,
               },
             };
           }
@@ -4223,6 +4244,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         streamingUsage &&
         this.toolCallPipeline.getStats().collector.totalCalls === 0
       ) {
+        const cacheMetrics = extractCacheMetrics(streamingUsage);
         yield {
           speaker: 'ai',
           blocks: [],
@@ -4234,6 +4256,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 streamingUsage.total_tokens ||
                 (streamingUsage.prompt_tokens || 0) +
                   (streamingUsage.completion_tokens || 0),
+              cachedTokens: cacheMetrics.cachedTokens,
+              cacheCreationTokens: cacheMetrics.cacheCreationTokens,
+              cacheMissTokens: cacheMetrics.cacheMissTokens,
             },
           },
         } as IContent;
@@ -4442,6 +4467,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         // Add usage metadata from non-streaming response
         if (completion.usage) {
+          const cacheMetrics = extractCacheMetrics(completion.usage);
           responseContent.metadata = {
             usage: {
               promptTokens: completion.usage.prompt_tokens || 0,
@@ -4450,6 +4476,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 completion.usage.total_tokens ||
                 (completion.usage.prompt_tokens || 0) +
                   (completion.usage.completion_tokens || 0),
+              cachedTokens: cacheMetrics.cachedTokens,
+              cacheCreationTokens: cacheMetrics.cacheCreationTokens,
+              cacheMissTokens: cacheMetrics.cacheMissTokens,
             },
           };
         }
@@ -4457,6 +4486,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         yield responseContent;
       } else if (completion.usage) {
         // Emit metadata-only response if no content blocks but have usage info
+        const cacheMetrics = extractCacheMetrics(completion.usage);
         yield {
           speaker: 'ai',
           blocks: [],
@@ -4468,6 +4498,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 completion.usage.total_tokens ||
                 (completion.usage.prompt_tokens || 0) +
                   (completion.usage.completion_tokens || 0),
+              cachedTokens: cacheMetrics.cachedTokens,
+              cacheCreationTokens: cacheMetrics.cacheCreationTokens,
+              cacheMissTokens: cacheMetrics.cacheMissTokens,
             },
           },
         } as IContent;

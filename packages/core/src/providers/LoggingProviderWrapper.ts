@@ -28,6 +28,7 @@ import {
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
+import type { ProviderPerformanceMetrics } from './types.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
@@ -893,16 +894,20 @@ export class LoggingProviderWrapper implements IProvider {
   } {
     const cacheReads = Math.max(
       0,
-      Number(tokenUsage.cache_read_input_tokens) || 0,
+      Number(tokenUsage.cachedTokens) ||
+        Number(tokenUsage.cache_read_input_tokens) ||
+        0,
     );
     const cacheWrites = Math.max(
       0,
-      Number(tokenUsage.cache_creation_input_tokens) || 0,
+      Number(tokenUsage.cacheCreationTokens) ||
+        Number(tokenUsage.cache_creation_input_tokens) ||
+        0,
     );
 
     this.debug.debug(
       () =>
-        `[extractTokenCountsFromTokenUsage] Extracting from UsageStats: cacheReads=${cacheReads}, cacheWrites=${cacheWrites}, raw values: cache_read=${tokenUsage.cache_read_input_tokens}, cache_creation=${tokenUsage.cache_creation_input_tokens}`,
+        `[extractTokenCountsFromTokenUsage] Extracting from UsageStats: cacheReads=${cacheReads}, cacheWrites=${cacheWrites}, raw values: cachedTokens=${tokenUsage.cachedTokens}, cache_read=${tokenUsage.cache_read_input_tokens}, cacheCreationTokens=${tokenUsage.cacheCreationTokens}, cache_creation=${tokenUsage.cache_creation_input_tokens}`,
     );
 
     return {
@@ -1235,7 +1240,7 @@ export class LoggingProviderWrapper implements IProvider {
    * Get the latest performance metrics from the tracker
    * @plan PLAN-20250909-TOKTRACK
    */
-  getPerformanceMetrics() {
+  getPerformanceMetrics(): ProviderPerformanceMetrics {
     return this.performanceTracker.getLatestMetrics();
   }
 }
