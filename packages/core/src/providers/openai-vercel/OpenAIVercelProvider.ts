@@ -38,7 +38,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { IContent } from '../../services/history/IContent.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
-import { isKimiModel } from '../../tools/ToolIdStrategy.js';
+import { isKimiModel, isMistralModel } from '../../tools/ToolIdStrategy.js';
 import {
   BaseProvider,
   NormalizedGenerateChatOptions,
@@ -387,9 +387,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     // Create a ToolIdMapper based on the tool format
     // For Kimi K2, this generates sequential IDs in the format functions.{name}:{index}
+    // For Mistral, this generates 9-char alphanumeric IDs
     const toolIdMapper =
-      toolFormat === 'kimi'
-        ? getToolIdStrategy('kimi').createMapper(contents)
+      toolFormat === 'kimi' || toolFormat === 'mistral'
+        ? getToolIdStrategy(toolFormat).createMapper(contents)
         : undefined;
 
     return convertToVercelMessages(
@@ -1734,6 +1735,15 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         () => `Auto-detected 'kimi' format for K2 model: ${modelName}`,
       );
       return 'kimi';
+    }
+
+    // Check for Mistral models (requires 9-char alphanumeric IDs)
+    // This applies to both hosted API and self-hosted Mistral models
+    if (isMistralModel(modelName)) {
+      logger.debug(
+        () => `Auto-detected 'mistral' format for Mistral model: ${modelName}`,
+      );
+      return 'mistral';
     }
 
     const lowerModelName = modelName.toLowerCase();

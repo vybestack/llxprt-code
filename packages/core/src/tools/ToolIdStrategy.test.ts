@@ -14,7 +14,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   isKimiModel,
+  isMistralModel,
   kimiStrategy,
+  mistralStrategy,
   standardStrategy,
   getToolIdStrategy,
 } from './ToolIdStrategy.js';
@@ -53,6 +55,45 @@ describe('ToolIdStrategy', () => {
     it('should handle case-insensitive matching', () => {
       expect(isKimiModel('KIMI-K2-0711-preview')).toBe(true);
       expect(isKimiModel('kimi-K2-thinking')).toBe(true);
+    });
+  });
+
+  describe('isMistralModel', () => {
+    it('should return true for mistral-large-latest', () => {
+      expect(isMistralModel('mistral-large-latest')).toBe(true);
+    });
+
+    it('should return true for devstral-small-latest', () => {
+      expect(isMistralModel('devstral-small-latest')).toBe(true);
+    });
+
+    it('should return true for codestral-latest', () => {
+      expect(isMistralModel('codestral-latest')).toBe(true);
+    });
+
+    it('should return true for pixtral-12b-2409', () => {
+      expect(isMistralModel('pixtral-12b-2409')).toBe(true);
+    });
+
+    it('should return true for ministral-8b-latest', () => {
+      expect(isMistralModel('ministral-8b-latest')).toBe(true);
+    });
+
+    it('should return false for gpt-4o', () => {
+      expect(isMistralModel('gpt-4o')).toBe(false);
+    });
+
+    it('should return false for claude-sonnet-4', () => {
+      expect(isMistralModel('claude-sonnet-4')).toBe(false);
+    });
+
+    it('should return false for kimi-k2', () => {
+      expect(isMistralModel('kimi-k2')).toBe(false);
+    });
+
+    it('should handle case-insensitive matching', () => {
+      expect(isMistralModel('MISTRAL-LARGE-LATEST')).toBe(true);
+      expect(isMistralModel('Devstral-Small-Latest')).toBe(true);
     });
   });
 
@@ -363,10 +404,176 @@ describe('ToolIdStrategy', () => {
     });
   });
 
+  describe('mistralStrategy', () => {
+    describe('createMapper', () => {
+      it('should generate 9-character alphanumeric ID', () => {
+        const contents: IContent[] = [
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call_0',
+                name: 'list_directory',
+                parameters: {},
+              },
+            ],
+          },
+        ];
+        const mapper = mistralStrategy.createMapper(contents);
+        const id = mapper.resolveToolCallId(
+          contents[0].blocks[0] as ToolCallBlock,
+        );
+        // Should be exactly 9 alphanumeric characters
+        expect(id).toMatch(/^[a-zA-Z0-9]{9}$/);
+      });
+
+      it('should preserve already-compliant 9-char alphanumeric IDs', () => {
+        const contents: IContent[] = [
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'abc123XYZ',
+                name: 'read_file',
+                parameters: {},
+              },
+            ],
+          },
+        ];
+        const mapper = mistralStrategy.createMapper(contents);
+        const id = mapper.resolveToolCallId(
+          contents[0].blocks[0] as ToolCallBlock,
+        );
+        expect(id).toBe('abc123XYZ');
+      });
+
+      it('should generate consistent IDs for same tool call', () => {
+        const contents: IContent[] = [
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'hist_tool_abc',
+                name: 'read_file',
+                parameters: {},
+              },
+            ],
+          },
+        ];
+        const mapper = mistralStrategy.createMapper(contents);
+        const tc = contents[0].blocks[0] as ToolCallBlock;
+        const id1 = mapper.resolveToolCallId(tc);
+        const id2 = mapper.resolveToolCallId(tc);
+        expect(id1).toBe(id2);
+      });
+
+      it('should resolve tool response ID to match its corresponding call', () => {
+        const contents: IContent[] = [
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call_underscore_bad',
+                name: 'list_directory',
+                parameters: {},
+              },
+            ],
+          },
+          {
+            speaker: 'tool',
+            blocks: [
+              {
+                type: 'tool_response',
+                callId: 'call_underscore_bad',
+                toolName: 'list_directory',
+                result: { files: [] },
+              },
+            ],
+          },
+        ];
+        const mapper = mistralStrategy.createMapper(contents);
+        const tc = contents[0].blocks[0] as ToolCallBlock;
+        const tr = contents[1].blocks[0] as ToolResponseBlock;
+
+        const tcId = mapper.resolveToolCallId(tc);
+        const trId = mapper.resolveToolResponseId(tr);
+
+        // Both should be the same Mistral-compliant ID
+        expect(tcId).toBe(trId);
+        expect(tcId).toMatch(/^[a-zA-Z0-9]{9}$/);
+      });
+
+      it('should handle multiple tool calls with unique IDs', () => {
+        const contents: IContent[] = [
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call_0',
+                name: 'glob',
+                parameters: {},
+              },
+              {
+                type: 'tool_call',
+                id: 'call_1',
+                name: 'read_file',
+                parameters: {},
+              },
+            ],
+          },
+        ];
+        const mapper = mistralStrategy.createMapper(contents);
+        const tc1 = contents[0].blocks[0] as ToolCallBlock;
+        const tc2 = contents[0].blocks[1] as ToolCallBlock;
+
+        const id1 = mapper.resolveToolCallId(tc1);
+        const id2 = mapper.resolveToolCallId(tc2);
+
+        // Both should be valid Mistral IDs
+        expect(id1).toMatch(/^[a-zA-Z0-9]{9}$/);
+        expect(id2).toMatch(/^[a-zA-Z0-9]{9}$/);
+        // And they should be different
+        expect(id1).not.toBe(id2);
+      });
+
+      it('should not include underscores in generated IDs', () => {
+        const contents: IContent[] = [
+          {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'tool_call',
+                id: 'call_with_underscores_123',
+                name: 'read_file',
+                parameters: {},
+              },
+            ],
+          },
+        ];
+        const mapper = mistralStrategy.createMapper(contents);
+        const id = mapper.resolveToolCallId(
+          contents[0].blocks[0] as ToolCallBlock,
+        );
+        expect(id).not.toContain('_');
+        expect(id).toMatch(/^[a-zA-Z0-9]{9}$/);
+      });
+    });
+  });
+
   describe('getToolIdStrategy', () => {
     it('should return kimiStrategy for kimi format', () => {
       const strategy = getToolIdStrategy('kimi');
       expect(strategy).toBe(kimiStrategy);
+    });
+
+    it('should return mistralStrategy for mistral format', () => {
+      const strategy = getToolIdStrategy('mistral');
+      expect(strategy).toBe(mistralStrategy);
     });
 
     it('should return standardStrategy for openai format', () => {

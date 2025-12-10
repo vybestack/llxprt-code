@@ -30,6 +30,7 @@ import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
 import {
   isKimiModel,
+  isMistralModel,
   getToolIdStrategy,
   type ToolIdMapper,
 } from '../../tools/ToolIdStrategy.js';
@@ -1209,9 +1210,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             }
           } else {
             // Assistant message with tool calls
+            // CRITICAL for Mistral API compatibility (#760):
+            // When tool_calls are present, we must NOT include a content property at all
+            // (not even null). Mistral's OpenAI-compatible API requires this.
+            // See: https://docs.mistral.ai/capabilities/function_calling
             messages.push({
               role: 'assistant',
-              content: text || null,
               tool_calls: toolCalls.map((tc) => ({
                 id: this.normalizeToOpenAIToolId(tc.id),
                 type: 'function' as const,
@@ -1246,11 +1250,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           }
         } else {
           for (const tr of toolResponses) {
+            // CRITICAL for Mistral API compatibility (#760):
+            // Tool messages must include a name field matching the function name.
+            // See: https://docs.mistral.ai/capabilities/function_calling
+            // Note: The OpenAI SDK types don't include name, but Mistral requires it.
+            // We use a type assertion to add this required field.
             messages.push({
               role: 'tool',
               content: this.buildToolResponseContent(tr, config),
               tool_call_id: this.normalizeToOpenAIToolId(tr.callId),
-            });
+              name: tr.toolName,
+            } as OpenAI.Chat.ChatCompletionToolMessageParam);
           }
         }
       }
@@ -1286,9 +1296,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Create a ToolIdMapper based on the tool format
     // For Kimi K2, this generates sequential IDs in the format functions.{name}:{index}
+    // For Mistral, this generates 9-char alphanumeric IDs
     const toolIdMapper: ToolIdMapper | null =
-      toolFormat === 'kimi'
-        ? getToolIdStrategy('kimi').createMapper(filteredContents)
+      toolFormat === 'kimi' || toolFormat === 'mistral'
+        ? getToolIdStrategy(toolFormat).createMapper(filteredContents)
         : null;
 
     // Helper to resolve tool call IDs based on format
@@ -1333,9 +1344,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
         if (toolCalls.length > 0) {
           // Assistant message with tool calls
+          // CRITICAL for Mistral API compatibility (#760):
+          // When tool_calls are present, we must NOT include a content property at all
+          // (not even null). Mistral's OpenAI-compatible API requires this.
+          // See: https://docs.mistral.ai/capabilities/function_calling
           const baseMessage: OpenAI.Chat.ChatCompletionAssistantMessageParam = {
             role: 'assistant',
-            content: text || null,
             tool_calls: toolCalls.map((tc) => ({
               id: resolveToolCallId(tc),
               type: 'function' as const,
@@ -1386,11 +1400,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock[];
         for (const tr of toolResponses) {
+          // CRITICAL for Mistral API compatibility (#760):
+          // Tool messages must include a name field matching the function name.
+          // See: https://docs.mistral.ai/capabilities/function_calling
+          // Note: The OpenAI SDK types don't include name, but Mistral requires it.
+          // We use a type assertion to add this required field.
           messages.push({
             role: 'tool',
             content: this.buildToolResponseContent(tr, options.config),
             tool_call_id: resolveToolResponseId(tr),
-          });
+            name: tr.toolName,
+          } as OpenAI.Chat.ChatCompletionToolMessageParam);
         }
       }
     }
@@ -3346,11 +3366,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           if (shouldDumpSuccess) {
             await dumpSDKContext(
               'openai',
-              '/v1/chat/completions',
+              '/chat/completions',
               requestBody,
               { streaming: true },
               false,
-              baseURL || 'https://api.openai.com',
+              baseURL || 'https://api.openai.com/v1',
             );
           }
 
@@ -3407,11 +3427,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               error instanceof Error ? error.message : String(error);
             await dumpSDKContext(
               'openai',
-              '/v1/chat/completions',
+              '/chat/completions',
               requestBody,
               { error: dumpErrorMessage },
               true,
-              baseURL || 'https://api.openai.com',
+              baseURL || 'https://api.openai.com/v1',
             );
           }
 
@@ -3464,11 +3484,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           if (shouldDumpSuccess) {
             await dumpSDKContext(
               'openai',
-              '/v1/chat/completions',
+              '/chat/completions',
               requestBody,
               response,
               false,
-              baseURL || 'https://api.openai.com',
+              baseURL || 'https://api.openai.com/v1',
             );
           }
 
@@ -3534,11 +3554,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               error instanceof Error ? error.message : String(error);
             await dumpSDKContext(
               'openai',
-              '/v1/chat/completions',
+              '/chat/completions',
               requestBody,
               { error: dumpErrorMessage },
               true,
-              baseURL || 'https://api.openai.com',
+              baseURL || 'https://api.openai.com/v1',
             );
           }
 
@@ -4539,6 +4559,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         () => `Auto-detected 'kimi' format for K2 model: ${modelName}`,
       );
       return 'kimi';
+    }
+
+    // Check for Mistral models (requires 9-char alphanumeric IDs)
+    // This applies to both hosted API and self-hosted Mistral models
+    if (isMistralModel(modelName)) {
+      logger.debug(
+        () => `Auto-detected 'mistral' format for Mistral model: ${modelName}`,
+      );
+      return 'mistral';
     }
 
     const lowerModelName = modelName.toLowerCase();
