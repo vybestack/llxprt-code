@@ -15,6 +15,12 @@ import type {
 import type { CommandContext } from '../types.js';
 import { filterCompletions } from '../../utils/fuzzyFilter.js';
 
+interface FlattenedPath {
+  readonly path: readonly string[];
+  readonly depth: number;
+  readonly description?: string;
+}
+
 export type CompletionInput =
   | string
   | {
@@ -273,14 +279,58 @@ async function suggestForValue(
   return [];
 }
 
+/**
+ * Flatten nested schema paths into a list of multi-token paths
+ * @plan:PLAN-411-DEEPCOMPLETION
+ * @requirement:REQ-002
+ */
+function flattenSchemaPaths(
+  nodes: LiteralArgument[],
+  currentPath: readonly string[] = [],
+): readonly FlattenedPath[] {
+  const flattened: FlattenedPath[] = [];
+
+  for (const node of nodes) {
+    const nodePath = [...currentPath, node.value];
+
+    // If this node has a 'next' that contains value arguments with options,
+    // we can create deep paths
+    if (node.next && node.next.length > 0) {
+      for (const nextNode of node.next) {
+        if (nextNode.kind === 'value' && nextNode.options) {
+          // For each option in the value node, create a flattened path
+          for (const option of nextNode.options) {
+            flattened.push({
+              path: [...nodePath, option.value],
+              depth: nodePath.length + 1,
+              description: option.description,
+            });
+          }
+        } else if (nextNode.kind === 'literal') {
+          // Recursively flatten nested literals
+          const nestedLiterals = node.next.filter(
+            (n): n is LiteralArgument => n.kind === 'literal',
+          );
+          const nestedPaths = flattenSchemaPaths(nestedLiterals, nodePath);
+          flattened.push(...nestedPaths);
+        }
+      }
+    }
+  }
+
+  return flattened;
+}
+
 function suggestForLiterals(
   ctx: CommandContext,
   nodes: LiteralArgument[],
   partialArg: string,
 ): readonly Option[] {
-  const options = nodes.map((node) => ({
+  // Single-level options (existing behavior)
+  const singleLevelOptions = nodes.map((node) => ({
     value: node.value,
     description: node.description,
+    depth: 1,
   }));
 
   // Get the fuzzy filtering setting from context
@@ -288,7 +338,52 @@ function suggestForLiterals(
   const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
   const enableFuzzy = settingValue ?? true;
 
-  return filterCompletions(options, partialArg, { enableFuzzy });
+  // Filter single-level options
+  const filteredSingleLevel = filterCompletions(
+    singleLevelOptions,
+    partialArg,
+    { enableFuzzy },
+  );
+
+  // For empty queries, only return single-level options
+  if (!partialArg || partialArg.trim() === '') {
+    return filteredSingleLevel.map(({ value, description }) => ({
+      value,
+      description,
+    }));
+  }
+
+  // Get deep paths and filter them
+  const deepPaths = flattenSchemaPaths(nodes);
+  const deepPathOptions = deepPaths.map((path) => ({
+    value: path.path.join(' '),
+    description: path.description,
+    depth: path.depth,
+  }));
+
+  const filteredDeepPaths = filterCompletions(deepPathOptions, partialArg, {
+    enableFuzzy,
+  });
+
+  // Combine and sort by depth (shorter first)
+  const allOptions = [...filteredSingleLevel, ...filteredDeepPaths];
+  const sorted = allOptions.sort((a, b) => {
+    const depthA = 'depth' in a ? (a.depth as number) : 1;
+    const depthB = 'depth' in b ? (b.depth as number) : 1;
+    return depthA - depthB;
+  });
+
+  // Deduplicate by value and remove depth property from final results
+  const seen = new Set<string>();
+  const deduplicated = sorted.filter((option) => {
+    if (seen.has(option.value)) {
+      return false;
+    }
+    seen.add(option.value);
+    return true;
+  });
+
+  return deduplicated.map(({ value, description }) => ({ value, description }));
 }
 
 async function computeHintForValue(
