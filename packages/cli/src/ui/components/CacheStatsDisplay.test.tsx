@@ -53,11 +53,11 @@ describe('<CacheStatsDisplay />', () => {
   it('should render "no cache data" message when there are no cache reads or writes', () => {
     const { lastFrame } = renderWithMockedCacheStats({
       totalCacheReads: 0,
-      totalCacheWrites: null, // No cache writes reported
+      totalCacheWrites: null as null, // No cache writes reported
       requestsWithCacheHits: 0,
       requestsWithCacheWrites: 0,
       hitRate: 0,
-    });
+    } as CacheStatistics);
 
     const output = lastFrame();
     expect(output).toContain('No cache data available');
@@ -149,11 +149,11 @@ describe('<CacheStatsDisplay />', () => {
   it('should hide cache writes row when provider does not report it (null)', () => {
     const { lastFrame } = renderWithMockedCacheStats({
       totalCacheReads: 5000,
-      totalCacheWrites: null, // Provider doesn't report cache writes (e.g., OpenAI/vLLM)
+      totalCacheWrites: null as null, // Provider doesn't report cache writes (e.g., OpenAI/vLLM)
       requestsWithCacheHits: 3,
       requestsWithCacheWrites: 0,
       hitRate: 25.0,
-    });
+    } as CacheStatistics);
 
     const output = lastFrame();
     // Should show cache reads
