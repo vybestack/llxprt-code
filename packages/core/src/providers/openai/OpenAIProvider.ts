@@ -2046,6 +2046,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Track total chunks for debugging empty responses
       let totalChunksReceived = 0;
 
+      // Track finish_reason for detecting empty responses (issue #584)
+      let lastFinishReason: string | null | undefined = null;
+
       try {
         // Handle streaming response
         for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
@@ -2139,6 +2142,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Check for finish_reason to detect proper stream ending
           if (choice.finish_reason) {
+            lastFinishReason = choice.finish_reason;
             logger.debug(
               () =>
                 `[Streaming] Stream finished with reason: ${choice.finish_reason}`,
@@ -2707,6 +2711,102 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             },
           },
         } as IContent;
+      }
+
+      // Detect and handle empty streaming responses after tool calls (issue #584)
+      // Some models (like gpt-oss-120b on OpenRouter) return finish_reason=stop with tools but no text
+      const hasToolsButNoText =
+        lastFinishReason === 'stop' &&
+        accumulatedToolCalls.length > 0 &&
+        _accumulatedText.length === 0 &&
+        textBuffer.length === 0 &&
+        accumulatedReasoningContent.length === 0 &&
+        accumulatedThinkingContent.length === 0;
+
+      if (hasToolsButNoText) {
+        logger.log(
+          () =>
+            `[OpenAIProvider] Model returned tool calls but no text (finish_reason=stop). Requesting continuation for model '${model}'.`,
+          {
+            model,
+            toolCallCount: accumulatedToolCalls.length,
+            baseURL: baseURL ?? this.getBaseURL(),
+          },
+        );
+
+        // Add tool call results to history and request continuation
+        // Build a new messages array with tool results
+        const continuationMessages = [
+          ...messagesWithSystem,
+          // Add the assistant's tool calls
+          {
+            role: 'assistant' as const,
+            tool_calls: accumulatedToolCalls.map((tc) => ({
+              id: tc.id,
+              type: tc.type,
+              function: tc.function,
+            })),
+          },
+          // Add placeholder tool responses (since we don't execute tools here in the provider)
+          ...accumulatedToolCalls.map((tc) => ({
+            role: 'tool' as const,
+            tool_call_id: tc.id,
+            content: '[Tool executed successfully]',
+          })),
+          // Add continuation prompt
+          {
+            role: 'user' as const,
+            content:
+              'Based on the tool results above, please provide your analysis or summary.',
+          },
+        ];
+
+        // Make a continuation request
+        const continuationResponse = await client.chat.completions.create({
+          ...requestBody,
+          messages: continuationMessages,
+          stream: streamingEnabled,
+        });
+
+        // Process the continuation response
+        if (streamingEnabled) {
+          for await (const chunk of continuationResponse as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+            if (abortSignal?.aborted) {
+              break;
+            }
+
+            const choice = chunk.choices?.[0];
+            if (!choice) continue;
+
+            const deltaContent = this.coerceMessageContentToString(
+              choice.delta?.content as unknown,
+            );
+            if (deltaContent) {
+              const sanitized = this.sanitizeProviderText(deltaContent);
+              if (sanitized) {
+                _accumulatedText += sanitized;
+                yield {
+                  speaker: 'ai',
+                  blocks: [
+                    {
+                      type: 'text',
+                      text: sanitized,
+                    } as TextBlock,
+                  ],
+                } as IContent;
+              }
+            }
+          }
+        }
+
+        logger.debug(
+          () =>
+            `[OpenAIProvider] Continuation request completed, received ${_accumulatedText.length} chars`,
+          {
+            model,
+            accumulatedTextLength: _accumulatedText.length,
+          },
+        );
       }
 
       // Detect and warn about empty streaming responses (common with Kimi K2 after tool calls)
@@ -3622,6 +3722,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         total_tokens?: number;
       } | null = null;
 
+      // Track finish_reason for detecting empty responses (issue #584)
+      let lastFinishReason: string | null | undefined = null;
+
       const allChunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = []; // Collect all chunks first
 
       try {
@@ -3723,6 +3826,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Check for finish_reason to detect proper stream ending
           if (choice.finish_reason) {
+            lastFinishReason = choice.finish_reason;
             logger.debug(
               () =>
                 `[Streaming] Stream finished with reason: ${choice.finish_reason}`,
@@ -4284,9 +4388,114 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         } as IContent;
       }
 
+      // Detect and handle empty streaming responses after tool calls (issue #584)
+      // Some models (like gpt-oss-120b on OpenRouter) return finish_reason=stop with tools but no text
+      const pipelineStats = this.toolCallPipeline.getStats();
+      const hasToolsButNoText =
+        lastFinishReason === 'stop' &&
+        pipelineStats.collector.totalCalls > 0 &&
+        _accumulatedText.length === 0 &&
+        textBuffer.length === 0 &&
+        accumulatedReasoningContent.length === 0 &&
+        accumulatedThinkingContent.length === 0;
+
+      if (hasToolsButNoText) {
+        logger.log(
+          () =>
+            `[OpenAIProvider] Model returned tool calls but no text (finish_reason=stop). Requesting continuation for model '${model}'.`,
+          {
+            model,
+            toolCallCount: pipelineStats.collector.totalCalls,
+            baseURL: baseURL ?? this.getBaseURL(),
+          },
+        );
+
+        // Note: In pipeline mode, tool calls have already been processed.
+        // We need to get the normalized tool calls from the pipeline to build continuation messages.
+        const pipelineResult = await this.toolCallPipeline.process(abortSignal);
+        const toolCallsForHistory = pipelineResult.normalized.map(
+          (normalizedCall, index) => ({
+            id: `call_${index}`,
+            type: 'function' as const,
+            function: {
+              name: normalizedCall.name,
+              arguments: JSON.stringify(normalizedCall.args),
+            },
+          }),
+        );
+
+        // Build continuation messages
+        const continuationMessages = [
+          ...messagesWithSystem,
+          // Add the assistant's tool calls
+          {
+            role: 'assistant' as const,
+            tool_calls: toolCallsForHistory,
+          },
+          // Add placeholder tool responses
+          ...toolCallsForHistory.map((tc) => ({
+            role: 'tool' as const,
+            tool_call_id: tc.id,
+            content: '[Tool executed successfully]',
+          })),
+          // Add continuation prompt
+          {
+            role: 'user' as const,
+            content:
+              'Based on the tool results above, please provide your analysis or summary.',
+          },
+        ];
+
+        // Make a continuation request
+        const continuationResponse = await client.chat.completions.create({
+          ...requestBody,
+          messages: continuationMessages,
+          stream: streamingEnabled,
+        });
+
+        // Process the continuation response
+        if (streamingEnabled) {
+          for await (const chunk of continuationResponse as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+            if (abortSignal?.aborted) {
+              break;
+            }
+
+            const choice = chunk.choices?.[0];
+            if (!choice) continue;
+
+            const deltaContent = this.coerceMessageContentToString(
+              choice.delta?.content as unknown,
+            );
+            if (deltaContent) {
+              const sanitized = this.sanitizeProviderText(deltaContent);
+              if (sanitized) {
+                _accumulatedText += sanitized;
+                yield {
+                  speaker: 'ai',
+                  blocks: [
+                    {
+                      type: 'text',
+                      text: sanitized,
+                    } as TextBlock,
+                  ],
+                } as IContent;
+              }
+            }
+          }
+        }
+
+        logger.debug(
+          () =>
+            `[OpenAIProvider] Continuation request completed, received ${_accumulatedText.length} chars`,
+          {
+            model,
+            accumulatedTextLength: _accumulatedText.length,
+          },
+        );
+      }
+
       // Detect and warn about empty streaming responses (common with Kimi K2 after tool calls)
       // Only warn if we truly got nothing - not even reasoning content
-      const pipelineStats = this.toolCallPipeline.getStats();
       if (
         _accumulatedText.length === 0 &&
         pipelineStats.collector.totalCalls === 0 &&
