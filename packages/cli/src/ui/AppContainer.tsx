@@ -84,6 +84,7 @@ import { useSettingsCommand } from './hooks/useSettingsCommand.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
 import { useRuntimeApi } from './contexts/RuntimeContext.js';
+import { submitOAuthCode } from './oauth-submission.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
@@ -1023,22 +1024,15 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const handleOAuthCodeSubmit = useCallback(
     async (code: string) => {
-      const provider = (global as unknown as { __oauth_provider?: string })
-        .__oauth_provider;
-
-      const oauthManager = runtime.getCliOAuthManager();
-      if (!oauthManager || !provider) {
-        return;
-      }
-
-      // Handle any OAuth provider that supports code submission
-      // This automatically works for anthropic, gemini, qwen, and any future providers
-      const oauthProvider = oauthManager.getProvider(provider);
-      if (oauthProvider && 'submitAuthCode' in oauthProvider) {
-        (
-          oauthProvider as { submitAuthCode: (code: string) => void }
-        ).submitAuthCode(code);
-      }
+      submitOAuthCode(
+        {
+          getOAuthManager: () => runtime.getCliOAuthManager(),
+          getActiveProvider: () =>
+            (global as unknown as { __oauth_provider?: string })
+              .__oauth_provider,
+        },
+        code,
+      );
     },
     [runtime],
   );
