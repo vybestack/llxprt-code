@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PromptResolver } from './prompt-resolver.js';
 import { PromptContext } from './types.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
 describe('PromptResolver', () => {
   let resolver: PromptResolver;
@@ -104,6 +105,104 @@ describe('PromptResolver', () => {
     it('should handle ReadLineRange PascalCase correctly', () => {
       const result = resolver.convertToKebabCase('ReadLineRange');
       expect(result).toBe('read-line-range');
+    });
+  });
+
+  describe('resolveAllFiles with MCP tools', () => {
+    it('should skip MCP tools when resolving tool prompts and not log warnings for them', () => {
+      // Spy on the logger to verify no warnings are logged for MCP tools
+      const warnSpy = vi.spyOn(DebugLogger.prototype, 'warn');
+
+      // Create a context with both regular tools and MCP tools
+      const contextWithMcpTools: PromptContext = {
+        provider: 'openai',
+        model: 'gpt-4',
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          sandboxType: undefined,
+          hasIdeCompanion: false,
+        },
+        enabledTools: [
+          'read_line_range', // regular tool
+          'mcp__test-cmd__edit_file', // MCP tool
+          'mcp__memory-server__add_observations', // MCP tool
+          'insert_at_line', // regular tool
+          'mcp__test-cmd__read_file', // MCP tool
+        ],
+        enableToolPrompts: true,
+      };
+
+      // Create prompt files ONLY for regular tools
+      fs.writeFileSync(
+        path.join(tempDir, 'tools/read-line-range.md'),
+        '- Read range tool prompt',
+      );
+      fs.writeFileSync(
+        path.join(tempDir, 'tools/insert-at-line.md'),
+        '- Insert tool prompt',
+      );
+
+      // Note: We intentionally do NOT create prompt files for MCP tools
+
+      const resolvedFiles = resolver.resolveAllFiles(
+        tempDir,
+        contextWithMcpTools,
+      );
+
+      // Should only resolve the regular tools, not MCP tools
+      const toolFiles = resolvedFiles.filter((f) => f.type === 'tool');
+      expect(toolFiles).toHaveLength(2);
+
+      const toolNames = toolFiles.map((f) => f.toolName);
+      expect(toolNames).toContain('read_line_range');
+      expect(toolNames).toContain('insert_at_line');
+
+      // MCP tools should NOT be in the resolved files
+      expect(toolNames).not.toContain('mcp__test-cmd__edit_file');
+      expect(toolNames).not.toContain('mcp__memory-server__add_observations');
+      expect(toolNames).not.toContain('mcp__test-cmd__read_file');
+
+      // Verify no warnings were logged for MCP tools
+      // The warn spy should not have been called with any MCP tool names
+      const warnCalls = warnSpy.mock.calls;
+      for (const call of warnCalls) {
+        const warnFn = call[0] as () => string;
+        const message = warnFn();
+        // Ensure no warnings mention MCP tools
+        expect(message).not.toContain('mcp__test-cmd__edit_file');
+        expect(message).not.toContain('mcp__memory-server__add_observations');
+        expect(message).not.toContain('mcp__test-cmd__read_file');
+      }
+
+      warnSpy.mockRestore();
+    });
+
+    it('should not attempt to resolve prompt files for MCP tools even when enableToolPrompts is false', () => {
+      const contextWithMcpTools: PromptContext = {
+        provider: 'openai',
+        model: 'gpt-4',
+        environment: {
+          isGitRepository: false,
+          isSandboxed: false,
+          sandboxType: undefined,
+          hasIdeCompanion: false,
+        },
+        enabledTools: [
+          'mcp__test-cmd__edit_file',
+          'mcp__memory-server__add_observations',
+        ],
+        enableToolPrompts: false, // disabled
+      };
+
+      const resolvedFiles = resolver.resolveAllFiles(
+        tempDir,
+        contextWithMcpTools,
+      );
+
+      // When enableToolPrompts is false, no tool prompts should be resolved
+      const toolFiles = resolvedFiles.filter((f) => f.type === 'tool');
+      expect(toolFiles).toHaveLength(0);
     });
   });
 });
