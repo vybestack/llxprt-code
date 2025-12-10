@@ -92,7 +92,7 @@ describe('TaskTool', () => {
     );
     expect(scope.runInteractive).toHaveBeenCalledTimes(1);
     expect(scope.runNonInteractive).not.toHaveBeenCalled();
-    expect(updateOutput).toHaveBeenCalledWith('[agent-42] progress update');
+    expect(updateOutput).toHaveBeenCalledWith('[agent-42] progress update\n');
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(result.metadata).toEqual({
       agentId: 'agent-42',
@@ -364,5 +364,112 @@ describe('TaskTool', () => {
     expect(() => tool.build({ subagent_name: 'helper' })).toThrow(
       "params must have required property 'goal_prompt'",
     );
+  });
+
+  it('streams subagent messages on separate lines with normalized newlines', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const updateOutput = vi.fn();
+    const scope: {
+      output: {
+        emitted_vars: Record<string, string>;
+        terminate_reason: SubagentTerminateMode;
+      };
+      runInteractive: ReturnType<typeof vi.fn>;
+      runNonInteractive: ReturnType<typeof vi.fn>;
+      onMessage?: (message: string) => void;
+    } = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi.fn().mockImplementation(async (_ctx: ContextState) => {
+        // Simulate subagent streaming multiple chunks with different line ending styles
+        scope.onMessage?.('first chunk');
+        scope.onMessage?.('second chunk\r');
+        scope.onMessage?.('third chunk\r\n');
+        scope.onMessage?.('fourth chunk\n');
+      }),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-42',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
+    });
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship it',
+    });
+
+    await invocation.execute(new AbortController().signal, updateOutput);
+
+    // Verify all messages end with newline and normalize CR/CRLF to LF
+    expect(updateOutput).toHaveBeenCalledWith('[agent-42] first chunk\n');
+    expect(updateOutput).toHaveBeenCalledWith('[agent-42] second chunk\n');
+    expect(updateOutput).toHaveBeenCalledWith('[agent-42] third chunk\n');
+    expect(updateOutput).toHaveBeenCalledWith('[agent-42] fourth chunk\n');
+    expect(updateOutput).toHaveBeenCalledTimes(4);
+  });
+
+  it('filters out empty messages when streaming', async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    const updateOutput = vi.fn();
+    const scope: {
+      output: {
+        emitted_vars: Record<string, string>;
+        terminate_reason: SubagentTerminateMode;
+      };
+      runInteractive: ReturnType<typeof vi.fn>;
+      runNonInteractive: ReturnType<typeof vi.fn>;
+      onMessage?: (message: string) => void;
+    } = {
+      output: {
+        emitted_vars: {},
+        terminate_reason: SubagentTerminateMode.GOAL,
+      },
+      runInteractive: vi.fn().mockImplementation(async (_ctx: ContextState) => {
+        // Simulate various empty/whitespace-only messages
+        scope.onMessage?.('');
+        scope.onMessage?.('  ');
+        scope.onMessage?.('\n');
+        scope.onMessage?.('actual message');
+      }),
+      runNonInteractive: vi.fn(),
+      onMessage: undefined,
+    };
+    const launch = vi.fn().mockResolvedValue({
+      agentId: 'agent-42',
+      scope,
+      dispose,
+      prompt: {} as unknown,
+      profile: {} as unknown,
+      config: {} as unknown,
+      runtime: {} as unknown,
+    });
+    const orchestrator = { launch } as unknown as SubagentOrchestrator;
+    const tool = new TaskTool(config, {
+      orchestratorFactory: () => orchestrator,
+      isInteractiveEnvironment: () => true,
+    });
+    const invocation = tool.build({
+      subagent_name: 'helper',
+      goal_prompt: 'Ship it',
+    });
+
+    await invocation.execute(new AbortController().signal, updateOutput);
+
+    // Only the actual message should be output, empty/whitespace-only are filtered
+    expect(updateOutput).toHaveBeenCalledWith('[agent-42] actual message\n');
+    expect(updateOutput).toHaveBeenCalledTimes(1);
   });
 });
