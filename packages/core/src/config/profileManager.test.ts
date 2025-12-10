@@ -244,6 +244,36 @@ describe('ProfileManager', () => {
         'code-editor',
       ]);
     });
+
+    it('should persist toolFormat from settings service to ephemeralSettings', async () => {
+      const manager = new ProfileManager();
+      const payloadCapture: { value?: unknown } = {};
+
+      mockSettingsService.exportForProfile.mockResolvedValue({
+        defaultProvider: 'openai',
+        providers: {
+          openai: {
+            enabled: true,
+            model: 'moonshotai/Kimi-K2-Thinking',
+            toolFormat: 'kimi',
+          },
+        },
+      });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.writeFile.mockImplementation(async (_path, data: string) => {
+        payloadCapture.value = JSON.parse(data);
+      });
+
+      await manager.save(
+        'kimi-profile',
+        mockSettingsService as unknown as SettingsService,
+      );
+
+      const serialized = payloadCapture.value as {
+        ephemeralSettings?: Record<string, unknown>;
+      };
+      expect(serialized.ephemeralSettings?.['tool-format']).toEqual('kimi');
+    });
   });
 
   describe('load method with SettingsService', () => {
@@ -300,6 +330,50 @@ describe('ProfileManager', () => {
         ),
       ).resolves.not.toThrow();
       expect(mockSettingsService.importFromProfile).toHaveBeenCalled();
+    });
+
+    it('should load toolFormat from profile and apply to SettingsService', async () => {
+      const manager = new ProfileManager();
+      const profileWithToolFormat: Profile = {
+        version: 1,
+        provider: 'openai',
+        model: 'moonshotai/Kimi-K2-Thinking',
+        modelParams: {
+          temperature: 0.7,
+        },
+        ephemeralSettings: {
+          'tool-format': 'kimi',
+        },
+      };
+
+      mockFs.readFile.mockResolvedValue(JSON.stringify(profileWithToolFormat));
+      mockSettingsService.importFromProfile.mockResolvedValue();
+
+      await manager.load(
+        'kimi-profile',
+        mockSettingsService as unknown as SettingsService,
+      );
+
+      expect(mockSettingsService.importFromProfile).toHaveBeenCalledWith({
+        defaultProvider: 'openai',
+        providers: {
+          openai: {
+            enabled: true,
+            model: 'moonshotai/Kimi-K2-Thinking',
+            temperature: 0.7,
+            maxTokens: undefined,
+            baseUrl: undefined,
+            apiKey: undefined,
+            'prompt-caching': undefined,
+            'include-folder-structure': undefined,
+            toolFormat: 'kimi',
+          },
+        },
+        tools: {
+          allowed: [],
+          disabled: [],
+        },
+      });
     });
   });
 

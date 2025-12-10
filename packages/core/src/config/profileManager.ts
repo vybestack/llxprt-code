@@ -192,6 +192,7 @@ export class ProfileManager {
         'prompt-caching': providerSettings?.['prompt-caching'],
         'include-folder-structure':
           providerSettings?.['include-folder-structure'],
+        'tool-format': providerSettings?.toolFormat,
       },
     };
 
@@ -246,6 +247,7 @@ export class ProfileManager {
           'prompt-caching': profile.ephemeralSettings['prompt-caching'],
           'include-folder-structure':
             profile.ephemeralSettings['include-folder-structure'],
+          toolFormat: profile.ephemeralSettings['tool-format'],
         },
       },
       tools: {

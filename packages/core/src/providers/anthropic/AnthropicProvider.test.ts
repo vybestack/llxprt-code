@@ -1870,6 +1870,11 @@ describe('AnthropicProvider', () => {
           'on',
         );
 
+        // Spy on sleep to verify throttling behavior without fake timers
+        const sleepSpy = vi
+          .spyOn(provider as never, 'sleep')
+          .mockResolvedValue(undefined);
+
         // First call establishes low rate limit
         const firstHeaders = new Headers({
           'anthropic-ratelimit-requests-limit': '1000',
@@ -1938,22 +1943,17 @@ describe('AnthropicProvider', () => {
           withResponse: secondWithResponse,
         } as unknown as Promise<Anthropic.Message>);
 
-        // Use fake timers to simulate throttling
-        vi.useFakeTimers();
+        const gen = provider.generateChatCompletion(buildCallOptions(messages));
+        await gen.next();
 
-        const generator2Promise = (async () => {
-          const gen = provider.generateChatCompletion(
-            buildCallOptions(messages),
-          );
-          await gen.next();
-        })();
-
-        await vi.runAllTimersAsync();
-        await generator2Promise;
-
-        vi.useRealTimers();
+        // Verify throttling was triggered (sleep was called with ~5000ms)
+        expect(sleepSpy).toHaveBeenCalled();
+        const sleepDuration = sleepSpy.mock.calls[0][0] as number;
+        expect(sleepDuration).toBeGreaterThan(0);
+        expect(sleepDuration).toBeLessThanOrEqual(5000);
 
         expect(secondWithResponse).toHaveBeenCalled();
+        sleepSpy.mockRestore();
       });
 
       it('should handle partial rate limit headers', async () => {
@@ -2080,6 +2080,11 @@ describe('AnthropicProvider', () => {
           },
         };
 
+        // Spy on sleep to verify throttling behavior without fake timers
+        const sleepSpy = vi
+          .spyOn(provider as never, 'sleep')
+          .mockResolvedValue(undefined);
+
         // First call establishes rate limit state
         const firstHeaders = new Headers({
           'anthropic-ratelimit-requests-limit': '1000',
@@ -2135,14 +2140,6 @@ describe('AnthropicProvider', () => {
           withResponse: secondWithResponse,
         } as unknown as Promise<Anthropic.Message>);
 
-        // Mock Date.now for deterministic testing
-        const originalDateNow = Date.now;
-        const mockNow = Date.now();
-        vi.spyOn(Date, 'now').mockReturnValue(mockNow);
-
-        // Mock setTimeout to avoid actual waiting
-        vi.useFakeTimers();
-
         const messages2: IContent[] = [
           {
             speaker: 'human',
@@ -2150,23 +2147,20 @@ describe('AnthropicProvider', () => {
           },
         ];
 
-        const generator2Promise = (async () => {
-          const gen = provider.generateChatCompletion(
-            buildCallOptions(messages2),
-          );
-          await gen.next();
-        })();
+        const generator2 = provider.generateChatCompletion(
+          buildCallOptions(messages2),
+        );
+        await generator2.next();
 
-        // Fast-forward timers to simulate the wait
-        await vi.runAllTimersAsync();
-        await generator2Promise;
-
-        // Restore timers
-        vi.useRealTimers();
-        Date.now = originalDateNow;
+        // Verify throttling was triggered (sleep was called)
+        expect(sleepSpy).toHaveBeenCalled();
+        const sleepDuration = sleepSpy.mock.calls[0][0] as number;
+        expect(sleepDuration).toBeGreaterThan(0);
+        expect(sleepDuration).toBeLessThanOrEqual(5000);
 
         // Verify the second request was made (after throttling)
         expect(secondWithResponse).toHaveBeenCalled();
+        sleepSpy.mockRestore();
       });
 
       it('should wait when tokens remaining is below threshold', async () => {
@@ -2179,6 +2173,11 @@ describe('AnthropicProvider', () => {
             cache_creation_input_tokens: 0,
           },
         };
+
+        // Spy on sleep to verify throttling behavior without fake timers
+        const sleepSpy = vi
+          .spyOn(provider as never, 'sleep')
+          .mockResolvedValue(undefined);
 
         // First call establishes rate limit state
         const firstHeaders = new Headers({
@@ -2235,8 +2234,99 @@ describe('AnthropicProvider', () => {
           withResponse: secondWithResponse,
         } as unknown as Promise<Anthropic.Message>);
 
-        // Mock timers for deterministic testing
-        vi.useFakeTimers();
+        const messages2: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Second request' }],
+          },
+        ];
+
+        const generator2 = provider.generateChatCompletion(
+          buildCallOptions(messages2),
+        );
+        await generator2.next();
+
+        // Verify throttling was triggered (sleep was called)
+        expect(sleepSpy).toHaveBeenCalled();
+        const sleepDuration = sleepSpy.mock.calls[0][0] as number;
+        expect(sleepDuration).toBeGreaterThan(0);
+        expect(sleepDuration).toBeLessThanOrEqual(5000);
+
+        // Verify the second request was made
+        expect(secondWithResponse).toHaveBeenCalled();
+        sleepSpy.mockRestore();
+      });
+
+      it('should not wait when throttling is disabled', async () => {
+        const mockResponse = {
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+
+        // Set settings BEFORE creating call options
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+        // Rate limit throttle is read from global settings, not provider settings
+        settingsService.set('rate-limit-throttle', 'off');
+
+        // Spy on sleep to verify throttling behavior
+        const sleepSpy = vi
+          .spyOn(provider as never, 'sleep')
+          .mockResolvedValue(undefined);
+
+        // First call establishes rate limit state
+        const firstHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '40', // 4% remaining
+          'anthropic-ratelimit-requests-reset': new Date(
+            Date.now() + 5000,
+          ).toISOString(),
+        });
+
+        const firstWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: firstHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: firstWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First request' }],
+          },
+        ];
+
+        // First request - establishes rate limit state (need to build options AFTER settings change)
+        const generator1 = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator1.next();
+
+        // Second call should NOT trigger throttling
+        const secondHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '39',
+        });
+
+        const secondWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: secondHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: secondWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
 
         const messages2: IContent[] = [
           {
@@ -2245,110 +2335,17 @@ describe('AnthropicProvider', () => {
           },
         ];
 
-        const generator2Promise = (async () => {
-          const gen = provider.generateChatCompletion(
-            buildCallOptions(messages2),
-          );
-          await gen.next();
-        })();
+        // Throttling is disabled, so this should not wait (build options AFTER settings change)
+        const generator2 = provider.generateChatCompletion(
+          buildCallOptions(messages2),
+        );
+        await generator2.next();
 
-        // Fast-forward timers
-        await vi.runAllTimersAsync();
-        await generator2Promise;
-
-        vi.useRealTimers();
-
-        // Verify the second request was made
+        // Verify sleep was NOT called (throttling disabled)
+        expect(sleepSpy).not.toHaveBeenCalled();
         expect(secondWithResponse).toHaveBeenCalled();
+        sleepSpy.mockRestore();
       });
-
-      it(
-        'should not wait when throttling is disabled',
-        { timeout: 10000 },
-        async () => {
-          const mockResponse = {
-            content: [{ type: 'text', text: 'response' }],
-            usage: {
-              input_tokens: 100,
-              output_tokens: 50,
-              cache_read_input_tokens: 0,
-              cache_creation_input_tokens: 0,
-            },
-          };
-
-          // First call establishes rate limit state
-          const firstHeaders = new Headers({
-            'anthropic-ratelimit-requests-limit': '1000',
-            'anthropic-ratelimit-requests-remaining': '40', // 4% remaining
-            'anthropic-ratelimit-requests-reset': new Date(
-              Date.now() + 5000,
-            ).toISOString(),
-          });
-
-          const firstWithResponse = vi.fn().mockResolvedValue({
-            data: mockResponse,
-            response: { headers: firstHeaders },
-          });
-
-          mockMessagesCreate.mockReturnValueOnce({
-            withResponse: firstWithResponse,
-          } as unknown as Promise<Anthropic.Message>);
-
-          settingsService.setProviderSetting(
-            'anthropic',
-            'streaming',
-            'disabled',
-          );
-          settingsService.setProviderSetting(
-            'anthropic',
-            'rate-limit-throttle',
-            'off',
-          );
-
-          const messages: IContent[] = [
-            {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'First request' }],
-            },
-          ];
-
-          // First request - establishes rate limit state
-          const generator1 = provider.generateChatCompletion(
-            buildCallOptions(messages),
-          );
-          await generator1.next();
-
-          // Second call should NOT trigger throttling
-          const secondHeaders = new Headers({
-            'anthropic-ratelimit-requests-limit': '1000',
-            'anthropic-ratelimit-requests-remaining': '39',
-          });
-
-          const secondWithResponse = vi.fn().mockResolvedValue({
-            data: mockResponse,
-            response: { headers: secondHeaders },
-          });
-
-          mockMessagesCreate.mockReturnValueOnce({
-            withResponse: secondWithResponse,
-          } as unknown as Promise<Anthropic.Message>);
-
-          const messages2: IContent[] = [
-            {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'Second request' }],
-            },
-          ];
-
-          // Throttling is disabled, so this should not wait
-          const generator2 = provider.generateChatCompletion(
-            buildCallOptions(messages2),
-          );
-          await generator2.next();
-
-          expect(secondWithResponse).toHaveBeenCalled();
-        },
-      );
 
       it('should respect max wait time', async () => {
         const mockResponse = {
@@ -2360,6 +2357,20 @@ describe('AnthropicProvider', () => {
             cache_creation_input_tokens: 0,
           },
         };
+
+        // Set settings BEFORE creating call options
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+        // Rate limit max wait is read from global settings, not provider settings
+        settingsService.set('rate-limit-max-wait', 1000);
+
+        // Spy on sleep to verify throttling behavior
+        const sleepSpy = vi
+          .spyOn(provider as never, 'sleep')
+          .mockResolvedValue(undefined);
 
         // First call establishes rate limit state with far future reset
         const firstHeaders = new Headers({
@@ -2379,18 +2390,6 @@ describe('AnthropicProvider', () => {
           withResponse: firstWithResponse,
         } as unknown as Promise<Anthropic.Message>);
 
-        settingsService.setProviderSetting(
-          'anthropic',
-          'streaming',
-          'disabled',
-        );
-        // Set max wait to 1 second
-        settingsService.setProviderSetting(
-          'anthropic',
-          'rate-limit-max-wait',
-          1000,
-        );
-
         const messages: IContent[] = [
           {
             speaker: 'human',
@@ -2398,7 +2397,7 @@ describe('AnthropicProvider', () => {
           },
         ];
 
-        // First request - establishes rate limit state
+        // First request - establishes rate limit state (build options AFTER settings change)
         const generator1 = provider.generateChatCompletion(
           buildCallOptions(messages),
         );
@@ -2419,13 +2418,95 @@ describe('AnthropicProvider', () => {
           withResponse: secondWithResponse,
         } as unknown as Promise<Anthropic.Message>);
 
-        // Mock Date.now for deterministic testing
-        const originalDateNow = Date.now;
-        const mockNow = Date.now();
-        vi.spyOn(Date, 'now').mockReturnValue(mockNow);
+        const messages2: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Second request' }],
+          },
+        ];
 
-        // Mock setTimeout to avoid actual waiting
-        vi.useFakeTimers();
+        // Build options AFTER settings change
+        const generator2 = provider.generateChatCompletion(
+          buildCallOptions(messages2),
+        );
+        await generator2.next();
+
+        // Verify sleep was called with max wait (1000ms) not full reset time (300000ms)
+        expect(sleepSpy).toHaveBeenCalled();
+        const sleepDuration = sleepSpy.mock.calls[0][0] as number;
+        expect(sleepDuration).toBe(1000);
+
+        expect(secondWithResponse).toHaveBeenCalled();
+        sleepSpy.mockRestore();
+      });
+
+      it('should not wait when reset time is in the past', async () => {
+        const mockResponse = {
+          content: [{ type: 'text', text: 'response' }],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        };
+
+        // Spy on sleep to verify throttling behavior
+        const sleepSpy = vi
+          .spyOn(provider as never, 'sleep')
+          .mockResolvedValue(undefined);
+
+        // First call establishes rate limit state with past reset
+        const firstHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '40', // 4% remaining
+          'anthropic-ratelimit-requests-reset': new Date(
+            Date.now() - 5000, // 5 seconds ago
+          ).toISOString(),
+        });
+
+        const firstWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: firstHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: firstWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
+
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+
+        const messages: IContent[] = [
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First request' }],
+          },
+        ];
+
+        // First request - establishes rate limit state
+        const generator1 = provider.generateChatCompletion(
+          buildCallOptions(messages),
+        );
+        await generator1.next();
+
+        // Second call should NOT wait (reset time in past)
+        const secondHeaders = new Headers({
+          'anthropic-ratelimit-requests-limit': '1000',
+          'anthropic-ratelimit-requests-remaining': '39',
+        });
+
+        const secondWithResponse = vi.fn().mockResolvedValue({
+          data: mockResponse,
+          response: { headers: secondHeaders },
+        });
+
+        mockMessagesCreate.mockReturnValueOnce({
+          withResponse: secondWithResponse,
+        } as unknown as Promise<Anthropic.Message>);
 
         const messages2: IContent[] = [
           {
@@ -2434,106 +2515,17 @@ describe('AnthropicProvider', () => {
           },
         ];
 
-        const generator2Promise = (async () => {
-          const gen = provider.generateChatCompletion(
-            buildCallOptions(messages2),
-          );
-          await gen.next();
-        })();
+        // Reset time is in the past, so should not wait
+        const generator2 = provider.generateChatCompletion(
+          buildCallOptions(messages2),
+        );
+        await generator2.next();
 
-        // Fast-forward timers to simulate the wait
-        await vi.runAllTimersAsync();
-        await generator2Promise;
-
-        // Restore timers
-        vi.useRealTimers();
-        Date.now = originalDateNow;
-
+        // Verify sleep was NOT called (reset time is in the past)
+        expect(sleepSpy).not.toHaveBeenCalled();
         expect(secondWithResponse).toHaveBeenCalled();
+        sleepSpy.mockRestore();
       });
-
-      it(
-        'should not wait when reset time is in the past',
-        { timeout: 15000 },
-        async () => {
-          const mockResponse = {
-            content: [{ type: 'text', text: 'response' }],
-            usage: {
-              input_tokens: 100,
-              output_tokens: 50,
-              cache_read_input_tokens: 0,
-              cache_creation_input_tokens: 0,
-            },
-          };
-
-          // First call establishes rate limit state with past reset
-          const firstHeaders = new Headers({
-            'anthropic-ratelimit-requests-limit': '1000',
-            'anthropic-ratelimit-requests-remaining': '40', // 4% remaining
-            'anthropic-ratelimit-requests-reset': new Date(
-              Date.now() - 5000, // 5 seconds ago
-            ).toISOString(),
-          });
-
-          const firstWithResponse = vi.fn().mockResolvedValue({
-            data: mockResponse,
-            response: { headers: firstHeaders },
-          });
-
-          mockMessagesCreate.mockReturnValueOnce({
-            withResponse: firstWithResponse,
-          } as unknown as Promise<Anthropic.Message>);
-
-          settingsService.setProviderSetting(
-            'anthropic',
-            'streaming',
-            'disabled',
-          );
-
-          const messages: IContent[] = [
-            {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'First request' }],
-            },
-          ];
-
-          // First request - establishes rate limit state
-          const generator1 = provider.generateChatCompletion(
-            buildCallOptions(messages),
-          );
-          await generator1.next();
-
-          // Second call should NOT wait (reset time in past)
-          const secondHeaders = new Headers({
-            'anthropic-ratelimit-requests-limit': '1000',
-            'anthropic-ratelimit-requests-remaining': '39',
-          });
-
-          const secondWithResponse = vi.fn().mockResolvedValue({
-            data: mockResponse,
-            response: { headers: secondHeaders },
-          });
-
-          mockMessagesCreate.mockReturnValueOnce({
-            withResponse: secondWithResponse,
-          } as unknown as Promise<Anthropic.Message>);
-
-          const messages2: IContent[] = [
-            {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'Second request' }],
-            },
-          ];
-
-          // Reset time is in the past, so should not wait
-          const generator2 = provider.generateChatCompletion(
-            buildCallOptions(messages2),
-          );
-          await generator2.next();
-
-          expect(secondWithResponse).toHaveBeenCalled();
-        },
-      );
 
       it('should use custom threshold percentage', async () => {
         const mockResponse = {
@@ -2545,6 +2537,20 @@ describe('AnthropicProvider', () => {
             cache_creation_input_tokens: 0,
           },
         };
+
+        // Set settings BEFORE creating call options
+        settingsService.setProviderSetting(
+          'anthropic',
+          'streaming',
+          'disabled',
+        );
+        // Rate limit threshold is read from global settings, not provider settings
+        settingsService.set('rate-limit-throttle-threshold', 10);
+
+        // Spy on sleep to verify throttling behavior
+        const sleepSpy = vi
+          .spyOn(provider as never, 'sleep')
+          .mockResolvedValue(undefined);
 
         // First call establishes rate limit state
         const firstHeaders = new Headers({
@@ -2564,18 +2570,6 @@ describe('AnthropicProvider', () => {
           withResponse: firstWithResponse,
         } as unknown as Promise<Anthropic.Message>);
 
-        settingsService.setProviderSetting(
-          'anthropic',
-          'streaming',
-          'disabled',
-        );
-        // Set threshold to 10%
-        settingsService.setProviderSetting(
-          'anthropic',
-          'rate-limit-throttle-threshold',
-          10,
-        );
-
         const messages: IContent[] = [
           {
             speaker: 'human',
@@ -2583,7 +2577,7 @@ describe('AnthropicProvider', () => {
           },
         ];
 
-        // First request - establishes rate limit state
+        // First request - establishes rate limit state (build options AFTER settings change)
         const generator1 = provider.generateChatCompletion(
           buildCallOptions(messages),
         );
@@ -2611,23 +2605,20 @@ describe('AnthropicProvider', () => {
           },
         ];
 
-        // Use fake timers to simulate the throttle wait
-        vi.useFakeTimers();
+        // Build options AFTER settings change
+        const generator2 = provider.generateChatCompletion(
+          buildCallOptions(messages2),
+        );
+        await generator2.next();
 
-        const generator2Promise = (async () => {
-          const gen = provider.generateChatCompletion(
-            buildCallOptions(messages2),
-          );
-          await gen.next();
-        })();
-
-        // Advance timers to trigger the throttle
-        await vi.runAllTimersAsync();
-        await generator2Promise;
-
-        vi.useRealTimers();
+        // Verify throttling was triggered (sleep was called because 8% < 10% threshold)
+        expect(sleepSpy).toHaveBeenCalled();
+        const sleepDuration = sleepSpy.mock.calls[0][0] as number;
+        expect(sleepDuration).toBeGreaterThan(0);
+        expect(sleepDuration).toBeLessThanOrEqual(5000);
 
         expect(secondWithResponse).toHaveBeenCalled();
+        sleepSpy.mockRestore();
       });
 
       it('should not wait when no rate limit info exists', async () => {
