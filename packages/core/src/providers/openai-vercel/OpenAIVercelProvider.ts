@@ -70,6 +70,7 @@ import {
   cleanKimiTokensFromThinking,
   type StripPolicy,
 } from '../reasoning/reasoningUtils.js';
+import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
 
 type VercelTools = Record<string, Tool<unknown, never>>;
 const streamText = Ai.streamText;
@@ -77,14 +78,10 @@ const generateText = Ai.generateText;
 const extractReasoningMiddleware = Ai.extractReasoningMiddleware;
 const wrapLanguageModel = Ai.wrapLanguageModel;
 
-/**
- * Shared buffer for capturing reasoning_content from custom fetch.
- * Used to pass reasoning content between the custom fetch interceptor
- * and the stream processing code.
- */
-interface ReasoningBuffer {
-  chunks: string[];
+interface CaptureBuffer {
+  reasoningChunks: string[];
   finalized: boolean;
+  headers?: Headers;
 }
 
 /**
@@ -95,15 +92,17 @@ interface ReasoningBuffer {
  * from the OpenAI-compatible API response. Kimi K2 and similar models
  * send reasoning via this field.
  *
- * @param reasoningBuffer - Shared buffer to store extracted reasoning
+ * @param captureBuffer - Shared buffer to store extracted reasoning and headers
  * @param logger - Debug logger for diagnostics
  */
 function createReasoningCaptureFetch(
-  reasoningBuffer: ReasoningBuffer,
+  captureBuffer: CaptureBuffer,
   logger: DebugLogger,
 ): typeof fetch {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const response = await fetch(input, init);
+
+    captureBuffer.headers = response.headers;
 
     // Only intercept streaming responses
     const contentType = response.headers.get('content-type') ?? '';
@@ -125,7 +124,7 @@ function createReasoningCaptureFetch(
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
-            reasoningBuffer.finalized = true;
+            captureBuffer.finalized = true;
             break;
           }
 
@@ -150,7 +149,7 @@ function createReasoningCaptureFetch(
               const reasoningContent =
                 parsed.choices?.[0]?.delta?.reasoning_content;
               if (reasoningContent && typeof reasoningContent === 'string') {
-                reasoningBuffer.chunks.push(reasoningContent);
+                captureBuffer.reasoningChunks.push(reasoningContent);
                 logger.debug(
                   () =>
                     `[ReasoningCaptureFetch] Captured reasoning_content chunk: ${reasoningContent.length} chars`,
@@ -168,7 +167,7 @@ function createReasoningCaptureFetch(
         );
       } finally {
         reader.releaseLock();
-        reasoningBuffer.finalized = true;
+        captureBuffer.finalized = true;
       }
     })();
 
@@ -447,11 +446,17 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     return Object.keys(toolsRecord).length > 0 ? toolsRecord : undefined;
   }
 
-  private mapUsageToMetadata(usage: LanguageModelUsage | undefined):
+  private mapUsageToMetadata(
+    usage: LanguageModelUsage | undefined,
+    headers?: Headers,
+  ):
     | {
         promptTokens: number;
         completionTokens: number;
         totalTokens: number;
+        cachedTokens?: number;
+        cacheCreationTokens?: number;
+        cacheMissTokens?: number;
       }
     | undefined {
     if (!usage) return undefined;
@@ -469,10 +474,15 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         ? promptTokens + completionTokens
         : 0);
 
+    const cacheMetrics = extractCacheMetrics(usage, headers);
+
     return {
       promptTokens,
       completionTokens,
       totalTokens,
+      cachedTokens: cacheMetrics.cachedTokens || undefined,
+      cacheCreationTokens: cacheMetrics.cacheCreationTokens || undefined,
+      cacheMissTokens: cacheMetrics.cacheMissTokens || undefined,
     };
   }
 
@@ -804,14 +814,15 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     const maxRetries = (ephemerals['retries'] as number | undefined) ?? 2; // AI SDK default is 2
 
-    // Create reasoning buffer to capture reasoning_content from Kimi K2 and similar models
-    // The Vercel AI SDK doesn't expose reasoning_content, so we intercept it via custom fetch
-    const reasoningBuffer: ReasoningBuffer = { chunks: [], finalized: false };
+    const captureBuffer: CaptureBuffer = {
+      reasoningChunks: [],
+      finalized: false,
+      headers: undefined,
+    };
 
-    // For streaming with reasoning enabled, use custom fetch to capture reasoning_content
     const customFetch =
       streamingEnabled && rsEnabled
-        ? createReasoningCaptureFetch(reasoningBuffer, logger)
+        ? createReasoningCaptureFetch(captureBuffer, logger)
         : undefined;
 
     // Instantiate AI SDK OpenAI provider + chat model
@@ -1178,11 +1189,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
           // This captures reasoning from the raw SSE stream that Vercel SDK doesn't expose
           if (
             !hasEmittedThinking &&
-            reasoningBuffer.chunks.length > 0 &&
+            captureBuffer.reasoningChunks.length > 0 &&
             rsEnabled &&
             rsIncludeInResponse
           ) {
-            const capturedReasoning = reasoningBuffer.chunks.join('');
+            const capturedReasoning = captureBuffer.reasoningChunks.join('');
             // Clean K2 tokens from captured reasoning
             const cleanedReasoning =
               cleanKimiTokensFromThinking(capturedReasoning);
@@ -1201,7 +1212,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
               hasEmittedThinking = true;
               logger.debug(
                 () =>
-                  `[OpenAIVercelProvider] Emitted captured reasoning_content: ${cleanedReasoning.length} chars from ${reasoningBuffer.chunks.length} chunks`,
+                  `[OpenAIVercelProvider] Emitted captured reasoning_content: ${cleanedReasoning.length} chars from ${captureBuffer.reasoningChunks.length} chunks`,
               );
             }
           }
@@ -1320,7 +1331,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
           } as ToolCallBlock;
         });
 
-        const usageMeta = this.mapUsageToMetadata(totalUsage);
+        const usageMeta = this.mapUsageToMetadata(
+          totalUsage,
+          captureBuffer.headers,
+        );
         const metadata =
           usageMeta || finishReason
             ? {
@@ -1338,7 +1352,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         yield toolContent;
       } else {
         // Emit metadata-only message so callers can see usage/finish reason
-        const usageMeta = this.mapUsageToMetadata(totalUsage);
+        const usageMeta = this.mapUsageToMetadata(
+          totalUsage,
+          captureBuffer.headers,
+        );
         const metadata =
           usageMeta || finishReason
             ? {

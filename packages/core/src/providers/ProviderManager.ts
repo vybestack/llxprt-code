@@ -76,7 +76,8 @@ interface ProviderManagerInit {
 
 export interface CacheStatistics {
   totalCacheReads: number;
-  totalCacheWrites: number;
+  /** null means provider doesn't report cache writes; 0 means explicitly reported as zero */
+  totalCacheWrites: number | null;
   requestsWithCacheHits: number;
   requestsWithCacheWrites: number;
   hitRate: number;
@@ -111,7 +112,7 @@ export class ProviderManager implements IProviderManager {
   };
   private cacheStats: CacheStatistics = {
     totalCacheReads: 0,
-    totalCacheWrites: 0,
+    totalCacheWrites: null,
     requestsWithCacheHits: 0,
     requestsWithCacheWrites: 0,
     hitRate: 0,
@@ -1016,7 +1017,7 @@ export class ProviderManager implements IProviderManager {
       tool: number;
       thought: number;
       cacheReads?: number;
-      cacheWrites?: number;
+      cacheWrites?: number | null;
     },
   ): void {
     logger.debug(
@@ -1045,6 +1046,7 @@ export class ProviderManager implements IProviderManager {
       Math.max(0, usage.thought || 0);
 
     // Track cache reads/writes if provided
+    // Note: cacheWrites can be null (provider doesn't report) vs undefined (not in usage object)
     if (usage.cacheReads !== undefined || usage.cacheWrites !== undefined) {
       logger.debug(
         () =>
@@ -1052,7 +1054,9 @@ export class ProviderManager implements IProviderManager {
       );
       this.trackCacheUsage(
         Math.max(0, usage.cacheReads || 0),
-        Math.max(0, usage.cacheWrites || 0),
+        usage.cacheWrites === null || usage.cacheWrites === undefined
+          ? null
+          : Math.max(0, usage.cacheWrites),
       );
     } else {
       logger.debug(
@@ -1100,8 +1104,10 @@ export class ProviderManager implements IProviderManager {
 
   /**
    * Track cache read/write statistics from a request
+   * @param cacheReads - Number of tokens read from cache
+   * @param cacheWrites - Number of tokens written to cache, or null if provider doesn't report this
    */
-  trackCacheUsage(cacheReads: number, cacheWrites: number): void {
+  trackCacheUsage(cacheReads: number, cacheWrites: number | null): void {
     logger.debug(
       () =>
         `[ProviderManager.trackCacheUsage] Called with cacheReads=${cacheReads}, cacheWrites=${cacheWrites}`,
@@ -1114,9 +1120,16 @@ export class ProviderManager implements IProviderManager {
           `[ProviderManager.trackCacheUsage] Updated totalCacheReads to ${this.cacheStats.totalCacheReads}`,
       );
     }
-    if (cacheWrites > 0) {
+    // Only track cache writes if the provider reports them (not null)
+    if (cacheWrites !== null) {
+      // Initialize from null to 0 on first reported value
+      if (this.cacheStats.totalCacheWrites === null) {
+        this.cacheStats.totalCacheWrites = 0;
+      }
       this.cacheStats.totalCacheWrites += cacheWrites;
-      this.cacheStats.requestsWithCacheWrites++;
+      if (cacheWrites > 0) {
+        this.cacheStats.requestsWithCacheWrites++;
+      }
       logger.debug(
         () =>
           `[ProviderManager.trackCacheUsage] Updated totalCacheWrites to ${this.cacheStats.totalCacheWrites}`,

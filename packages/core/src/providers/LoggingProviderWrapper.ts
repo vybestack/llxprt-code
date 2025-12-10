@@ -28,6 +28,7 @@ import {
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
+import type { ProviderPerformanceMetrics } from './types.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
@@ -889,20 +890,32 @@ export class LoggingProviderWrapper implements IProvider {
     thoughts_token_count: number;
     tool_token_count: number;
     cache_read_input_tokens: number;
-    cache_creation_input_tokens: number;
+    cache_creation_input_tokens: number | null;
   } {
     const cacheReads = Math.max(
       0,
-      Number(tokenUsage.cache_read_input_tokens) || 0,
+      Number(tokenUsage.cachedTokens) ||
+        Number(tokenUsage.cache_read_input_tokens) ||
+        0,
     );
-    const cacheWrites = Math.max(
-      0,
-      Number(tokenUsage.cache_creation_input_tokens) || 0,
-    );
+
+    // Check if cache writes are actually reported by the provider
+    const hasCacheWriteData =
+      tokenUsage.cacheCreationTokens !== undefined ||
+      tokenUsage.cache_creation_input_tokens !== undefined;
+
+    const cacheWrites = hasCacheWriteData
+      ? Math.max(
+          0,
+          Number(tokenUsage.cacheCreationTokens) ||
+            Number(tokenUsage.cache_creation_input_tokens) ||
+            0,
+        )
+      : null;
 
     this.debug.debug(
       () =>
-        `[extractTokenCountsFromTokenUsage] Extracting from UsageStats: cacheReads=${cacheReads}, cacheWrites=${cacheWrites}, raw values: cache_read=${tokenUsage.cache_read_input_tokens}, cache_creation=${tokenUsage.cache_creation_input_tokens}`,
+        `[extractTokenCountsFromTokenUsage] Extracting from UsageStats: cacheReads=${cacheReads}, cacheWrites=${cacheWrites}, raw values: cachedTokens=${tokenUsage.cachedTokens}, cache_read=${tokenUsage.cache_read_input_tokens}, cacheCreationTokens=${tokenUsage.cacheCreationTokens}, cache_creation=${tokenUsage.cache_creation_input_tokens}`,
     );
 
     return {
@@ -1027,19 +1040,31 @@ export class LoggingProviderWrapper implements IProvider {
       thoughts_token_count: number;
       tool_token_count: number;
       cache_read_input_tokens?: number;
-      cache_creation_input_tokens?: number;
+      cache_creation_input_tokens?: number | null;
     },
     config: Config | undefined,
   ): void {
     // Map token counts to expected format
-    const usage = {
+    // Preserve null for cacheWrites to distinguish "not reported" from "0"
+    const usage: {
+      input: number;
+      output: number;
+      cache: number;
+      thought: number;
+      tool: number;
+      cacheReads: number;
+      cacheWrites: number | null;
+    } = {
       input: tokenCounts.input_token_count || 0,
       output: tokenCounts.output_token_count || 0,
       cache: tokenCounts.cached_content_token_count || 0,
       thought: tokenCounts.thoughts_token_count || 0,
       tool: tokenCounts.tool_token_count || 0,
       cacheReads: tokenCounts.cache_read_input_tokens || 0,
-      cacheWrites: tokenCounts.cache_creation_input_tokens || 0,
+      cacheWrites:
+        tokenCounts.cache_creation_input_tokens === undefined
+          ? null
+          : tokenCounts.cache_creation_input_tokens,
     };
 
     this.debug.debug(
@@ -1235,7 +1260,7 @@ export class LoggingProviderWrapper implements IProvider {
    * Get the latest performance metrics from the tracker
    * @plan PLAN-20250909-TOKTRACK
    */
-  getPerformanceMetrics() {
+  getPerformanceMetrics(): ProviderPerformanceMetrics {
     return this.performanceTracker.getLatestMetrics();
   }
 }
