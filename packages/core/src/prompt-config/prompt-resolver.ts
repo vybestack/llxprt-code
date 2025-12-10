@@ -218,6 +218,11 @@ export class PromptResolver {
     // 5. Resolve tool prompts (only if enabled via setting, default: false)
     if (context.enableToolPrompts) {
       for (const tool of context.enabledTools) {
+        // Skip MCP tools - they don't have prompt files
+        if (tool.startsWith('mcp__')) {
+          continue;
+        }
+
         const toolFileName = this.convertToKebabCase(tool) + '.md';
         const toolPath = 'tools/' + toolFileName;
         const toolResult = this.resolveFile(baseDir, toolPath, context);
