@@ -102,7 +102,7 @@ export const CacheStatsDisplay: React.FC = () => {
         <Text color={Colors.Foreground}>
           No cache data available. Cache statistics are available for providers
           with prompt caching support (Anthropic, OpenAI, Groq, Deepseek,
-          Fireworks, OpenRouter).
+          Fireworks, OpenRouter, Qwen).
         </Text>
       </Box>
     );

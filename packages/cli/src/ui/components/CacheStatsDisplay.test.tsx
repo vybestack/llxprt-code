@@ -67,6 +67,7 @@ describe('<CacheStatsDisplay />', () => {
     expect(output).toContain('Deepseek');
     expect(output).toContain('Fireworks');
     expect(output).toContain('OpenRouter');
+    expect(output).toContain('Qwen');
   });
 
   it('should display cache statistics when cache data is available', () => {

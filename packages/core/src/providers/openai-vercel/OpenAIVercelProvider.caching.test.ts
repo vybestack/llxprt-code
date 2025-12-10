@@ -218,7 +218,11 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
   });
 
   describe('Fireworks cache headers via custom fetch', () => {
-    it('extracts Fireworks cache headers via custom fetch', async () => {
+    // Note: Full end-to-end testing of Fireworks header extraction would require
+    // mocking the underlying fetch to return fireworks-cached-prompt-tokens header.
+    // This test verifies the streaming path works; actual header extraction is
+    // covered by the cacheMetricsExtractor unit tests.
+    it('handles streaming response and includes usage metadata', async () => {
       const { streamText } = await import('ai');
       const mockStreamText = streamText as ReturnType<typeof vi.fn>;
 
@@ -264,6 +268,9 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
       expect(results.length).toBeGreaterThan(0);
       const lastResult = results[results.length - 1];
       expect(lastResult.metadata).toBeDefined();
+      expect(lastResult.metadata?.usage).toBeDefined();
+      expect(lastResult.metadata?.usage?.promptTokens).toBe(100);
+      expect(lastResult.metadata?.usage?.completionTokens).toBe(50);
     });
   });
 

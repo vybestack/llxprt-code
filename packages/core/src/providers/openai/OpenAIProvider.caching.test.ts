@@ -7,14 +7,17 @@ import { createProviderCallOptions } from '../../test-utils/providerCallOptions.
 
 const { mockChatCreate, mockOpenAIConstructor } = vi.hoisted(() => {
   const chatCreate = vi.fn();
-  const constructor = vi.fn().mockImplementation(() => ({
+  const openAIConstructorMock = vi.fn().mockImplementation(() => ({
     chat: {
       completions: {
         create: chatCreate,
       },
     },
   }));
-  return { mockChatCreate: chatCreate, mockOpenAIConstructor: constructor };
+  return {
+    mockChatCreate: chatCreate,
+    mockOpenAIConstructor: openAIConstructorMock,
+  };
 });
 
 let settingsServiceRef: { current: SettingsService } = {
