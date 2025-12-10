@@ -94,7 +94,13 @@ describe('replace', () => {
 
   it('should fail safely when old_string is not found', async () => {
     const rig = new TestRig();
-    await rig.setup('should fail safely when old_string is not found');
+    await rig.setup('should fail safely when old_string is not found', {
+      settings: {
+        // Prevent LLM from using write_file to bypass the replace failure
+        // This ensures the test is deterministic by restricting available tools
+        excludeTools: ['write_file'],
+      },
+    });
     const fileName = 'no_match.txt';
     const fileContent = 'hello world';
     rig.createFile(fileName, fileContent);
