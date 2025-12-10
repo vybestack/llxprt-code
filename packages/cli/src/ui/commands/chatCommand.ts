@@ -30,6 +30,7 @@ import type {
 import { MessageType } from '../types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import { type Part } from '@google/genai';
+import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const getSavedChatTags = async (
   context: CommandContext,
@@ -81,21 +82,13 @@ const chatTagSchema: CommandArgumentSchema = [
      * @requirement:REQ-004
      * Schema completer replaces legacy checkpoint completion.
      */
-    completer: async (ctx, partialArg) => {
+    completer: withFuzzyFilter(async (ctx) => {
       const chatDetails = await getSavedChatTags(ctx, true);
-      const normalizedPartial = partialArg.toLowerCase();
-      return chatDetails
-        .map((chat) => chat.name)
-        .filter((name) =>
-          normalizedPartial.length === 0
-            ? true
-            : name.toLowerCase().startsWith(normalizedPartial),
-        )
-        .map((name) => ({
-          value: name,
-          description: checkpointSuggestionDescription,
-        }));
-    },
+      return chatDetails.map((chat) => ({
+        value: chat.name,
+        description: checkpointSuggestionDescription,
+      }));
+    }),
   },
 ];
 

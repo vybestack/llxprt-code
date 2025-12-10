@@ -41,6 +41,7 @@ describe('SettingsSchema', () => {
         'useRipgrep',
         'debugKeystrokeLogging',
         'toolCallProcessingMode',
+        'enableFuzzyFiltering',
       ];
 
       expectedSettings.forEach((setting) => {

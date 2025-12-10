@@ -94,6 +94,12 @@ describe('chatCommand', () => {
           deleteCheckpoint: mockDeleteCheckpoint,
           initialize: vi.fn().mockResolvedValue(undefined),
         },
+        settings: {
+          merged: {
+            // Disable fuzzy filtering for tests expecting prefix matching
+            enableFuzzyFiltering: false,
+          },
+        },
       },
     });
   });

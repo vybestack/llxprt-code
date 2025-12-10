@@ -13,6 +13,7 @@ import type {
   ValueArgument,
 } from './types.js';
 import type { CommandContext } from '../types.js';
+import { filterCompletions } from '../../utils/fuzzyFilter.js';
 
 export type CompletionInput =
   | string
@@ -246,17 +247,13 @@ async function suggestForValue(
 ): Promise<readonly Option[]> {
   try {
     if (node.options?.length) {
-      const lowerPartial = partialArg.toLowerCase();
-      return node.options
-        .filter((option) =>
-          lowerPartial.length === 0
-            ? true
-            : option.value.toLowerCase().startsWith(lowerPartial),
-        )
-        .map((option) => ({
-          value: option.value,
-          description: option.description,
-        }));
+      // Get the fuzzy filtering setting from context
+      // Default to true if setting is not defined
+      const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
+      const enableFuzzy = settingValue ?? true;
+
+      // Use filterCompletions for both fuzzy and exact prefix matching
+      return filterCompletions(node.options, partialArg, { enableFuzzy });
     }
 
     if (node.completer) {
@@ -277,20 +274,21 @@ async function suggestForValue(
 }
 
 function suggestForLiterals(
+  ctx: CommandContext,
   nodes: LiteralArgument[],
   partialArg: string,
 ): readonly Option[] {
-  const lowerPartial = partialArg.toLowerCase();
-  return nodes
-    .filter((node) =>
-      lowerPartial.length === 0
-        ? true
-        : node.value.toLowerCase().startsWith(lowerPartial),
-    )
-    .map((node) => ({
-      value: node.value,
-      description: node.description,
-    }));
+  const options = nodes.map((node) => ({
+    value: node.value,
+    description: node.description,
+  }));
+
+  // Get the fuzzy filtering setting from context
+  // Default to true if setting is not defined
+  const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
+  const enableFuzzy = settingValue ?? true;
+
+  return filterCompletions(options, partialArg, { enableFuzzy });
 }
 
 async function computeHintForValue(
@@ -456,7 +454,11 @@ export function createCompletionHandler(schema: CommandArgumentSchema) {
       );
       hint = await computeHintForValue(ctx, active.node, argumentTokenInfo);
     } else if (active.kind === 'literal') {
-      suggestions = suggestForLiterals(active.nodes, normalized.partialArg);
+      suggestions = suggestForLiterals(
+        ctx,
+        active.nodes,
+        normalized.partialArg,
+      );
       hint = inferLiteralHint(active.nodes);
     }
 

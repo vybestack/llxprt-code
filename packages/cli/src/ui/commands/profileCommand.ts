@@ -18,35 +18,25 @@ import {
 } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
+import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const profileSuggestionDescription = 'Saved profile';
-const normalizeProfilePartial = (partial: string): string =>
-  partial.startsWith('"') ? partial.slice(1) : partial;
 
 async function listProfiles(): Promise<string[]> {
   return getRuntimeApi().listSavedProfiles();
 }
 
-function filterProfiles(partialArg: string, profiles: string[]): string[] {
-  const normalizedPartial = normalizeProfilePartial(partialArg).toLowerCase();
-  return profiles.filter((profile) =>
-    normalizedPartial.length === 0
-      ? true
-      : profile.toLowerCase().startsWith(normalizedPartial),
-  );
-}
-
-const profileNameCompleter: CompleterFn = async (_ctx, partialArg) => {
+const profileNameCompleter: CompleterFn = withFuzzyFilter(async () => {
   try {
     const profiles = await listProfiles();
-    return filterProfiles(partialArg, profiles).map((profile) => ({
+    return profiles.map((profile) => ({
       value: profile,
       description: profileSuggestionDescription,
     }));
   } catch {
     return [];
   }
-};
+});
 
 const profileSaveSchema: CommandArgumentSchema = [
   {
@@ -85,29 +75,21 @@ const profileSetDefaultSchema: CommandArgumentSchema = [
     kind: 'value',
     name: 'profile',
     description: 'Set default profile or choose none',
-    completer: async (_ctx, partialArg) => {
+    completer: withFuzzyFilter(async () => {
       try {
         const profiles = await listProfiles();
         const candidates = ['none', ...profiles];
-        const normalizedPartial =
-          normalizeProfilePartial(partialArg).toLowerCase();
-        return candidates
-          .filter((option) =>
-            normalizedPartial.length === 0
-              ? true
-              : option.toLowerCase().startsWith(normalizedPartial),
-          )
-          .map((option) => ({
-            value: option,
-            description:
-              option === 'none'
-                ? 'Clear default profile'
-                : profileSuggestionDescription,
-          }));
+        return candidates.map((option) => ({
+          value: option,
+          description:
+            option === 'none'
+              ? 'Clear default profile'
+              : profileSuggestionDescription,
+        }));
       } catch {
         return [];
       }
-    },
+    }),
   },
 ];
 
