@@ -59,6 +59,33 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
     return results;
   }
 
+  function createTestProvider(): OpenAIVercelProvider {
+    return new OpenAIVercelProvider('test-api-key', undefined, {
+      settingsService,
+    });
+  }
+
+  function createTestMessages(): IContent[] {
+    return [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
+      },
+    ];
+  }
+
+  function createTestOptions(streaming: boolean): ProviderCallOptions {
+    return createProviderCallOptions({
+      config,
+      contents: createTestMessages(),
+      settings: settingsService,
+      resolved: {
+        streaming,
+      },
+      providerName: 'openaivercel',
+    });
+  }
+
   describe('Vercel AI SDK usage format', () => {
     it('extracts cache metrics from Vercel AI SDK usage', async () => {
       const { generateText } = await import('ai');
@@ -76,26 +103,8 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
         toolCalls: [],
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
-
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ];
-
-      const options: ProviderCallOptions = createProviderCallOptions({
-        config,
-        contents: messages,
-        settings: settingsService,
-        resolved: {
-          streaming: false,
-        },
-        providerName: 'openaivercel',
-      });
+      provider = createTestProvider();
+      const options = createTestOptions(false);
 
       const results = await collectResults(
         provider.generateChatCompletion(options),
@@ -129,26 +138,8 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
         toolCalls: [],
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
-
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ];
-
-      const options: ProviderCallOptions = createProviderCallOptions({
-        config,
-        contents: messages,
-        settings: settingsService,
-        resolved: {
-          streaming: false,
-        },
-        providerName: 'openaivercel',
-      });
+      provider = createTestProvider();
+      const options = createTestOptions(false);
 
       const results = await collectResults(
         provider.generateChatCompletion(options),
@@ -180,26 +171,8 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
         toolCalls: [],
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
-
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ];
-
-      const options: ProviderCallOptions = createProviderCallOptions({
-        config,
-        contents: messages,
-        settings: settingsService,
-        resolved: {
-          streaming: false,
-        },
-        providerName: 'openaivercel',
-      });
+      provider = createTestProvider();
+      const options = createTestOptions(false);
 
       const results = await collectResults(
         provider.generateChatCompletion(options),
@@ -240,26 +213,8 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
         })(),
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
-
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ];
-
-      const options: ProviderCallOptions = createProviderCallOptions({
-        config,
-        contents: messages,
-        settings: settingsService,
-        resolved: {
-          streaming: true,
-        },
-        providerName: 'openaivercel',
-      });
+      provider = createTestProvider();
+      const options = createTestOptions(true);
 
       const results = await collectResults(
         provider.generateChatCompletion(options),
@@ -292,26 +247,8 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
         toolCalls: [],
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
-
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ];
-
-      const options: ProviderCallOptions = createProviderCallOptions({
-        config,
-        contents: messages,
-        settings: settingsService,
-        resolved: {
-          streaming: false,
-        },
-        providerName: 'openaivercel',
-      });
+      provider = createTestProvider();
+      const options = createTestOptions(false);
 
       const results = await collectResults(
         provider.generateChatCompletion(options),
@@ -352,26 +289,8 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
         })(),
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
-
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ];
-
-      const options: ProviderCallOptions = createProviderCallOptions({
-        config,
-        contents: messages,
-        settings: settingsService,
-        resolved: {
-          streaming: true,
-        },
-        providerName: 'openaivercel',
-      });
+      provider = createTestProvider();
+      const options = createTestOptions(true);
 
       const results = await collectResults(
         provider.generateChatCompletion(options),
@@ -407,26 +326,8 @@ describe('OpenAIVercelProvider - Cache Metrics', () => {
         toolCalls: [],
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
-
-      const messages: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ];
-
-      const options: ProviderCallOptions = createProviderCallOptions({
-        config,
-        contents: messages,
-        settings: settingsService,
-        resolved: {
-          streaming: false,
-        },
-        providerName: 'openaivercel',
-      });
+      provider = createTestProvider();
+      const options = createTestOptions(false);
 
       const results = await collectResults(
         provider.generateChatCompletion(options),

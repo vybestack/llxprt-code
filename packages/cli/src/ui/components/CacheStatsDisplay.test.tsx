@@ -89,15 +89,16 @@ describe('<CacheStatsDisplay />', () => {
     expect(output).toContain('Total Cache Reads');
     expect(output).toContain('Total Cache Writes');
     expect(output).toContain('Cache Hit Rate');
-    expect(output).toContain('Token Savings');
-    expect(output).toContain('Estimated Cost Savings');
     expect(output).toContain('Requests with Cache Hits');
+
+    // Verify removed metrics are not present
+    expect(output).not.toContain('Token Savings');
+    expect(output).not.toContain('Estimated Cost Savings');
 
     // Check for values (using regex to match any locale format)
     expect(output).toMatch(/2[,\s]?000/); // Cache reads
     expect(output).toMatch(/500/); // Cache writes
     expect(output).toMatch(/20\.0%/); // Hit rate
-    expect(output).toMatch(/1[,\s]?800/); // Token savings (90% of 2000)
   });
 
   it('should handle multiple cache hits correctly', () => {
@@ -113,7 +114,8 @@ describe('<CacheStatsDisplay />', () => {
     expect(output).toContain('Total Cache Reads');
     expect(output).toMatch(/15[,\s]?000/); // Cache reads
     expect(output).toMatch(/45\.5%/); // Hit rate
-    expect(output).toMatch(/13[,\s]?500/); // Token savings (90% of 15000)
+    expect(output).not.toContain('Token Savings');
+    expect(output).not.toContain('Estimated Cost Savings');
   });
 
   it('should display hit rate with proper formatting', () => {
@@ -129,7 +131,7 @@ describe('<CacheStatsDisplay />', () => {
     expect(output).toMatch(/33\.3%/);
   });
 
-  it('should calculate cost savings correctly', () => {
+  it('should not display cost savings', () => {
     const { lastFrame } = renderWithMockedCacheStats({
       totalCacheReads: 10000,
       totalCacheWrites: 2000,
@@ -139,9 +141,9 @@ describe('<CacheStatsDisplay />', () => {
     });
 
     const output = lastFrame();
-    // Token savings: 10000 * 0.9 = 9000
-    // Cost savings: (9000 / 1000) * 0.003 * 0.9 = $0.0243
-    expect(output).toMatch(/\$0\.024[0-9]/);
+    expect(output).not.toContain('Token Savings');
+    expect(output).not.toContain('Estimated Cost Savings');
+    expect(output).not.toMatch(/\$/);
   });
 
   it('should hide cache writes row when provider does not report it (null)', () => {
