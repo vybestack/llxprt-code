@@ -65,10 +65,121 @@ import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import { AuthenticationError, wrapError } from './errors.js';
+import {
+  filterThinkingForContext,
+  cleanKimiTokensFromThinking,
+  type StripPolicy,
+} from '../reasoning/reasoningUtils.js';
 
 type VercelTools = Record<string, Tool<unknown, never>>;
 const streamText = Ai.streamText;
 const generateText = Ai.generateText;
+const extractReasoningMiddleware = Ai.extractReasoningMiddleware;
+const wrapLanguageModel = Ai.wrapLanguageModel;
+
+/**
+ * Shared buffer for capturing reasoning_content from custom fetch.
+ * Used to pass reasoning content between the custom fetch interceptor
+ * and the stream processing code.
+ */
+interface ReasoningBuffer {
+  chunks: string[];
+  finalized: boolean;
+}
+
+/**
+ * Creates a custom fetch function that intercepts streaming responses
+ * and extracts reasoning_content from SSE chunks.
+ *
+ * This is necessary because Vercel AI SDK doesn't expose reasoning_content
+ * from the OpenAI-compatible API response. Kimi K2 and similar models
+ * send reasoning via this field.
+ *
+ * @param reasoningBuffer - Shared buffer to store extracted reasoning
+ * @param logger - Debug logger for diagnostics
+ */
+function createReasoningCaptureFetch(
+  reasoningBuffer: ReasoningBuffer,
+  logger: DebugLogger,
+): typeof fetch {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    const response = await fetch(input, init);
+
+    // Only intercept streaming responses
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.includes('text/event-stream') || !response.body) {
+      return response;
+    }
+
+    // Tee the response body so both our parser and SDK can read it
+    const [parserStream, sdkStream] = response.body.tee();
+
+    // Process the parser stream to extract reasoning_content
+    // This runs in the background while SDK processes the other stream
+    void (async () => {
+      const reader = parserStream.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            reasoningBuffer.finalized = true;
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE chunks (data: {...}\n\n)
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? ''; // Keep incomplete line for next iteration
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') continue;
+
+            try {
+              const parsed = JSON.parse(jsonStr) as {
+                choices?: Array<{
+                  delta?: { reasoning_content?: string };
+                }>;
+              };
+
+              const reasoningContent =
+                parsed.choices?.[0]?.delta?.reasoning_content;
+              if (reasoningContent && typeof reasoningContent === 'string') {
+                reasoningBuffer.chunks.push(reasoningContent);
+                logger.debug(
+                  () =>
+                    `[ReasoningCaptureFetch] Captured reasoning_content chunk: ${reasoningContent.length} chars`,
+                );
+              }
+            } catch {
+              // Ignore JSON parse errors (malformed chunks)
+            }
+          }
+        }
+      } catch (err) {
+        logger.debug(
+          () =>
+            `[ReasoningCaptureFetch] Stream parsing error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      } finally {
+        reader.releaseLock();
+        reasoningBuffer.finalized = true;
+      }
+    })();
+
+    // Return response with the SDK stream
+    return new Response(sdkStream, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  };
+}
 
 /**
  * Vercel OpenAI-based provider using AI SDK v5.
@@ -122,9 +233,13 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
    *
    * Uses the resolved runtime auth token and baseURL, and still allows
    * local endpoints without authentication (for Ollama-style servers).
+   *
+   * @param options - Normalized generate chat options
+   * @param customFetch - Optional custom fetch function for intercepting responses
    */
   private async createOpenAIClient(
     options: NormalizedGenerateChatOptions,
+    customFetch?: typeof fetch,
   ): Promise<ReturnType<typeof createOpenAI>> {
     const authToken =
       (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
@@ -144,6 +259,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       apiKey: authToken || undefined,
       baseURL: baseURL || undefined,
       headers: headers || undefined,
+      fetch: customFetch,
     });
   }
 
@@ -264,7 +380,10 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
    * For Kimi K2 models, uses ToolIdStrategy to generate proper tool IDs
    * in the format functions.{name}:{index} instead of call_xxx.
    */
-  private convertToModelMessages(contents: IContent[]): ModelMessage[] {
+  private convertToModelMessages(
+    contents: IContent[],
+    options?: { includeReasoningInContext?: boolean },
+  ): ModelMessage[] {
     const toolFormat = this.detectToolFormat();
 
     // Create a ToolIdMapper based on the tool format
@@ -277,6 +396,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     return convertToVercelMessages(
       contents,
       toolIdMapper,
+      options,
     ) as unknown as ModelMessage[];
   }
 
@@ -564,6 +684,28 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       });
     }
 
+    // Reasoning settings with defaults
+    const rsEnabled =
+      (options.settings.get('reasoning.enabled') as boolean | undefined) ??
+      true;
+    const rsIncludeInResponse =
+      (options.settings.get('reasoning.includeInResponse') as
+        | boolean
+        | undefined) ?? true;
+    const rsIncludeInContext =
+      (options.settings.get('reasoning.includeInContext') as
+        | boolean
+        | undefined) ?? false;
+    const rsStripFromContext =
+      (options.settings.get('reasoning.stripFromContext') as
+        | StripPolicy
+        | undefined) ?? 'all';
+    const rsFormat =
+      (options.settings.get('reasoning.format') as
+        | 'native'
+        | 'field'
+        | undefined) ?? 'field';
+
     // Determine streaming vs non-streaming mode (default: enabled)
     const streamingSetting = ephemerals['streaming'];
     const streamingResolved = options.resolved?.streaming;
@@ -594,8 +736,15 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
       toolNamesArg,
     );
 
+    // Filter thinking from context based on settings
+    const stripPolicy = rsEnabled ? rsStripFromContext : 'all'; // If disabled, strip all
+    const filteredContents = filterThinkingForContext(contents, stripPolicy);
+
     // Convert internal history to AI SDK ModelMessages with structured tool replay.
-    const messages: ModelMessage[] = this.convertToModelMessages(contents);
+    const messages: ModelMessage[] = this.convertToModelMessages(
+      filteredContents,
+      { includeReasoningInContext: rsIncludeInContext },
+    );
 
     if (logger.enabled) {
       logger.debug(() => `[OpenAIVercelProvider] Chat payload snapshot`, {
@@ -655,19 +804,52 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
     const maxRetries = (ephemerals['retries'] as number | undefined) ?? 2; // AI SDK default is 2
 
+    // Create reasoning buffer to capture reasoning_content from Kimi K2 and similar models
+    // The Vercel AI SDK doesn't expose reasoning_content, so we intercept it via custom fetch
+    const reasoningBuffer: ReasoningBuffer = { chunks: [], finalized: false };
+
+    // For streaming with reasoning enabled, use custom fetch to capture reasoning_content
+    const customFetch =
+      streamingEnabled && rsEnabled
+        ? createReasoningCaptureFetch(reasoningBuffer, logger)
+        : undefined;
+
     // Instantiate AI SDK OpenAI provider + chat model
-    const openaiProvider = await this.createOpenAIClient(options);
+    const openaiProvider = await this.createOpenAIClient(options, customFetch);
     const providerWithChat = openaiProvider as unknown as {
       chat?: (modelId: string) => unknown;
       (modelId: string): unknown;
     };
-    const model = (
+    const baseModel = (
       providerWithChat.chat
         ? providerWithChat.chat(modelId)
         : providerWithChat(modelId)
     ) as LanguageModel;
 
+    // For streaming: DON'T use middleware - let raw text with <think> tags flow through
+    // so our manual extraction logic (extractThinkTagsAsBlock + flushBuffer) can process them.
+    // The middleware removes tags from the text stream before our code sees them.
+    //
+    // For non-streaming: Use middleware to extract <think> tags and expose via result.reasoning
+    // The middleware adds reasoning as a property on the generateText result.
+    const useMiddlewareForNonStreaming = rsEnabled && !streamingEnabled;
+    const model = useMiddlewareForNonStreaming
+      ? wrapLanguageModel({
+          model: baseModel as unknown as Parameters<
+            typeof wrapLanguageModel
+          >[0]['model'],
+          middleware: extractReasoningMiddleware({
+            tagName: 'think',
+            separator: '\n',
+          }),
+        })
+      : baseModel;
+
     if (logger.enabled) {
+      logger.debug(
+        () =>
+          `[OpenAIVercelProvider] Reasoning: enabled=${rsEnabled}, streaming=${streamingEnabled}, useMiddleware=${useMiddlewareForNonStreaming}`,
+      );
       logger.debug(() => `[OpenAIVercelProvider] Sending chat request`, {
         model: modelId,
         baseURL: resolved.baseURL ?? this.getBaseURL(),
@@ -916,14 +1098,32 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
               }
               case 'reasoning': {
                 // Handle reasoning/thinking content from models like Kimi K2
-                // Accumulate reasoning content rather than emitting immediately
-                // This allows combining with <think> tags from text-delta
+                if (!rsEnabled) break;
                 const reasoning = (part as { text?: string }).text;
-                if (reasoning) {
+                if (!reasoning) break;
+
+                // Clean K2 markers from thought
+                const cleaned = cleanKimiTokensFromThinking(reasoning);
+
+                if (rsIncludeInResponse && rsFormat === 'native') {
+                  // Interleaved mode: emit thinking as it arrives (for Minimax M2)
+                  yield {
+                    speaker: 'ai',
+                    blocks: [
+                      {
+                        type: 'thinking',
+                        thought: cleaned,
+                        sourceField: 'reasoning_content',
+                        isHidden: false,
+                      } as ThinkingBlock,
+                    ],
+                  } as IContent;
+                } else if (rsIncludeInResponse) {
+                  // Accumulate mode: buffer for K2/field mode
                   if (accumulatedThinkingContent.length > 0) {
                     accumulatedThinkingContent += ' ';
                   }
-                  accumulatedThinkingContent += reasoning;
+                  accumulatedThinkingContent += cleaned;
                   logger.debug(
                     () =>
                       `[OpenAIVercelProvider] Accumulated reasoning: ${accumulatedThinkingContent.length} chars`,
@@ -946,13 +1146,22 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
           }
 
           // Emit any remaining accumulated thinking content that wasn't emitted yet
-          if (!hasEmittedThinking && accumulatedThinkingContent.length > 0) {
+          if (
+            !hasEmittedThinking &&
+            accumulatedThinkingContent.length > 0 &&
+            rsEnabled &&
+            rsIncludeInResponse
+          ) {
+            // Clean K2 tokens from accumulated thinking
+            const cleanedThought = cleanKimiTokensFromThinking(
+              accumulatedThinkingContent,
+            );
             yield {
               speaker: 'ai',
               blocks: [
                 {
                   type: 'thinking',
-                  thought: accumulatedThinkingContent,
+                  thought: cleanedThought,
                   sourceField: 'reasoning_content',
                   isHidden: false,
                 } as ThinkingBlock,
@@ -961,8 +1170,40 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
             hasEmittedThinking = true;
             logger.debug(
               () =>
-                `[OpenAIVercelProvider] Emitted final thinking block: ${accumulatedThinkingContent.length} chars`,
+                `[OpenAIVercelProvider] Emitted final thinking block: ${cleanedThought.length} chars`,
             );
+          }
+
+          // Emit reasoning_content captured from custom fetch (for Kimi K2 and similar)
+          // This captures reasoning from the raw SSE stream that Vercel SDK doesn't expose
+          if (
+            !hasEmittedThinking &&
+            reasoningBuffer.chunks.length > 0 &&
+            rsEnabled &&
+            rsIncludeInResponse
+          ) {
+            const capturedReasoning = reasoningBuffer.chunks.join('');
+            // Clean K2 tokens from captured reasoning
+            const cleanedReasoning =
+              cleanKimiTokensFromThinking(capturedReasoning);
+            if (cleanedReasoning.length > 0) {
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'thinking',
+                    thought: cleanedReasoning,
+                    sourceField: 'reasoning_content',
+                    isHidden: false,
+                  } as ThinkingBlock,
+                ],
+              } as IContent;
+              hasEmittedThinking = true;
+              logger.debug(
+                () =>
+                  `[OpenAIVercelProvider] Emitted captured reasoning_content: ${cleanedReasoning.length} chars from ${reasoningBuffer.chunks.length} chunks`,
+              );
+            }
           }
         } catch (error) {
           if (
@@ -1152,13 +1393,81 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
         throw wrapError(error, this.name);
       }
 
-      const blocks: Array<TextBlock | ToolCallBlock> = [];
+      const blocks: Array<TextBlock | ToolCallBlock | ThinkingBlock> = [];
 
-      if (result.text) {
+      // Extract thinking from various sources
+      let thinkingContent = '';
+
+      // 1. Extract from <think> tags in text (if enabled)
+      if (rsEnabled && rsIncludeInResponse && result.text) {
+        const thinkBlock = this.extractThinkTagsAsBlock(result.text);
+        if (thinkBlock) {
+          thinkingContent = thinkBlock.thought;
+          logger.debug(
+            () =>
+              `[OpenAIVercelProvider] Extracted thinking from <think> tags: ${thinkingContent.length} chars`,
+          );
+        }
+      }
+
+      // 2. Extract from reasoning field (from extractReasoningMiddleware)
+      if (rsEnabled && rsIncludeInResponse) {
+        // AI SDK's extractReasoningMiddleware can return reasoning as either:
+        // - A string (AI SDK v5 format)
+        // - An array of { text: string } objects (older format)
+        const reasoningField = (
+          result as { reasoning?: string | Array<{ text: string }> }
+        ).reasoning;
+        if (reasoningField) {
+          let reasoning: string;
+          if (typeof reasoningField === 'string') {
+            reasoning = reasoningField;
+          } else if (Array.isArray(reasoningField)) {
+            reasoning = reasoningField
+              .map((r) => r.text)
+              .filter((text): text is string => !!text)
+              .join(' ');
+          } else {
+            reasoning = '';
+          }
+          if (reasoning) {
+            if (thinkingContent.length > 0) {
+              thinkingContent += ' ';
+            }
+            thinkingContent += reasoning;
+            logger.debug(
+              () =>
+                `[OpenAIVercelProvider] Extracted reasoning from result field: ${reasoning.length} chars`,
+            );
+          }
+        }
+      }
+
+      // 3. Emit ThinkingBlock if we have thinking content
+      if (thinkingContent.length > 0 && rsEnabled && rsIncludeInResponse) {
+        // Clean K2 tokens from thinking
+        const cleanedThinking = cleanKimiTokensFromThinking(thinkingContent);
         blocks.push({
-          type: 'text',
-          text: result.text,
-        } as TextBlock);
+          type: 'thinking',
+          thought: cleanedThinking,
+          sourceField: 'reasoning_content',
+          isHidden: false,
+        } as ThinkingBlock);
+        logger.debug(
+          () =>
+            `[OpenAIVercelProvider] Emitted ThinkingBlock in non-streaming: ${cleanedThinking.length} chars`,
+        );
+      }
+
+      // 4. Sanitize and emit text content
+      if (result.text) {
+        const sanitizedText = this.sanitizeText(result.text);
+        if (sanitizedText) {
+          blocks.push({
+            type: 'text',
+            text: sanitizedText,
+          } as TextBlock);
+        }
       }
 
       // Typed tool calls from AI SDK; execution is not automatic because we did not provide execute().

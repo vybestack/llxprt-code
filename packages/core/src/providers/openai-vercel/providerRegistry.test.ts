@@ -16,43 +16,57 @@
  * is in place.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ProviderManager } from '../ProviderManager.js';
 import { OpenAIVercelProvider } from './OpenAIVercelProvider.js';
-import type { Config } from '../../config/config.js';
-import type { SettingsService } from '../../settings/SettingsService.js';
+import {
+  resetSettingsService,
+  registerSettingsService,
+} from '../../settings/settingsServiceInstance.js';
+import { SettingsService } from '../../settings/SettingsService.js';
+import {
+  clearActiveProviderRuntimeContext,
+  createProviderRuntimeContext,
+  setActiveProviderRuntimeContext,
+} from '../../runtime/providerRuntimeContext.js';
+
+// Mock the 'ai' module to avoid import errors
+vi.mock('ai', () => ({
+  generateText: vi.fn(),
+  streamText: vi.fn(),
+  extractReasoningMiddleware: vi.fn(() => ({})),
+  wrapLanguageModel: vi.fn((model) => model),
+}));
+
+// Mock @ai-sdk/openai
+vi.mock('@ai-sdk/openai', () => ({
+  createOpenAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
+}));
 
 describe('OpenAIVercelProvider Registry Integration', () => {
   let providerManager: ProviderManager;
-  let mockConfig: Config;
-  let mockSettingsService: SettingsService;
+  let settingsService: SettingsService;
 
   beforeEach(() => {
-    // Create minimal mock for Config
-    mockConfig = {
-      getProvider: vi.fn().mockReturnValue('openaivercel'),
-      getModel: vi.fn().mockReturnValue('gpt-4o'),
-      setProviderManager: vi.fn(),
-      getEphemeralSettings: vi.fn().mockReturnValue({}),
-    } as unknown as Config;
-
-    // Create minimal mock for SettingsService
-    mockSettingsService = {
-      get: vi.fn().mockReturnValue(''),
-      set: vi.fn(),
-      getProviderSettings: vi.fn().mockReturnValue({}),
-      getConversationSettings: vi.fn().mockReturnValue({}),
-    } as unknown as SettingsService;
+    // Reset and set up runtime context
+    resetSettingsService();
+    setActiveProviderRuntimeContext(createProviderRuntimeContext());
+    settingsService = new SettingsService();
+    registerSettingsService(settingsService);
 
     // Create ProviderManager instance
-    providerManager = new ProviderManager(mockConfig, mockSettingsService);
+    providerManager = new ProviderManager();
 
     // Register OpenAIVercelProvider (simulating what CLI does)
     providerManager.registerProvider(
       new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService: mockSettingsService,
+        settingsService,
       }),
     );
+  });
+
+  afterEach(() => {
+    clearActiveProviderRuntimeContext();
   });
 
   describe('Provider Discovery', () => {
@@ -132,8 +146,8 @@ describe('OpenAIVercelProvider Registry Integration', () => {
     it('should return openaivercel from getActiveProviderName', () => {
       providerManager.setActiveProvider('openaivercel');
 
-      // Mock settingsService to return the active provider
-      vi.mocked(mockSettingsService.get).mockReturnValue('openaivercel');
+      // Set the active provider in settings
+      settingsService.set('activeProvider', 'openaivercel');
 
       const activeName = providerManager.getActiveProviderName();
       expect(activeName).toBe('openaivercel');
@@ -200,7 +214,7 @@ describe('OpenAIVercelProvider Registry Integration', () => {
      * This is useful for testing and for CLI setup
      */
     it('should accept manual registration of OpenAIVercelProvider', () => {
-      const freshManager = new ProviderManager(mockConfig, mockSettingsService);
+      const freshManager = new ProviderManager();
       const provider = new OpenAIVercelProvider();
 
       // Should not throw
@@ -218,7 +232,7 @@ describe('OpenAIVercelProvider Registry Integration', () => {
      * Tests that manually registered provider can be activated
      */
     it('should allow activation of manually registered provider', () => {
-      const freshManager = new ProviderManager(mockConfig, mockSettingsService);
+      const freshManager = new ProviderManager();
       const provider = new OpenAIVercelProvider();
 
       freshManager.registerProvider(provider);

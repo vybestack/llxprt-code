@@ -46,6 +46,11 @@ import {
   EMPTY_TOOL_RESULT_PLACEHOLDER,
 } from '../utils/toolResponsePayload.js';
 import type { ToolIdMapper } from '../../tools/ToolIdStrategy.js';
+import {
+  extractThinkingBlocks,
+  thinkingToReasoningField,
+  cleanKimiTokensFromThinking,
+} from '../reasoning/reasoningUtils.js';
 
 function inferMediaEncoding(imageData: string): {
   encoding: 'base64' | 'url';
@@ -75,10 +80,12 @@ function inferMediaEncoding(imageData: string): {
  * Convert IContent array to Vercel AI SDK CoreMessage array
  * @param contents - The contents to convert
  * @param toolIdMapper - Optional mapper for tool IDs (for Kimi K2 format)
+ * @param options - Optional conversion options
  */
 export function convertToVercelMessages(
   contents: IContent[],
   toolIdMapper?: ToolIdMapper,
+  options?: { includeReasoningInContext?: boolean },
 ): CoreMessage[] {
   const messages: CoreMessage[] = [];
 
@@ -166,6 +173,7 @@ export function convertToVercelMessages(
       const toolCallBlocks = content.blocks.filter(
         (b: ContentBlock) => b.type === 'tool_call',
       ) as ToolCallBlock[];
+      const thinkingBlocks = extractThinkingBlocks(content);
 
       const text = textBlocks
         .map((b) => b.text)
@@ -193,15 +201,51 @@ export function convertToVercelMessages(
           });
         }
 
-        messages.push({
-          role: 'assistant',
+        const baseMessage = {
+          role: 'assistant' as const,
           content: contentParts,
-        });
-      } else if (text) {
-        messages.push({
-          role: 'assistant',
+        };
+
+        // Add reasoning_content if includeReasoningInContext is true and thinking blocks exist
+        if (options?.includeReasoningInContext && thinkingBlocks.length > 0) {
+          const reasoningText = thinkingToReasoningField(thinkingBlocks);
+          if (reasoningText) {
+            const messageWithReasoning = baseMessage as unknown as Record<
+              string,
+              unknown
+            >;
+            messageWithReasoning.reasoning_content =
+              cleanKimiTokensFromThinking(reasoningText);
+            messages.push(messageWithReasoning as unknown as CoreMessage);
+          } else {
+            messages.push(baseMessage);
+          }
+        } else {
+          messages.push(baseMessage);
+        }
+      } else if (text || thinkingBlocks.length > 0) {
+        const baseMessage = {
+          role: 'assistant' as const,
           content: text,
-        });
+        };
+
+        // Add reasoning_content if includeReasoningInContext is true and thinking blocks exist
+        if (options?.includeReasoningInContext && thinkingBlocks.length > 0) {
+          const reasoningText = thinkingToReasoningField(thinkingBlocks);
+          if (reasoningText) {
+            const messageWithReasoning = baseMessage as unknown as Record<
+              string,
+              unknown
+            >;
+            messageWithReasoning.reasoning_content =
+              cleanKimiTokensFromThinking(reasoningText);
+            messages.push(messageWithReasoning as unknown as CoreMessage);
+          } else {
+            messages.push(baseMessage);
+          }
+        } else if (text) {
+          messages.push(baseMessage);
+        }
       }
     } else if (content.speaker === 'tool') {
       // Convert tool messages to tool result messages

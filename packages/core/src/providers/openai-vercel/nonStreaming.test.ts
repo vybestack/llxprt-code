@@ -31,6 +31,8 @@ import type { ProviderToolset } from '../IProvider.js';
 vi.mock('ai', () => ({
   generateText: vi.fn(),
   streamText: vi.fn(),
+  extractReasoningMiddleware: vi.fn(() => ({})),
+  wrapLanguageModel: vi.fn((model) => model),
 }));
 
 // Mock @ai-sdk/openai
