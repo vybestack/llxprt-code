@@ -79,16 +79,9 @@ export const CacheStatsDisplay: React.FC = () => {
   const requestsWithCacheHits = cacheStats.requestsWithCacheHits;
   const cacheHitRate = cacheStats.hitRate;
 
-  // Calculate token savings (cache reads cost 10% of regular tokens, so 90% savings)
-  const tokenSavings = Math.floor(totalCacheReads * 0.9);
-
-  // Estimate cost savings (using rough Anthropic pricing: $0.003 per 1K input tokens for Claude 3.5 Sonnet)
-  const costSavingsPerThousandTokens = 0.003 * 0.9; // 90% savings on cache hits
-  const estimatedCostSavings =
-    (tokenSavings / 1000) * costSavingsPerThousandTokens;
-
   // Check if we have any cache data
-  const hasCacheData = totalCacheReads > 0 || totalCacheWrites > 0;
+  // totalCacheWrites can be null (not reported by provider) vs 0 (explicitly reported as zero)
+  const hasCacheData = totalCacheReads > 0 || (totalCacheWrites ?? 0) > 0;
 
   if (!hasCacheData) {
     return (
@@ -99,8 +92,9 @@ export const CacheStatsDisplay: React.FC = () => {
         paddingX={2}
       >
         <Text color={Colors.Foreground}>
-          No cache data available. Cache statistics are only available for
-          Anthropic requests with prompt caching enabled.
+          No cache data available. Cache statistics are available for providers
+          with prompt caching support (Anthropic, OpenAI, Groq, Deepseek,
+          Fireworks, OpenRouter, Qwen).
         </Text>
       </Box>
     );
@@ -128,14 +122,17 @@ export const CacheStatsDisplay: React.FC = () => {
           </Text>
         }
       />
-      <StatRow
-        title="Total Cache Writes (tokens)"
-        value={
-          <Text color={Colors.Foreground}>
-            {totalCacheWrites.toLocaleString()}
-          </Text>
-        }
-      />
+      {/* Only show cache writes if the provider reports them (not null) */}
+      {totalCacheWrites !== null && (
+        <StatRow
+          title="Total Cache Writes (tokens)"
+          value={
+            <Text color={Colors.Foreground}>
+              {totalCacheWrites.toLocaleString()}
+            </Text>
+          }
+        />
+      )}
       <StatRow
         title="Cache Hit Rate"
         value={
@@ -146,30 +143,6 @@ export const CacheStatsDisplay: React.FC = () => {
           </Text>
         }
       />
-
-      <Box height={1} />
-
-      {/* Savings */}
-      <StatRow
-        title="Token Savings"
-        value={
-          <Text color={Colors.AccentYellow}>
-            {tokenSavings.toLocaleString()}
-          </Text>
-        }
-      />
-      <StatRow
-        title="Estimated Cost Savings"
-        value={
-          <Text color={Colors.AccentYellow}>
-            ${estimatedCostSavings.toFixed(4)}
-          </Text>
-        }
-      />
-
-      <Box height={1} />
-
-      {/* Request Stats */}
       <StatRow
         title="Requests with Cache Hits"
         value={
