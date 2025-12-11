@@ -391,21 +391,19 @@ export class MemoryTool
   }
 
   getModifyContext(_abortSignal: AbortSignal): ModifyContext<SaveMemoryParams> {
+    const resolvePath = (scope?: 'global' | 'project'): string => {
+      if (scope === 'project' && this.config) {
+        return getProjectMemoryFilePath(this.config.getWorkingDir());
+      }
+      return getGlobalMemoryFilePath();
+    };
+
     return {
-      getFilePath: (params: SaveMemoryParams) => {
-        // For getModifyContext, we use global path since we don't have access to workingDir
-        // The actual execution will use the proper path based on scope and workingDir
-        const scope = params.scope || 'global';
-        if (scope === 'project') {
-          // In modify context, we can't determine project path without workingDir
-          // This is used for external editor, and the actual write will use the correct path
-          return getGlobalMemoryFilePath();
-        }
-        return getGlobalMemoryFilePath();
-      },
-      getCurrentContent: async (_params: SaveMemoryParams): Promise<string> => {
+      getFilePath: (params: SaveMemoryParams) => resolvePath(params.scope),
+      getCurrentContent: async (params: SaveMemoryParams): Promise<string> => {
+        const memoryFilePath = resolvePath(params.scope);
         try {
-          return await fs.readFile(getGlobalMemoryFilePath(), 'utf-8');
+          return await fs.readFile(memoryFilePath, 'utf-8');
         } catch (err) {
           const error = err as Error & { code?: string };
           if (!(error instanceof Error) || error.code !== 'ENOENT') throw err;
@@ -413,11 +411,9 @@ export class MemoryTool
         }
       },
       getProposedContent: async (params: SaveMemoryParams): Promise<string> => {
+        const memoryFilePath = resolvePath(params.scope);
         try {
-          const currentContent = await fs.readFile(
-            getGlobalMemoryFilePath(),
-            'utf-8',
-          );
+          const currentContent = await fs.readFile(memoryFilePath, 'utf-8');
           return computeNewContent(currentContent, params.fact);
         } catch (err) {
           const error = err as Error & { code?: string };

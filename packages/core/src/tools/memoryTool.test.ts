@@ -586,7 +586,9 @@ describe('MemoryTool', () => {
         throw new Error('Expected confirmation details');
       }
 
-      expect(result.title).toContain('.llxprt/LLXPRT.md');
+      // Normalize paths for cross-platform compatibility (Windows uses backslashes)
+      const normalizedTitle = result.title.replace(/\\/g, '/');
+      expect(normalizedTitle).toContain('.llxprt/LLXPRT.md');
       expect(result.fileName).toContain(mockWorkingDir);
       expect(result.fileName).toContain('.llxprt');
     });
