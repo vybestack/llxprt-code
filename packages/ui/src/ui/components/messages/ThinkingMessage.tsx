@@ -5,9 +5,9 @@ export function ThinkingMessage(
   props: Readonly<ThinkingMessageProps>,
 ): React.ReactNode {
   return (
-    <i key={props.id}>
-      <text fg={props.theme.colors.text.thinking}>{props.text}</text>
-    </i>
+    <text key={props.id} fg={props.theme.colors.text.thinking}>
+      <i>{props.text}</i>
+    </text>
   );
 }
 
