@@ -161,9 +161,10 @@ async function getIdeProcessInfoForUnix(): Promise<{
 }
 
 /**
- * Finds the IDE process info on Windows.
+ * Finds the IDE process info on Windows using an optimized single PowerShell call.
  *
- * The strategy is to find the great-grandchild of the root process.
+ * The strategy is to get all ancestor processes in one call, then traverse in memory.
+ * This is much faster than making multiple PowerShell calls.
  *
  * @returns A promise that resolves to the PID and command of the IDE process.
  */
@@ -171,39 +172,73 @@ async function getIdeProcessInfoForWindows(): Promise<{
   pid: number;
   command: string;
 }> {
-  let currentPid = process.pid;
-  let previousPid = process.pid;
+  try {
+    // Get all processes in a single PowerShell call - much faster than multiple calls
+    const powershellCommand = `powershell "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CommandLine | ConvertTo-Json"`;
+    const { stdout } = await execAsync(powershellCommand, { timeout: 5000 });
+    const output = stdout.trim();
 
-  for (let i = 0; i < MAX_TRAVERSAL_DEPTH; i++) {
-    try {
-      const { parentPid } = await getProcessInfo(currentPid);
+    if (!output) {
+      return { pid: process.pid, command: '' };
+    }
 
+    // Parse all processes into a map for fast lookup
+    const processes = JSON.parse(output) as Array<{
+      ProcessId?: number;
+      ParentProcessId?: number;
+      Name?: string;
+      CommandLine?: string;
+    }>;
+
+    const processMap = new Map<
+      number,
+      { parentPid: number; name: string; command: string }
+    >();
+    for (const p of processes) {
+      if (p.ProcessId !== undefined) {
+        processMap.set(p.ProcessId, {
+          parentPid: p.ParentProcessId ?? 0,
+          name: p.Name ?? '',
+          command: p.CommandLine ?? '',
+        });
+      }
+    }
+
+    // Traverse up from current process to find the IDE
+    let currentPid = process.pid;
+    let previousPid = process.pid;
+
+    for (let i = 0; i < MAX_TRAVERSAL_DEPTH; i++) {
+      const current = processMap.get(currentPid);
+      if (!current) {
+        break;
+      }
+
+      const parentPid = current.parentPid;
       if (parentPid > 0) {
-        try {
-          const { parentPid: grandParentPid } = await getProcessInfo(parentPid);
-          if (grandParentPid === 0) {
-            // We've found the grandchild of the root (`currentPid`). The IDE
-            // process is its child, which we've stored in `previousPid`.
-            const { command } = await getProcessInfo(previousPid);
-            return { pid: previousPid, command };
-          }
-        } catch {
-          // getting grandparent failed, proceed
+        const parent = processMap.get(parentPid);
+        const grandParentPid = parent?.parentPid ?? 0;
+
+        if (grandParentPid === 0) {
+          // Found the grandchild of root - the IDE is previousPid
+          const ide = processMap.get(previousPid);
+          return { pid: previousPid, command: ide?.command ?? '' };
         }
       }
 
       if (parentPid <= 0) {
-        break; // Reached the root
+        break;
       }
       previousPid = currentPid;
       currentPid = parentPid;
-    } catch {
-      // Process in chain died
-      break;
     }
+
+    const current = processMap.get(currentPid);
+    return { pid: currentPid, command: current?.command ?? '' };
+  } catch (error) {
+    console.debug('Failed to get Windows process info:', error);
+    return { pid: process.pid, command: '' };
   }
-  const { command } = await getProcessInfo(currentPid);
-  return { pid: currentPid, command };
 }
 
 /**
@@ -222,13 +257,6 @@ export async function getIdeProcessInfo(): Promise<{
   pid: number;
   command: string;
 }> {
-  // Skip slow process tree traversal in CI environments on Windows
-  // IDE detection is not needed in CI and the PowerShell calls are slow
-  // Use process.platform directly to avoid mocked os.platform() in tests
-  if (process.env.CI && process.platform === 'win32') {
-    return { pid: process.pid, command: '' };
-  }
-
   const platform = os.platform();
 
   if (platform === 'win32') {
