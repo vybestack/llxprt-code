@@ -60,7 +60,14 @@ for (const [location, details] of Object.entries(packages)) {
     continue;
   }
 
-  // 3. Any remaining package should be a third-party dependency.
+  // 3. Skip optional dependencies that aren't installed on this platform.
+  // These are platform-specific binaries (e.g., sharp's @img/* packages)
+  // that only get resolved/integrity when installed on matching platforms.
+  if (details.optional === true && !details.resolved) {
+    continue;
+  }
+
+  // 4. Any remaining package should be a third-party dependency.
   // 1) Registry package with both "resolved" and "integrity" fields is valid.
   if (details.resolved && details.integrity) {
     continue;
