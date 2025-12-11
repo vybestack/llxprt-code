@@ -158,7 +158,10 @@ jobs:
 
       - name: 'Install dependencies'
         run: |-
-          npm ci --omit=optional
+          # Use npm install instead of npm ci because sharp's optional platform-specific
+          # deps are only resolved for the platform where the lockfile was generated.
+          # npm install will resolve them fresh for the current platform.
+          npm install
 
       - name: Fix rollup platform dependency
         run: |
@@ -354,9 +357,9 @@ jobs:
 
       - name: 'Install dependencies for testing'
         run: |-
-          # Use --omit=optional to skip platform-specific optional deps like sharp's @img/* packages
-          # The experimental UI (which needs these) is not tested in CI
-          npm ci --omit=optional
+          # Use npm install instead of npm ci because sharp's optional platform-specific
+          # deps are only resolved for the platform where the lockfile was generated.
+          npm install
 
       - name: 'Build project'
         run: |-

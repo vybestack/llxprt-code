@@ -46,7 +46,9 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm ci --omit=optional
+        # Use npm install instead of npm ci - sharp's optional platform-specific
+        # deps are only resolved for the platform where the lockfile was generated
+        run: npm install
 
       - name: Build packages
         run: npm run build
