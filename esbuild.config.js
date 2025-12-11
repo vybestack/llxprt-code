@@ -54,6 +54,11 @@ esbuild
       '@lydell/node-pty-win32-arm64',
       '@lydell/node-pty-win32-x64',
       'node:module',
+      // UI package uses opentui which has Bun-specific imports that esbuild can't handle
+      // Keep it external - it will be dynamically imported at runtime when --experimental-ui is used
+      '@vybestack/llxprt-ui',
+      '@vybestack/opentui-core',
+      '@vybestack/opentui-react',
     ],
     alias: {
       'is-in-ci': path.resolve(
