@@ -393,6 +393,7 @@ export class CoreToolScheduler {
   private requestQueue: QueuedRequest[] = [];
   private messageBusUnsubscribe?: () => void;
   private pendingConfirmations: Map<string, string> = new Map();
+  private staleCorrelationIds: Map<string, NodeJS.Timeout> = new Map();
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -417,6 +418,18 @@ export class CoreToolScheduler {
    */
   private handleMessageBusResponse(response: ToolConfirmationResponse): void {
     const callId = this.pendingConfirmations.get(response.correlationId);
+
+    // Check if this is a stale correlationId (from before ModifyWithEditor created a new one)
+    if (!callId && this.staleCorrelationIds.has(response.correlationId)) {
+      if (toolSchedulerLogger.enabled) {
+        toolSchedulerLogger.debug(
+          () =>
+            `Received TOOL_CONFIRMATION_RESPONSE for stale correlationId=${response.correlationId} (likely from UI race condition after ModifyWithEditor). Ignoring.`,
+        );
+      }
+      return; // Stale correlation ID from before editor modification
+    }
+
     if (!callId) {
       if (toolSchedulerLogger.enabled) {
         toolSchedulerLogger.debug(
@@ -479,6 +492,12 @@ export class CoreToolScheduler {
       this.messageBusUnsubscribe = undefined;
     }
     this.pendingConfirmations.clear();
+
+    // Clean up any pending stale correlation ID timeouts
+    for (const timeout of this.staleCorrelationIds.values()) {
+      clearTimeout(timeout);
+    }
+    this.staleCorrelationIds.clear();
   }
 
   private setStatusInternal(
@@ -1099,6 +1118,29 @@ export class CoreToolScheduler {
         );
         this.publishConfirmationRequest(newCorrelationId, context);
         this.setStatusInternal(callId, 'awaiting_approval', updatedDetails);
+
+        // Mark the old correlationId as stale to handle race condition with UI
+        // where the UI might still send a response with the old correlationId
+        // before it receives the update with the new one
+        if (previousCorrelationId) {
+          const graceTimeout = setTimeout(() => {
+            this.staleCorrelationIds.delete(previousCorrelationId);
+            if (toolSchedulerLogger.enabled) {
+              toolSchedulerLogger.debug(
+                () =>
+                  `Removed stale correlationId=${previousCorrelationId} after grace period`,
+              );
+            }
+          }, 2000); // 2 second grace period
+
+          this.staleCorrelationIds.set(previousCorrelationId, graceTimeout);
+          if (toolSchedulerLogger.enabled) {
+            toolSchedulerLogger.debug(
+              () =>
+                `Marked correlationId=${previousCorrelationId} as stale with 2s grace period after ModifyWithEditor created new correlationId=${newCorrelationId}`,
+            );
+          }
+        }
       }
     } else {
       if (payload?.newContent && waitingToolCall) {
