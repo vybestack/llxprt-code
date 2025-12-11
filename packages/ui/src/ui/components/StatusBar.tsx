@@ -32,7 +32,7 @@ export function StatusBar(props: StatusBarProps): React.ReactNode {
         flexDirection: 'row',
         justifyContent: 'space-between',
         backgroundColor: props.theme.colors.panel.bg,
-        border: true,
+        border: ['top'],
         borderColor: props.theme.colors.panel.border,
       }}
     >
