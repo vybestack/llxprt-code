@@ -2046,6 +2046,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Track total chunks for debugging empty responses
       let totalChunksReceived = 0;
 
+      // Track finish_reason for detecting empty responses (issue #584)
+      let lastFinishReason: string | null | undefined = null;
+
       try {
         // Handle streaming response
         for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
@@ -2139,6 +2142,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Check for finish_reason to detect proper stream ending
           if (choice.finish_reason) {
+            lastFinishReason = choice.finish_reason;
             logger.debug(
               () =>
                 `[Streaming] Stream finished with reason: ${choice.finish_reason}`,
@@ -2707,6 +2711,46 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             },
           },
         } as IContent;
+      }
+
+      // Detect and handle empty streaming responses after tool calls (issue #584)
+      // Some models (like gpt-oss-120b on OpenRouter) return finish_reason=stop with tools but no text
+      const hasToolsButNoText =
+        lastFinishReason === 'stop' &&
+        accumulatedToolCalls.length > 0 &&
+        _accumulatedText.length === 0 &&
+        textBuffer.length === 0 &&
+        accumulatedReasoningContent.length === 0 &&
+        accumulatedThinkingContent.length === 0;
+
+      if (hasToolsButNoText) {
+        logger.log(
+          () =>
+            `[OpenAIProvider] Model returned tool calls but no text (finish_reason=stop). Requesting continuation for model '${model}'.`,
+          {
+            model,
+            toolCallCount: accumulatedToolCalls.length,
+            baseURL: baseURL ?? this.getBaseURL(),
+          },
+        );
+
+        // Request continuation after tool calls (delegated to shared method)
+        const toolCallsForContinuation = accumulatedToolCalls.map((tc) => ({
+          id: tc.id,
+          type: tc.type,
+          function: tc.function,
+        }));
+
+        yield* this.requestContinuationAfterToolCalls(
+          toolCallsForContinuation,
+          messagesWithSystem,
+          requestBody,
+          client,
+          abortSignal,
+          model,
+          logger,
+          customHeaders,
+        );
       }
 
       // Detect and warn about empty streaming responses (common with Kimi K2 after tool calls)
@@ -3622,6 +3666,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         total_tokens?: number;
       } | null = null;
 
+      // Track finish_reason for detecting empty responses (issue #584)
+      let lastFinishReason: string | null | undefined = null;
+
+      // Store pipeline result to avoid duplicate process() calls (CodeRabbit review #764)
+      let cachedPipelineResult: Awaited<
+        ReturnType<typeof this.toolCallPipeline.process>
+      > | null = null;
+
       const allChunks: OpenAI.Chat.Completions.ChatCompletionChunk[] = []; // Collect all chunks first
 
       try {
@@ -3723,6 +3775,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           // Check for finish_reason to detect proper stream ending
           if (choice.finish_reason) {
+            lastFinishReason = choice.finish_reason;
             logger.debug(
               () =>
                 `[Streaming] Stream finished with reason: ${choice.finish_reason}`,
@@ -4197,15 +4250,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       }
 
       // Process and emit tool calls using the pipeline
-      const pipelineResult = await this.toolCallPipeline.process(abortSignal);
+      cachedPipelineResult = await this.toolCallPipeline.process(abortSignal);
       if (
-        pipelineResult.normalized.length > 0 ||
-        pipelineResult.failed.length > 0
+        cachedPipelineResult.normalized.length > 0 ||
+        cachedPipelineResult.failed.length > 0
       ) {
         const blocks: ToolCallBlock[] = [];
 
         // Process successful tool calls
-        for (const normalizedCall of pipelineResult.normalized) {
+        for (const normalizedCall of cachedPipelineResult.normalized) {
           const sanitizedArgs = this.sanitizeToolArgumentsString(
             normalizedCall.originalArgs ?? normalizedCall.args,
           );
@@ -4225,7 +4278,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
 
         // Handle failed tool calls (could emit as errors or warnings)
-        for (const failed of pipelineResult.failed) {
+        for (const failed of cachedPipelineResult.failed) {
           this.getLogger().warn(
             `Tool call validation failed for index ${failed.index}: ${failed.validationErrors.join(', ')}`,
           );
@@ -4284,12 +4337,68 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         } as IContent;
       }
 
+      // Detect and handle empty streaming responses after tool calls (issue #584)
+      // Some models (like gpt-oss-120b on OpenRouter) return finish_reason=stop with tools but no text
+      // Use cachedPipelineResult instead of pipelineStats.collector.totalCalls since process() resets the collector (CodeRabbit review #764)
+      const toolCallCount =
+        (cachedPipelineResult?.normalized.length ?? 0) +
+        (cachedPipelineResult?.failed.length ?? 0);
+      const hasToolsButNoText =
+        lastFinishReason === 'stop' &&
+        toolCallCount > 0 &&
+        _accumulatedText.length === 0 &&
+        textBuffer.length === 0 &&
+        accumulatedReasoningContent.length === 0 &&
+        accumulatedThinkingContent.length === 0;
+
+      if (hasToolsButNoText) {
+        logger.log(
+          () =>
+            `[OpenAIProvider] Model returned tool calls but no text (finish_reason=stop). Requesting continuation for model '${model}'.`,
+          {
+            model,
+            toolCallCount,
+            baseURL: baseURL ?? this.getBaseURL(),
+          },
+        );
+
+        // Note: In pipeline mode, tool calls have already been processed.
+        // We need to get the normalized tool calls from the cached pipeline result to build continuation messages.
+        // Use cached result to avoid duplicate process() call that would return empty results (CodeRabbit review #764)
+        if (!cachedPipelineResult) {
+          throw new Error(
+            'Pipeline result not cached - this should not happen in pipeline mode',
+          );
+        }
+        const toolCallsForHistory = cachedPipelineResult.normalized.map(
+          (normalizedCall, index) => ({
+            id: `call_${index}`,
+            type: 'function' as const,
+            function: {
+              name: normalizedCall.name,
+              arguments: JSON.stringify(normalizedCall.args),
+            },
+          }),
+        );
+
+        // Request continuation after tool calls (delegated to shared method)
+        yield* this.requestContinuationAfterToolCalls(
+          toolCallsForHistory,
+          messagesWithSystem,
+          requestBody,
+          client,
+          abortSignal,
+          model,
+          logger,
+          customHeaders,
+        );
+      }
+
       // Detect and warn about empty streaming responses (common with Kimi K2 after tool calls)
       // Only warn if we truly got nothing - not even reasoning content
-      const pipelineStats = this.toolCallPipeline.getStats();
       if (
         _accumulatedText.length === 0 &&
-        pipelineStats.collector.totalCalls === 0 &&
+        toolCallCount === 0 &&
         textBuffer.length === 0 &&
         accumulatedReasoningContent.length === 0 &&
         accumulatedThinkingContent.length === 0
@@ -4322,7 +4431,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             `[Streaming pipeline] Stream completed with accumulated content`,
           {
             textLength: _accumulatedText.length,
-            toolCallCount: pipelineStats.collector.totalCalls,
+            toolCallCount,
             textBufferLength: textBuffer.length,
             reasoningLength: accumulatedReasoningContent.length,
             thinkingLength: accumulatedThinkingContent.length,
@@ -4766,5 +4875,115 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           };
 
     return { thinking: thinkingBlock, toolCalls };
+  }
+
+  /**
+   * Request continuation after tool calls when model returned no text.
+   * This is a helper to avoid code duplication between legacy and pipeline paths.
+   *
+   * @plan PLAN-20250120-DEBUGLOGGING.P15
+   * @issue #584, #764 (CodeRabbit review)
+   */
+  private async *requestContinuationAfterToolCalls(
+    toolCalls: Array<{
+      id: string;
+      type: 'function';
+      function: { name: string; arguments: string };
+    }>,
+    messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+    client: OpenAI,
+    abortSignal: AbortSignal | undefined,
+    model: string,
+    logger: DebugLogger,
+    customHeaders: Record<string, string> | undefined,
+  ): AsyncGenerator<IContent, void, unknown> {
+    // Build continuation messages
+    const continuationMessages = [
+      ...messagesWithSystem,
+      // Add the assistant's tool calls
+      {
+        role: 'assistant' as const,
+        tool_calls: toolCalls,
+      },
+      // Add placeholder tool responses (tools have NOT been executed yet - only acknowledged)
+      ...toolCalls.map((tc) => ({
+        role: 'tool' as const,
+        tool_call_id: tc.id,
+        content: '[Tool call acknowledged - awaiting execution]',
+      })),
+      // Add continuation prompt
+      {
+        role: 'user' as const,
+        content:
+          'The tool calls above have been registered. Please continue with your response.',
+      },
+    ];
+
+    // Make a continuation request (wrap in try-catch since tools were already yielded)
+    try {
+      const continuationResponse = await client.chat.completions.create(
+        {
+          ...requestBody,
+          messages: continuationMessages,
+          stream: true, // Always stream for consistency
+        },
+        {
+          ...(abortSignal ? { signal: abortSignal } : {}),
+          ...(customHeaders ? { headers: customHeaders } : {}),
+        },
+      );
+
+      let accumulatedText = '';
+
+      // Process the continuation response
+      for await (const chunk of continuationResponse as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+        if (abortSignal?.aborted) {
+          break;
+        }
+
+        const choice = chunk.choices?.[0];
+        if (!choice) continue;
+
+        const deltaContent = this.coerceMessageContentToString(
+          choice.delta?.content as unknown,
+        );
+        if (deltaContent) {
+          const sanitized = this.sanitizeProviderText(deltaContent);
+          if (sanitized) {
+            accumulatedText += sanitized;
+            yield {
+              speaker: 'ai',
+              blocks: [
+                {
+                  type: 'text',
+                  text: sanitized,
+                } as TextBlock,
+              ],
+            } as IContent;
+          }
+        }
+      }
+
+      logger.debug(
+        () =>
+          `[OpenAIProvider] Continuation request completed, received ${accumulatedText.length} chars`,
+        {
+          model,
+          accumulatedTextLength: accumulatedText.length,
+        },
+      );
+    } catch (continuationError) {
+      // Tool calls were already successfully yielded, so log warning and continue
+      logger.warn(
+        () =>
+          `[OpenAIProvider] Continuation request failed, but tool calls were already emitted: ${continuationError instanceof Error ? continuationError.message : String(continuationError)}`,
+        {
+          model,
+          error: continuationError,
+        },
+      );
+      // Don't re-throw - tool calls were already successful
+    }
   }
 }
