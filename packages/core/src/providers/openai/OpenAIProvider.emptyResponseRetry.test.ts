@@ -216,6 +216,48 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
 
     // Verify fetch was called twice (original + retry)
     expect(callCount).toBe(2);
+
+    // Verify the continuation request structure (CodeRabbit review #764)
+    const secondFetchCall = vi.mocked(global.fetch).mock.calls[1];
+    expect(secondFetchCall).toBeDefined();
+    const secondRequestBody = JSON.parse(
+      secondFetchCall?.[1]?.body as string,
+    ) as {
+      messages: Array<{
+        role: string;
+        content?: string;
+        tool_calls?: unknown[];
+        tool_call_id?: string;
+      }>;
+    };
+
+    // Verify continuation messages structure
+    expect(secondRequestBody.messages).toBeDefined();
+    const continuationMessages = secondRequestBody.messages;
+
+    // Should have assistant message with tool_calls
+    const assistantMsg = continuationMessages.find(
+      (m) => m.role === 'assistant' && m.tool_calls,
+    );
+    expect(assistantMsg).toBeDefined();
+    expect(assistantMsg?.tool_calls).toHaveLength(1);
+
+    // Should have tool response messages with correct placeholder
+    const toolResponseMsgs = continuationMessages.filter(
+      (m) => m.role === 'tool',
+    );
+    expect(toolResponseMsgs).toHaveLength(1);
+    expect(toolResponseMsgs[0]?.content).toBe(
+      '[Tool call acknowledged - awaiting execution]',
+    );
+
+    // Should have user continuation prompt
+    const continuationPrompt = continuationMessages.find(
+      (m) =>
+        m.role === 'user' &&
+        m.content?.includes('Based on the tool results above'),
+    );
+    expect(continuationPrompt).toBeDefined();
   });
 
   it('should not retry when text is already present with tool calls', async () => {
