@@ -22,6 +22,9 @@ import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
 import { tildeifyPath } from '../utils/paths.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { ToolErrorType } from './tool-error.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const logger = new DebugLogger('llxprt:tools:memory');
 
 const memoryToolSchemaData: FunctionDeclaration = {
   name: 'save_memory',
@@ -34,6 +37,13 @@ const memoryToolSchemaData: FunctionDeclaration = {
         type: 'string',
         description:
           'The specific fact or piece of information to remember. Should be a clear, self-contained statement.',
+      },
+      scope: {
+        type: 'string',
+        enum: ['global', 'project'],
+        description:
+          'Where to save the memory: "global" (default, saves to ~/.llxprt) or "project" (saves to project-local .llxprt directory)',
+        default: 'global',
       },
     },
     required: ['fact'],
@@ -63,7 +73,7 @@ export const LLXPRT_CONFIG_DIR = '.llxprt';
 // Alias for backward compatibility with gemini-cli code
 export const GEMINI_DIR = LLXPRT_CONFIG_DIR;
 export const DEFAULT_CONTEXT_FILENAME = 'LLXPRT.md';
-export const MEMORY_SECTION_HEADER = '## Gemini Added Memories';
+export const MEMORY_SECTION_HEADER = '## LLxprt Code Added Memories';
 
 // This variable will hold the currently configured filename for LLXPRT.md context files.
 // It defaults to DEFAULT_CONTEXT_FILENAME but can be overridden by setLlxprtMdFilename.
@@ -95,12 +105,17 @@ export function getAllLlxprtMdFilenames(): string[] {
 
 interface SaveMemoryParams {
   fact: string;
+  scope?: 'global' | 'project';
   modified_by_user?: boolean;
   modified_content?: string;
 }
 
 function getGlobalMemoryFilePath(): string {
   return path.join(Storage.getGlobalLlxprtDir(), getCurrentLlxprtMdFilename());
+}
+
+function getProjectMemoryFilePath(workingDir: string): string {
+  return path.join(workingDir, LLXPRT_CONFIG_DIR, getCurrentLlxprtMdFilename());
 }
 
 /**
@@ -113,19 +128,6 @@ function ensureNewlineSeparation(currentContent: string): string {
   if (currentContent.endsWith('\n') || currentContent.endsWith('\r\n'))
     return '\n';
   return '\n\n';
-}
-
-/**
- * Reads the current content of the memory file
- */
-async function readMemoryFileContent(): Promise<string> {
-  try {
-    return await fs.readFile(getGlobalMemoryFilePath(), 'utf-8');
-  } catch (err) {
-    const error = err as Error & { code?: string };
-    if (!(error instanceof Error) || error.code !== 'ENOENT') throw err;
-    return '';
-  }
 }
 
 /**
@@ -177,9 +179,32 @@ class MemoryToolInvocation extends BaseToolInvocation<
   ToolResult
 > {
   private static readonly allowlist: Set<string> = new Set();
+  private workingDir?: string;
 
   constructor(params: SaveMemoryParams, messageBus?: MessageBus) {
     super(params, messageBus);
+  }
+
+  setWorkingDir(workingDir: string): void {
+    this.workingDir = workingDir;
+  }
+
+  getMemoryFilePath(): string {
+    const scope = this.params.scope || 'global';
+    if (scope === 'project' && this.workingDir) {
+      return getProjectMemoryFilePath(this.workingDir);
+    }
+    return getGlobalMemoryFilePath();
+  }
+
+  async readMemoryFileContent(): Promise<string> {
+    try {
+      return await fs.readFile(this.getMemoryFilePath(), 'utf-8');
+    } catch (err) {
+      const error = err as Error & { code?: string };
+      if (!(error instanceof Error) || error.code !== 'ENOENT') throw err;
+      return '';
+    }
   }
 
   override getToolName(): string {
@@ -187,21 +212,21 @@ class MemoryToolInvocation extends BaseToolInvocation<
   }
 
   override getDescription(): string {
-    const memoryFilePath = getGlobalMemoryFilePath();
+    const memoryFilePath = this.getMemoryFilePath();
     return `in ${tildeifyPath(memoryFilePath)}`;
   }
 
   override async shouldConfirmExecute(
     _abortSignal: AbortSignal,
   ): Promise<ToolEditConfirmationDetails | false> {
-    const memoryFilePath = getGlobalMemoryFilePath();
+    const memoryFilePath = this.getMemoryFilePath();
     const allowlistKey = memoryFilePath;
 
     if (MemoryToolInvocation.allowlist.has(allowlistKey)) {
       return false;
     }
 
-    const currentContent = await readMemoryFileContent();
+    const currentContent = await this.readMemoryFileContent();
     const newContent = computeNewContent(currentContent, this.params.fact);
 
     const fileName = path.basename(memoryFilePath);
@@ -233,18 +258,15 @@ class MemoryToolInvocation extends BaseToolInvocation<
 
   async execute(_signal: AbortSignal): Promise<ToolResult> {
     const { fact, modified_by_user, modified_content } = this.params;
+    const memoryFilePath = this.getMemoryFilePath();
 
     try {
       if (modified_by_user && modified_content !== undefined) {
         // User modified the content in external editor, write it directly
-        await fs.mkdir(path.dirname(getGlobalMemoryFilePath()), {
+        await fs.mkdir(path.dirname(memoryFilePath), {
           recursive: true,
         });
-        await fs.writeFile(
-          getGlobalMemoryFilePath(),
-          modified_content,
-          'utf-8',
-        );
+        await fs.writeFile(memoryFilePath, modified_content, 'utf-8');
         const successMessage = `Okay, I've updated the memory file with your modifications.`;
         return {
           llmContent: JSON.stringify({
@@ -255,15 +277,11 @@ class MemoryToolInvocation extends BaseToolInvocation<
         };
       } else {
         // Use the normal memory entry logic
-        await MemoryTool.performAddMemoryEntry(
-          fact,
-          getGlobalMemoryFilePath(),
-          {
-            readFile: fs.readFile,
-            writeFile: fs.writeFile,
-            mkdir: fs.mkdir,
-          },
-        );
+        await MemoryTool.performAddMemoryEntry(fact, memoryFilePath, {
+          readFile: fs.readFile,
+          writeFile: fs.writeFile,
+          mkdir: fs.mkdir,
+        });
         const successMessage = `Okay, I've remembered that: "${fact}"`;
         return {
           llmContent: JSON.stringify({
@@ -276,8 +294,8 @@ class MemoryToolInvocation extends BaseToolInvocation<
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.error(
-        `[MemoryTool] Error executing save_memory for fact "${fact}": ${errorMessage}`,
+      logger.error(
+        `Error executing save_memory for fact "${fact}": ${errorMessage}`,
       );
       return {
         llmContent: JSON.stringify({
@@ -299,7 +317,10 @@ export class MemoryTool
   implements ModifiableDeclarativeTool<SaveMemoryParams>
 {
   static readonly Name: string = memoryToolSchemaData.name!;
-  constructor(messageBus?: MessageBus) {
+  constructor(
+    private config?: { getWorkingDir: () => string },
+    messageBus?: MessageBus,
+  ) {
     super(
       MemoryTool.Name,
       'Save Memory',
@@ -326,7 +347,11 @@ export class MemoryTool
     params: SaveMemoryParams,
     messageBus?: MessageBus,
   ) {
-    return new MemoryToolInvocation(params, messageBus);
+    const invocation = new MemoryToolInvocation(params, messageBus);
+    if (this.config) {
+      invocation.setWorkingDir(this.config.getWorkingDir());
+    }
+    return invocation;
   }
 
   static async performAddMemoryEntry(
@@ -358,9 +383,8 @@ export class MemoryTool
 
       await fsAdapter.writeFile(memoryFilePath, newContent, 'utf-8');
     } catch (error) {
-      console.error(
-        `[MemoryTool] Error adding memory entry to ${memoryFilePath}:`,
-        error,
+      logger.error(
+        `Error adding memory entry to ${memoryFilePath}: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw new Error(
         `[MemoryTool] Failed to add memory entry: ${error instanceof Error ? error.message : String(error)}`,
@@ -369,13 +393,35 @@ export class MemoryTool
   }
 
   getModifyContext(_abortSignal: AbortSignal): ModifyContext<SaveMemoryParams> {
+    const resolvePath = (scope?: 'global' | 'project'): string => {
+      if (scope === 'project' && this.config) {
+        return getProjectMemoryFilePath(this.config.getWorkingDir());
+      }
+      return getGlobalMemoryFilePath();
+    };
+
     return {
-      getFilePath: (_params: SaveMemoryParams) => getGlobalMemoryFilePath(),
-      getCurrentContent: async (_params: SaveMemoryParams): Promise<string> =>
-        readMemoryFileContent(),
+      getFilePath: (params: SaveMemoryParams) => resolvePath(params.scope),
+      getCurrentContent: async (params: SaveMemoryParams): Promise<string> => {
+        const memoryFilePath = resolvePath(params.scope);
+        try {
+          return await fs.readFile(memoryFilePath, 'utf-8');
+        } catch (err) {
+          const error = err as Error & { code?: string };
+          if (!(error instanceof Error) || error.code !== 'ENOENT') throw err;
+          return '';
+        }
+      },
       getProposedContent: async (params: SaveMemoryParams): Promise<string> => {
-        const currentContent = await readMemoryFileContent();
-        return computeNewContent(currentContent, params.fact);
+        const memoryFilePath = resolvePath(params.scope);
+        try {
+          const currentContent = await fs.readFile(memoryFilePath, 'utf-8');
+          return computeNewContent(currentContent, params.fact);
+        } catch (err) {
+          const error = err as Error & { code?: string };
+          if (!(error instanceof Error) || error.code !== 'ENOENT') throw err;
+          return computeNewContent('', params.fact);
+        }
       },
       createUpdatedParams: (
         _oldContent: string,

@@ -121,17 +121,148 @@ describe('memoryCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Usage: /memory add <text to remember>',
+        content: 'Usage: /memory add <global|project> <text to remember>',
       });
 
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
     });
 
-    it('should return a tool action and add an info message when arguments are provided', () => {
+    it('should return an error message if only scope is provided without text', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const result = addCommand.action(mockContext, 'global');
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'Usage: /memory add <global|project> <text to remember>',
+      });
+
+      expect(mockContext.ui.addItem).not.toHaveBeenCalled();
+    });
+
+    it('should return an error message if only "project" is provided without text', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const result = addCommand.action(mockContext, 'project');
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'Usage: /memory add <global|project> <text to remember>',
+      });
+
+      expect(mockContext.ui.addItem).not.toHaveBeenCalled();
+    });
+
+    it('should default to global scope when no scope keyword is provided', () => {
       if (!addCommand.action) throw new Error('Command has no action');
 
       const fact = 'remember this';
       const result = addCommand.action(mockContext, `  ${fact}  `);
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: `Attempting to save to memory: "${fact}"`,
+        },
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        type: 'tool',
+        toolName: 'save_memory',
+        toolArgs: { fact },
+      });
+    });
+
+    it('should return a tool action with scope "global" when "global" is specified', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const fact = 'remember this globally';
+      const result = addCommand.action(mockContext, `global ${fact}`);
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: `Attempting to save to memory: "${fact}"`,
+        },
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        type: 'tool',
+        toolName: 'save_memory',
+        toolArgs: { fact, scope: 'global' },
+      });
+    });
+
+    it('should return a tool action with scope "project" when "project" is specified', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const fact = 'remember this for the project';
+      const result = addCommand.action(mockContext, `project ${fact}`);
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: `Attempting to save to memory: "${fact}"`,
+        },
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        type: 'tool',
+        toolName: 'save_memory',
+        toolArgs: { fact, scope: 'project' },
+      });
+    });
+
+    it('should handle uppercase scope keywords', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const fact = 'test fact';
+      const result = addCommand.action(mockContext, `PROJECT ${fact}`);
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: `Attempting to save to memory: "${fact}"`,
+        },
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        type: 'tool',
+        toolName: 'save_memory',
+        toolArgs: { fact, scope: 'project' },
+      });
+    });
+
+    it('should handle mixed case scope keywords', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const fact = 'test fact';
+      const result = addCommand.action(mockContext, `Global ${fact}`);
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: `Attempting to save to memory: "${fact}"`,
+        },
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        type: 'tool',
+        toolName: 'save_memory',
+        toolArgs: { fact, scope: 'global' },
+      });
+    });
+
+    it('should treat non-scope first words as part of the fact', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const fact = 'globally important fact';
+      const result = addCommand.action(mockContext, fact);
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         {

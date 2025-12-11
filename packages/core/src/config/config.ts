@@ -1670,7 +1670,7 @@ export class Config {
     registerCoreTool(DeleteLineRangeTool, this);
     registerCoreTool(InsertAtLineTool, this);
     registerCoreTool(ShellTool, this);
-    registerCoreTool(MemoryTool);
+    registerCoreTool(MemoryTool, this);
     registerCoreTool(GoogleWebSearchTool, this);
     registerCoreTool(ExaWebSearchTool, this);
     registerCoreTool(TodoWrite);
