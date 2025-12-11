@@ -1,6 +1,6 @@
 import type { TextareaRenderable } from '@vybestack/opentui-core';
 import { useKeyboard } from '@vybestack/opentui-react';
-import { useCallback, useMemo, useRef, useState, type JSX } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useFilteredList } from '../../hooks/useListNavigation';
 import { type SearchItem } from './types';
 import { ModalShell } from './ModalShell';
@@ -22,7 +22,7 @@ export interface SearchSelectProps {
   readonly theme?: ThemeDefinition;
 }
 
-export function SearchSelectModal(props: SearchSelectProps): JSX.Element {
+export function SearchSelectModal(props: SearchSelectProps): React.ReactNode {
   const searchRef = useRef<TextareaRenderable | null>(null);
   const [query, setQuery] = useState('');
 
@@ -152,7 +152,7 @@ function SearchGrid(props: {
   readonly pageStart: number;
   readonly selectedIndex: number;
   readonly theme?: ThemeDefinition;
-}): JSX.Element {
+}): React.ReactNode {
   return (
     <box flexDirection="column" style={{ gap: 0 }}>
       {renderSearchGrid(
@@ -170,7 +170,7 @@ function renderSearchGrid(
   pageStart: number,
   selectedIndex: number,
   theme?: ThemeDefinition,
-): JSX.Element[] {
+): React.ReactNode[] {
   const rows = chunkItems(items, GRID_COLUMNS);
   const columnWidths = Array.from({ length: GRID_COLUMNS }, (_, col) =>
     Math.max(0, ...rows.map((row) => (row.at(col)?.label.length ?? 0) + 2)),
@@ -197,7 +197,7 @@ function renderSearchItem(
   selectedIndex: number,
   width: number,
   theme?: ThemeDefinition,
-): JSX.Element {
+): React.ReactNode {
   const isSelected = absoluteIndex === selectedIndex;
   return (
     <SelectableListItem

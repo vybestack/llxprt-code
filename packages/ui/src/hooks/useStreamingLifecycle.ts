@@ -1,4 +1,4 @@
-import type { RefObject } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useCallback, useRef } from 'react';
 import type { ConfigSession } from '../features/config/configSession';
 import type { ToolConfirmationEvent } from '../features/config';
@@ -32,8 +32,8 @@ export function useStreamingLifecycle(
     callId: string,
     update: Partial<Omit<ToolCall, 'id' | 'kind' | 'callId'>>,
   ) => void,
-  setResponderWordCount: (count: number) => void,
-  setStreamState: (state: 'idle' | 'busy') => void,
+  setResponderWordCount: Dispatch<SetStateAction<number>>,
+  setStreamState: Dispatch<SetStateAction<'idle' | 'busy'>>,
   scheduleTools: ScheduleFn,
   onConfirmationNeeded?: (event: ToolConfirmationEvent) => void,
 ): UseStreamingLifecycleResult {

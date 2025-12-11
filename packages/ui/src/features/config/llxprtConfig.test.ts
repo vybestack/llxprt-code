@@ -8,6 +8,7 @@ import {
 } from './llxprtConfig';
 import type { SessionConfig } from './llxprtAdapter';
 import type { ProfileData } from './llxprtConfig';
+import type { Profile } from '@vybestack/llxprt-code-core';
 
 const BASE_CONFIG: SessionConfig = { provider: 'openai' };
 
@@ -150,12 +151,12 @@ class FakeProfileManager {
     this.profiles = profiles;
   }
 
-  loadProfile(name: string): Promise<unknown> {
+  loadProfile(name: string): Promise<Profile> {
     const profile = this.profiles[name];
     if (profile === undefined) {
       return Promise.reject(new Error(`Profile '${name}' not found`));
     }
-    return Promise.resolve(profile);
+    return Promise.resolve(profile as Profile);
   }
 
   listProfiles(): Promise<string[]> {

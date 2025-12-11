@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import React from 'react';
 import { useMemo } from 'react';
 import type { ThemeDefinition } from '../../features/theme';
 
@@ -196,7 +196,7 @@ function DiffLineRow({
   index,
   gutterWidth,
   colors,
-}: DiffLineProps): JSX.Element {
+}: DiffLineProps): React.ReactNode {
   const lineNum = line.type === 'del' ? line.oldLine : line.newLine;
   const lineNumStr = (lineNum ?? '').toString().padStart(gutterWidth);
   const prefix = getLinePrefix(line.type);
@@ -228,7 +228,7 @@ function DiffLineRow({
   );
 }
 
-export function DiffViewer(props: DiffViewerProps): JSX.Element {
+export function DiffViewer(props: DiffViewerProps): React.ReactNode {
   const { diffContent, filename, maxHeight = 15, theme } = props;
 
   const parsedLines = useMemo(() => parseDiff(diffContent), [diffContent]);

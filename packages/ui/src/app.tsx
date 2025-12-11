@@ -2,7 +2,7 @@ import type {
   ScrollBoxRenderable,
   TextareaRenderable,
 } from '@vybestack/opentui-core';
-import type { JSX } from 'react';
+import React from 'react';
 import { useRenderer } from '@vybestack/opentui-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
@@ -85,7 +85,7 @@ function getPreviewForConfirmation(
 
 const HEADER_TEXT = "LLxprt Code - I'm here to help";
 
-function AppInner(): JSX.Element {
+function AppInner(): React.ReactNode {
   const scrollRef = useRef<ScrollBoxRenderable | null>(null);
   const textareaRef = useRef<TextareaRenderable | null>(null);
   const scheduleRef = useRef<ScheduleFn | null>(null);
@@ -581,7 +581,7 @@ function AppInner(): JSX.Element {
   );
 }
 
-function AppWithCommand(): JSX.Element {
+function AppWithCommand(): React.ReactNode {
   const dialog = useDialog();
   return (
     <Command dialogContext={dialog}>
@@ -590,7 +590,7 @@ function AppWithCommand(): JSX.Element {
   );
 }
 
-export function App(): JSX.Element {
+export function App(): React.ReactNode {
   return (
     <Dialog>
       <AppWithCommand />

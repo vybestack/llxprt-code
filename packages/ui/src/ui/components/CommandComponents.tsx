@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import React from 'react';
 import type { SessionConfig } from '../../features/config';
 import type { ThemeDefinition } from '../../features/theme';
 import type { SearchItem } from '../modals/types';
@@ -38,7 +38,7 @@ export function CommandComponents({
   currentTheme,
   onThemeSelect,
   focusInput,
-}: CommandComponentsProps): JSX.Element {
+}: CommandComponentsProps): React.ReactNode {
   return (
     <>
       <ModelCommand

@@ -1,5 +1,5 @@
 import { useKeyboard } from '@vybestack/opentui-react';
-import { useCallback, useState, type JSX } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useListNavigation } from '../../hooks/useListNavigation';
 import { ModalShell } from './ModalShell';
 import type { ThemeDefinition } from '../../features/theme';
@@ -16,7 +16,7 @@ export function AuthModal(props: {
   readonly onClose: () => void;
   readonly onSave: (next: AuthOption[]) => void;
   readonly theme?: ThemeDefinition;
-}): JSX.Element {
+}): React.ReactNode {
   const [options, setOptions] = useState<AuthOption[]>(props.options);
   const { selectedIndex, moveSelection } = useListNavigation(options.length);
 
@@ -90,8 +90,8 @@ function renderAuthOptions(
   options: AuthOption[],
   selectedIndex: number,
   theme?: ThemeDefinition,
-): JSX.Element[] {
-  return options.map((opt, optIndex): JSX.Element => {
+): React.ReactNode[] {
+  return options.map((opt, optIndex): React.ReactNode => {
     const isSelected = optIndex === selectedIndex;
     const label = `${optIndex + 1}. ${opt.label} [${opt.enabled ? 'ON' : 'OFF'}]`;
     return (

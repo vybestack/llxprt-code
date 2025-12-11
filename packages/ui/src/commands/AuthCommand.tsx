@@ -1,10 +1,9 @@
-import {
+import React, {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type JSX,
 } from 'react';
 import { useCommand } from '../uicontext';
 import { AuthModal, AUTH_DEFAULTS, type AuthOption } from '../ui/modals';
@@ -23,7 +22,7 @@ export function AuthCommand({
   appendMessage,
   theme,
   focusInput,
-}: AuthCommandProps): JSX.Element | null {
+}: AuthCommandProps): React.ReactNode | null {
   const { register } = useCommand();
   const [authOptions, setAuthOptions] = useState<AuthOption[]>(AUTH_DEFAULTS);
   const dialogClearRef = useRef<(() => void) | null>(null);

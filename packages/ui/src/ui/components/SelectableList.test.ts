@@ -8,6 +8,7 @@ describe('SelectableListItem', () => {
     name: 'Test Theme',
     kind: 'dark',
     colors: {
+      background: '#000000',
       text: {
         primary: '#ffffff',
         muted: '#888888',
@@ -26,14 +27,26 @@ describe('SelectableListItem', () => {
         bg: '#111111',
         border: '#333333',
       },
+      status: {
+        fg: '#ffffff',
+      },
       accent: {
         primary: '#00ffff',
+      },
+      selection: {
+        fg: '#000000',
+        bg: '#ffffff',
       },
       diff: {
         addedBg: '#003300',
         addedFg: '#00ff00',
         removedBg: '#330000',
         removedFg: '#ff0000',
+      },
+      message: {
+        userBorder: '#00ff00',
+        systemBorder: '#888888',
+        systemText: '#888888',
       },
     },
   };

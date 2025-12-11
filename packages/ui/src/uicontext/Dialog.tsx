@@ -1,16 +1,16 @@
+import React from 'react';
 import {
   createContext,
   useCallback,
   useContext,
   useMemo,
   useState,
-  type JSX,
   type ReactNode,
 } from 'react';
 import { useKeyboard } from '@vybestack/opentui-react';
 
 interface DialogContextValue {
-  readonly replace: (element: JSX.Element) => void;
+  readonly replace: (element: ReactNode) => void;
   readonly clear: () => void;
   readonly isOpen: boolean;
 }
@@ -29,10 +29,10 @@ interface DialogProps {
   readonly children: ReactNode;
 }
 
-export function Dialog({ children }: DialogProps): JSX.Element {
-  const [dialogStack, setDialogStack] = useState<JSX.Element[]>([]);
+export function Dialog({ children }: DialogProps): React.ReactNode {
+  const [dialogStack, setDialogStack] = useState<ReactNode[]>([]);
 
-  const replace = useCallback((element: JSX.Element) => {
+  const replace = useCallback((element: ReactNode) => {
     setDialogStack([element]);
   }, []);
 

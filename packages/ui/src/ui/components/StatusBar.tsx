@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import React from 'react';
 import type { ThemeDefinition } from '../../features/theme';
 import type { StreamState } from '../../hooks/useChatStore';
 
@@ -19,7 +19,7 @@ export function buildStatusLabel(
   return `${streamingPart} | ${scrollPart}`;
 }
 
-export function StatusBar(props: StatusBarProps): JSX.Element {
+export function StatusBar(props: StatusBarProps): React.ReactNode {
   return (
     <box
       style={{
@@ -32,8 +32,8 @@ export function StatusBar(props: StatusBarProps): JSX.Element {
         flexDirection: 'row',
         justifyContent: 'space-between',
         backgroundColor: props.theme.colors.panel.bg,
-        borderTop: true,
-        borderTopColor: props.theme.colors.panel.border,
+        border: true,
+        borderColor: props.theme.colors.panel.border,
       }}
     >
       <text fg={props.theme.colors.status.fg}>{props.statusLabel}</text>

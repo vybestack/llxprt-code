@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import React from 'react';
 import type { ThemeDefinition } from '../../features/theme';
 
 export interface SelectableListItemProps {
@@ -12,7 +12,7 @@ export interface SelectableListItemProps {
 
 export function SelectableListItem(
   props: SelectableListItemProps,
-): JSX.Element {
+): React.ReactNode {
   const bullet = props.isSelected ? '●' : '○';
   const activeTag =
     props.isActive === true && props.activeTag ? props.activeTag : '';

@@ -101,6 +101,9 @@ module.exports = [
       'no-unneeded-ternary': 'error',
       'no-console': 'warn',
 
+      // Disable sonarjs/function-return-type for React components - returning ReactNode is valid
+      'sonarjs/function-return-type': 'off',
+
       // Complexity limits
       complexity: ['warn', 15],
       'max-lines': [

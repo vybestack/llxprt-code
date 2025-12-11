@@ -1,7 +1,9 @@
-import type { JSX } from 'react';
+import React from 'react';
 import type { ModelMessageProps } from './types';
 
-export function ModelMessage(props: Readonly<ModelMessageProps>): JSX.Element {
+export function ModelMessage(
+  props: Readonly<ModelMessageProps>,
+): React.ReactNode {
   return (
     <text key={props.id} fg={props.theme.colors.text.responder}>
       {props.text}

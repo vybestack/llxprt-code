@@ -76,7 +76,7 @@ describe('transformEvent', () => {
     const input = {
       type: 'unknown_type' as GeminiEventType,
       value: { foo: 'bar' },
-    };
+    } as unknown as ServerGeminiStreamEvent;
     const result = transformEvent(input);
     expect(result.type).toBe('unknown');
     expect(result).toHaveProperty('raw');

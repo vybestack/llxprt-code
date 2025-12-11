@@ -1,18 +1,18 @@
+import React from 'react';
 import { useKeyboard } from '@vybestack/opentui-react';
-import type { JSX } from 'react';
 import type { ThemeDefinition } from '../../features/theme';
 
 export interface ModalShellProps {
   readonly title: string;
   readonly subtitle?: string;
-  readonly width?: number | string;
+  readonly width?: number | `${number}%`;
   readonly onClose: () => void;
-  readonly children: JSX.Element | JSX.Element[];
-  readonly footer?: JSX.Element;
+  readonly children: React.ReactNode;
+  readonly footer?: React.ReactNode;
   readonly theme?: ThemeDefinition;
 }
 
-export function ModalShell(props: ModalShellProps): JSX.Element {
+export function ModalShell(props: ModalShellProps): React.ReactNode {
   useKeyboard((key) => {
     if (key.name === 'escape') {
       key.preventDefault();

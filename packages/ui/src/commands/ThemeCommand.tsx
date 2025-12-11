@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type JSX } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useCommand } from '../uicontext';
 import { ThemeModal } from '../ui/modals';
 import type { ThemeDefinition } from '../features/theme';
@@ -20,7 +20,7 @@ export function ThemeCommand({
   onThemeSelect,
   appendMessage,
   focusInput,
-}: ThemeCommandProps): JSX.Element | null {
+}: ThemeCommandProps): React.ReactNode | null {
   const { register } = useCommand();
   const dialogClearRef = useRef<(() => void) | null>(null);
 

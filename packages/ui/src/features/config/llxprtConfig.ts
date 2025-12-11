@@ -16,7 +16,10 @@ export interface ConfigCommandResultWithSession extends ConfigCommandResult {
 
 interface ApplyOptions {
   readonly profileDir?: string;
-  readonly profileManager?: ProfileManager;
+  readonly profileManager?: Pick<
+    ProfileManager,
+    'loadProfile' | 'listProfiles'
+  >;
 }
 
 const SYNTHETIC_PROFILE_DEFAULT = path.join(
@@ -276,7 +279,7 @@ async function applyProfile(
 
   try {
     const profile = await manager.loadProfile(parsed.name);
-    const config = mapProfileToSessionConfig(profile as ProfileData);
+    const config = mapProfileToSessionConfig(profile as unknown as ProfileData);
     const error = validateProfileConfig(config, parsed.name);
 
     if (error !== null) {

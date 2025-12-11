@@ -20,7 +20,7 @@
     "test:coverage": "vitest run --coverage",
     "check:limits": "tsx scripts/check-limits.ts",
     "check": "npm run lint && npm run test && npm run check:limits",
-    "typecheck": "echo 'Typecheck temporarily disabled due to OpenTUI source-based exports'"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "llxprt",

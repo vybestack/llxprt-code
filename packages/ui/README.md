@@ -22,5 +22,4 @@ npm start   # uses bun run src/main.tsx
 
 ## Notes
 
-- Requires a terminal with OpenTUI graphics support (tested on iTerm2/kitty) for the logo image; falls back to text where images aren’t supported.
-- Reference checkouts for upstreams live under `reference/` (opentui, opencode, llxprt-code) and are ignored by git. Use `reference/opentui-clip` for clipping repro work; `reference/opentui` holds the image-support branch.
+- Requires a terminal with OpenTUI graphics support (tested on iTerm2/kitty) for the logo image; falls back to text where images aren't supported.

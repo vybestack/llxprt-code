@@ -1,10 +1,9 @@
-import {
+import React, {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type JSX,
 } from 'react';
 import { useCommand } from '../uicontext';
 import { SearchSelectModal } from '../ui/modals';
@@ -34,7 +33,7 @@ export function ModelCommand({
   appendMessage,
   theme,
   focusInput,
-}: ModelCommandProps): JSX.Element | null {
+}: ModelCommandProps): React.ReactNode | null {
   const { register } = useCommand();
   const dialogClearRef = useRef<(() => void) | null>(null);
   const [modalItems, setModalItems] = useState<SearchItem[]>([]);

@@ -1,17 +1,13 @@
-import type { JSX } from 'react';
+import React from 'react';
 import type { ThinkingMessageProps } from './types';
 
 export function ThinkingMessage(
   props: Readonly<ThinkingMessageProps>,
-): JSX.Element {
+): React.ReactNode {
   return (
-    <text
-      key={props.id}
-      fg={props.theme.colors.text.thinking}
-      style={{ fontStyle: 'italic' }}
-    >
-      {props.text}
-    </text>
+    <i key={props.id}>
+      <text fg={props.theme.colors.text.thinking}>{props.text}</text>
+    </i>
   );
 }
 

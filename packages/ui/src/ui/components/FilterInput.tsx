@@ -1,12 +1,6 @@
 import type { TextareaRenderable } from '@vybestack/opentui-core';
 import { parseColor, stringToStyledText } from '@vybestack/opentui-core';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  type JSX,
-  type RefObject,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, type RefObject } from 'react';
 import type { ThemeDefinition } from '../../features/theme';
 
 export interface FilterInputProps {
@@ -16,7 +10,7 @@ export interface FilterInputProps {
   readonly onQueryChange: (query: string) => void;
 }
 
-export function FilterInput(props: FilterInputProps): JSX.Element {
+export function FilterInput(props: FilterInputProps): React.ReactNode {
   const placeholderText = useMemo(() => {
     const base = stringToStyledText(props.placeholder);
     const fg = parseColor(
@@ -58,16 +52,6 @@ export function FilterInput(props: FilterInputProps): JSX.Element {
         width: '90%',
         minHeight: 1,
         maxHeight: 1,
-        paddingLeft: 1,
-        paddingRight: 1,
-        paddingTop: 0,
-        paddingBottom: 0,
-        fg: props.theme?.colors.input.fg,
-        bg: props.theme?.colors.input.bg,
-        borderColor:
-          props.theme?.colors.panel.border ?? props.theme?.colors.input.border,
-        border: true,
-        borderRadius: 0,
       }}
       textColor={props.theme?.colors.input.fg}
       focusedTextColor={props.theme?.colors.input.fg}

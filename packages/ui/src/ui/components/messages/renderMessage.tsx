@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import React from 'react';
 import type { ThemeDefinition } from '../../../features/theme';
 import type { MessageRole, MessageComponent } from './types';
 import { UserMessage } from './UserMessage';
@@ -37,7 +37,7 @@ export function renderMessage(
   id: string,
   text: string,
   theme: ThemeDefinition,
-): JSX.Element {
+): React.ReactNode {
   const MessageComponent = getMessageRenderer(role);
   return <MessageComponent id={id} text={text} theme={theme} />;
 }

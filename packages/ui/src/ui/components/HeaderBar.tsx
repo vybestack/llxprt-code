@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { JSX } from 'react';
+import React from 'react';
 import { useRenderer } from '@vybestack/opentui-react';
 import { useEffect, useState } from 'react';
 import type { ThemeDefinition } from '../../features/theme';
@@ -28,7 +28,7 @@ interface HeaderBarProps {
   readonly theme: ThemeDefinition;
 }
 
-export function HeaderBar({ text, theme }: HeaderBarProps): JSX.Element {
+export function HeaderBar({ text, theme }: HeaderBarProps): React.ReactNode {
   const renderer = useRenderer();
 
   const caps = renderer.capabilities as {

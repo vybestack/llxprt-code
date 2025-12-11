@@ -115,6 +115,7 @@ function isFunctionWithBody(
 ): node is ts.FunctionLikeDeclarationBase & { body: ts.Block } {
   return (
     ts.isFunctionLike(node) &&
+    'body' in node &&
     node.body !== undefined &&
     ts.isBlock(node.body as ts.Node)
   );

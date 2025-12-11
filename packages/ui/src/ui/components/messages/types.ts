@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import type React from 'react';
 import type { ThemeDefinition } from '../../../features/theme';
 
 export type MessageRole = 'user' | 'model' | 'system' | 'thinking';
@@ -17,7 +17,9 @@ export type ModelMessageProps = MessageProps;
 
 export type ThinkingMessageProps = MessageProps;
 
-export type MessageComponent = (props: MessageProps) => JSX.Element;
+export type MessageComponent = ((props: MessageProps) => React.ReactNode) & {
+  displayName?: string;
+};
 
 export const EmptyBorder = {
   topLeft: ' ',

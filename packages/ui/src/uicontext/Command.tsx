@@ -1,11 +1,10 @@
-import {
+import React, {
   createContext,
   useCallback,
   useContext,
   useMemo,
   useRef,
   useState,
-  type JSX,
   type ReactNode,
 } from 'react';
 import type { DialogContextValue } from './Dialog';
@@ -43,7 +42,7 @@ let registrationId = 0;
 export function Command({
   children,
   dialogContext,
-}: CommandProps): JSX.Element {
+}: CommandProps): React.ReactNode {
   const [commands, setCommands] = useState<Map<string, CommandDef>>(new Map());
   const mountedComponents = useRef(new Set<number>());
 

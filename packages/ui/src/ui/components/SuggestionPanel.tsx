@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import React from 'react';
 import { MAX_SUGGESTION_COUNT } from '../../features/completion';
 import type { CompletionSuggestion } from '../../features/completion';
 import type { ThemeDefinition } from '../../features/theme';
@@ -15,7 +15,7 @@ function renderSuggestionRow(
   selectedIndex: number,
   maxLabel: number,
   theme: ThemeDefinition,
-): JSX.Element {
+): React.ReactNode {
   const isSelected = globalIndex === selectedIndex;
   const prefix =
     item.mode === 'slash' && item.displayPrefix !== false ? '/' : '';
@@ -45,7 +45,7 @@ function renderSuggestionRow(
 
 export function SuggestionPanel(
   props: SuggestionPanelProps,
-): JSX.Element | null {
+): React.ReactNode | null {
   if (props.suggestions.length === 0) {
     return null;
   }

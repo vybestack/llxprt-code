@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import React from 'react';
 import { useCallback, useMemo } from 'react';
 import type { ThemeDefinition } from '../../features/theme';
 import type { ToolConfirmationType } from '../../types/events';
@@ -66,7 +66,7 @@ interface PreviewContentProps {
 /**
  * Render the preview content based on confirmation type
  */
-function PreviewContent(props: PreviewContentProps): JSX.Element {
+function PreviewContent(props: PreviewContentProps): React.ReactNode {
   const { details, theme } = props;
 
   // For edit confirmations with core details, show diff
@@ -196,7 +196,9 @@ function PreviewContent(props: PreviewContentProps): JSX.Element {
   );
 }
 
-export function ToolApprovalModal(props: ToolApprovalModalProps): JSX.Element {
+export function ToolApprovalModal(
+  props: ToolApprovalModalProps,
+): React.ReactNode {
   const { details, onDecision, onClose, theme } = props;
 
   const options = useMemo((): RadioSelectOption<ToolApprovalOutcome>[] => {

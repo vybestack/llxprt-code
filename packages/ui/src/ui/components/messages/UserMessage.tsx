@@ -1,8 +1,10 @@
-import type { JSX } from 'react';
+import React from 'react';
 import type { UserMessageProps } from './types';
 import { EmptyBorder } from './types';
 
-export function UserMessage(props: Readonly<UserMessageProps>): JSX.Element {
+export function UserMessage(
+  props: Readonly<UserMessageProps>,
+): React.ReactNode {
   return (
     <box
       key={props.id}

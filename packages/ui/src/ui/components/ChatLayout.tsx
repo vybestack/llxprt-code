@@ -1,9 +1,10 @@
 import type {
   ScrollBoxRenderable,
   TextareaRenderable,
+  TextareaAction,
 } from '@vybestack/opentui-core';
 import { parseColor, stringToStyledText } from '@vybestack/opentui-core';
-import type { JSX, RefObject } from 'react';
+import React, { type RefObject } from 'react';
 import { useMemo } from 'react';
 import type { CompletionSuggestion } from '../../features/completion';
 import type { ThemeDefinition } from '../../features/theme';
@@ -71,7 +72,12 @@ const MAX_INPUT_LINES = 10;
 // - Shift+Return sends linefeed (\n) which inserts newline
 // - Option+Return (meta) inserts newline
 // - Keypad enter (kpenter/kpplus) submits
-const TEXTAREA_KEY_BINDINGS = [
+const TEXTAREA_KEY_BINDINGS: {
+  name: string;
+  action: TextareaAction;
+  meta?: boolean;
+  shift?: boolean;
+}[] = [
   { name: 'return', action: 'submit' },
   { name: 'return', meta: true, action: 'newline' },
   { name: 'return', shift: true, action: 'newline' },
@@ -131,7 +137,7 @@ interface InputAreaProps {
 export function renderChatMessage(
   message: ChatMessage,
   theme: ThemeDefinition,
-): JSX.Element {
+): React.ReactNode {
   return renderMessage(message.role, message.id, message.text, theme);
 }
 
@@ -213,7 +219,7 @@ function renderInlineApproval({
   tool,
   theme,
   selectedIndex,
-}: InlineApprovalProps): JSX.Element {
+}: InlineApprovalProps): React.ReactNode {
   const confirmation = tool.confirmation;
   if (!confirmation) {
     return <></>;
@@ -222,7 +228,7 @@ function renderInlineApproval({
   const coreDetails = confirmation.coreDetails;
 
   // Render diff for edit confirmations
-  const renderPreview = (): JSX.Element => {
+  const renderPreview = (): React.ReactNode => {
     if (
       confirmation.confirmationType === 'edit' &&
       coreDetails?.type === 'edit'
@@ -305,7 +311,7 @@ export function renderToolCall(
   tool: ToolCall,
   theme: ThemeDefinition,
   pendingApproval?: PendingApprovalState,
-): JSX.Element {
+): React.ReactNode {
   const { symbol, color } = getStatusIndicator(tool.status, theme);
   const paramLines = formatParams(tool.params);
 
@@ -451,7 +457,7 @@ export function renderToolCall(
 export function renderToolBlock(
   block: ToolBlockLegacy,
   theme: ThemeDefinition,
-): JSX.Element {
+): React.ReactNode {
   const content =
     block.scrollable === true ? (
       <scrollbox
@@ -520,7 +526,7 @@ export function renderToolBlock(
   );
 }
 
-function ScrollbackView(props: ScrollbackProps): JSX.Element {
+function ScrollbackView(props: ScrollbackProps): React.ReactNode {
   return (
     <scrollbox
       ref={props.scrollRef}
@@ -565,7 +571,7 @@ function ScrollbackView(props: ScrollbackProps): JSX.Element {
   );
 }
 
-function InputArea(props: InputAreaProps): JSX.Element {
+function InputArea(props: InputAreaProps): React.ReactNode {
   const isDisabled = props.disabled === true;
   const placeholderText = useMemo(() => {
     const text = isDisabled
@@ -610,19 +616,12 @@ function InputArea(props: InputAreaProps): JSX.Element {
         onContentChange={props.enforceInputLineBounds}
         onCursorChange={props.enforceInputLineBounds}
         wrapMode="word"
+        cursorColor={props.theme.colors.input.fg}
         style={{
           height: props.textareaHeight,
           minHeight: props.textareaHeight,
           maxHeight: props.textareaHeight,
           width: '100%',
-          paddingLeft: 1,
-          paddingRight: 1,
-          paddingTop: 0,
-          paddingBottom: 0,
-          fg: inputFg,
-          bg: inputBg,
-          borderColor: props.theme.colors.input.border,
-          cursorColor: props.theme.colors.input.fg,
         }}
         textColor={inputFg}
         focusedTextColor={inputFg}
@@ -637,7 +636,7 @@ function clampInputLines(value: number): number {
   return Math.min(MAX_INPUT_LINES, Math.max(MIN_INPUT_LINES, value));
 }
 
-export function ChatLayout(props: ChatLayoutProps): JSX.Element {
+export function ChatLayout(props: ChatLayoutProps): React.ReactNode {
   const visibleInputLines = Math.min(
     MAX_INPUT_LINES,
     clampInputLines(props.inputLineCount),

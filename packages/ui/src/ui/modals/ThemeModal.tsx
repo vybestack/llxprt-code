@@ -1,11 +1,10 @@
 import { useKeyboard } from '@vybestack/opentui-react';
-import {
+import React, {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type JSX,
 } from 'react';
 import type { TextareaRenderable } from '@vybestack/opentui-core';
 import { useListNavigation } from '../../hooks/useListNavigation';
@@ -21,7 +20,7 @@ export interface ThemeModalProps {
   readonly onSelect: (theme: ThemeDefinition) => void;
 }
 
-export function ThemeModal(props: ThemeModalProps): JSX.Element {
+export function ThemeModal(props: ThemeModalProps): React.ReactNode {
   const searchRef = useRef<TextareaRenderable | null>(null);
   const [query, setQuery] = useState('');
 
@@ -115,7 +114,7 @@ function ThemeList(props: {
   readonly selectedIndex: number;
   readonly activeSlug: string;
   readonly displayTheme: ThemeDefinition;
-}): JSX.Element {
+}): React.ReactNode {
   return (
     <scrollbox
       style={{
@@ -148,7 +147,7 @@ function renderThemeRow(
   selectedIndex: number,
   activeSlug: string,
   displayTheme: ThemeDefinition,
-): JSX.Element {
+): React.ReactNode {
   const isSelected = index === selectedIndex;
   const isActive = theme.slug === activeSlug;
   return (
@@ -167,7 +166,7 @@ function ThemePreview({
   theme,
 }: {
   readonly theme: ThemeDefinition;
-}): JSX.Element {
+}): React.ReactNode {
   return (
     <box
       border

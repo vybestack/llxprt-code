@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import React from 'react';
 import { useKeyboard } from '@vybestack/opentui-react';
 import type { ThemeDefinition } from '../../features/theme';
 import { useListNavigation } from '../../hooks/useListNavigation';
@@ -17,7 +17,7 @@ export interface RadioSelectProps<T> {
   readonly initialIndex?: number;
 }
 
-export function RadioSelect<T>(props: RadioSelectProps<T>): JSX.Element {
+export function RadioSelect<T>(props: RadioSelectProps<T>): React.ReactNode {
   const {
     options,
     onSelect,
@@ -69,7 +69,7 @@ export function RadioSelect<T>(props: RadioSelectProps<T>): JSX.Element {
 
   return (
     <box flexDirection="column" style={{ gap: 0 }}>
-      {options.map((option, index): JSX.Element => {
+      {options.map((option, index): React.ReactNode => {
         const isSelected = index === selectedIndex;
         const bullet = isSelected ? '●' : '○';
         const number = index + 1;

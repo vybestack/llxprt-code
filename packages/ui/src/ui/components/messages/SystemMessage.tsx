@@ -1,10 +1,10 @@
-import type { JSX } from 'react';
+import React from 'react';
 import type { SystemMessageProps } from './types';
 import { EmptyBorder } from './types';
 
 export function SystemMessage(
   props: Readonly<SystemMessageProps>,
-): JSX.Element {
+): React.ReactNode {
   const bgColor = props.theme.colors.message.systemBg;
   return (
     <box
