@@ -78,8 +78,8 @@ export function useCompletionManager(
     if (editor == null) {
       return;
     }
-    const current = suggestions[selectedIndex];
-    if (!current) {
+    const current = suggestions.at(selectedIndex);
+    if (current == null) {
       return;
     }
     if (current.mode === 'mention') {

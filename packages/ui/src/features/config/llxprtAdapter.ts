@@ -15,7 +15,8 @@ export type {
   ToolConfirmationEvent,
 } from '../../types/events';
 
-export type ProviderKey = string;
+/** Branded type for provider identifiers */
+export type ProviderKey = string & { readonly __brand?: 'ProviderKey' };
 
 export interface ProviderInfo {
   readonly id: ProviderKey;

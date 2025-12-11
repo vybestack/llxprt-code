@@ -126,12 +126,12 @@ function useSearchSelectKeys(
     const handlers: Record<string, () => void> = {
       tab: () => moveSelection(key.shift ? -1 : 1),
       return: () => {
-        if (current) {
+        if (current != null) {
           onSelect(current);
         }
       },
       enter: () => {
-        if (current) {
+        if (current != null) {
           onSelect(current);
         }
       },
@@ -140,10 +140,9 @@ function useSearchSelectKeys(
       left: () => moveSelection(-1),
       right: () => moveSelection(1),
     };
-    const handler = handlers[key.name];
-    if (handler != null) {
+    if (key.name in handlers) {
       key.preventDefault();
-      handler();
+      handlers[key.name]();
     }
   });
 }
@@ -174,10 +173,7 @@ function renderSearchGrid(
 ): JSX.Element[] {
   const rows = chunkItems(items, GRID_COLUMNS);
   const columnWidths = Array.from({ length: GRID_COLUMNS }, (_, col) =>
-    Math.max(
-      0,
-      ...rows.map((row) => (row[col] ? row[col].label.length + 2 : 0)),
-    ),
+    Math.max(0, ...rows.map((row) => (row.at(col)?.label.length ?? 0) + 2)),
   );
 
   return rows.map((row, rowIndex) => (

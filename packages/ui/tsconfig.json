@@ -6,9 +6,9 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "jsxImportSource": "@vybestack/opentui-react",
-    "strict": false,
-    "noImplicitAny": false,
-    "strictNullChecks": false,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
@@ -22,14 +22,7 @@
       "@vybestack/llxprt-code-core/*": ["../core/src/*"]
     }
   },
-  "include": ["src"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "scripts",
-    "**/*.test.ts",
-    "**/*.test.tsx",
-    "**/*.spec.ts"
-  ],
+  "include": ["src", "scripts"],
+  "exclude": ["node_modules", "dist"],
   "references": [{ "path": "../core" }]
 }

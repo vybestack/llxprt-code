@@ -205,7 +205,7 @@ function parseProfileArgs(args: string[]): ProfileArgResult {
   }
   const [action, name] =
     args.length === 1 ? ['load', args[0]] : [args[0], args[1]];
-  if (action?.toLowerCase() !== 'load') {
+  if (action.toLowerCase() !== 'load') {
     return { error: 'Usage: /profile load <name>' };
   }
   if (!name) {
@@ -383,8 +383,7 @@ export async function applyProfileWithSession(
 
   const body = trimmed.slice(1).trim();
   const tokens = body.split(/\s+/).filter((token) => token.length > 0);
-  const [rawCommand] = tokens;
-  const command = rawCommand?.toLowerCase();
+  const command = tokens.at(0)?.toLowerCase() ?? '';
 
   // Only generate session options for profile commands
   if (command !== 'profile') {

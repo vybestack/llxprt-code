@@ -41,8 +41,8 @@ export function AuthModal(props: {
       moveSelection(1);
     } else if (key.name === 'return' || key.name === 'enter') {
       key.preventDefault();
-      const current = options[selectedIndex];
-      if (!current) {
+      const current = options.at(selectedIndex);
+      if (current == null) {
         return;
       }
       if (current.id === 'close') {

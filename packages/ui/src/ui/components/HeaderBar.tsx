@@ -35,13 +35,13 @@ export function HeaderBar({ text, theme }: HeaderBarProps): JSX.Element {
     pixelResolution?: { width: number; height: number };
   } | null;
   const resolution = caps?.pixelResolution ?? renderer.resolution ?? null;
-  const cellMetrics = renderer.getCellMetrics?.() ?? null;
+  const cellMetrics = renderer.getCellMetrics() ?? null;
 
   // Log graphics support and resolution detection
   logger.debug('HeaderBar render', {
     graphicsSupport: renderer.graphicsSupport,
-    termProgram: process.env['TERM_PROGRAM'],
-    term: process.env['TERM'],
+    termProgram: process.env.TERM_PROGRAM,
+    term: process.env.TERM,
     resolution,
     cellMetrics,
     rendererResolution: renderer.resolution,

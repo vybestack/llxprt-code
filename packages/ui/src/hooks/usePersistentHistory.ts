@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  PersistentHistoryService,
-  createPersistentHistory,
-} from '../features/chat/persistentHistory';
+import type { PersistentHistoryService } from '../features/chat/persistentHistory';
+import { createPersistentHistory } from '../features/chat/persistentHistory';
 import { getLogger } from '../lib/logger';
 
 const logger = getLogger('nui:use-persistent-history');

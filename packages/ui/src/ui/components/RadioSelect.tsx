@@ -50,16 +50,16 @@ export function RadioSelect<T>(props: RadioSelectProps<T>): JSX.Element {
         moveSelection(1);
       } else if (key.name === 'return') {
         key.preventDefault();
-        const selected = options[selectedIndex];
-        if (selected) {
+        const selected = options.at(selectedIndex);
+        if (selected != null) {
           onSelect(selected.value);
         }
       } else if (key.name >= '1' && key.name <= '9') {
         const index = parseInt(key.name, 10) - 1;
         if (index < options.length) {
           key.preventDefault();
-          const selected = options[index];
-          if (selected) {
+          const selected = options.at(index);
+          if (selected != null) {
             onSelect(selected.value);
           }
         }

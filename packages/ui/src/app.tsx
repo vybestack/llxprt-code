@@ -149,7 +149,9 @@ function AppInner(): JSX.Element {
       toolName: string,
       confirmationDetails: ToolCallConfirmationDetails,
     ) => void
-  >(() => {});
+  >(() => {
+    /* placeholder - will be assigned later */
+  });
 
   // Tool scheduler callbacks using refs to avoid circular dependencies
   const onToolsComplete = useCallback(

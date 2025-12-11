@@ -9,7 +9,7 @@ import {
 import { useCommand } from '../uicontext';
 import { SearchSelectModal } from '../ui/modals';
 import type { SearchItem } from '../ui/modals/types';
-import type { SessionConfig, ProviderKey } from '../features/config';
+import type { SessionConfig } from '../features/config';
 import type { ThemeDefinition } from '../features/theme';
 
 interface ProviderCommandProps {
@@ -48,7 +48,7 @@ export function ProviderCommand({
 
   const handleSelect = useCallback(
     (item: SearchItem): void => {
-      const id = item.id.toLowerCase() as ProviderKey;
+      const id = item.id.toLowerCase();
       setSessionConfig({ ...sessionConfig, provider: id });
       appendMessage('system', `Selected provider: ${item.label}`);
       if (dialogClearRef.current !== null) {

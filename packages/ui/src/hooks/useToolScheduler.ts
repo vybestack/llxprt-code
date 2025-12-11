@@ -8,7 +8,7 @@ import {
   type ExecutingToolCall,
   type CancelledToolCall,
   type ToolCallConfirmationDetails,
-  ToolConfirmationOutcome,
+  type ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
 import type { ToolStatus } from '../types/events';
 import { getLogger } from '../lib/logger';
@@ -415,16 +415,8 @@ export function useToolScheduler(
       }
 
       const waitingCall = toolCall as WaitingToolCall;
-      if (waitingCall.confirmationDetails?.onConfirm) {
-        logger.debug('Calling onConfirm callback', 'callId:', callId);
-        void waitingCall.confirmationDetails.onConfirm(outcome);
-      } else {
-        logger.warn(
-          'respondToConfirmation: no onConfirm callback found',
-          'callId:',
-          callId,
-        );
-      }
+      logger.debug('Calling onConfirm callback', 'callId:', callId);
+      void waitingCall.confirmationDetails.onConfirm(outcome);
     },
     [toolCalls],
   );

@@ -41,7 +41,8 @@ export function ThemeModal(props: ThemeModalProps): JSX.Element {
   const { selectedIndex, setSelectedIndex, moveSelection } = useListNavigation(
     filtered.length,
   );
-  const selected = filtered[selectedIndex] ?? filtered[0] ?? props.current;
+  const selected =
+    filtered.at(selectedIndex) ?? filtered.at(0) ?? props.current;
 
   const handleQueryChange = useCallback((newQuery: string) => {
     setQuery(newQuery);
@@ -70,8 +71,8 @@ export function ThemeModal(props: ThemeModalProps): JSX.Element {
       moveSelection(-1);
     } else if (key.name === 'return' || key.name === 'enter') {
       key.preventDefault();
-      const currentSelection = filtered[selectedIndex] ?? filtered[0];
-      if (currentSelection) {
+      const currentSelection = filtered.at(selectedIndex) ?? filtered.at(0);
+      if (currentSelection != null) {
         props.onSelect(currentSelection);
       }
       props.onClose();

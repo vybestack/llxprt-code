@@ -178,8 +178,6 @@ function formatParams(params: Record<string, unknown> | string): string[] {
         params.length > 80 ? params.slice(0, 77) + '...' : params;
       return [`  ${displayValue}`];
     }
-  } else if (params === null || params === undefined) {
-    return [];
   } else {
     paramsObj = params;
   }

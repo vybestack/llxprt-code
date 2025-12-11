@@ -41,9 +41,6 @@ function parseHunkHeader(
   }
   const oldMatch = execResult[1];
   const newMatch = execResult[2];
-  if (oldMatch === undefined || newMatch === undefined) {
-    return null;
-  }
   return {
     oldStart: parseInt(oldMatch, 10) - 1,
     newStart: parseInt(newMatch, 10) - 1,

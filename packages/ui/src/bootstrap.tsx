@@ -8,8 +8,7 @@ import type { UILaunchConfig } from './types';
  * This is the entry point when launched from the CLI with --experimental-ui
  */
 export async function startNui(config: UILaunchConfig): Promise<void> {
-  // TODO: Initialize app with config
-  // For now, just launch the basic UI
+  // Config initialization happens in App component
   console.log('Starting NUI with config:', config);
 
   const renderer = await createCliRenderer({

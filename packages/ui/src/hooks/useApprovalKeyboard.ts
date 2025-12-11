@@ -114,9 +114,7 @@ export function useApprovalKeyboard(
           'outcome:',
           outcome,
         );
-        if (outcome) {
-          onSelectRef.current(outcome);
-        }
+        onSelectRef.current(outcome);
         handled = true;
         break;
       }

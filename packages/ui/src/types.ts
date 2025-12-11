@@ -5,7 +5,7 @@ export interface UILaunchConfig {
   /** Pre-loaded profile name */
   profile?: string;
   /** Pre-built config from CLI bootstrap */
-  sessionConfig?: any; // TODO: Import SessionConfig type from core
+  sessionConfig?: Record<string, unknown>;
   /** Working directory */
   workingDir: string;
   /** Pass-through command line arguments */
