@@ -5,23 +5,23 @@
  */
 
 import {
-  ToolCallRequestInfo,
-  ToolCallResponseInfo,
+  type ToolCallRequestInfo,
+  type ToolCallResponseInfo,
   ToolConfirmationOutcome,
-  ToolCallConfirmationDetails,
-  ToolResult,
-  ToolResultDisplay,
+  type ToolCallConfirmationDetails,
+  type ToolResult,
+  type ToolResultDisplay,
   ToolRegistry,
   ApprovalMode,
-  EditorType,
+  type EditorType,
   Config,
   logToolCall,
   ToolCallEvent,
-  ToolConfirmationPayload,
+  type ToolConfirmationPayload,
   ToolErrorType,
-  AnyDeclarativeTool,
-  AnyToolInvocation,
-  ContextAwareTool,
+  type AnyDeclarativeTool,
+  type AnyToolInvocation,
+  type ContextAwareTool,
   BaseToolInvocation,
 } from '../index.js';
 import { randomUUID } from 'node:crypto';
@@ -38,11 +38,15 @@ interface QueuedRequest {
   reject: (reason?: Error) => void;
 }
 import { DEFAULT_AGENT_ID } from './turn.js';
-import { Part, PartListUnion, FunctionCall } from '@google/genai';
+import {
+  type Part,
+  type PartListUnion,
+  type FunctionCall,
+} from '@google/genai';
 import { getResponseTextFromParts } from '../utils/generateContentResponseUtilities.js';
 import {
   isModifiableDeclarativeTool,
-  ModifyContext,
+  type ModifyContext,
   modifyWithEditor,
 } from '../tools/modifiable-tool.js';
 import * as Diff from 'diff';
@@ -50,7 +54,7 @@ import levenshtein from 'fast-levenshtein';
 import { doesToolInvocationMatch } from '../utils/tool-utils.js';
 import {
   limitOutputTokens,
-  ToolOutputSettingsProvider,
+  type ToolOutputSettingsProvider,
 } from '../utils/toolOutputLimiter.js';
 import { DebugLogger } from '../debug/index.js';
 

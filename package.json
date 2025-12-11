@@ -11,9 +11,7 @@
     "packages/ui",
     "packages/a2a-server",
     "packages/test-utils",
-    "packages/vscode-ide-companion",
-    "packages/opentui/packages/core",
-    "packages/opentui/packages/react"
+    "packages/vscode-ide-companion"
   ],
   "private": "true",
   "repository": {
@@ -128,6 +126,7 @@
     "fast-uri": "^3.0.6",
     "openai": "^5.10.1",
     "path-scurry": "^2.0.0",
+    "sharp": "^0.33.5",
     "simple-git": "^3.28.0",
     "strip-ansi": "^7.1.0"
   },

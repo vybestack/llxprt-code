@@ -1,4 +1,4 @@
-import { useKeyboard } from '@opentui/react';
+import { useKeyboard } from '@vybestack/opentui-react';
 import type { JSX } from 'react';
 import type { ThemeDefinition } from '../../features/theme';
 

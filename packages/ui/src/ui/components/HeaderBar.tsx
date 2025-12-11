@@ -1,10 +1,25 @@
+import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { JSX } from 'react';
-import { useRenderer } from '@opentui/react';
+import { useRenderer } from '@vybestack/opentui-react';
 import { useEffect, useState } from 'react';
 import type { ThemeDefinition } from '../../features/theme';
+import { getLogger } from '../../lib/logger';
 
-const LOGO_PATH = path.resolve(process.cwd(), 'llxprt.png');
+const logger = getLogger('nui:headerbar');
+
+// Get the directory of this source file, then navigate to the logo
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const LOGO_PATH = path.resolve(__dirname, '../../../llxprt.png');
+
+logger.debug('HeaderBar module loaded', {
+  __filename,
+  __dirname,
+  LOGO_PATH,
+  logoExists: existsSync(LOGO_PATH),
+});
 const LOGO_PX_WIDTH = 150;
 const LOGO_PX_HEIGHT = 90;
 
@@ -15,6 +30,24 @@ interface HeaderBarProps {
 
 export function HeaderBar({ text, theme }: HeaderBarProps): JSX.Element {
   const renderer = useRenderer();
+
+  const caps = renderer.capabilities as {
+    pixelResolution?: { width: number; height: number };
+  } | null;
+  const resolution = caps?.pixelResolution ?? renderer.resolution ?? null;
+  const cellMetrics = renderer.getCellMetrics?.() ?? null;
+
+  // Log graphics support and resolution detection
+  logger.debug('HeaderBar render', {
+    graphicsSupport: renderer.graphicsSupport,
+    termProgram: process.env['TERM_PROGRAM'],
+    term: process.env['TERM'],
+    resolution,
+    cellMetrics,
+    rendererResolution: renderer.resolution,
+    terminalWidth: renderer.terminalWidth,
+    terminalHeight: renderer.terminalHeight,
+  });
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -29,10 +62,6 @@ export function HeaderBar({ text, theme }: HeaderBarProps): JSX.Element {
     };
   }, [renderer]);
 
-  const caps = renderer.capabilities as {
-    pixelResolution?: { width: number; height: number };
-  } | null;
-  const resolution = caps?.pixelResolution ?? renderer.resolution ?? null;
   const pxPerCellX =
     resolution && renderer.terminalWidth > 0
       ? resolution.width / renderer.terminalWidth

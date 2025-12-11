@@ -1,6 +1,6 @@
 import type { RefObject, Dispatch, SetStateAction } from 'react';
 import { useCallback, useState } from 'react';
-import type { TextareaRenderable } from '@opentui/core';
+import type { TextareaRenderable } from '@vybestack/opentui-core';
 import type { Role } from './useChatStore';
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;

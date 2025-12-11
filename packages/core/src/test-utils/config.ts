@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config, ConfigParameters } from '../config/config.js';
+import { Config, type ConfigParameters } from '../config/config.js';
 import {
   AuthType,
   type ContentGeneratorConfig,

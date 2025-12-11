@@ -24,10 +24,10 @@ import crypto from 'node:crypto';
 import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
-import { IContent } from '../../services/history/IContent.js';
+import { type IContent } from '../../services/history/IContent.js';
 import type { Config } from '../../config/config.js';
-import { IProviderConfig } from '../types/IProviderConfig.js';
-import { ToolFormat } from '../../tools/IToolFormatter.js';
+import { type IProviderConfig } from '../types/IProviderConfig.js';
+import { type ToolFormat } from '../../tools/IToolFormatter.js';
 import {
   isKimiModel,
   getToolIdStrategy,
@@ -35,22 +35,22 @@ import {
 } from '../../tools/ToolIdStrategy.js';
 import {
   BaseProvider,
-  NormalizedGenerateChatOptions,
+  type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
-import { OAuthManager } from '../../auth/precedence.js';
+import { type OAuthManager } from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
-import { convertToolsToOpenAI, OpenAITool } from './schemaConverter.js';
+import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
 import {
-  ToolCallBlock,
-  TextBlock,
-  ToolResponseBlock,
-  ThinkingBlock,
+  type ToolCallBlock,
+  type TextBlock,
+  type ToolResponseBlock,
+  type ThinkingBlock,
 } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
-import { IModel } from '../IModel.js';
-import { IProvider } from '../IProvider.js';
+import { type IModel } from '../IModel.js';
+import { type IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { retryWithBackoff } from '../../utils/retry.js';
 import { resolveUserMemory } from '../utils/userMemory.js';

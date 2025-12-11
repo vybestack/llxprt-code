@@ -5,14 +5,14 @@
  */
 
 import {
-  GenerateContentConfig,
-  PartListUnion,
-  Part,
-  Content,
-  Tool,
-  FunctionDeclaration,
+  type GenerateContentConfig,
+  type PartListUnion,
+  type Part,
+  type Content,
+  type Tool,
+  type FunctionDeclaration,
   GenerateContentResponse,
-  SendMessageParameters,
+  type SendMessageParameters,
 } from '@google/genai';
 import {
   getDirectoryContextString,
@@ -20,7 +20,7 @@ import {
 } from '../utils/environmentContext.js';
 import {
   Turn,
-  ServerGeminiStreamEvent,
+  type ServerGeminiStreamEvent,
   GeminiEventType,
   DEFAULT_AGENT_ID,
 } from './turn.js';
@@ -45,8 +45,8 @@ import { retryWithBackoff } from '../utils/retry.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
   AuthType,
-  ContentGenerator,
-  ContentGeneratorConfig,
+  type ContentGenerator,
+  type ContentGeneratorConfig,
   createContentGenerator,
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
@@ -56,7 +56,7 @@ import {
   COMPRESSION_PRESERVE_THRESHOLD,
 } from './compression-config.js';
 import { LoopDetectionService } from '../services/loopDetectionService.js';
-import { ideContext, IdeContext, File } from '../ide/ideContext.js';
+import { ideContext, type IdeContext, type File } from '../ide/ideContext.js';
 import {
   ComplexityAnalyzer,
   type ComplexityAnalysisResult,

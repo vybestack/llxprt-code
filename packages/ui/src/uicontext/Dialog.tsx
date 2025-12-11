@@ -7,7 +7,7 @@ import {
   type JSX,
   type ReactNode,
 } from 'react';
-import { useKeyboard } from '@opentui/react';
+import { useKeyboard } from '@vybestack/opentui-react';
 
 interface DialogContextValue {
   readonly replace: (element: JSX.Element) => void;

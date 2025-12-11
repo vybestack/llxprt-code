@@ -4,22 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { FunctionDeclaration, PartListUnion } from '@google/genai';
-import { ToolContext, ContextAwareTool } from './tool-context.js';
+import { type FunctionDeclaration, type PartListUnion } from '@google/genai';
+import { type ToolContext, type ContextAwareTool } from './tool-context.js';
 import { ToolErrorType } from './tool-error.js';
-import { DiffUpdateResult } from '../ide/ideContext.js';
+import { type DiffUpdateResult } from '../ide/ideContext.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { PolicyDecision } from '../policy/types.js';
 import {
   ToolConfirmationOutcome,
-  ToolConfirmationPayload,
+  type ToolConfirmationPayload,
 } from './tool-confirmation-types.js';
 
-export {
-  ToolConfirmationOutcome,
-  ToolConfirmationPayload,
-} from './tool-confirmation-types.js';
+export { ToolConfirmationOutcome } from './tool-confirmation-types.js';
+export type { ToolConfirmationPayload } from './tool-confirmation-types.js';
 
 /**
  * Represents a validated and ready-to-execute tool call.

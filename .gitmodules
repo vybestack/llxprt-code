@@ -1,3 +1,0 @@
-[submodule "packages/opentui"]
-	path = packages/opentui
-	url = https://github.com/acoliver/opentui.git

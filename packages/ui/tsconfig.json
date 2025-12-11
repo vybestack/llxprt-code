@@ -5,7 +5,7 @@
     "moduleResolution": "bundler",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
-    "jsxImportSource": "@opentui/react",
+    "jsxImportSource": "@vybestack/opentui-react",
     "strict": false,
     "noImplicitAny": false,
     "strictNullChecks": false,

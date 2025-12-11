@@ -11,21 +11,24 @@ import { Config, ApprovalMode } from '../config/config.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
-  ToolResult,
-  FileDiff,
-  ToolEditConfirmationDetails,
+  type ToolResult,
+  type FileDiff,
+  type ToolEditConfirmationDetails,
   ToolConfirmationOutcome,
-  ToolCallConfirmationDetails,
+  type ToolCallConfirmationDetails,
   Kind,
-  ToolLocation,
-  ToolInvocation,
+  type ToolLocation,
+  type ToolInvocation,
 } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import { DEFAULT_DIFF_OPTIONS, getDiffStat } from './diffOptions.js';
-import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
+import {
+  type ModifiableDeclarativeTool,
+  type ModifyContext,
+} from './modifiable-tool.js';
 import { getSpecificMimeType } from '../utils/fileUtils.js';
 import {
   recordFileOperationMetric,

@@ -35,28 +35,28 @@ import type {
 } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
-import { IContent } from '../../services/history/IContent.js';
-import { IProviderConfig } from '../types/IProviderConfig.js';
-import { ToolFormat } from '../../tools/IToolFormatter.js';
+import { type IContent } from '../../services/history/IContent.js';
+import { type IProviderConfig } from '../types/IProviderConfig.js';
+import { type ToolFormat } from '../../tools/IToolFormatter.js';
 import { isKimiModel } from '../../tools/ToolIdStrategy.js';
 import {
   BaseProvider,
-  NormalizedGenerateChatOptions,
+  type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
-import { OAuthManager } from '../../auth/precedence.js';
+import { type OAuthManager } from '../../auth/precedence.js';
 import {
   convertToolsToOpenAIVercel,
-  OpenAIVercelTool,
+  type OpenAIVercelTool,
 } from './schemaConverter.js';
 import {
-  ToolCallBlock,
-  TextBlock,
-  ThinkingBlock,
+  type ToolCallBlock,
+  type TextBlock,
+  type ThinkingBlock,
 } from '../../services/history/IContent.js';
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
-import { IModel } from '../IModel.js';
-import { IProvider } from '../IProvider.js';
+import { type IModel } from '../IModel.js';
+import { type IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { convertToVercelMessages } from './messageConversion.js';

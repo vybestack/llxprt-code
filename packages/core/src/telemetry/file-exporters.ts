@@ -6,12 +6,18 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ExportResult, ExportResultCode } from '@opentelemetry/core';
-import { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
-import { ReadableLogRecord, LogRecordExporter } from '@opentelemetry/sdk-logs';
+import { type ExportResult, ExportResultCode } from '@opentelemetry/core';
 import {
-  ResourceMetrics,
-  PushMetricExporter,
+  type ReadableSpan,
+  type SpanExporter,
+} from '@opentelemetry/sdk-trace-base';
+import {
+  type ReadableLogRecord,
+  type LogRecordExporter,
+} from '@opentelemetry/sdk-logs';
+import {
+  type ResourceMetrics,
+  type PushMetricExporter,
   AggregationTemporality,
 } from '@opentelemetry/sdk-metrics';
 

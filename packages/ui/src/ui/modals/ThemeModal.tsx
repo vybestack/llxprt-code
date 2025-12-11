@@ -1,4 +1,4 @@
-import { useKeyboard } from '@opentui/react';
+import { useKeyboard } from '@vybestack/opentui-react';
 import {
   useCallback,
   useEffect,
@@ -7,7 +7,7 @@ import {
   useState,
   type JSX,
 } from 'react';
-import type { TextareaRenderable } from '@opentui/core';
+import type { TextareaRenderable } from '@vybestack/opentui-core';
 import { useListNavigation } from '../../hooks/useListNavigation';
 import { ModalShell } from './ModalShell';
 import type { ThemeDefinition } from '../../features/theme';

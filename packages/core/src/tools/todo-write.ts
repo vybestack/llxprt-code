@@ -5,11 +5,11 @@
  */
 
 import { Type } from '@google/genai';
-import { BaseTool, ToolResult, Kind } from './tools.js';
-import { Todo, TodoArraySchema } from './todo-schemas.js';
+import { BaseTool, type ToolResult, Kind } from './tools.js';
+import { type Todo, TodoArraySchema } from './todo-schemas.js';
 import { TodoStore } from './todo-store.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
-import { todoEvents, TodoUpdateEvent } from './todo-events.js';
+import { todoEvents, type TodoUpdateEvent } from './todo-events.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
 import { formatTodoListForDisplay } from '../todo/todoFormatter.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';

@@ -1,5 +1,5 @@
-import type { TextareaRenderable } from '@opentui/core';
-import { useKeyboard } from '@opentui/react';
+import type { TextareaRenderable } from '@vybestack/opentui-core';
+import { useKeyboard } from '@vybestack/opentui-react';
 import { useCallback, useMemo, useRef, useState, type JSX } from 'react';
 import { useFilteredList } from '../../hooks/useListNavigation';
 import { type SearchItem } from './types';

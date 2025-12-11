@@ -12,17 +12,17 @@
 import { reportError } from '../utils/errorReporting.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { Config, ApprovalMode } from '../config/config.js';
-import { ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
+import { type ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
 import {
   executeToolCall,
   type ToolExecutionConfig,
 } from './nonInteractiveToolExecutor.js';
 import {
-  Content,
-  Part,
-  FunctionCall,
-  GenerateContentConfig,
-  FunctionDeclaration,
+  type Content,
+  type Part,
+  type FunctionCall,
+  type GenerateContentConfig,
+  type FunctionDeclaration,
   Type,
 } from '@google/genai';
 import { GeminiChat, StreamEventType } from './geminiChat.js';
@@ -36,7 +36,7 @@ import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js'
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import { TodoStore } from '../tools/todo-store.js';
-import { ToolResultDisplay } from '../tools/tools.js';
+import { type ToolResultDisplay } from '../tools/tools.js';
 import {
   CoreToolScheduler,
   type CompletedToolCall,

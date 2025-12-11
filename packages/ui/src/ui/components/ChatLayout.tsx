@@ -1,5 +1,8 @@
-import type { ScrollBoxRenderable, TextareaRenderable } from '@opentui/core';
-import { parseColor, stringToStyledText } from '@opentui/core';
+import type {
+  ScrollBoxRenderable,
+  TextareaRenderable,
+} from '@vybestack/opentui-core';
+import { parseColor, stringToStyledText } from '@vybestack/opentui-core';
 import type { JSX, RefObject } from 'react';
 import { useMemo } from 'react';
 import type { CompletionSuggestion } from '../../features/completion';

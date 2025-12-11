@@ -7,9 +7,9 @@
 
 import { GenerateContentResponseUsageMetadata } from '@google/genai';
 import { Config } from '../config/config.js';
-import { CompletedToolCall } from '../core/coreToolScheduler.js';
+import { type CompletedToolCall } from '../core/coreToolScheduler.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
-import { ToolConfirmationOutcome, FileDiff } from '../tools/tools.js';
+import { ToolConfirmationOutcome, type FileDiff } from '../tools/tools.js';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import { AuthType } from '../core/contentGenerator.js';
 import type { IContent } from '../services/history/IContent.js';

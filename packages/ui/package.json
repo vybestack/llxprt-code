@@ -35,8 +35,8 @@
     "bun": ">=1.2.0"
   },
   "dependencies": {
-    "@opentui/core": "file:../opentui/packages/core",
-    "@opentui/react": "file:../opentui/packages/react",
+    "@vybestack/opentui-core": "^0.1.61",
+    "@vybestack/opentui-react": "^0.1.61",
     "clipboardy": "^4.0.0",
     "react": "^19.2.1"
   },

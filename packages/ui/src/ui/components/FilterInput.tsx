@@ -1,5 +1,5 @@
-import type { TextareaRenderable } from '@opentui/core';
-import { parseColor, stringToStyledText } from '@opentui/core';
+import type { TextareaRenderable } from '@vybestack/opentui-core';
+import { parseColor, stringToStyledText } from '@vybestack/opentui-core';
 import {
   useCallback,
   useEffect,

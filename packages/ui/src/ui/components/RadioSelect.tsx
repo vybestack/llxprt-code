@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { useKeyboard } from '@opentui/react';
+import { useKeyboard } from '@vybestack/opentui-react';
 import type { ThemeDefinition } from '../../features/theme';
 import { useListNavigation } from '../../hooks/useListNavigation';
 

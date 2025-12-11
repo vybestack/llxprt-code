@@ -1,5 +1,5 @@
-import { createCliRenderer } from '@opentui/core';
-import { createRoot } from '@opentui/react';
+import { createCliRenderer } from '@vybestack/opentui-core';
+import { createRoot } from '@vybestack/opentui-react';
 import { App } from './app';
 import type { UILaunchConfig } from './types';
 

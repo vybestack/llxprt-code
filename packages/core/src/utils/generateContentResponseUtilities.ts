@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GenerateContentResponse, Part, FunctionCall } from '@google/genai';
+import {
+  GenerateContentResponse,
+  type Part,
+  type FunctionCall,
+} from '@google/genai';
 
 export function getResponseText(
   response: GenerateContentResponse,

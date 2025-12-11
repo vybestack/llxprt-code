@@ -1,7 +1,7 @@
 import type { RefObject, Dispatch, SetStateAction } from 'react';
 import { useCallback, useState } from 'react';
-import { useKeyboard } from '@opentui/react';
-import type { ScrollBoxRenderable } from '@opentui/core';
+import { useKeyboard } from '@vybestack/opentui-react';
+import type { ScrollBoxRenderable } from '@vybestack/opentui-core';
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
 

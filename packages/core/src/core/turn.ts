@@ -5,18 +5,18 @@
  */
 
 import {
-  Part,
-  PartListUnion,
+  type Part,
+  type PartListUnion,
   GenerateContentResponse,
-  FunctionCall,
-  FunctionDeclaration,
+  type FunctionCall,
+  type FunctionDeclaration,
   FinishReason,
   GenerateContentResponseUsageMetadata,
 } from '@google/genai';
 import {
-  ToolCallConfirmationDetails,
-  ToolResult,
-  ToolResultDisplay,
+  type ToolCallConfirmationDetails,
+  type ToolResult,
+  type ToolResultDisplay,
 } from '../tools/tools.js';
 import { ToolErrorType } from '../tools/tool-error.js';
 import {

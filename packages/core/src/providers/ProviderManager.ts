@@ -5,9 +5,9 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
-import { IProvider, GenerateChatOptions } from './IProvider.js';
-import { IModel } from './IModel.js';
-import { IProviderManager } from './IProviderManager.js';
+import { type IProvider, type GenerateChatOptions } from './IProvider.js';
+import { type IModel } from './IModel.js';
+import { type IProviderManager } from './IProviderManager.js';
 import { Config } from '../config/config.js';
 import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
 import {

@@ -9,7 +9,7 @@ import os from 'node:os';
 import process from 'node:process';
 import {
   AuthType,
-  ContentGeneratorConfig,
+  type ContentGeneratorConfig,
   createContentGeneratorConfig,
 } from '../core/contentGenerator.js';
 import { PromptRegistry } from '../prompts/prompt-registry.js';
@@ -64,7 +64,7 @@ import {
 import { DEFAULT_GEMINI_FLASH_MODEL } from './models.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
-import { MCPOAuthConfig } from '../mcp/oauth-provider.js';
+import { type MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import { IdeClient } from '../ide/ide-client.js';
 import { ideContext } from '../ide/ideContext.js';
 import type { Content } from '@google/genai';
@@ -77,7 +77,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
 import {
-  FileSystemService,
+  type FileSystemService,
   StandardFileSystemService,
 } from '../services/fileSystemService.js';
 import { ProfileManager } from './profileManager.js';

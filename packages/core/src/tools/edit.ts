@@ -11,12 +11,12 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-  ToolCallConfirmationDetails,
+  type ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
-  ToolEditConfirmationDetails,
-  ToolInvocation,
-  ToolLocation,
-  ToolResult,
+  type ToolEditConfirmationDetails,
+  type ToolInvocation,
+  type ToolLocation,
+  type ToolResult,
 } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
@@ -25,7 +25,10 @@ import { isNodeError } from '../utils/errors.js';
 import { Config, ApprovalMode } from '../config/config.js';
 import { DEFAULT_DIFF_OPTIONS, getDiffStat } from './diffOptions.js';
 import { ReadFileTool } from './read-file.js';
-import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
+import {
+  type ModifiableDeclarativeTool,
+  type ModifyContext,
+} from './modifiable-tool.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';

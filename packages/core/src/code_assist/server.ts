@@ -6,27 +6,27 @@
 
 import { OAuth2Client } from 'google-auth-library';
 import {
-  CodeAssistGlobalUserSettingResponse,
-  LoadCodeAssistRequest,
-  LoadCodeAssistResponse,
-  LongRunningOperationResponse,
-  OnboardUserRequest,
-  SetCodeAssistGlobalUserSettingRequest,
+  type CodeAssistGlobalUserSettingResponse,
+  type LoadCodeAssistRequest,
+  type LoadCodeAssistResponse,
+  type LongRunningOperationResponse,
+  type OnboardUserRequest,
+  type SetCodeAssistGlobalUserSettingRequest,
 } from './types.js';
 import {
-  CountTokensParameters,
+  type CountTokensParameters,
   CountTokensResponse,
-  EmbedContentParameters,
+  type EmbedContentParameters,
   EmbedContentResponse,
-  GenerateContentParameters,
+  type GenerateContentParameters,
   GenerateContentResponse,
 } from '@google/genai';
 import * as readline from 'readline';
-import { ContentGenerator } from '../core/contentGenerator.js';
+import { type ContentGenerator } from '../core/contentGenerator.js';
 import { UserTierId } from './types.js';
 import {
-  CaCountTokenResponse,
-  CaGenerateContentResponse,
+  type CaCountTokenResponse,
+  type CaGenerateContentResponse,
   fromCountTokenResponse,
   fromGenerateContentResponse,
   toCountTokenRequest,

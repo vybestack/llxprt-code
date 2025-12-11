@@ -1,4 +1,4 @@
-import { useKeyboard } from '@opentui/react';
+import { useKeyboard } from '@vybestack/opentui-react';
 import { useCallback, useState, type JSX } from 'react';
 import { useListNavigation } from '../../hooks/useListNavigation';
 import { ModalShell } from './ModalShell';

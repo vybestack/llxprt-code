@@ -1,4 +1,4 @@
-import type { TextareaRenderable } from '@opentui/core';
+import type { TextareaRenderable } from '@vybestack/opentui-core';
 import { useCallback, useEffect, useRef, type RefObject } from 'react';
 import type { PersistentHistoryService } from './persistentHistory';
 

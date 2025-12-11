@@ -4,13 +4,13 @@
  */
 import { DebugLogger } from '../../debug/index.js';
 import {
-  IContent,
-  ToolCallBlock,
-  ToolResponseBlock,
-  TextBlock,
+  type IContent,
+  type ToolCallBlock,
+  type ToolResponseBlock,
+  type TextBlock,
 } from '../../services/history/IContent.js';
-import { ITool } from '../ITool.js';
-import { ResponsesTool } from '../../tools/IToolFormatter.js';
+import { type ITool } from '../ITool.js';
+import { type ResponsesTool } from '../../tools/IToolFormatter.js';
 import {
   ensureJsonSafe,
   hasUnicodeReplacements,

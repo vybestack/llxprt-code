@@ -2,7 +2,7 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
-import { IContent } from '../../services/history/IContent.js';
+import { type IContent } from '../../services/history/IContent.js';
 import { createStreamInterruptionError } from '../../utils/retry.js';
 
 // Types for Responses API events

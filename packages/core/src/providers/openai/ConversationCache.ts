@@ -1,4 +1,4 @@
-import { IContent } from '../../services/history/IContent.js';
+import { type IContent } from '../../services/history/IContent.js';
 
 interface CacheEntry {
   conversationId: string;

@@ -900,7 +900,7 @@ SOFTWARE.
 
 ============================================================
 iconv-lite@0.6.3
-(git://github.com/ashtuchkin/iconv-lite.git)
+(https://github.com/pillarjs/iconv-lite.git)
 
 Copyright (c) 2011 Alexander Shtuchkin
 

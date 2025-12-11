@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getLogger } from '../../lib/logger';
 
 export type ThemeKind = 'light' | 'dark' | 'ansi' | 'custom';
@@ -66,7 +67,10 @@ export interface ThemeDefinition {
   readonly colors: ThemeColors;
 }
 
-const THEMES_DIR = path.resolve(process.cwd(), 'themes');
+// Get the directory of this source file, then navigate to themes directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const THEMES_DIR = path.resolve(__dirname, '../../../themes');
 export const DEFAULT_THEME_SLUG = 'green-screen';
 
 const logger = getLogger('nui:theme');

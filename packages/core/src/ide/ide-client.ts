@@ -13,7 +13,7 @@ import {
   IdeDiffAcceptedNotificationSchema,
   IdeDiffClosedNotificationSchema,
   CloseDiffResponseSchema,
-  DiffUpdateResult,
+  type DiffUpdateResult,
 } from '../ide/ideContext.js';
 import { getIdeProcessInfo } from './process-utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';

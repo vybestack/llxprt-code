@@ -25,7 +25,7 @@ import { DebugLogger } from '../../debug/index.js';
 import { ToolCallCollector } from './ToolCallCollector.js';
 import {
   ToolCallNormalizer,
-  NormalizedToolCall,
+  type NormalizedToolCall,
 } from './ToolCallNormalizer.js';
 
 const logger = new DebugLogger('llxprt:providers:openai:toolCallPipeline');
@@ -201,4 +201,4 @@ export class ToolCallPipeline {
 }
 
 // Import type from ToolCallCollector
-import { ToolCallFragment } from './ToolCallCollector.js';
+import { type ToolCallFragment } from './ToolCallCollector.js';

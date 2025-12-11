@@ -1,4 +1,4 @@
-import type { TextareaRenderable } from '@opentui/core';
+import type { TextareaRenderable } from '@vybestack/opentui-core';
 import { useCallback, useState, useRef, type RefObject } from 'react';
 import {
   extractMentionQuery,

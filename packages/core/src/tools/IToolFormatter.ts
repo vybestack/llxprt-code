@@ -20,8 +20,8 @@
  * limitations under the License.
  */
 
-import { ITool } from '../providers/ITool.js';
-import { ToolCallBlock } from '../services/history/IContent.js';
+import { type ITool } from '../providers/ITool.js';
+import { type ToolCallBlock } from '../services/history/IContent.js';
 
 export type ToolFormat =
   | 'openai'

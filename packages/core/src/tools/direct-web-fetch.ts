@@ -12,13 +12,13 @@ import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
   BaseDeclarativeTool,
   Kind,
-  ToolInvocation,
-  ToolResult,
+  type ToolInvocation,
+  type ToolResult,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import { Config } from '../config/config.js';
 import { BaseToolInvocation } from './tools.js';
-import fetch, { RequestInit } from 'node-fetch';
+import fetch, { type RequestInit } from 'node-fetch';
 import TurndownService from 'turndown';
 import * as cheerio from 'cheerio';
 

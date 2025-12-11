@@ -1,6 +1,6 @@
-import type { KeyEvent, TextareaRenderable } from '@opentui/core';
+import type { KeyEvent, TextareaRenderable } from '@vybestack/opentui-core';
 import type { RefObject } from 'react';
-import { useKeyboard } from '@opentui/react';
+import { useKeyboard } from '@vybestack/opentui-react';
 import { useCallback, useEffect, useRef } from 'react';
 import { getLogger } from '../lib/logger';
 

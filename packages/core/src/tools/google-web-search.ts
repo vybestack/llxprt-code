@@ -4,17 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BaseDeclarativeTool, Kind, ToolInvocation } from './tools.js';
+import { BaseDeclarativeTool, Kind, type ToolInvocation } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { Config } from '../config/config.js';
 import {
   GoogleWebSearchToolInvocation,
-  WebSearchToolParams,
-  WebSearchToolResult,
+  type WebSearchToolParams,
+  type WebSearchToolResult,
 } from './google-web-search-invocation.js';
 
 // Re-export interfaces for external consumers
-export {
+export type {
   WebSearchToolParams,
   WebSearchToolResult,
 } from './google-web-search-invocation.js';

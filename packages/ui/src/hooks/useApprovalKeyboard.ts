@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useKeyboard } from '@opentui/react';
+import { useKeyboard } from '@vybestack/opentui-react';
 import type { ToolApprovalOutcome } from '../ui/components/ChatLayout';
 import { getLogger } from '../lib/logger';
 

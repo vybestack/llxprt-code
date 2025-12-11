@@ -1,6 +1,9 @@
-import type { ScrollBoxRenderable, TextareaRenderable } from '@opentui/core';
+import type {
+  ScrollBoxRenderable,
+  TextareaRenderable,
+} from '@vybestack/opentui-core';
 import type { JSX } from 'react';
-import { useRenderer } from '@opentui/react';
+import { useRenderer } from '@vybestack/opentui-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   CompletedToolCall,
