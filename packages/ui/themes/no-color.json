@@ -1,0 +1,59 @@
+{
+  "name": "NoColor",
+  "slug": "nocolor",
+  "kind": "dark",
+  "colors": {
+    "background": "#0f172a",
+    "panel": {
+      "bg": "#0f172a",
+      "border": "#94a3b8",
+      "headerBg": "#0f172a",
+      "headerFg": "#e5e7eb"
+    },
+    "text": {
+      "primary": "#e5e7eb",
+      "muted": "#94a3b8",
+      "user": "#e5e7eb",
+      "responder": "#e5e7eb",
+      "thinking": "#94a3b8",
+      "tool": "#e5e7eb"
+    },
+    "input": {
+      "bg": "#0f172a",
+      "fg": "#e5e7eb",
+      "placeholder": "#94a3b8",
+      "border": "#94a3b8"
+    },
+    "status": {
+      "fg": "#e5e7eb",
+      "muted": "#94a3b8"
+    },
+    "accent": {
+      "primary": "#e5e7eb",
+      "secondary": "#e5e7eb",
+      "warning": "#e5e7eb",
+      "error": "#e5e7eb",
+      "success": "#e5e7eb"
+    },
+    "selection": {
+      "fg": "#0f172a",
+      "bg": "#e5e7eb"
+    },
+    "diff": {
+      "addedBg": "#e5e7eb",
+      "addedFg": "#e5e7eb",
+      "removedBg": "#e5e7eb",
+      "removedFg": "#e5e7eb"
+    },
+    "scrollbar": {
+      "thumb": "#e5e7eb",
+      "track": "#94a3b8"
+    },
+    "message": {
+      "userBorder": "#e5e7eb",
+      "systemBorder": "#e5e7eb",
+      "systemText": "#e5e7eb",
+      "systemBg": "#1a2435"
+    }
+  }
+}

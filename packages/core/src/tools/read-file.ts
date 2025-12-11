@@ -10,12 +10,12 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-  ToolInvocation,
-  ToolLocation,
-  ToolResult,
+  type ToolInvocation,
+  type ToolLocation,
+  type ToolResult,
 } from './tools.js';
 
-import { PartUnion } from '@google/genai';
+import { type PartUnion } from '@google/genai';
 import {
   processSingleFileContent,
   getSpecificMimeType,

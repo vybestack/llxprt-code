@@ -153,13 +153,13 @@ export * from './todo/todoFormatter.js';
 
 // MCP OAuth
 export { MCPOAuthProvider } from './mcp/oauth-provider.js';
-export {
+export { MCPOAuthTokenStorage } from './mcp/oauth-token-storage.js';
+export type {
   MCPOAuthToken,
   MCPOAuthCredentials,
-  MCPOAuthTokenStorage,
 } from './mcp/oauth-token-storage.js';
-export {
-  BaseTokenStore,
+export { BaseTokenStore } from './mcp/token-store.js';
+export type {
   MCPOAuthToken as MCPOAuthTokenInterface,
   MCPOAuthCredentials as MCPOAuthCredentialsInterface,
 } from './mcp/token-store.js';

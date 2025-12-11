@@ -5,7 +5,7 @@
  */
 
 import { Type } from '@google/genai';
-import { BaseTool, ToolResult, Kind } from './tools.js';
+import { BaseTool, type ToolResult, Kind } from './tools.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 
 export interface TodoPauseParams {

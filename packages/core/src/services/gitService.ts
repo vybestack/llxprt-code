@@ -8,7 +8,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { isNodeError } from '../utils/errors.js';
 import { exec } from 'node:child_process';
-import { simpleGit, SimpleGit, CheckRepoActions } from 'simple-git';
+import { simpleGit, type SimpleGit, CheckRepoActions } from 'simple-git';
 import { ensureLlxprtDirExists } from '../utils/paths.js';
 import { Storage } from '../config/storage.js';
 

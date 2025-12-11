@@ -1,0 +1,59 @@
+{
+  "name": "GitHub",
+  "slug": "github",
+  "kind": "dark",
+  "colors": {
+    "background": "#24292e",
+    "panel": {
+      "bg": "#24292e",
+      "border": "#6A737D",
+      "headerBg": "#24292e",
+      "headerFg": "#d1d5da"
+    },
+    "text": {
+      "primary": "#d1d5da",
+      "muted": "#6A737D",
+      "user": "#79B8FF",
+      "responder": "#FFAB70",
+      "thinking": "#6A737D",
+      "tool": "#85E89D"
+    },
+    "input": {
+      "bg": "#24292e",
+      "fg": "#d1d5da",
+      "placeholder": "#6A737D",
+      "border": "#6A737D"
+    },
+    "status": {
+      "fg": "#85E89D",
+      "muted": "#6A737D"
+    },
+    "accent": {
+      "primary": "#79B8FF",
+      "secondary": "#B392F0",
+      "warning": "#FFAB70",
+      "error": "#F97583",
+      "success": "#85E89D"
+    },
+    "selection": {
+      "fg": "#0f172a",
+      "bg": "#79B8FF"
+    },
+    "diff": {
+      "addedBg": "#3C4636",
+      "addedFg": "#d1d5da",
+      "removedBg": "#502125",
+      "removedFg": "#d1d5da"
+    },
+    "scrollbar": {
+      "thumb": "#79B8FF",
+      "track": "#6A737D"
+    },
+    "message": {
+      "userBorder": "#79B8FF",
+      "systemBorder": "#FFAB70",
+      "systemText": "#FFAB70",
+      "systemBg": "#2d3339"
+    }
+  }
+}

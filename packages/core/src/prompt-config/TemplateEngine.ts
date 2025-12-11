@@ -1,8 +1,8 @@
 import path from 'node:path';
 import {
-  TemplateVariables,
-  TemplateProcessingOptions,
-  PromptContext,
+  type TemplateVariables,
+  type TemplateProcessingOptions,
+  type PromptContext,
 } from './types.js';
 
 /**

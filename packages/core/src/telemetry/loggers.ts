@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { logs, LogRecord, LogAttributes } from '@opentelemetry/api-logs';
+import {
+  logs,
+  type LogRecord,
+  type LogAttributes,
+} from '@opentelemetry/api-logs';
 import { SemanticAttributes } from '@opentelemetry/semantic-conventions';
 import { Config } from '../config/config.js';
 import {
@@ -62,7 +66,7 @@ import {
   FileOperation,
 } from './metrics.js';
 import { isTelemetrySdkInitialized } from './sdk.js';
-import { uiTelemetryService, UiEvent } from './uiTelemetry.js';
+import { uiTelemetryService, type UiEvent } from './uiTelemetry.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 
 type SessionConfig = Pick<Config, 'getSessionId'>;

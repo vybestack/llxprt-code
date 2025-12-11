@@ -1,4 +1,4 @@
-import { PromptContext } from './types.js';
+import { type PromptContext } from './types.js';
 
 /**
  * Represents a cached prompt entry with metadata

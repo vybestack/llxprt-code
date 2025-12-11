@@ -5,15 +5,15 @@
  */
 
 import {
-  ContentGenerator,
-  ContentGeneratorConfig,
+  type ContentGenerator,
+  type ContentGeneratorConfig,
 } from './contentGenerator.js';
 import {
-  GenerateContentParameters,
+  type GenerateContentParameters,
   GenerateContentResponse,
-  CountTokensParameters,
+  type CountTokensParameters,
   CountTokensResponse,
-  EmbedContentParameters,
+  type EmbedContentParameters,
   EmbedContentResponse,
   GoogleGenAI,
   Models,

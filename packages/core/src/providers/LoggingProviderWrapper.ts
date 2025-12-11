@@ -6,14 +6,17 @@
  */
 
 import {
-  IProvider,
-  IModel,
-  ITool,
-  GenerateChatOptions,
-  ProviderToolset,
+  type IProvider,
+  type IModel,
+  type ITool,
+  type GenerateChatOptions,
+  type ProviderToolset,
 } from './IProvider.js';
-import { IContent, UsageStats } from '../services/history/IContent.js';
-import { Config, RedactionConfig } from '../config/config.js';
+import {
+  type IContent,
+  type UsageStats,
+} from '../services/history/IContent.js';
+import { Config, type RedactionConfig } from '../config/config.js';
 import {
   logConversationRequest,
   logConversationResponse,

@@ -5,18 +5,18 @@
  */
 
 import {
-  ContentGenerator,
-  ContentGeneratorConfig,
+  type ContentGenerator,
+  type ContentGeneratorConfig,
 } from '../core/contentGenerator.js';
 import {
-  GenerateContentParameters,
+  type GenerateContentParameters,
   GenerateContentResponse,
-  CountTokensParameters,
+  type CountTokensParameters,
   CountTokensResponse,
-  EmbedContentParameters,
+  type EmbedContentParameters,
   EmbedContentResponse,
-  Content,
-  Part,
+  type Content,
+  type Part,
 } from '@google/genai';
 import type { IProviderManager as ProviderManager } from './IProviderManager.js';
 

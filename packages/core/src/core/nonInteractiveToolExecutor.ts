@@ -5,20 +5,20 @@
  */
 
 import {
-  FileDiff,
+  type FileDiff,
   logToolCall,
-  ToolCallRequestInfo,
-  ToolCallResponseInfo,
+  type ToolCallRequestInfo,
+  type ToolCallResponseInfo,
   ToolErrorType,
-  ToolResult,
+  type ToolResult,
   DEFAULT_AGENT_ID,
 } from '../index.js';
-import { Part } from '@google/genai';
+import { type Part } from '@google/genai';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import type { Config } from '../config/config.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
 import { ToolCallDecision } from '../telemetry/types.js';
-import { EmojiFilter, FilterResult } from '../filters/EmojiFilter.js';
+import { EmojiFilter, type FilterResult } from '../filters/EmojiFilter.js';
 import { DebugLogger } from '../debug/index.js';
 
 /**

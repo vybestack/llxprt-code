@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Todo, TodoToolCall } from '../tools/todo-schemas.js';
+import { type Todo, type TodoToolCall } from '../tools/todo-schemas.js';
 
 export interface GroupedToolCall {
   toolCall: TodoToolCall;

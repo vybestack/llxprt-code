@@ -12,23 +12,26 @@ import type {
   InputJSONDelta,
 } from '@anthropic-ai/sdk/resources/messages/index.js';
 import { DebugLogger } from '../../debug/index.js';
-import { IModel } from '../IModel.js';
+import { type IModel } from '../IModel.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
-import { convertToolsToAnthropic, AnthropicTool } from './schemaConverter.js';
-import { IProviderConfig } from '../types/IProviderConfig.js';
+import {
+  convertToolsToAnthropic,
+  type AnthropicTool,
+} from './schemaConverter.js';
+import { type IProviderConfig } from '../types/IProviderConfig.js';
 import {
   BaseProvider,
-  BaseProviderConfig,
-  NormalizedGenerateChatOptions,
+  type BaseProviderConfig,
+  type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import { OAuthManager } from '../../auth/precedence.js';
+import { type OAuthManager } from '../../auth/precedence.js';
 import {
-  IContent,
-  ContentBlock,
-  ToolCallBlock,
-  ToolResponseBlock,
-  TextBlock,
-  ThinkingBlock,
+  type IContent,
+  type ContentBlock,
+  type ToolCallBlock,
+  type ToolResponseBlock,
+  type TextBlock,
+  type ThinkingBlock,
 } from '../../services/history/IContent.js';
 import {
   processToolParameters,

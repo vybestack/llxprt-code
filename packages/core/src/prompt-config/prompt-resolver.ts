@@ -6,7 +6,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { PromptContext } from './types.js';
+import { type PromptContext } from './types.js';
 
 const logger = new DebugLogger('llxprt:prompt-config:resolver');
 

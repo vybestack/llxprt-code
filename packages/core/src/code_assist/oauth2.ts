@@ -6,7 +6,7 @@
 
 import {
   OAuth2Client,
-  Credentials,
+  type Credentials,
   Compute,
   CodeChallengeMethod,
 } from 'google-auth-library';

@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IContent } from '../services/history/IContent.js';
-import { ServerGeminiStreamEvent } from '../core/turn.js';
+import { type IContent } from '../services/history/IContent.js';
+import { type ServerGeminiStreamEvent } from '../core/turn.js';
 
 /**
  * Interface for adapting provider-specific streams to Gemini event format

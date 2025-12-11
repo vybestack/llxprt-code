@@ -1,0 +1,59 @@
+{
+  "name": "ANSI",
+  "slug": "ansi",
+  "kind": "dark",
+  "colors": {
+    "background": "black",
+    "panel": {
+      "bg": "black",
+      "border": "gray",
+      "headerBg": "black",
+      "headerFg": "white"
+    },
+    "text": {
+      "primary": "white",
+      "muted": "gray",
+      "user": "bluebright",
+      "responder": "yellow",
+      "thinking": "gray",
+      "tool": "green"
+    },
+    "input": {
+      "bg": "black",
+      "fg": "white",
+      "placeholder": "gray",
+      "border": "gray"
+    },
+    "status": {
+      "fg": "green",
+      "muted": "gray"
+    },
+    "accent": {
+      "primary": "blue",
+      "secondary": "magenta",
+      "warning": "yellow",
+      "error": "red",
+      "success": "green"
+    },
+    "selection": {
+      "fg": "#0f172a",
+      "bg": "blue"
+    },
+    "diff": {
+      "addedBg": "#003300",
+      "addedFg": "white",
+      "removedBg": "#4D0000",
+      "removedFg": "white"
+    },
+    "scrollbar": {
+      "thumb": "blue",
+      "track": "gray"
+    },
+    "message": {
+      "userBorder": "bluebright",
+      "systemBorder": "yellow",
+      "systemText": "yellow",
+      "systemBg": "#1a1a1a"
+    }
+  }
+}

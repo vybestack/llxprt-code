@@ -1,0 +1,59 @@
+{
+  "name": "Green Screen",
+  "slug": "green-screen",
+  "kind": "dark",
+  "colors": {
+    "background": "#000000",
+    "panel": {
+      "bg": "#000000",
+      "border": "#6a9955",
+      "headerBg": "#000000",
+      "headerFg": "#6a9955"
+    },
+    "text": {
+      "primary": "#6a9955",
+      "muted": "#6a9955",
+      "user": "#6a9955",
+      "responder": "#6a9955",
+      "thinking": "#6a9955",
+      "tool": "#6a9955"
+    },
+    "input": {
+      "bg": "#000000",
+      "fg": "#6a9955",
+      "placeholder": "#3b7a3b",
+      "border": "#6a9955"
+    },
+    "status": {
+      "fg": "#6a9955",
+      "muted": "#6a9955"
+    },
+    "accent": {
+      "primary": "#6a9955",
+      "secondary": "#6a9955",
+      "warning": "#6a9955",
+      "error": "#6a9955",
+      "success": "#00ff00"
+    },
+    "selection": {
+      "fg": "#000000",
+      "bg": "#6a9955"
+    },
+    "diff": {
+      "addedBg": "#6a9955",
+      "addedFg": "#000000",
+      "removedBg": "#6a9955",
+      "removedFg": "#000000"
+    },
+    "scrollbar": {
+      "thumb": "#6a9955",
+      "track": "#1a3318"
+    },
+    "message": {
+      "userBorder": "#6a9955",
+      "systemBorder": "#00ff00",
+      "systemText": "#00ff00",
+      "systemBg": "#0a1a0a"
+    }
+  }
+}

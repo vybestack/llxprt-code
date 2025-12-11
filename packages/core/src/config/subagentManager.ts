@@ -6,9 +6,9 @@
 
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
-import { SubagentConfig } from '../config/types.js';
+import { type SubagentConfig } from '../config/types.js';
 import { ProfileManager } from './profileManager.js';
-import { NodeJSError } from '../interfaces/nodejs-error.interface.js';
+import { type NodeJSError } from '../interfaces/nodejs-error.interface.js';
 
 // Error message templates for consistency
 // @plan:PLAN-20250117-SUBAGENTCONFIG.P05

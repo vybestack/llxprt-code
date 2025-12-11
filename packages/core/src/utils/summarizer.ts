@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ToolResult } from '../tools/tools.js';
+import { type ToolResult } from '../tools/tools.js';
 import {
-  Content,
-  GenerateContentConfig,
+  type Content,
+  type GenerateContentConfig,
   GenerateContentResponse,
 } from '@google/genai';
 import { GeminiClient } from '../core/client.js';

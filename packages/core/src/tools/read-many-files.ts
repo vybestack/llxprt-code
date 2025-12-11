@@ -8,8 +8,8 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-  ToolInvocation,
-  ToolResult,
+  type ToolInvocation,
+  type ToolResult,
 } from './tools.js';
 import { getErrorMessage } from '../utils/errors.js';
 import * as fs from 'fs';
@@ -22,7 +22,7 @@ import {
   DEFAULT_ENCODING,
   getSpecificMimeType,
 } from '../utils/fileUtils.js';
-import { PartListUnion } from '@google/genai';
+import { type PartListUnion } from '@google/genai';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
 import {
   recordFileOperationMetric,

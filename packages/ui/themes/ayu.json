@@ -1,0 +1,59 @@
+{
+  "name": "Ayu",
+  "slug": "ayu",
+  "kind": "dark",
+  "colors": {
+    "background": "#0b0e14",
+    "panel": {
+      "bg": "#0b0e14",
+      "border": "#3D4149",
+      "headerBg": "#0b0e14",
+      "headerFg": "#bfbdb6"
+    },
+    "text": {
+      "primary": "#bfbdb6",
+      "muted": "#646A71",
+      "user": "#59C2FF",
+      "responder": "#FFB454",
+      "thinking": "#3D4149",
+      "tool": "#AAD94C"
+    },
+    "input": {
+      "bg": "#0b0e14",
+      "fg": "#bfbdb6",
+      "placeholder": "#646A71",
+      "border": "#3D4149"
+    },
+    "status": {
+      "fg": "#AAD94C",
+      "muted": "#646A71"
+    },
+    "accent": {
+      "primary": "#39BAE6",
+      "secondary": "#D2A6FF",
+      "warning": "#FFB454",
+      "error": "#F26D78",
+      "success": "#AAD94C"
+    },
+    "selection": {
+      "fg": "#0f172a",
+      "bg": "#39BAE6"
+    },
+    "diff": {
+      "addedBg": "#293022",
+      "addedFg": "#bfbdb6",
+      "removedBg": "#3D1215",
+      "removedFg": "#bfbdb6"
+    },
+    "scrollbar": {
+      "thumb": "#39BAE6",
+      "track": "#3D4149"
+    },
+    "message": {
+      "userBorder": "#59C2FF",
+      "systemBorder": "#FFB454",
+      "systemText": "#FFB454",
+      "systemBg": "#151922"
+    }
+  }
+}

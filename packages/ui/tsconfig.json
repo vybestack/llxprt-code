@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "@vybestack/opentui-react",
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["node", "bun", "vitest/globals"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@vybestack/llxprt-code-core": ["../core/src/index.ts"],
+      "@vybestack/llxprt-code-core/*": ["../core/src/*"]
+    }
+  },
+  "include": ["src", "scripts"],
+  "exclude": ["node_modules", "dist"],
+  "references": [{ "path": "../core" }]
+}

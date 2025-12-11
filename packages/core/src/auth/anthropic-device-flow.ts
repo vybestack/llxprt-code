@@ -5,7 +5,7 @@
  * Based on the OAuth 2.0 Device Authorization Grant specification (RFC 8628).
  */
 
-import { DeviceCodeResponse, OAuthToken } from './types.js';
+import { type DeviceCodeResponse, type OAuthToken } from './types.js';
 import { createHash, randomBytes } from 'crypto';
 import { URL } from 'node:url';
 

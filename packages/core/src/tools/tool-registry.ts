@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { FunctionDeclaration } from '@google/genai';
+import { type FunctionDeclaration } from '@google/genai';
 import {
-  AnyDeclarativeTool,
+  type AnyDeclarativeTool,
   Kind,
-  ToolResult,
+  type ToolResult,
   BaseTool,
   BaseToolInvocation,
 } from './tools.js';
-import { ToolContext } from './tool-context.js';
+import { type ToolContext } from './tool-context.js';
 import { Config } from '../config/config.js';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';

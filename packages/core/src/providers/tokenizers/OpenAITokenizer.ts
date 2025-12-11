@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { encoding_for_model, TiktokenModel } from '@dqbd/tiktoken';
+import { encoding_for_model, type TiktokenModel } from '@dqbd/tiktoken';
 import { DebugLogger } from '../../debug/DebugLogger.js';
-import { ITokenizer } from './ITokenizer.js';
+import { type ITokenizer } from './ITokenizer.js';
 
 export class OpenAITokenizer implements ITokenizer {
   private readonly logger = new DebugLogger('llxprt:tokenizer:openai');

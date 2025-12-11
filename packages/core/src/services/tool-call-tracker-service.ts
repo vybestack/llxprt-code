@@ -5,7 +5,7 @@
  */
 
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
-import { TodoToolCall } from '../tools/todo-schemas.js';
+import { type TodoToolCall } from '../tools/todo-schemas.js';
 import { DEFAULT_AGENT_ID } from '../core/turn.js';
 
 // Map of session ID -> agent ID -> todo ID -> tool calls

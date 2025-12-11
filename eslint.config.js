@@ -51,6 +51,8 @@ export default tseslint.config(
       '.stryker-tmp/**',
       '**/.stryker-tmp/**',
       'project-plans/**',
+      'packages/opentui/**',
+      'packages/ui/**',
     ],
   },
   eslint.configs.recommended,

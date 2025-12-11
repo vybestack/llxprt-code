@@ -57,30 +57,54 @@ if (process.env.DEBUG && !sandboxCommand) {
   }
 }
 
-nodeArgs.push('./packages/cli');
-nodeArgs.push(...process.argv.slice(2));
+// Check if --experimental-ui flag is present
+const args = process.argv.slice(2);
+const experimentalUi = args.includes('--experimental-ui');
 
-const env = {
-  ...process.env,
-  CLI_VERSION: pkg.version,
-  DEV: 'true',
-};
+// In development (running via this script), use bun for UI
+if (experimentalUi) {
+  // In development, launch UI with bun directly since it exports TypeScript
+  const uiArgs = ['run', join(root, 'packages/ui/src/main.tsx')];
+  // Filter out --experimental-ui and pass remaining args
+  const filteredArgs = args.filter((a) => a !== '--experimental-ui');
+  uiArgs.push(...filteredArgs);
 
-if (bootstrapSnapshot.bootstrapArgs.profileName) {
-  env.LLXPRT_BOOTSTRAP_PROFILE = bootstrapSnapshot.bootstrapArgs.profileName;
+  const uiChild = spawn('bun', uiArgs, {
+    stdio: 'inherit',
+    env: { ...process.env, CLI_VERSION: pkg.version, DEV: 'true' },
+    cwd: root,
+  });
+
+  uiChild.on('close', (code) => {
+    process.exit(code);
+  });
+} else {
+  // Standard CLI path
+  nodeArgs.push('./packages/cli');
+  nodeArgs.push(...args);
+
+  const env = {
+    ...process.env,
+    CLI_VERSION: pkg.version,
+    DEV: 'true',
+  };
+
+  if (bootstrapSnapshot.bootstrapArgs.profileName) {
+    env.LLXPRT_BOOTSTRAP_PROFILE = bootstrapSnapshot.bootstrapArgs.profileName;
+  }
+  if (bootstrapSnapshot.bootstrapArgs.providerOverride) {
+    env.LLXPRT_BOOTSTRAP_PROVIDER =
+      bootstrapSnapshot.bootstrapArgs.providerOverride;
+  }
+
+  if (process.env.DEBUG) {
+    // If this is not set, the debugger will pause on the outer process rather
+    // than the relaunched process making it harder to debug.
+    env.LLXPRT_CODE_NO_RELAUNCH = 'true';
+  }
+  const child = spawn('node', nodeArgs, { stdio: 'inherit', env });
+
+  child.on('close', (code) => {
+    process.exit(code);
+  });
 }
-if (bootstrapSnapshot.bootstrapArgs.providerOverride) {
-  env.LLXPRT_BOOTSTRAP_PROVIDER =
-    bootstrapSnapshot.bootstrapArgs.providerOverride;
-}
-
-if (process.env.DEBUG) {
-  // If this is not set, the debugger will pause on the outer process rather
-  // than the relaunched process making it harder to debug.
-  env.LLXPRT_CODE_NO_RELAUNCH = 'true';
-}
-const child = spawn('node', nodeArgs, { stdio: 'inherit', env });
-
-child.on('close', (code) => {
-  process.exit(code);
-});

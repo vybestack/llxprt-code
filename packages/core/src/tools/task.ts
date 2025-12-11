@@ -8,7 +8,7 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-  ToolResult,
+  type ToolResult,
 } from './tools.js';
 import type { Config } from '../config/config.js';
 import {

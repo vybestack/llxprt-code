@@ -11,8 +11,8 @@
 import {
   BaseDeclarativeTool,
   Kind,
-  ToolInvocation,
-  ToolResult,
+  type ToolInvocation,
+  type ToolResult,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import { Config } from '../config/config.js';

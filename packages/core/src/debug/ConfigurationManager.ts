@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { LLXPRT_DIR } from '../utils/paths.js';
-import { DebugSettings } from './types.js';
+import { type DebugSettings } from './types.js';
 
 export class ConfigurationManager {
   // Line 11: PRIVATE static instance: ConfigurationManager

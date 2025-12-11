@@ -5,10 +5,10 @@
  */
 
 import {
-  ClientMetadata,
-  GeminiUserTier,
-  LoadCodeAssistResponse,
-  OnboardUserRequest,
+  type ClientMetadata,
+  type GeminiUserTier,
+  type LoadCodeAssistResponse,
+  type OnboardUserRequest,
   UserTierId,
 } from './types.js';
 import { CodeAssistServer } from './server.js';

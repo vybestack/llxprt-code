@@ -1,0 +1,59 @@
+{
+  "name": "Ayu Light",
+  "slug": "ayu-light",
+  "kind": "light",
+  "colors": {
+    "background": "#f8f9fa",
+    "panel": {
+      "bg": "#f8f9fa",
+      "border": "#a6aaaf",
+      "headerBg": "#f8f9fa",
+      "headerFg": "#5c6166"
+    },
+    "text": {
+      "primary": "#5c6166",
+      "muted": "#ABADB1",
+      "user": "#55b4d4",
+      "responder": "#f2ae49",
+      "thinking": "#a6aaaf",
+      "tool": "#86b300"
+    },
+    "input": {
+      "bg": "#f8f9fa",
+      "fg": "#5c6166",
+      "placeholder": "#ABADB1",
+      "border": "#a6aaaf"
+    },
+    "status": {
+      "fg": "#86b300",
+      "muted": "#ABADB1"
+    },
+    "accent": {
+      "primary": "#399ee6",
+      "secondary": "#a37acc",
+      "warning": "#f2ae49",
+      "error": "#f07171",
+      "success": "#86b300"
+    },
+    "selection": {
+      "fg": "#f8fafc",
+      "bg": "#399ee6"
+    },
+    "diff": {
+      "addedBg": "#C6EAD8",
+      "addedFg": "#5c6166",
+      "removedBg": "#FFCCCC",
+      "removedFg": "#5c6166"
+    },
+    "scrollbar": {
+      "thumb": "#399ee6",
+      "track": "#a6aaaf"
+    },
+    "message": {
+      "userBorder": "#55b4d4",
+      "systemBorder": "#f2ae49",
+      "systemText": "#f2ae49",
+      "systemBg": "#f0f1f2"
+    }
+  }
+}

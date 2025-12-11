@@ -1,7 +1,7 @@
 import {
-  IContent,
-  TextBlock,
-  ToolResponseBlock,
+  type IContent,
+  type TextBlock,
+  type ToolResponseBlock,
 } from '../../services/history/IContent.js';
 import { ConversationCache } from './ConversationCache.js';
 

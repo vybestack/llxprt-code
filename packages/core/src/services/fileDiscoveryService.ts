@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GitIgnoreParser, GitIgnoreFilter } from '../utils/gitIgnoreParser.js';
+import {
+  GitIgnoreParser,
+  type GitIgnoreFilter,
+} from '../utils/gitIgnoreParser.js';
 import { findGitRoot } from '../utils/gitUtils.js';
 import * as fs from 'fs';
 import * as path from 'path';

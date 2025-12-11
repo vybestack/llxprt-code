@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { getPty, PtyImplementation } from '../utils/getPty.js';
+import { getPty, type PtyImplementation } from '../utils/getPty.js';
 import { spawn as cpSpawn } from 'child_process';
 import { TextDecoder } from 'util';
 import os from 'os';

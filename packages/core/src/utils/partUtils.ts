@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { PartListUnion, Part } from '@google/genai';
+import { type PartListUnion, type Part } from '@google/genai';
 
 /**
  * Converts a PartListUnion into a string.

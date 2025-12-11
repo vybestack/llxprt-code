@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Profile } from '../types/modelParams.js';
+import { type Profile } from '../types/modelParams.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import fs from 'fs/promises';
 import os from 'os';

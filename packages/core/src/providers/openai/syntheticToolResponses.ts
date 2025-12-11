@@ -5,9 +5,9 @@
  */
 
 import {
-  IContent,
-  ToolCallBlock,
-  ToolResponseBlock,
+  type IContent,
+  type ToolCallBlock,
+  type ToolResponseBlock,
 } from '../../services/history/IContent.js';
 import { DebugLogger } from '../../debug/DebugLogger.js';
 

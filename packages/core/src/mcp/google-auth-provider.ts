@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
+import { type OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import {
-  OAuthClientInformation,
-  OAuthClientInformationFull,
-  OAuthClientMetadata,
-  OAuthTokens,
+  type OAuthClientInformation,
+  type OAuthClientInformationFull,
+  type OAuthClientMetadata,
+  type OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { GoogleAuth } from 'google-auth-library';
 import { MCPServerConfig } from '../config/config.js';

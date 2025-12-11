@@ -8,19 +8,22 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-  ToolEditConfirmationDetails,
+  type ToolEditConfirmationDetails,
   ToolConfirmationOutcome,
-  ToolResult,
+  type ToolResult,
 } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import { FunctionDeclaration } from '@google/genai';
+import { type FunctionDeclaration } from '@google/genai';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Storage } from '../config/storage.js';
 import * as Diff from 'diff';
 import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
 import { tildeifyPath } from '../utils/paths.js';
-import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
+import {
+  type ModifiableDeclarativeTool,
+  type ModifyContext,
+} from './modifiable-tool.js';
 import { ToolErrorType } from './tool-error.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { IModel } from './IModel.js';
-import { ITool } from './ITool.js';
-import { IContent } from '../services/history/IContent.js';
+import { type IModel } from './IModel.js';
+import { type ITool } from './ITool.js';
+import { type IContent } from '../services/history/IContent.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import type { Config } from '../config/config.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';

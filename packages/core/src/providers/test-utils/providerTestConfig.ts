@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { IProviderConfig } from '../types/IProviderConfig.js';
+import { type IProviderConfig } from '../types/IProviderConfig.js';
 
 /**
  * Test configuration for providers that allows browser environment

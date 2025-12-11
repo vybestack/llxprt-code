@@ -16,7 +16,7 @@ import {
   type Part,
   GenerateContentResponseUsageMetadata,
   type Tool,
-  PartListUnion,
+  type PartListUnion,
   ApiError,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
@@ -26,7 +26,7 @@ import {
   extractThinkingBlocks,
   estimateThinkingTokens,
 } from '../providers/reasoning/reasoningUtils.js';
-import { ContentGenerator } from './contentGenerator.js';
+import { type ContentGenerator } from './contentGenerator.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 import type {
