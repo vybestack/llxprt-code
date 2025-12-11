@@ -22,6 +22,9 @@ import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
 import { tildeifyPath } from '../utils/paths.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { ToolErrorType } from './tool-error.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const logger = new DebugLogger('llxprt:tools:memory');
 
 const memoryToolSchemaData: FunctionDeclaration = {
   name: 'save_memory',
@@ -291,8 +294,8 @@ class MemoryToolInvocation extends BaseToolInvocation<
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.error(
-        `[MemoryTool] Error executing save_memory for fact "${fact}": ${errorMessage}`,
+      logger.error(
+        `Error executing save_memory for fact "${fact}": ${errorMessage}`,
       );
       return {
         llmContent: JSON.stringify({
@@ -380,9 +383,8 @@ export class MemoryTool
 
       await fsAdapter.writeFile(memoryFilePath, newContent, 'utf-8');
     } catch (error) {
-      console.error(
-        `[MemoryTool] Error adding memory entry to ${memoryFilePath}:`,
-        error,
+      logger.error(
+        `Error adding memory entry to ${memoryFilePath}: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw new Error(
         `[MemoryTool] Failed to add memory entry: ${error instanceof Error ? error.message : String(error)}`,

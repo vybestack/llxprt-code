@@ -495,7 +495,10 @@ describe('MemoryTool', () => {
         typeof MemoryTool.performAddMemoryEntry
       >;
 
-      const params = { fact: 'Project-specific fact', scope: 'project' };
+      const params = {
+        fact: 'Project-specific fact',
+        scope: 'project' as const,
+      };
       const invocation = memoryTool.build(params);
 
       // Mock the working directory
