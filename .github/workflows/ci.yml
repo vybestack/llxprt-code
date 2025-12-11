@@ -152,6 +152,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343c9d334ae194c3bbe1881453fc9a5ffee90' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version: 'latest'
+
       - name: 'Run lockfile check'
         run: |-
           npm run check:lockfile
@@ -159,6 +164,10 @@ jobs:
       - name: 'Install dependencies'
         run: |-
           npm ci
+
+      - name: 'Install UI dependencies (bun)'
+        run: |-
+          cd packages/ui && bun install
 
       - name: Fix rollup platform dependency
         run: |
@@ -181,6 +190,10 @@ jobs:
         run: |-
           npm run lint:ci
 
+      - name: 'Run UI linter (bun)'
+        run: |-
+          cd packages/ui && bun run lint
+
       - name: 'Run linter on integration tests'
         run: |-
           npx eslint integration-tests --max-warnings 0
@@ -200,6 +213,10 @@ jobs:
       - name: 'Run type check'
         run: |-
           npm run typecheck
+
+      - name: 'Run UI type check (bun)'
+        run: |-
+          cd packages/ui && bun run typecheck
 
       - name: 'Run sensitive keyword linter'
         run: 'node scripts/lint.js --sensitive-keywords'
@@ -352,9 +369,18 @@ jobs:
           node-version: '${{ matrix.node-version }}'
           cache: 'npm'
 
+      - name: 'Setup Bun'
+        uses: 'oven-sh/setup-bun@735343c9d334ae194c3bbe1881453fc9a5ffee90' # ratchet:oven-sh/setup-bun@v2
+        with:
+          bun-version: 'latest'
+
       - name: 'Install dependencies for testing'
         run: |-
           npm ci
+
+      - name: 'Install UI dependencies (bun)'
+        run: |-
+          cd packages/ui && bun install
 
       - name: 'Build project'
         run: |-
@@ -390,6 +416,12 @@ jobs:
           # Allow OpenAI integration tests to exceed Vitest's 5s default timeout (issue #338)
           VITEST_TEST_TIMEOUT: 15000
         run: 'npm run test'
+
+      - name: 'Run UI tests (bun)'
+        env:
+          CI: true
+        run: |-
+          cd packages/ui && bun test
 
       - name: 'Smoke test bundle'
         run: 'node ./bundle/llxprt.js --version'

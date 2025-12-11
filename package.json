@@ -8,7 +8,6 @@
   "workspaces": [
     "packages/core",
     "packages/cli",
-    "packages/ui",
     "packages/a2a-server",
     "packages/test-utils",
     "packages/vscode-ide-companion"
@@ -45,9 +44,9 @@
     "test:integration:sandbox:none": "cross-env LLXPRT_SANDBOX=false vitest run --root ./integration-tests",
     "test:integration:sandbox:docker": "cross-env LLXPRT_SANDBOX=docker npm run build:sandbox && cross-env LLXPRT_SANDBOX=docker vitest run --root ./integration-tests",
     "test:integration:sandbox:podman": "cross-env LLXPRT_SANDBOX=podman vitest run --root ./integration-tests",
-    "lint": "eslint . --ext .ts,.tsx && eslint integration-tests && npm run lint --workspace=@vybestack/llxprt-ui",
-    "lint:fix": "eslint . --fix && eslint integration-tests --fix && npm run lint --workspace=@vybestack/llxprt-ui -- --fix",
-    "lint:ci": "eslint . --ext .ts,.tsx --max-warnings 0 && eslint integration-tests --max-warnings 0 && npm run lint --workspace=@vybestack/llxprt-ui",
+    "lint": "eslint . --ext .ts,.tsx && eslint integration-tests",
+    "lint:fix": "eslint . --fix && eslint integration-tests --fix",
+    "lint:ci": "eslint . --ext .ts,.tsx --max-warnings 0 && eslint integration-tests --max-warnings 0",
     "lint:all": "./scripts/lint-all.sh",
     "format": "prettier --experimental-cli --write .",
     "format:check": "prettier --check .",
@@ -126,7 +125,6 @@
     "fast-uri": "^3.0.6",
     "openai": "^5.10.1",
     "path-scurry": "^2.0.0",
-    "sharp": "^0.33.5",
     "simple-git": "^3.28.0",
     "strip-ansi": "^7.1.0"
   },

@@ -14,13 +14,13 @@
     "build": "echo 'UI package uses bun runtime - no build required'",
     "dev": "bun run src/main.tsx",
     "start": "bun run src/main.tsx",
-    "lint": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.ts\"",
-    "test": "vitest run",
-    "test:ci": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "check:limits": "tsx scripts/check-limits.ts",
-    "check": "npm run lint && npm run test && npm run check:limits",
-    "typecheck": "tsc --noEmit"
+    "lint": "bunx eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.ts\"",
+    "test": "bun test",
+    "test:ci": "bun test",
+    "test:coverage": "bun test --coverage",
+    "check:limits": "bun run scripts/check-limits.ts",
+    "check": "bun run lint && bun run test && bun run check:limits",
+    "typecheck": "bunx tsc --noEmit"
   },
   "keywords": [
     "llxprt",
