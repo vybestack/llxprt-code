@@ -48,6 +48,7 @@ interface FsAdapter {
 
 describe('MemoryTool', () => {
   const mockAbortSignal = new AbortController().signal;
+  const mockWorkingDir = '/mock/project';
 
   const mockFsAdapter: {
     readFile: Mock<FsAdapter['readFile']>;
@@ -223,6 +224,13 @@ describe('MemoryTool', () => {
             type: 'string',
             description:
               'The specific fact or piece of information to remember. Should be a clear, self-contained statement.',
+          },
+          scope: {
+            type: 'string',
+            enum: ['global', 'project'],
+            description:
+              'Where to save the memory: "global" (default, saves to ~/.llxprt) or "project" (saves to project-local .llxprt directory)',
+            default: 'global',
           },
         },
         required: ['fact'],
@@ -454,6 +462,133 @@ describe('MemoryTool', () => {
       expect(editResult.originalContent).toBe(existingContent);
       expect(editResult.newContent).toContain('- Old fact');
       expect(editResult.newContent).toContain('- New fact');
+    });
+  });
+
+  describe('Project-level memory (scope parameter)', () => {
+    let memoryTool: MemoryTool;
+
+    beforeEach(() => {
+      memoryTool = new MemoryTool();
+    });
+
+    it('should accept scope parameter in tool schema', () => {
+      const schema = memoryTool.schema;
+      expect(schema.parametersJsonSchema).toHaveProperty('properties.scope');
+      const scopeProperty = (
+        schema.parametersJsonSchema as {
+          properties: { scope: unknown };
+        }
+      ).properties.scope;
+      expect(scopeProperty).toEqual({
+        type: 'string',
+        enum: ['global', 'project'],
+        description: expect.stringContaining('Where to save'),
+        default: 'global',
+      });
+    });
+
+    it('should save to project directory when scope is "project"', async () => {
+      const performAddMemoryEntrySpy = vi
+        .spyOn(MemoryTool, 'performAddMemoryEntry')
+        .mockResolvedValue(undefined) as Mock<
+        typeof MemoryTool.performAddMemoryEntry
+      >;
+
+      const params = { fact: 'Project-specific fact', scope: 'project' };
+      const invocation = memoryTool.build(params);
+
+      // Mock the working directory
+      invocation.setWorkingDir(mockWorkingDir);
+
+      await invocation.execute(mockAbortSignal);
+
+      const expectedProjectPath = path.join(
+        mockWorkingDir,
+        '.llxprt',
+        getCurrentLlxprtMdFilename(),
+      );
+
+      expect(performAddMemoryEntrySpy).toHaveBeenCalledWith(
+        params.fact,
+        expectedProjectPath,
+        expect.anything(),
+      );
+
+      performAddMemoryEntrySpy.mockRestore();
+    });
+
+    it('should save to global directory when scope is "global" or undefined', async () => {
+      const performAddMemoryEntrySpy = vi
+        .spyOn(MemoryTool, 'performAddMemoryEntry')
+        .mockResolvedValue(undefined) as Mock<
+        typeof MemoryTool.performAddMemoryEntry
+      >;
+
+      const params = { fact: 'Global fact' };
+      const invocation = memoryTool.build(params);
+
+      await invocation.execute(mockAbortSignal);
+
+      const expectedGlobalPath = path.join(
+        os.homedir(),
+        '.llxprt',
+        getCurrentLlxprtMdFilename(),
+      );
+
+      expect(performAddMemoryEntrySpy).toHaveBeenCalledWith(
+        params.fact,
+        expectedGlobalPath,
+        expect.anything(),
+      );
+
+      performAddMemoryEntrySpy.mockRestore();
+    });
+
+    it('should fallback to global when scope is "project" but no working directory is set', async () => {
+      const performAddMemoryEntrySpy = vi
+        .spyOn(MemoryTool, 'performAddMemoryEntry')
+        .mockResolvedValue(undefined) as Mock<
+        typeof MemoryTool.performAddMemoryEntry
+      >;
+
+      const params = { fact: 'Project fact without workdir', scope: 'project' };
+      const invocation = memoryTool.build(params);
+
+      await invocation.execute(mockAbortSignal);
+
+      const expectedGlobalPath = path.join(
+        os.homedir(),
+        '.llxprt',
+        getCurrentLlxprtMdFilename(),
+      );
+
+      expect(performAddMemoryEntrySpy).toHaveBeenCalledWith(
+        params.fact,
+        expectedGlobalPath,
+        expect.anything(),
+      );
+
+      performAddMemoryEntrySpy.mockRestore();
+    });
+
+    it('should show correct file path in confirmation for project scope', async () => {
+      vi.mocked(fs.readFile).mockResolvedValue('');
+
+      const params = { fact: 'Test fact', scope: 'project' };
+      const invocation = memoryTool.build(params);
+      invocation.setWorkingDir(mockWorkingDir);
+
+      const result = await invocation.shouldConfirmExecute(mockAbortSignal);
+
+      expect(result).not.toBe(false);
+      if (result === false) {
+        throw new Error('Expected confirmation details');
+      }
+
+      expect(result.title).toContain('.llxprt/LLXPRT.md');
+      expect(result.fileName).toContain(mockWorkingDir);
+      expect(result.fileName).toContain('.llxprt');
     });
   });
 });

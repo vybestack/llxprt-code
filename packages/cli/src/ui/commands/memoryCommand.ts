@@ -44,29 +44,53 @@ export const memoryCommand: SlashCommand = {
     },
     {
       name: 'add',
-      description: 'Add content to the memory.',
+      description:
+        'Add content to the memory. Use --project or -p to save to project-level memory.',
       kind: CommandKind.BUILT_IN,
       action: (context, args): SlashCommandActionReturn | void => {
         if (!args || args.trim() === '') {
           return {
             type: 'message',
             messageType: 'error',
-            content: 'Usage: /memory add <text to remember>',
+            content: 'Usage: /memory add [--project|-p] <text to remember>',
+          };
+        }
+
+        // Check for --project or -p flag
+        const hasProjectFlag =
+          args.includes('--project') || args.includes('-p');
+        const fact = args
+          .replace(/--project/g, '')
+          .replace(/-p(?=\s|$)/g, '')
+          .trim();
+
+        if (fact === '') {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: 'Usage: /memory add [--project|-p] <text to remember>',
           };
         }
 
         context.ui.addItem(
           {
             type: MessageType.INFO,
-            text: `Attempting to save to memory: "${args.trim()}"`,
+            text: `Attempting to save to memory: "${fact}"`,
           },
           Date.now(),
         );
 
+        const toolArgs: { fact: string; scope?: 'global' | 'project' } = {
+          fact,
+        };
+        if (hasProjectFlag) {
+          toolArgs.scope = 'project';
+        }
+
         return {
           type: 'tool',
           toolName: 'save_memory',
-          toolArgs: { fact: args.trim() },
+          toolArgs,
         };
       },
     },

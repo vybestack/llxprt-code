@@ -121,7 +121,7 @@ describe('memoryCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Usage: /memory add <text to remember>',
+        content: 'Usage: /memory add [--project|-p] <text to remember>',
       });
 
       expect(mockContext.ui.addItem).not.toHaveBeenCalled();
@@ -145,6 +145,69 @@ describe('memoryCommand', () => {
         type: 'tool',
         toolName: 'save_memory',
         toolArgs: { fact },
+      });
+    });
+
+    it('should return a tool action with scope "project" when --project flag is provided', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const fact = 'remember this for the project';
+      const result = addCommand.action(mockContext, `--project ${fact}`);
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: `Attempting to save to memory: "${fact}"`,
+        },
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        type: 'tool',
+        toolName: 'save_memory',
+        toolArgs: { fact, scope: 'project' },
+      });
+    });
+
+    it('should return a tool action with scope "project" when -p flag is provided', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const fact = 'remember this for the project';
+      const result = addCommand.action(mockContext, `-p ${fact}`);
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: `Attempting to save to memory: "${fact}"`,
+        },
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        type: 'tool',
+        toolName: 'save_memory',
+        toolArgs: { fact, scope: 'project' },
+      });
+    });
+
+    it('should handle --project flag at the end of arguments', () => {
+      if (!addCommand.action) throw new Error('Command has no action');
+
+      const fact = 'remember this for the project';
+      const result = addCommand.action(mockContext, `${fact} --project`);
+
+      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
+        {
+          type: MessageType.INFO,
+          text: `Attempting to save to memory: "${fact}"`,
+        },
+        expect.any(Number),
+      );
+
+      expect(result).toEqual({
+        type: 'tool',
+        toolName: 'save_memory',
+        toolArgs: { fact, scope: 'project' },
       });
     });
   });
