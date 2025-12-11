@@ -31,7 +31,7 @@ jobs:
           ref: '${{ github.event.inputs.ref || github.sha }}'
           fetch-depth: 1
       - name: 'Install Dependencies'
-        run: 'npm ci'
+        run: 'npm ci --omit=optional'
       - name: 'Build bundle'
         run: 'npm run bundle'
       - name: 'Smoke test bundle'

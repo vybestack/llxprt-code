@@ -354,7 +354,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.claim_issue.outputs.should_continue == 'true'
-        run: npm ci
+        run: npm ci --omit=optional
 
       - name: Fix rollup platform dependency
         if: steps.claim_issue.outputs.should_continue == 'true'

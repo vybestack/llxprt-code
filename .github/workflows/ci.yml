@@ -354,7 +354,9 @@ jobs:
 
       - name: 'Install dependencies for testing'
         run: |-
-          npm ci
+          # Use --omit=optional to skip platform-specific optional deps like sharp's @img/* packages
+          # The experimental UI (which needs these) is not tested in CI
+          npm ci --omit=optional
 
       - name: 'Build project'
         run: |-
