@@ -255,7 +255,7 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     const continuationPrompt = continuationMessages.find(
       (m) =>
         m.role === 'user' &&
-        m.content?.includes('Based on the tool results above'),
+        m.content?.includes('tool calls above have been registered'),
     );
     expect(continuationPrompt).toBeDefined();
   });

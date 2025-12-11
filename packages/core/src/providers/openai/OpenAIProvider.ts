@@ -4339,10 +4339,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Detect and handle empty streaming responses after tool calls (issue #584)
       // Some models (like gpt-oss-120b on OpenRouter) return finish_reason=stop with tools but no text
-      const pipelineStats = this.toolCallPipeline.getStats();
+      // Use cachedPipelineResult instead of pipelineStats.collector.totalCalls since process() resets the collector (CodeRabbit review #764)
+      const toolCallCount =
+        (cachedPipelineResult?.normalized.length ?? 0) +
+        (cachedPipelineResult?.failed.length ?? 0);
       const hasToolsButNoText =
         lastFinishReason === 'stop' &&
-        pipelineStats.collector.totalCalls > 0 &&
+        toolCallCount > 0 &&
         _accumulatedText.length === 0 &&
         textBuffer.length === 0 &&
         accumulatedReasoningContent.length === 0 &&
@@ -4354,7 +4357,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             `[OpenAIProvider] Model returned tool calls but no text (finish_reason=stop). Requesting continuation for model '${model}'.`,
           {
             model,
-            toolCallCount: pipelineStats.collector.totalCalls,
+            toolCallCount,
             baseURL: baseURL ?? this.getBaseURL(),
           },
         );
@@ -4395,7 +4398,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Only warn if we truly got nothing - not even reasoning content
       if (
         _accumulatedText.length === 0 &&
-        pipelineStats.collector.totalCalls === 0 &&
+        toolCallCount === 0 &&
         textBuffer.length === 0 &&
         accumulatedReasoningContent.length === 0 &&
         accumulatedThinkingContent.length === 0
@@ -4428,7 +4431,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             `[Streaming pipeline] Stream completed with accumulated content`,
           {
             textLength: _accumulatedText.length,
-            toolCallCount: pipelineStats.collector.totalCalls,
+            toolCallCount,
             textBufferLength: textBuffer.length,
             reasoningLength: accumulatedReasoningContent.length,
             thinkingLength: accumulatedThinkingContent.length,
