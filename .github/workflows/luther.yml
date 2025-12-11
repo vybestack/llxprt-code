@@ -354,9 +354,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.claim_issue.outputs.should_continue == 'true'
-        # Use npm install instead of npm ci - sharp's optional platform-specific
-        # deps are only resolved for the platform where the lockfile was generated
-        run: npm install
+        run: npm ci
 
       - name: Fix rollup platform dependency
         if: steps.claim_issue.outputs.should_continue == 'true'

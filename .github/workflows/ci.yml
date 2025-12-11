@@ -158,10 +158,7 @@ jobs:
 
       - name: 'Install dependencies'
         run: |-
-          # Use npm install instead of npm ci because sharp's optional platform-specific
-          # deps are only resolved for the platform where the lockfile was generated.
-          # npm install will resolve them fresh for the current platform.
-          npm install
+          npm ci
 
       - name: Fix rollup platform dependency
         run: |
@@ -357,9 +354,7 @@ jobs:
 
       - name: 'Install dependencies for testing'
         run: |-
-          # Use npm install instead of npm ci because sharp's optional platform-specific
-          # deps are only resolved for the platform where the lockfile was generated.
-          npm install
+          npm ci
 
       - name: 'Build project'
         run: |-

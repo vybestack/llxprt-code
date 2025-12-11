@@ -139,9 +139,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        # Use npm install instead of npm ci - sharp's optional platform-specific
-        # deps are only resolved for the platform where the lockfile was generated
-        run: npm install
+        run: npm ci
 
       - name: Get the version
         id: version
