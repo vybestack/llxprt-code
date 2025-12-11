@@ -1,8 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useSessionManager } from './useSessionManager';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 
 describe('useSessionManager', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nui-session-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
   describe('initial state', () => {
     it('should start with null session and idle status', () => {
       const { result } = renderHook(() => useSessionManager());
@@ -41,7 +54,7 @@ describe('useSessionManager', () => {
       act(() => {
         void result.current.createSession({
           model: 'gemini-2.5-flash',
-          workingDir: '/home/test',
+          workingDir: tempDir,
         });
       });
 
@@ -59,7 +72,7 @@ describe('useSessionManager', () => {
         await act(async () => {
           await result.current.createSession({
             model: 'gemini-2.5-flash',
-            workingDir: '/home/test',
+            workingDir: tempDir,
           });
         });
 
