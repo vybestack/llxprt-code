@@ -417,11 +417,11 @@ jobs:
           VITEST_TEST_TIMEOUT: 15000
         run: 'npm run test'
 
-      - name: 'Run UI tests (bun)'
+      - name: 'Run UI tests (vitest with happy-dom)'
         env:
           CI: true
         run: |-
-          cd packages/ui && bun test
+          cd packages/ui && bun run test
 
       - name: 'Smoke test bundle'
         run: 'node ./bundle/llxprt.js --version'

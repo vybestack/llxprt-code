@@ -15,9 +15,9 @@
     "dev": "bun run src/main.tsx",
     "start": "bun run src/main.tsx",
     "lint": "bunx eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.ts\"",
-    "test": "bun test",
-    "test:ci": "bun test",
-    "test:coverage": "bun test --coverage",
+    "test": "bunx vitest run",
+    "test:ci": "bunx vitest run",
+    "test:coverage": "bunx vitest run --coverage",
     "check:limits": "bun run scripts/check-limits.ts",
     "check": "bun run lint && bun run test && bun run check:limits",
     "typecheck": "bunx tsc --noEmit"
