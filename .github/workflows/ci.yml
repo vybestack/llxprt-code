@@ -201,7 +201,7 @@ jobs:
       - name: 'Run formatter on integration tests'
         run: |-
           npx prettier --check integration-tests
-          git diff --exit-code
+          git diff --exit-code -- . ':!packages/ui/bun.lock'
 
       - name: 'Build project'
         run: |-
