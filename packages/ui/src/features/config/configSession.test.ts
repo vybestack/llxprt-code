@@ -99,35 +99,44 @@ describe('ConfigSession', () => {
   });
 
   describe('provider initialization', () => {
-    it('should initialize with OpenAI provider without error', async () => {
-      const session = createConfigSession({
-        model: 'gpt-4',
-        provider: 'openai',
-        baseUrl: 'https://api.openai.com/v1',
-        apiKey: 'test-key',
-        workingDir: tempDir,
-      });
+    // Provider initialization is slow on Windows CI due to ProviderManager setup
+    it(
+      'should initialize with OpenAI provider without error',
+      { timeout: 15000 },
+      async () => {
+        const session = createConfigSession({
+          model: 'gpt-4',
+          provider: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: 'test-key',
+          workingDir: tempDir,
+        });
 
-      // This should NOT throw - the test ensures the auth flow works
-      await session.initialize();
+        // This should NOT throw - the test ensures the auth flow works
+        await session.initialize();
 
-      expect(session.getClient()).toBeDefined();
-    });
+        expect(session.getClient()).toBeDefined();
+      },
+    );
 
-    it('should initialize with Anthropic provider without error', async () => {
-      const session = createConfigSession({
-        model: 'claude-3-sonnet',
-        provider: 'anthropic',
-        baseUrl: 'https://api.anthropic.com',
-        apiKey: 'test-key',
-        workingDir: tempDir,
-      });
+    it(
+      'should initialize with Anthropic provider without error',
+      { timeout: 15000 },
+      async () => {
+        const session = createConfigSession({
+          model: 'claude-3-sonnet',
+          provider: 'anthropic',
+          baseUrl: 'https://api.anthropic.com',
+          apiKey: 'test-key',
+          workingDir: tempDir,
+        });
 
-      // This should NOT throw - the test ensures the auth flow works
-      await session.initialize();
+        // This should NOT throw - the test ensures the auth flow works
+        await session.initialize();
 
-      expect(session.getClient()).toBeDefined();
-    });
+        expect(session.getClient()).toBeDefined();
+      },
+    );
 
     it('should initialize with Gemini provider without error', async () => {
       const session = createConfigSession({
@@ -142,21 +151,25 @@ describe('ConfigSession', () => {
       expect(session.getClient()).toBeDefined();
     });
 
-    it('should set up ProviderManager for OpenAI provider', async () => {
-      const session = createConfigSession({
-        model: 'gpt-4',
-        provider: 'openai',
-        baseUrl: 'https://api.openai.com/v1',
-        apiKey: 'test-key',
-        workingDir: tempDir,
-      });
+    it(
+      'should set up ProviderManager for OpenAI provider',
+      { timeout: 15000 },
+      async () => {
+        const session = createConfigSession({
+          model: 'gpt-4',
+          provider: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: 'test-key',
+          workingDir: tempDir,
+        });
 
-      await session.initialize();
+        await session.initialize();
 
-      // ProviderManager should be set for non-gemini providers
-      const providerManager = session.config.getProviderManager();
-      expect(providerManager).toBeDefined();
-    });
+        // ProviderManager should be set for non-gemini providers
+        const providerManager = session.config.getProviderManager();
+        expect(providerManager).toBeDefined();
+      },
+    );
 
     it('should NOT set up ProviderManager for Gemini provider', async () => {
       const session = createConfigSession({

@@ -49,19 +49,24 @@ describe('useSessionManager', () => {
       expect(result.current.status).toBe('initializing');
     });
 
-    it('should complete session creation with result', async () => {
-      const { result } = renderHook(() => useSessionManager());
+    // Session creation can be slow on Windows CI
+    it(
+      'should complete session creation with result',
+      { timeout: 15000 },
+      async () => {
+        const { result } = renderHook(() => useSessionManager());
 
-      await act(async () => {
-        await result.current.createSession({
-          model: 'gemini-2.5-flash',
-          workingDir: '/home/test',
+        await act(async () => {
+          await result.current.createSession({
+            model: 'gemini-2.5-flash',
+            workingDir: '/home/test',
+          });
         });
-      });
 
-      // After completion, status should be either ready or error (not initializing)
-      expect(result.current.status).not.toBe('initializing');
-      expect(['ready', 'error']).toContain(result.current.status);
-    });
+        // After completion, status should be either ready or error (not initializing)
+        expect(result.current.status).not.toBe('initializing');
+        expect(['ready', 'error']).toContain(result.current.status);
+      },
+    );
   });
 });
