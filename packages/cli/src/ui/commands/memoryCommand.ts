@@ -45,31 +45,70 @@ export const memoryCommand: SlashCommand = {
     {
       name: 'add',
       description:
-        'Add content to the memory. Use --project or -p to save to project-level memory.',
+        'Add content to the memory. Usage: /memory add <global|project> <text to remember>',
       kind: CommandKind.BUILT_IN,
       action: (context, args): SlashCommandActionReturn | void => {
         if (!args || args.trim() === '') {
           return {
             type: 'message',
             messageType: 'error',
-            content: 'Usage: /memory add [--project|-p] <text to remember>',
+            content: 'Usage: /memory add <global|project> <text to remember>',
           };
         }
 
-        // Check for --project or -p flag
-        const hasProjectFlag =
-          args.includes('--project') || args.includes('-p');
-        const fact = args
-          .replace(/--project/g, '')
-          .replace(/-p(?=\s|$)/g, '')
-          .trim();
+        // Parse scope as first argument
+        const trimmedArgs = args.trim();
+        const firstSpaceIndex = trimmedArgs.indexOf(' ');
 
-        if (fact === '') {
+        // If no space, check if it's just a scope keyword without content
+        if (firstSpaceIndex === -1) {
+          const arg = trimmedArgs.toLowerCase();
+          if (arg === 'global' || arg === 'project') {
+            return {
+              type: 'message',
+              messageType: 'error',
+              content: 'Usage: /memory add <global|project> <text to remember>',
+            };
+          }
+          // No scope specified, default to global
+          const fact = trimmedArgs;
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Attempting to save to memory: "${fact}"`,
+            },
+            Date.now(),
+          );
+
           return {
-            type: 'message',
-            messageType: 'error',
-            content: 'Usage: /memory add [--project|-p] <text to remember>',
+            type: 'tool',
+            toolName: 'save_memory',
+            toolArgs: { fact },
           };
+        }
+
+        const firstArg = trimmedArgs
+          .substring(0, firstSpaceIndex)
+          .toLowerCase();
+        const remainingArgs = trimmedArgs.substring(firstSpaceIndex + 1).trim();
+
+        let scope: 'global' | 'project' | undefined;
+        let fact: string;
+
+        // Check if first argument is a scope keyword
+        if (firstArg === 'global' || firstArg === 'project') {
+          if (remainingArgs === '') {
+            return {
+              type: 'message',
+              messageType: 'error',
+              content: 'Usage: /memory add <global|project> <text to remember>',
+            };
+          }
+          scope = firstArg;
+          fact = remainingArgs;
+        } else {
+          // No scope specified, treat entire args as the fact
+          fact = trimmedArgs;
         }
 
         context.ui.addItem(
@@ -83,8 +122,8 @@ export const memoryCommand: SlashCommand = {
         const toolArgs: { fact: string; scope?: 'global' | 'project' } = {
           fact,
         };
-        if (hasProjectFlag) {
-          toolArgs.scope = 'project';
+        if (scope) {
+          toolArgs.scope = scope;
         }
 
         return {
