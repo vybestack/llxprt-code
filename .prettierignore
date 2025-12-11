@@ -32,6 +32,8 @@ Thumbs.db
 
 # Generated files
 package-lock.json
+bun.lock
+**/bun.lock
 tsconfig.tsbuildinfo
 *.tsbuildinfo
 *.vsix
