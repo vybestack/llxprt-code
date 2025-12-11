@@ -34,7 +34,7 @@ vi.mock('fs', () => ({
 
 vi.mock('os');
 
-const MEMORY_SECTION_HEADER = '## Gemini Added Memories';
+const MEMORY_SECTION_HEADER = '## LLxprt Code Added Memories';
 
 // Define a type for our fsAdapter to ensure consistency
 interface FsAdapter {
@@ -341,10 +341,10 @@ describe('MemoryTool', () => {
       );
       expect(editResult.fileName).toContain('LLXPRT.md');
       expect(editResult.fileDiff).toContain('Index: LLXPRT.md');
-      expect(editResult.fileDiff).toContain('+## Gemini Added Memories');
+      expect(editResult.fileDiff).toContain('+## LLxprt Code Added Memories');
       expect(editResult.fileDiff).toContain('+- Test fact');
       expect(editResult.originalContent).toBe('');
-      expect(editResult.newContent).toContain('## Gemini Added Memories');
+      expect(editResult.newContent).toContain('## LLxprt Code Added Memories');
       expect(editResult.newContent).toContain('- Test fact');
     });
 
@@ -435,7 +435,7 @@ describe('MemoryTool', () => {
     it('should handle existing memory file with content', async () => {
       const params = { fact: 'New fact' };
       const existingContent =
-        'Some existing content.\n\n## Gemini Added Memories\n- Old fact\n';
+        'Some existing content.\n\n## LLxprt Code Added Memories\n- Old fact\n';
 
       // Mock fs.readFile to return existing content
       vi.mocked(fs.readFile).mockResolvedValue(existingContent);

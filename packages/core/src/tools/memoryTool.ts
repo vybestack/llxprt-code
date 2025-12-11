@@ -70,7 +70,7 @@ export const LLXPRT_CONFIG_DIR = '.llxprt';
 // Alias for backward compatibility with gemini-cli code
 export const GEMINI_DIR = LLXPRT_CONFIG_DIR;
 export const DEFAULT_CONTEXT_FILENAME = 'LLXPRT.md';
-export const MEMORY_SECTION_HEADER = '## Gemini Added Memories';
+export const MEMORY_SECTION_HEADER = '## LLxprt Code Added Memories';
 
 // This variable will hold the currently configured filename for LLXPRT.md context files.
 // It defaults to DEFAULT_CONTEXT_FILENAME but can be overridden by setLlxprtMdFilename.
