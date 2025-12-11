@@ -222,6 +222,13 @@ export async function getIdeProcessInfo(): Promise<{
   pid: number;
   command: string;
 }> {
+  // Skip slow process tree traversal in CI environments on Windows
+  // IDE detection is not needed in CI and the PowerShell calls are slow
+  // Use process.platform directly to avoid mocked os.platform() in tests
+  if (process.env.CI && process.platform === 'win32') {
+    return { pid: process.pid, command: '' };
+  }
+
   const platform = os.platform();
 
   if (platform === 'win32') {
