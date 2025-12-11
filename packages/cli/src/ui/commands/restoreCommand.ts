@@ -14,6 +14,7 @@ import {
 } from './types.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import { type CommandArgumentSchema } from './schema/types.js';
+import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const checkpointSuggestionDescription = 'Restorable tool call checkpoint';
 
@@ -28,7 +29,7 @@ const restoreSchema: CommandArgumentSchema = [
      * @requirement:REQ-006
      * Deprecation: Legacy completion removed in favour of schema completer.
      */
-    completer: async (ctx, partialArg) => {
+    completer: withFuzzyFilter(async (ctx) => {
       const checkpointDir =
         ctx.services.config?.storage.getProjectTempCheckpointsDir();
       if (!checkpointDir) {
@@ -37,15 +38,9 @@ const restoreSchema: CommandArgumentSchema = [
 
       try {
         const files = await fs.readdir(checkpointDir);
-        const normalizedPartial = partialArg.toLowerCase();
         return files
           .filter((file) => file.endsWith('.json'))
           .map((file) => file.replace(/\.json$/, ''))
-          .filter((name) =>
-            normalizedPartial.length === 0
-              ? true
-              : name.toLowerCase().startsWith(normalizedPartial),
-          )
           .map((name) => ({
             value: name,
             description: checkpointSuggestionDescription,
@@ -53,7 +48,7 @@ const restoreSchema: CommandArgumentSchema = [
       } catch (_err) {
         return [];
       }
-    },
+    }),
   },
 ];
 

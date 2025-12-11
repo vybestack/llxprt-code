@@ -22,6 +22,8 @@ import {
   SubagentConfig,
   createRuntimeStateFromConfig,
 } from '@vybestack/llxprt-code-core';
+
+const logger = new DebugLogger('llxprt:ui:subagent');
 import {
   FunctionCallingConfigMode,
   SendMessageParameters,
@@ -31,6 +33,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { getRuntimeBridge } from '../contexts/RuntimeContext.js';
+import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 /**
  * Parse save command arguments
@@ -134,22 +137,16 @@ const subagentSchema = [
     kind: 'value' as const,
     name: 'name',
     description: 'Enter subagent name',
-    completer: async (ctx: CommandContext, partialArg: string) => {
+    completer: withFuzzyFilter(async (ctx: CommandContext) => {
       const manager = ctx.services.subagentManager;
       if (!manager) {
         return [];
       }
 
       const names = await manager.listSubagents();
-      const normalizedPartial = partialArg.toLowerCase();
-      const matchingNames = names.filter((name) =>
-        normalizedPartial.length === 0
-          ? true
-          : name.toLowerCase().startsWith(normalizedPartial),
-      );
 
       const suggestions = await Promise.all(
-        matchingNames.map(async (name) => {
+        names.map(async (name) => {
           try {
             const details = await manager.loadSubagent(name);
             return {
@@ -166,13 +163,13 @@ const subagentSchema = [
       );
 
       return suggestions;
-    },
+    }),
   },
   {
     kind: 'value' as const,
     name: 'profile',
     description: 'Select profile configuration',
-    completer: async (ctx: CommandContext, partialArg: string) => {
+    completer: withFuzzyFilter(async (ctx: CommandContext) => {
       const profileManager = ctx.services.profileManager;
       if (
         !profileManager ||
@@ -183,23 +180,19 @@ const subagentSchema = [
 
       try {
         const profiles = await profileManager.listProfiles();
-        const normalizedPartial = partialArg.toLowerCase();
 
-        const filtered = profiles.filter((name) =>
-          normalizedPartial.length === 0
-            ? true
-            : name.toLowerCase().startsWith(normalizedPartial),
-        );
-
-        return filtered.map((name) => ({
+        return profiles.map((name) => ({
           value: name,
           description: 'Saved profile',
         }));
       } catch (error) {
-        console.warn('Error loading profiles for subagent completion:', error);
+        logger.warn(
+          () =>
+            `Error loading profiles for subagent completion: ${error instanceof Error ? error.message : String(error)}`,
+        );
         return [];
       }
-    },
+    }),
   },
   {
     kind: 'literal' as const,

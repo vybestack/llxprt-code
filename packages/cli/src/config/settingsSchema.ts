@@ -1340,6 +1340,16 @@ export const SETTINGS_SCHEMA = {
       'Enable AI-powered prompt completion suggestions while typing.',
     showInDialog: true,
   },
+  enableFuzzyFiltering: {
+    type: 'boolean',
+    label: 'Enable Fuzzy Filtering',
+    category: 'UI',
+    requiresRestart: false,
+    default: true,
+    description:
+      'Enable fuzzy filtering for command menu completions. When enabled, you can type partial characters (e.g., "prd" to match "production"). When disabled, only exact prefix matches are shown.',
+    showInDialog: true,
+  },
   debugKeystrokeLogging: {
     type: 'boolean',
     label: 'Debug Keystroke Logging',

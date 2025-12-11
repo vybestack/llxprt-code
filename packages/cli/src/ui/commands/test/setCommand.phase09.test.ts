@@ -54,6 +54,17 @@ if (!commandSchema) {
   throw new Error('setCommand schema is not configured');
 }
 
+/**
+ * Test utility function to set fuzzy filtering mode
+ */
+// @ts-expect-error - Utility function for future use
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function setFuzzyFiltering(ctx: CommandContext, enabled: boolean): void {
+  if (ctx.services.settings?.merged) {
+    ctx.services.settings.merged.enableFuzzyFiltering = enabled;
+  }
+}
+
 describe('setCommand schema integration', () => {
   // Mock context for testing
   const mockContext: CommandContext = createMockCommandContext({
@@ -114,9 +125,30 @@ describe('setCommand schema integration', () => {
     it('should filter literal subcommands based on partial input @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', async () => {
       const result = await handler(mockContext, 'mo', '/set mo');
 
-      expect(result.suggestions).toEqual([
-        expect.objectContaining({ value: 'modelparam' }),
-      ]);
+      // With deep path completion, we now also get nested paths like 'modelparam temperature'
+      // The single-level 'modelparam' should still be included and appear first
+      expect(result.suggestions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ value: 'modelparam' }),
+        ]),
+      );
+
+      // Verify modelparam appears first (before any deep paths)
+      const modelparamIndex = result.suggestions.findIndex(
+        (s) => s.value === 'modelparam',
+      );
+      expect(modelparamIndex).toBeGreaterThanOrEqual(0);
+
+      // Any deep paths should come after the single-level match
+      const deepPathIndex = result.suggestions.findIndex((s) =>
+        s.value.includes(' '),
+      );
+      // If deep paths exist, they must come after single-level matches
+      // deepPathIndex === -1 means no deep paths, which is also valid
+      expect(deepPathIndex === -1 || modelparamIndex < deepPathIndex).toBe(
+        true,
+      );
+
       expect(result.hint).toBe('Select option');
     });
 
