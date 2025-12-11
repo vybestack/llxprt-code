@@ -55,15 +55,6 @@ export function filterCompletions(
 }
 
 /**
- * Higher-order function that wraps a CompleterFn to add fuzzy filtering.
- *
- * The wrapped completer should return ALL items, and this wrapper will handle
- * the filtering based on the user's query and settings.
- *
- * @param baseCompleter - The base completer function that returns all items
- * @returns A wrapped completer that applies fuzzy filtering
- */
-/**
  * Filters a string array using either fuzzy matching or exact prefix matching.
  *
  * @param items - The list of strings to filter
@@ -106,6 +97,15 @@ export function getFuzzyEnabled(ctx: CommandContext): boolean {
   return ctx.services.settings?.merged?.enableFuzzyFiltering ?? true;
 }
 
+/**
+ * Higher-order function that wraps a CompleterFn to add fuzzy filtering.
+ *
+ * The wrapped completer should return ALL items, and this wrapper will handle
+ * the filtering based on the user's query and settings.
+ *
+ * @param baseCompleter - The base completer function that returns all items
+ * @returns A wrapped completer that applies fuzzy filtering
+ */
 export function withFuzzyFilter(baseCompleter: CompleterFn): CompleterFn {
   return async (
     ctx: CommandContext,

@@ -22,6 +22,8 @@ import {
   SubagentConfig,
   createRuntimeStateFromConfig,
 } from '@vybestack/llxprt-code-core';
+
+const logger = new DebugLogger('llxprt:ui:subagent');
 import {
   FunctionCallingConfigMode,
   SendMessageParameters,
@@ -184,7 +186,10 @@ const subagentSchema = [
           description: 'Saved profile',
         }));
       } catch (error) {
-        console.warn('Error loading profiles for subagent completion:', error);
+        logger.warn(
+          () =>
+            `Error loading profiles for subagent completion: ${error instanceof Error ? error.message : String(error)}`,
+        );
         return [];
       }
     }),

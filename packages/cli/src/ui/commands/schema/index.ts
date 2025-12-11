@@ -14,6 +14,9 @@ import type {
 } from './types.js';
 import type { CommandContext } from '../types.js';
 import { filterCompletions } from '../../utils/fuzzyFilter.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+
+const logger = new DebugLogger('llxprt:ui:schema');
 
 interface FlattenedPath {
   readonly path: readonly string[];
@@ -252,16 +255,6 @@ async function suggestForValue(
   tokenInfo: TokenInfo,
 ): Promise<readonly Option[]> {
   try {
-    if (node.options?.length) {
-      // Get the fuzzy filtering setting from context
-      // Default to true if setting is not defined
-      const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
-      const enableFuzzy = settingValue ?? true;
-
-      // Use filterCompletions for both fuzzy and exact prefix matching
-      return filterCompletions(node.options, partialArg, { enableFuzzy });
-    }
-
     if (node.completer) {
       const results = await node.completer(ctx, partialArg, tokenInfo);
       if (!Array.isArray(results)) {
@@ -272,8 +265,21 @@ async function suggestForValue(
         description: option.description,
       }));
     }
+
+    if (node.options?.length) {
+      // Get the fuzzy filtering setting from context
+      // Default to true if setting is not defined
+      const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
+      const enableFuzzy = settingValue ?? true;
+
+      // Use filterCompletions for both fuzzy and exact prefix matching
+      return filterCompletions(node.options, partialArg, { enableFuzzy });
+    }
   } catch (error) {
-    console.warn('Error generating suggestions:', error);
+    logger.warn(
+      () =>
+        `Error generating suggestions: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   return [];
@@ -399,7 +405,10 @@ async function computeHintForValue(
       return node.hint;
     }
   } catch (error) {
-    console.warn('Error computing hint:', error);
+    logger.warn(
+      () =>
+        `Error computing hint: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   if (node.description) {
