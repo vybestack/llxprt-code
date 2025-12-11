@@ -2,8 +2,13 @@ import type {
   Profile,
   AuthType,
   ModelParams,
+  LoadBalancerProfile,
 } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  DebugLogger,
+  LoadBalancerResolver,
+  isLoadBalancerProfile,
+} from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
@@ -45,6 +50,34 @@ export interface ProfileApplicationResult {
 }
 
 const logger = new DebugLogger('llxprt:runtime:profile');
+const lbLogger = new DebugLogger('llxprt:loadbalancer');
+const lbResolver = new LoadBalancerResolver();
+
+/**
+ * Get load balancer stats for a specific LB profile
+ * @param lbName The name of the load balancer profile
+ * @returns Stats or undefined if not an LB profile
+ */
+export function getLoadBalancerStats(lbName: string) {
+  return lbResolver.getStats(lbName);
+}
+
+/**
+ * Get the last selected profile from a load balancer
+ * @param lbName The name of the load balancer profile
+ * @returns The last selected profile name or null
+ */
+export function getLoadBalancerLastSelected(lbName: string): string | null {
+  return lbResolver.getLastSelected(lbName);
+}
+
+/**
+ * Get stats for all load balancers
+ * @returns Map of LB name to stats
+ */
+export function getAllLoadBalancerStats() {
+  return lbResolver.getAllStats();
+}
 
 function getStringValue(
   ephemerals: Profile['ephemeralSettings'],
@@ -111,13 +144,35 @@ export async function applyProfileWithGuards(
   profileInput: Profile,
   _options: ProfileApplicationOptions = {},
 ): Promise<ProfileApplicationResult> {
-  const { config, providerManager, settingsService } = getCliRuntimeServices();
+  const { config, providerManager, settingsService, profileManager } =
+    getCliRuntimeServices();
+
+  let actualProfile: Profile = profileInput;
+
+  if (isLoadBalancerProfile(profileInput)) {
+    const lbProfile = profileInput as LoadBalancerProfile;
+    const lbName = _options.profileName ?? 'loadbalancer';
+    const selectedProfileName = lbResolver.resolveProfile(lbProfile, lbName);
+
+    lbLogger.debug(
+      () =>
+        `Load balancer '${lbName}' selected profile '${selectedProfileName}'`,
+    );
+
+    if (!profileManager) {
+      throw new Error(
+        'ProfileManager not available in runtime services, cannot resolve LoadBalancer profile',
+      );
+    }
+
+    actualProfile = await profileManager.loadProfile(selectedProfileName);
+  }
   const availableProviders = providerManager.listProviders();
   logger.debug(() => {
     const requested =
-      typeof profileInput.provider === 'string'
-        ? profileInput.provider
-        : profileInput.provider === null
+      typeof actualProfile.provider === 'string'
+        ? actualProfile.provider
+        : actualProfile.provider === null
           ? 'null'
           : 'unset';
     return `[profile] applying profile provider='${requested}' available=[${availableProviders.join(
@@ -126,7 +181,7 @@ export async function applyProfileWithGuards(
   });
 
   const selection = selectAvailableProvider(
-    profileInput.provider,
+    actualProfile.provider,
     availableProviders,
   );
 
@@ -137,12 +192,12 @@ export async function applyProfileWithGuards(
     );
   }
   const requestedProvider =
-    typeof profileInput.provider === 'string' ? profileInput.provider : null;
+    typeof actualProfile.provider === 'string' ? actualProfile.provider : null;
 
   const sanitizedProfile: Profile = {
-    ...profileInput,
-    modelParams: { ...(profileInput.modelParams ?? {}) },
-    ephemeralSettings: { ...(profileInput.ephemeralSettings ?? {}) },
+    ...actualProfile,
+    modelParams: { ...(actualProfile.modelParams ?? {}) },
+    ephemeralSettings: { ...(actualProfile.ephemeralSettings ?? {}) },
   };
 
   const setProviderApiKey = (apiKey: string | undefined): void => {

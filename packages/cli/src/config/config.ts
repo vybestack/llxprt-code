@@ -1245,9 +1245,11 @@ export async function loadCliConfig(
     stage: 'post-config',
   };
 
+  const profileManager = new ProfileManager();
   setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
     runtimeId: bootstrapRuntimeId,
     metadata: baseBootstrapMetadata,
+    profileManager,
   });
 
   // Register provider infrastructure AFTER runtime context but BEFORE any profile application

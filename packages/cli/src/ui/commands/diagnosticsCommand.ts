@@ -60,6 +60,24 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push(`- Current Profile: ${snapshot.profileName ?? 'none'}`);
       diagnostics.push(`- API Key: unavailable via runtime helpers`);
 
+      // Check for load balancer stats
+      const runtimeApi = getRuntimeApi();
+      if (snapshot.profileName) {
+        const lbStats = runtimeApi.getLoadBalancerStats(snapshot.profileName);
+        if (lbStats) {
+          diagnostics.push('\n## Load Balancer Stats');
+          diagnostics.push(`- Active Sub-Profile: ${lbStats.lastSelected ?? 'none'}`);
+          diagnostics.push(`- Total Requests: ${lbStats.totalRequests}`);
+          diagnostics.push('- Profile Distribution:');
+          for (const [profile, count] of Object.entries(lbStats.profileCounts)) {
+            const percentage = lbStats.totalRequests > 0
+              ? ((count / lbStats.totalRequests) * 100).toFixed(1)
+              : '0';
+            diagnostics.push(`  - ${profile}: ${count} requests (${percentage}%)`);
+          }
+        }
+      }
+
       diagnostics.push('\n## Model Parameters');
       const modelParams = snapshot.modelParams;
       if (Object.keys(modelParams).length === 0) {

@@ -416,6 +416,25 @@ export const Footer = React.memo<FooterProps>(
                 <Text color={SemanticColors.text.accent}>{model}</Text>
               )}
 
+              {/* Show active sub-profile for load balancer profiles */}
+              {(() => {
+                const snapshot = runtime.getRuntimeDiagnosticsSnapshot();
+                if (snapshot.profileName) {
+                  const lbStats = runtime.getLoadBalancerStats(snapshot.profileName);
+                  if (lbStats?.lastSelected) {
+                    return (
+                      <>
+                        <Text color={SemanticColors.text.secondary}> via </Text>
+                        <Text color={SemanticColors.status.success}>
+                          {lbStats.lastSelected}
+                        </Text>
+                      </>
+                    );
+                  }
+                }
+                return null;
+              })()}
+
               {/* Show paid/free mode for Gemini provider */}
               {isPaidMode !== undefined &&
                 (() => {

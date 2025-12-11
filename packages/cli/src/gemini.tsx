@@ -71,6 +71,7 @@ import {
   // IDE connection logging removed - telemetry disabled in llxprt
   SettingsService,
   DebugLogger,
+  ProfileManager,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -356,8 +357,10 @@ export async function main() {
     workspaceRoot,
     { settingsService: runtimeSettingsService },
   );
+  const profileManager = new ProfileManager();
   setCliRuntimeContext(runtimeSettingsService, config, {
     metadata: { source: 'cli-bootstrap', stage: 'post-config' },
+    profileManager,
   });
 
   // Check for invalid input combinations early to prevent crashes
@@ -420,10 +423,15 @@ export async function main() {
     (typeof process.env.LLXPRT_BOOTSTRAP_PROFILE === 'string'
       ? process.env.LLXPRT_BOOTSTRAP_PROFILE.trim()
       : '');
+  // Only reload profile if it wasn't already loaded in config.ts
+  // (checking if currentProfileName is null means no profile was loaded yet)
+  // If the profile was already loaded, don't reload - especially important for
+  // load balancer profiles where reloading advances the round-robin counter
+  const currentProfileName = runtimeSettingsService.getCurrentProfileName?.();
   if (
     !argv.provider &&
     bootstrapProfileName !== '' &&
-    runtimeSettingsService.getCurrentProfileName?.() !== null
+    currentProfileName === null
   ) {
     try {
       await loadProfileByName(bootstrapProfileName);

@@ -80,6 +80,9 @@ const getCliRuntimeServicesMock = vi.fn<
         getDefaultModel?: () => string;
       };
     };
+    profileManager?: {
+      loadProfile: (profileName: string) => Promise<Profile>;
+    };
   }
 >();
 const getActiveProviderOrThrowMock = vi.fn<() => { name: string }>();
@@ -184,10 +187,13 @@ beforeEach(() => {
     ['anthropic', { name: 'anthropic' }],
   ]);
 
-  switchActiveProviderMock.mockResolvedValue({
-    infoMessages: [],
-    changed: true,
-    authType: 'key',
+  switchActiveProviderMock.mockImplementation(async (providerName: string) => {
+    providerManagerStub.activeProviderName = providerName;
+    return {
+      infoMessages: [],
+      changed: true,
+      authType: 'key',
+    };
   });
   setActiveModelMock.mockResolvedValue({ nextModel: 'gpt-4o-mini' });
   updateActiveProviderBaseUrlMock.mockResolvedValue({
@@ -1087,5 +1093,197 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
         expect.stringMatching(/Failed to load keyfile/i),
       ]),
     );
+  });
+});
+
+describe('LoadBalancer profile integration', () => {
+  const mockProfileManager = {
+    loadProfile: vi.fn<(profileName: string) => Promise<Profile>>(),
+  };
+
+  beforeEach(() => {
+    mockProfileManager.loadProfile.mockClear();
+    getCliRuntimeServicesMock.mockReturnValue({
+      config: configStub,
+      settingsService: settingsServiceStub,
+      providerManager: providerManagerStub,
+      profileManager: mockProfileManager,
+    } as ReturnType<typeof getCliRuntimeServicesMock>);
+  });
+
+  it('resolves LoadBalancer profile to first standard profile on first call', async () => {
+    const standardProfile1: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      modelParams: { temperature: 0.5 },
+      ephemeralSettings: {},
+    };
+
+    const standardProfile2: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'claude-3-opus',
+      modelParams: { temperature: 0.7 },
+      ephemeralSettings: {},
+    };
+
+    mockProfileManager.loadProfile.mockImplementation(
+      async (name: string): Promise<Profile> => {
+        if (name === 'profile1') return standardProfile1;
+        if (name === 'profile2') return standardProfile2;
+        throw new Error(`Profile ${name} not found`);
+      },
+    );
+
+    const lbProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['profile1', 'profile2'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    providerManagerStub.available = ['openai', 'anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+
+    const result = (await applyProfileWithGuards(lbProfile, {
+      profileName: 'lb-profiles',
+    })) as unknown as ProfileApplicationResult;
+
+    expect(mockProfileManager.loadProfile).toHaveBeenCalledWith('profile1');
+    expect(result.providerName).toBe('openai');
+    expect(result.modelName).toBe('gpt-4o-mini');
+  });
+
+  it('uses round robin across multiple LoadBalancer calls', async () => {
+    const standardProfile1: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    const standardProfile2: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'claude-3-opus',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    mockProfileManager.loadProfile.mockImplementation(
+      async (name: string): Promise<Profile> => {
+        if (name === 'profile1') return standardProfile1;
+        if (name === 'profile2') return standardProfile2;
+        throw new Error(`Profile ${name} not found`);
+      },
+    );
+
+    const lbProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['profile1', 'profile2'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    providerManagerStub.available = ['openai', 'anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+
+    const result1 = (await applyProfileWithGuards(lbProfile, {
+      profileName: 'lb-roundrobin-test',
+    })) as unknown as ProfileApplicationResult;
+    expect(result1.providerName).toBe('openai');
+    expect(mockProfileManager.loadProfile).toHaveBeenCalledWith('profile1');
+
+    mockProfileManager.loadProfile.mockClear();
+
+    const result2 = (await applyProfileWithGuards(lbProfile, {
+      profileName: 'lb-roundrobin-test',
+    })) as unknown as ProfileApplicationResult;
+    expect(mockProfileManager.loadProfile).toHaveBeenCalledTimes(1);
+    expect(mockProfileManager.loadProfile).toHaveBeenCalledWith('profile2');
+    expect(result2.providerName).toBe('anthropic');
+
+    const result3 = (await applyProfileWithGuards(lbProfile, {
+      profileName: 'lb-roundrobin-test',
+    })) as unknown as ProfileApplicationResult;
+    expect(result3.providerName).toBe('openai');
+    expect(mockProfileManager.loadProfile).toHaveBeenCalledWith('profile1');
+  });
+
+  it('passes resolved standard profile to provider application', async () => {
+    const standardProfile: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'claude-3-sonnet',
+      modelParams: { temperature: 0.8, max_tokens: 2048 },
+      ephemeralSettings: { 'auth-key': 'test-key' },
+    };
+
+    mockProfileManager.loadProfile.mockResolvedValue(standardProfile);
+
+    const lbProfile: Profile = {
+      version: 1,
+      type: 'loadbalancer',
+      policy: 'roundrobin',
+      profiles: ['profile-a'],
+      provider: '',
+      model: '',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    providerManagerStub.available = ['anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+
+    await applyProfileWithGuards(lbProfile, {
+      profileName: 'lb-single',
+    });
+
+    expect(setActiveModelMock).toHaveBeenCalledWith('claude-3-sonnet');
+    expect(setActiveModelParamMock).toHaveBeenCalledWith('temperature', 0.8);
+    expect(setActiveModelParamMock).toHaveBeenCalledWith('max_tokens', 2048);
+  });
+
+  it('standard profiles still work unchanged (backward compatibility)', async () => {
+    const standardProfile: Profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4o',
+      modelParams: { temperature: 0.3 },
+      ephemeralSettings: {},
+    };
+
+    providerManagerStub.available = ['openai'];
+    providerManagerStub.providerLookup = new Map([
+      ['openai', { name: 'openai' }],
+    ]);
+
+    setActiveModelMock.mockResolvedValueOnce({ nextModel: 'gpt-4o' });
+
+    const result = (await applyProfileWithGuards(standardProfile, {
+      profileName: 'standard-profile',
+    })) as unknown as ProfileApplicationResult;
+
+    expect(mockProfileManager.loadProfile).not.toHaveBeenCalled();
+    expect(result.providerName).toBe('openai');
+    expect(result.modelName).toBe('gpt-4o');
   });
 });

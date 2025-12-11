@@ -457,6 +457,8 @@ export const useSlashCommandProcessor = (
                     case 'loadProfile':
                       actions.openLoadProfileDialog();
                       return { type: 'handled' };
+                    case 'saveProfile':
+                      return { type: 'handled' };
                     default: {
                       const unhandled: never = result.dialog;
                       throw new Error(
