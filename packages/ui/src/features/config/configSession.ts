@@ -4,7 +4,8 @@ import {
   ProviderManager,
   OpenAIProvider,
   AnthropicProvider,
-  getSettingsService,
+  SettingsService,
+  registerSettingsService,
   resetSettingsService,
 } from '@vybestack/llxprt-code-core';
 import type {
@@ -64,9 +65,10 @@ function requiresProviderManager(providerName: string | undefined): boolean {
 export function createConfigSession(
   options: ConfigSessionOptions,
 ): ConfigSession {
-  // Reset and get the global singleton SettingsService that providers use
+  // Reset any existing context and create a fresh SettingsService
   resetSettingsService();
-  const settings = getSettingsService();
+  const settings = new SettingsService();
+  registerSettingsService(settings);
 
   // CRITICAL: Set model in SettingsService - providers read from here, not from Config
   settings.set('model', options.model);
