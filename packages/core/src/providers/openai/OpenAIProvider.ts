@@ -2749,6 +2749,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           abortSignal,
           model,
           logger,
+          customHeaders,
         );
       }
 
@@ -4386,6 +4387,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           abortSignal,
           model,
           logger,
+          customHeaders,
         );
       }
 
@@ -4891,6 +4893,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     abortSignal: AbortSignal | undefined,
     model: string,
     logger: DebugLogger,
+    customHeaders: Record<string, string> | undefined,
   ): AsyncGenerator<IContent, void, unknown> {
     // Build continuation messages
     const continuationMessages = [
@@ -4910,17 +4913,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       {
         role: 'user' as const,
         content:
-          'Based on the tool results above, please provide your analysis or summary.',
+          'The tool calls above have been registered. Please continue with your response.',
       },
     ];
 
     // Make a continuation request (wrap in try-catch since tools were already yielded)
     try {
-      const continuationResponse = await client.chat.completions.create({
-        ...requestBody,
-        messages: continuationMessages,
-        stream: true, // Always stream for consistency
-      });
+      const continuationResponse = await client.chat.completions.create(
+        {
+          ...requestBody,
+          messages: continuationMessages,
+          stream: true, // Always stream for consistency
+        },
+        {
+          ...(abortSignal ? { signal: abortSignal } : {}),
+          ...(customHeaders ? { headers: customHeaders } : {}),
+        },
+      );
 
       let accumulatedText = '';
 
