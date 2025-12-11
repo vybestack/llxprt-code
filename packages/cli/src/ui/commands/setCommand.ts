@@ -19,6 +19,11 @@ import type {
 } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { ephemeralSettingHelp } from '../../settings/ephemeralSettings.js';
+import {
+  filterStrings,
+  filterCompletions,
+  getFuzzyEnabled,
+} from '../utils/fuzzyFilter.js';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
 
@@ -84,6 +89,16 @@ const truncateModeOptions = [
   { value: 'warn', description: 'warn' },
   { value: 'truncate', description: 'truncate' },
   { value: 'sample', description: 'sample' },
+];
+
+// Common model parameters - used for deep path completion flattening
+const commonParamOptions = [
+  { value: 'temperature', description: 'Sampling temperature (0-2)' },
+  { value: 'max_tokens', description: 'Maximum tokens to generate' },
+  { value: 'top_p', description: 'Nucleus sampling probability' },
+  { value: 'top_k', description: 'Top-k sampling' },
+  { value: 'frequency_penalty', description: 'Frequency penalty (-2 to 2)' },
+  { value: 'presence_penalty', description: 'Presence penalty (-2 to 2)' },
 ];
 
 const directSettingSpecs: SettingLiteralSpec[] = [
@@ -294,7 +309,7 @@ const setSchema: CommandArgumentSchema = [
         kind: 'value',
         name: 'key',
         description: 'setting key to remove',
-        completer: async (_ctx, partial) => {
+        completer: async (ctx, partial) => {
           const ephemeralSettings = getRuntimeApi().getEphemeralSettings();
           const ephemeralKeys = Object.keys(ephemeralSettings).filter(
             (key) => ephemeralSettings[key] !== undefined,
@@ -309,9 +324,12 @@ const setSchema: CommandArgumentSchema = [
             new Set([...ephemeralKeys, ...specialKeys]),
           );
 
-          return allKeys
-            .filter((key) => key.startsWith(partial))
-            .map((key) => ({ value: key, description: `setting: ${key}` }));
+          const enableFuzzy = getFuzzyEnabled(ctx);
+          const filtered = filterStrings(allKeys, partial, { enableFuzzy });
+          return filtered.map((key) => ({
+            value: key,
+            description: `setting: ${key}`,
+          }));
         },
         next: [
           {
@@ -330,16 +348,18 @@ const setSchema: CommandArgumentSchema = [
             },
             completer: async (ctx, partial, tokens) => {
               const key = tokens.tokens[1];
+              const enableFuzzy = getFuzzyEnabled(ctx);
 
               if (key === 'modelparam') {
                 const params = getRuntimeApi().getActiveModelParams();
                 const paramNames = Object.keys(params);
-                return paramNames
-                  .filter((name) => name.startsWith(partial))
-                  .map((name) => ({
-                    value: name,
-                    description: `Parameter: ${name}`,
-                  }));
+                const filtered = filterStrings(paramNames, partial, {
+                  enableFuzzy,
+                });
+                return filtered.map((name) => ({
+                  value: name,
+                  description: `Parameter: ${name}`,
+                }));
               }
 
               if (key === 'custom-headers') {
@@ -347,12 +367,14 @@ const setSchema: CommandArgumentSchema = [
                   'custom-headers'
                 ] as Record<string, string> | undefined;
                 if (headers) {
-                  return Object.keys(headers)
-                    .filter((name) => name.startsWith(partial))
-                    .map((name) => ({
-                      value: name,
-                      description: `header: ${name}`,
-                    }));
+                  const headerNames = Object.keys(headers);
+                  const filtered = filterStrings(headerNames, partial, {
+                    enableFuzzy,
+                  });
+                  return filtered.map((name) => ({
+                    value: name,
+                    description: `header: ${name}`,
+                  }));
                 }
               }
 
@@ -374,13 +396,16 @@ const setSchema: CommandArgumentSchema = [
         name: 'param-name',
         description: 'parameter name',
         hint: 'parameter name',
-        completer: async (_ctx, partial) => {
+        // Static options for deep path completion flattening
+        options: commonParamOptions,
+        // Dynamic completer also checks active model params at runtime
+        completer: async (ctx, partial) => {
+          const enableFuzzy = getFuzzyEnabled(ctx);
+          // First check for active model params (dynamic)
           const modelParams = getRuntimeApi().getActiveModelParams();
           if (modelParams && Object.keys(modelParams).length > 0) {
             const paramNames = Object.keys(modelParams);
-            const matches = paramNames.filter((name) =>
-              name.startsWith(partial),
-            );
+            const matches = filterStrings(paramNames, partial, { enableFuzzy });
             if (matches.length > 0) {
               return matches.map((name) => ({
                 value: name,
@@ -389,20 +414,10 @@ const setSchema: CommandArgumentSchema = [
             }
           }
 
-          const commonParams = [
-            'temperature',
-            'max_tokens',
-            'top_p',
-            'top_k',
-            'frequency_penalty',
-            'presence_penalty',
-          ];
-          return commonParams
-            .filter((name) => name.startsWith(partial))
-            .map((name) => ({
-              value: name,
-              description: `Parameter: ${name}`,
-            }));
+          // Fall back to common params (same as static options)
+          return filterCompletions(commonParamOptions, partial, {
+            enableFuzzy,
+          });
         },
         next: [
           {
@@ -475,41 +490,29 @@ const setSchema: CommandArgumentSchema = [
         },
         completer: async (ctx, partial, tokens) => {
           const setting = tokens.tokens[0] || tokens.partialToken;
+          const enableFuzzy = getFuzzyEnabled(ctx);
+
           if (setting === 'emojifilter') {
-            return emojifilterOptions
-              .filter((option) => option.value.startsWith(partial))
-              .map((option) => ({
-                value: option.value,
-                description: option.description,
-              }));
+            return filterCompletions(emojifilterOptions, partial, {
+              enableFuzzy,
+            });
           }
           if (setting === 'streaming') {
-            return streamingOptions
-              .filter((option) => option.value.startsWith(partial))
-              .map((option) => ({
-                value: option.value,
-                description: option.description,
-              }));
+            return filterCompletions(streamingOptions, partial, {
+              enableFuzzy,
+            });
           }
           if (
             setting === 'socket-keepalive' ||
             setting === 'socket-nodelay' ||
             setting === 'shell-replacement'
           ) {
-            return booleanOptions
-              .filter((option) => option.value.startsWith(partial))
-              .map((option) => ({
-                value: option.value,
-                description: option.description,
-              }));
+            return filterCompletions(booleanOptions, partial, { enableFuzzy });
           }
           if (setting === 'tool-output-truncate-mode') {
-            return truncateModeOptions
-              .filter((option) => option.value.startsWith(partial))
-              .map((option) => ({
-                value: option.value,
-                description: option.description,
-              }));
+            return filterCompletions(truncateModeOptions, partial, {
+              enableFuzzy,
+            });
           }
 
           if (setting === 'custom-headers') {
@@ -517,12 +520,14 @@ const setSchema: CommandArgumentSchema = [
               'custom-headers'
             ] as Record<string, string> | undefined;
             if (headers) {
-              return Object.keys(headers)
-                .filter((name) => name.startsWith(partial))
-                .map((name) => ({
-                  value: name,
-                  description: `header: ${name}`,
-                }));
+              const headerNames = Object.keys(headers);
+              const filtered = filterStrings(headerNames, partial, {
+                enableFuzzy,
+              });
+              return filtered.map((name) => ({
+                value: name,
+                description: `header: ${name}`,
+              }));
             }
           }
 

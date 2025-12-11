@@ -15,6 +15,7 @@ import type {
   CompleterFn,
   HintFn,
 } from './types.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 // Mock command context for tests
 const mockContext = createMockCommandContext();
@@ -211,7 +212,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       await fc.assert(
         fc.asyncProperty(fc.string(), async (input) => {
           const warnSpy = vi
-            .spyOn(console, 'warn')
+            .spyOn(DebugLogger.prototype, 'warn')
             .mockImplementation(() => {});
           const handler = createCompletionHandler([]);
           const result = await handler(mockContext, '', input);
@@ -228,7 +229,9 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
         throw new Error('completer boom');
       };
 
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warnSpy = vi
+        .spyOn(DebugLogger.prototype, 'warn')
+        .mockImplementation(() => {});
 
       const schema: CommandArgumentSchema = [
         value('mode', '', undefined, failingCompleter),
@@ -239,9 +242,9 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       const result = await handler(mockContext, '', '/command ');
       expect(result.suggestions).toEqual([]);
       expect(result.hint).toBe('');
+      expect(warnSpy).toHaveBeenCalled();
       expect(warnSpy).toHaveBeenCalledWith(
-        'Error generating suggestions:',
-        expect.any(Error),
+        expect.any(Function), // DebugLogger.warn takes a function that returns the message
       );
 
       warnSpy.mockRestore();

@@ -89,11 +89,37 @@ vi.mock('../core/client.js', () => ({
   })),
 }));
 
-vi.mock('../telemetry/index.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../telemetry/index.js')>();
+vi.mock('../telemetry/index.js', () => {
+  // Create a mock StartSessionEvent class to avoid circular dependency issues
+  // when importOriginal tries to load types.ts which imports config.ts
+  class MockStartSessionEvent {
+    'event.name' = 'cli_config';
+    'event.timestamp': string;
+    model = '';
+    embedding_model: string | undefined;
+    sandbox_enabled = false;
+    core_tools_enabled = '';
+    approval_mode = '';
+    api_key_enabled = false;
+    vertex_ai_enabled = false;
+    debug_enabled = false;
+    mcp_servers = '';
+    telemetry_enabled = false;
+    telemetry_log_user_prompts_enabled = false;
+    file_filtering_respect_git_ignore = false;
+
+    constructor() {
+      this['event.timestamp'] = new Date().toISOString();
+    }
+  }
+
   return {
-    ...actual,
     initializeTelemetry: vi.fn(),
+    logCliConfiguration: vi.fn(),
+    StartSessionEvent: MockStartSessionEvent,
+    DEFAULT_TELEMETRY_TARGET: 'local',
+    DEFAULT_OTLP_ENDPOINT: 'http://localhost:4317',
+    TelemetryTarget: { GCP: 'gcp', LOCAL: 'local' },
   };
 });
 

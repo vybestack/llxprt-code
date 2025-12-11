@@ -76,6 +76,30 @@ export function isKimiModel(model: string): boolean {
 }
 
 /**
+ * Checks if a model name indicates a Mistral model that requires
+ * the special 9-character alphanumeric ID format.
+ *
+ * Mistral models (both hosted and self-hosted) enforce a strict tool call ID format:
+ * - Exactly 9 characters
+ * - Only alphanumeric (a-z, A-Z, 0-9) - no underscores or special characters
+ *
+ * This applies to mistral, devstral, codestral, and other Mistral model variants.
+ *
+ * @param model - The model name to check
+ * @returns true if this is a Mistral model requiring special ID handling
+ */
+export function isMistralModel(model: string): boolean {
+  const lowerModel = model.toLowerCase();
+  return (
+    lowerModel.includes('mistral') ||
+    lowerModel.includes('devstral') ||
+    lowerModel.includes('codestral') ||
+    lowerModel.includes('pixtral') ||
+    lowerModel.includes('ministral')
+  );
+}
+
+/**
  * Kimi K2 strategy: Generates IDs in the format functions.{toolName}:{globalIndex}
  *
  * K2 uses a specific ID format where each tool call gets a sequential index
@@ -141,6 +165,97 @@ export const standardStrategy: ToolIdStrategy = {
 };
 
 /**
+ * Generates a Mistral-compatible tool call ID.
+ *
+ * Mistral requires exactly 9 alphanumeric characters (a-z, A-Z, 0-9).
+ * No underscores, dashes, or other special characters are allowed.
+ *
+ * @returns A 9-character alphanumeric string
+ */
+function generateMistralToolId(): string {
+  const chars =
+    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 9; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+/**
+ * Converts any tool ID to Mistral's required format.
+ *
+ * If the ID is already 9 alphanumeric characters, return it as-is.
+ * Otherwise, generate a new compliant ID.
+ *
+ * @param id - The original tool call ID
+ * @returns A Mistral-compatible 9-character alphanumeric ID
+ */
+function toMistralToolId(id: string): string {
+  // Check if already compliant: exactly 9 alphanumeric characters
+  if (/^[a-zA-Z0-9]{9}$/.test(id)) {
+    return id;
+  }
+  // Generate a new compliant ID
+  return generateMistralToolId();
+}
+
+/**
+ * Mistral strategy: Generates IDs in Mistral's required format
+ *
+ * Mistral models (both hosted API and self-hosted) require tool call IDs to be:
+ * - Exactly 9 characters
+ * - Only alphanumeric (a-z, A-Z, 0-9)
+ *
+ * This strategy maintains a mapping from internal IDs to Mistral-compliant IDs
+ * to ensure tool responses can be matched back to their calls.
+ */
+export const mistralStrategy: ToolIdStrategy = {
+  createMapper(contents: IContent[]): ToolIdMapper {
+    // Build a map of internal ID -> Mistral format ID
+    const idToMistralId = new Map<string, string>();
+
+    // Scan all tool calls in the conversation and assign Mistral IDs
+    for (const content of contents) {
+      if (content.speaker !== 'ai') continue;
+
+      for (const block of content.blocks) {
+        if (isToolCallBlock(block)) {
+          // Check if this ID already has a Mistral mapping
+          if (!idToMistralId.has(block.id)) {
+            idToMistralId.set(block.id, toMistralToolId(block.id));
+          }
+        }
+      }
+    }
+
+    return {
+      resolveToolCallId(tc: ToolCallBlock): string {
+        // Return existing mapping or create new one
+        let mistralId = idToMistralId.get(tc.id);
+        if (!mistralId) {
+          mistralId = toMistralToolId(tc.id);
+          idToMistralId.set(tc.id, mistralId);
+        }
+        return mistralId;
+      },
+
+      resolveToolResponseId(tr: ToolResponseBlock): string {
+        // Look up the corresponding tool call's Mistral ID
+        const mistralId = idToMistralId.get(tr.callId);
+        if (mistralId) {
+          return mistralId;
+        }
+        // Fallback: generate a new compliant ID
+        const newId = toMistralToolId(tr.callId);
+        idToMistralId.set(tr.callId, newId);
+        return newId;
+      },
+    };
+  },
+};
+
+/**
  * Gets the appropriate tool ID strategy for a given tool format
  *
  * @param format - The tool format being used
@@ -149,6 +264,9 @@ export const standardStrategy: ToolIdStrategy = {
 export function getToolIdStrategy(format: ToolFormat): ToolIdStrategy {
   if (format === 'kimi') {
     return kimiStrategy;
+  }
+  if (format === 'mistral') {
+    return mistralStrategy;
   }
   return standardStrategy;
 }

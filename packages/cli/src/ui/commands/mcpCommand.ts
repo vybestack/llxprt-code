@@ -25,6 +25,7 @@ import {
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
 import { appEvents, AppEvent } from '../../utils/events.js';
+import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const COLOR_GREEN = '\u001b[32m';
 const COLOR_YELLOW = '\u001b[33m';
@@ -43,25 +44,18 @@ const mcpAuthSchema: CommandArgumentSchema = [
      * @requirement:REQ-004
      * Schema completer replaces legacy server list.
      */
-    completer: async (ctx, partialArg) => {
+    completer: withFuzzyFilter(async (ctx) => {
       const { config } = ctx.services;
       if (!config) {
         return [];
       }
 
       const mcpServers = config.getMcpServers() || {};
-      const normalizedPartial = partialArg.toLowerCase();
-      return Object.keys(mcpServers)
-        .filter((name) =>
-          normalizedPartial.length === 0
-            ? true
-            : name.toLowerCase().startsWith(normalizedPartial),
-        )
-        .map((name) => ({
-          value: name,
-          description: 'Configured MCP server',
-        }));
-    },
+      return Object.keys(mcpServers).map((name) => ({
+        value: name,
+        description: 'Configured MCP server',
+      }));
+    }),
   },
 ];
 

@@ -29,6 +29,7 @@ export type ToolFormat =
   | 'deepseek'
   | 'qwen'
   | 'kimi'
+  | 'mistral'
   | 'hermes'
   | 'xml'
   | 'llama'

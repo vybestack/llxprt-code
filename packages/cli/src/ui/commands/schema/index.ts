@@ -13,6 +13,16 @@ import type {
   ValueArgument,
 } from './types.js';
 import type { CommandContext } from '../types.js';
+import { filterCompletions } from '../../utils/fuzzyFilter.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+
+const logger = new DebugLogger('llxprt:ui:schema');
+
+interface FlattenedPath {
+  readonly path: readonly string[];
+  readonly depth: number;
+  readonly description?: string;
+}
 
 export type CompletionInput =
   | string
@@ -245,20 +255,6 @@ async function suggestForValue(
   tokenInfo: TokenInfo,
 ): Promise<readonly Option[]> {
   try {
-    if (node.options?.length) {
-      const lowerPartial = partialArg.toLowerCase();
-      return node.options
-        .filter((option) =>
-          lowerPartial.length === 0
-            ? true
-            : option.value.toLowerCase().startsWith(lowerPartial),
-        )
-        .map((option) => ({
-          value: option.value,
-          description: option.description,
-        }));
-    }
-
     if (node.completer) {
       const results = await node.completer(ctx, partialArg, tokenInfo);
       if (!Array.isArray(results)) {
@@ -269,28 +265,131 @@ async function suggestForValue(
         description: option.description,
       }));
     }
+
+    if (node.options?.length) {
+      // Get the fuzzy filtering setting from context
+      // Default to true if setting is not defined
+      const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
+      const enableFuzzy = settingValue ?? true;
+
+      // Use filterCompletions for both fuzzy and exact prefix matching
+      return filterCompletions(node.options, partialArg, { enableFuzzy });
+    }
   } catch (error) {
-    console.warn('Error generating suggestions:', error);
+    logger.warn(
+      () =>
+        `Error generating suggestions: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   return [];
 }
 
+/**
+ * Flatten nested schema paths into a list of multi-token paths
+ * @plan:PLAN-411-DEEPCOMPLETION
+ * @requirement:REQ-002
+ */
+function flattenSchemaPaths(
+  nodes: LiteralArgument[],
+  currentPath: readonly string[] = [],
+): readonly FlattenedPath[] {
+  const flattened: FlattenedPath[] = [];
+
+  for (const node of nodes) {
+    const nodePath = [...currentPath, node.value];
+
+    // If this node has a 'next' that contains value arguments with options,
+    // we can create deep paths
+    if (node.next && node.next.length > 0) {
+      for (const nextNode of node.next) {
+        if (nextNode.kind === 'value' && nextNode.options) {
+          // For each option in the value node, create a flattened path
+          for (const option of nextNode.options) {
+            flattened.push({
+              path: [...nodePath, option.value],
+              depth: nodePath.length + 1,
+              description: option.description,
+            });
+          }
+        } else if (nextNode.kind === 'literal') {
+          // Recursively flatten nested literals
+          const nestedLiterals = node.next.filter(
+            (n): n is LiteralArgument => n.kind === 'literal',
+          );
+          const nestedPaths = flattenSchemaPaths(nestedLiterals, nodePath);
+          flattened.push(...nestedPaths);
+        }
+      }
+    }
+  }
+
+  return flattened;
+}
+
 function suggestForLiterals(
+  ctx: CommandContext,
   nodes: LiteralArgument[],
   partialArg: string,
 ): readonly Option[] {
-  const lowerPartial = partialArg.toLowerCase();
-  return nodes
-    .filter((node) =>
-      lowerPartial.length === 0
-        ? true
-        : node.value.toLowerCase().startsWith(lowerPartial),
-    )
-    .map((node) => ({
-      value: node.value,
-      description: node.description,
+  // Single-level options (existing behavior)
+  const singleLevelOptions = nodes.map((node) => ({
+    value: node.value,
+    description: node.description,
+    depth: 1,
+  }));
+
+  // Get the fuzzy filtering setting from context
+  // Default to true if setting is not defined
+  const settingValue = ctx.services.settings?.merged?.enableFuzzyFiltering;
+  const enableFuzzy = settingValue ?? true;
+
+  // Filter single-level options
+  const filteredSingleLevel = filterCompletions(
+    singleLevelOptions,
+    partialArg,
+    { enableFuzzy },
+  );
+
+  // For empty queries, only return single-level options
+  if (!partialArg || partialArg.trim() === '') {
+    return filteredSingleLevel.map(({ value, description }) => ({
+      value,
+      description,
     }));
+  }
+
+  // Get deep paths and filter them
+  const deepPaths = flattenSchemaPaths(nodes);
+  const deepPathOptions = deepPaths.map((path) => ({
+    value: path.path.join(' '),
+    description: path.description,
+    depth: path.depth,
+  }));
+
+  const filteredDeepPaths = filterCompletions(deepPathOptions, partialArg, {
+    enableFuzzy,
+  });
+
+  // Combine and sort by depth (shorter first)
+  const allOptions = [...filteredSingleLevel, ...filteredDeepPaths];
+  const sorted = allOptions.sort((a, b) => {
+    const depthA = 'depth' in a ? (a.depth as number) : 1;
+    const depthB = 'depth' in b ? (b.depth as number) : 1;
+    return depthA - depthB;
+  });
+
+  // Deduplicate by value and remove depth property from final results
+  const seen = new Set<string>();
+  const deduplicated = sorted.filter((option) => {
+    if (seen.has(option.value)) {
+      return false;
+    }
+    seen.add(option.value);
+    return true;
+  });
+
+  return deduplicated.map(({ value, description }) => ({ value, description }));
 }
 
 async function computeHintForValue(
@@ -306,7 +405,10 @@ async function computeHintForValue(
       return node.hint;
     }
   } catch (error) {
-    console.warn('Error computing hint:', error);
+    logger.warn(
+      () =>
+        `Error computing hint: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   if (node.description) {
@@ -456,7 +558,11 @@ export function createCompletionHandler(schema: CommandArgumentSchema) {
       );
       hint = await computeHintForValue(ctx, active.node, argumentTokenInfo);
     } else if (active.kind === 'literal') {
-      suggestions = suggestForLiterals(active.nodes, normalized.partialArg);
+      suggestions = suggestForLiterals(
+        ctx,
+        active.nodes,
+        normalized.partialArg,
+      );
       hint = inferLiteralHint(active.nodes);
     }
 
