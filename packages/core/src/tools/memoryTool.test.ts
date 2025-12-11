@@ -588,9 +588,10 @@ describe('MemoryTool', () => {
 
       // Normalize paths for cross-platform compatibility (Windows uses backslashes)
       const normalizedTitle = result.title.replace(/\\/g, '/');
+      const normalizedFileName = result.fileName.replace(/\\/g, '/');
       expect(normalizedTitle).toContain('.llxprt/LLXPRT.md');
-      expect(result.fileName).toContain(mockWorkingDir);
-      expect(result.fileName).toContain('.llxprt');
+      expect(normalizedFileName).toContain(mockWorkingDir);
+      expect(normalizedFileName).toContain('.llxprt');
     });
   });
 });
