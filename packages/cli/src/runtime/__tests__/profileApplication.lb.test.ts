@@ -178,6 +178,25 @@ const profileManagerStub: ProfileManagerStub = {
   loadProfile: vi.fn<(profileName: string) => Promise<Profile>>(),
 };
 
+// Capture original registerProvider to prevent nested wrappers
+const originalRegisterProvider = providerManagerStub.registerProvider;
+
+// Helper function to wrap registerProvider and capture LoadBalancingProvider
+function wrapRegisterProviderToCaptureLB(): {
+  getLBProvider: () => LoadBalancingProvider | null;
+} {
+  let capturedLBProvider: LoadBalancingProvider | null = null;
+  const original = providerManagerStub.registerProvider.bind(providerManagerStub);
+  providerManagerStub.registerProvider = vi.fn((provider: unknown) => {
+    const providerWithName = provider as { name: string };
+    if (providerWithName.name === 'load-balancer') {
+      capturedLBProvider = provider as LoadBalancingProvider;
+    }
+    return original(provider);
+  });
+  return { getLBProvider: () => capturedLBProvider };
+}
+
 beforeEach(() => {
   configStub.model = undefined;
   configStub.ephemerals.clear();
@@ -185,6 +204,8 @@ beforeEach(() => {
   settingsServiceStub.providerSettings.clear();
   providerManagerStub.providers.clear();
   providerManagerStub.activeProviderName = null;
+  // Restore original registerProvider to prevent nested wrappers
+  providerManagerStub.registerProvider = originalRegisterProvider;
 
   // Register standard providers
   providerManagerStub.registerProvider({
@@ -297,24 +318,14 @@ describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)'
       profileManagerStub.loadProfile = mockLoadProfile;
 
       // Track if LoadBalancingProvider was created
-      let lbProviderCreated = false;
-      const originalRegisterProvider =
-        providerManagerStub.registerProvider.bind(providerManagerStub);
-
-      providerManagerStub.registerProvider = vi.fn((provider: unknown) => {
-        const providerWithName = provider as { name: string };
-        if (providerWithName.name === 'load-balancer') {
-          lbProviderCreated = true;
-        }
-        originalRegisterProvider(provider);
-      });
+      const { getLBProvider } = wrapRegisterProviderToCaptureLB();
 
       await applyProfileWithGuards(lbProfile, {
         profileName: 'myLB',
       });
 
       // Verify that LoadBalancingProvider was detected and created
-      expect(lbProviderCreated).toBe(true);
+      expect(getLBProvider()).not.toBeNull();
       expect(mockLoadProfile).toHaveBeenCalledWith('syntheticglm46');
       expect(mockLoadProfile).toHaveBeenCalledWith('syntheticm2maxstreaming');
     });
@@ -329,24 +340,14 @@ describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)'
       };
 
       // Track if LoadBalancingProvider was created
-      let lbProviderCreated = false;
-      const originalRegisterProvider =
-        providerManagerStub.registerProvider.bind(providerManagerStub);
-
-      providerManagerStub.registerProvider = vi.fn((provider: unknown) => {
-        const providerWithName = provider as { name: string };
-        if (providerWithName.name === 'load-balancer') {
-          lbProviderCreated = true;
-        }
-        originalRegisterProvider(provider);
-      });
+      const { getLBProvider } = wrapRegisterProviderToCaptureLB();
 
       await applyProfileWithGuards(standardProfile, {
         profileName: 'standard-profile',
       });
 
       // Verify that LoadBalancingProvider was NOT created
-      expect(lbProviderCreated).toBe(false);
+      expect(getLBProvider()).toBeNull();
     });
   });
 
@@ -417,24 +418,14 @@ describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)'
       );
       profileManagerStub.loadProfile = mockLoadProfile;
 
-      let capturedProvider: LoadBalancingProvider | null = null;
-      const originalRegisterProvider =
-        providerManagerStub.registerProvider.bind(providerManagerStub);
-
-      providerManagerStub.registerProvider = vi.fn((provider: unknown) => {
-        const providerWithName = provider as { name: string };
-        if (providerWithName.name === 'load-balancer') {
-          capturedProvider = provider as LoadBalancingProvider;
-        }
-        originalRegisterProvider(provider);
-      });
+      const { getLBProvider } = wrapRegisterProviderToCaptureLB();
 
       await applyProfileWithGuards(lbProfile, {
         profileName: 'myLB',
       });
 
       // Verify provider was created (config extraction happens internally)
-      expect(capturedProvider).not.toBeNull();
+      expect(getLBProvider()).not.toBeNull();
       expect(mockLoadProfile).toHaveBeenCalledWith('subProfile1');
     });
   });
@@ -586,24 +577,14 @@ describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)'
       );
       profileManagerStub.loadProfile = mockLoadProfile;
 
-      let capturedProvider: LoadBalancingProvider | null = null;
-      const originalRegisterProvider =
-        providerManagerStub.registerProvider.bind(providerManagerStub);
-
-      providerManagerStub.registerProvider = vi.fn((provider: unknown) => {
-        const providerWithName = provider as { name: string };
-        if (providerWithName.name === 'load-balancer') {
-          capturedProvider = provider as LoadBalancingProvider;
-        }
-        originalRegisterProvider(provider);
-      });
+      const { getLBProvider } = wrapRegisterProviderToCaptureLB();
 
       await applyProfileWithGuards(lbProfile, {
         profileName: 'myLB',
       });
 
-      expect(capturedProvider).not.toBeNull();
-      expect(capturedProvider).toHaveProperty('name', 'load-balancer');
+      expect(getLBProvider()).not.toBeNull();
+      expect(getLBProvider()).toHaveProperty('name', 'load-balancer');
     });
 
     it('should register LoadBalancingProvider as "load-balancer" @plan:PLAN-20251211issue486c @phase:2', async () => {
@@ -820,17 +801,7 @@ describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)'
       } as unknown as Profile;
 
       // Track if LoadBalancingProvider was created
-      let lbProviderCreated = false;
-      const originalRegisterProvider =
-        providerManagerStub.registerProvider.bind(providerManagerStub);
-
-      providerManagerStub.registerProvider = vi.fn((provider: unknown) => {
-        const providerWithName = provider as { name: string };
-        if (providerWithName.name === 'load-balancer') {
-          lbProviderCreated = true;
-        }
-        originalRegisterProvider(provider);
-      });
+      const { getLBProvider } = wrapRegisterProviderToCaptureLB();
 
       // This should treat the profile as a standard profile (use provider: gemini)
       const result = (await applyProfileWithGuards(oldInlineFormatProfile, {
@@ -838,7 +809,7 @@ describe('Phase 2: Load Balancing Profile Detection (type: loadbalancer format)'
       })) as unknown as ProfileApplicationResult;
 
       // Verify that LoadBalancingProvider was NOT created
-      expect(lbProviderCreated).toBe(false);
+      expect(getLBProvider()).toBeNull();
 
       // Verify the provider was set to 'gemini' (from profile.provider), not 'load-balancer'
       expect(result.providerName).toBe('gemini');

@@ -427,7 +427,7 @@ export async function main() {
   // (checking if currentProfileName is null means no profile was loaded yet)
   // If the profile was already loaded, don't reload - especially important for
   // load balancer profiles where reloading advances the round-robin counter
-  const currentProfileName = runtimeSettingsService.getCurrentProfileName?.();
+  const currentProfileName = runtimeSettingsService.getCurrentProfileName();
   if (
     !argv.provider &&
     bootstrapProfileName !== '' &&
