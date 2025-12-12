@@ -159,8 +159,11 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
 };
 
 import { existsSync, mkdirSync } from 'fs';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { homedir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
+import commandExists from 'command-exists';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function setupUnhandledRejectionHandler() {
@@ -777,24 +780,82 @@ export async function main() {
 
   // Check for experimental UI flag
   if (argv.experimentalUi) {
+    if (!commandExists.sync('bun')) {
+      console.error('--experimental-ui requires Bun to be installed.');
+      console.error(
+        'Install bun from https://bun.sh or via your package manager.',
+      );
+      process.exit(1);
+    }
+
+    const require = createRequire(import.meta.url);
+    let uiPackageJsonPath: string;
     try {
-      const { startNui } = await import('@vybestack/llxprt-ui');
-      await startNui({
-        workingDir: workspaceRoot,
-        args: process.argv.slice(2),
-      });
-      return;
+      uiPackageJsonPath = require.resolve('@vybestack/llxprt-ui/package.json');
     } catch (e: unknown) {
       const error = e as { code?: string };
-      if (error.code === 'ERR_MODULE_NOT_FOUND') {
+      if (
+        error.code === 'MODULE_NOT_FOUND' ||
+        error.code === 'ERR_MODULE_NOT_FOUND'
+      ) {
         console.error(
           '--experimental-ui requires @vybestack/llxprt-ui to be installed',
         );
-        console.error('Run: npm install @vybestack/llxprt-ui');
+        console.error('Run: npm install -g @vybestack/llxprt-ui');
         process.exit(1);
       }
       throw e;
     }
+
+    // If we enabled raw mode earlier, restore cooked mode before handing
+    // the terminal to bun/OpenTUI.
+    if (process.stdin.isTTY && process.stdin.isRaw && !wasRaw) {
+      try {
+        process.stdin.setRawMode(wasRaw);
+      } catch {
+        // ignore
+      }
+    }
+
+    const uiRoot = dirname(uiPackageJsonPath);
+    const uiEntry = join(uiRoot, 'src', 'main.tsx');
+    const filteredArgs = process.argv
+      .slice(2)
+      .filter((a) => a !== '--experimental-ui');
+
+    const child = spawn('bun', ['run', uiEntry, ...filteredArgs], {
+      stdio: 'inherit',
+      cwd: workspaceRoot,
+      env: { ...process.env },
+    });
+
+    child.on('error', (err) => {
+      console.error('Failed to launch experimental UI via bun:', err);
+      process.exit(1);
+    });
+
+    child.on('close', async (code, signal) => {
+      if (process.stdin.isTTY && process.stdin.isRaw !== wasRaw) {
+        try {
+          process.stdin.setRawMode(wasRaw);
+        } catch {
+          // ignore
+        }
+      }
+      await runExitCleanup();
+
+      if (signal === 'SIGINT') {
+        process.exit(130);
+        return;
+      }
+      if (signal === 'SIGTERM') {
+        process.exit(143);
+        return;
+      }
+      process.exit(code ?? 0);
+    });
+
+    return;
   }
 
   // Render UI, passing necessary config values. Check that there is no command line question.

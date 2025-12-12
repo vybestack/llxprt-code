@@ -252,7 +252,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         .option('experimental-ui', {
           type: 'boolean',
           description:
-            'Use experimental terminal UI (requires @vybestack/llxprt-ui)',
+            'Use experimental terminal UI (requires bun and @vybestack/llxprt-ui)',
         })
         .option('allowed-mcp-server-names', {
           type: 'array',
@@ -427,7 +427,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     .option('experimental-ui', {
       type: 'boolean',
       description:
-        'Use experimental terminal UI (requires @vybestack/llxprt-ui)',
+        'Use experimental terminal UI (requires bun and @vybestack/llxprt-ui)',
     })
     .option('allowed-mcp-server-names', {
       type: 'array',
