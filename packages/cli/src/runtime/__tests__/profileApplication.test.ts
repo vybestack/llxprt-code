@@ -4,7 +4,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Profile } from '@vybestack/llxprt-code-core';
+import type { Profile, LoadBalancerProfile } from '@vybestack/llxprt-code-core';
 import path from 'node:path';
 
 // Mock fs module for keyfile tests
@@ -167,6 +167,9 @@ const providerManagerStub = {
       }
     );
   },
+  registerProvider(provider: { name: string }) {
+    this.providerLookup.set(provider.name, provider);
+  },
 };
 const isCliStatelessProviderModeEnabledMock = vi
   .fn<() => boolean>()
@@ -174,6 +177,10 @@ const isCliStatelessProviderModeEnabledMock = vi
 const isCliRuntimeStatelessReadyMock = vi
   .fn<() => boolean>()
   .mockReturnValue(true);
+
+const mockProfileManager = {
+  loadProfile: vi.fn<(profileName: string) => Promise<Profile>>(),
+};
 
 beforeEach(() => {
   configStub.model = undefined;
@@ -211,6 +218,7 @@ beforeEach(() => {
     config: configStub,
     settingsService: settingsServiceStub,
     providerManager: providerManagerStub,
+    profileManager: mockProfileManager,
   });
   getActiveProviderOrThrowMock.mockReturnValue({ name: 'openai' });
   isCliStatelessProviderModeEnabledMock.mockReturnValue(false);
@@ -1097,21 +1105,11 @@ describe('Phase 3: Profile loading auth timing (OAuth lazy loading)', () => {
 });
 
 describe('LoadBalancer profile integration', () => {
-  const mockProfileManager = {
-    loadProfile: vi.fn<(profileName: string) => Promise<Profile>>(),
-  };
-
   beforeEach(() => {
     mockProfileManager.loadProfile.mockClear();
-    getCliRuntimeServicesMock.mockReturnValue({
-      config: configStub,
-      settingsService: settingsServiceStub,
-      providerManager: providerManagerStub,
-      profileManager: mockProfileManager,
-    } as ReturnType<typeof getCliRuntimeServicesMock>);
   });
 
-  it('resolves LoadBalancer profile to first standard profile on first call', async () => {
+  it('registers LoadBalancingProvider for LoadBalancer profiles', async () => {
     const standardProfile1: Profile = {
       version: 1,
       provider: 'openai',
@@ -1136,7 +1134,12 @@ describe('LoadBalancer profile integration', () => {
       },
     );
 
-    const lbProfile: Profile = {
+    // Mock setActiveModel to return the model being set (including 'load-balancer')
+    setActiveModelMock.mockImplementation(async (model: string) => ({
+      nextModel: model,
+    }));
+
+    const lbProfile: LoadBalancerProfile = {
       version: 1,
       type: 'loadbalancer',
       policy: 'roundrobin',
@@ -1157,109 +1160,17 @@ describe('LoadBalancer profile integration', () => {
       profileName: 'lb-profiles',
     })) as unknown as ProfileApplicationResult;
 
-    expect(mockProfileManager.loadProfile).toHaveBeenCalledWith('profile1');
-    expect(result.providerName).toBe('openai');
-    expect(result.modelName).toBe('gpt-4o-mini');
-  });
+    // NEW behavior: LoadBalancingProvider is registered with 'load-balancer' as the model
+    expect(result.modelName).toBe('load-balancer');
 
-  it('uses round robin across multiple LoadBalancer calls', async () => {
-    const standardProfile1: Profile = {
-      version: 1,
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
+    // Verify setActiveModel was called with 'load-balancer'
+    expect(setActiveModelMock).toHaveBeenCalledWith('load-balancer');
 
-    const standardProfile2: Profile = {
-      version: 1,
-      provider: 'anthropic',
-      model: 'claude-3-opus',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    mockProfileManager.loadProfile.mockImplementation(
-      async (name: string): Promise<Profile> => {
-        if (name === 'profile1') return standardProfile1;
-        if (name === 'profile2') return standardProfile2;
-        throw new Error(`Profile ${name} not found`);
-      },
-    );
-
-    const lbProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: ['profile1', 'profile2'],
-      provider: '',
-      model: '',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    providerManagerStub.available = ['openai', 'anthropic'];
-    providerManagerStub.providerLookup = new Map([
-      ['openai', { name: 'openai' }],
-      ['anthropic', { name: 'anthropic' }],
-    ]);
-
-    const result1 = (await applyProfileWithGuards(lbProfile, {
-      profileName: 'lb-roundrobin-test',
-    })) as unknown as ProfileApplicationResult;
-    expect(result1.providerName).toBe('openai');
-    expect(mockProfileManager.loadProfile).toHaveBeenCalledWith('profile1');
-
-    mockProfileManager.loadProfile.mockClear();
-
-    const result2 = (await applyProfileWithGuards(lbProfile, {
-      profileName: 'lb-roundrobin-test',
-    })) as unknown as ProfileApplicationResult;
-    expect(mockProfileManager.loadProfile).toHaveBeenCalledTimes(1);
-    expect(mockProfileManager.loadProfile).toHaveBeenCalledWith('profile2');
-    expect(result2.providerName).toBe('anthropic');
-
-    const result3 = (await applyProfileWithGuards(lbProfile, {
-      profileName: 'lb-roundrobin-test',
-    })) as unknown as ProfileApplicationResult;
-    expect(result3.providerName).toBe('openai');
-    expect(mockProfileManager.loadProfile).toHaveBeenCalledWith('profile1');
-  });
-
-  it('passes resolved standard profile to provider application', async () => {
-    const standardProfile: Profile = {
-      version: 1,
-      provider: 'anthropic',
-      model: 'claude-3-sonnet',
-      modelParams: { temperature: 0.8, max_tokens: 2048 },
-      ephemeralSettings: { 'auth-key': 'test-key' },
-    };
-
-    mockProfileManager.loadProfile.mockResolvedValue(standardProfile);
-
-    const lbProfile: Profile = {
-      version: 1,
-      type: 'loadbalancer',
-      policy: 'roundrobin',
-      profiles: ['profile-a'],
-      provider: '',
-      model: '',
-      modelParams: {},
-      ephemeralSettings: {},
-    };
-
-    providerManagerStub.available = ['anthropic'];
-    providerManagerStub.providerLookup = new Map([
-      ['anthropic', { name: 'anthropic' }],
-    ]);
-
-    await applyProfileWithGuards(lbProfile, {
-      profileName: 'lb-single',
-    });
-
-    expect(setActiveModelMock).toHaveBeenCalledWith('claude-3-sonnet');
-    expect(setActiveModelParamMock).toHaveBeenCalledWith('temperature', 0.8);
-    expect(setActiveModelParamMock).toHaveBeenCalledWith('max_tokens', 2048);
+    // Verify LoadBalancingProvider is registered
+    const loadBalancingProvider =
+      providerManagerStub.getProviderByName('load-balancer');
+    expect(loadBalancingProvider).toBeTruthy();
+    expect(loadBalancingProvider?.name).toBe('load-balancer');
   });
 
   it('standard profiles still work unchanged (backward compatibility)', async () => {
