@@ -377,17 +377,19 @@ export async function main() {
     // input showing up in the output.
     process.stdin.setRawMode(true);
 
-    // This cleanup isn't strictly needed but may help in certain situations.
-    process.on('SIGTERM', async () => {
-      process.stdin.setRawMode(wasRaw);
-      await runExitCleanup();
-      process.exit(0);
-    });
-    process.on('SIGINT', async () => {
-      process.stdin.setRawMode(wasRaw);
-      await runExitCleanup();
-      process.exit(130); // Standard exit code for SIGINT
-    });
+    if (!argv.experimentalUi) {
+      // This cleanup isn't strictly needed but may help in certain situations.
+      process.on('SIGTERM', async () => {
+        process.stdin.setRawMode(wasRaw);
+        await runExitCleanup();
+        process.exit(0);
+      });
+      process.on('SIGINT', async () => {
+        process.stdin.setRawMode(wasRaw);
+        await runExitCleanup();
+        process.exit(130); // Standard exit code for SIGINT
+      });
+    }
 
     // Detect and enable Kitty keyboard protocol once at startup.
     detectAndEnableKittyProtocol();
@@ -819,9 +821,22 @@ export async function main() {
 
     const uiRoot = dirname(uiPackageJsonPath);
     const uiEntry = join(uiRoot, 'src', 'main.tsx');
-    const filteredArgs = process.argv
-      .slice(2)
-      .filter((a) => a !== '--experimental-ui');
+    const rawArgs = process.argv.slice(2);
+    const filteredArgs: string[] = [];
+    for (let i = 0; i < rawArgs.length; i += 1) {
+      const arg = rawArgs[i];
+      if (arg === '--experimental-ui') {
+        const next = rawArgs[i + 1];
+        if (next === 'true' || next === 'false') {
+          i += 1;
+        }
+        continue;
+      }
+      if (arg.startsWith('--experimental-ui=')) {
+        continue;
+      }
+      filteredArgs.push(arg);
+    }
 
     const child = spawn('bun', ['run', uiEntry, ...filteredArgs], {
       stdio: 'inherit',
@@ -829,8 +844,31 @@ export async function main() {
       env: { ...process.env },
     });
 
-    child.on('error', (err) => {
+    const forwardSignal = (signal: NodeJS.Signals) => {
+      if (!child.killed) {
+        child.kill(signal);
+      }
+      const killTimer = setTimeout(() => {
+        if (!child.killed) {
+          child.kill('SIGKILL');
+        }
+      }, 800);
+      killTimer.unref();
+
+      const exitTimer = setTimeout(async () => {
+        await runExitCleanup();
+        process.exit(signal === 'SIGINT' ? 130 : 143);
+      }, 1200);
+      exitTimer.unref();
+    };
+
+    ['SIGINT', 'SIGTERM'].forEach((signal) => {
+      process.on(signal, () => forwardSignal(signal as NodeJS.Signals));
+    });
+
+    child.on('error', async (err) => {
       console.error('Failed to launch experimental UI via bun:', err);
+      await runExitCleanup();
       process.exit(1);
     });
 
