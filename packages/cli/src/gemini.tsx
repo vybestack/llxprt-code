@@ -372,24 +372,27 @@ export async function main() {
   }
 
   const wasRaw = process.stdin.isRaw;
-  if (config.isInteractive() && !wasRaw && process.stdin.isTTY) {
+  if (
+    config.isInteractive() &&
+    !argv.experimentalUi &&
+    !wasRaw &&
+    process.stdin.isTTY
+  ) {
     // Set this as early as possible to avoid spurious characters from
     // input showing up in the output.
     process.stdin.setRawMode(true);
 
-    if (!argv.experimentalUi) {
-      // This cleanup isn't strictly needed but may help in certain situations.
-      process.on('SIGTERM', async () => {
-        process.stdin.setRawMode(wasRaw);
-        await runExitCleanup();
-        process.exit(0);
-      });
-      process.on('SIGINT', async () => {
-        process.stdin.setRawMode(wasRaw);
-        await runExitCleanup();
-        process.exit(130); // Standard exit code for SIGINT
-      });
-    }
+    // This cleanup isn't strictly needed but may help in certain situations.
+    process.on('SIGTERM', async () => {
+      process.stdin.setRawMode(wasRaw);
+      await runExitCleanup();
+      process.exit(0);
+    });
+    process.on('SIGINT', async () => {
+      process.stdin.setRawMode(wasRaw);
+      await runExitCleanup();
+      process.exit(130); // Standard exit code for SIGINT
+    });
 
     // Detect and enable Kitty keyboard protocol once at startup.
     detectAndEnableKittyProtocol();
@@ -829,6 +832,11 @@ export async function main() {
       } catch {
         // ignore
       }
+    }
+    // Ensure the parent process isn't consuming stdin while bun runs
+    // (inherited stdio means both processes share the same TTY fd).
+    if (process.stdin.isTTY) {
+      process.stdin.pause();
     }
 
     let uiRoot = dirname(uiEntryPath);
