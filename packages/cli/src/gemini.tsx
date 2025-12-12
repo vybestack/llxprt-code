@@ -160,7 +160,7 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
 
 import { existsSync, mkdirSync } from 'fs';
 import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'os';
 import { dirname, join } from 'path';
 import commandExists from 'command-exists';
@@ -790,10 +790,22 @@ export async function main() {
       process.exit(1);
     }
 
-    const require = createRequire(import.meta.url);
-    let uiPackageJsonPath: string;
+    const resolveImportMeta = (
+      import.meta as unknown as {
+        resolve?: (specifier: string, parent?: string) => string;
+      }
+    ).resolve;
+    if (typeof resolveImportMeta !== 'function') {
+      console.error(
+        '--experimental-ui requires a Node version that supports import.meta.resolve.',
+      );
+      process.exit(1);
+    }
+
+    let uiEntryPath: string;
     try {
-      uiPackageJsonPath = require.resolve('@vybestack/llxprt-ui/package.json');
+      const uiEntryUrl = resolveImportMeta('@vybestack/llxprt-ui');
+      uiEntryPath = fileURLToPath(uiEntryUrl);
     } catch (e: unknown) {
       const error = e as { code?: string };
       if (
@@ -819,7 +831,20 @@ export async function main() {
       }
     }
 
-    const uiRoot = dirname(uiPackageJsonPath);
+    let uiRoot = dirname(uiEntryPath);
+    while (
+      uiRoot !== dirname(uiRoot) &&
+      !existsSync(join(uiRoot, 'package.json'))
+    ) {
+      uiRoot = dirname(uiRoot);
+    }
+    if (!existsSync(join(uiRoot, 'package.json'))) {
+      console.error(
+        `Unable to locate @vybestack/llxprt-ui package root from: ${uiEntryPath}`,
+      );
+      process.exit(1);
+    }
+
     const uiEntry = join(uiRoot, 'src', 'main.tsx');
     const rawArgs = process.argv.slice(2);
     const filteredArgs: string[] = [];
