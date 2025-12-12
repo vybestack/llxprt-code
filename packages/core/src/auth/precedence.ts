@@ -38,7 +38,7 @@ export interface AuthPrecedenceConfig {
   providerId?: string;
 }
 
-import { OAuthToken } from './types.js';
+import { type OAuthToken } from './types.js';
 
 export interface OAuthTokenRequestMetadata {
   runtimeAuthScopeId?: string;

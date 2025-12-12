@@ -12,8 +12,8 @@ import { Storage } from '../config/storage.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
   BaseTokenStore,
-  MCPOAuthToken,
-  MCPOAuthCredentials,
+  type MCPOAuthToken,
+  type MCPOAuthCredentials,
 } from './token-store.js';
 
 const safeOsHostname = (): string => {

@@ -7,10 +7,10 @@
 import {
   CountTokensResponse,
   GenerateContentResponse,
-  GenerateContentParameters,
-  CountTokensParameters,
+  type GenerateContentParameters,
+  type CountTokensParameters,
   EmbedContentResponse,
-  EmbedContentParameters,
+  type EmbedContentParameters,
 } from '@google/genai';
 import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';

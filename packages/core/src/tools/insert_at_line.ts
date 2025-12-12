@@ -10,9 +10,9 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-  ToolInvocation,
-  ToolLocation,
-  ToolResult,
+  type ToolInvocation,
+  type ToolLocation,
+  type ToolResult,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 

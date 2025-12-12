@@ -9,7 +9,7 @@ import picomatch from 'picomatch';
 import { Ignore, loadIgnoreRules } from './ignore.js';
 import { ResultCache } from './result-cache.js';
 import { crawl } from './crawler.js';
-import { AsyncFzf, FzfResultItem } from 'fzf';
+import { AsyncFzf, type FzfResultItem } from 'fzf';
 import { unescapePath } from '../paths.js';
 
 export interface FileSearchOptions {

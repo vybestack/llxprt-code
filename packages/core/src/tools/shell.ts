@@ -14,11 +14,11 @@ import { ToolErrorType } from './tool-error.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
-  ToolInvocation,
-  ToolResult,
-  ToolExecuteConfirmationDetails,
+  type ToolInvocation,
+  type ToolResult,
+  type ToolExecuteConfirmationDetails,
   ToolConfirmationOutcome,
-  ToolCallConfirmationDetails,
+  type ToolCallConfirmationDetails,
   Kind,
 } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -32,7 +32,7 @@ import { summarizeToolOutput } from '../utils/summarizer.js';
 import { stripShellMarkers } from '../utils/shell-markers.js';
 import {
   ShellExecutionService,
-  ShellOutputEvent,
+  type ShellOutputEvent,
 } from '../services/shellExecutionService.js';
 import { formatMemoryUsage } from '../utils/formatters.js';
 import {

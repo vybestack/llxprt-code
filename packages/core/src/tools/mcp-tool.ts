@@ -9,13 +9,13 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-  ToolCallConfirmationDetails,
+  type ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
-  ToolInvocation,
-  ToolMcpConfirmationDetails,
-  ToolResult,
+  type ToolInvocation,
+  type ToolMcpConfirmationDetails,
+  type ToolResult,
 } from './tools.js';
-import { CallableTool, FunctionCall, Part } from '@google/genai';
+import { type CallableTool, type FunctionCall, type Part } from '@google/genai';
 import { ToolErrorType } from './tool-error.js';
 import type { Config } from '../config/config.js';
 

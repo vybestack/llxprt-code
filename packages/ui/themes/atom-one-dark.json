@@ -1,0 +1,59 @@
+{
+  "name": "Atom One",
+  "slug": "atom-one",
+  "kind": "dark",
+  "colors": {
+    "background": "#282c34",
+    "panel": {
+      "bg": "#282c34",
+      "border": "#5c6370",
+      "headerBg": "#282c34",
+      "headerFg": "#abb2bf"
+    },
+    "text": {
+      "primary": "#abb2bf",
+      "muted": "#5c6370",
+      "user": "#61aeee",
+      "responder": "#e6c07b",
+      "thinking": "#5c6370",
+      "tool": "#98c379"
+    },
+    "input": {
+      "bg": "#282c34",
+      "fg": "#abb2bf",
+      "placeholder": "#5c6370",
+      "border": "#5c6370"
+    },
+    "status": {
+      "fg": "#98c379",
+      "muted": "#5c6370"
+    },
+    "accent": {
+      "primary": "#61aeee",
+      "secondary": "#c678dd",
+      "warning": "#e6c07b",
+      "error": "#e06c75",
+      "success": "#98c379"
+    },
+    "selection": {
+      "fg": "#0f172a",
+      "bg": "#61aeee"
+    },
+    "diff": {
+      "addedBg": "#39544E",
+      "addedFg": "white",
+      "removedBg": "#562B2F",
+      "removedFg": "white"
+    },
+    "scrollbar": {
+      "thumb": "#61aeee",
+      "track": "#5c6370"
+    },
+    "message": {
+      "userBorder": "#61aeee",
+      "systemBorder": "#e6c07b",
+      "systemText": "#e6c07b",
+      "systemBg": "#31363f"
+    }
+  }
+}

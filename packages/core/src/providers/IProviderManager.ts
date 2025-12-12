@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IProvider } from './IProvider.js';
-import { IModel } from './IModel.js';
+import { type IProvider } from './IProvider.js';
+import { type IModel } from './IModel.js';
 import { Config } from '../config/config.js';
 
 /**

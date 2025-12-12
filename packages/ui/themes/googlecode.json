@@ -1,0 +1,59 @@
+{
+  "name": "Google Code",
+  "slug": "google-code",
+  "kind": "light",
+  "colors": {
+    "background": "white",
+    "panel": {
+      "bg": "white",
+      "border": "#97a0b0",
+      "headerBg": "white",
+      "headerFg": "#444"
+    },
+    "text": {
+      "primary": "#444",
+      "muted": "#5f6368",
+      "user": "#066",
+      "responder": "#660",
+      "thinking": "#97a0b0",
+      "tool": "#080"
+    },
+    "input": {
+      "bg": "white",
+      "fg": "#444",
+      "placeholder": "#5f6368",
+      "border": "#97a0b0"
+    },
+    "status": {
+      "fg": "#080",
+      "muted": "#5f6368"
+    },
+    "accent": {
+      "primary": "#008",
+      "secondary": "#606",
+      "warning": "#660",
+      "error": "#800",
+      "success": "#080"
+    },
+    "selection": {
+      "fg": "#f8fafc",
+      "bg": "#008"
+    },
+    "diff": {
+      "addedBg": "#C6EAD8",
+      "addedFg": "#444",
+      "removedBg": "#FEDEDE",
+      "removedFg": "#444"
+    },
+    "scrollbar": {
+      "thumb": "#008",
+      "track": "#97a0b0"
+    },
+    "message": {
+      "userBorder": "#066",
+      "systemBorder": "#660",
+      "systemText": "#660",
+      "systemBg": "#f5f5f5"
+    }
+  }
+}

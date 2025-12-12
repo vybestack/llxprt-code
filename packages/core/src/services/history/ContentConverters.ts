@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { Content, Part } from '@google/genai';
+import { type Content, type Part } from '@google/genai';
 import type {
   IContent,
   ContentBlock,

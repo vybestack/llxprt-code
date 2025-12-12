@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Todo, TodoArraySchema } from './todo-schemas.js';
+import { type Todo, TodoArraySchema } from './todo-schemas.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

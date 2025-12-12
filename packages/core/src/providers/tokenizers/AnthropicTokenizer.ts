@@ -1,4 +1,4 @@
-import { ITokenizer } from './ITokenizer.js';
+import { type ITokenizer } from './ITokenizer.js';
 
 export class AnthropicTokenizer implements ITokenizer {
   /**

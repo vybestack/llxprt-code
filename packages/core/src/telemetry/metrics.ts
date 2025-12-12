@@ -6,11 +6,11 @@
 
 import {
   metrics,
-  Attributes,
+  type Attributes,
   ValueType,
-  Meter,
-  Counter,
-  Histogram,
+  type Meter,
+  type Counter,
+  type Histogram,
 } from '@opentelemetry/api';
 import {
   SERVICE_NAME,
@@ -23,7 +23,7 @@ import {
   METRIC_FILE_OPERATION_COUNT,
 } from './constants.js';
 import { Config } from '../config/config.js';
-import { DiffStat } from '../tools/tools.js';
+import { type DiffStat } from '../tools/tools.js';
 
 export enum FileOperation {
   CREATE = 'create',

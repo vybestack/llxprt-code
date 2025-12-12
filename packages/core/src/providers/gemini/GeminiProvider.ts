@@ -7,13 +7,13 @@
 // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
 // createHash import removed - no longer needed without client caching
 import { DebugLogger } from '../../debug/index.js';
-import { IModel } from '../IModel.js';
+import { type IModel } from '../IModel.js';
 import {
-  IContent,
-  TextBlock,
-  ToolCallBlock,
-  ToolResponseBlock,
-  ThinkingBlock,
+  type IContent,
+  type TextBlock,
+  type ToolCallBlock,
+  type ToolResponseBlock,
+  type ThinkingBlock,
 } from '../../services/history/IContent.js';
 import { Config } from '../../config/config.js';
 import { AuthType } from '../../core/contentGenerator.js';
@@ -28,10 +28,10 @@ import {
 } from '@google/genai';
 import {
   BaseProvider,
-  BaseProviderConfig,
-  NormalizedGenerateChatOptions,
+  type BaseProviderConfig,
+  type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import { OAuthManager } from '../../auth/precedence.js';
+import { type OAuthManager } from '../../auth/precedence.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import {

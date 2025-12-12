@@ -6,8 +6,8 @@
 
 import { randomBytes, createHash } from 'crypto';
 import {
-  DeviceCodeResponse,
-  OAuthToken,
+  type DeviceCodeResponse,
+  type OAuthToken,
   DeviceCodeResponseSchema,
   TokenResponseSchema,
 } from './types.js';

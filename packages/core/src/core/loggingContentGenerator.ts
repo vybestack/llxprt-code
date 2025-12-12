@@ -5,12 +5,12 @@
  */
 
 import {
-  Content,
-  CountTokensParameters,
+  type Content,
+  type CountTokensParameters,
   CountTokensResponse,
-  EmbedContentParameters,
+  type EmbedContentParameters,
   EmbedContentResponse,
-  GenerateContentParameters,
+  type GenerateContentParameters,
   GenerateContentResponseUsageMetadata,
   GenerateContentResponse,
 } from '@google/genai';
@@ -25,7 +25,7 @@ import {
   logApiRequest,
   logApiResponse,
 } from '../telemetry/loggers.js';
-import { ContentGenerator } from './contentGenerator.js';
+import { type ContentGenerator } from './contentGenerator.js';
 import { toContents } from '../code_assist/converter.js';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
 

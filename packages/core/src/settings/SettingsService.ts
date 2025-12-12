@@ -6,13 +6,13 @@
 
 import { EventEmitter } from 'events';
 import {
-  ISettingsService,
-  GlobalSettings,
-  ProviderSettings,
-  SettingsChangeEvent,
-  EventListener,
-  EventUnsubscribe,
-  DiagnosticsInfo,
+  type ISettingsService,
+  type GlobalSettings,
+  type ProviderSettings,
+  type SettingsChangeEvent,
+  type EventListener,
+  type EventUnsubscribe,
+  type DiagnosticsInfo,
 } from './types.js';
 
 /**

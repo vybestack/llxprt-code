@@ -128,6 +128,7 @@ export interface CliArgs {
   allowedMcpServerNames: string[] | undefined;
   allowedTools: string[] | undefined;
   experimentalAcp: boolean | undefined;
+  experimentalUi: boolean | undefined;
   extensions: string[] | undefined;
   listExtensions: boolean | undefined;
   provider: string | undefined;
@@ -247,6 +248,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         .option('experimental-acp', {
           type: 'boolean',
           description: 'Starts the agent in ACP mode',
+        })
+        .option('experimental-ui', {
+          type: 'boolean',
+          description:
+            'Use experimental terminal UI (requires @vybestack/llxprt-ui)',
         })
         .option('allowed-mcp-server-names', {
           type: 'array',
@@ -418,6 +424,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       type: 'boolean',
       description: 'Starts the agent in ACP mode',
     })
+    .option('experimental-ui', {
+      type: 'boolean',
+      description:
+        'Use experimental terminal UI (requires @vybestack/llxprt-ui)',
+    })
     .option('allowed-mcp-server-names', {
       type: 'array',
       string: true,
@@ -559,6 +570,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     telemetryOutfile: result.telemetryOutfile as string | undefined,
     allowedMcpServerNames: result.allowedMcpServerNames as string[] | undefined,
     experimentalAcp: result.experimentalAcp as boolean | undefined,
+    experimentalUi: result.experimentalUi as boolean | undefined,
     extensions: result.extensions as string[] | undefined,
     listExtensions: result.listExtensions as boolean | undefined,
     provider: result.provider as string | undefined,

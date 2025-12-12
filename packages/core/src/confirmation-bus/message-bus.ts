@@ -10,7 +10,7 @@ import {
 } from './types.js';
 import {
   ToolConfirmationOutcome,
-  ToolConfirmationPayload,
+  type ToolConfirmationPayload,
 } from '../tools/tool-confirmation-types.js';
 
 type MessageHandler<T extends MessageBusMessage = MessageBusMessage> = (

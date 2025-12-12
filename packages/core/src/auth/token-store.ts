@@ -7,7 +7,7 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { OAuthToken, OAuthTokenSchema } from './types.js';
+import { type OAuthToken, OAuthTokenSchema } from './types.js';
 
 /**
  * Interface for multi-provider OAuth token storage

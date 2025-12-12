@@ -8,14 +8,14 @@ import { vi } from 'vitest';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
-  ToolCallConfirmationDetails,
-  ToolInvocation,
-  ToolResult,
+  type ToolCallConfirmationDetails,
+  type ToolInvocation,
+  type ToolResult,
   Kind,
 } from '../tools/tools.js';
 import {
-  ModifiableDeclarativeTool,
-  ModifyContext,
+  type ModifiableDeclarativeTool,
+  type ModifyContext,
 } from '../tools/modifiable-tool.js';
 
 type ToolSpy = ReturnType<(typeof vi)['fn']>;

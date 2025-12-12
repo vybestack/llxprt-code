@@ -783,6 +783,28 @@ export async function main() {
   // Check if a provider is already active on startup
   providerManager.getActiveProvider();
 
+  // Check for experimental UI flag
+  if (argv.experimentalUi) {
+    try {
+      const { startNui } = await import('@vybestack/llxprt-ui');
+      await startNui({
+        workingDir: workspaceRoot,
+        args: process.argv.slice(2),
+      });
+      return;
+    } catch (e: unknown) {
+      const error = e as { code?: string };
+      if (error.code === 'ERR_MODULE_NOT_FOUND') {
+        console.error(
+          '--experimental-ui requires @vybestack/llxprt-ui to be installed',
+        );
+        console.error('Run: npm install @vybestack/llxprt-ui');
+        process.exit(1);
+      }
+      throw e;
+    }
+  }
+
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {
     await startInteractiveUI(config, settings, startupWarnings, workspaceRoot);

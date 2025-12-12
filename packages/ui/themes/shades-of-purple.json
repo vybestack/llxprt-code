@@ -1,0 +1,59 @@
+{
+  "name": "Shades Of Purple",
+  "slug": "shades-of-purple",
+  "kind": "dark",
+  "colors": {
+    "background": "#2d2b57",
+    "panel": {
+      "bg": "#2d2b57",
+      "border": "#726c86",
+      "headerBg": "#2d2b57",
+      "headerFg": "#e3dfff"
+    },
+    "text": {
+      "primary": "#e3dfff",
+      "muted": "#B362FF",
+      "user": "#847ace",
+      "responder": "#fad000",
+      "thinking": "#726c86",
+      "tool": "#A5FF90"
+    },
+    "input": {
+      "bg": "#2d2b57",
+      "fg": "#e3dfff",
+      "placeholder": "#B362FF",
+      "border": "#726c86"
+    },
+    "status": {
+      "fg": "#A5FF90",
+      "muted": "#B362FF"
+    },
+    "accent": {
+      "primary": "#a599e9",
+      "secondary": "#ac65ff",
+      "warning": "#fad000",
+      "error": "#ff628c",
+      "success": "#A5FF90"
+    },
+    "selection": {
+      "fg": "#0f172a",
+      "bg": "#a599e9"
+    },
+    "diff": {
+      "addedBg": "#383E45",
+      "addedFg": "#e3dfff",
+      "removedBg": "#572244",
+      "removedFg": "#e3dfff"
+    },
+    "scrollbar": {
+      "thumb": "#a599e9",
+      "track": "#726c86"
+    },
+    "message": {
+      "userBorder": "#847ace",
+      "systemBorder": "#fad000",
+      "systemText": "#fad000",
+      "systemBg": "#3a3866"
+    }
+  }
+}

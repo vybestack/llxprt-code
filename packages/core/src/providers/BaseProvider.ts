@@ -10,20 +10,20 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
-  IProvider,
-  GenerateChatOptions,
-  ProviderToolset,
+  type IProvider,
+  type GenerateChatOptions,
+  type ProviderToolset,
 } from './IProvider.js';
-import { IModel } from './IModel.js';
-import { IContent } from '../services/history/IContent.js';
+import { type IModel } from './IModel.js';
+import { type IContent } from '../services/history/IContent.js';
 import { DebugLogger } from '../debug/index.js';
 import {
   AuthPrecedenceResolver,
-  AuthPrecedenceConfig,
-  OAuthManager,
+  type AuthPrecedenceConfig,
+  type OAuthManager,
 } from '../auth/precedence.js';
 import type { Config } from '../config/config.js';
-import { IProviderConfig } from './types/IProviderConfig.js';
+import { type IProviderConfig } from './types/IProviderConfig.js';
 import {
   peekActiveProviderRuntimeContext,
   setActiveProviderRuntimeContext,

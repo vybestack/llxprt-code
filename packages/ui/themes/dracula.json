@@ -1,0 +1,59 @@
+{
+  "name": "Dracula",
+  "slug": "dracula",
+  "kind": "dark",
+  "colors": {
+    "background": "#282a36",
+    "panel": {
+      "bg": "#282a36",
+      "border": "#6272a4",
+      "headerBg": "#282a36",
+      "headerFg": "#f8f8f2"
+    },
+    "text": {
+      "primary": "#f8f8f2",
+      "muted": "#6272a4",
+      "user": "#8be9fd",
+      "responder": "#f1fa8c",
+      "thinking": "#6272a4",
+      "tool": "#50fa7b"
+    },
+    "input": {
+      "bg": "#282a36",
+      "fg": "#f8f8f2",
+      "placeholder": "#6272a4",
+      "border": "#6272a4"
+    },
+    "status": {
+      "fg": "#50fa7b",
+      "muted": "#6272a4"
+    },
+    "accent": {
+      "primary": "#8be9fd",
+      "secondary": "#ff79c6",
+      "warning": "#f1fa8c",
+      "error": "#ff5555",
+      "success": "#50fa7b"
+    },
+    "selection": {
+      "fg": "#0f172a",
+      "bg": "#8be9fd"
+    },
+    "diff": {
+      "addedBg": "#11431d",
+      "addedFg": "white",
+      "removedBg": "#6e1818",
+      "removedFg": "white"
+    },
+    "scrollbar": {
+      "thumb": "#8be9fd",
+      "track": "#6272a4"
+    },
+    "message": {
+      "userBorder": "#8be9fd",
+      "systemBorder": "#f1fa8c",
+      "systemText": "#f1fa8c",
+      "systemBg": "#343746"
+    }
+  }
+}

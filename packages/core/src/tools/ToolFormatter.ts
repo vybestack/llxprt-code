@@ -21,13 +21,13 @@
  */
 
 import {
-  IToolFormatter,
-  ToolFormat,
-  OpenAITool,
-  ResponsesTool,
+  type IToolFormatter,
+  type ToolFormat,
+  type OpenAITool,
+  type ResponsesTool,
 } from './IToolFormatter.js';
-import { ITool } from '../providers/ITool.js';
-import { ToolCallBlock } from '../services/history/IContent.js';
+import { type ITool } from '../providers/ITool.js';
+import { type ToolCallBlock } from '../services/history/IContent.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import {
   logDoubleEscapingInChunk,

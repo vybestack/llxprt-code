@@ -70,43 +70,35 @@ describe('getIdeProcessInfo', () => {
   describe('on Windows', () => {
     it('should traverse up and find the great-grandchild of the root process', async () => {
       (os.platform as Mock).mockReturnValue('win32');
-      const processInfoMap = new Map([
-        [
-          1000,
-          {
-            stdout:
-              '{"Name":"node.exe","ParentProcessId":900,"CommandLine":"node.exe"}',
-          },
-        ],
-        [
-          900,
-          {
-            stdout:
-              '{"Name":"powershell.exe","ParentProcessId":800,"CommandLine":"powershell.exe"}',
-          },
-        ],
-        [
-          800,
-          {
-            stdout:
-              '{"Name":"code.exe","ParentProcessId":700,"CommandLine":"code.exe"}',
-          },
-        ],
-        [
-          700,
-          {
-            stdout:
-              '{"Name":"wininit.exe","ParentProcessId":0,"CommandLine":"wininit.exe"}',
-          },
-        ],
-      ]);
-      mockedExec.mockImplementation((command: string) => {
-        const pidMatch = command.match(/ProcessId=(\d+)/);
-        if (pidMatch) {
-          const pid = parseInt(pidMatch[1], 10);
-          return Promise.resolve(processInfoMap.get(pid));
-        }
-        return Promise.reject(new Error('Invalid command for mock'));
+      // Mock the single PowerShell call that returns all processes
+      const allProcesses = [
+        {
+          ProcessId: 1000,
+          ParentProcessId: 900,
+          Name: 'node.exe',
+          CommandLine: 'node.exe',
+        },
+        {
+          ProcessId: 900,
+          ParentProcessId: 800,
+          Name: 'powershell.exe',
+          CommandLine: 'powershell.exe',
+        },
+        {
+          ProcessId: 800,
+          ParentProcessId: 700,
+          Name: 'code.exe',
+          CommandLine: 'code.exe',
+        },
+        {
+          ProcessId: 700,
+          ParentProcessId: 0,
+          Name: 'wininit.exe',
+          CommandLine: 'wininit.exe',
+        },
+      ];
+      mockedExec.mockResolvedValueOnce({
+        stdout: JSON.stringify(allProcesses),
       });
 
       const result = await getIdeProcessInfo();
@@ -115,49 +107,34 @@ describe('getIdeProcessInfo', () => {
 
     it('should handle non-existent process gracefully', async () => {
       (os.platform as Mock).mockReturnValue('win32');
-      mockedExec
-        .mockResolvedValueOnce({ stdout: '' }) // Non-existent PID returns empty due to -ErrorAction SilentlyContinue
-        .mockResolvedValueOnce({
-          stdout:
-            '{"Name":"fallback.exe","ParentProcessId":0,"CommandLine":"fallback.exe"}',
-        }); // Fallback call
+      // Mock all processes but the current process PID is missing from the list
+      const allProcesses = [
+        {
+          ProcessId: 900,
+          ParentProcessId: 0,
+          Name: 'fallback.exe',
+          CommandLine: 'fallback.exe',
+        },
+      ];
+      mockedExec.mockResolvedValueOnce({
+        stdout: JSON.stringify(allProcesses),
+      });
 
       const result = await getIdeProcessInfo();
-      expect(result).toEqual({ pid: 1000, command: 'fallback.exe' });
+      expect(result).toEqual({ pid: 1000, command: '' });
     });
 
     it('should handle malformed JSON output gracefully', async () => {
       (os.platform as Mock).mockReturnValue('win32');
-      mockedExec
-        .mockResolvedValueOnce({ stdout: '{"invalid":json}' }) // Malformed JSON
-        .mockResolvedValueOnce({
-          stdout:
-            '{"Name":"fallback.exe","ParentProcessId":0,"CommandLine":"fallback.exe"}',
-        }); // Fallback call
+      // Mock malformed JSON response from PowerShell
+      mockedExec.mockResolvedValueOnce({ stdout: '{"invalid":json}' });
 
       const result = await getIdeProcessInfo();
-      expect(result).toEqual({ pid: 1000, command: 'fallback.exe' });
+      expect(result).toEqual({ pid: 1000, command: '' });
     });
 
     it('should handle PowerShell errors without crashing the process chain', async () => {
       (os.platform as Mock).mockReturnValue('win32');
-      const processInfoMap = new Map([
-        [1000, { stdout: '' }], // First process doesn't exist (empty due to -ErrorAction)
-        [
-          1001,
-          {
-            stdout:
-              '{"Name":"parent.exe","ParentProcessId":800,"CommandLine":"parent.exe"}',
-          },
-        ],
-        [
-          800,
-          {
-            stdout:
-              '{"Name":"ide.exe","ParentProcessId":0,"CommandLine":"ide.exe"}',
-          },
-        ],
-      ]);
 
       // Mock the process.pid to test traversal with missing processes
       Object.defineProperty(process, 'pid', {
@@ -165,13 +142,23 @@ describe('getIdeProcessInfo', () => {
         configurable: true,
       });
 
-      mockedExec.mockImplementation((command: string) => {
-        const pidMatch = command.match(/ProcessId=(\d+)/);
-        if (pidMatch) {
-          const pid = parseInt(pidMatch[1], 10);
-          return Promise.resolve(processInfoMap.get(pid) || { stdout: '' });
-        }
-        return Promise.reject(new Error('Invalid command for mock'));
+      // Mock all processes where current process exists but some parents may be missing
+      const allProcesses = [
+        {
+          ProcessId: 1001,
+          ParentProcessId: 800,
+          Name: 'parent.exe',
+          CommandLine: 'parent.exe',
+        },
+        {
+          ProcessId: 800,
+          ParentProcessId: 0,
+          Name: 'ide.exe',
+          CommandLine: 'ide.exe',
+        },
+      ];
+      mockedExec.mockResolvedValueOnce({
+        stdout: JSON.stringify(allProcesses),
       });
 
       const result = await getIdeProcessInfo();
@@ -187,15 +174,28 @@ describe('getIdeProcessInfo', () => {
 
     it('should handle partial JSON data with defaults', async () => {
       (os.platform as Mock).mockReturnValue('win32');
-      mockedExec
-        .mockResolvedValueOnce({ stdout: '{"Name":"partial.exe"}' }) // Missing ParentProcessId, defaults to 0
-        .mockResolvedValueOnce({
-          stdout:
-            '{"Name":"root.exe","ParentProcessId":0,"CommandLine":"root.exe"}',
-        }); // Get grandparent info
+      // Mock processes with some fields missing - should use defaults
+      const allProcesses = [
+        {
+          ProcessId: 1000,
+          Name: 'partial.exe',
+          // Missing ParentProcessId, should default to 0
+          // Missing CommandLine
+        },
+        {
+          ProcessId: 900,
+          ParentProcessId: 0,
+          Name: 'root.exe',
+          CommandLine: 'root.exe',
+        },
+      ];
+      mockedExec.mockResolvedValueOnce({
+        stdout: JSON.stringify(allProcesses),
+      });
 
       const result = await getIdeProcessInfo();
-      expect(result).toEqual({ pid: 1000, command: 'root.exe' });
+      // Current process has parent 0 (default), so it's already at root
+      expect(result).toEqual({ pid: 1000, command: '' });
     });
   });
 });

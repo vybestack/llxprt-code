@@ -5,7 +5,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { GeminiEventType, ServerGeminiStreamEvent } from '../core/turn.js';
+import { GeminiEventType, type ServerGeminiStreamEvent } from '../core/turn.js';
 import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
 import { Config } from '../config/config.js';

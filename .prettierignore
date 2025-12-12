@@ -2,6 +2,9 @@
 node_modules/
 bower_components
 
+# Git submodules
+packages/opentui/
+
 # Build outputs
 dist/
 build/
@@ -29,6 +32,8 @@ Thumbs.db
 
 # Generated files
 package-lock.json
+bun.lock
+**/bun.lock
 tsconfig.tsbuildinfo
 *.tsbuildinfo
 *.vsix

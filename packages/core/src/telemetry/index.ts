@@ -36,10 +36,10 @@ export {
   ApiRequestEvent,
   ApiErrorEvent,
   ApiResponseEvent,
-  TelemetryEvent,
   SlashCommandEvent,
   KittySequenceOverflowEvent,
 } from './types.js';
+export type { TelemetryEvent } from './types.js';
 export { SpanStatusCode, ValueType } from '@opentelemetry/api';
 export { SemanticAttributes } from '@opentelemetry/semantic-conventions';
 export * from './uiTelemetry.js';

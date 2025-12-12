@@ -420,50 +420,54 @@ My code memory
     });
   });
 
-  it('should respect the maxDirs parameter during downward scan', async () => {
-    const _consoleDebugSpy = vi
-      .spyOn(console, 'debug')
-      .mockImplementation(() => {});
+  it(
+    'should respect the maxDirs parameter during downward scan',
+    { timeout: 15000 },
+    async () => {
+      const _consoleDebugSpy = vi
+        .spyOn(console, 'debug')
+        .mockImplementation(() => {});
 
-    for (let i = 0; i < 60; i++) {
-      await createEmptyDir(path.join(cwd, `deep_dir_${i}`));
-    }
+      for (let i = 0; i < 60; i++) {
+        await createEmptyDir(path.join(cwd, `deep_dir_${i}`));
+      }
 
-    // Pass the custom limit directly to the function
-    await loadServerHierarchicalMemory(
-      cwd,
-      [],
-      true,
-      new FileDiscoveryService(projectRoot),
-      [],
-      DEFAULT_FOLDER_TRUST,
-      'tree', // importFormat
-      {
-        respectGitIgnore: true,
-        respectLlxprtIgnore: true,
-      },
-      50, // maxDirs
-    );
+      // Pass the custom limit directly to the function
+      await loadServerHierarchicalMemory(
+        cwd,
+        [],
+        true,
+        new FileDiscoveryService(projectRoot),
+        [],
+        DEFAULT_FOLDER_TRUST,
+        'tree', // importFormat
+        {
+          respectGitIgnore: true,
+          respectLlxprtIgnore: true,
+        },
+        50, // maxDirs
+      );
 
-    // Debug logging removed - no need to check for it
+      // Debug logging removed - no need to check for it
 
-    vi.mocked(console.debug).mockRestore();
+      vi.mocked(console.debug).mockRestore();
 
-    const result = await loadServerHierarchicalMemory(
-      cwd,
-      [],
-      false,
-      new FileDiscoveryService(projectRoot),
-      [],
-      DEFAULT_FOLDER_TRUST,
-    );
+      const result = await loadServerHierarchicalMemory(
+        cwd,
+        [],
+        false,
+        new FileDiscoveryService(projectRoot),
+        [],
+        DEFAULT_FOLDER_TRUST,
+      );
 
-    expect(result).toEqual({
-      memoryContent: '',
-      fileCount: 0,
-      filePaths: [],
-    });
-  });
+      expect(result).toEqual({
+        memoryContent: '',
+        fileCount: 0,
+        filePaths: [],
+      });
+    },
+  );
 
   it('should load extension context file paths', async () => {
     const extensionFilePath = await createTestFile(

@@ -23,14 +23,14 @@
 // @requirement:REQ-SP4-002/REQ-SP4-003
 // Removed ConversationCache and peekActiveProviderRuntime dependencies to enforce stateless operation
 import { DebugLogger } from '../../debug/index.js';
-import { IModel } from '../IModel.js';
+import { type IModel } from '../IModel.js';
 import {
-  IContent,
-  TextBlock,
-  ToolCallBlock,
-  ToolResponseBlock,
+  type IContent,
+  type TextBlock,
+  type ToolCallBlock,
+  type ToolResponseBlock,
 } from '../../services/history/IContent.js';
-import { IProviderConfig } from '../types/IProviderConfig.js';
+import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import {
   parseResponsesStream,
@@ -38,8 +38,8 @@ import {
 } from '../openai/parseResponsesStream.js';
 import {
   BaseProvider,
-  BaseProviderConfig,
-  NormalizedGenerateChatOptions,
+  type BaseProviderConfig,
+  type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
