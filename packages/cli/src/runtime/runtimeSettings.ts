@@ -1124,6 +1124,12 @@ export async function saveProfileSnapshot(
   return snapshot;
 }
 
+/**
+ * @deprecated This function saves old-style load balancer profiles (type='loadbalancer').
+ * The old architecture did round-robin at profile-load time (selecting a profile once).
+ * Use the new subProfiles architecture instead which does per-request load balancing.
+ * This function is kept for backward compatibility only.
+ */
 export async function saveLoadBalancerProfile(
   profileName: string,
   profile: LoadBalancerProfile,

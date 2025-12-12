@@ -93,6 +93,27 @@ export interface EphemeralSettings {
 }
 
 /**
+ * Sub-profile configuration for load balancing (NEW ARCHITECTURE)
+ * @plan PLAN-20251211issue486b
+ */
+export interface LoadBalancerSubProfileConfig {
+  name: string;
+  provider: string;
+  model?: string;
+  baseURL?: string;
+  apiKey?: string;
+}
+
+/**
+ * Load balancer configuration (NEW ARCHITECTURE)
+ * @plan PLAN-20251211issue486b
+ */
+export interface LoadBalancerConfig {
+  strategy: 'round-robin';
+  subProfiles: LoadBalancerSubProfileConfig[];
+}
+
+/**
  * Standard profile configuration (single model)
  */
 export interface StandardProfile {
@@ -108,6 +129,8 @@ export interface StandardProfile {
   modelParams: ModelParams;
   /** Ephemeral settings */
   ephemeralSettings: EphemeralSettings;
+  /** Load balancer configuration (NEW ARCHITECTURE - optional) */
+  loadBalancer?: LoadBalancerConfig;
 }
 
 /**

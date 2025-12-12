@@ -1339,6 +1339,12 @@ export async function loadCliConfig(
     if (appliedProfileResult.warnings.length > 0) {
       profileWarnings.push(...appliedProfileResult.warnings);
     }
+    // @plan:PLAN-20251211issue486b - Update finalProvider after applyProfile
+    // applyProfile may change the provider (e.g., to "load-balancer" for LB profiles)
+    // so we need to update finalProvider to match
+    if (profileProvider && profileProvider.trim() !== '') {
+      finalProvider = profileProvider;
+    }
     logger.debug(
       () =>
         `[bootstrap] Applied profile '${profileToLoad || 'inline'}' -> provider=${profileProvider}, model=${profileModel}, baseUrl=${profileBaseUrl ?? 'default'}`,

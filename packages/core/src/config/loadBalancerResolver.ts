@@ -6,6 +6,12 @@
 
 import type { LoadBalancerProfile } from '../types/modelParams.js';
 
+/**
+ * @deprecated This interface is part of the old load balancer architecture.
+ * Use LoadBalancingProvider.getStats() instead which provides per-request stats.
+ * The old architecture did round-robin at profile-load time, the new architecture
+ * does it per-request via LoadBalancingProvider.
+ */
 export interface LoadBalancerStats {
   /** Map of profile name to number of requests */
   profileCounts: Record<string, number>;
@@ -15,6 +21,14 @@ export interface LoadBalancerStats {
   lastSelected: string | null;
 }
 
+/**
+ * @deprecated This class is part of the old load balancer architecture.
+ * Use LoadBalancingProvider instead which provides per-request load balancing.
+ * The old architecture did round-robin at profile-load time (selecting a profile once),
+ * the new architecture does it per-request via LoadBalancingProvider.
+ *
+ * This class is kept for backward compatibility only and should not be used in new code.
+ */
 export class LoadBalancerResolver {
   private counters: Map<string, number> = new Map();
   /** Stats per load balancer: lbName -> profileName -> count */

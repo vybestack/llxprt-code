@@ -61,20 +61,51 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push(`- API Key: unavailable via runtime helpers`);
 
       // Check for load balancer stats
+      // NEW ARCHITECTURE: Get stats from LoadBalancingProvider directly
       const runtimeApi = getRuntimeApi();
-      if (snapshot.profileName) {
-        const lbStats = runtimeApi.getLoadBalancerStats(snapshot.profileName);
-        if (lbStats) {
-          diagnostics.push('\n## Load Balancer Stats');
-          diagnostics.push(`- Active Sub-Profile: ${lbStats.lastSelected ?? 'none'}`);
-          diagnostics.push(`- Total Requests: ${lbStats.totalRequests}`);
-          diagnostics.push('- Profile Distribution:');
-          for (const [profile, count] of Object.entries(lbStats.profileCounts)) {
-            const percentage = lbStats.totalRequests > 0
-              ? ((count / lbStats.totalRequests) * 100).toFixed(1)
-              : '0';
-            diagnostics.push(`  - ${profile}: ${count} requests (${percentage}%)`);
+      const providerStatus = runtimeApi.getActiveProviderStatus();
+      if (providerStatus.providerName === 'load-balancer') {
+        try {
+          const providerManager = runtimeApi.getCliProviderManager();
+          const lbProvider = providerManager.getProviderByName('load-balancer');
+          if (
+            lbProvider &&
+            'getStats' in lbProvider &&
+            typeof (lbProvider as { getStats?: () => unknown }).getStats ===
+              'function'
+          ) {
+            const lbStats = (
+              lbProvider as {
+                getStats: () => {
+                  lastSelected: string | null;
+                  totalRequests: number;
+                  profileCounts: Record<string, number>;
+                };
+              }
+            ).getStats();
+            diagnostics.push('\n## Load Balancer Stats');
+            diagnostics.push(
+              `- Active Sub-Profile: ${lbStats.lastSelected ?? 'none'}`,
+            );
+            diagnostics.push(`- Total Requests: ${lbStats.totalRequests}`);
+            diagnostics.push('- Profile Distribution:');
+            for (const [profile, count] of Object.entries(
+              lbStats.profileCounts,
+            )) {
+              const percentage =
+                lbStats.totalRequests > 0
+                  ? ((count / lbStats.totalRequests) * 100).toFixed(1)
+                  : '0';
+              diagnostics.push(
+                `  - ${profile}: ${count} requests (${percentage}%)`,
+              );
+            }
           }
+        } catch (error) {
+          logger.debug(
+            () =>
+              `[diagnostics] Failed to fetch load balancer stats: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       }
 

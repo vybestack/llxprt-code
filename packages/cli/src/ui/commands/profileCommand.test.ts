@@ -19,6 +19,7 @@ const runtimeMocks = vi.hoisted(() => ({
   switchActiveProvider: vi.fn(),
   getActiveProviderStatus: vi.fn(),
   saveLoadBalancerProfile: vi.fn(),
+  getEphemeralSettings: vi.fn(),
 }));
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
@@ -172,6 +173,7 @@ describe('profileCommand', () => {
         'profile2',
         'profile3',
       ]);
+      runtimeMocks.getEphemeralSettings.mockReturnValue({});
     });
 
     it('saves load balancer profile with selected profiles', async () => {

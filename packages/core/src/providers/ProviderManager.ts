@@ -422,6 +422,15 @@ export class ProviderManager implements IProviderManager {
     const providerSettings =
       settingsService.getProviderSettings(targetProvider);
     const providerInstance = this.providers.get(targetProvider);
+    // Debug: Log incoming authToken before normalization
+    const incomingAuthPrefix = rawOptions.resolved?.authToken
+      ? String(rawOptions.resolved.authToken).substring(0, 10)
+      : 'NONE';
+    logger.debug(
+      () =>
+        `[normalizeRuntimeInputs] provider=${targetProvider}, incoming authToken prefix: ${incomingAuthPrefix}`,
+    );
+
     const resolved = {
       model:
         rawOptions.resolved?.model ??
@@ -446,6 +455,15 @@ export class ProviderManager implements IProviderManager {
     };
 
     const effectiveConfig = rawOptions.config ?? config ?? null;
+    // Debug: Log resolved authToken before global auth-key check
+    const resolvedAuthPrefix = resolved.authToken
+      ? String(resolved.authToken).substring(0, 10)
+      : 'NONE';
+    logger.debug(
+      () =>
+        `[normalizeRuntimeInputs] provider=${targetProvider}, resolved authToken prefix: ${resolvedAuthPrefix}`,
+    );
+
     if (
       effectiveConfig &&
       typeof (
@@ -461,6 +479,15 @@ export class ProviderManager implements IProviderManager {
           getEphemeralSetting?: (key: string) => unknown;
         }
       ).getEphemeralSetting?.('auth-key') as string | undefined;
+
+      // Debug: Log global auth-key check
+      const globalAuthPrefix = globalAuthKey
+        ? globalAuthKey.substring(0, 10)
+        : 'NONE';
+      logger.debug(
+        () =>
+          `[normalizeRuntimeInputs] provider=${targetProvider}, global auth-key prefix: ${globalAuthPrefix}, will use: ${globalAuthKey ? 'YES' : 'NO'}`,
+      );
 
       if (globalAuthKey && globalAuthKey.trim() !== '') {
         resolved.authToken = globalAuthKey.trim();
@@ -502,6 +529,7 @@ export class ProviderManager implements IProviderManager {
       'openai-responses',
       'anthropic',
       'openaivercel',
+      'load-balancer', // Resolves baseURL at request time via sub-profile selection
     ]);
     if (!resolved.baseURL && !baseUrlOptionalProviders.has(targetProvider)) {
       missingFields.push('baseURL');

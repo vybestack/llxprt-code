@@ -42,11 +42,10 @@ const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
   async (_ctx, _partial, tokens) => {
     try {
       const profiles = await listProfiles();
+      // tokens.tokens format: ["save", "loadbalancer", "lb-name", "prof1", "prof2", ...]
+      // Skip first 3 tokens (save, loadbalancer, lb-name) to get already selected profiles
       const alreadySelected = tokens.tokens
-        .slice(2)
-        .join(' ')
-        .split(',')
-        .map((p) => p.trim())
+        .slice(3)
         .filter((p) => p.length > 0);
       const available = profiles.filter((p) => !alreadySelected.includes(p));
       return available.map((profile) => ({
@@ -59,23 +58,25 @@ const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
   },
 );
 
+// Recursive schema for unlimited profile selection
+// Each profile entry has a 'next' that points back to the same structure
+const createLbMemberProfileEntry = (
+  depth: number,
+): CommandArgumentSchema[number] => ({
+  kind: 'value',
+  name: depth === 0 ? 'profile1' : `profile${depth + 1}`,
+  description:
+    depth === 0
+      ? 'Select first profile'
+      : 'Add another profile (ESC to finish)',
+  completer: lbMemberProfileCompleter,
+  hint: 'ESC to finish selection',
+  // Create a reasonably deep chain (20 levels should be more than enough)
+  next: depth < 20 ? [createLbMemberProfileEntry(depth + 1)] : undefined,
+});
+
 const lbMemberProfileSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'profiles',
-    description: 'Select profiles to include (comma-separated)',
-    completer: lbMemberProfileCompleter,
-    hint: 'ESC to finish selection, comma to add more profiles',
-    next: [
-      {
-        kind: 'value',
-        name: 'more-profiles',
-        description: 'Add more profiles',
-        completer: lbMemberProfileCompleter,
-        hint: 'ESC to finish selection',
-      },
-    ],
-  },
+  createLbMemberProfileEntry(0),
 ];
 
 const profileSaveSchema: CommandArgumentSchema = [
@@ -259,6 +260,33 @@ const saveCommand: SlashCommand = {
           }
         }
 
+        // Protected settings that must be stripped when saving LB profiles
+        // These settings come from sub-profiles, not the LB profile itself
+        const PROTECTED_SETTINGS = [
+          'auth-key',
+          'auth-keyfile',
+          'base-url',
+          'apiKey',
+          'apiKeyfile',
+          'model',
+          'provider', // LB profiles use load-balancer, not current provider
+          'currentProfile', // Meta-setting, not applicable to LB profiles
+          'GOOGLE_CLOUD_PROJECT',
+          'GOOGLE_CLOUD_LOCATION',
+        ];
+
+        // Get current ephemeral settings and filter out protected ones
+        // Also filter out undefined/null values to avoid overriding child profile settings
+        const currentEphemerals = runtime.getEphemeralSettings();
+        const filteredEphemerals = Object.fromEntries(
+          Object.entries(currentEphemerals).filter(
+            ([key, value]) =>
+              !PROTECTED_SETTINGS.includes(key) &&
+              value !== undefined &&
+              value !== null,
+          ),
+        );
+
         const lbProfile = {
           version: 1 as const,
           type: 'loadbalancer' as const,
@@ -267,7 +295,7 @@ const saveCommand: SlashCommand = {
           provider: '',
           model: '',
           modelParams: {},
-          ephemeralSettings: {},
+          ephemeralSettings: filteredEphemerals,
         };
 
         await runtime.saveLoadBalancerProfile(lbProfileName, lbProfile);

@@ -1,13 +1,14 @@
-import type {
-  Profile,
-  AuthType,
-  ModelParams,
-  LoadBalancerProfile,
-} from '@vybestack/llxprt-code-core';
 import {
+  type Profile,
+  type AuthType,
+  type ModelParams,
   DebugLogger,
-  LoadBalancerResolver,
+  LoadBalancingProvider,
+  type LoadBalancingProviderConfig,
+  type LoadBalancerSubProfile,
+  type ResolvedSubProfile,
   isLoadBalancerProfile,
+  ProfileManager,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -51,32 +52,43 @@ export interface ProfileApplicationResult {
 
 const logger = new DebugLogger('llxprt:runtime:profile');
 const lbLogger = new DebugLogger('llxprt:loadbalancer');
-const lbResolver = new LoadBalancerResolver();
 
 /**
  * Get load balancer stats for a specific LB profile
- * @param lbName The name of the load balancer profile
+ * @param _lbName The name of the load balancer profile
  * @returns Stats or undefined if not an LB profile
+ * @deprecated Stats are now tracked by LoadBalancingProvider directly
  */
-export function getLoadBalancerStats(lbName: string) {
-  return lbResolver.getStats(lbName);
+export function getLoadBalancerStats(_lbName: string) {
+  // Stats are now tracked by LoadBalancingProvider directly
+  // This function is kept for backward compatibility but returns undefined
+  // Use the LoadBalancingProvider.getStats() method directly instead
+  return undefined;
 }
 
 /**
  * Get the last selected profile from a load balancer
- * @param lbName The name of the load balancer profile
+ * @param _lbName The name of the load balancer profile
  * @returns The last selected profile name or null
+ * @deprecated Stats are now tracked by LoadBalancingProvider directly
  */
-export function getLoadBalancerLastSelected(lbName: string): string | null {
-  return lbResolver.getLastSelected(lbName);
+export function getLoadBalancerLastSelected(_lbName: string): string | null {
+  // Stats are now tracked by LoadBalancingProvider directly
+  // This function is kept for backward compatibility but returns null
+  // Use the LoadBalancingProvider.getStats() method directly instead
+  return null;
 }
 
 /**
  * Get stats for all load balancers
  * @returns Map of LB name to stats
+ * @deprecated Stats are now tracked by LoadBalancingProvider directly
  */
 export function getAllLoadBalancerStats() {
-  return lbResolver.getAllStats();
+  // Stats are now tracked by LoadBalancingProvider directly
+  // This function is kept for backward compatibility but returns empty Map
+  // Use the LoadBalancingProvider.getStats() method directly instead
+  return new Map();
 }
 
 function getStringValue(
@@ -144,35 +156,144 @@ export async function applyProfileWithGuards(
   profileInput: Profile,
   _options: ProfileApplicationOptions = {},
 ): Promise<ProfileApplicationResult> {
-  const { config, providerManager, settingsService, profileManager } =
-    getCliRuntimeServices();
+  const runtimeServices = getCliRuntimeServices();
+  const { config, providerManager, settingsService } = runtimeServices;
 
   let actualProfile: Profile = profileInput;
 
+  // PHASE 2 (486c): Check for {type: "loadbalancer", profiles: [...]} format FIRST
+  // This format uses ProfileManager to load sub-profiles by name
   if (isLoadBalancerProfile(profileInput)) {
-    const lbProfile = profileInput as LoadBalancerProfile;
-    const lbName = _options.profileName ?? 'loadbalancer';
-    const selectedProfileName = lbResolver.resolveProfile(lbProfile, lbName);
-
+    const lbName = _options.profileName ?? 'load-balancer';
     lbLogger.debug(
       () =>
-        `Load balancer '${lbName}' selected profile '${selectedProfileName}'`,
+        `Detected type: loadbalancer profile with ${profileInput.profiles.length} profile references`,
     );
 
-    if (!profileManager) {
-      throw new Error(
-        'ProfileManager not available in runtime services, cannot resolve LoadBalancer profile',
+    // Get ProfileManager from runtime services (allows for dependency injection in tests)
+    const profileManagerInstance =
+      'profileManager' in runtimeServices && runtimeServices.profileManager
+        ? runtimeServices.profileManager
+        : new ProfileManager();
+
+    // Load each sub-profile and resolve its configuration
+    const resolvedSubProfiles: ResolvedSubProfile[] = [];
+    for (const profileName of profileInput.profiles) {
+      lbLogger.debug(() => `Loading sub-profile: ${profileName}`);
+
+      let subProfile: Profile;
+      try {
+        subProfile = await profileManagerInstance.loadProfile(profileName);
+      } catch (_error) {
+        throw new Error(
+          `Load balancer profile "${lbName}" references profile "${profileName}" which does not exist`,
+        );
+      }
+
+      // Check for circular reference (sub-profile cannot be a loadbalancer)
+      if (isLoadBalancerProfile(subProfile)) {
+        throw new Error(
+          `Load balancer profile "${lbName}" cannot reference another loadbalancer profile "${profileName}"`,
+        );
+      }
+
+      // Extract full config from loaded sub-profile
+      // Resolve authToken from either auth-key or auth-keyfile
+      let authToken = subProfile.ephemeralSettings?.['auth-key'] as
+        | string
+        | undefined;
+      const authKeyfile = subProfile.ephemeralSettings?.['auth-keyfile'] as
+        | string
+        | undefined;
+
+      // If auth-key not provided but auth-keyfile is, read the key from file
+      if (!authToken && authKeyfile) {
+        try {
+          const keyfilePath = authKeyfile.startsWith('~')
+            ? path.join(homedir(), authKeyfile.slice(1))
+            : authKeyfile;
+          authToken = (await fs.readFile(keyfilePath, 'utf-8')).trim();
+          lbLogger.debug(
+            () =>
+              `Resolved authToken from keyfile for sub-profile ${profileName}`,
+          );
+        } catch (error) {
+          lbLogger.warn(
+            () =>
+              `Failed to read auth-keyfile for sub-profile ${profileName}: ${error}`,
+          );
+        }
+      }
+
+      const resolved: ResolvedSubProfile = {
+        name: profileName,
+        providerName: subProfile.provider,
+        model: subProfile.model,
+        baseURL: subProfile.ephemeralSettings?.['base-url'] as
+          | string
+          | undefined,
+        authToken,
+        authKeyfile,
+        ephemeralSettings: (subProfile.ephemeralSettings ?? {}) as Record<
+          string,
+          unknown
+        >,
+        modelParams: (subProfile.modelParams ?? {}) as Record<string, unknown>,
+      };
+
+      resolvedSubProfiles.push(resolved);
+      lbLogger.debug(
+        () =>
+          `Resolved sub-profile ${profileName}: provider=${resolved.providerName}, model=${resolved.model}`,
       );
     }
 
-    actualProfile = await profileManager.loadProfile(selectedProfileName);
+    // Build LoadBalancingProviderConfig from resolved sub-profiles
+    const lbConfig: LoadBalancingProviderConfig = {
+      profileName: lbName,
+      strategy: 'round-robin', // Map 'roundrobin' policy to 'round-robin' strategy
+      subProfiles: resolvedSubProfiles.map(
+        (sp): LoadBalancerSubProfile => ({
+          name: sp.name,
+          providerName: sp.providerName,
+          modelId: sp.model,
+          baseURL: sp.baseURL,
+          authToken: sp.authToken,
+        }),
+      ),
+    };
+
+    lbLogger.debug(
+      () =>
+        `Created LoadBalancingProvider config with ${lbConfig.subProfiles.length} sub-profiles`,
+    );
+
+    // Create and register LoadBalancingProvider
+    const lbProvider = new LoadBalancingProvider(lbConfig, providerManager);
+    providerManager.registerProvider(lbProvider);
+
+    lbLogger.debug(() => `Registered LoadBalancingProvider as "load-balancer"`);
+
+    // Continue with normal profile application
+    // The provider will be switched to "load-balancer" below
+    actualProfile = profileInput;
   }
+
   const availableProviders = providerManager.listProviders();
+
+  // Check if this is a load balancer profile with type: loadbalancer format (486c)
+  const isLBProfileFormat = isLoadBalancerProfile(actualProfile);
+
+  // If load balancer profile, use "load-balancer" as the provider
+  const requestedProvider = isLBProfileFormat
+    ? 'load-balancer'
+    : actualProfile.provider;
+
   logger.debug(() => {
     const requested =
-      typeof actualProfile.provider === 'string'
-        ? actualProfile.provider
-        : actualProfile.provider === null
+      typeof requestedProvider === 'string'
+        ? requestedProvider
+        : requestedProvider === null
           ? 'null'
           : 'unset';
     return `[profile] applying profile provider='${requested}' available=[${availableProviders.join(
@@ -181,7 +302,7 @@ export async function applyProfileWithGuards(
   });
 
   const selection = selectAvailableProvider(
-    actualProfile.provider,
+    requestedProvider,
     availableProviders,
   );
 
@@ -191,8 +312,6 @@ export async function applyProfileWithGuards(
       `[REQ-SP4-005] Stateless provider runtime context is not initialised. Run setCliRuntimeContext() or ensure runtime infrastructure boots before applying profiles.`,
     );
   }
-  const requestedProvider =
-    typeof actualProfile.provider === 'string' ? actualProfile.provider : null;
 
   const sanitizedProfile: Profile = {
     ...actualProfile,
@@ -484,6 +603,8 @@ export async function applyProfileWithGuards(
   }
 
   // STEP 6: Apply model and modelParams
+  // Skip model validation for load balancer profiles as they delegate to sub-profiles
+  const isLB = isLoadBalancerProfile(actualProfile);
   const requestedModel =
     typeof sanitizedProfile.model === 'string'
       ? sanitizedProfile.model.trim()
@@ -493,17 +614,21 @@ export async function applyProfileWithGuards(
     config.getModel() ??
     providerManager.getActiveProvider()?.getDefaultModel?.() ??
     '';
-  if (!requestedModel && !fallbackModel) {
+
+  // Load balancer profiles don't need a model - they delegate to sub-profiles
+  if (!isLB && !requestedModel && !fallbackModel) {
     throw new Error(
       `Profile '${sanitizedProfile.provider}' does not specify a model and no default is available.`,
     );
   }
 
-  // Issue #453: Do NOT restore old ephemeral settings that were not in the profile
+  // Issue #453: DO NOT restore old ephemeral settings that were not in the profile
   // Ephemeral settings should only contain what's explicitly set in the loaded profile
   // This prevents credentials and settings from leaking between profiles/providers
 
-  const modelResult = await setActiveModel(requestedModel || fallbackModel);
+  // For load balancer profiles, use a placeholder model name
+  const modelToSet = isLB ? 'load-balancer' : requestedModel || fallbackModel;
+  const modelResult = await setActiveModel(modelToSet);
 
   const profileParams = sanitizedProfile.modelParams ?? {};
   const existingParams = getActiveModelParams();
