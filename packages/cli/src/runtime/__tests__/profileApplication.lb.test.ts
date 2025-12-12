@@ -186,7 +186,8 @@ function wrapRegisterProviderToCaptureLB(): {
   getLBProvider: () => LoadBalancingProvider | null;
 } {
   let capturedLBProvider: LoadBalancingProvider | null = null;
-  const original = providerManagerStub.registerProvider.bind(providerManagerStub);
+  const original =
+    providerManagerStub.registerProvider.bind(providerManagerStub);
   providerManagerStub.registerProvider = vi.fn((provider: unknown) => {
     const providerWithName = provider as { name: string };
     if (providerWithName.name === 'load-balancer') {
