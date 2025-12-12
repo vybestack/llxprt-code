@@ -93,11 +93,34 @@ export interface EphemeralSettings {
 }
 
 /**
- * Complete profile configuration
+ * Sub-profile configuration for load balancing (NEW ARCHITECTURE)
+ * @plan PLAN-20251211issue486b
  */
-export interface Profile {
+export interface LoadBalancerSubProfileConfig {
+  name: string;
+  provider: string;
+  model?: string;
+  baseURL?: string;
+  apiKey?: string;
+}
+
+/**
+ * Load balancer configuration (NEW ARCHITECTURE)
+ * @plan PLAN-20251211issue486b
+ */
+export interface LoadBalancerConfig {
+  strategy: 'round-robin';
+  subProfiles: LoadBalancerSubProfileConfig[];
+}
+
+/**
+ * Standard profile configuration (single model)
+ */
+export interface StandardProfile {
   /** Profile format version */
   version: 1;
+  /** Profile type (optional for backward compatibility) */
+  type?: 'standard';
   /** Provider name */
   provider: string;
   /** Model name */
@@ -106,4 +129,51 @@ export interface Profile {
   modelParams: ModelParams;
   /** Ephemeral settings */
   ephemeralSettings: EphemeralSettings;
+  /** Load balancer configuration (NEW ARCHITECTURE - optional) */
+  loadBalancer?: LoadBalancerConfig;
+}
+
+/**
+ * Load balancer profile configuration (multiple profiles)
+ */
+export interface LoadBalancerProfile {
+  /** Profile format version */
+  version: 1;
+  /** Profile type */
+  type: 'loadbalancer';
+  /** Load balancing policy */
+  policy: 'roundrobin';
+  /** List of profile names to load balance across */
+  profiles: string[];
+  /** Provider name (empty for load balancer) */
+  provider: string;
+  /** Model name (empty for load balancer) */
+  model: string;
+  /** Model parameters (empty for load balancer) */
+  modelParams: ModelParams;
+  /** Ephemeral settings (empty for load balancer) */
+  ephemeralSettings: EphemeralSettings;
+}
+
+/**
+ * Complete profile configuration (union type)
+ */
+export type Profile = StandardProfile | LoadBalancerProfile;
+
+/**
+ * Type guard to check if a profile is a load balancer profile
+ */
+export function isLoadBalancerProfile(
+  profile: Profile,
+): profile is LoadBalancerProfile {
+  return profile.type === 'loadbalancer';
+}
+
+/**
+ * Type guard to check if a profile is a standard profile
+ */
+export function isStandardProfile(
+  profile: Profile,
+): profile is StandardProfile {
+  return profile.type !== 'loadbalancer';
 }

@@ -743,10 +743,17 @@ export abstract class BaseProvider implements IProvider {
       providedOptions.resolved?.streaming ??
       (providerSettings?.streaming as boolean | undefined);
 
+    // Use provided authToken if specified (e.g., from LoadBalancingProvider),
+    // otherwise fall back to resolved auth from auth resolver
+    const finalAuthToken = providedOptions.resolved?.authToken ?? resolvedAuth;
+    // Same for model and baseURL - providedOptions.resolved takes precedence
+    const finalModel = providedOptions.resolved?.model ?? resolvedModel;
+    const finalBaseURL = providedOptions.resolved?.baseURL ?? resolvedBaseURL;
+
     const resolved = {
-      model: resolvedModel,
-      baseURL: resolvedBaseURL,
-      authToken: resolvedAuth,
+      model: finalModel,
+      baseURL: finalBaseURL,
+      authToken: finalAuthToken,
       telemetry: providedOptions.resolved?.telemetry,
       temperature: resolvedTemperature,
       maxTokens: resolvedMaxTokens,

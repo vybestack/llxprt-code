@@ -33,6 +33,7 @@ import {
   loadProfileByName,
   registerCliProviderInfrastructure,
   saveProfileSnapshot,
+  saveLoadBalancerProfile,
   setActiveModel,
   setActiveModelParam,
   setActiveToolFormatOverride,
@@ -42,6 +43,9 @@ import {
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
   getSessionTokenUsage,
+  getLoadBalancerStats,
+  getLoadBalancerLastSelected,
+  getAllLoadBalancerStats,
 } from '../../runtime/runtimeSettings.js';
 import {
   enterRuntimeScope,
@@ -69,6 +73,7 @@ const runtimeFunctions = {
   setActiveModelParam,
   clearActiveModelParam,
   saveProfileSnapshot,
+  saveLoadBalancerProfile,
   loadProfileByName,
   deleteProfileByName,
   listSavedProfiles,
@@ -85,6 +90,9 @@ const runtimeFunctions = {
   getSessionTokenUsage,
   getCliRuntimeServices,
   getEphemeralSetting,
+  getLoadBalancerStats,
+  getLoadBalancerLastSelected,
+  getAllLoadBalancerStats,
 } as const;
 
 type RuntimeFunctions = typeof runtimeFunctions;

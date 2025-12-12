@@ -1257,9 +1257,11 @@ export async function loadCliConfig(
     stage: 'post-config',
   };
 
+  const profileManager = new ProfileManager();
   setCliRuntimeContext(runtimeState.runtime.settingsService, enhancedConfig, {
     runtimeId: bootstrapRuntimeId,
     metadata: baseBootstrapMetadata,
+    profileManager,
   });
 
   // Register provider infrastructure AFTER runtime context but BEFORE any profile application
@@ -1348,6 +1350,12 @@ export async function loadCliConfig(
     }
     if (appliedProfileResult.warnings.length > 0) {
       profileWarnings.push(...appliedProfileResult.warnings);
+    }
+    // @plan:PLAN-20251211issue486b - Update finalProvider after applyProfile
+    // applyProfile may change the provider (e.g., to "load-balancer" for LB profiles)
+    // so we need to update finalProvider to match
+    if (profileProvider && profileProvider.trim() !== '') {
+      finalProvider = profileProvider;
     }
     logger.debug(
       () =>

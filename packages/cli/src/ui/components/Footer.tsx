@@ -416,6 +416,49 @@ export const Footer = React.memo<FooterProps>(
                 <Text color={SemanticColors.text.accent}>{model}</Text>
               )}
 
+              {/* Show active sub-profile for load balancer profiles */}
+              {(() => {
+                // NEW ARCHITECTURE: Get stats from LoadBalancingProvider directly
+                const providerStatus = runtime.getActiveProviderStatus();
+                if (providerStatus.providerName === 'load-balancer') {
+                  try {
+                    const providerManager = runtime.getCliProviderManager();
+                    const lbProvider =
+                      providerManager.getProviderByName('load-balancer');
+                    if (
+                      lbProvider &&
+                      'getStats' in lbProvider &&
+                      typeof (lbProvider as { getStats?: () => unknown })
+                        .getStats === 'function'
+                    ) {
+                      const lbStats = (
+                        lbProvider as {
+                          getStats: () => {
+                            lastSelected: string | null;
+                          };
+                        }
+                      ).getStats();
+                      if (lbStats?.lastSelected) {
+                        return (
+                          <>
+                            <Text color={SemanticColors.text.secondary}>
+                              {' '}
+                              via{' '}
+                            </Text>
+                            <Text color={SemanticColors.status.success}>
+                              {lbStats.lastSelected}
+                            </Text>
+                          </>
+                        );
+                      }
+                    }
+                  } catch {
+                    // Silently ignore errors fetching LB stats in the footer
+                  }
+                }
+                return null;
+              })()}
+
               {/* Show paid/free mode for Gemini provider */}
               {isPaidMode !== undefined &&
                 (() => {

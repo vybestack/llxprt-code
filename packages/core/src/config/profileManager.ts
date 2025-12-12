@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Profile } from '../types/modelParams.js';
+import {
+  Profile,
+  LoadBalancerProfile,
+  isLoadBalancerProfile,
+} from '../types/modelParams.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import fs from 'fs/promises';
 import os from 'os';
@@ -34,13 +38,57 @@ export class ProfileManager {
    * @param profile The profile configuration to save
    */
   async saveProfile(profileName: string, profile: Profile): Promise<void> {
-    // Ensure profiles directory exists
     await fs.mkdir(this.profilesDir, { recursive: true });
 
-    // Construct the file path
     const filePath = path.join(this.profilesDir, `${profileName}.json`);
 
-    // Write the profile to file with nice formatting
+    await fs.writeFile(filePath, JSON.stringify(profile, null, 2), 'utf8');
+  }
+
+  async saveLoadBalancerProfile(
+    name: string,
+    profile: LoadBalancerProfile,
+  ): Promise<void> {
+    if (profile.version !== 1) {
+      throw new Error('unsupported profile version');
+    }
+
+    if (!profile.profiles || profile.profiles.length === 0) {
+      throw new Error(
+        `LoadBalancer profile '${name}' must reference at least one profile`,
+      );
+    }
+
+    const availableProfiles = await this.listProfiles();
+
+    for (const referencedProfile of profile.profiles) {
+      if (!availableProfiles.includes(referencedProfile)) {
+        throw new Error(
+          `LoadBalancer profile '${name}' references non-existent profile '${referencedProfile}'`,
+        );
+      }
+
+      const referencedProfilePath = path.join(
+        this.profilesDir,
+        `${referencedProfile}.json`,
+      );
+      const referencedContent = await fs.readFile(
+        referencedProfilePath,
+        'utf8',
+      );
+      const referencedProfileData = JSON.parse(referencedContent) as Profile;
+
+      if (isLoadBalancerProfile(referencedProfileData)) {
+        throw new Error(
+          `LoadBalancer profile '${name}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
+        );
+      }
+    }
+
+    await fs.mkdir(this.profilesDir, { recursive: true });
+
+    const filePath = path.join(this.profilesDir, `${name}.json`);
+
     await fs.writeFile(filePath, JSON.stringify(profile, null, 2), 'utf8');
   }
 
@@ -50,17 +98,55 @@ export class ProfileManager {
    * @returns The loaded profile configuration
    */
   async loadProfile(profileName: string): Promise<Profile> {
-    // Construct the file path
     const filePath = path.join(this.profilesDir, `${profileName}.json`);
 
     try {
-      // Read the profile file
       const content = await fs.readFile(filePath, 'utf8');
 
-      // Parse JSON
       const profile = JSON.parse(content) as Profile;
 
-      // Validate required fields
+      if (isLoadBalancerProfile(profile)) {
+        if (profile.version !== 1) {
+          throw new Error('unsupported profile version');
+        }
+
+        if (!profile.profiles || profile.profiles.length === 0) {
+          throw new Error(
+            `LoadBalancer profile '${profileName}' must reference at least one profile`,
+          );
+        }
+
+        const availableProfiles = await this.listProfiles();
+
+        for (const referencedProfile of profile.profiles) {
+          if (!availableProfiles.includes(referencedProfile)) {
+            throw new Error(
+              `LoadBalancer profile '${profileName}' references non-existent profile '${referencedProfile}'`,
+            );
+          }
+
+          const referencedProfilePath = path.join(
+            this.profilesDir,
+            `${referencedProfile}.json`,
+          );
+          const referencedContent = await fs.readFile(
+            referencedProfilePath,
+            'utf8',
+          );
+          const referencedProfileData = JSON.parse(
+            referencedContent,
+          ) as Profile;
+
+          if (isLoadBalancerProfile(referencedProfileData)) {
+            throw new Error(
+              `LoadBalancer profile '${profileName}' cannot reference another LoadBalancer profile '${referencedProfile}'`,
+            );
+          }
+        }
+
+        return profile;
+      }
+
       if (
         !profile.version ||
         !profile.provider ||
@@ -71,7 +157,6 @@ export class ProfileManager {
         throw new Error('missing required fields');
       }
 
-      // Check version
       if (profile.version !== 1) {
         throw new Error('unsupported profile version');
       }

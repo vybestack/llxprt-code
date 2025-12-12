@@ -149,6 +149,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -180,6 +186,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -205,6 +217,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
@@ -237,6 +255,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
@@ -273,6 +297,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -304,6 +334,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
@@ -337,6 +373,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -365,6 +407,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
@@ -401,6 +449,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -433,6 +487,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
@@ -469,6 +529,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -497,6 +563,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
@@ -527,6 +599,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
@@ -560,6 +638,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -592,6 +676,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -619,6 +709,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
@@ -648,6 +744,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -676,6 +778,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -697,6 +805,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => null),
       });
@@ -725,6 +839,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
@@ -776,6 +896,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           modelParams: {},
           ephemeralSettings: {},
         })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
+        })),
         getCliOAuthManager: vi.fn(() => mockOAuthManager),
       });
 
@@ -795,6 +921,12 @@ describe('diagnosticsCommand OAuth token display', () => {
           profileName: 'test-profile',
           modelParams: {},
           ephemeralSettings: {},
+        })),
+        getActiveProviderStatus: vi.fn(() => ({
+          providerName: 'test-provider',
+        })),
+        getCliProviderManager: vi.fn(() => ({
+          getProviderByName: vi.fn(() => null),
         })),
         getCliOAuthManager: vi.fn(() => {
           throw new Error('OAuth manager error');

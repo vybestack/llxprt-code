@@ -18,6 +18,23 @@ import { DebugLogger, MCPOAuthTokenStorage } from '@vybestack/llxprt-code-core';
 import process from 'node:process';
 import * as os from 'node:os';
 
+interface LoadBalancerStatsResult {
+  lastSelected: string | null;
+  totalRequests: number;
+  profileCounts: Record<string, number>;
+}
+
+function isLoadBalancingProvider(
+  provider: unknown,
+): provider is { getStats: () => LoadBalancerStatsResult } {
+  return (
+    provider !== null &&
+    typeof provider === 'object' &&
+    'getStats' in provider &&
+    typeof (provider as { getStats?: unknown }).getStats === 'function'
+  );
+}
+
 function maskSensitive(value: string): string {
   if (value.length < 8) {
     return '*'.repeat(value.length);
@@ -59,6 +76,42 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push(`- Current Model: ${snapshot.modelName ?? 'unknown'}`);
       diagnostics.push(`- Current Profile: ${snapshot.profileName ?? 'none'}`);
       diagnostics.push(`- API Key: unavailable via runtime helpers`);
+
+      // Check for load balancer stats
+      // NEW ARCHITECTURE: Get stats from LoadBalancingProvider directly
+      const runtimeApi = getRuntimeApi();
+      const providerStatus = runtimeApi.getActiveProviderStatus();
+      if (providerStatus.providerName === 'load-balancer') {
+        try {
+          const providerManager = runtimeApi.getCliProviderManager();
+          const lbProvider = providerManager.getProviderByName('load-balancer');
+          if (isLoadBalancingProvider(lbProvider)) {
+            const lbStats = lbProvider.getStats();
+            diagnostics.push('\n## Load Balancer Stats');
+            diagnostics.push(
+              `- Active Sub-Profile: ${lbStats.lastSelected ?? 'none'}`,
+            );
+            diagnostics.push(`- Total Requests: ${lbStats.totalRequests}`);
+            diagnostics.push('- Profile Distribution:');
+            for (const [profile, count] of Object.entries(
+              lbStats.profileCounts,
+            )) {
+              const percentage =
+                lbStats.totalRequests > 0
+                  ? ((count / lbStats.totalRequests) * 100).toFixed(1)
+                  : '0';
+              diagnostics.push(
+                `  - ${profile}: ${count} requests (${percentage}%)`,
+              );
+            }
+          }
+        } catch (error) {
+          logger.debug(
+            () =>
+              `[diagnostics] Failed to fetch load balancer stats: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
 
       diagnostics.push('\n## Model Parameters');
       const modelParams = snapshot.modelParams;

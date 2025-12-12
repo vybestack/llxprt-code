@@ -21,6 +21,7 @@ import type {
   IModel,
   ModelParams,
   RuntimeAuthScopeFlushResult,
+  LoadBalancerProfile,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
@@ -34,7 +35,12 @@ import {
   enterRuntimeScope,
 } from './runtimeContextFactory.js';
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P07
-import { applyProfileWithGuards } from './profileApplication.js';
+import {
+  applyProfileWithGuards,
+  getLoadBalancerStats,
+  getLoadBalancerLastSelected,
+  getAllLoadBalancerStats,
+} from './profileApplication.js';
 import {
   formatMissingRuntimeMessage,
   formatNormalizationFailureMessage,
@@ -55,6 +61,13 @@ export type {
   IsolatedRuntimeContextHandle,
   IsolatedRuntimeContextOptions,
 } from './runtimeContextFactory.js';
+
+// Load balancer stats exports
+export {
+  getLoadBalancerStats,
+  getLoadBalancerLastSelected,
+  getAllLoadBalancerStats,
+};
 
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P06
@@ -206,6 +219,7 @@ interface RuntimeRegistryEntry {
   config: Config | null;
   providerManager: ProviderManager | null;
   oauthManager: OAuthManager | null;
+  profileManager: ProfileManager | null;
   metadata: Record<string, unknown>;
 }
 
@@ -257,6 +271,12 @@ function upsertRuntimeEntry(
     oauthManager: Object.prototype.hasOwnProperty.call(update, 'oauthManager')
       ? (update.oauthManager ?? null)
       : (current?.oauthManager ?? null),
+    profileManager: Object.prototype.hasOwnProperty.call(
+      update,
+      'profileManager',
+    )
+      ? (update.profileManager ?? null)
+      : (current?.profileManager ?? null),
     metadata:
       update.metadata !== undefined
         ? { ...(current?.metadata ?? {}), ...update.metadata }
@@ -302,6 +322,7 @@ export interface CliRuntimeServices {
   settingsService: SettingsService;
   config: Config;
   providerManager: ProviderManager;
+  profileManager?: ProfileManager;
 }
 
 /**
@@ -409,7 +430,8 @@ export function getCliRuntimeServices(): CliRuntimeServices {
       }),
     );
   }
-  return { settingsService, config, providerManager };
+  const profileManager = entry.profileManager ?? undefined;
+  return { settingsService, config, providerManager, profileManager };
 }
 
 export function getCliProviderManager(
@@ -1102,6 +1124,20 @@ export async function saveProfileSnapshot(
   return snapshot;
 }
 
+/**
+ * @deprecated This function saves old-style load balancer profiles (type='loadbalancer').
+ * The old architecture did round-robin at profile-load time (selecting a profile once).
+ * Use the new subProfiles architecture instead which does per-request load balancing.
+ * This function is kept for backward compatibility only.
+ */
+export async function saveLoadBalancerProfile(
+  profileName: string,
+  profile: LoadBalancerProfile,
+): Promise<void> {
+  const manager = new ProfileManager();
+  await manager.saveLoadBalancerProfile(profileName, profile);
+}
+
 export async function loadProfileByName(
   profileName: string,
 ): Promise<ProfileLoadResult> {
@@ -1190,6 +1226,7 @@ export function setCliRuntimeContext(
   options: {
     metadata?: ProviderRuntimeContext['metadata'];
     runtimeId?: string;
+    profileManager?: ProfileManager;
   } = {},
 ): void {
   const runtimeId =
@@ -1214,6 +1251,7 @@ export function setCliRuntimeContext(
     settingsService,
     config: config ?? null,
     metadata,
+    profileManager: options.profileManager,
   });
 }
 

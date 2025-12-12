@@ -208,6 +208,13 @@ export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';
 export { GeminiProvider } from './providers/gemini/GeminiProvider.js';
 export * from './providers/ProviderManager.js';
 export * from './providers/errors.js';
+export {
+  LoadBalancingProvider,
+  type LoadBalancingProviderConfig,
+  type LoadBalancerSubProfile,
+  type LoadBalancerStats,
+  type ResolvedSubProfile,
+} from './providers/LoadBalancingProvider.js';
 
 // Export provider utilities
 export type { DumpMode } from './providers/utils/dumpContext.js';
