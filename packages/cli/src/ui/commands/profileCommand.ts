@@ -248,6 +248,15 @@ const saveCommand: SlashCommand = {
       }
 
       const lbProfileName = parts[1];
+
+      if (lbProfileName.includes('/') || lbProfileName.includes('\\')) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Profile name cannot contain path separators',
+        };
+      }
+
       const policyInput = parts[2]?.toLowerCase();
 
       if (policyInput !== 'failover' && policyInput !== 'roundrobin') {
