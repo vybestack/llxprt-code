@@ -338,7 +338,7 @@ const saveCommand: SlashCommand = {
       type: 'message',
       messageType: 'error',
       content:
-        'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <profile1> <profile2> [...]',
+        'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
     };
   },
 };
