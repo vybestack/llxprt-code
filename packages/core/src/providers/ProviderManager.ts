@@ -423,13 +423,11 @@ export class ProviderManager implements IProviderManager {
       settingsService.getProviderSettings(targetProvider);
     const providerInstance = this.providers.get(targetProvider);
     // Debug: Log incoming authToken before normalization
-    const incomingAuthPrefix = rawOptions.resolved?.authToken
-      ? String(rawOptions.resolved.authToken).substring(0, 10)
-      : 'NONE';
-    logger.debug(
-      () =>
-        `[normalizeRuntimeInputs] provider=${targetProvider}, incoming authToken prefix: ${incomingAuthPrefix}`,
-    );
+    logger.debug(() => {
+      const token = rawOptions.resolved?.authToken;
+      const tokenStr = typeof token === 'string' ? token : '';
+      return `[normalizeRuntimeInputs] provider=${targetProvider}, incoming authToken present=${Boolean(tokenStr.trim())} length=${tokenStr.length}`;
+    });
 
     const resolved = {
       model:
@@ -456,13 +454,11 @@ export class ProviderManager implements IProviderManager {
 
     const effectiveConfig = rawOptions.config ?? config ?? null;
     // Debug: Log resolved authToken before global auth-key check
-    const resolvedAuthPrefix = resolved.authToken
-      ? String(resolved.authToken).substring(0, 10)
-      : 'NONE';
-    logger.debug(
-      () =>
-        `[normalizeRuntimeInputs] provider=${targetProvider}, resolved authToken prefix: ${resolvedAuthPrefix}`,
-    );
+    logger.debug(() => {
+      const token = resolved.authToken;
+      const tokenStr = typeof token === 'string' ? token : '';
+      return `[normalizeRuntimeInputs] provider=${targetProvider}, resolved authToken present=${Boolean(tokenStr.trim())} length=${tokenStr.length}`;
+    });
 
     if (
       effectiveConfig &&
@@ -481,13 +477,10 @@ export class ProviderManager implements IProviderManager {
       ).getEphemeralSetting?.('auth-key') as string | undefined;
 
       // Debug: Log global auth-key check
-      const globalAuthPrefix = globalAuthKey
-        ? globalAuthKey.substring(0, 10)
-        : 'NONE';
-      logger.debug(
-        () =>
-          `[normalizeRuntimeInputs] provider=${targetProvider}, global auth-key prefix: ${globalAuthPrefix}, will use: ${globalAuthKey ? 'YES' : 'NO'}`,
-      );
+      logger.debug(() => {
+        const tokenStr = typeof globalAuthKey === 'string' ? globalAuthKey : '';
+        return `[normalizeRuntimeInputs] provider=${targetProvider}, global auth-key present=${Boolean(tokenStr.trim())} length=${tokenStr.length}, will use: ${globalAuthKey ? 'YES' : 'NO'}`;
+      });
 
       if (globalAuthKey && globalAuthKey.trim() !== '') {
         resolved.authToken = globalAuthKey.trim();

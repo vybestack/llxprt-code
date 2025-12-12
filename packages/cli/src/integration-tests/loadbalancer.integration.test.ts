@@ -345,7 +345,7 @@ describe('LoadBalancer Integration Tests', () => {
       );
     });
 
-    it('should reject LoadBalancer with unsupported policy', async () => {
+    it('should accept LoadBalancer with roundrobin policy', async () => {
       const profile1: Profile = {
         version: 1,
         type: 'standard',

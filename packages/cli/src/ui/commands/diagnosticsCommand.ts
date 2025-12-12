@@ -18,6 +18,23 @@ import { DebugLogger, MCPOAuthTokenStorage } from '@vybestack/llxprt-code-core';
 import process from 'node:process';
 import * as os from 'node:os';
 
+interface LoadBalancerStatsResult {
+  lastSelected: string | null;
+  totalRequests: number;
+  profileCounts: Record<string, number>;
+}
+
+function isLoadBalancingProvider(
+  provider: unknown,
+): provider is { getStats: () => LoadBalancerStatsResult } {
+  return (
+    provider !== null &&
+    typeof provider === 'object' &&
+    'getStats' in provider &&
+    typeof (provider as { getStats?: unknown }).getStats === 'function'
+  );
+}
+
 function maskSensitive(value: string): string {
   if (value.length < 8) {
     return '*'.repeat(value.length);
@@ -68,21 +85,8 @@ export const diagnosticsCommand: SlashCommand = {
         try {
           const providerManager = runtimeApi.getCliProviderManager();
           const lbProvider = providerManager.getProviderByName('load-balancer');
-          if (
-            lbProvider &&
-            'getStats' in lbProvider &&
-            typeof (lbProvider as { getStats?: () => unknown }).getStats ===
-              'function'
-          ) {
-            const lbStats = (
-              lbProvider as {
-                getStats: () => {
-                  lastSelected: string | null;
-                  totalRequests: number;
-                  profileCounts: Record<string, number>;
-                };
-              }
-            ).getStats();
+          if (isLoadBalancingProvider(lbProvider)) {
+            const lbStats = lbProvider.getStats();
             diagnostics.push('\n## Load Balancer Stats');
             diagnostics.push(
               `- Active Sub-Profile: ${lbStats.lastSelected ?? 'none'}`,

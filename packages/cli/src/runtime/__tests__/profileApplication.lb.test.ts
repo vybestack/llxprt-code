@@ -6,8 +6,6 @@
  * These tests verify that the profile loading system correctly detects
  * the {type: "loadbalancer", profiles: [...]} format and loads referenced
  * sub-profiles using ProfileManager.
- *
- * EXPECTED STATUS: RED (failing) - Implementation does not exist yet
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,30 +14,6 @@ import type {
   Profile,
   LoadBalancerProfile,
 } from '@vybestack/llxprt-code-core';
-
-/**
- * Profile structure with loadBalancer configuration (NEW ARCHITECTURE - 486b)
- * Note: Not currently used but kept for reference
- */
-/*
-interface ProfileWithLoadBalancer {
-  version: 1;
-  provider: string;
-  model: string;
-  modelParams: Record<string, unknown>;
-  ephemeralSettings: Record<string, unknown>;
-  loadBalancer?: {
-    strategy: 'round-robin';
-    subProfiles: Array<{
-      name: string;
-      provider: string;
-      model?: string;
-      baseURL?: string;
-      apiKey?: string;
-    }>;
-  };
-}
-*/
 
 type ProfileApplicationResult = {
   providerName: string;
