@@ -142,7 +142,7 @@ export interface LoadBalancerProfile {
   /** Profile type */
   type: 'loadbalancer';
   /** Load balancing policy */
-  policy: 'roundrobin';
+  policy: 'roundrobin' | 'failover';
   /** List of profile names to load balance across */
   profiles: string[];
   /** Provider name (empty for load balancer) */

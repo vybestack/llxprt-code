@@ -58,7 +58,10 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(context, 'loadbalancer myLB profile1 profile2');
+      await save.action!(
+        context,
+        'loadbalancer myLB roundrobin profile1 profile2',
+      );
 
       expect(runtimeMocks.saveLoadBalancerProfile).toHaveBeenCalledTimes(1);
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
@@ -105,7 +108,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       const result = await save.action!(
         context,
-        'loadbalancer myLB profile1 profile2',
+        'loadbalancer myLB roundrobin profile1 profile2',
       );
 
       expect(runtimeMocks.saveLoadBalancerProfile).toHaveBeenCalledWith(
@@ -130,7 +133,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       expect(result).toHaveProperty('messageType', 'info');
       expect(result).toHaveProperty(
         'content',
-        "Load balancer profile 'myLB' saved with 2 profiles",
+        "Load balancer profile 'myLB' saved with 2 profiles (policy: roundrobin)",
       );
     });
 
@@ -138,7 +141,10 @@ describe('profileCommand - load balancer save with protected settings', () => {
       runtimeMocks.getEphemeralSettings.mockReturnValue({});
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(context, 'loadbalancer myLB profile1 profile2');
+      await save.action!(
+        context,
+        'loadbalancer myLB roundrobin profile1 profile2',
+      );
 
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
@@ -153,7 +159,10 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(context, 'loadbalancer myLB profile1 profile2');
+      await save.action!(
+        context,
+        'loadbalancer myLB roundrobin profile1 profile2',
+      );
 
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
@@ -169,7 +178,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       await save.action!(
         context,
-        'loadbalancer myLB profile1 profile2 profile3',
+        'loadbalancer myLB roundrobin profile1 profile2 profile3',
       );
 
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
@@ -198,7 +207,10 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(context, 'loadbalancer myLB profile1 profile2');
+      await save.action!(
+        context,
+        'loadbalancer myLB roundrobin profile1 profile2',
+      );
 
       const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
         .calls[0][1] as LoadBalancerProfile;
@@ -214,13 +226,17 @@ describe('profileCommand - load balancer save with protected settings', () => {
     it('requires at least 2 profiles', async () => {
       runtimeMocks.getEphemeralSettings.mockReturnValue({});
 
-      const result = await save.action!(context, 'loadbalancer myLB profile1');
+      const result = await save.action!(
+        context,
+        'loadbalancer myLB roundrobin profile1',
+      );
 
       expect(result).toBeDefined();
       expect(result).toHaveProperty('type', 'message');
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
-      expect(content).toContain('Usage');
+      // Gets usage error since parts.length < 5
+      expect(content).toMatch(/Usage.*roundrobin.*failover/i);
     });
 
     it('validates that referenced profiles exist', async () => {
@@ -229,7 +245,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       const result = await save.action!(
         context,
-        'loadbalancer myLB profile1 nonexistent',
+        'loadbalancer myLB roundrobin profile1 nonexistent',
       );
 
       expect(result).toBeDefined();
@@ -247,7 +263,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       const result = await save.action!(
         context,
-        'loadbalancer myLB profile1 profile2',
+        'loadbalancer myLB roundrobin profile1 profile2',
       );
 
       expect(result).toBeDefined();

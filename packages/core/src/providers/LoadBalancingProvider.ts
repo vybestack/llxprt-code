@@ -21,6 +21,8 @@ import { IContent } from '../services/history/IContent.js';
 import { ProviderManager } from './ProviderManager.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import type { Profile } from '../types/modelParams.js';
+import { LoadBalancerFailoverError } from './errors.js';
+import { isNetworkTransientError, getErrorStatus } from '../utils/retry.js';
 
 /**
  * Sub-profile configuration for load balancing
@@ -36,10 +38,11 @@ export interface LoadBalancerSubProfile {
 /**
  * Load balancing provider configuration
  * @plan PLAN-20251211issue486c - Updated to support ResolvedSubProfile
+ * @plan PLAN-20251212issue488 - Added failover strategy
  */
 export interface LoadBalancingProviderConfig {
   profileName: string;
-  strategy: 'round-robin';
+  strategy: 'round-robin' | 'failover';
   subProfiles: ResolvedSubProfile[] | LoadBalancerSubProfile[];
   lbProfileEphemeralSettings?: Record<string, unknown>;
 }
@@ -98,6 +101,17 @@ export function isResolvedSubProfile(
 }
 
 /**
+ * Failover settings extracted from ephemeral settings
+ * @plan PLAN-20251212issue488
+ */
+interface FailoverSettings {
+  retryCount: number;
+  retryDelayMs: number;
+  failoverOnNetworkErrors: boolean;
+  failoverStatusCodes: number[] | undefined;
+}
+
+/**
  * Load balancing provider that distributes requests across multiple sub-profiles
  */
 export class LoadBalancingProvider implements IProvider {
@@ -136,9 +150,16 @@ export class LoadBalancingProvider implements IProvider {
     }
 
     // Check for valid strategy
-    if (config.strategy !== 'round-robin') {
+    if (config.strategy !== 'round-robin' && config.strategy !== 'failover') {
       throw new Error(
-        `Invalid strategy "${config.strategy}". Only "round-robin" is currently supported.`,
+        `Invalid strategy "${config.strategy}". Supported: "round-robin", "failover".`,
+      );
+    }
+
+    // Failover strategy requires at least 2 sub-profiles
+    if (config.strategy === 'failover' && config.subProfiles.length < 2) {
+      throw new Error(
+        'Failover strategy requires at least 2 sub-profiles (minimum 2 backends for failover)',
       );
     }
 
@@ -239,6 +260,12 @@ export class LoadBalancingProvider implements IProvider {
     } else {
       // Called with GenerateChatOptions
       options = optionsOrContent;
+    }
+
+    // Branch on strategy
+    if (this.config.strategy === 'failover') {
+      yield* this.executeWithFailover(options);
+      return;
     }
 
     // Phase 3 Step 1: Select next sub-profile using round-robin
@@ -414,6 +441,157 @@ export class LoadBalancingProvider implements IProvider {
     this.stats.clear();
     this.lastSelected = null;
     this.totalRequests = 0;
+  }
+
+  /**
+   * Extract failover settings from ephemeral settings
+   * @plan PLAN-20251212issue488
+   */
+  private extractFailoverSettings(): FailoverSettings {
+    const ephemeral = this.config.lbProfileEphemeralSettings ?? {};
+    return {
+      retryCount: Math.min(
+        typeof ephemeral.failover_retry_count === 'number'
+          ? ephemeral.failover_retry_count
+          : 1,
+        100,
+      ),
+      retryDelayMs:
+        typeof ephemeral.failover_retry_delay_ms === 'number'
+          ? ephemeral.failover_retry_delay_ms
+          : 0,
+      failoverOnNetworkErrors: ephemeral.failover_on_network_errors !== false,
+      failoverStatusCodes: Array.isArray(ephemeral.failover_status_codes)
+        ? ephemeral.failover_status_codes.filter(
+            (n): n is number => typeof n === 'number',
+          )
+        : undefined,
+    };
+  }
+
+  /**
+   * Determine if error should trigger failover
+   * @plan PLAN-20251212issue488
+   */
+  private shouldFailover(error: unknown, settings: FailoverSettings): boolean {
+    if (!(error instanceof Error)) return true;
+
+    if (settings.failoverOnNetworkErrors && isNetworkTransientError(error)) {
+      return true;
+    }
+
+    const status = getErrorStatus(error);
+    if (status !== undefined) {
+      if (settings.failoverStatusCodes) {
+        return settings.failoverStatusCodes.includes(status);
+      }
+      return status === 429 || (status >= 500 && status < 600);
+    }
+
+    return true;
+  }
+
+  /**
+   * Build resolved options for a sub-profile
+   * @plan PLAN-20251212issue488
+   */
+  private buildResolvedOptions(
+    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
+    options: GenerateChatOptions,
+  ): GenerateChatOptions {
+    return {
+      ...options,
+      resolved: {
+        ...options.resolved,
+        model: isResolvedSubProfile(subProfile)
+          ? subProfile.model
+          : (subProfile.modelId ?? ''),
+        baseURL: subProfile.baseURL ?? '',
+        authToken: subProfile.authToken ?? '',
+      },
+    };
+  }
+
+  /**
+   * Execute with failover strategy
+   * @plan PLAN-20251212issue488
+   */
+  private async *executeWithFailover(
+    options: GenerateChatOptions,
+  ): AsyncGenerator<IContent> {
+    const settings = this.extractFailoverSettings();
+    const errors: Array<{ profile: string; error: Error }> = [];
+
+    for (const subProfile of this.config.subProfiles) {
+      let attempts = 0;
+      const maxAttempts = Math.max(1, settings.retryCount);
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        try {
+          this.logger.debug(
+            () =>
+              `[LB:failover] Trying backend: ${subProfile.name} (attempt ${attempts}/${maxAttempts})`,
+          );
+
+          const resolvedOptions = this.buildResolvedOptions(
+            subProfile,
+            options,
+          );
+          const delegateProvider = this.providerManager.getProviderByName(
+            subProfile.providerName,
+          );
+          if (!delegateProvider) {
+            throw new Error(`Provider "${subProfile.providerName}" not found`);
+          }
+
+          const iterator =
+            delegateProvider.generateChatCompletion(resolvedOptions);
+          const firstResult = await iterator.next();
+
+          if (!firstResult.done) {
+            yield firstResult.value;
+          }
+
+          for await (const chunk of {
+            [Symbol.asyncIterator]: () => iterator,
+          }) {
+            yield chunk;
+          }
+
+          this.incrementStats(subProfile.name);
+          this.logger.debug(
+            () => `[LB:failover] Success on backend: ${subProfile.name}`,
+          );
+          return;
+        } catch (error) {
+          const isLastAttempt = attempts >= maxAttempts;
+          const shouldRetry =
+            !isLastAttempt && this.shouldFailover(error, settings);
+
+          if (shouldRetry) {
+            if (settings.retryDelayMs > 0) {
+              this.logger.debug(
+                () =>
+                  `[LB:failover] ${subProfile.name} attempt ${attempts} failed, retrying after ${settings.retryDelayMs}ms: ${(error as Error).message}`,
+              );
+              await new Promise((resolve) =>
+                setTimeout(resolve, settings.retryDelayMs),
+              );
+            }
+          } else {
+            this.logger.debug(
+              () =>
+                `[LB:failover] ${subProfile.name} failed after ${attempts} attempts: ${(error as Error).message}`,
+            );
+            errors.push({ profile: subProfile.name, error: error as Error });
+            break;
+          }
+        }
+      }
+    }
+
+    throw new LoadBalancerFailoverError(this.config.profileName, errors);
   }
 
   /**
