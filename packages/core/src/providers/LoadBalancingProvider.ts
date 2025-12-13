@@ -326,6 +326,9 @@ export class LoadBalancingProvider implements IProvider {
     // Phase 5: Track stats for selected sub-profile
     this.incrementStats(subProfile.name);
 
+    // Record request start for backend metrics (Issue #489)
+    const startTime = this.recordRequestStart(subProfile.name);
+
     // Phase 3 Step 2: Get delegate provider from ProviderManager
     const delegateProvider = this.providerManager.getProviderByName(
       subProfile.providerName,
@@ -418,7 +421,29 @@ export class LoadBalancingProvider implements IProvider {
     }
 
     // Phase 3 Step 5: Delegate to provider.generateChatCompletion() and yield all chunks
-    yield* delegateProvider.generateChatCompletion(resolvedOptions);
+    // Wrap to track backend metrics (Issue #489)
+    try {
+      const chunks: IContent[] = [];
+      for await (const chunk of delegateProvider.generateChatCompletion(
+        resolvedOptions,
+      )) {
+        chunks.push(chunk);
+        yield chunk;
+      }
+      // Extract tokens and record success
+      const tokensUsed = this.extractTokenCount(chunks);
+      if (tokensUsed > 0) {
+        this.updateTPM(subProfile.name, tokensUsed);
+      }
+      this.recordRequestSuccess(subProfile.name, startTime, tokensUsed);
+    } catch (error) {
+      this.recordRequestFailure(
+        subProfile.name,
+        startTime,
+        error instanceof Error ? error : new Error(String(error)),
+      );
+      throw error;
+    }
   }
 
   /**

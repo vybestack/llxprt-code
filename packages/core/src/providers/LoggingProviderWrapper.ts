@@ -1266,4 +1266,18 @@ export class LoggingProviderWrapper implements IProvider {
   getPerformanceMetrics(): ProviderPerformanceMetrics {
     return this.performanceTracker.getLatestMetrics();
   }
+
+  /**
+   * Delegate getStats() to wrapped provider if it supports it (e.g., LoadBalancingProvider)
+   * @returns Stats from the underlying provider, or undefined if not supported
+   */
+  getStats(): unknown {
+    if (
+      'getStats' in this.wrapped &&
+      typeof this.wrapped.getStats === 'function'
+    ) {
+      return (this.wrapped as { getStats: () => unknown }).getStats();
+    }
+    return undefined;
+  }
 }

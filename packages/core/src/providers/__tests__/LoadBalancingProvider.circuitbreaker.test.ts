@@ -586,10 +586,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
       const stats = lb.getStats();
       const backend1State = stats.circuitBreakerStates.backend1;
 
-      // Should be in closed state or not tracked
-      const stateValue = backend1State ? backend1State.state : undefined;
-      const expectedValue = backend1State ? 'closed' : undefined;
-      expect(stateValue).toBe(expectedValue);
+      // Should be in closed state (if tracked) after successful request
+      // If not tracked (undefined), that's also acceptable
+      expect(backend1State?.state ?? 'closed').toBe('closed');
     });
   });
 });

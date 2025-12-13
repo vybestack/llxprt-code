@@ -29,7 +29,7 @@ const StatRow: React.FC<StatRowProps> = ({
 }) => (
   <Box>
     <Box width={METRIC_COL_WIDTH}>
-      <Text color={Colors.LightBlue}>{isSubtle ? `  ↳ ${title}` : title}</Text>
+      <Text color={Colors.Gray}>{isSubtle ? `  ↳ ${title}` : title}</Text>
     </Box>
     <Box width={VALUE_COL_WIDTH} justifyContent="flex-end">
       <Text>{value}</Text>
@@ -54,9 +54,9 @@ export const LBStatsDisplay: React.FC = () => {
     );
   }
 
-  const currentProvider = providerManager.getActiveProvider();
+  const activeProvider = providerManager.getActiveProvider();
 
-  if (!currentProvider || currentProvider.name !== 'load-balancer') {
+  if (!activeProvider || activeProvider.name !== 'load-balancer') {
     return (
       <Box
         borderStyle="round"
@@ -72,11 +72,18 @@ export const LBStatsDisplay: React.FC = () => {
     );
   }
 
-  const getStats = (
-    currentProvider as { getStats?: () => ExtendedLoadBalancerStats }
-  ).getStats;
+  // Use getProviderByName to get the actual LoadBalancingProvider instance
+  // (wrapped in LoggingProviderWrapper which delegates getStats())
+  const lbProvider = providerManager.getProviderByName('load-balancer') as
+    | { getStats?: () => ExtendedLoadBalancerStats }
+    | undefined;
 
-  if (!getStats) {
+  // Check if provider exists and has getStats method
+  if (
+    !lbProvider ||
+    !('getStats' in lbProvider) ||
+    typeof lbProvider.getStats !== 'function'
+  ) {
     return (
       <Box
         borderStyle="round"
@@ -85,13 +92,15 @@ export const LBStatsDisplay: React.FC = () => {
         paddingX={2}
       >
         <Text color={Colors.Foreground}>
-          Load balancer statistics not yet implemented.
+          Provider &quot;{activeProvider.name}&quot; does not support load
+          balancer statistics.
         </Text>
       </Box>
     );
   }
 
-  const stats = getStats();
+  // Call getStats() directly on the provider to preserve 'this' binding
+  const stats = lbProvider.getStats();
   const backends = Object.keys(stats.backendMetrics);
 
   return (
@@ -102,14 +111,14 @@ export const LBStatsDisplay: React.FC = () => {
       paddingY={1}
       paddingX={2}
     >
-      <Text bold color={Colors.AccentPurple}>
+      <Text bold color={Colors.Foreground}>
         Load Balancer Statistics
       </Text>
       <Box height={1} />
 
       <StatRow
         title="Profile Name"
-        value={<Text color={Colors.AccentGreen}>{stats.profileName}</Text>}
+        value={<Text color={Colors.Foreground}>{stats.profileName}</Text>}
       />
       <StatRow
         title="Total Requests"
@@ -127,18 +136,20 @@ export const LBStatsDisplay: React.FC = () => {
       )}
 
       <Box height={1} />
-      <Text bold color={Colors.LightBlue}>
+      <Text bold color={Colors.Foreground}>
         Backend Metrics
       </Text>
 
       {backends.map((backendName) => {
         const metrics = stats.backendMetrics[backendName];
-        const cbState = stats.circuitBreakerStates[backendName];
+        const cbState = stats.circuitBreakerStates[backendName] ?? {
+          state: 'closed' as const,
+        };
         const tpm = stats.currentTPM[backendName] || 0;
 
         return (
           <Box key={backendName} flexDirection="column" marginTop={1}>
-            <Text bold color={Colors.AccentPurple}>
+            <Text bold color={Colors.Foreground}>
               {backendName}
             </Text>
 
@@ -154,7 +165,7 @@ export const LBStatsDisplay: React.FC = () => {
             <StatRow
               title="Successes"
               value={
-                <Text color={Colors.AccentGreen}>
+                <Text color={Colors.Foreground}>
                   {metrics.successes.toLocaleString()}
                 </Text>
               }
@@ -207,7 +218,7 @@ export const LBStatsDisplay: React.FC = () => {
             <StatRow
               title="Current TPM"
               value={
-                <Text color={Colors.AccentGreen}>
+                <Text color={Colors.Foreground}>
                   {Math.round(tpm).toLocaleString()}
                 </Text>
               }
@@ -222,7 +233,7 @@ export const LBStatsDisplay: React.FC = () => {
                       ? Colors.AccentRed
                       : cbState.state === 'half-open'
                         ? Colors.AccentYellow
-                        : Colors.AccentGreen
+                        : Colors.Foreground
                   }
                 >
                   {cbState.state.toUpperCase()}

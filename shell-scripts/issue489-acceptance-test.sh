@@ -1,5 +1,5 @@
 #!/bin/bash
-# test-issue489.sh - Acceptance test for Issue #489 - Advanced Failover with Metrics
+# issue489-acceptance-test.sh - Acceptance test for Issue #489 - Advanced Failover with Metrics
 #
 # This script:
 # 1. Creates a load balancer test profile with ephemeral settings
@@ -7,7 +7,7 @@
 # 3. Verifies the load balancer is active and functioning
 # 4. Checks that debug logs were created
 #
-# Usage: ./shell-scripts/test-issue489.sh
+# Usage: ./shell-scripts/issue489-acceptance-test.sh
 
 set -e
 set -o pipefail
