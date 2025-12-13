@@ -108,6 +108,17 @@ class MockTokenStore implements TokenStore {
     return Array.from(this.tokens.keys()).sort();
   }
 
+  async listBuckets(provider: string): Promise<string[]> {
+    const buckets: string[] = [];
+    for (const key of this.tokens.keys()) {
+      if (key.startsWith(`${provider}:`)) {
+        const bucket = key.split(':')[1];
+        buckets.push(bucket);
+      }
+    }
+    return buckets.sort();
+  }
+
   // Test helpers
   clear(): void {
     this.tokens.clear();
