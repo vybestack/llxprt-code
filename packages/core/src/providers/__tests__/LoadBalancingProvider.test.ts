@@ -380,8 +380,10 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
       // Constructor should require ProviderManager
       // TypeScript will catch this at compile time, but we test runtime behavior
       expect(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        new LoadBalancingProvider(lbConfig, undefined as any);
+        new LoadBalancingProvider(
+          lbConfig,
+          undefined as unknown as IProviderManager,
+        );
       }).toThrow();
     });
   });
@@ -570,8 +572,10 @@ describe('LoadBalancingProvider - Phase 1: Skeleton Implementation', () => {
       };
 
       expect(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        new LoadBalancingProvider(invalidConfig as any, providerManager);
+        new LoadBalancingProvider(
+          invalidConfig as unknown as LoadBalancingProviderConfig,
+          providerManager,
+        );
       }).toThrow();
     });
   });

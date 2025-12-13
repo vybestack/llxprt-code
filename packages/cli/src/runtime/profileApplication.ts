@@ -251,7 +251,7 @@ export async function applyProfileWithGuards(
     // Build LoadBalancingProviderConfig from resolved sub-profiles
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: lbName,
-      strategy: 'round-robin', // Map 'roundrobin' policy to 'round-robin' strategy
+      strategy: profileInput.policy === 'failover' ? 'failover' : 'round-robin',
       subProfiles: resolvedSubProfiles.map(
         (sp): LoadBalancerSubProfile => ({
           name: sp.name,
@@ -261,6 +261,10 @@ export async function applyProfileWithGuards(
           authToken: sp.authToken,
         }),
       ),
+      lbProfileEphemeralSettings: profileInput.ephemeralSettings as Record<
+        string,
+        unknown
+      >,
     };
 
     lbLogger.debug(

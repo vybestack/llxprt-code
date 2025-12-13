@@ -181,7 +181,7 @@ describe('profileCommand', () => {
 
       const result = await save.action!(
         context,
-        'loadbalancer lb-profile profile1 profile2',
+        'loadbalancer lb-profile roundrobin profile1 profile2',
       );
 
       expect(runtimeMocks.saveLoadBalancerProfile).toHaveBeenCalledWith(
@@ -201,21 +201,22 @@ describe('profileCommand', () => {
       expect(result).toHaveProperty('type', 'message');
       expect(result).toHaveProperty(
         'content',
-        "Load balancer profile 'lb-profile' saved with 2 profiles",
+        "Load balancer profile 'lb-profile' saved with 2 profiles (policy: roundrobin)",
       );
     });
 
     it('requires at least 2 profiles for load balancer', async () => {
       const result = await save.action!(
         context,
-        'loadbalancer lb-profile profile1',
+        'loadbalancer lb-profile roundrobin profile1',
       );
 
       expect(result).toBeDefined();
       expect(result).toHaveProperty('type', 'message');
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
-      expect(content).toContain('Usage');
+      // Gets usage error since parts.length < 5
+      expect(content).toMatch(/Usage.*roundrobin.*failover/i);
     });
 
     it('validates profile names exist', async () => {
@@ -223,7 +224,7 @@ describe('profileCommand', () => {
 
       const result = await save.action!(
         context,
-        'loadbalancer lb-profile profile1 nonexistent',
+        'loadbalancer lb-profile roundrobin profile1 nonexistent',
       );
 
       expect(result).toBeDefined();
@@ -246,7 +247,7 @@ describe('profileCommand', () => {
 
       const result = await save.action!(
         context,
-        'loadbalancer lb-new profile1 lb-existing',
+        'loadbalancer lb-new roundrobin profile1 lb-existing',
       );
 
       expect(result).toBeDefined();
@@ -263,7 +264,7 @@ describe('profileCommand', () => {
 
       const result = await save.action!(
         context,
-        'loadbalancer lb-profile profile1 profile2',
+        'loadbalancer lb-profile roundrobin profile1 profile2',
       );
 
       expect(result).toBeDefined();

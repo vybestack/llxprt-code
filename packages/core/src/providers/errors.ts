@@ -169,3 +169,32 @@ export class ProviderRuntimeScopeError extends Error {
     };
   }
 }
+
+/**
+ * Error thrown when all backends in a load balancer failover policy have failed
+ * @plan PLAN-20251212issue488
+ */
+export class LoadBalancerFailoverError extends Error {
+  readonly profileName: string;
+  readonly failures: ReadonlyArray<{
+    readonly profile: string;
+    readonly error: Error;
+  }>;
+
+  constructor(
+    profileName: string,
+    failures: Array<{ profile: string; error: Error }>,
+  ) {
+    const profileNames = failures.map((f) => f.profile).join(', ');
+    const errorSummary =
+      failures.length === 1
+        ? failures[0].error.message
+        : `${failures.length} backends failed`;
+    super(
+      `Load balancer "${profileName}" failover exhausted: ${errorSummary} (tried: ${profileNames})`,
+    );
+    this.name = 'LoadBalancerFailoverError';
+    this.profileName = profileName;
+    this.failures = failures;
+  }
+}

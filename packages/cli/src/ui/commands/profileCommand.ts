@@ -42,10 +42,10 @@ const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
   async (_ctx, _partial, tokens) => {
     try {
       const profiles = await listProfiles();
-      // tokens.tokens format: ["save", "loadbalancer", "lb-name", "prof1", "prof2", ...]
-      // Skip first 3 tokens (save, loadbalancer, lb-name) to get already selected profiles
+      // tokens.tokens format: ["save", "loadbalancer", "lb-name", "policy", "prof1", "prof2", ...]
+      // Skip first 4 tokens (save, loadbalancer, lb-name, policy) to get already selected profiles
       const alreadySelected = tokens.tokens
-        .slice(3)
+        .slice(4)
         .filter((p) => p.length > 0);
       const available = profiles.filter((p) => !alreadySelected.includes(p));
       return available.map((profile) => ({
@@ -103,7 +103,20 @@ const profileSaveSchema: CommandArgumentSchema = [
         name: 'lb-name',
         description: 'Enter load balancer profile name',
         completer: profileNameCompleter,
-        next: lbMemberProfileSchema,
+        next: [
+          {
+            kind: 'literal',
+            value: 'roundrobin',
+            description: 'Distribute requests across backends in sequence',
+            next: lbMemberProfileSchema,
+          },
+          {
+            kind: 'literal',
+            value: 'failover',
+            description: 'Try backends sequentially until one succeeds',
+            next: lbMemberProfileSchema,
+          },
+        ],
       },
     ],
   },
@@ -169,7 +182,7 @@ const saveCommand: SlashCommand = {
         type: 'message',
         messageType: 'error',
         content:
-          'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <profile1> <profile2> [...]',
+          'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
       };
     }
 
@@ -225,24 +238,44 @@ const saveCommand: SlashCommand = {
     }
 
     if (profileType === 'loadbalancer') {
-      if (parts.length < 4) {
+      if (parts.length < 5) {
         return {
           type: 'message',
           messageType: 'error',
           content:
-            'Usage: /profile save loadbalancer <lb-name> <profile1> <profile2> [...]',
+            'Usage: /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
         };
       }
 
       const lbProfileName = parts[1];
-      const selectedProfiles = parts.slice(2).filter((p) => p.length > 0);
+
+      if (lbProfileName.includes('/') || lbProfileName.includes('\\')) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Profile name cannot contain path separators',
+        };
+      }
+
+      const policyInput = parts[2]?.toLowerCase();
+
+      if (policyInput !== 'failover' && policyInput !== 'roundrobin') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Invalid policy "${parts[2]}". Must be "roundrobin" or "failover".`,
+        };
+      }
+
+      const policy: 'roundrobin' | 'failover' = policyInput;
+
+      const selectedProfiles = parts.slice(3).filter((p) => p.length > 0);
 
       if (selectedProfiles.length < 2) {
         return {
           type: 'message',
           messageType: 'error',
-          content:
-            'Load balancer profile requires at least 2 profiles to be selected',
+          content: 'Load balancer profile requires at least 2 profiles',
         };
       }
 
@@ -260,8 +293,6 @@ const saveCommand: SlashCommand = {
           }
         }
 
-        // Protected settings that must be stripped when saving LB profiles
-        // These settings come from sub-profiles, not the LB profile itself
         const PROTECTED_SETTINGS = [
           'auth-key',
           'auth-keyfile',
@@ -269,14 +300,12 @@ const saveCommand: SlashCommand = {
           'apiKey',
           'apiKeyfile',
           'model',
-          'provider', // LB profiles use load-balancer, not current provider
-          'currentProfile', // Meta-setting, not applicable to LB profiles
+          'provider',
+          'currentProfile',
           'GOOGLE_CLOUD_PROJECT',
           'GOOGLE_CLOUD_LOCATION',
         ];
 
-        // Get current ephemeral settings and filter out protected ones
-        // Also filter out undefined/null values to avoid overriding child profile settings
         const currentEphemerals = runtime.getEphemeralSettings();
         const filteredEphemerals = Object.fromEntries(
           Object.entries(currentEphemerals).filter(
@@ -290,7 +319,7 @@ const saveCommand: SlashCommand = {
         const lbProfile = {
           version: 1 as const,
           type: 'loadbalancer' as const,
-          policy: 'roundrobin' as const,
+          policy,
           profiles: selectedProfiles,
           provider: '',
           model: '',
@@ -303,7 +332,7 @@ const saveCommand: SlashCommand = {
         return {
           type: 'message',
           messageType: 'info',
-          content: `Load balancer profile '${lbProfileName}' saved with ${selectedProfiles.length} profiles`,
+          content: `Load balancer profile '${lbProfileName}' saved with ${selectedProfiles.length} profiles (policy: ${policy})`,
         };
       } catch (error) {
         return {
@@ -318,7 +347,7 @@ const saveCommand: SlashCommand = {
       type: 'message',
       messageType: 'error',
       content:
-        'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <profile1> <profile2> [...]',
+        'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
     };
   },
 };
@@ -748,8 +777,8 @@ export const profileCommand: SlashCommand = {
     messageType: 'info',
     content: `Profile management commands:
   /profile save model <name>    - Save current model configuration
-  /profile save loadbalancer <lb-name> <profile1> <profile2> [...]
-                                - Save a load balancer profile (round-robin)
+  /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]
+                                - Save a load balancer profile
   /profile load <name>          - Load a saved profile
   /profile delete <name>        - Delete a saved profile
   /profile set-default <name>   - Set profile to load on startup (or "none")
