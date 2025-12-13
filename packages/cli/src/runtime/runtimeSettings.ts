@@ -1117,11 +1117,19 @@ export async function applyProfileSnapshot(
 
 export async function saveProfileSnapshot(
   profileName: string,
+  additionalConfig?: Partial<Profile>,
 ): Promise<Profile> {
   const manager = new ProfileManager();
   const snapshot = buildRuntimeProfileSnapshot();
-  await manager.saveProfile(profileName, snapshot);
-  return snapshot;
+
+  // Apply additional config if provided
+  let finalProfile: Profile = snapshot;
+  if (additionalConfig) {
+    finalProfile = { ...snapshot, ...additionalConfig } as Profile;
+  }
+
+  await manager.saveProfile(profileName, finalProfile);
+  return finalProfile;
 }
 
 /**
