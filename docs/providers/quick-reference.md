@@ -35,12 +35,55 @@ For providers without aliases, use the OpenAI protocol:
 
 ## Common Providers
 
+### Model geometry and budgeting (all providers)
+
+When you set a model, configure both context-limit (ephemeral) and max_tokens (model param):
+
+- Effective prompt budget = context-limit − max_tokens − safety-margin
+- Safety margin: 256–2048 tokens (recommend 1024) to avoid last-second overflows from tool wrappers, system prompt, and LLXPRT.md.
+- Tip: If you see "would exceed the token context window" errors, lower max_tokens first or reduce LLXPRT.md size.
+
+Examples:
+
+- Large coding session: context-limit 121000, max_tokens 10000 → prompt budget ≈ 110k (minus safety).
+- Writing mode: context-limit 200000, max_tokens 4000 → prompt budget ≈ 196k (minus safety).
+
 ### OpenAI
 
 ```bash
 /provider openai
 /key sk-your-openai-key
 /model o3-mini
+```
+
+#### Model geometry & recommended settings (OpenAI)
+
+Common models: o3-mini, o1-preview, gpt-4o, gpt-4.1
+
+Guidance:
+
+- Start with context-limit 200000 unless you know the model's smaller limit; adjust down if you get limit errors.
+- Typical defaults:
+  - gpt-4.1: context-limit 200000
+  - gpt-4o / gpt-4o-mini: context-limit 128000
+- Example setup:
+
+```bash
+/set context-limit 200000
+/set modelparam max_tokens 4096
+/set modelparam temperature 0.2  # code-oriented
+```
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "openai",
+  "model": "o3-mini",
+  "modelParams": { "temperature": 0.2, "max_tokens": 4096 },
+  "ephemeralSettings": { "context-limit": 200000 }
+}
 ```
 
 **Common models:** `o3-mini`, `o1-preview`, `gpt-4o`, `gpt-4.1`
@@ -65,6 +108,34 @@ For providers without aliases, use the OpenAI protocol:
 
 Note: OAuth is lazy - authentication happens when you first use the provider.
 
+#### Model geometry & recommended settings (Anthropic)
+
+Common models: claude-sonnet-4-20250115, claude-opus-4, claude-sonnet-3.5
+
+Guidance:
+
+- Start with context-limit 200000.
+- If you enable thinking, increase max_tokens as needed and keep ≥1k tokens of safety.
+- Example setup:
+
+```bash
+/set context-limit 200000
+/set modelparam max_tokens 4096
+/set modelparam temperature 0.7
+```
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-20250115",
+  "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
+  "ephemeralSettings": { "context-limit": 200000 }
+}
+```
+
 **Common models:** `claude-sonnet-4-20250115`, `claude-opus-4`, `claude-sonnet-3.5`
 
 **Environment variable:** `export ANTHROPIC_API_KEY=sk-ant-...`
@@ -73,17 +144,69 @@ Note: OAuth is lazy - authentication happens when you first use the provider.
 
 #### Using Alias
 
+````bash
+
+#### Model geometry & recommended settings (Gemini)
+
+Common models: gemini-2.0-flash, gemini-pro
+
+Guidance:
+- Use context-limit 200000 as a safe starting value; lower if you see provider limit errors.
+- Example setup:
 ```bash
+/set context-limit 200000
+/set modelparam max_tokens 4096   # Gemini often uses camelCase params in native SDKs, but LLxprt forwards what you set
+````
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "gemini",
+  "model": "gemini-2.0-flash",
+  "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
+  "ephemeralSettings": { "context-limit": 200000 }
+}
+```
+
+#### Model geometry & recommended settings (Synthetic)
+
+Popular models: hf:zai-org/GLM-4.6, hf:mistralai/Mixtral-8x7B
+
+Guidance:
+
+- Context varies by model/runtime. Start with context-limit 200000 and adjust.
+- Example setup:
+
+```bash
+/set context-limit 200000
+/set modelparam max_tokens 4096
+```
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "synthetic",
+  "model": "hf:zai-org/GLM-4.6",
+  "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
+  "ephemeralSettings": {}
+}
+```
+
 /provider gemini
 /key your-gemini-key
 /model gemini-2.0-flash
-```
+
+````
 
 #### Or OAuth
 
 ```bash
 /auth gemini enable
-```
+````
 
 Note: OAuth is lazy - authentication happens when you first use the provider.
 
@@ -93,17 +216,72 @@ Note: OAuth is lazy - authentication happens when you first use the provider.
 
 ### Synthetic (Hugging Face Models)
 
-```bash
+````bash
 /provider synthetic
 /key your-synthetic-key
-/model hf:zai-org/GLM-4.6
+
+#### Model geometry & recommended settings (Qwen)
+
+Common models: qwen3-coder-pro, qwen3-coder
+
+Guidance:
+- Use /auth qwen enable for OAuth (free) or /provider qwen for API key usage.
+- Start with context-limit 200000; lower if you hit provider limits.
+- Example setup:
+```bash
+/set context-limit 200000
+/set modelparam max_tokens 4096
+````
+
+**Important:** This alias is for Qwen's own service. It is not used for Cerebras.
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "qwen",
+  "model": "qwen3-coder-pro",
+  "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
+  "ephemeralSettings": { "context-limit": 200000 }
+}
 ```
+
+/model hf:zai-org/GLM-4.6
+
+````
 
 **Popular models:** `hf:zai-org/GLM-4.6`, `hf:mistralai/Mixtral-8x7B`
 
 ### Qwen (Free)
 
 #### OAuth (Free)
+
+
+#### Model geometry & recommended settings (xAI)
+
+Model: grok-3 (example)
+
+- Example setup:
+```bash
+/set context-limit 200000
+/set modelparam max_tokens 4096
+````
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "openai",
+  "model": "grok-3",
+  "modelParams": { "max_tokens": 4096, "temperature": 0.7 },
+  "ephemeralSettings": {
+    "context-limit": 200000,
+    "base-url": "https://api.x.ai/v1"
+  }
+}
+```
 
 ```bash
 /auth qwen enable
@@ -132,6 +310,64 @@ These providers use the OpenAI-compatible endpoint approach:
 
 #### OpenRouter
 
+````bash
+/provider openai
+/baseurl https://openrouter.ai/api/v1/
+/key your-openrouter-key
+
+#### Model geometry & recommended settings (OpenRouter)
+
+Example model: qwen/qwen3-coder
+
+- Example setup:
+```bash
+/set context-limit 200000
+/set modelparam max_tokens 4096
+````
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "openai",
+  "model": "qwen/qwen3-coder",
+  "modelParams": { "max_tokens": 4096, "temperature": 0.7 },
+  "ephemeralSettings": {
+    "context-limit": 200000,
+    "base-url": "https://openrouter.ai/api/v1"
+  }
+}
+```
+
+#### Model geometry & recommended settings (Fireworks)
+
+Example model: accounts/fireworks/models/llama-v3p3-70b-instruct
+
+- Example setup:
+
+```bash
+/set context-limit 200000
+/set modelparam max_tokens 4096
+```
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "openai",
+  "model": "accounts/fireworks/models/llama-v3p3-70b-instruct",
+  "modelParams": { "max_tokens": 4096, "temperature": 0.7 },
+  "ephemeralSettings": {
+    "context-limit": 200000,
+    "base-url": "https://api.fireworks.ai/inference/v1"
+  }
+}
+```
+
+#### OpenRouter
+
 ```bash
 /provider openai
 /baseurl https://openrouter.ai/api/v1/
@@ -148,13 +384,42 @@ These providers use the OpenAI-compatible endpoint approach:
 /model accounts/fireworks/models/llama-v3p3-70b-instruct
 ```
 
-#### Cerebras
+#### Cerebras (GLM‑4.6)
 
 ```bash
 /provider openai
 /baseurl https://api.cerebras.ai/v1/
 /key your-cerebras-key
-/model qwen-3-coder-480b
+/model zai-glm-4.6
+# Recommended runtime tuning:
+/set context-limit 121000
+/set modelparam max_tokens 10000
+/set modelparam temperature 1
+```
+
+**Notes:**
+
+- GLM‑4.6 generally supports large context (often cited ~200k), but the Cerebras endpoint typically performs best with a reduced effective window. We recommend context-limit 121000 and max_tokens 10000 as a reliable starting point.
+- Budget room for completions: effective prompt budget = context-limit − max_tokens − safety.
+- The /provider qwen alias is for Qwen's own service, not for Cerebras.
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "openai",
+  "model": "zai-glm-4.6",
+  "modelParams": {
+    "temperature": 1,
+    "max_tokens": 10000
+  },
+  "ephemeralSettings": {
+    "context-limit": 121000,
+    "base-url": "https://api.cerebras.ai/v1",
+    "shell-replacement": true
+  }
+}
 ```
 
 #### Chutes AI
@@ -170,6 +435,30 @@ These providers use the OpenAI-compatible endpoint approach:
 
 ## Local Models
 
+#### Model geometry & recommended settings (Chutes AI)
+
+- Example setup:
+
+```bash
+/set context-limit 200000
+/set modelparam max_tokens 4096
+```
+
+**Profile JSON:**
+
+```json
+{
+  "version": 1,
+  "provider": "openai",
+  "model": "your-model",
+  "modelParams": { "max_tokens": 4096, "temperature": 0.7 },
+  "ephemeralSettings": {
+    "context-limit": 200000,
+    "base-url": "https://api.chutes.ai/v1"
+  }
+}
+```
+
 ### LM Studio
 
 ```bash
@@ -182,13 +471,33 @@ These providers use the OpenAI-compatible endpoint approach:
 
 ### llama.cpp
 
-```bash
+````bash
 /provider llama-cpp    # Has built-in alias
 # OR
 /provider openai
+
+### Model geometry & recommended settings (Local)
+
+Context depends on your local runtime and model build. Start with:
+```bash
+/set context-limit 32000
+/set modelparam max_tokens 2048
+# Increase gradually as your runtime allows.
+````
+
+**Ollama tip:**
+
+```bash
+/provider openai
+/baseurl http://localhost:11434/v1
+/key dummy-key
+/model codellama:13b
+```
+
 /baseurl http://localhost:8080/v1/
 /model your-model
-```
+
+````
 
 ### Ollama
 
@@ -199,7 +508,7 @@ These providers use the OpenAI-compatible endpoint approach:
 /baseurl http://localhost:11434/v1/
 /key dummy-key        # Ollama may require a dummy key
 /model codellama:13b
-```
+````
 
 ## Authentication Methods
 
