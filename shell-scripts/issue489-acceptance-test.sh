@@ -10,6 +10,7 @@
 # Usage: ./shell-scripts/test-issue489.sh
 
 set -e
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "${SCRIPT_DIR}")"
@@ -104,8 +105,11 @@ echo ""
 
 # Step 6: Check for debug log creation
 echo "Checking for debug log files..."
-LOG_COUNT=$(find "${DEBUG_DIR}" -name "*.jsonl" -type f 2>/dev/null | wc -l)
-LOG_COUNT=$(echo "${LOG_COUNT}" | tr -d ' ')
+LOG_FILES=$(find "${DEBUG_DIR}" -name "*.jsonl" -type f 2>/dev/null || true)
+LOG_COUNT=0
+if [[ -n "${LOG_FILES}" ]]; then
+    LOG_COUNT=$(echo "${LOG_FILES}" | wc -l | tr -d ' ')
+fi
 
 if [[ "${LOG_COUNT}" -gt 0 ]]; then
     echo "PASS: Found ${LOG_COUNT} debug log file(s) in ${DEBUG_DIR}"
