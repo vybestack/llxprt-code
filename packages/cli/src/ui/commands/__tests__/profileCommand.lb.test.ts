@@ -2,6 +2,9 @@
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Tests for load balancer profile save/load with advanced failover ephemeral settings
+ * Issue #489 Phase 7
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -271,6 +274,185 @@ describe('profileCommand - load balancer save with protected settings', () => {
       expect(result).toHaveProperty('messageType', 'error');
       const content = (result as { content: string }).content;
       expect(content).toContain('disk full');
+    });
+  });
+
+  describe('advanced failover ephemeral settings (Issue #489)', () => {
+    it('includes tpm_threshold in saved profile when set', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({
+        'context-limit': 190000,
+        tpm_threshold: 1000,
+      });
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      await save.action!(
+        context,
+        'loadbalancer lb-tpm failover profile1 profile2',
+      );
+
+      const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
+        .calls[0][1] as LoadBalancerProfile;
+      const settings = savedProfile.ephemeralSettings as Record<
+        string,
+        unknown
+      >;
+      expect(settings.tpm_threshold).toBe(1000);
+    });
+
+    it('includes timeout_ms in saved profile when set', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({
+        timeout_ms: 30000,
+      });
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      await save.action!(
+        context,
+        'loadbalancer lb-timeout failover profile1 profile2',
+      );
+
+      const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
+        .calls[0][1] as LoadBalancerProfile;
+      const settings = savedProfile.ephemeralSettings as Record<
+        string,
+        unknown
+      >;
+      expect(settings.timeout_ms).toBe(30000);
+    });
+
+    it('includes circuit_breaker_enabled in saved profile when set', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({
+        circuit_breaker_enabled: true,
+      });
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      await save.action!(
+        context,
+        'loadbalancer lb-cb failover profile1 profile2',
+      );
+
+      const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
+        .calls[0][1] as LoadBalancerProfile;
+      const settings = savedProfile.ephemeralSettings as Record<
+        string,
+        unknown
+      >;
+      expect(settings.circuit_breaker_enabled).toBe(true);
+    });
+
+    it('includes circuit_breaker_failure_threshold in saved profile when set', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({
+        circuit_breaker_failure_threshold: 3,
+      });
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      await save.action!(
+        context,
+        'loadbalancer lb-cb-threshold failover profile1 profile2',
+      );
+
+      const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
+        .calls[0][1] as LoadBalancerProfile;
+      const settings = savedProfile.ephemeralSettings as Record<
+        string,
+        unknown
+      >;
+      expect(settings.circuit_breaker_failure_threshold).toBe(3);
+    });
+
+    it('includes circuit_breaker_failure_window_ms in saved profile when set', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({
+        circuit_breaker_failure_window_ms: 60000,
+      });
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      await save.action!(
+        context,
+        'loadbalancer lb-cb-window failover profile1 profile2',
+      );
+
+      const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
+        .calls[0][1] as LoadBalancerProfile;
+      const settings = savedProfile.ephemeralSettings as Record<
+        string,
+        unknown
+      >;
+      expect(settings.circuit_breaker_failure_window_ms).toBe(60000);
+    });
+
+    it('includes circuit_breaker_recovery_timeout_ms in saved profile when set', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({
+        circuit_breaker_recovery_timeout_ms: 30000,
+      });
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      await save.action!(
+        context,
+        'loadbalancer lb-cb-recovery failover profile1 profile2',
+      );
+
+      const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
+        .calls[0][1] as LoadBalancerProfile;
+      const settings = savedProfile.ephemeralSettings as Record<
+        string,
+        unknown
+      >;
+      expect(settings.circuit_breaker_recovery_timeout_ms).toBe(30000);
+    });
+
+    it('includes all load balancer advanced failover settings when set', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({
+        tpm_threshold: 500,
+        timeout_ms: 30000,
+        circuit_breaker_enabled: true,
+        circuit_breaker_failure_threshold: 3,
+        circuit_breaker_failure_window_ms: 60000,
+        circuit_breaker_recovery_timeout_ms: 30000,
+      });
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      await save.action!(
+        context,
+        'loadbalancer lb-all failover profile1 profile2',
+      );
+
+      const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
+        .calls[0][1] as LoadBalancerProfile;
+      const settings = savedProfile.ephemeralSettings as Record<
+        string,
+        unknown
+      >;
+
+      expect(settings.tpm_threshold).toBe(500);
+      expect(settings.timeout_ms).toBe(30000);
+      expect(settings.circuit_breaker_enabled).toBe(true);
+      expect(settings.circuit_breaker_failure_threshold).toBe(3);
+      expect(settings.circuit_breaker_failure_window_ms).toBe(60000);
+      expect(settings.circuit_breaker_recovery_timeout_ms).toBe(30000);
+    });
+
+    it('excludes undefined/null load balancer settings from saved profile', async () => {
+      runtimeMocks.getEphemeralSettings.mockReturnValue({
+        tpm_threshold: 1000,
+        timeout_ms: undefined,
+        circuit_breaker_enabled: null,
+      });
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      await save.action!(
+        context,
+        'loadbalancer lb-nulls failover profile1 profile2',
+      );
+
+      const savedProfile = runtimeMocks.saveLoadBalancerProfile.mock
+        .calls[0][1] as LoadBalancerProfile;
+      const settings = savedProfile.ephemeralSettings as Record<
+        string,
+        unknown
+      >;
+
+      expect(settings.tpm_threshold).toBe(1000);
+      expect(settings.timeout_ms).toBeUndefined();
+      expect(settings.circuit_breaker_enabled).toBeUndefined();
     });
   });
 });

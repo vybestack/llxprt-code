@@ -205,6 +205,10 @@ export const useSlashCommandProcessor = (
         historyItemContent = {
           type: 'cache_stats',
         };
+      } else if (message.type === MessageType.LB_STATS) {
+        historyItemContent = {
+          type: 'lb_stats',
+        };
       } else if (
         message.type === MessageType.INFO ||
         message.type === MessageType.ERROR ||

@@ -90,6 +90,20 @@ export interface EphemeralSettings {
   'prompt-caching'?: 'off' | '5m' | '1h';
   /** Load tool-specific prompts from ~/.llxprt/prompts/tools/** (default: false) */
   'enable-tool-prompts'?: boolean;
+
+  // Load balancer advanced failover settings (Phase 3, Issue #489)
+  /** Minimum tokens per minute before triggering failover */
+  tpm_threshold?: number;
+  /** Maximum request duration in milliseconds before timeout */
+  timeout_ms?: number;
+  /** Enable circuit breaker pattern for failing backends */
+  circuit_breaker_enabled?: boolean;
+  /** Number of failures before opening circuit */
+  circuit_breaker_failure_threshold?: number;
+  /** Time window for counting failures in milliseconds */
+  circuit_breaker_failure_window_ms?: number;
+  /** Cooldown period before retrying after circuit opens in milliseconds */
+  circuit_breaker_recovery_timeout_ms?: number;
 }
 
 /**

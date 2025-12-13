@@ -80,5 +80,31 @@ export const statsCommand: SlashCommand = {
         );
       },
     },
+    {
+      name: 'lb',
+      description: 'Show load balancer usage statistics.',
+      kind: CommandKind.BUILT_IN,
+      action: (context: CommandContext) => {
+        context.ui.addItem(
+          {
+            type: MessageType.LB_STATS,
+          },
+          Date.now(),
+        );
+      },
+    },
+    {
+      name: 'loadbalancer',
+      description: 'Show load balancer usage statistics.',
+      kind: CommandKind.BUILT_IN,
+      action: (context: CommandContext) => {
+        context.ui.addItem(
+          {
+            type: MessageType.LB_STATS,
+          },
+          Date.now(),
+        );
+      },
+    },
   ],
 };

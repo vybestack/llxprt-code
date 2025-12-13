@@ -24,6 +24,7 @@ import { StatsDisplay } from './StatsDisplay.js';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
 import { ToolStatsDisplay } from './ToolStatsDisplay.js';
 import { CacheStatsDisplay } from './CacheStatsDisplay.js';
+import { LBStatsDisplay } from './LBStatsDisplay.js';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
 import { Help } from './Help.js';
 import { Config } from '@vybestack/llxprt-code-core';
@@ -137,6 +138,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
       {itemForDisplay.type === 'model_stats' && <ModelStatsDisplay />}
       {itemForDisplay.type === 'tool_stats' && <ToolStatsDisplay />}
       {itemForDisplay.type === 'cache_stats' && <CacheStatsDisplay />}
+      {itemForDisplay.type === 'lb_stats' && <LBStatsDisplay />}
       {itemForDisplay.type === 'quit' && (
         <SessionSummaryDisplay duration={itemForDisplay.duration} />
       )}
