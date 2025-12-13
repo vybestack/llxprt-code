@@ -125,6 +125,29 @@ const directSettingSpecs: SettingLiteralSpec[] = [
     hint: 'API version (e.g., v1, 2024-05-01)',
   },
   {
+    value: 'stream-options',
+    hint: 'JSON object (e.g., {"include_usage":false})',
+    description:
+      'Stream options for OpenAI-compatible APIs (disable include_usage for Mistral)',
+    options: [
+      {
+        value: '{"include_usage":true}',
+        description: 'Include usage stats (default)',
+      },
+      {
+        value: '{"include_usage":false}',
+        description: 'No usage stats (for Mistral)',
+      },
+      { value: '{}', description: 'Omit stream_options entirely' },
+    ],
+  },
+  {
+    value: 'streaming',
+    hint: 'enabled or disabled',
+    description: 'boolean value',
+    options: booleanOptions,
+  },
+  {
     value: 'streaming',
     hint: 'enabled or disabled',
     description: 'streaming mode',
