@@ -213,6 +213,9 @@ export {
   type LoadBalancingProviderConfig,
   type LoadBalancerSubProfile,
   type LoadBalancerStats,
+  type ExtendedLoadBalancerStats,
+  type BackendMetrics,
+  type CircuitBreakerState,
   type ResolvedSubProfile,
 } from './providers/LoadBalancingProvider.js';
 

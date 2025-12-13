@@ -16,6 +16,35 @@ import {
 import { ProviderManager } from '../ProviderManager.js';
 import type { IContent } from '../../services/history/IContent.js';
 
+/**
+ * Helper function to create a mock provider with usage metadata
+ */
+function createMockProviderWithUsage(
+  name: string,
+  promptTokens: number,
+  candidateTokens: number,
+  responseText = 'Response',
+  callCounter?: { count: number },
+) {
+  return {
+    name,
+    async *generateChatCompletion(): AsyncGenerator<IContent> {
+      if (callCounter) {
+        callCounter.count++;
+      }
+      yield {
+        role: 'assistant',
+        parts: [{ text: responseText }],
+        usageMetadata: {
+          promptTokenCount: promptTokens,
+          candidatesTokenCount: candidateTokens,
+        },
+      } as unknown as IContent;
+    },
+    getServerTools: () => [],
+  };
+}
+
 describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
   let providerManager: ProviderManager;
   let config: LoadBalancingProviderConfig;
@@ -62,21 +91,12 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
     it('should track tokens after successful request', async () => {
       const lb = new LoadBalancingProvider(config, providerManager);
 
-      // Mock provider that returns usage metadata
-      const mockProvider = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'Hello!' }],
-            usageMetadata: {
-              promptTokenCount: 100,
-              candidatesTokenCount: 50,
-            },
-          } as unknown as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const mockProvider = createMockProviderWithUsage(
+        'test-provider-1',
+        100,
+        50,
+        'Hello!',
+      );
       providerManager.registerProvider(mockProvider);
 
       const gen = lb.generateChatCompletion({
@@ -99,20 +119,11 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       const lb = new LoadBalancingProvider(config, providerManager);
 
-      const mockProvider = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'Response' }],
-            usageMetadata: {
-              promptTokenCount: 500,
-              candidatesTokenCount: 500,
-            },
-          } as unknown as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const mockProvider = createMockProviderWithUsage(
+        'test-provider-1',
+        500,
+        500,
+      );
       providerManager.registerProvider(mockProvider);
 
       // Make a request
@@ -141,20 +152,11 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       const lb = new LoadBalancingProvider(config, providerManager);
 
-      const mockProvider = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'Response' }],
-            usageMetadata: {
-              promptTokenCount: 100,
-              candidatesTokenCount: 100,
-            },
-          } as unknown as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const mockProvider = createMockProviderWithUsage(
+        'test-provider-1',
+        100,
+        100,
+      );
       providerManager.registerProvider(mockProvider);
 
       // Make first request
@@ -194,22 +196,14 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
         providerManager,
       );
 
-      let backend1Calls = 0;
-      const mockProvider1 = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          backend1Calls++;
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'Response' }],
-            usageMetadata: {
-              promptTokenCount: 500,
-              candidatesTokenCount: 500,
-            },
-          } as unknown as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const backend1Calls = { count: 0 };
+      const mockProvider1 = createMockProviderWithUsage(
+        'test-provider-1',
+        500,
+        500,
+        'Response',
+        backend1Calls,
+      );
       providerManager.registerProvider(mockProvider1);
 
       // First request - should succeed and establish high TPM
@@ -229,7 +223,7 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
       }
 
       // Should have called backend1 for both requests
-      expect(backend1Calls).toBe(2);
+      expect(backend1Calls.count).toBe(2);
     });
 
     it('should trigger failover when TPM below threshold', async () => {
@@ -246,38 +240,22 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
         providerManager,
       );
 
-      let backend1Calls = 0;
-      let backend2Calls = 0;
-      const mockProvider1 = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          backend1Calls++;
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'Response' }],
-            usageMetadata: {
-              promptTokenCount: 50,
-              candidatesTokenCount: 50,
-            },
-          } as unknown as IContent;
-        },
-        getServerTools: () => [],
-      };
-      const mockProvider2 = {
-        name: 'test-provider-2',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          backend2Calls++;
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'Response from backend2' }],
-            usageMetadata: {
-              promptTokenCount: 500,
-              candidatesTokenCount: 500,
-            },
-          } as unknown as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const backend1Calls = { count: 0 };
+      const backend2Calls = { count: 0 };
+      const mockProvider1 = createMockProviderWithUsage(
+        'test-provider-1',
+        50,
+        50,
+        'Response',
+        backend1Calls,
+      );
+      const mockProvider2 = createMockProviderWithUsage(
+        'test-provider-2',
+        500,
+        500,
+        'Response from backend2',
+        backend2Calls,
+      );
       providerManager.registerProvider(mockProvider1);
       providerManager.registerProvider(mockProvider2);
 
@@ -302,9 +280,9 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
       }
 
       // Backend1 called once for first request
-      expect(backend1Calls).toBe(1);
+      expect(backend1Calls.count).toBe(1);
       // Backend2 called for second request (failover due to low TPM)
-      expect(backend2Calls).toBe(1);
+      expect(backend2Calls.count).toBe(1);
     });
 
     it('should not check TPM when threshold not configured', async () => {
@@ -318,23 +296,14 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
         providerManager,
       );
 
-      let backend1Calls = 0;
-      const mockProvider1 = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          backend1Calls++;
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'Response' }],
-            // Very low token count
-            usageMetadata: {
-              promptTokenCount: 1,
-              candidatesTokenCount: 1,
-            },
-          } as unknown as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const backend1Calls = { count: 0 };
+      const mockProvider1 = createMockProviderWithUsage(
+        'test-provider-1',
+        1,
+        1,
+        'Response',
+        backend1Calls,
+      );
       providerManager.registerProvider(mockProvider1);
 
       // First request
@@ -354,7 +323,7 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
       }
 
       // Should have called backend1 for both requests
-      expect(backend1Calls).toBe(2);
+      expect(backend1Calls.count).toBe(2);
     });
   });
 
@@ -362,20 +331,11 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
     it('should handle single bucket correctly', async () => {
       const lb = new LoadBalancingProvider(config, providerManager);
 
-      const mockProvider = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'Response' }],
-            usageMetadata: {
-              promptTokenCount: 500,
-              candidatesTokenCount: 500,
-            },
-          } as unknown as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const mockProvider = createMockProviderWithUsage(
+        'test-provider-1',
+        500,
+        500,
+      );
       providerManager.registerProvider(mockProvider);
 
       const gen = lb.generateChatCompletion({
@@ -394,20 +354,11 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
     it('should handle multiple buckets in same minute', async () => {
       const lb = new LoadBalancingProvider(config, providerManager);
 
-      const mockProvider = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'Response' }],
-            usageMetadata: {
-              promptTokenCount: 100,
-              candidatesTokenCount: 100,
-            },
-          } as unknown as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const mockProvider = createMockProviderWithUsage(
+        'test-provider-1',
+        100,
+        100,
+      );
       providerManager.registerProvider(mockProvider);
 
       // Make 3 requests in same minute
@@ -430,20 +381,11 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
 
       const lb = new LoadBalancingProvider(config, providerManager);
 
-      const mockProvider = {
-        name: 'test-provider-1',
-        async *generateChatCompletion(): AsyncGenerator<IContent> {
-          yield {
-            role: 'assistant',
-            parts: [{ text: 'Response' }],
-            usageMetadata: {
-              promptTokenCount: 500,
-              candidatesTokenCount: 500,
-            },
-          } as unknown as IContent;
-        },
-        getServerTools: () => [],
-      };
+      const mockProvider = createMockProviderWithUsage(
+        'test-provider-1',
+        500,
+        500,
+      );
       providerManager.registerProvider(mockProvider);
 
       // Make request at minute 0

@@ -48,59 +48,47 @@ describe('statsCommand - load balancer stats', () => {
     });
   });
 
-  describe('loadbalancer subcommand (alias)', () => {
-    it('should display load balancer stats when using "loadbalancer" subcommand', () => {
-      const loadbalancerSubCommand = statsCommand.subCommands?.find(
-        (sc) => sc.name === 'loadbalancer',
-      );
-      if (!loadbalancerSubCommand?.action) {
-        throw new Error('loadbalancer subcommand has no action');
-      }
-
-      loadbalancerSubCommand.action(mockContext, '');
-
-      expect(mockContext.ui.addItem).toHaveBeenCalledWith(
-        {
-          type: MessageType.LB_STATS,
-        },
-        expect.any(Number),
-      );
-    });
-
-    it('should have correct subcommand metadata for "loadbalancer"', () => {
-      const loadbalancerSubCommand = statsCommand.subCommands?.find(
-        (sc) => sc.name === 'loadbalancer',
-      );
-
-      expect(loadbalancerSubCommand).toBeDefined();
-      expect(loadbalancerSubCommand?.name).toBe('loadbalancer');
-      expect(loadbalancerSubCommand?.description).toContain('load balancer');
-    });
-  });
-
-  describe('both lb and loadbalancer aliases', () => {
-    it('should have both "lb" and "loadbalancer" subcommands', () => {
+  describe('loadbalancer alias', () => {
+    it('should have "loadbalancer" as an alternative name for "lb" subcommand', () => {
       const lbSubCommand = statsCommand.subCommands?.find(
         (sc) => sc.name === 'lb',
-      );
-      const loadbalancerSubCommand = statsCommand.subCommands?.find(
-        (sc) => sc.name === 'loadbalancer',
       );
 
       expect(lbSubCommand).toBeDefined();
-      expect(loadbalancerSubCommand).toBeDefined();
+      expect(lbSubCommand?.altNames).toBeDefined();
+      expect(lbSubCommand?.altNames).toContain('loadbalancer');
     });
 
-    it('should use the same MessageType.LB_STATS for both aliases', () => {
+    it('should have correct subcommand metadata for "lb" with alias', () => {
       const lbSubCommand = statsCommand.subCommands?.find(
         (sc) => sc.name === 'lb',
       );
-      const loadbalancerSubCommand = statsCommand.subCommands?.find(
-        (sc) => sc.name === 'loadbalancer',
+
+      expect(lbSubCommand).toBeDefined();
+      expect(lbSubCommand?.name).toBe('lb');
+      expect(lbSubCommand?.altNames).toEqual(['loadbalancer']);
+      expect(lbSubCommand?.description).toContain('load balancer');
+    });
+  });
+
+  describe('lb command functionality', () => {
+    it('should have "lb" as primary name with "loadbalancer" as alias', () => {
+      const lbSubCommand = statsCommand.subCommands?.find(
+        (sc) => sc.name === 'lb',
       );
 
-      if (!lbSubCommand?.action || !loadbalancerSubCommand?.action) {
-        throw new Error('Subcommands missing actions');
+      expect(lbSubCommand).toBeDefined();
+      expect(lbSubCommand?.name).toBe('lb');
+      expect(lbSubCommand?.altNames).toEqual(['loadbalancer']);
+    });
+
+    it('should use MessageType.LB_STATS when invoked', () => {
+      const lbSubCommand = statsCommand.subCommands?.find(
+        (sc) => sc.name === 'lb',
+      );
+
+      if (!lbSubCommand?.action) {
+        throw new Error('lb subcommand has no action');
       }
 
       // Clear any previous calls
@@ -111,16 +99,7 @@ describe('statsCommand - load balancer stats', () => {
       const lbCall = (mockContext.ui.addItem as ReturnType<typeof vi.fn>).mock
         .calls[0][0];
 
-      // Clear and test loadbalancer
-      vi.clearAllMocks();
-      loadbalancerSubCommand.action(mockContext, '');
-      const loadbalancerCall = (
-        mockContext.ui.addItem as ReturnType<typeof vi.fn>
-      ).mock.calls[0][0];
-
       expect(lbCall.type).toBe(MessageType.LB_STATS);
-      expect(loadbalancerCall.type).toBe(MessageType.LB_STATS);
-      expect(lbCall.type).toBe(loadbalancerCall.type);
     });
   });
 });
