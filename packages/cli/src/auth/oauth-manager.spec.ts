@@ -119,6 +119,10 @@ class MockTokenStore implements TokenStore {
     return buckets.sort();
   }
 
+  async getBucketStats(): Promise<null> {
+    return null;
+  }
+
   // Test helpers
   clear(): void {
     this.tokens.clear();

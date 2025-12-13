@@ -69,6 +69,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       removeToken: vi.fn().mockResolvedValue(undefined),
       listProviders: vi.fn().mockResolvedValue([]),
       listBuckets: vi.fn().mockResolvedValue(['default']),
+      getBucketStats: vi.fn().mockResolvedValue(null),
     };
 
     const manager = new OAuthManager(tokenStore);

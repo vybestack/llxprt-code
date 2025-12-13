@@ -36,6 +36,7 @@ describe('AnthropicOAuthProvider local callback flow', () => {
       removeToken: vi.fn(async () => undefined),
       listProviders: vi.fn(async () => []),
       listBuckets: vi.fn(async () => ['default']),
+      getBucketStats: vi.fn(async () => null),
     } satisfies TokenStore;
 
     provider = new AnthropicOAuthProvider(tokenStore);

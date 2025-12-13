@@ -19,6 +19,7 @@ import type {
   SubagentManager,
 } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
+import type { OAuthManager } from '../../auth/oauth-manager.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
 import type {
@@ -47,6 +48,7 @@ export interface CommandContext {
     logger: Logger;
     subagentManager?: SubagentManager;
     profileManager?: ProfileManager;
+    oauthManager?: OAuthManager;
   };
   // UI state and history management
   ui: {

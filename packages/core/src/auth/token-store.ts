@@ -7,7 +7,7 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { type OAuthToken, OAuthTokenSchema } from './types.js';
+import { type OAuthToken, OAuthTokenSchema, type BucketStats } from './types.js';
 
 /**
  * Interface for multi-provider OAuth token storage
@@ -48,6 +48,14 @@ export interface TokenStore {
    * @returns Array of bucket names for the provider
    */
   listBuckets(provider: string): Promise<string[]>;
+
+  /**
+   * Get usage statistics for a specific bucket
+   * @param provider - The provider name
+   * @param bucket - The bucket name
+   * @returns Bucket statistics if available, null otherwise
+   */
+  getBucketStats(provider: string, bucket: string): Promise<BucketStats | null>;
 }
 
 /**
@@ -216,6 +224,31 @@ export class MultiProviderTokenStore implements TokenStore {
       }
       throw error;
     }
+  }
+
+  /**
+   * Get usage statistics for a specific bucket
+   * Returns placeholder statistics for now
+   */
+  async getBucketStats(provider: string, bucket: string): Promise<BucketStats | null> {
+    // Validate bucket name if provided
+    if (bucket) {
+      this.validateBucketName(bucket);
+    }
+
+    // Check if bucket exists
+    const token = await this.getToken(provider, bucket);
+    if (!token) {
+      return null;
+    }
+
+    // Return placeholder stats - actual implementation would track usage
+    return {
+      bucket,
+      requestCount: 0,
+      percentage: 0,
+      lastUsed: undefined,
+    };
   }
 
   /**

@@ -49,6 +49,10 @@ class MockTokenStore implements TokenStore {
     return buckets.sort();
   }
 
+  async getBucketStats(): Promise<null> {
+    return null;
+  }
+
   private getKey(provider: string, bucket?: string): string {
     return `${provider}:${bucket || 'default'}`;
   }
