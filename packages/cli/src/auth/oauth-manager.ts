@@ -9,7 +9,10 @@ import { LoadedSettings, SettingScope } from '../config/settings.js';
 import {
   getSettingsService,
   flushRuntimeAuthScope,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
+
+const logger = new DebugLogger('llxprt:oauth:manager');
 
 function isAuthOnlyEnabled(value: unknown): boolean {
   if (typeof value === 'boolean') {
@@ -104,12 +107,15 @@ export class OAuthManager {
   private settings?: LoadedSettings;
   // In-memory OAuth enablement state for when settings aren't available
   private inMemoryOAuthState: Map<string, boolean>;
+  // Session bucket overrides (in-memory only)
+  private sessionBuckets: Map<string, string>;
 
   constructor(tokenStore: TokenStore, settings?: LoadedSettings) {
     this.providers = new Map();
     this.tokenStore = tokenStore;
     this.settings = settings;
     this.inMemoryOAuthState = new Map();
+    this.sessionBuckets = new Map();
   }
 
   /**
@@ -158,8 +164,9 @@ export class OAuthManager {
   /**
    * Authenticate with a specific provider
    * @param providerName - Name of the provider to authenticate with
+   * @param bucket - Optional bucket name for multi-account support
    */
-  async authenticate(providerName: string): Promise<void> {
+  async authenticate(providerName: string, bucket?: string): Promise<void> {
     if (!providerName || typeof providerName !== 'string') {
       throw new Error('Provider name must be a non-empty string');
     }
@@ -179,8 +186,8 @@ export class OAuthManager {
         throw new Error('Authentication completed but no token was returned');
       }
 
-      // 3. Store token using tokenStore
-      await this.tokenStore.saveToken(providerName, providerToken);
+      // 3. Store token using tokenStore with bucket parameter
+      await this.tokenStore.saveToken(providerName, providerToken, bucket);
 
       // 4. Ensure provider marked as OAuth enabled after successful auth
       if (!this.isOAuthEnabled(providerName)) {
@@ -263,9 +270,10 @@ export class OAuthManager {
    * @pseudocode lines 51-68
    * Check if authenticated with a specific provider (required by precedence resolver)
    * @param providerName - Name of the provider
+   * @param bucket - Optional bucket name
    * @returns True if authenticated, false otherwise
    */
-  async isAuthenticated(providerName: string): Promise<boolean> {
+  async isAuthenticated(providerName: string, bucket?: string): Promise<boolean> {
     // Lines 52-55: VALIDATE providerName
     if (!providerName || typeof providerName !== 'string') {
       return false;
@@ -277,8 +285,8 @@ export class OAuthManager {
       return true;
     }
 
-    // Lines 57-60: SET token = AWAIT this.tokenStore.getToken(providerName)
-    const token = await this.tokenStore.getToken(providerName);
+    // Lines 57-60: SET token = AWAIT this.tokenStore.getToken(providerName, bucket)
+    const token = await this.tokenStore.getToken(providerName, bucket);
     if (!token) {
       return false;
     }
@@ -299,8 +307,9 @@ export class OAuthManager {
    * @pseudocode lines 4-37
    * Logout from a specific provider by clearing stored tokens
    * @param providerName - Name of the provider to logout from
+   * @param bucket - Optional bucket name for multi-account support
    */
-  async logout(providerName: string): Promise<void> {
+  async logout(providerName: string, bucket?: string): Promise<void> {
     // Line 5-8: VALIDATE providerName
     if (!providerName || typeof providerName !== 'string') {
       throw new Error('Provider name must be a non-empty string');
@@ -317,10 +326,10 @@ export class OAuthManager {
       try {
         await provider.logout();
       } catch (error) {
-        console.warn(`Provider logout failed:`, error);
+        logger.warn(`Provider logout failed:`, error);
       }
     } else {
-      await this.tokenStore.removeToken(providerName);
+      await this.tokenStore.removeToken(providerName, bucket);
     }
 
     // CRITICAL FIX: Clear all provider auth caches after logout
@@ -339,7 +348,7 @@ export class OAuthManager {
         const legacyCredsPath = path.join(llxprtDir, 'oauth_creds.json');
         try {
           await fs.unlink(legacyCredsPath);
-          console.log('Cleared Gemini OAuth credentials');
+          logger.debug('Cleared Gemini OAuth credentials');
         } catch {
           // File might not exist
         }
@@ -348,7 +357,7 @@ export class OAuthManager {
         const googleAccountsPath = path.join(llxprtDir, 'google_accounts.json');
         try {
           await fs.unlink(googleAccountsPath);
-          console.log('Cleared Google account info');
+          logger.debug('Cleared Google account info');
         } catch {
           // File might not exist
         }
@@ -356,7 +365,7 @@ export class OAuthManager {
         // Force the OAuth client to re-authenticate by clearing any cached state
         // The next request will need to re-authenticate
       } catch (error) {
-        console.debug('Error clearing Gemini credentials:', error);
+        logger.debug('Error clearing Gemini credentials:', error);
       }
     }
   }
@@ -378,7 +387,7 @@ export class OAuthManager {
         await this.logout(provider);
       } catch (error) {
         // Lines 45-47: LOG "Failed to logout from " + provider + ": " + error
-        console.warn(`Failed to logout from ${provider}: ${error}`);
+        logger.warn(`Failed to logout from ${provider}: ${error}`);
         // Continue with other providers even if one fails
       }
     }
@@ -435,7 +444,7 @@ export class OAuthManager {
       }
 
       // Re-throw the error so it's not silently swallowed
-      console.error(`OAuth authentication failed for ${providerName}:`, error);
+      logger.error(`OAuth authentication failed for ${providerName}:`, error);
       throw error;
     }
   }
@@ -456,7 +465,7 @@ export class OAuthManager {
     try {
       return await this.tokenStore.getToken(providerName);
     } catch (error) {
-      console.debug(`Failed to load stored token for ${providerName}:`, error);
+      logger.debug(`Failed to load stored token for ${providerName}:`, error);
       return null;
     }
   }
@@ -680,7 +689,7 @@ export class OAuthManager {
       );
 
       if (!provider) {
-        console.debug(
+        logger.debug(
           `Provider ${providerName} is not registered; skipping auth cache clear.`,
         );
         return;
@@ -728,21 +737,109 @@ export class OAuthManager {
           flushRuntimeAuthScope(runtimeContext.runtimeId);
         }
       } catch (runtimeError) {
-        if (process.env.DEBUG) {
-          console.debug(
-            `Skipped runtime auth scope flush for ${providerName}:`,
-            runtimeError,
-          );
-        }
+        logger.debug(
+          `Skipped runtime auth scope flush for ${providerName}:`,
+          runtimeError,
+        );
       }
 
-      console.debug(`Cleared auth caches for provider: ${providerName}`);
+      logger.debug(`Cleared auth caches for provider: ${providerName}`);
     } catch (error) {
       // Cache clearing failures should not prevent logout from succeeding
-      console.debug(
+      logger.debug(
         `Failed to clear provider auth caches for ${providerName}:`,
         error,
       );
     }
+  }
+
+  /**
+   * Set session bucket override for a provider
+   * Session state is in-memory only and not persisted
+   */
+  setSessionBucket(provider: string, bucket: string): void {
+    this.sessionBuckets.set(provider, bucket);
+  }
+
+  /**
+   * Get session bucket override for a provider
+   * Returns undefined if no session override set
+   */
+  getSessionBucket(provider: string): string | undefined {
+    return this.sessionBuckets.get(provider);
+  }
+
+  /**
+   * Clear session bucket override for a provider
+   */
+  clearSessionBucket(provider: string): void {
+    this.sessionBuckets.delete(provider);
+  }
+
+  /**
+   * List all buckets for a provider
+   */
+  async listBuckets(provider: string): Promise<string[]> {
+    return this.tokenStore.listBuckets(provider);
+  }
+
+  /**
+   * Logout from all buckets for a provider
+   */
+  async logoutAllBuckets(provider: string): Promise<void> {
+    const buckets = await this.tokenStore.listBuckets(provider);
+    for (const bucket of buckets) {
+      try {
+        await this.logout(provider, bucket);
+      } catch (error) {
+        logger.warn(`Failed to logout from bucket ${bucket}:`, error);
+      }
+    }
+    this.clearSessionBucket(provider);
+  }
+
+  /**
+   * Get authentication status with bucket information
+   */
+  async getAuthStatusWithBuckets(
+    provider: string,
+  ): Promise<
+    Array<{
+      bucket: string;
+      authenticated: boolean;
+      expiry?: number;
+      isSessionBucket: boolean;
+    }>
+  > {
+    const buckets = await this.tokenStore.listBuckets(provider);
+    const sessionBucket = this.sessionBuckets.get(provider);
+    const statuses: Array<{
+      bucket: string;
+      authenticated: boolean;
+      expiry?: number;
+      isSessionBucket: boolean;
+    }> = [];
+
+    for (const bucket of buckets) {
+      const token = await this.tokenStore.getToken(provider, bucket);
+      const isSessionBucket = bucket === sessionBucket;
+
+      if (token) {
+        statuses.push({
+          bucket,
+          authenticated: true,
+          expiry: token.expiry,
+          isSessionBucket,
+        });
+      } else {
+        statuses.push({
+          bucket,
+          authenticated: false,
+          isSessionBucket,
+        });
+      }
+    }
+
+    return statuses;
   }
 }
