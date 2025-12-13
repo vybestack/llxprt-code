@@ -26,6 +26,7 @@ import { createProviderCallOptions } from '../../test-utils/providerCallOptions.
 import { createRuntimeConfigStub } from '../../test-utils/runtime.js';
 import { SettingsService } from '../../settings/SettingsService.js';
 import type { ProviderToolset } from '../IProvider.js';
+import type { IProviderConfig } from '../types/IProviderConfig.js';
 
 // Mock the 'ai' module
 vi.mock('ai', () => ({
@@ -108,6 +109,71 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
 
       expect(results.length).toBeGreaterThan(0);
       expect(mockGenerateText).toHaveBeenCalledOnce();
+    });
+
+    it('uses Qwen OAuth token as the OpenAI-compatible apiKey', async () => {
+      delete process.env.OPENAI_API_KEY;
+
+      const oauthManager = {
+        getToken: vi.fn(async () => 'oauth-token'),
+        isAuthenticated: vi.fn(async () => true),
+        isOAuthEnabled: vi.fn(() => true),
+      };
+
+      const providerConfig = { forceQwenOAuth: true } as IProviderConfig & {
+        forceQwenOAuth: true;
+      };
+      provider = new OpenAIVercelProvider(
+        undefined,
+        'https://portal.qwen.ai/v1',
+        providerConfig,
+        oauthManager,
+      );
+
+      const { generateText } = await import('ai');
+      const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
+      mockGenerateText.mockResolvedValue({
+        text: 'Hello from Qwen OAuth',
+        toolCalls: [],
+        finishReason: 'stop',
+        usage: {
+          promptTokens: 10,
+          completionTokens: 8,
+          totalTokens: 18,
+        },
+      });
+
+      const { createOpenAI } = await import('@ai-sdk/openai');
+      const mockCreateOpenAI = createOpenAI as ReturnType<typeof vi.fn>;
+
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
+
+      const options = createProviderCallOptions({
+        config,
+        contents: messages,
+        settings: settingsService,
+        resolved: {
+          streaming: false,
+        },
+        providerName: 'openaivercel',
+      });
+
+      const iterator = provider.generateChatCompletion(options);
+      await collectResults(iterator);
+
+      expect(oauthManager.getToken).toHaveBeenCalled();
+      expect(oauthManager.getToken.mock.calls[0]?.[0]).toBe('qwen');
+      expect(mockCreateOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: 'oauth-token',
+          baseURL: 'https://portal.qwen.ai/v1',
+        }),
+      );
     });
 
     it('should include text content in the response', async () => {

@@ -25,6 +25,7 @@ import {
 import { AuthenticationError } from './errors.js';
 import { createProviderCallOptions } from '../../test-utils/providerCallOptions.js';
 import { SettingsService } from '../../settings/SettingsService.js';
+import { type IProviderConfig } from '../types/IProviderConfig.js';
 
 describe('OpenAIVercelProvider', () => {
   describe('Provider Registration (REQ-OAV-001)', () => {
@@ -211,9 +212,63 @@ describe('OpenAIVercelProvider', () => {
   });
 
   describe('OAuth Support', () => {
-    it('should not support OAuth', () => {
-      const provider = new OpenAIVercelProvider('test-api-key');
-      // Access protected method via any cast for testing
+    it('supports Qwen OAuth when forced via config', () => {
+      const oauthManager = {
+        getToken: vi.fn(async () => null),
+        isAuthenticated: vi.fn(async () => false),
+      };
+
+      const providerConfig = { forceQwenOAuth: true } as IProviderConfig & {
+        forceQwenOAuth: true;
+      };
+      const provider = new OpenAIVercelProvider(
+        undefined,
+        'https://api.example.com/v1',
+        providerConfig,
+        oauthManager,
+      );
+
+      const supportsOAuth = (
+        provider as unknown as { supportsOAuth: () => boolean }
+      ).supportsOAuth();
+      expect(supportsOAuth).toBe(true);
+
+      const baseProviderConfig = (
+        provider as unknown as {
+          baseProviderConfig?: {
+            isOAuthEnabled?: boolean;
+            oauthProvider?: string;
+          };
+        }
+      ).baseProviderConfig;
+      expect(baseProviderConfig?.isOAuthEnabled).toBe(true);
+      expect(baseProviderConfig?.oauthProvider).toBe('qwen');
+    });
+
+    it('supports Qwen OAuth when the base URL is a Qwen endpoint', () => {
+      const oauthManager = {
+        getToken: vi.fn(async () => null),
+        isAuthenticated: vi.fn(async () => false),
+      };
+
+      const provider = new OpenAIVercelProvider(
+        undefined,
+        'https://portal.qwen.ai/v1',
+        undefined,
+        oauthManager,
+      );
+
+      const supportsOAuth = (
+        provider as unknown as { supportsOAuth: () => boolean }
+      ).supportsOAuth();
+      expect(supportsOAuth).toBe(true);
+    });
+
+    it('does not support OAuth for non-Qwen endpoints by default', () => {
+      const provider = new OpenAIVercelProvider(
+        'test-api-key',
+        'https://api.openai.com/v1',
+      );
       const supportsOAuth = (
         provider as unknown as { supportsOAuth: () => boolean }
       ).supportsOAuth();

@@ -208,15 +208,42 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     const normalizedApiKey =
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;
 
+    const providerConfig = config as IProviderConfig & {
+      forceQwenOAuth?: boolean;
+    };
+    const forceQwenOAuth = Boolean(providerConfig?.forceQwenOAuth);
+
+    let isQwenEndpoint = false;
+    if (baseURL) {
+      try {
+        const hostname = new URL(baseURL).hostname.toLowerCase();
+        isQwenEndpoint =
+          hostname === 'dashscope.aliyuncs.com' ||
+          hostname.endsWith('.dashscope.aliyuncs.com') ||
+          hostname === 'portal.qwen.ai' ||
+          hostname.endsWith('.qwen.ai') ||
+          hostname === 'api.qwen.com' ||
+          hostname.endsWith('.qwen.com');
+      } catch {
+        const lowered = baseURL.toLowerCase();
+        isQwenEndpoint =
+          lowered.includes('dashscope.aliyuncs.com') ||
+          lowered.includes('portal.qwen.ai') ||
+          lowered.includes('qwen.ai') ||
+          lowered.includes('api.qwen.com') ||
+          lowered.includes('qwen.com');
+      }
+    }
+    const shouldEnableQwenOAuth = isQwenEndpoint || forceQwenOAuth;
+
     super(
       {
         name: 'openaivercel',
         apiKey: normalizedApiKey,
         baseURL,
         envKeyNames: ['OPENAI_API_KEY'],
-        // AI SDK-based provider does not use OAuth directly here.
-        isOAuthEnabled: false,
-        oauthProvider: undefined,
+        isOAuthEnabled: shouldEnableQwenOAuth && !!oauthManager,
+        oauthProvider: shouldEnableQwenOAuth ? 'qwen' : undefined,
         oauthManager,
       },
       config,
@@ -224,6 +251,25 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   }
 
   protected override supportsOAuth(): boolean {
+    const providerConfig = this.providerConfig as IProviderConfig & {
+      forceQwenOAuth?: boolean;
+    };
+    if (providerConfig?.forceQwenOAuth) {
+      return true;
+    }
+    if (this.name === 'qwen') {
+      return true;
+    }
+    const baseURL = this.getBaseURL();
+    if (
+      baseURL &&
+      (baseURL.includes('dashscope.aliyuncs.com') ||
+        baseURL.includes('portal.qwen.ai') ||
+        baseURL.includes('api.qwen.com') ||
+        baseURL.includes('qwen'))
+    ) {
+      return true;
+    }
     return false;
   }
 
