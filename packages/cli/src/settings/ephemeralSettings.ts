@@ -75,6 +75,20 @@ export const ephemeralSettingHelp: Record<string, string> = {
     'Maximum token budget the model can use for reasoning (positive integer, default: undefined)',
   'enable-tool-prompts':
     'Load tool-specific prompts from ~/.llxprt/prompts/tools/** (true/false, default: false)',
+
+  // Load balancer advanced failover settings (Phase 3, Issue #489)
+  tpm_threshold:
+    'Minimum tokens per minute before triggering failover (positive integer, load balancer only)',
+  timeout_ms:
+    'Maximum request duration in milliseconds before timeout (positive integer, load balancer only)',
+  circuit_breaker_enabled:
+    'Enable circuit breaker pattern for failing backends (true/false, load balancer only)',
+  circuit_breaker_failure_threshold:
+    'Number of failures before opening circuit (positive integer, default: 3, load balancer only)',
+  circuit_breaker_failure_window_ms:
+    'Time window for counting failures in milliseconds (positive integer, default: 60000, load balancer only)',
+  circuit_breaker_recovery_timeout_ms:
+    'Cooldown period before retrying after circuit opens in milliseconds (positive integer, default: 30000, load balancer only)',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
@@ -421,6 +435,37 @@ export function parseEphemeralSettingValue(
       return {
         success: false,
         message: `enable-tool-prompts must be either 'true' or 'false'`,
+      };
+    }
+  }
+
+  // Load balancer numeric settings (Phase 3, Issue #489)
+  if (
+    key === 'tpm_threshold' ||
+    key === 'timeout_ms' ||
+    key === 'circuit_breaker_failure_threshold' ||
+    key === 'circuit_breaker_failure_window_ms' ||
+    key === 'circuit_breaker_recovery_timeout_ms'
+  ) {
+    const numValue = parsedValue as number;
+    if (
+      typeof numValue !== 'number' ||
+      numValue <= 0 ||
+      !Number.isInteger(numValue)
+    ) {
+      return {
+        success: false,
+        message: `${key} must be a positive integer`,
+      };
+    }
+  }
+
+  // Load balancer boolean settings (Phase 3, Issue #489)
+  if (key === 'circuit_breaker_enabled') {
+    if (typeof parsedValue !== 'boolean') {
+      return {
+        success: false,
+        message: `${key} must be either 'true' or 'false'`,
       };
     }
   }
