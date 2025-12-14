@@ -92,15 +92,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
   /**
    * OAuth is supported in Codex mode
+   * Check baseURL directly to avoid timing issues with instance properties
    * @plan PLAN-20251213-ISSUE160.P03
    */
-
-  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
-  // @requirement:REQ-SP4-002/REQ-SP4-003
-  // Removed stateful conversation cache methods to ensure stateless operation
-
   protected supportsOAuth(): boolean {
-    return this._isCodexMode;
+    // Check baseURL directly - don't rely on _isCodexMode which may not be set yet
+    const baseURL = this.getBaseURL();
+    return this.isCodexMode(baseURL);
   }
 
   /**
