@@ -8,16 +8,29 @@ import {
 } from '@vybestack/opentui-core';
 import { TextRenderable } from '@vybestack/opentui-core';
 
-type SharpModule = typeof import('sharp');
+interface SharpInstance {
+  png: () => SharpInstance;
+  ensureAlpha: () => SharpInstance;
+  raw: () => SharpInstance;
+  toBuffer: () => Promise<Buffer>;
+  metadata: () => Promise<{ width?: number; height?: number }>;
+}
 
-async function getSharp(): Promise<SharpModule> {
+type SharpFactory = (input: unknown) => SharpInstance;
+
+async function getSharp(): Promise<SharpFactory> {
   const sharpModule: unknown = await import('sharp');
   const moduleCandidate = sharpModule as { default?: unknown };
-  return (
+  const sharpExport =
     typeof moduleCandidate.default === 'function'
       ? moduleCandidate.default
-      : sharpModule
-  ) as SharpModule;
+      : sharpModule;
+
+  if (typeof sharpExport !== 'function') {
+    throw new Error('sharp import did not resolve to a callable function');
+  }
+
+  return sharpExport as SharpFactory;
 }
 
 function parseFirstItermImagePayload(writes: string[]): {
@@ -31,21 +44,48 @@ function parseFirstItermImagePayload(writes: string[]): {
   png: Buffer;
 } {
   const output = writes.join('');
-  const match = output.match(
-    /\x1b\[(\d+);(\d+)H\x1b\]1337;File=inline=1;width=(\d+)(px)?;height=(\d+)(px)?;preserveAspectRatio=(\d+):([A-Za-z0-9+/=]+)\x07/,
-  );
-  if (!match) {
+
+  const oscPrefix = '\u001b]1337;File=inline=1;';
+  const oscStart = output.indexOf(oscPrefix);
+  if (oscStart === -1) {
     throw new Error('No iTerm2 inline image sequence found in renderer output');
   }
 
-  const row1 = Number(match[1]);
-  const col1 = Number(match[2]);
-  const width = Number(match[3]);
-  const widthUnit: 'px' | 'cells' = match[4] === 'px' ? 'px' : 'cells';
-  const height = Number(match[5]);
-  const heightUnit: 'px' | 'cells' = match[6] === 'px' ? 'px' : 'cells';
-  const preserveAspectRatio = Number(match[7]);
-  const png = Buffer.from(match[8], 'base64');
+  const belIndex = output.indexOf('\u0007', oscStart);
+  if (belIndex === -1) {
+    throw new Error(
+      'Found iTerm2 image prefix but did not find terminating BEL',
+    );
+  }
+
+  const moveStart = output.lastIndexOf('\u001b[', oscStart);
+  const moveEnd = output.lastIndexOf('H', oscStart);
+  if (moveStart === -1 || moveEnd === -1 || moveStart >= moveEnd) {
+    throw new Error(
+      'Failed to locate cursor movement sequence preceding iTerm2 payload',
+    );
+  }
+
+  const movePayload = output.slice(moveStart + 2, moveEnd);
+  const [rowStr, colStr] = movePayload.split(';');
+  const row1 = Number(rowStr);
+  const col1 = Number(colStr);
+
+  const oscPayload = output.slice(oscStart + 2, belIndex);
+  const oscMatch =
+    /^1337;File=inline=1;width=(\d+)(px)?;height=(\d+)(px)?;preserveAspectRatio=(\d+):([A-Za-z0-9+/=]+)$/.exec(
+      oscPayload,
+    );
+  if (!oscMatch) {
+    throw new Error('Failed to parse iTerm2 inline image payload');
+  }
+
+  const width = Number(oscMatch[1]);
+  const widthUnit: 'px' | 'cells' = oscMatch[2] === 'px' ? 'px' : 'cells';
+  const height = Number(oscMatch[3]);
+  const heightUnit: 'px' | 'cells' = oscMatch[4] === 'px' ? 'px' : 'cells';
+  const preserveAspectRatio = Number(oscMatch[5]);
+  const png = Buffer.from(oscMatch[6], 'base64');
 
   if (
     !Number.isFinite(row1) ||
@@ -139,7 +179,7 @@ async function assertContainPaddingPreservesAlpha(): Promise<void> {
   const meta = await sharp(png).metadata();
   const widthPx = meta.width;
   const heightPx = meta.height;
-  if (!widthPx || !heightPx) {
+  if (widthPx == null || heightPx == null) {
     throw new Error('Failed to read PNG metadata from iTerm2 payload');
   }
   if (widthPx !== expectedWidthPx || heightPx !== expectedHeightPx) {
@@ -263,7 +303,7 @@ async function assertHeaderImagePayloadMatchesLayout(): Promise<void> {
 
   const sharp = await getSharp();
   const meta = await sharp(png).metadata();
-  if (!meta.width || !meta.height) {
+  if (meta.width == null || meta.height == null) {
     throw new Error('Failed to read PNG metadata from iTerm2 payload');
   }
 
@@ -529,9 +569,9 @@ async function assertHeaderLayoutBehavesLikeImg(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const failures: Array<{ name: string; error: string }> = [];
+  const failures: { name: string; error: string }[] = [];
 
-  const tests: Array<{ name: string; run: () => Promise<void> }> = [
+  const tests: { name: string; run: () => Promise<void> }[] = [
     {
       name: 'contain-padding-alpha',
       run: assertContainPaddingPreservesAlpha,
@@ -566,11 +606,13 @@ async function main(): Promise<void> {
   }
 
   if (failures.length > 0) {
-    console.error(JSON.stringify({ ok: false, failures }, null, 2));
+    process.stderr.write(
+      `${JSON.stringify({ ok: false, failures }, null, 2)}\n`,
+    );
     process.exit(1);
   }
 
-  console.log(JSON.stringify({ ok: true }));
+  process.stdout.write(`${JSON.stringify({ ok: true })}\n`);
 }
 
 await main();

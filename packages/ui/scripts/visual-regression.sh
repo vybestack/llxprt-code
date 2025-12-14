@@ -134,6 +134,8 @@ PY
 if [[ "${UPDATE_BASELINE}" -eq 1 ]]; then
   cp "${CROP_PATH}" "${BASELINE_PATH}"
   echo "Updated baseline: ${BASELINE_PATH}"
+  trap - EXIT
+  cleanup
   exit 0
 fi
 
@@ -150,6 +152,8 @@ set -e
 
 if [[ "${STATUS}" -eq 0 ]]; then
   echo "Visual regression passed"
+  trap - EXIT
+  cleanup
   exit 0
 fi
 
@@ -158,4 +162,6 @@ echo "Artifacts:"
 echo "  baseline: ${BASELINE_PATH}"
 echo "  current : ${CROP_PATH}"
 echo "  diff    : ${DIFF_PATH}"
+trap - EXIT
+cleanup
 exit 1
