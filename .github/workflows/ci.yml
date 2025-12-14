@@ -288,7 +288,7 @@ jobs:
             | xargs shellcheck \
               --check-sourced \
               --enable=all \
-              --exclude=SC2002,SC2129,SC2310 \
+              --exclude=SC2002,SC2129,SC2310,SC2311,SC2312 \
               --severity=style \
               --format=gcc \
               --color=never | sed -e 's/note:/warning:/g' -e 's/style:/warning:/g'

@@ -14,8 +14,9 @@ import {
 import type { CodexOAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
 import { OAuthProvider } from './oauth-manager.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
-import type { HistoryItemWithoutId } from '../ui/types.js';
+import type { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
 import { globalOAuthUI } from './global-oauth-ui.js';
+import { ClipboardService } from '../services/ClipboardService.js';
 
 enum InitializationState {
   NotStarted = 'not-started',
@@ -189,16 +190,30 @@ export class CodexOAuthProvider implements OAuthProvider {
       () => `[FLOW] Built auth URL: ${authUrl.substring(0, 80)}...`,
     );
 
-    // Display URL in TUI if available
+    // Display URL in TUI (clickable) if available
+    console.log('\nCodex OAuth Authentication');
+    console.log('─'.repeat(40));
+
+    const historyItem: HistoryItemOAuthURL = {
+      type: 'oauth_url',
+      text: `Please visit the following URL to authenticate with Codex:\n${authUrl}`,
+      url: authUrl,
+    };
     const addItem = this.addItem || globalOAuthUI.getAddItem();
     if (addItem) {
-      addItem(
-        {
-          type: 'info',
-          text: `Please visit this URL to authenticate:\n${authUrl}`,
-        },
-        Date.now(),
-      );
+      addItem(historyItem, Date.now());
+    }
+
+    // Also show plain URL for copying (pastable)
+    console.log('Please visit the following URL to authenticate:');
+    console.log(authUrl);
+
+    // Copy URL to clipboard with error handling
+    try {
+      await ClipboardService.copyToClipboard(authUrl);
+    } catch (error) {
+      // Clipboard copy is non-critical, continue without it
+      this.logger.debug(() => `Failed to copy URL to clipboard: ${error}`);
     }
 
     // Open browser if in interactive mode
