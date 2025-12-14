@@ -482,4 +482,400 @@ describe('MultiProviderTokenStore - Behavioral Tests', () => {
       });
     });
   });
+
+  describe('Bucket Support - Phase 1', () => {
+    const workToken: OAuthToken = {
+      access_token: 'work-access-token',
+      refresh_token: 'work-refresh-token',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      scope: 'work-scope',
+      token_type: 'Bearer' as const,
+    };
+
+    const personalToken: OAuthToken = {
+      access_token: 'personal-access-token',
+      refresh_token: 'personal-refresh-token',
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+      scope: 'personal-scope',
+      token_type: 'Bearer' as const,
+    };
+
+    /**
+     * @requirement REQ-490.1 - Bucket Storage
+     * @scenario Save token to named bucket
+     * @given Empty token store
+     * @when saveToken('anthropic', token, 'work@company.com') is called
+     * @then Token is saved to anthropic-work@company.com.json
+     */
+    it('should save token to named bucket with correct filename pattern', async () => {
+      await tokenStore.saveToken('anthropic', workToken, 'work@company.com');
+
+      const tokenPath = join(
+        tempDir,
+        '.llxprt',
+        'oauth',
+        'anthropic-work@company.com.json',
+      );
+      await fs.access(tokenPath); // File exists
+      const content = JSON.parse(await fs.readFile(tokenPath, 'utf8'));
+      expect(content).toEqual(workToken);
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Storage
+     * @scenario Retrieve token from named bucket
+     * @given Token saved in named bucket
+     * @when getToken('anthropic', 'work@company.com') is called
+     * @then Returns correct token from that bucket
+     */
+    it('should retrieve token from named bucket', async () => {
+      await tokenStore.saveToken('anthropic', workToken, 'work@company.com');
+      const retrieved = await tokenStore.getToken(
+        'anthropic',
+        'work@company.com',
+      );
+      expect(retrieved).toEqual(workToken);
+      expect(retrieved?.access_token).toBe('work-access-token');
+    });
+
+    /**
+     * @requirement REQ-490.1 - Backward Compatibility
+     * @scenario Save token to default bucket
+     * @given Empty token store
+     * @when saveToken('anthropic', token) is called without bucket
+     * @then Token is saved to anthropic.json (default bucket)
+     */
+    it('should use default bucket when bucket parameter is undefined', async () => {
+      await tokenStore.saveToken('anthropic', workToken);
+
+      const tokenPath = join(tempDir, '.llxprt', 'oauth', 'anthropic.json');
+      await fs.access(tokenPath);
+      const content = JSON.parse(await fs.readFile(tokenPath, 'utf8'));
+      expect(content).toEqual(workToken);
+    });
+
+    /**
+     * @requirement REQ-490.1 - Backward Compatibility
+     * @scenario Get token from default bucket
+     * @given Token saved without bucket parameter
+     * @when getToken('anthropic') is called
+     * @then Returns token from default bucket
+     */
+    it('should retrieve from default bucket when bucket parameter is undefined', async () => {
+      await tokenStore.saveToken('anthropic', workToken);
+      const retrieved = await tokenStore.getToken('anthropic');
+      expect(retrieved).toEqual(workToken);
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Storage
+     * @scenario Explicit default bucket
+     * @given Empty token store
+     * @when saveToken('anthropic', token, 'default') is called
+     * @then Token is saved to anthropic.json (not anthropic-default.json)
+     */
+    it('should use default bucket when bucket is explicitly "default"', async () => {
+      await tokenStore.saveToken('anthropic', workToken, 'default');
+
+      const defaultPath = join(tempDir, '.llxprt', 'oauth', 'anthropic.json');
+      const namedPath = join(
+        tempDir,
+        '.llxprt',
+        'oauth',
+        'anthropic-default.json',
+      );
+
+      await fs.access(defaultPath); // Should exist
+      await expect(fs.access(namedPath)).rejects.toThrow(); // Should NOT exist
+
+      const content = JSON.parse(await fs.readFile(defaultPath, 'utf8'));
+      expect(content).toEqual(workToken);
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Listing
+     * @scenario List all buckets for a provider
+     * @given Multiple buckets for anthropic provider
+     * @when listBuckets('anthropic') is called
+     * @then Returns array of bucket names including default
+     */
+    it('should list all buckets for a provider', async () => {
+      await tokenStore.saveToken('anthropic', workToken, 'default');
+      await tokenStore.saveToken(
+        'anthropic',
+        personalToken,
+        'work@company.com',
+      );
+      await tokenStore.saveToken('anthropic', workToken, 'personal@gmail.com');
+
+      const buckets = await tokenStore.listBuckets('anthropic');
+      expect(buckets).toHaveLength(3);
+      expect(buckets).toContain('default');
+      expect(buckets).toContain('work@company.com');
+      expect(buckets).toContain('personal@gmail.com');
+      expect(buckets).toEqual(
+        expect.arrayContaining([
+          'default',
+          'personal@gmail.com',
+          'work@company.com',
+        ]),
+      );
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Listing
+     * @scenario List buckets when only default exists
+     * @given Only default bucket exists
+     * @when listBuckets('anthropic') is called
+     * @then Returns ['default']
+     */
+    it('should return default in list when only default bucket exists', async () => {
+      await tokenStore.saveToken('anthropic', workToken);
+      const buckets = await tokenStore.listBuckets('anthropic');
+      expect(buckets).toEqual(['default']);
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Listing
+     * @scenario List buckets for non-existent provider
+     * @given No buckets exist for provider
+     * @when listBuckets('nonexistent') is called
+     * @then Returns empty array
+     */
+    it('should return empty array when no buckets exist for provider', async () => {
+      const buckets = await tokenStore.listBuckets('nonexistent');
+      expect(buckets).toEqual([]);
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Isolation
+     * @scenario Provider bucket isolation
+     * @given Buckets for multiple providers
+     * @when listBuckets is called for one provider
+     * @then Returns only that provider's buckets
+     */
+    it('should not include other providers buckets in listing', async () => {
+      await tokenStore.saveToken('anthropic', workToken, 'work@company.com');
+      await tokenStore.saveToken('gemini', personalToken, 'work@company.com');
+      await tokenStore.saveToken('qwen', workToken, 'personal@gmail.com');
+
+      const anthropicBuckets = await tokenStore.listBuckets('anthropic');
+      const geminiBuckets = await tokenStore.listBuckets('gemini');
+
+      expect(anthropicBuckets).toEqual(['work@company.com']);
+      expect(geminiBuckets).toEqual(['work@company.com']);
+      expect(anthropicBuckets).not.toContain('personal@gmail.com');
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Isolation
+     * @scenario Bucket isolation across providers
+     * @given Same bucket name for different providers
+     * @when tokens are saved and retrieved
+     * @then Each provider's bucket is completely isolated
+     */
+    it('should maintain isolation between providers with same bucket name', async () => {
+      await tokenStore.saveToken('anthropic', workToken, 'work@company.com');
+      await tokenStore.saveToken('gemini', personalToken, 'work@company.com');
+
+      const anthropicToken = await tokenStore.getToken(
+        'anthropic',
+        'work@company.com',
+      );
+      const geminiToken = await tokenStore.getToken(
+        'gemini',
+        'work@company.com',
+      );
+
+      expect(anthropicToken).toEqual(workToken);
+      expect(geminiToken).toEqual(personalToken);
+      expect(anthropicToken?.access_token).not.toBe(geminiToken?.access_token);
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Deletion
+     * @scenario Delete token from specific bucket
+     * @given Multiple buckets exist
+     * @when removeToken('anthropic', 'work@company.com') is called
+     * @then Only that bucket is removed, others remain
+     */
+    it('should remove token from specific bucket only', async () => {
+      await tokenStore.saveToken('anthropic', workToken, 'work@company.com');
+      await tokenStore.saveToken(
+        'anthropic',
+        personalToken,
+        'personal@gmail.com',
+      );
+
+      await tokenStore.removeToken('anthropic', 'work@company.com');
+
+      const workTokenRetrieved = await tokenStore.getToken(
+        'anthropic',
+        'work@company.com',
+      );
+      const personalTokenRetrieved = await tokenStore.getToken(
+        'anthropic',
+        'personal@gmail.com',
+      );
+
+      expect(workTokenRetrieved).toBeNull();
+      expect(personalTokenRetrieved).toEqual(personalToken);
+
+      const buckets = await tokenStore.listBuckets('anthropic');
+      expect(buckets).toEqual(['personal@gmail.com']);
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Deletion
+     * @scenario Delete default bucket
+     * @given Default bucket exists
+     * @when removeToken('anthropic') is called without bucket
+     * @then Default bucket is removed
+     */
+    it('should delete default bucket when no bucket parameter provided', async () => {
+      await tokenStore.saveToken('anthropic', workToken);
+      await tokenStore.removeToken('anthropic');
+
+      const retrieved = await tokenStore.getToken('anthropic');
+      expect(retrieved).toBeNull();
+
+      const buckets = await tokenStore.listBuckets('anthropic');
+      expect(buckets).toEqual([]);
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Name Validation
+     * @scenario Reject invalid bucket names
+     * @given Invalid bucket name characters
+     * @when saveToken is called with invalid bucket name
+     * @then Throws error with validation message
+     */
+    it('should reject bucket names with filesystem-unsafe characters', async () => {
+      const invalidBucketNames = [
+        'bucket:name', // colon
+        'bucket/name', // forward slash
+        'bucket\\name', // backslash
+        'bucket<name', // less than
+        'bucket>name', // greater than
+        'bucket"name', // quote
+        'bucket|name', // pipe
+        'bucket?name', // question mark
+        'bucket*name', // asterisk
+      ];
+
+      for (const bucketName of invalidBucketNames) {
+        await expect(
+          tokenStore.saveToken('anthropic', workToken, bucketName),
+        ).rejects.toThrow();
+      }
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Name Validation
+     * @scenario Accept valid bucket names
+     * @given Valid bucket name patterns
+     * @when saveToken is called
+     * @then Tokens are saved successfully
+     */
+    it('should accept valid bucket names including emails and alphanumeric', async () => {
+      const validBucketNames = [
+        'work@company.com',
+        'personal@gmail.com',
+        'bucket-with-hyphens',
+        'bucket_with_underscores',
+        'bucket.with.dots',
+        'simple123',
+      ];
+
+      for (const bucketName of validBucketNames) {
+        await tokenStore.saveToken('anthropic', workToken, bucketName);
+        const retrieved = await tokenStore.getToken('anthropic', bucketName);
+        expect(retrieved).toEqual(workToken);
+      }
+    });
+
+    /**
+     * @requirement REQ-490.1 - File Permissions
+     * @scenario Bucket files have secure permissions
+     * @given Named bucket token saved
+     * @when file is created
+     * @then File has 0600 permissions
+     */
+    it.skipIf(process.platform === 'win32')(
+      'should create bucket files with 0600 permissions',
+      async () => {
+        await tokenStore.saveToken('anthropic', workToken, 'work@company.com');
+
+        const tokenPath = join(
+          tempDir,
+          '.llxprt',
+          'oauth',
+          'anthropic-work@company.com.json',
+        );
+        const stats = await fs.stat(tokenPath);
+        expect(stats.mode & 0o777).toBe(0o600);
+      },
+    );
+
+    /**
+     * @requirement REQ-490.1 - Backward Compatibility
+     * @scenario Existing anthropic.json works as default
+     * @given Pre-existing anthropic.json file
+     * @when getToken('anthropic') is called
+     * @then Returns token from anthropic.json
+     */
+    it('should read existing provider.json files as default bucket', async () => {
+      // Simulate pre-existing file (before bucket feature)
+      const legacyPath = join(tempDir, '.llxprt', 'oauth', 'anthropic.json');
+      await fs.mkdir(join(tempDir, '.llxprt', 'oauth'), { recursive: true });
+      await fs.writeFile(legacyPath, JSON.stringify(workToken), {
+        mode: 0o600,
+      });
+
+      const retrieved = await tokenStore.getToken('anthropic');
+      expect(retrieved).toEqual(workToken);
+
+      const buckets = await tokenStore.listBuckets('anthropic');
+      expect(buckets).toContain('default');
+    });
+
+    /**
+     * @requirement REQ-490.1 - Bucket Isolation
+     * @scenario Multiple buckets maintain separate tokens
+     * @given Different tokens in different buckets
+     * @when tokens are updated independently
+     * @then Each bucket maintains its own token
+     */
+    it('should maintain isolation when updating tokens in different buckets', async () => {
+      await tokenStore.saveToken('anthropic', workToken, 'work@company.com');
+      await tokenStore.saveToken(
+        'anthropic',
+        personalToken,
+        'personal@gmail.com',
+      );
+
+      const updatedWorkToken: OAuthToken = {
+        ...workToken,
+        access_token: 'updated-work-token',
+      };
+
+      await tokenStore.saveToken(
+        'anthropic',
+        updatedWorkToken,
+        'work@company.com',
+      );
+
+      const workRetrieved = await tokenStore.getToken(
+        'anthropic',
+        'work@company.com',
+      );
+      const personalRetrieved = await tokenStore.getToken(
+        'anthropic',
+        'personal@gmail.com',
+      );
+
+      expect(workRetrieved?.access_token).toBe('updated-work-token');
+      expect(personalRetrieved?.access_token).toBe('personal-access-token');
+    });
+  });
 });

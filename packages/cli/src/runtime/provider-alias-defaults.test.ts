@@ -223,6 +223,8 @@ const mockOAuthManager = {
   isOAuthEnabled: vi.fn(() => false),
   toggleOAuthEnabled: vi.fn(),
   authenticate: vi.fn(),
+  setMessageBus: vi.fn(),
+  setConfigGetter: vi.fn(),
 } as never;
 
 describe('Provider alias defaults (model + ephemerals)', () => {

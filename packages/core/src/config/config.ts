@@ -249,6 +249,33 @@ export interface ActiveExtension {
   version: string;
 }
 
+/**
+ * Handler for bucket failover on rate limit/quota errors
+ * @plan PLAN-20251213issue490
+ */
+export interface BucketFailoverHandler {
+  /**
+   * Get the list of available buckets
+   */
+  getBuckets(): string[];
+
+  /**
+   * Get the currently active bucket
+   */
+  getCurrentBucket(): string | undefined;
+
+  /**
+   * Try to failover to the next bucket
+   * @returns true if successfully switched to a new bucket, false if no more buckets
+   */
+  tryFailover(): Promise<boolean>;
+
+  /**
+   * Check if bucket failover is enabled
+   */
+  isEnabled(): boolean;
+}
+
 export interface ConfigParameters {
   sessionId: string;
   embeddingModel?: string;
@@ -391,6 +418,7 @@ export class Config {
   private profileManager?: ProfileManager;
   private subagentManager?: SubagentManager;
   private subagentSchedulerFactory?: SubagentSchedulerFactory;
+  private bucketFailoverHandler?: BucketFailoverHandler;
 
   // Track all potential tools for settings UI
   private allPotentialTools: Array<{
@@ -425,6 +453,22 @@ export class Config {
 
   getSubagentManager(): SubagentManager | undefined {
     return this.subagentManager;
+  }
+
+  /**
+   * Set the bucket failover handler for rate limit/quota error handling
+   * @plan PLAN-20251213issue490
+   */
+  setBucketFailoverHandler(handler: BucketFailoverHandler | undefined): void {
+    this.bucketFailoverHandler = handler;
+  }
+
+  /**
+   * Get the bucket failover handler
+   * @plan PLAN-20251213issue490
+   */
+  getBucketFailoverHandler(): BucketFailoverHandler | undefined {
+    return this.bucketFailoverHandler;
   }
 
   setInteractiveSubagentSchedulerFactory(

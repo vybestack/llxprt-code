@@ -4,6 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { z } from 'zod';
+
+/**
+ * OAuth bucket authentication configuration
+ * @plan PLAN-20251213issue490 Phase 1
+ */
+export interface AuthConfig {
+  type: 'oauth' | 'apikey';
+  buckets?: string[];
+}
+
+/**
+ * Zod schema for AuthConfig validation
+ * @plan PLAN-20251213issue490 Phase 1
+ */
+export const AuthConfigSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('oauth'),
+    buckets: z.array(z.string()).optional(),
+  }),
+  z
+    .object({
+      type: z.literal('apikey'),
+    })
+    .strict(),
+]);
+
 /**
  * Parameters that are sent directly to the model API
  */
@@ -145,6 +172,8 @@ export interface StandardProfile {
   ephemeralSettings: EphemeralSettings;
   /** Load balancer configuration (NEW ARCHITECTURE - optional) */
   loadBalancer?: LoadBalancerConfig;
+  /** OAuth bucket authentication configuration (optional) */
+  auth?: AuthConfig;
 }
 
 /**
@@ -190,4 +219,20 @@ export function isStandardProfile(
   profile: Profile,
 ): profile is StandardProfile {
   return profile.type !== 'loadbalancer';
+}
+
+/**
+ * Type guard to check if a profile has auth configuration
+ * @plan PLAN-20251213issue490 Phase 1
+ */
+export function hasAuthConfig(profile: Profile): boolean {
+  return isStandardProfile(profile) && profile.auth !== undefined;
+}
+
+/**
+ * Type guard to check if a profile is OAuth-based
+ * @plan PLAN-20251213issue490 Phase 1
+ */
+export function isOAuthProfile(profile: Profile): boolean {
+  return isStandardProfile(profile) && profile.auth?.type === 'oauth';
 }

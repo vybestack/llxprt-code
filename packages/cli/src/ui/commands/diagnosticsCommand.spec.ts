@@ -26,6 +26,29 @@ function createTestToken(expiryInSeconds: number): OAuthToken {
   };
 }
 
+function createMockTokenStore(providers: Record<string, OAuthToken | null>): {
+  listBuckets: ReturnType<typeof vi.fn>;
+  getToken: ReturnType<typeof vi.fn>;
+  saveToken: ReturnType<typeof vi.fn>;
+  removeToken: ReturnType<typeof vi.fn>;
+  listProviders: ReturnType<typeof vi.fn>;
+  getBucketStats: ReturnType<typeof vi.fn>;
+} {
+  return {
+    listBuckets: vi.fn(async (provider: string) => {
+      const token = providers[provider];
+      return token ? ['default'] : [];
+    }),
+    getToken: vi.fn(async (provider: string) => providers[provider] || null),
+    saveToken: vi.fn(),
+    removeToken: vi.fn(),
+    listProviders: vi.fn(async () =>
+      Object.keys(providers).filter((p) => providers[p]),
+    ),
+    getBucketStats: vi.fn(async () => null),
+  };
+}
+
 function createMCPCredentials(
   serverName: string,
   expiresAt?: number,
@@ -135,10 +158,20 @@ describe('diagnosticsCommand OAuth token display', () => {
       const expiryInSeconds = 7200; // 2 hours
       const mockToken = createTestToken(expiryInSeconds);
 
+      const mockTokenStore = {
+        listBuckets: vi.fn(async () => ['default']),
+        getToken: vi.fn(async () => mockToken),
+        saveToken: vi.fn(),
+        removeToken: vi.fn(),
+        listProviders: vi.fn(async () => ['github']),
+        getBucketStats: vi.fn(async () => null),
+      };
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github']),
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
+        getTokenStore: vi.fn(() => mockTokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -172,10 +205,20 @@ describe('diagnosticsCommand OAuth token display', () => {
       const expiryInSeconds = 2700; // 45 minutes
       const mockToken = createTestToken(expiryInSeconds);
 
+      const mockTokenStore = {
+        listBuckets: vi.fn(async () => ['default']),
+        getToken: vi.fn(async () => mockToken),
+        saveToken: vi.fn(),
+        removeToken: vi.fn(),
+        listProviders: vi.fn(async () => ['github']),
+        getBucketStats: vi.fn(async () => null),
+      };
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github']),
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
+        getTokenStore: vi.fn(() => mockTokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -204,10 +247,20 @@ describe('diagnosticsCommand OAuth token display', () => {
     });
 
     it('displays provider as not authenticated when no token', async () => {
+      const mockTokenStore = {
+        listBuckets: vi.fn(async () => []),
+        getToken: vi.fn(async () => null),
+        saveToken: vi.fn(),
+        removeToken: vi.fn(),
+        listProviders: vi.fn(async () => []),
+        getBucketStats: vi.fn(async () => null),
+      };
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github']),
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
+        getTokenStore: vi.fn(() => mockTokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -232,11 +285,26 @@ describe('diagnosticsCommand OAuth token display', () => {
       expect(result?.type).toBe('message');
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('info');
-      expect(messageResult.content).toContain('github: Not authenticated');
+      // With bucket implementation, providers with no buckets are not shown
+      expect(messageResult.content).not.toContain('github:');
+      expect(messageResult.content).not.toContain('Provider Tokens');
     });
 
     it('displays multiple providers with mixed authentication states', async () => {
       const authenticatedToken = createTestToken(3600); // 1 hour
+
+      const mockTokenStore = {
+        listBuckets: vi.fn(async (provider: string) =>
+          provider === 'github' ? ['default'] : [],
+        ),
+        getToken: vi.fn(async (provider: string) =>
+          provider === 'github' ? authenticatedToken : null,
+        ),
+        saveToken: vi.fn(),
+        removeToken: vi.fn(),
+        listProviders: vi.fn(async () => ['github']),
+        getBucketStats: vi.fn(async () => null),
+      };
 
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github', 'gitlab']),
@@ -246,6 +314,7 @@ describe('diagnosticsCommand OAuth token display', () => {
         peekStoredToken: vi.fn(async (provider: string) =>
           provider === 'github' ? authenticatedToken : null,
         ),
+        getTokenStore: vi.fn(() => mockTokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -272,7 +341,8 @@ describe('diagnosticsCommand OAuth token display', () => {
       expect(messageResult.messageType).toBe('info');
       expect(messageResult.content).toContain('github:');
       expect(messageResult.content).toContain('Status: Authenticated');
-      expect(messageResult.content).toContain('gitlab: Not authenticated');
+      // With bucket implementation, gitlab with no buckets is not shown
+      expect(messageResult.content).not.toContain('gitlab:');
     });
 
     it('handles provider with token but no refresh token', async () => {
@@ -283,10 +353,20 @@ describe('diagnosticsCommand OAuth token display', () => {
         scope: 'read',
       };
 
+      const mockTokenStore = {
+        listBuckets: vi.fn(async () => ['default']),
+        getToken: vi.fn(async () => mockToken),
+        saveToken: vi.fn(),
+        removeToken: vi.fn(),
+        listProviders: vi.fn(async () => ['github']),
+        getBucketStats: vi.fn(async () => null),
+      };
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github']),
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
+        getTokenStore: vi.fn(() => mockTokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -515,10 +595,13 @@ describe('diagnosticsCommand OAuth token display', () => {
       const credentials = createMCPCredentials('mcp-server', mcpExpiresAt);
       mockTokenStore.set('mcp-server', credentials);
 
+      const tokenStore = createMockTokenStore({ github: providerToken });
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github']),
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => providerToken),
+        getTokenStore: vi.fn(() => tokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -550,10 +633,13 @@ describe('diagnosticsCommand OAuth token display', () => {
     });
 
     it('displays no tokens message when neither exists', async () => {
+      const tokenStore = createMockTokenStore({});
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => []),
         isAuthenticated: vi.fn(async () => false),
         peekStoredToken: vi.fn(async () => null),
+        getTokenStore: vi.fn(() => tokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -586,10 +672,13 @@ describe('diagnosticsCommand OAuth token display', () => {
     it('displays only provider tokens when no MCP tokens', async () => {
       const providerToken = createTestToken(3600);
 
+      const tokenStore = createMockTokenStore({ github: providerToken });
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github']),
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => providerToken),
+        getTokenStore: vi.fn(() => tokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -662,10 +751,13 @@ describe('diagnosticsCommand OAuth token display', () => {
     it('correctly calculates time for token expiring in exactly 1 hour', async () => {
       const mockToken = createTestToken(3600); // Exactly 1 hour
 
+      const tokenStore = createMockTokenStore({ github: mockToken });
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github']),
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
+        getTokenStore: vi.fn(() => tokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -696,10 +788,13 @@ describe('diagnosticsCommand OAuth token display', () => {
     it('correctly handles token expiring in less than 1 minute', async () => {
       const mockToken = createTestToken(30); // 30 seconds
 
+      const tokenStore = createMockTokenStore({ github: mockToken });
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github']),
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
+        getTokenStore: vi.fn(() => tokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -730,10 +825,13 @@ describe('diagnosticsCommand OAuth token display', () => {
     it('prevents negative time display for expired tokens', async () => {
       const mockToken = createTestToken(-3600); // Expired 1 hour ago
 
+      const tokenStore = createMockTokenStore({ github: mockToken });
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github']),
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
+        getTokenStore: vi.fn(() => tokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
@@ -764,10 +862,13 @@ describe('diagnosticsCommand OAuth token display', () => {
     it('correctly floors fractional minutes', async () => {
       const mockToken = createTestToken(2730); // 45.5 minutes
 
+      const tokenStore = createMockTokenStore({ github: mockToken });
+
       const mockOAuthManager = {
         getSupportedProviders: vi.fn(() => ['github']),
         isAuthenticated: vi.fn(async () => true),
         peekStoredToken: vi.fn(async () => mockToken),
+        getTokenStore: vi.fn(() => tokenStore),
       };
 
       runtimeMocks.getRuntimeApiMock.mockReturnValue({
