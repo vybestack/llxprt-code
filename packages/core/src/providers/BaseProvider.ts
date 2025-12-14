@@ -56,6 +56,8 @@ export interface BaseProviderConfig {
   isOAuthEnabled?: boolean;
   oauthProvider?: string;
   oauthManager?: OAuthManager;
+  // Override for supportsOAuth when method can't be used in constructor
+  supportsOAuth?: boolean;
 }
 
 export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
@@ -135,7 +137,8 @@ export abstract class BaseProvider implements IProvider {
       apiKey: config.apiKey,
       envKeyNames: config.envKeyNames || [],
       isOAuthEnabled: config.isOAuthEnabled ?? false,
-      supportsOAuth: this.supportsOAuth(),
+      // Use supportsOAuth from config if provided (for cases where method can't be used in constructor)
+      supportsOAuth: config.supportsOAuth ?? this.supportsOAuth(),
       oauthProvider: config.oauthProvider,
       providerId: this.name,
     };

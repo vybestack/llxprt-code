@@ -75,6 +75,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
       isOAuthEnabled: isCodex && !!oauthManager,
       oauthProvider: isCodex ? 'codex' : undefined,
       oauthManager: isCodex ? oauthManager : undefined,
+      // Must set supportsOAuth here because supportsOAuth() is called in super()
+      // before _isCodexMode is set
+      supportsOAuth: isCodex,
     };
 
     super(baseConfig, config);
