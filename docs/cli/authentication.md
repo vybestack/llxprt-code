@@ -172,3 +172,114 @@ following authentication methods if available:
       - Ensure the `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` environment variables are set.
 
 If none of these environment variables are set in a non-interactive session, the CLI will exit with an error.
+
+## Multi-Provider Authentication
+
+LLxprt Code supports authentication with multiple AI providers beyond Google. Use the `/auth` command to manage OAuth authentication for providers that support it.
+
+### The `/auth` Command
+
+```bash
+/auth <provider> <action> [bucket-name]
+```
+
+**Providers:** `anthropic`, `gemini`, `qwen`, and others
+
+**Actions:**
+
+- `login [bucket]` - Authenticate with the provider (optionally to a named bucket)
+- `logout [bucket|--all]` - Remove authentication
+- `status` - Show all authenticated buckets and their status
+- `switch <bucket>` - Switch to a different bucket
+
+### OAuth Buckets
+
+OAuth buckets let you manage multiple authentication contexts per provider. This is useful when you have multiple accounts or API credentials for the same provider.
+
+**Creating buckets:**
+
+```bash
+# Default bucket (no name)
+/auth anthropic login
+
+# Named buckets
+/auth anthropic login work@company.com
+/auth anthropic login personal@gmail.com
+```
+
+**Viewing buckets:**
+
+```bash
+/auth anthropic status
+```
+
+Shows all buckets with their authentication status and token expiry.
+
+**Switching buckets:**
+
+```bash
+/auth anthropic switch work@company.com
+```
+
+**Logging out:**
+
+```bash
+# Logout from specific bucket
+/auth anthropic logout work@company.com
+
+# Logout from all buckets
+/auth anthropic logout --all
+```
+
+### Using Buckets with Profiles
+
+Buckets are most powerful when combined with profiles. You can save a profile that uses specific buckets:
+
+```bash
+# Single bucket
+/profile save model work-profile work@company.com
+
+# Multiple buckets (automatic failover on rate limits)
+/profile save model ha-profile bucket1 bucket2 bucket3
+```
+
+When a profile has multiple buckets, LLxprt Code automatically fails over to the next bucket when encountering rate limits (429) or quota errors (402).
+
+For more details, see [Profiles](./profiles.md).
+
+### Viewing Bucket Statistics
+
+```bash
+/stats buckets
+```
+
+Shows request counts and last-used timestamps for all OAuth buckets across providers.
+
+## API Key Authentication
+
+For providers that use API keys instead of OAuth, you can use environment variables or the `/key` and `/keyfile` commands:
+
+**Environment variables:**
+
+```bash
+export OPENAI_API_KEY="your-key"
+export ANTHROPIC_API_KEY="your-key"
+```
+
+**In-session commands:**
+
+```bash
+/key <api-key>
+/keyfile /path/to/keyfile
+```
+
+These commands set the API key for the current provider. The key is not persisted between sessions unless saved in a profile.
+
+## Authentication Priority
+
+When multiple authentication methods are available, LLxprt Code uses this priority:
+
+1. CLI flags (`--key`, `--keyfile`)
+2. Profile settings (if a profile is loaded)
+3. OAuth tokens (from `/auth login`)
+4. Environment variables

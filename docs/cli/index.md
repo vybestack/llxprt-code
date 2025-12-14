@@ -4,8 +4,9 @@ Within LLxprt Code, `packages/cli` is the frontend for users to send and receive
 
 ## Navigating this section
 
-- **[Authentication](./authentication.md):** A guide to setting up authentication with Google's AI services.
+- **[Authentication](./authentication.md):** A guide to setting up authentication with AI providers, including OAuth buckets.
 - **[Commands](./commands.md):** A reference for LLxprt Code commands (e.g., `/help`, `/tools`, `/theme`).
+- **[Profiles](./profiles.md):** Save and manage configuration profiles, load balancing, and OAuth bucket failover.
 - **[Configuration](./configuration.md):** A guide to tailoring LLxprt Code behavior using configuration files.
 - **[Runtime helper APIs](./runtime-helpers.md):** Reference for the CLI runtime helper surface that powers provider switching, profiles, and diagnostics.
 - **[Enterprise](./enterprise.md):** A guide to enterprise configuration.
