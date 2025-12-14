@@ -20,8 +20,9 @@ const CODEX_CONFIG = {
   clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
   issuer: 'https://auth.openai.com',
   tokenEndpoint: 'https://auth.openai.com/oauth/token',
-  authorizationEndpoint: 'https://auth.openai.com/authorize',
+  authorizationEndpoint: 'https://auth.openai.com/oauth/authorize',
   scopes: ['openid', 'profile', 'email', 'offline_access'],
+  originator: 'codex_cli_rs',
 } as const;
 
 /**
@@ -60,14 +61,18 @@ export class CodexDeviceFlow {
     const { challenge } = this.generatePKCE();
     // Manually construct query string to use %20 for spaces (not +)
     // This ensures proper parsing with decodeURIComponent
+    // Include all required params per shell-scripts/codex-oauth.sh
     const params = [
+      `response_type=code`,
       `client_id=${encodeURIComponent(CODEX_CONFIG.clientId)}`,
       `redirect_uri=${encodeURIComponent(redirectUri)}`,
-      `response_type=code`,
       `scope=${encodeURIComponent(CODEX_CONFIG.scopes.join(' '))}`,
-      `state=${encodeURIComponent(state)}`,
       `code_challenge=${encodeURIComponent(challenge)}`,
       `code_challenge_method=S256`,
+      `id_token_add_organizations=true`,
+      `codex_cli_simplified_flow=true`,
+      `state=${encodeURIComponent(state)}`,
+      `originator=${encodeURIComponent(CODEX_CONFIG.originator)}`,
     ].join('&');
     this.logger.debug(() => 'Built authorization URL with PKCE S256');
     return `${CODEX_CONFIG.authorizationEndpoint}?${params}`;

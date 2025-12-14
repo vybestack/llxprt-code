@@ -94,7 +94,8 @@ export class CodexOAuthProvider implements OAuthProvider {
       this.logger.debug(() => `Primary port busy, using fallback port ${port}`);
     }
 
-    const redirectUri = `http://127.0.0.1:${port}/callback`;
+    // Use localhost and /auth/callback path per shell-scripts/codex-oauth.sh
+    const redirectUri = `http://localhost:${port}/auth/callback`;
     const authUrl = this.deviceFlow.buildAuthorizationUrl(redirectUri, state);
 
     // Display URL in TUI if available
