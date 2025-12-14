@@ -77,6 +77,13 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push(`- Current Profile: ${snapshot.profileName ?? 'none'}`);
       diagnostics.push(`- API Key: unavailable via runtime helpers`);
 
+      // Show current OAuth bucket
+      const oauthMgr = context.services.oauthManager;
+      if (oauthMgr && snapshot.providerName) {
+        const sessionBucket = oauthMgr.getSessionBucket(snapshot.providerName);
+        diagnostics.push(`- OAuth Bucket: ${sessionBucket ?? 'default'}`);
+      }
+
       // Check for load balancer stats
       // NEW ARCHITECTURE: Get stats from LoadBalancingProvider directly
       const runtimeApi = getRuntimeApi();
@@ -302,15 +309,32 @@ export const diagnosticsCommand: SlashCommand = {
           if (supportedProviders.length > 0) {
             diagnostics.push('### Provider Tokens');
 
-            for (const provider of supportedProviders) {
-              const isAuthenticated =
-                await oauthManager.isAuthenticated(provider);
+            const tokenStore = oauthManager.getTokenStore();
 
-              if (isAuthenticated) {
-                const token = await oauthManager.peekStoredToken(provider);
+            for (const provider of supportedProviders) {
+              let buckets: string[] = [];
+
+              try {
+                buckets = await tokenStore.listBuckets(provider);
+              } catch (error) {
+                logger.debug(
+                  () =>
+                    `[diagnostics] Failed to list buckets for ${provider}: ${error}`,
+                );
+              }
+
+              if (buckets.length === 0) {
+                continue;
+              }
+
+              hasProviderTokens = true;
+              diagnostics.push(`- ${provider}:`);
+              diagnostics.push(`  - Buckets: ${buckets.length}`);
+
+              for (const bucket of buckets) {
+                const token = await tokenStore.getToken(provider, bucket);
 
                 if (token && typeof token.expiry === 'number') {
-                  hasProviderTokens = true;
                   const expiryDate = new Date(token.expiry * 1000);
                   const timeUntilExpiry = Math.max(
                     0,
@@ -318,18 +342,20 @@ export const diagnosticsCommand: SlashCommand = {
                   );
                   const hours = Math.floor(timeUntilExpiry / 3600);
                   const minutes = Math.floor((timeUntilExpiry % 3600) / 60);
+                  const isExpired = token.expiry < Date.now() / 1000;
 
-                  diagnostics.push(`- ${provider}:`);
-                  diagnostics.push(`  - Status: Authenticated`);
-                  diagnostics.push(`  - Expires: ${expiryDate.toISOString()}`);
-                  diagnostics.push(`  - Time Remaining: ${hours}h ${minutes}m`);
+                  diagnostics.push(`  - ${bucket}:`);
                   diagnostics.push(
-                    `  - Refresh Token: ${token.refresh_token ? 'Available' : 'None'}`,
+                    `    - Status: ${isExpired ? 'Expired' : 'Authenticated'}`,
+                  );
+                  diagnostics.push(`    - Expires: ${expiryDate.toISOString()}`);
+                  diagnostics.push(
+                    `    - Time Remaining: ${hours}h ${minutes}m`,
+                  );
+                  diagnostics.push(
+                    `    - Refresh Token: ${token.refresh_token ? 'Available' : 'None'}`,
                   );
                 }
-              } else {
-                hasProviderTokens = true;
-                diagnostics.push(`- ${provider}: Not authenticated`);
               }
             }
           }
