@@ -329,12 +329,17 @@ export class OpenAIResponsesProvider extends BaseProvider {
   ): AsyncIterableIterator<IContent> {
     const { contents: content, tools } = options;
 
+    // Use getAuthTokenForPrompt() to trigger OAuth if needed
     const apiKey =
-      (await this.getAuthToken()) ??
+      (await this.getAuthTokenForPrompt()) ??
       (await resolveRuntimeAuthToken(options.resolved.authToken)) ??
       '';
     if (!apiKey) {
-      throw new Error('OpenAI API key is required to generate completions');
+      throw new Error(
+        this._isCodexMode
+          ? 'Codex authentication required. Run /auth codex enable to authenticate.'
+          : 'OpenAI API key is required',
+      );
     }
 
     const resolvedModel = options.resolved.model || this.getDefaultModel();

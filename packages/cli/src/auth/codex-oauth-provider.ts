@@ -16,7 +16,6 @@ import { OAuthProvider } from './oauth-manager.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import { globalOAuthUI } from './global-oauth-ui.js';
-import { z } from 'zod';
 
 /**
  * Port configuration for Codex OAuth callback
@@ -25,19 +24,6 @@ import { z } from 'zod';
 const CODEX_PRIMARY_PORT = 1455;
 const CODEX_FALLBACK_RANGE: readonly [number, number] = [1456, 1485];
 const CALLBACK_TIMEOUT_MS = 120000; // 2 minutes
-
-/**
- * Codex CLI token schema for fallback reading from ~/.codex/auth.json
- */
-const CodexCliTokenSchema = z.object({
-  tokens: z.object({
-    access_token: z.string(),
-    account_id: z.string(),
-    refresh_token: z.string().optional(),
-    id_token: z.string().optional(),
-  }),
-});
-
 /**
  * Codex OAuth Provider Implementation
  * Implements OAuth 2.0 PKCE flow for Codex authentication
@@ -163,13 +149,8 @@ export class CodexOAuthProvider implements OAuthProvider {
    * @returns CodexOAuthToken if available, null otherwise
    */
   async getToken(): Promise<CodexOAuthToken | null> {
-    // Try primary location first (~/.llxprt/oauth/codex.json)
-    let token = await this.tokenStore.getToken('codex');
-
-    if (!token) {
-      // Fallback: Try reading from Codex CLI's auth file (read-only)
-      token = await this.readCodexCliToken();
-    }
+    // Get token from ~/.llxprt/oauth/codex.json
+    const token = await this.tokenStore.getToken('codex');
 
     if (!token) {
       return null;
@@ -179,7 +160,7 @@ export class CodexOAuthProvider implements OAuthProvider {
     try {
       return CodexOAuthTokenSchema.parse(token);
     } catch (_error) {
-      this.logger.debug(() => 'Token validation failed');
+      this.logger.debug(() => 'Token validation failed (missing account_id?)');
       return null;
     }
   }
@@ -224,37 +205,6 @@ export class CodexOAuthProvider implements OAuthProvider {
    */
   async logout(): Promise<void> {
     this.logger.debug(() => 'Logging out from Codex');
-    // Only remove from llxprt storage - never touch ~/.codex/
     await this.tokenStore.removeToken('codex');
-  }
-
-  /**
-   * Read-only fallback from ~/.codex/auth.json
-   * This allows compatibility with Codex CLI's token storage
-   * @returns CodexOAuthToken if found and valid, null otherwise
-   */
-  private async readCodexCliToken(): Promise<CodexOAuthToken | null> {
-    const codexAuthPath = `${process.env.HOME}/.codex/auth.json`;
-    try {
-      const fs = await import('fs/promises');
-      const content = await fs.readFile(codexAuthPath, 'utf-8');
-      const data: unknown = JSON.parse(content);
-
-      // Validate and parse Codex CLI token format
-      const parsed = CodexCliTokenSchema.parse(data);
-
-      // Convert to our format - use Unix timestamp in SECONDS
-      return CodexOAuthTokenSchema.parse({
-        access_token: parsed.tokens.access_token,
-        token_type: 'Bearer',
-        expiry: Math.floor(Date.now() / 1000) + 3600, // Unknown expiry, assume 1 hour
-        account_id: parsed.tokens.account_id,
-        refresh_token: parsed.tokens.refresh_token,
-        id_token: parsed.tokens.id_token,
-      });
-    } catch (_error) {
-      this.logger.debug(() => 'No valid token found in ~/.codex/auth.json');
-      return null;
-    }
   }
 }
