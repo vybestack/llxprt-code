@@ -457,6 +457,15 @@ export class AuthCommandExecutor {
         // Still attempt logout to clean up stale tokens
         try {
           await this.oauthManager.logout(provider, bucketOrFlag);
+          // Clear session bucket after successful logout
+          this.oauthManager.clearSessionBucket(provider);
+          // Clear provider cache
+          this.clearProviderCache(provider);
+          return {
+            type: 'message',
+            messageType: 'info',
+            content: `Successfully logged out of ${provider} (bucket: ${bucketOrFlag})`,
+          };
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
@@ -468,7 +477,7 @@ export class AuthCommandExecutor {
         }
       }
 
-      // Perform logout
+      // Perform logout for authenticated session or default bucket
       await this.oauthManager.logout(provider, bucketOrFlag);
 
       // Clear session bucket

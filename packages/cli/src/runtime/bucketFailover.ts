@@ -197,8 +197,12 @@ export async function executeWithBucketFailover(
     }
   }
 
-  const exhaustedError = new Error(
+  // Note: This point is unreachable because the loop always:
+  // 1. Returns on successful execution (line 182)
+  // 2. Throws on non-failover error (line 196)
+  // 3. Throws "All buckets exhausted" on last bucket failover error (line 192)
+  // However, TypeScript doesn't recognize this, so we need this for type safety
+  throw new Error(
     `All buckets exhausted. Last error: ${lastError?.message ?? 'Unknown error'}`,
   );
-  throw exhaustedError;
 }

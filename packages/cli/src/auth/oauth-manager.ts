@@ -1038,21 +1038,44 @@ export class OAuthManager {
         // Interactive terminal - wait for keypress
         console.log(`\nReady to authenticate bucket: ${bucket}`);
         console.log('Press ENTER to continue, or Ctrl+C to cancel...\n');
-        await new Promise<void>((resolve) => {
-          const onData = (): void => {
-            process.stdin.removeListener('data', onData);
+        let rawModeSet = false;
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const cleanup = (): void => {
+              process.stdin.removeListener('data', onData);
+              process.stdin.removeListener('error', onError);
+              if (rawModeSet && process.stdin.isTTY) {
+                process.stdin.setRawMode(false);
+              }
+              process.stdin.pause();
+            };
+            const onData = (): void => {
+              cleanup();
+              resolve();
+            };
+            const onError = (err: Error): void => {
+              cleanup();
+              reject(err);
+            };
             if (process.stdin.isTTY) {
-              process.stdin.setRawMode(false);
+              process.stdin.setRawMode(true);
+              rawModeSet = true;
             }
-            process.stdin.pause();
-            resolve();
-          };
-          if (process.stdin.isTTY) {
-            process.stdin.setRawMode(true);
+            process.stdin.resume();
+            process.stdin.once('data', onData);
+            process.stdin.once('error', onError);
+          });
+        } catch (error) {
+          // Ensure raw mode is reset even on unexpected errors
+          if (rawModeSet && process.stdin.isTTY) {
+            try {
+              process.stdin.setRawMode(false);
+            } catch {
+              // Ignore cleanup errors
+            }
           }
-          process.stdin.resume();
-          process.stdin.once('data', onData);
-        });
+          throw error;
+        }
         return true;
       }
 

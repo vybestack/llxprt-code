@@ -91,9 +91,9 @@ export const statsCommand: SlashCommand = {
         if (!oauthManager) {
           context.ui.addItem(
             {
-              type: 'message',
-              content: 'OAuth is not available or configured',
-            } as never,
+              type: MessageType.INFO,
+              text: 'OAuth is not available or configured',
+            },
             Date.now(),
           );
           return;
@@ -137,9 +137,9 @@ export const statsCommand: SlashCommand = {
           if (!hasAnyBuckets) {
             context.ui.addItem(
               {
-                type: 'message',
-                content: 'No OAuth buckets available',
-              } as never,
+                type: MessageType.INFO,
+                text: 'No OAuth buckets available',
+              },
               Date.now(),
             );
             return;
@@ -147,9 +147,9 @@ export const statsCommand: SlashCommand = {
 
           context.ui.addItem(
             {
-              type: 'message',
-              content: output.join('\n'),
-            } as never,
+              type: MessageType.INFO,
+              text: output.join('\n'),
+            },
             Date.now(),
           );
         } catch (error) {
@@ -157,9 +157,9 @@ export const statsCommand: SlashCommand = {
             error instanceof Error ? error.message : 'Unknown error';
           context.ui.addItem(
             {
-              type: 'message',
-              content: `Failed to retrieve bucket statistics: ${errorMessage}`,
-            } as never,
+              type: MessageType.ERROR,
+              text: `Failed to retrieve bucket statistics: ${errorMessage}`,
+            },
             Date.now(),
           );
         }

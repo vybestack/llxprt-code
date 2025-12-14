@@ -226,8 +226,7 @@ export function isStandardProfile(
  * @plan PLAN-20251213issue490 Phase 1
  */
 export function hasAuthConfig(profile: Profile): boolean {
-  const standardProfile = profile as StandardProfile;
-  return standardProfile.auth !== undefined;
+  return isStandardProfile(profile) && profile.auth !== undefined;
 }
 
 /**
@@ -235,6 +234,5 @@ export function hasAuthConfig(profile: Profile): boolean {
  * @plan PLAN-20251213issue490 Phase 1
  */
 export function isOAuthProfile(profile: Profile): boolean {
-  const standardProfile = profile as StandardProfile;
-  return standardProfile.auth?.type === 'oauth';
+  return isStandardProfile(profile) && profile.auth?.type === 'oauth';
 }

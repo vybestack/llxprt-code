@@ -286,11 +286,16 @@ export async function retryWithBackoff<T>(
   const logger = new DebugLogger('llxprt:retry');
   let attempt = 0;
   let currentDelay = initialDelayMs;
+  let consecutive429s = 0;
+  const failoverThreshold = 2; // Attempt bucket failover after this many consecutive 429s
 
   while (attempt < maxAttempts) {
     attempt++;
     try {
       const result = await fn();
+
+      // Reset 429 counter on success
+      consecutive429s = 0;
 
       if (
         shouldRetryOnContent &&
@@ -307,9 +312,52 @@ export async function retryWithBackoff<T>(
     } catch (error) {
       const errorStatus = getErrorStatus(error);
 
+      // Track consecutive 429 errors for bucket failover
+      if (errorStatus === 429) {
+        consecutive429s++;
+        logger.debug(
+          () =>
+            `429 error detected, consecutive count: ${consecutive429s}/${failoverThreshold}`,
+        );
+      } else {
+        consecutive429s = 0;
+      }
+
       // Check if we've exhausted retries or shouldn't retry
       if (attempt >= maxAttempts || !shouldRetryOnError(error as Error)) {
         throw error;
+      }
+
+      // Attempt bucket failover after threshold consecutive 429 errors
+      // @plan PLAN-20251213issue490 Bucket failover integration
+      if (consecutive429s >= failoverThreshold && options?.onPersistent429) {
+        logger.debug(
+          () =>
+            `Attempting bucket failover after ${consecutive429s} consecutive 429 errors`,
+        );
+        const failoverResult = await options.onPersistent429(
+          options.authType,
+          error,
+        );
+
+        if (failoverResult === true || typeof failoverResult === 'string') {
+          // Bucket switch succeeded - reset counters and retry immediately
+          logger.debug(
+            () => `Bucket failover successful, resetting retry state`,
+          );
+          consecutive429s = 0;
+          currentDelay = initialDelayMs;
+          // Don't increment attempt counter - this is a fresh start with new bucket
+          attempt--;
+          continue;
+        } else if (failoverResult === false) {
+          // No more buckets available - stop retrying
+          logger.debug(
+            () => `No more buckets available for failover, stopping retry`,
+          );
+          throw error;
+        }
+        // failoverResult === null means continue with normal retry
       }
 
       const { delayDurationMs, errorStatus: delayErrorStatus } =

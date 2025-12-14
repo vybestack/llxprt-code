@@ -1461,9 +1461,32 @@ export class GeminiChat {
       })(this);
     };
 
-    // LLxprt Note: We don't auto-fallback to different models in multi-provider setup
-    // Users should explicitly choose their model/provider
-    const onPersistent429Callback = async () => null;
+    // Bucket failover callback for 429 errors
+    // @plan PLAN-20251213issue490 Bucket failover integration
+    const onPersistent429Callback = async (): Promise<boolean | null> => {
+      // Try to get the bucket failover handler from runtime context config
+      const failoverHandler =
+        this.runtimeContext.providerRuntime.config?.getBucketFailoverHandler();
+
+      if (failoverHandler && failoverHandler.isEnabled()) {
+        this.logger.debug(() => 'Attempting bucket failover on persistent 429');
+        const success = await failoverHandler.tryFailover();
+        if (success) {
+          this.logger.debug(
+            () =>
+              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
+          );
+          return true; // Signal retry with new bucket
+        }
+        this.logger.debug(
+          () => 'Bucket failover failed - no more buckets available',
+        );
+        return false; // No more buckets, stop retrying
+      }
+
+      // No bucket failover configured
+      return null;
+    };
 
     const streamResponse = await retryWithBackoff(apiCall, {
       onPersistent429: onPersistent429Callback,

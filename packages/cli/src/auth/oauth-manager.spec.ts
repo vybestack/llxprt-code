@@ -383,7 +383,7 @@ describe.skipIf(skipInCI)(
         const expiringToken = {
           access_token: 'expiring_token',
           refresh_token: 'refresh_token',
-          expiry: Math.floor(Date.now() / 1000) + 10, // Expires in 10 seconds (Unix timestamp in seconds)
+          expiry: Date.now() + 10000, // Expires in 10 seconds (milliseconds to match MockOAuthProvider)
           token_type: 'Bearer' as const,
           scope: 'read',
         };
