@@ -13,6 +13,7 @@ describe('Anthropic OAuth registration with environment key', () => {
   let anthropicCtor: ReturnType<typeof vi.fn>;
   let openaiCtor: ReturnType<typeof vi.fn>;
   let openaiResponsesCtor: ReturnType<typeof vi.fn>;
+  let openaivercelCtor: ReturnType<typeof vi.fn>;
   let mockSettingsService: SettingsService;
 
   beforeEach(() => {
@@ -22,6 +23,7 @@ describe('Anthropic OAuth registration with environment key', () => {
     anthropicCtor = vi.fn(() => ({}));
     openaiCtor = vi.fn(() => ({}));
     openaiResponsesCtor = vi.fn(() => ({}));
+    openaivercelCtor = vi.fn(() => ({}));
     mockSettingsService = new SettingsService();
   });
 
@@ -64,6 +66,7 @@ describe('Anthropic OAuth registration with environment key', () => {
         GeminiProvider: MockGeminiProvider,
         OpenAIProvider: MockProvider,
         OpenAIResponsesProvider: MockProvider,
+        OpenAIVercelProvider: openaivercelCtor,
         AnthropicProvider: anthropicCtor,
       };
     });
@@ -120,6 +123,8 @@ describe('Anthropic OAuth registration with environment key', () => {
         OpenAIProvider: openaiCtor as unknown as typeof actual.OpenAIProvider,
         OpenAIResponsesProvider:
           openaiResponsesCtor as unknown as typeof actual.OpenAIResponsesProvider,
+        OpenAIVercelProvider:
+          openaivercelCtor as unknown as typeof actual.OpenAIVercelProvider,
         AnthropicProvider:
           anthropicCtor as unknown as typeof actual.AnthropicProvider,
       };
@@ -155,5 +160,55 @@ describe('Anthropic OAuth registration with environment key', () => {
     expect(anthropicCtor).toHaveBeenCalled();
     const anthropicArgs = anthropicCtor.mock.calls[0] as unknown[] | undefined;
     expect(anthropicArgs?.[0]).toBeUndefined();
+  });
+
+  it('passes the shared OAuth manager into OpenAIVercelProvider', async () => {
+    vi.doMock('./oauth-provider-registration.js', () => ({
+      ensureOAuthProviderRegistered: ensureOAuthProviderRegisteredMock,
+      isOAuthProviderRegistered: vi.fn(),
+      resetRegisteredProviders: vi.fn(),
+    }));
+
+    vi.doMock('@vybestack/llxprt-code-core', async () => {
+      const actual = await vi.importActual<
+        typeof import('@vybestack/llxprt-code-core')
+      >('@vybestack/llxprt-code-core');
+
+      class MockProviderManager {
+        setConfig(): void {}
+        setActiveProvider(): void {}
+        registerProvider(): void {}
+      }
+
+      class MockGeminiProvider {
+        setConfig(): void {}
+      }
+
+      return {
+        ...actual,
+        ProviderManager: MockProviderManager,
+        GeminiProvider: MockGeminiProvider,
+        OpenAIProvider: openaiCtor as unknown as typeof actual.OpenAIProvider,
+        OpenAIResponsesProvider:
+          openaiResponsesCtor as unknown as typeof actual.OpenAIResponsesProvider,
+        OpenAIVercelProvider:
+          openaivercelCtor as unknown as typeof actual.OpenAIVercelProvider,
+        AnthropicProvider:
+          anthropicCtor as unknown as typeof actual.AnthropicProvider,
+      };
+    });
+
+    const { getProviderManager, resetProviderManager } = await import(
+      './providerManagerInstance.js'
+    );
+
+    resetProviderManager();
+    getProviderManager(undefined, false, undefined);
+
+    expect(openaivercelCtor).toHaveBeenCalled();
+    const openaivercelArgs = openaivercelCtor.mock.calls[0] as
+      | unknown[]
+      | undefined;
+    expect(openaivercelArgs?.[3]).toBeTruthy();
   });
 });

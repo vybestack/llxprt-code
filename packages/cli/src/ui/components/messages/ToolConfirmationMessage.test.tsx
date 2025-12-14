@@ -162,7 +162,7 @@ describe('ToolConfirmationMessage', () => {
       });
     });
 
-    it('should render confirmation question with accent green color', () => {
+    it('should render confirmation question with theme-respecting color', () => {
       const mockConfig = {
         isTrustedFolder: () => true,
         getIdeMode: () => false,
@@ -177,7 +177,7 @@ describe('ToolConfirmationMessage', () => {
         />,
       );
 
-      // The confirmation question should be colored with AccentGreen
+      // The confirmation question should be colored with theme-respecting success color
       expect(lastFrame()).toContain('Allow execution of:');
     });
   });

@@ -489,7 +489,7 @@ export const ToolConfirmationMessage: React.FC<
 
       {/* Confirmation Question */}
       <Box marginBottom={1} flexShrink={0}>
-        <Text wrap="truncate" color={Colors.AccentGreen}>
+        <Text wrap="truncate" color={SemanticColors.status.success}>
           {question}
         </Text>
       </Box>
