@@ -572,4 +572,83 @@ describe('retryWithBackoff', () => {
       expect(fallbackCallback).toHaveBeenCalledWith('oauth-personal');
     });
   });
+
+  describe('bucket failover integration', () => {
+    /**
+     * @requirement PLAN-20251213issue490 Bucket failover
+     * @scenario Bucket failover on 429 errors
+     * @given A request that consistently returns 429 for first bucket
+     * @when onPersistent429 callback returns true (switch succeeded)
+     * @then Retry should continue with new bucket
+     */
+    it('should call onPersistent429 callback on consecutive 429 errors', async () => {
+      vi.useFakeTimers();
+      let attempt = 0;
+      let failoverCalled = false;
+
+      const mockFn = vi.fn(async () => {
+        attempt++;
+        if (attempt <= 2) {
+          const error: HttpError = new Error('Rate limit exceeded');
+          error.status = 429;
+          throw error;
+        }
+        return 'success after bucket switch';
+      });
+
+      const failoverCallback = vi.fn(async () => {
+        failoverCalled = true;
+        return true; // Indicate bucket switch succeeded
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 5,
+        initialDelayMs: 100,
+        onPersistent429: failoverCallback,
+        authType: 'oauth-bucket',
+      });
+
+      await vi.runAllTimersAsync();
+      await expect(promise).resolves.toBe('success after bucket switch');
+
+      // onPersistent429 should be called after consecutive 429 errors
+      expect(failoverCallback).toHaveBeenCalled();
+      expect(failoverCalled).toBe(true);
+    });
+
+    /**
+     * @requirement PLAN-20251213issue490 Bucket failover
+     * @scenario All buckets exhausted
+     * @given A request that returns 429 and all bucket switches fail
+     * @when onPersistent429 callback returns false (no more buckets)
+     * @then Should throw error after exhausting retries
+     */
+    it('should throw when onPersistent429 returns false (no more buckets)', async () => {
+      vi.useFakeTimers();
+
+      const mockFn = vi.fn(async () => {
+        const error: HttpError = new Error('Rate limit exceeded');
+        error.status = 429;
+        throw error;
+      });
+
+      const failoverCallback = vi.fn(async () => false); // No more buckets available
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 100,
+        onPersistent429: failoverCallback,
+        authType: 'oauth-bucket',
+      });
+
+      // Properly handle the rejection
+      const resultPromise = promise.catch((error) => error);
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
+
+      expect(result).toBeInstanceOf(Error);
+      expect(result.message).toBe('Rate limit exceeded');
+      expect(failoverCallback).toHaveBeenCalled();
+    });
+  });
 });

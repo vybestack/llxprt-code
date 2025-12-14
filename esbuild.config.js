@@ -53,6 +53,7 @@ esbuild
       '@lydell/node-pty-linux-x64',
       '@lydell/node-pty-win32-arm64',
       '@lydell/node-pty-win32-x64',
+      'keytar',
       'node:module',
       // UI package uses opentui which has Bun-specific imports that esbuild can't handle
       // Keep it external - it will be dynamically imported at runtime when --experimental-ui is used

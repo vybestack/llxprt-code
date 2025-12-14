@@ -42,7 +42,7 @@ class MockOAuthProvider implements OAuthProvider {
       this.token = {
         access_token: `access_${this.name}_${Date.now()}`,
         refresh_token: `refresh_${this.name}_${Date.now()}`,
-        expiry: Date.now() + 3600000, // 1 hour from now
+        expiry: Math.floor(Date.now() / 1000) + 3600, // 1 hour from now (Unix timestamp)
         token_type: 'Bearer',
         scope: 'read write',
       };
@@ -54,12 +54,13 @@ class MockOAuthProvider implements OAuthProvider {
   }
 
   async refreshIfNeeded(): Promise<OAuthToken | null> {
-    if (this.token && this.token.expiry < Date.now() + 300000) {
-      // Refresh if expires in less than 5 minutes
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    if (this.token && this.token.expiry < nowInSeconds + 300) {
+      // Refresh if expires in less than 5 minutes (Unix timestamp)
       this.token = {
         ...this.token,
         access_token: `refreshed_${this.name}_${Date.now()}`,
-        expiry: Date.now() + 3600000, // 1 hour from now
+        expiry: nowInSeconds + 3600, // 1 hour from now (Unix timestamp)
       };
     }
     return this.token;
@@ -74,7 +75,7 @@ class MockOAuthProvider implements OAuthProvider {
     this.token = {
       access_token: `expiring_${this.name}`,
       refresh_token: `refresh_${this.name}`,
-      expiry: Date.now() + 10000, // Expires in 10 seconds
+      expiry: Math.floor(Date.now() / 1000) + 10, // Expires in 10 seconds (Unix timestamp)
       token_type: 'Bearer',
       scope: 'read',
     };
@@ -106,6 +107,21 @@ class MockTokenStore implements TokenStore {
 
   async listProviders(): Promise<string[]> {
     return Array.from(this.tokens.keys()).sort();
+  }
+
+  async listBuckets(provider: string): Promise<string[]> {
+    const buckets: string[] = [];
+    for (const key of this.tokens.keys()) {
+      if (key.startsWith(`${provider}:`)) {
+        const bucket = key.split(':')[1];
+        buckets.push(bucket);
+      }
+    }
+    return buckets.sort();
+  }
+
+  async getBucketStats(): Promise<null> {
+    return null;
   }
 
   // Test helpers
@@ -364,18 +380,18 @@ describe.skipIf(skipInCI)(
         // First authenticate to get a token
         await manager.authenticate('qwen');
 
-        // Set an expiring token in the token store
+        // Set an expiring token in the token store (expiry is Unix timestamp in seconds)
         const expiringToken = {
           access_token: 'expiring_token',
           refresh_token: 'refresh_token',
-          expiry: Date.now() + 10000, // Expires in 10 seconds
+          expiry: Math.floor(Date.now() / 1000) + 10, // Expires in 10 seconds (Unix timestamp)
           token_type: 'Bearer' as const,
           scope: 'read',
         };
         await tokenStore.saveToken('qwen', expiringToken);
 
-        // Set the provider to return a refreshed token
-        qwenProvider.setExpiringToken(); // This will trigger refresh logic in the provider
+        // Set the provider to return a refreshed token when refresh is triggered
+        qwenProvider.setExpiringToken(); // This sets the provider's internal token for refresh
 
         const token = await manager.getToken('qwen');
 

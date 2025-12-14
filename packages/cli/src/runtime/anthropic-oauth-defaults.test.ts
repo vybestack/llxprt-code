@@ -245,6 +245,8 @@ const mockOAuthManager = {
   }),
   toggleOAuthEnabled: vi.fn(),
   authenticate: vi.fn(),
+  setMessageBus: vi.fn(),
+  setConfigGetter: vi.fn(),
 } as never;
 
 describe('Anthropic OAuth defaults (Issue #181)', () => {

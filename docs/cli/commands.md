@@ -106,7 +106,36 @@ Slash commands provide meta-level control over the CLI itself.
   - **Description:** Open a dialog that lets you change the visual theme of LLxprt Code.
 
 - **`/auth`**
-  - **Description:** Open a dialog that lets you change the authentication method.
+  - **Description:** Manage OAuth authentication for AI providers.
+  - **Usage:** `/auth <provider> <action> [bucket-name]`
+  - **Sub-commands:**
+    - **`login [bucket]`**: Authenticate with a provider, optionally to a named bucket.
+    - **`logout [bucket|--all]`**: Remove authentication from a specific bucket or all buckets.
+    - **`status`**: Show all authenticated buckets and their token status.
+    - **`switch <bucket>`**: Switch to a different authentication bucket.
+  - **Examples:**
+    - `/auth anthropic login` - Login to default bucket
+    - `/auth anthropic login work@company.com` - Login to named bucket
+    - `/auth anthropic status` - Show all buckets
+    - `/auth anthropic logout --all` - Logout from all buckets
+  - **See Also:** [Authentication](./authentication.md) for details on OAuth buckets.
+
+- **`/profile`**
+  - **Description:** Manage saved configuration profiles for quick switching between providers, models, and settings.
+  - **Sub-commands:**
+    - **`save model <name> [bucket1] [bucket2] ...`**: Save the current session configuration as a model profile. Optionally specify OAuth buckets for automatic failover.
+    - **`save loadbalancer <name> <roundrobin|failover> <profile1> <profile2> ...`**: Create a load balancer profile that distributes requests across multiple model profiles.
+    - **`load [name]`**: Load a saved profile. Opens interactive selection if no name provided.
+    - **`list`**: Show all saved profiles.
+    - **`delete <name>`**: Delete a saved profile.
+    - **`set-default <name>`**: Set a profile to load automatically on startup.
+  - **Examples:**
+    - `/profile save model my-config` - Save current config
+    - `/profile save model ha-profile bucket1 bucket2` - Save with failover buckets
+    - `/profile save loadbalancer my-lb failover primary backup` - Create failover LB
+    - `/profile load my-config` - Load a profile
+    - `/profile set-default my-config` - Set default profile
+  - **See Also:** [Profiles](./profiles.md) for comprehensive documentation on profiles, load balancing, and OAuth bucket failover.
 
 - **`/about`**
   - **Description:** Show version info. Please share this information when filing issues.
