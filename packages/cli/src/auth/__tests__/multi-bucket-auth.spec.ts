@@ -190,8 +190,11 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         'personal@gmail.com',
         'backup@example.com',
       ]);
-      expect(authLog[0]).toContain('bucket 1/3');
+      // First log is delay, second is auth
+      expect(authLog[0]).toContain('Delay');
       expect(authLog[0]).toContain('work@company.com');
+      expect(authLog[1]).toContain('bucket 1/3');
+      expect(authLog[1]).toContain('work@company.com');
     });
 
     /**
@@ -232,12 +235,12 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
 
     /**
      * @requirement Phase 9 - Sequential multi-bucket auth
-     * @scenario No pause before first bucket with delay mode
+     * @scenario Delay before all buckets in delay mode (so user can switch browser)
      * @given auth-bucket-prompt is false (default)
-     * @when First bucket authentication starts
-     * @then No delay before first bucket
+     * @when Multi-bucket authentication starts
+     * @then Delay applied before each bucket including first
      */
-    it('should not delay before first bucket when using delay mode', async () => {
+    it('should delay before all buckets when using delay mode', async () => {
       setEphemeralSetting('auth-bucket-prompt', false);
 
       await authenticator.authenticateMultipleBuckets({
@@ -245,11 +248,13 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1', 'bucket2'],
       });
 
-      // First auth should happen immediately
-      expect(authLog[0]).toContain('Authenticating bucket 1/2');
-      // Delay only before second bucket
-      expect(delayLog).toHaveLength(1);
-      expect(delayLog[0].bucket).toBe('bucket2');
+      // Delay before ALL buckets including first (so user can switch browser)
+      expect(delayLog).toHaveLength(2);
+      expect(delayLog[0].bucket).toBe('bucket1');
+      expect(delayLog[1].bucket).toBe('bucket2');
+      // Auth should happen after delay
+      expect(authLog[0]).toContain('Delay 5000ms before bucket1');
+      expect(authLog[1]).toContain('Authenticating bucket 1/2');
     });
 
     /**
@@ -535,8 +540,9 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1', 'bucket2'],
       });
 
-      expect(delayLog).toHaveLength(1);
+      expect(delayLog).toHaveLength(2);
       expect(delayLog[0].ms).toBe(2000);
+      expect(delayLog[1].ms).toBe(2000);
     });
 
     /**
@@ -634,9 +640,9 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
      * @scenario Single bucket authentication
      * @given Single bucket to authenticate
      * @when Auth starts
-     * @then No delays, direct authentication
+     * @then Applies delay before authentication for rate-limit protection
      */
-    it('should handle single bucket without unnecessary delays', async () => {
+    it('should handle single bucket with delay for rate-limit protection', async () => {
       setEphemeralSetting('auth-bucket-delay', 5000);
 
       const result = await authenticator.authenticateMultipleBuckets({
@@ -645,7 +651,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       });
 
       expect(result.authenticatedBuckets).toEqual(['single-bucket']);
-      expect(delayLog).toHaveLength(0); // No delay for single bucket
+      expect(delayLog).toHaveLength(1); // Delay applied for rate-limit protection
+      expect(delayLog[0].ms).toBe(5000);
     });
 
     /**

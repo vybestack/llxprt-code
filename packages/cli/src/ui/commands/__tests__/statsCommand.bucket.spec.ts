@@ -144,15 +144,15 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // Then: Should display request counts and percentages
       expect(addedItems.length).toBeGreaterThan(0);
-      const message = addedItems[0] as { type: string; content?: string };
-      expect(message.type).toBe('message');
-      expect(message.content).toContain('anthropic');
-      expect(message.content).toContain('default');
-      expect(message.content).toContain('47 requests');
-      expect(message.content).toContain('68.1%');
-      expect(message.content).toContain('work@company.com');
-      expect(message.content).toContain('22 requests');
-      expect(message.content).toContain('31.9%');
+      const message = addedItems[0] as { type: string; text?: string };
+      expect(message.type).toBe('info');
+      expect(message.text).toContain('anthropic');
+      expect(message.text).toContain('default');
+      expect(message.text).toContain('47 requests');
+      expect(message.text).toContain('68.1%');
+      expect(message.text).toContain('work@company.com');
+      expect(message.text).toContain('22 requests');
+      expect(message.text).toContain('31.9%');
     });
 
     it('should show percentage of total requests per provider', async () => {
@@ -187,9 +187,9 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Percentages should sum to 100% per provider
-      const message = addedItems[0] as { content?: string };
-      expect(message.content).toContain('75.0%');
-      expect(message.content).toContain('25.0%');
+      const message = addedItems[0] as { text?: string };
+      expect(message.text).toContain('75.0%');
+      expect(message.text).toContain('25.0%');
     });
 
     it('should show last used timestamp per bucket', async () => {
@@ -213,10 +213,10 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Should display last used timestamp
-      const message = addedItems[0] as { content?: string };
-      expect(message.content).toContain('Last used');
+      const message = addedItems[0] as { text?: string };
+      expect(message.text).toContain('Last used');
       // Should contain date or time representation
-      expect(message.content).toMatch(/\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}/);
+      expect(message.text).toMatch(/\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}/);
     });
   });
 
@@ -252,10 +252,10 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Should show sections for each provider
-      const message = addedItems[0] as { content?: string };
-      expect(message.content).toContain('### anthropic');
-      expect(message.content).toContain('### gemini');
-      expect(message.content).toContain('### qwen');
+      const message = addedItems[0] as { text?: string };
+      expect(message.text).toContain('### anthropic');
+      expect(message.text).toContain('### gemini');
+      expect(message.text).toContain('### qwen');
     });
 
     it('should show statistics for each providers buckets separately', async () => {
@@ -314,17 +314,17 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Anthropic stats should be separate from Gemini stats
-      const message = addedItems[0] as { content?: string };
+      const message = addedItems[0] as { text?: string };
 
       // Check anthropic section
-      const anthropicSection = message.content!.split('### gemini')[0];
+      const anthropicSection = message.text!.split('### gemini')[0];
       expect(anthropicSection).toContain('default');
       expect(anthropicSection).toContain('47 requests');
       expect(anthropicSection).toContain('work@company.com');
       expect(anthropicSection).toContain('22 requests');
 
       // Check gemini section
-      const geminiSection = message.content!.split('### gemini')[1];
+      const geminiSection = message.text!.split('### gemini')[1];
       expect(geminiSection).toContain('default');
       expect(geminiSection).toContain('15 requests');
       expect(geminiSection).toContain('100');
@@ -355,10 +355,10 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Should only show anthropic, not gemini or qwen
-      const message = addedItems[0] as { content?: string };
-      expect(message.content).toContain('anthropic');
-      expect(message.content).not.toContain('### gemini');
-      expect(message.content).not.toContain('### qwen');
+      const message = addedItems[0] as { text?: string };
+      expect(message.text).toContain('anthropic');
+      expect(message.text).not.toContain('### gemini');
+      expect(message.text).not.toContain('### qwen');
     });
   });
 
@@ -374,9 +374,9 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Should show "no buckets" message
-      const message = addedItems[0] as { type: string; content?: string };
-      expect(message.type).toBe('message');
-      expect(message.content).toContain('No OAuth buckets');
+      const message = addedItems[0] as { type: string; text?: string };
+      expect(message.type).toBe('info');
+      expect(message.text).toContain('No OAuth buckets');
     });
 
     it('should show appropriate message when provider has no buckets', async () => {
@@ -404,10 +404,10 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Should only show providers with buckets
-      const message = addedItems[0] as { content?: string };
-      expect(message.content).toContain('anthropic');
-      expect(message.content).not.toContain('gemini');
-      expect(message.content).not.toContain('qwen');
+      const message = addedItems[0] as { text?: string };
+      expect(message.text).toContain('anthropic');
+      expect(message.text).not.toContain('gemini');
+      expect(message.text).not.toContain('qwen');
     });
 
     it('should handle buckets with zero requests gracefully', async () => {
@@ -430,10 +430,10 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Should show bucket with 0 requests and "Never" for last used
-      const message = addedItems[0] as { content?: string };
-      expect(message.content).toContain('default');
-      expect(message.content).toContain('0 requests');
-      expect(message.content).toMatch(/Never|Not used/i);
+      const message = addedItems[0] as { text?: string };
+      expect(message.text).toContain('default');
+      expect(message.text).toContain('0 requests');
+      expect(message.text).toMatch(/Never|Not used/i);
     });
   });
 
@@ -494,23 +494,23 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Output should match expected format
-      const message = addedItems[0] as { content?: string };
+      const message = addedItems[0] as { text?: string };
 
       // Should have header
-      expect(message.content).toMatch(/OAuth Bucket Statistics/i);
+      expect(message.text).toMatch(/OAuth Bucket Statistics/i);
 
       // Should have markdown headings for providers
-      expect(message.content).toContain('### anthropic');
-      expect(message.content).toContain('### gemini');
+      expect(message.text).toContain('### anthropic');
+      expect(message.text).toContain('### gemini');
 
       // Should use list format for buckets
-      expect(message.content).toMatch(/- default:/);
-      expect(message.content).toMatch(/- work@company\.com:/);
+      expect(message.text).toMatch(/- default:/);
+      expect(message.text).toMatch(/- work@company\.com:/);
 
       // Should show stats with proper formatting
-      expect(message.content).toContain('47 requests (68.1%)');
-      expect(message.content).toContain('22 requests (31.9%)');
-      expect(message.content).toContain('15 requests (100');
+      expect(message.text).toContain('47 requests (68.1%)');
+      expect(message.text).toContain('22 requests (31.9%)');
+      expect(message.text).toContain('15 requests (100');
     });
 
     it('should format percentages with one decimal place', async () => {
@@ -533,9 +533,9 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Percentage should be formatted to 1 decimal place
-      const message = addedItems[0] as { content?: string };
-      expect(message.content).toContain('33.3%');
-      expect(message.content).not.toContain('33.333333');
+      const message = addedItems[0] as { text?: string };
+      expect(message.text).toContain('33.3%');
+      expect(message.text).not.toContain('33.333333');
     });
 
     it('should format last used timestamp in readable format', async () => {
@@ -559,8 +559,8 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Should show readable timestamp
-      const message = addedItems[0] as { content?: string };
-      expect(message.content).toMatch(/Last used:.*\d{4}-\d{2}-\d{2}/);
+      const message = addedItems[0] as { text?: string };
+      expect(message.text).toMatch(/Last used:.*\d{4}-\d{2}-\d{2}/);
     });
   });
 
@@ -638,9 +638,9 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Should show error message
-      const message = addedItems[0] as { type: string; content?: string };
-      expect(message.type).toBe('message');
-      expect(message.content).toMatch(/error|failed/i);
+      const message = addedItems[0] as { type: string; text?: string };
+      expect(message.type).toBe('error');
+      expect(message.text).toMatch(/error|failed/i);
     });
 
     it('should handle missing oauthManager gracefully', async () => {
@@ -659,10 +659,10 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       );
       await bucketsSubCommand!.action!(contextWithoutOAuth, '');
 
-      // Then: Should show error message
-      const message = addedItems[0] as { type: string; content?: string };
-      expect(message.type).toBe('message');
-      expect(message.content).toMatch(/OAuth.*not available|not configured/i);
+      // Then: Should show info message
+      const message = addedItems[0] as { type: string; text?: string };
+      expect(message.type).toBe('info');
+      expect(message.text).toMatch(/OAuth.*not available|not configured/i);
     });
   });
 });
