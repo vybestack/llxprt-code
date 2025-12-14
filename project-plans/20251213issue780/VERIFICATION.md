@@ -35,3 +35,23 @@ Date: 2025-12-14
 4. `npm run test` ✅
 5. `npm run build` ✅
 6. `node scripts/start.js --profile-load synthetic --prompt "write me a haiku"` ✅
+
+---
+
+# Verification Addendum — Alias defaults (Qwen model + ephemerals)
+
+Date: 2025-12-14
+
+## Targeted Checks
+
+- `npm run test --workspace @vybestack/llxprt-code -- src/providers/providerAliases.builtin-qwen.test.ts` ✅
+- `npm run test --workspace @vybestack/llxprt-code -- src/runtime/provider-alias-defaults.test.ts` ✅
+
+## Required Repo-Root Checklist (AGENTS.md) — rerun after alias defaults
+
+1. `npm run format` ✅
+2. `npm run lint` ✅
+3. `npm run typecheck` ✅
+4. `npm run test` ✅
+5. `npm run build` ✅
+6. `node scripts/start.js --profile-load synthetic --prompt "write me a haiku"` ✅

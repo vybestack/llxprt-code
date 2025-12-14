@@ -46,6 +46,10 @@ import {
   formatNormalizationFailureMessage,
 } from './messages.js';
 import { ensureOAuthProviderRegistered } from '../providers/oauth-provider-registration.js';
+import {
+  loadProviderAliasEntries,
+  type ProviderAliasConfig,
+} from '../providers/providerAliases.js';
 
 type ProfileApplicationResult = Awaited<
   ReturnType<typeof applyProfileWithGuards>
@@ -1555,6 +1559,15 @@ export async function switchActiveProvider(
     }
     return trimmed;
   };
+
+  let aliasConfig: ProviderAliasConfig | undefined;
+  try {
+    aliasConfig = loadProviderAliasEntries().find(
+      (entry) => entry.alias === name,
+    )?.config;
+  } catch {
+    aliasConfig = undefined;
+  }
   const storedModelSetting = normalizeSetting(providerSettingsBefore.model);
   const storedBaseUrlSetting =
     normalizeSetting(providerSettingsBefore.baseUrl) ??
@@ -1609,7 +1622,9 @@ export async function switchActiveProvider(
     settingsService.setProviderSetting(name, 'baseURL', undefined);
   }
 
-  const defaultModel = normalizeSetting(activeProvider.getDefaultModel?.());
+  const aliasDefaultModel = normalizeSetting(aliasConfig?.defaultModel);
+  const defaultModel =
+    aliasDefaultModel ?? normalizeSetting(activeProvider.getDefaultModel?.());
   let modelToApply =
     explicitConfigModel ??
     (currentProvider === name &&
@@ -1773,6 +1788,32 @@ export async function switchActiveProvider(
       if (authOnlyBeforeSwitch !== undefined) {
         config.setEphemeralSetting('authOnly', authOnlyBeforeSwitch);
       }
+    }
+  }
+
+  // Apply alias-specific ephemeral settings (defaults) after the switch.
+  if (
+    aliasConfig?.ephemeralSettings &&
+    typeof aliasConfig.ephemeralSettings === 'object'
+  ) {
+    const protectedAliasEphemeralKeys = new Set([
+      'activeProvider',
+      'base-url',
+      'model',
+      'auth-key',
+      'auth-keyfile',
+      'apiKey',
+      'apiKeyfile',
+    ]);
+
+    for (const [key, value] of Object.entries(aliasConfig.ephemeralSettings)) {
+      if (protectedAliasEphemeralKeys.has(key)) {
+        continue;
+      }
+      if (config.getEphemeralSetting(key) !== undefined) {
+        continue;
+      }
+      config.setEphemeralSetting(key, value);
     }
   }
 

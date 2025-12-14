@@ -33,6 +33,7 @@ export interface ProviderAliasConfig {
   baseProvider: string;
   baseUrl?: string;
   defaultModel?: string;
+  ephemeralSettings?: Record<string, unknown>;
   description?: string;
   providerConfig?: Record<string, unknown>;
   apiKeyEnv?: string;

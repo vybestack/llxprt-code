@@ -172,3 +172,87 @@ This should fail pre-fix because the underlying AI SDK emits a `"developer"` rol
 ### 4C) Verify (targeted)
 
 - `npm run test --workspace @vybestack/llxprt-code-core -- src/providers/openai-vercel/OpenAIVercelProvider.test.ts`
+
+---
+
+# Addendum — Provider Alias Defaults (Model + Ephemerals)
+
+## Problem
+
+- `/provider qwen` auto-selects the expected default model (`qwen3-coder-plus`), but `/provider qwenvercel` can fail to do so in some flows.
+- We also want safety defaults for Qwen endpoints so we don’t accidentally exceed context:
+  - `context-limit: 200000`
+  - `max_tokens: 50000`
+
+## Goal
+
+Make provider aliases support:
+
+1. A **default model** that is applied on provider switch (authoritative from alias config).
+2. **Ephemeral settings defaults** that are applied on provider switch (from alias config).
+
+Then configure `qwen` and `qwenvercel` built-in aliases to set:
+
+- `defaultModel: qwen3-coder-plus`
+- `ephemeralSettings.context-limit: 200000`
+- `ephemeralSettings.max_tokens: 50000`
+
+## PHASE 5 — RED → GREEN: Alias defaults
+
+### 5A) RED: Add failing tests
+
+1) Built-in alias config includes Qwen ephemerals:
+
+- Add `packages/cli/src/providers/providerAliases.builtin-qwen.test.ts`
+- Assert `loadProviderAliasEntries()` contains a **builtin** entry for:
+  - `alias === 'qwen'`
+  - `alias === 'qwenvercel'`
+- Expect both have:
+  - `config.defaultModel === 'qwen3-coder-plus'`
+  - `config.ephemeralSettings['context-limit'] === 200000`
+  - `config.ephemeralSettings.max_tokens === 50000`
+
+This fails initially because built-in alias configs do not include `ephemeralSettings`.
+
+2) Switching to an alias applies default model + ephemerals:
+
+- Add `packages/cli/src/runtime/provider-alias-defaults.test.ts`
+- Mock alias registry to return an alias config for `qwenvercel` with:
+  - `defaultModel: 'qwen3-coder-plus'`
+  - `ephemeralSettings: { 'context-limit': 200000, max_tokens: 50000 }`
+- Use a stub provider manager where the provider’s own `getDefaultModel()` returns something else.
+- Expect `switchActiveProvider('qwenvercel')` sets:
+  - `config.model === 'qwen3-coder-plus'` (from alias config)
+  - `config.ephemeral['context-limit'] === 200000`
+  - `config.ephemeral.max_tokens === 50000`
+
+This fails initially because `switchActiveProvider()` does not consult alias config for model/ephemerals.
+
+### 5B) GREEN: Implement behavior
+
+1) Extend provider alias schema:
+
+- Update `packages/cli/src/providers/providerAliases.ts`
+  - Add `ephemeralSettings?: Record<string, unknown>` to `ProviderAliasConfig`
+
+2) Apply alias defaults during provider switching:
+
+- Update `packages/cli/src/runtime/runtimeSettings.ts`:
+  - When switching providers, look up alias config for the provider name.
+  - Prefer `aliasConfig.defaultModel` as the default model for the switch.
+  - Apply `aliasConfig.ephemeralSettings` onto `config.setEphemeralSetting(...)` as defaults (don’t override preserved ephemerals).
+
+3) Configure Qwen built-in aliases:
+
+- Update:
+  - `packages/cli/src/providers/aliases/qwen.config`
+  - `packages/cli/src/providers/aliases/qwenvercel.config`
+- Add:
+  - `ephemeralSettings: { "context-limit": 200000, "max_tokens": 50000 }`
+
+### 5C) Verify
+
+- `npm run test --workspace @vybestack/llxprt-code -- src/providers/providerAliases.builtin-qwen.test.ts`
+- `npm run test --workspace @vybestack/llxprt-code -- src/runtime/provider-alias-defaults.test.ts`
+
+Then rerun the repo-root checklist (AGENTS.md).
