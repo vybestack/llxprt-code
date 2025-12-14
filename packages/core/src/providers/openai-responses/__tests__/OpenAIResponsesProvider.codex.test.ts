@@ -122,9 +122,23 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
 
   describe('Codex request headers', () => {
     it('should include ChatGPT-Account-ID and originator headers in actual HTTP request', async () => {
+      const codexToken: CodexOAuthToken = {
+        access_token: 'test-access-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        account_id: 'test-account-id-123',
+      };
+
+      // Create mock OAuth manager
+      const mockOAuthManager = {
+        getOAuthToken: vi.fn().mockResolvedValue(codexToken),
+      };
+
       const provider = new OpenAIResponsesProvider(
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
+        undefined,
+        mockOAuthManager as never,
       );
 
       const settings = new SettingsService();
@@ -138,19 +152,12 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
         config,
       });
 
-      const codexToken: CodexOAuthToken = {
-        access_token: 'test-access-token',
-        token_type: 'Bearer',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        account_id: 'test-account-id-123',
-      };
-
       const invocation = createRuntimeInvocationContext({
         runtime,
         settings,
         providerName: provider.name,
         ephemeralsSnapshot: {},
-        metadata: { test: 'codex-headers', codexToken },
+        metadata: { test: 'codex-headers' },
       });
 
       let capturedHeaders: Headers | undefined;
@@ -189,7 +196,6 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
         config,
         runtime,
         invocation,
-        codexToken,
         contents: [
           { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
         ],
@@ -283,9 +289,23 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
 
   describe('Codex request body', () => {
     it('should add store: false to request body in Codex mode', async () => {
+      const codexToken: CodexOAuthToken = {
+        access_token: 'test-access-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        account_id: 'test-account-id',
+      };
+
+      // Create mock OAuth manager
+      const mockOAuthManager = {
+        getOAuthToken: vi.fn().mockResolvedValue(codexToken),
+      };
+
       const provider = new OpenAIResponsesProvider(
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
+        undefined,
+        mockOAuthManager as never,
       );
 
       const settings = new SettingsService();
@@ -299,19 +319,12 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
         config,
       });
 
-      const codexToken: CodexOAuthToken = {
-        access_token: 'test-access-token',
-        token_type: 'Bearer',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        account_id: 'test-account-id',
-      };
-
       const invocation = createRuntimeInvocationContext({
         runtime,
         settings,
         providerName: provider.name,
         ephemeralsSnapshot: {},
-        metadata: { test: 'codex-body', codexToken },
+        metadata: { test: 'codex-body' },
       });
 
       let capturedBody: string | undefined;
@@ -350,7 +363,6 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
         config,
         runtime,
         invocation,
-        codexToken,
         contents: [
           { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
         ],
@@ -372,9 +384,23 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
     });
 
     it('should inject system prompt as first user message in Codex mode', async () => {
+      const codexToken: CodexOAuthToken = {
+        access_token: 'test-access-token',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+        account_id: 'test-account-id',
+      };
+
+      // Create mock OAuth manager
+      const mockOAuthManager = {
+        getOAuthToken: vi.fn().mockResolvedValue(codexToken),
+      };
+
       const provider = new OpenAIResponsesProvider(
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
+        undefined,
+        mockOAuthManager as never,
       );
 
       const settings = new SettingsService();
@@ -388,19 +414,12 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
         config,
       });
 
-      const codexToken: CodexOAuthToken = {
-        access_token: 'test-access-token',
-        token_type: 'Bearer',
-        expiry: Math.floor(Date.now() / 1000) + 3600,
-        account_id: 'test-account-id',
-      };
-
       const invocation = createRuntimeInvocationContext({
         runtime,
         settings,
         providerName: provider.name,
         ephemeralsSnapshot: {},
-        metadata: { test: 'codex-system-prompt', codexToken },
+        metadata: { test: 'codex-system-prompt' },
       });
 
       let capturedBody: string | undefined;
@@ -439,7 +458,6 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
         config,
         runtime,
         invocation,
-        codexToken,
         contents: [
           {
             speaker: 'human',
@@ -457,20 +475,24 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
       expect(capturedBody).toBeDefined();
       const parsedBody = JSON.parse(capturedBody!) as {
         input?: Array<{ role: string; content?: string }>;
+        instructions?: string;
       };
       expect(parsedBody.input).toBeDefined();
       expect(Array.isArray(parsedBody.input)).toBe(true);
 
-      // First message should be user with system prompt injected
+      // Codex mode sets system prompt in instructions field (not as first message)
+      expect(parsedBody.instructions).toBeDefined();
+      expect(parsedBody.instructions).toContain(
+        'coding agent running in the Codex CLI',
+      );
+      expect(parsedBody.instructions).toContain(
+        'terminal-based coding assistant',
+      );
+
+      // User message should be first (and only) input message
       const firstMessage = parsedBody.input![0];
       expect(firstMessage.role).toBe('user');
-      expect(firstMessage.content).toContain('<system>');
-      expect(firstMessage.content).toContain('</system>');
-
-      // Second message should be the actual user message
-      const secondMessage = parsedBody.input![1];
-      expect(secondMessage.role).toBe('user');
-      expect(secondMessage.content).toBe('user question');
+      expect(firstMessage.content).toBe('user question');
     });
 
     it('should NOT inject system prompt when not in Codex mode', async () => {

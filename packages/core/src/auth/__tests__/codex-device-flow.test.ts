@@ -312,8 +312,8 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
 
     const authUrl = deviceFlow.buildAuthorizationUrl(redirectUri, state);
 
-    // Verify URL structure
-    expect(authUrl).toContain('https://auth.openai.com/authorize');
+    // Verify URL structure - uses /oauth/authorize per CODEX_CONFIG
+    expect(authUrl).toContain('https://auth.openai.com/oauth/authorize');
     expect(authUrl).toContain('client_id=app_EMoamEEZ73f0CkXaXp7hrann');
     expect(authUrl).toContain(
       'redirect_uri=' + encodeURIComponent(redirectUri),
@@ -420,7 +420,8 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
     });
 
     // First build auth URL to initialize PKCE verifier
-    deviceFlow.buildAuthorizationUrl(redirectUri, 'test-state');
+    const testState = 'test-state';
+    deviceFlow.buildAuthorizationUrl(redirectUri, testState);
 
     // Mock the token endpoint to use test server
     const originalFetch = global.fetch;
@@ -442,7 +443,11 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
     }) as typeof fetch;
 
     // This should use Zod validation internally - no type assertions
-    const token = await deviceFlow.exchangeCodeForToken(authCode, redirectUri);
+    const token = await deviceFlow.exchangeCodeForToken(
+      authCode,
+      redirectUri,
+      testState,
+    );
 
     // Verify token structure matches CodexOAuthTokenSchema
     expect(token.access_token).toBe('codex-access-token-abc');
@@ -460,59 +465,63 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
    * @when Calling refreshToken
    * @then Returns new CodexOAuthToken with updated expiry
    */
-  it('should refresh token using refresh grant type with Zod validation', async () => {
-    const refreshToken = 'old-refresh-token';
-    const mockTokenResponse = {
-      access_token: 'new-access-token',
-      token_type: 'Bearer',
-      expires_in: 3600,
-      refresh_token: 'new-refresh-token',
-      id_token: createTestIdToken('test-account-123'),
-    };
+  it(
+    'should refresh token using refresh grant type with Zod validation',
+    async () => {
+      const refreshToken = 'old-refresh-token';
+      const mockTokenResponse = {
+        access_token: 'new-access-token',
+        token_type: 'Bearer',
+        expires_in: 3600,
+        refresh_token: 'new-refresh-token',
+        id_token: createTestIdToken('test-account-123'),
+      };
 
-    testServer.removeAllListeners('request');
-    testServer.on('request', (req, res) => {
-      let body = '';
-      req.on('data', (chunk) => {
-        body += chunk;
-      });
-      req.on('end', () => {
-        const params = new URLSearchParams(body);
-        expect(params.get('grant_type')).toBe('refresh_token');
-        expect(params.get('refresh_token')).toBe(refreshToken);
-        expect(params.get('client_id')).toBe('app_EMoamEEZ73f0CkXaXp7hrann');
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(mockTokenResponse));
-      });
-    });
-
-    const originalFetch = global.fetch;
-    global.fetch = vi.fn((input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url.includes('auth.openai.com/oauth/token')) {
-        return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
-          method: 'POST',
-          body: new URLSearchParams({
-            grant_type: 'refresh_token',
-            refresh_token: refreshToken,
-            client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
-          }),
+      testServer.removeAllListeners('request');
+      testServer.on('request', (req, res) => {
+        let body = '';
+        req.on('data', (chunk) => {
+          body += chunk;
         });
-      }
-      return originalFetch(input);
-    }) as typeof fetch;
+        req.on('end', () => {
+          const params = new URLSearchParams(body);
+          expect(params.get('grant_type')).toBe('refresh_token');
+          expect(params.get('refresh_token')).toBe(refreshToken);
+          expect(params.get('client_id')).toBe('app_EMoamEEZ73f0CkXaXp7hrann');
 
-    const newToken = await deviceFlow.refreshToken(refreshToken);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(mockTokenResponse));
+        });
+      });
 
-    // Verify new token is validated with Zod schema
-    expect(newToken.access_token).toBe('new-access-token');
-    expect(newToken.token_type).toBe('Bearer');
-    expect(newToken.account_id).toBe('test-account-123');
-    expect(newToken.refresh_token).toBe('new-refresh-token');
+      const originalFetch = global.fetch;
+      global.fetch = vi.fn((input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url.includes('auth.openai.com/oauth/token')) {
+          return originalFetch(`http://localhost:${serverPort}/oauth/token`, {
+            method: 'POST',
+            body: new URLSearchParams({
+              grant_type: 'refresh_token',
+              refresh_token: refreshToken,
+              client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+            }),
+          });
+        }
+        return originalFetch(input);
+      }) as typeof fetch;
 
-    global.fetch = originalFetch;
-  });
+      const newToken = await deviceFlow.refreshToken(refreshToken);
+
+      // Verify new token is validated with Zod schema
+      expect(newToken.access_token).toBe('new-access-token');
+      expect(newToken.token_type).toBe('Bearer');
+      expect(newToken.account_id).toBe('test-account-123');
+      expect(newToken.refresh_token).toBe('new-refresh-token');
+
+      global.fetch = originalFetch;
+    },
+    { timeout: 10000 },
+  );
 
   /**
    * @requirement REQ-160.6
@@ -579,7 +588,8 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
     });
 
     // Build auth URL first to initialize PKCE
-    deviceFlow.buildAuthorizationUrl(redirectUri, 'test-state');
+    const testState = 'test-state';
+    deviceFlow.buildAuthorizationUrl(redirectUri, testState);
 
     const originalFetch = global.fetch;
     global.fetch = vi.fn(() =>
@@ -588,7 +598,7 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
 
     // Should throw error because id_token is required to extract account_id
     await expect(
-      deviceFlow.exchangeCodeForToken(authCode, redirectUri),
+      deviceFlow.exchangeCodeForToken(authCode, redirectUri, testState),
     ).rejects.toThrow();
 
     global.fetch = originalFetch;

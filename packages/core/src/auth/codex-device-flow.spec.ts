@@ -124,7 +124,8 @@ describe('CodexDeviceFlow - PKCE Verifier State Management', () => {
       const storedVerifier = verifiers.get(state);
 
       expect(storedVerifier).toBeDefined();
-      expect(storedVerifier).toHaveLength(43);
+      // PKCE verifier is 64 random bytes = 86 chars in base64url
+      expect(storedVerifier).toHaveLength(86);
     });
 
     it('should match verifier to challenge for state', () => {
