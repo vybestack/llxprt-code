@@ -179,6 +179,11 @@ function applyColor(color: string, text: string): string {
     case 'grey':
       return chalk.gray(text);
     default:
+      // Return text with a safe fallback color for empty/unknown colors
+      // This fixes issue #703 where empty Foreground values make text invisible on dark backgrounds
+      if (!color || color === '') {
+        return chalk.white(text);
+      }
       return text;
   }
 }
