@@ -6,6 +6,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { aliasEntries } = vi.hoisted(() => ({
+  aliasEntries: [] as Array<Record<string, unknown>>,
+}));
+
 const {
   StubSettingsService: StubSettingsServiceClass,
   StubConfig: StubConfigClass,
@@ -163,22 +167,7 @@ let stubSettingsService: StubSettingsServiceInstance;
 let stubConfig: StubConfigInstance;
 
 vi.mock('../providers/providerAliases.js', () => ({
-  loadProviderAliasEntries: () => [
-    {
-      alias: 'qwenvercel',
-      source: 'builtin',
-      filePath: '/fake/qwenvercel.config',
-      config: {
-        baseProvider: 'openaivercel',
-        baseUrl: 'https://portal.qwen.ai/v1',
-        defaultModel: 'qwen3-coder-plus',
-        ephemeralSettings: {
-          'context-limit': 200000,
-          max_tokens: 50000,
-        },
-      },
-    },
-  ],
+  loadProviderAliasEntries: () => aliasEntries,
 }));
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
@@ -251,6 +240,22 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       mockOAuthManager,
     );
 
+    aliasEntries.length = 0;
+    aliasEntries.push({
+      alias: 'qwenvercel',
+      source: 'builtin',
+      filePath: '/fake/qwenvercel.config',
+      config: {
+        baseProvider: 'openaivercel',
+        baseUrl: 'https://portal.qwen.ai/v1',
+        defaultModel: 'qwen3-coder-plus',
+        ephemeralSettings: {
+          'context-limit': 200000,
+          max_tokens: 50000,
+        },
+      },
+    });
+
     // Ensure provider instance default doesn't match alias default
     providers.qwenvercel.defaultModel = 'gpt-4o';
     providers.qwenvercel.providerConfig.baseUrl = 'https://portal.qwen.ai/v1';
@@ -282,5 +287,37 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
 
     expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(8192);
+  });
+
+  it('does not allow alias ephemerals to set auth-like keys', async () => {
+    const entry = aliasEntries[0] as {
+      config?: { ephemeralSettings?: Record<string, unknown> };
+    };
+    entry.config = entry.config ?? {};
+    entry.config.ephemeralSettings = {
+      'api-key': 'should-not-apply',
+      max_tokens: 50000,
+    };
+
+    await switchActiveProvider('qwenvercel');
+
+    expect(stubConfig.getEphemeralSetting('api-key')).toBeUndefined();
+    expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
+  });
+
+  it('ignores non-scalar alias ephemeral values', async () => {
+    const entry = aliasEntries[0] as {
+      config?: { ephemeralSettings?: Record<string, unknown> };
+    };
+    entry.config = entry.config ?? {};
+    entry.config.ephemeralSettings = {
+      'context-limit': [200000],
+      max_tokens: 50000,
+    };
+
+    await switchActiveProvider('qwenvercel');
+
+    expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
+    expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
   });
 });

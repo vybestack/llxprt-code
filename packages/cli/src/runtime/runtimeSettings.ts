@@ -1792,28 +1792,82 @@ export async function switchActiveProvider(
   }
 
   // Apply alias-specific ephemeral settings (defaults) after the switch.
+  const aliasEphemeralSettings = aliasConfig?.ephemeralSettings;
   if (
-    aliasConfig?.ephemeralSettings &&
-    typeof aliasConfig.ephemeralSettings === 'object'
+    aliasEphemeralSettings &&
+    typeof aliasEphemeralSettings === 'object' &&
+    !Array.isArray(aliasEphemeralSettings)
   ) {
     const protectedAliasEphemeralKeys = new Set([
-      'activeProvider',
+      'activeprovider',
       'base-url',
+      'baseurl',
+      'base_url',
       'model',
       'auth-key',
       'auth-keyfile',
-      'apiKey',
-      'apiKeyfile',
+      'authkey',
+      'authkeyfile',
+      'api-key',
+      'api-keyfile',
+      'api_key',
+      'api_keyfile',
+      'apikey',
+      'apikeyfile',
     ]);
 
-    for (const [key, value] of Object.entries(aliasConfig.ephemeralSettings)) {
-      if (protectedAliasEphemeralKeys.has(key)) {
+    for (const [rawKey, rawValue] of Object.entries(aliasEphemeralSettings)) {
+      const key = rawKey.trim();
+      if (!key) {
         continue;
       }
+
+      const normalizedKey = key.toLowerCase();
+      if (protectedAliasEphemeralKeys.has(normalizedKey)) {
+        logger.warn(
+          () =>
+            `[cli-runtime] Skipping protected alias ephemeral setting '${key}' for provider '${name}'.`,
+        );
+        continue;
+      }
+
       if (config.getEphemeralSetting(key) !== undefined) {
         continue;
       }
-      config.setEphemeralSetting(key, value);
+
+      if (
+        rawValue === null ||
+        rawValue === undefined ||
+        Array.isArray(rawValue)
+      ) {
+        logger.warn(
+          () =>
+            `[cli-runtime] Skipping non-scalar alias ephemeral setting '${key}' for provider '${name}'.`,
+        );
+        continue;
+      }
+
+      if (typeof rawValue === 'number' && !Number.isFinite(rawValue)) {
+        logger.warn(
+          () =>
+            `[cli-runtime] Skipping non-finite alias ephemeral setting '${key}' for provider '${name}'.`,
+        );
+        continue;
+      }
+
+      const isScalar =
+        typeof rawValue === 'string' ||
+        typeof rawValue === 'number' ||
+        typeof rawValue === 'boolean';
+      if (!isScalar) {
+        logger.warn(
+          () =>
+            `[cli-runtime] Skipping non-scalar alias ephemeral setting '${key}' for provider '${name}'.`,
+        );
+        continue;
+      }
+
+      config.setEphemeralSetting(key, rawValue);
     }
   }
 

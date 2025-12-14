@@ -264,6 +264,36 @@ describe('OpenAIVercelProvider', () => {
       expect(supportsOAuth).toBe(true);
     });
 
+    it('does not treat schemeless non-Qwen URLs containing Qwen substrings as Qwen endpoints', () => {
+      const oauthManager = {
+        getToken: vi.fn(async () => null),
+        isAuthenticated: vi.fn(async () => false),
+      };
+
+      const provider = new OpenAIVercelProvider(
+        undefined,
+        'evil.com/dashscope.aliyuncs.com',
+        undefined,
+        oauthManager,
+      );
+
+      const supportsOAuth = (
+        provider as unknown as { supportsOAuth: () => boolean }
+      ).supportsOAuth();
+      expect(supportsOAuth).toBe(false);
+
+      const baseProviderConfig = (
+        provider as unknown as {
+          baseProviderConfig?: {
+            isOAuthEnabled?: boolean;
+            oauthProvider?: string;
+          };
+        }
+      ).baseProviderConfig;
+      expect(baseProviderConfig?.isOAuthEnabled).toBe(false);
+      expect(baseProviderConfig?.oauthProvider).toBeUndefined();
+    });
+
     it('does not support OAuth for non-Qwen endpoints by default', () => {
       const provider = new OpenAIVercelProvider(
         'test-api-key',

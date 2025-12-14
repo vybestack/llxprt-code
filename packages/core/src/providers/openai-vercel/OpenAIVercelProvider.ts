@@ -85,10 +85,15 @@ interface CaptureBuffer {
 }
 
 function isQwenBaseURL(baseURL: string | undefined): boolean {
-  if (!baseURL) return false;
+  const candidate = baseURL?.trim();
+  if (!candidate) return false;
+
+  const normalized = candidate.includes('://')
+    ? candidate
+    : `https://${candidate}`;
 
   try {
-    const hostname = new URL(baseURL).hostname.toLowerCase();
+    const hostname = new URL(normalized).hostname.toLowerCase();
     return (
       hostname === 'dashscope.aliyuncs.com' ||
       hostname.endsWith('.dashscope.aliyuncs.com') ||
@@ -98,14 +103,7 @@ function isQwenBaseURL(baseURL: string | undefined): boolean {
       hostname.endsWith('.qwen.com')
     );
   } catch {
-    const lowered = baseURL.toLowerCase();
-    return (
-      lowered.includes('dashscope.aliyuncs.com') ||
-      lowered.includes('portal.qwen.ai') ||
-      lowered.includes('qwen.ai') ||
-      lowered.includes('api.qwen.com') ||
-      lowered.includes('qwen.com')
-    );
+    return false;
   }
 }
 
@@ -328,14 +326,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     if (this.name === 'qwen') {
       return true;
     }
-    const baseURL = this.getBaseURL();
-    if (
-      baseURL &&
-      (baseURL.includes('dashscope.aliyuncs.com') ||
-        baseURL.includes('portal.qwen.ai') ||
-        baseURL.includes('api.qwen.com') ||
-        baseURL.includes('qwen'))
-    ) {
+    if (isQwenBaseURL(this.getBaseURL())) {
       return true;
     }
     return false;
@@ -1793,11 +1784,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
   }
 
   override getDefaultModel(): string {
-    const baseURL = this.getBaseURL();
-    if (
-      baseURL &&
-      (baseURL.includes('qwen') || baseURL.includes('dashscope'))
-    ) {
+    if (isQwenBaseURL(this.getBaseURL())) {
       return process.env.LLXPRT_DEFAULT_MODEL || 'qwen3-coder-plus';
     }
     return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-4o';
