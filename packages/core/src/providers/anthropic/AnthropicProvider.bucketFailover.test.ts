@@ -181,10 +181,15 @@ describe('AnthropicProvider - Bucket Failover Integration', () => {
         blocks: [{ type: 'text', text: 'Hello' }],
       };
 
+      // Use minimal retry attempts since failover is disabled
+      // Need at least 3 retries: 2 to hit failover threshold, 1 more to check failover
       const options = createProviderCallOptions({
         providerName: 'anthropic',
         contents: [userContent],
         runtime: mockRuntime,
+        settingsOverrides: {
+          global: { retries: 3, retrywait: 10 },
+        },
       });
 
       // Should throw error without attempting failover
@@ -199,7 +204,7 @@ describe('AnthropicProvider - Bucket Failover Integration', () => {
       expect(mockFailoverHandler.isEnabled).toHaveBeenCalled();
       expect(mockFailoverHandler.tryFailover).not.toHaveBeenCalled();
     },
-    { timeout: 30000 },
+    { timeout: 5000 },
   );
 
   it(
@@ -231,10 +236,15 @@ describe('AnthropicProvider - Bucket Failover Integration', () => {
         blocks: [{ type: 'text', text: 'Hello' }],
       };
 
+      // Use minimal retry attempts since no handler is configured
+      // Need at least 3 retries: 2 to hit failover threshold, 1 more to check failover
       const options = createProviderCallOptions({
         providerName: 'anthropic',
         contents: [userContent],
         runtime: runtimeWithoutHandler,
+        settingsOverrides: {
+          global: { retries: 3, retrywait: 10 },
+        },
       });
 
       // Should throw error without attempting failover
@@ -248,7 +258,7 @@ describe('AnthropicProvider - Bucket Failover Integration', () => {
       // Verify handler getter was called but returned null
       expect(configWithoutHandler.getBucketFailoverHandler).toHaveBeenCalled();
     },
-    { timeout: 30000 },
+    { timeout: 5000 },
   );
 
   it('should stop retrying when bucket failover returns false (no more buckets)', async () => {
@@ -364,78 +374,82 @@ describe('AnthropicProvider - Bucket Failover Integration', () => {
     expect(mockFailoverHandler.tryFailover).toHaveBeenCalledTimes(1);
   });
 
-  it('should pass authType to bucket failover callback', async () => {
-    // Helper to create async iterable stream for Anthropic
-    async function* createAnthropicStream() {
-      yield {
-        type: 'message_start',
-        message: {
-          id: 'msg_123',
-          type: 'message',
-          role: 'assistant',
-          content: [],
-          model: 'claude-sonnet-4-5-20250929',
-          usage: { input_tokens: 10, output_tokens: 0 },
+  it(
+    'should pass authType to bucket failover callback',
+    async () => {
+      // Helper to create async iterable stream for Anthropic
+      async function* createAnthropicStream() {
+        yield {
+          type: 'message_start',
+          message: {
+            id: 'msg_123',
+            type: 'message',
+            role: 'assistant',
+            content: [],
+            model: 'claude-sonnet-4-5-20250929',
+            usage: { input_tokens: 10, output_tokens: 0 },
+          },
+        };
+        yield {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'text', text: '' },
+        };
+        yield {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'text_delta', text: 'Success' },
+        };
+        yield {
+          type: 'content_block_stop',
+          index: 0,
+        };
+        yield {
+          type: 'message_delta',
+          delta: { stop_reason: 'end_turn' },
+          usage: { output_tokens: 5 },
+        };
+        yield {
+          type: 'message_stop',
+        };
+      }
+
+      // Mock the provider to use OAuth auth
+      const mockCreate = vi
+        .fn()
+        .mockRejectedValueOnce({ status: 429, message: 'Rate limit' })
+        .mockRejectedValueOnce({ status: 429, message: 'Rate limit' })
+        .mockResolvedValueOnce(createAnthropicStream());
+
+      AnthropicMock.mockImplementation(() => ({
+        messages: {
+          create: mockCreate,
         },
+      }));
+
+      const userContent: IContent = {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
       };
-      yield {
-        type: 'content_block_start',
-        index: 0,
-        content_block: { type: 'text', text: '' },
-      };
-      yield {
-        type: 'content_block_delta',
-        index: 0,
-        delta: { type: 'text_delta', text: 'Success' },
-      };
-      yield {
-        type: 'content_block_stop',
-        index: 0,
-      };
-      yield {
-        type: 'message_delta',
-        delta: { stop_reason: 'end_turn' },
-        usage: { output_tokens: 5 },
-      };
-      yield {
-        type: 'message_stop',
-      };
-    }
 
-    // Mock the provider to use OAuth auth
-    const mockCreate = vi
-      .fn()
-      .mockRejectedValueOnce({ status: 429, message: 'Rate limit' })
-      .mockRejectedValueOnce({ status: 429, message: 'Rate limit' })
-      .mockResolvedValueOnce(createAnthropicStream());
+      const options = createProviderCallOptions({
+        providerName: 'anthropic',
+        contents: [userContent],
+        runtime: mockRuntime,
+        resolved: {
+          authToken: 'sk-ant-oat-mock-token',
+        },
+      });
 
-    AnthropicMock.mockImplementation(() => ({
-      messages: {
-        create: mockCreate,
-      },
-    }));
+      const responseGenerator = provider.generateChatCompletion(options);
 
-    const userContent: IContent = {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'Hello' }],
-    };
+      for await (const _ of responseGenerator) {
+        // Consume the generator
+      }
 
-    const options = createProviderCallOptions({
-      providerName: 'anthropic',
-      contents: [userContent],
-      runtime: mockRuntime,
-      resolved: {
-        authToken: 'sk-ant-oat-mock-token',
-      },
-    });
-
-    const responseGenerator = provider.generateChatCompletion(options);
-
-    for await (const _ of responseGenerator) {
-      // Consume the generator
-    }
-
-    // Verify bucket failover was called
-    expect(mockFailoverHandler.tryFailover).toHaveBeenCalled();
-  });
+      // Verify bucket failover was called
+      expect(mockFailoverHandler.tryFailover).toHaveBeenCalled();
+    },
+    { timeout: 10000 },
+  );
 });

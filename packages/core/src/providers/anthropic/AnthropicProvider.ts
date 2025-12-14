@@ -1549,7 +1549,9 @@ export class AnthropicProvider extends BaseProvider {
             requestBody as Parameters<typeof client.messages.create>[0],
           );
 
-    const { maxAttempts, initialDelayMs } = this.getRetryConfig();
+    const { maxAttempts, initialDelayMs } = this.getRetryConfig(
+      configEphemeralSettings,
+    );
 
     // Proactively throttle if approaching rate limits
     await this.waitForRateLimitIfNeeded(configEphemeralSettings);
@@ -2006,9 +2008,10 @@ export class AnthropicProvider extends BaseProvider {
     }
   }
 
-  private getRetryConfig(): { maxAttempts: number; initialDelayMs: number } {
-    const ephemeralSettings =
-      this.providerConfig?.getEphemeralSettings?.() || {};
+  private getRetryConfig(ephemeralSettings: Record<string, unknown> = {}): {
+    maxAttempts: number;
+    initialDelayMs: number;
+  } {
     const maxAttempts =
       (ephemeralSettings['retries'] as number | undefined) ?? 6;
     const initialDelayMs =

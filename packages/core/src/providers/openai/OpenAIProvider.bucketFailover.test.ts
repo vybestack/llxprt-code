@@ -174,10 +174,15 @@ describe('OpenAIProvider - Bucket Failover Integration', () => {
           blocks: [{ type: 'text', text: 'Hello' }],
         };
 
+        // Use minimal retry attempts since failover is disabled
+        // Need at least 3 retries: 2 to hit failover threshold, 1 more to check failover
         const options = createProviderCallOptions({
           providerName: 'openai',
           contents: [userContent],
           runtime: mockRuntime,
+          settingsOverrides: {
+            global: { retries: 3, retrywait: 10 },
+          },
         });
 
         // Should throw error without attempting failover
@@ -192,7 +197,7 @@ describe('OpenAIProvider - Bucket Failover Integration', () => {
         expect(mockFailoverHandler.isEnabled).toHaveBeenCalled();
         expect(mockFailoverHandler.tryFailover).not.toHaveBeenCalled();
       },
-      { timeout: 30000 },
+      { timeout: 5000 },
     );
   });
 
