@@ -371,8 +371,9 @@ describe('CLI runtime isolation', () => {
         },
       });
 
-      const { ensureStatelessProviderReady } =
-        await import('../runtimeSettings.js');
+      const { ensureStatelessProviderReady } = await import(
+        '../runtimeSettings.js'
+      );
 
       // Should not throw - runtime properly registered
       expect(() => ensureStatelessProviderReady()).not.toThrow();
@@ -391,8 +392,9 @@ describe('CLI runtime isolation', () => {
     try {
       resetCliProviderInfrastructure();
 
-      const { ensureStatelessProviderReady } =
-        await import('../runtimeSettings.js');
+      const { ensureStatelessProviderReady } = await import(
+        '../runtimeSettings.js'
+      );
 
       // Try to ensure ready with no runtime registered - should throw
       expect(() => ensureStatelessProviderReady()).toThrow(

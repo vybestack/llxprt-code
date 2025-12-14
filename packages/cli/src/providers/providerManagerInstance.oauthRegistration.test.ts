@@ -68,8 +68,9 @@ describe('Anthropic OAuth registration with environment key', () => {
       };
     });
 
-    const { getProviderManager, resetProviderManager } =
-      await import('./providerManagerInstance.js');
+    const { getProviderManager, resetProviderManager } = await import(
+      './providerManagerInstance.js'
+    );
 
     resetProviderManager();
     getProviderManager(undefined, false, undefined);
@@ -124,8 +125,9 @@ describe('Anthropic OAuth registration with environment key', () => {
       };
     });
 
-    const { getProviderManager, resetProviderManager } =
-      await import('./providerManagerInstance.js');
+    const { getProviderManager, resetProviderManager } = await import(
+      './providerManagerInstance.js'
+    );
 
     resetProviderManager();
     const mockConfig = {

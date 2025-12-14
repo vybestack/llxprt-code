@@ -171,8 +171,9 @@ const getMcpStatus = async (
     if (server?.oauth?.enabled) {
       needsAuthHint = true;
       try {
-        const { MCPOAuthTokenStorage } =
-          await import('@vybestack/llxprt-code-core');
+        const { MCPOAuthTokenStorage } = await import(
+          '@vybestack/llxprt-code-core'
+        );
         const tokenStorage = new MCPOAuthTokenStorage();
         const hasToken = await tokenStorage.getCredentials(serverName);
         if (hasToken) {
