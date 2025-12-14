@@ -112,166 +112,11 @@ describe('CodexOAuthTokenSchema', () => {
   });
 });
 
-describe('JWT account_id extraction', () => {
-  beforeEach(() => {});
-  // Tests are standalone, don't need shared deviceFlow instance
-
-  /**
-   * @requirement REQ-160.2
-   * @scenario Extract account_id from id_token JWT payload
-   * @given Valid JWT with account_id in payload
-   * @when Extracting account_id from id_token
-   * @then Returns correct account_id from JWT claims
-   */
-  it('should extract account_id from id_token JWT payload', () => {
-    // Create a valid JWT with account_id in payload
-    // JWT format: header.payload.signature (base64url encoded)
-    const header = { alg: 'RS256', typ: 'JWT' };
-    const payload = {
-      'https://api.openai.com/auth': {
-        account_id: 'extracted-account-id-123',
-      },
-      sub: 'user123',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    };
-
-    const headerEncoded = Buffer.from(JSON.stringify(header)).toString(
-      'base64url',
-    );
-    const payloadEncoded = Buffer.from(JSON.stringify(payload)).toString(
-      'base64url',
-    );
-    const signature = 'fake-signature';
-    const idToken = `${headerEncoded}.${payloadEncoded}.${signature}`;
-
-    // This will test the extractAccountIdFromIdToken private method via public API
-    // The method should parse the JWT and extract the account_id
-    expect(idToken.split('.')).toHaveLength(3);
-
-    // Decode and verify payload structure
-    const decodedPayload = JSON.parse(
-      Buffer.from(payloadEncoded, 'base64url').toString('utf-8'),
-    );
-    expect(decodedPayload['https://api.openai.com/auth'].account_id).toBe(
-      'extracted-account-id-123',
-    );
-  });
-
-  /**
-   * @requirement REQ-160.2
-   * @scenario Handle JWT with chatgpt_account_id claim
-   * @given JWT with chatgpt_account_id instead of account_id
-   * @when Extracting account_id
-   * @then Returns account_id from chatgpt_account_id claim
-   */
-  it('should extract account_id from chatgpt_account_id claim', () => {
-    const header = { alg: 'RS256', typ: 'JWT' };
-    const payload = {
-      'https://api.openai.com/auth': {
-        chatgpt_account_id: 'chatgpt-account-123',
-      },
-      sub: 'user123',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    };
-
-    const headerEncoded = Buffer.from(JSON.stringify(header)).toString(
-      'base64url',
-    );
-    const payloadEncoded = Buffer.from(JSON.stringify(payload)).toString(
-      'base64url',
-    );
-    const signature = 'fake-signature';
-    const _idToken = `${headerEncoded}.${payloadEncoded}.${signature}`;
-
-    const decodedPayload = JSON.parse(
-      Buffer.from(payloadEncoded, 'base64url').toString('utf-8'),
-    );
-    expect(
-      decodedPayload['https://api.openai.com/auth'].chatgpt_account_id,
-    ).toBe('chatgpt-account-123');
-  });
-
-  /**
-   * @requirement REQ-160.2
-   * @scenario Throw error for invalid JWT format
-   * @given Malformed JWT string (not 3 parts)
-   * @when Attempting to extract account_id
-   * @then Throws error indicating invalid JWT format
-   */
-  it('should throw error for invalid JWT format', () => {
-    const invalidJWT = 'not.a.valid.jwt.structure';
-
-    // Invalid JWT should have != 3 parts when split by '.'
-    expect(invalidJWT.split('.')).toHaveLength(5);
-
-    // The extractAccountIdFromIdToken method should validate this
-    // and throw an error for invalid structure
-  });
-
-  /**
-   * @requirement REQ-160.2
-   * @scenario Throw error if account_id not found in JWT
-   * @given Valid JWT structure but missing account_id claim
-   * @when Attempting to extract account_id
-   * @then Throws error indicating account_id not found
-   */
-  it('should throw error if account_id not found in JWT', () => {
-    const header = { alg: 'RS256', typ: 'JWT' };
-    const payload = {
-      sub: 'user123',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      // Missing 'https://api.openai.com/auth' claim with account_id
-    };
-
-    const headerEncoded = Buffer.from(JSON.stringify(header)).toString(
-      'base64url',
-    );
-    const payloadEncoded = Buffer.from(JSON.stringify(payload)).toString(
-      'base64url',
-    );
-    const signature = 'fake-signature';
-    const _idToken = `${headerEncoded}.${payloadEncoded}.${signature}`;
-
-    const decodedPayload = JSON.parse(
-      Buffer.from(payloadEncoded, 'base64url').toString('utf-8'),
-    );
-    expect(decodedPayload['https://api.openai.com/auth']).toBeUndefined();
-  });
-
-  /**
-   * @requirement REQ-160.2
-   * @scenario Handle JWT with root-level account_id
-   * @given JWT with account_id at root level (fallback)
-   * @when Extracting account_id
-   * @then Returns account_id from root level
-   */
-  it('should extract account_id from root level as fallback', () => {
-    const header = { alg: 'RS256', typ: 'JWT' };
-    const payload = {
-      account_id: 'root-level-account-id',
-      sub: 'user123',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    };
-
-    const headerEncoded = Buffer.from(JSON.stringify(header)).toString(
-      'base64url',
-    );
-    const payloadEncoded = Buffer.from(JSON.stringify(payload)).toString(
-      'base64url',
-    );
-    const signature = 'fake-signature';
-    const _idToken = `${headerEncoded}.${payloadEncoded}.${signature}`;
-
-    const decodedPayload = JSON.parse(
-      Buffer.from(payloadEncoded, 'base64url').toString('utf-8'),
-    );
-    expect(decodedPayload.account_id).toBe('root-level-account-id');
-  });
-});
+// NOTE: JWT account_id extraction tests removed per dev-docs/RULES.md
+// The extractAccountIdFromIdToken method is private and should only be tested
+// through the public API (exchangeCodeForToken). Direct JWT parsing tests
+// were testing implementation details, not behavior.
+// See: exchangeCodeForToken tests which verify account_id extraction end-to-end
 
 describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
   let testServer: Server;
@@ -523,45 +368,11 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
     { timeout: 10000 },
   );
 
-  /**
-   * @requirement REQ-160.6
-   * @scenario Handle token expiry with 30-second buffer
-   * @given Token with expiry timestamp
-   * @when Checking if token needs refresh
-   * @then Triggers refresh 30 seconds before expiry
-   */
-  it('should detect tokens needing refresh with 30-second buffer', () => {
-    const now = Math.floor(Date.now() / 1000);
-
-    // Token expiring in 25 seconds (less than 30-second buffer)
-    const soonExpiringToken = {
-      access_token: 'soon-expiring',
-      token_type: 'Bearer' as const,
-      expiry: now + 25,
-      account_id: 'test-account',
-    };
-
-    // Token expiring in 35 seconds (more than 30-second buffer)
-    const validToken = {
-      access_token: 'still-valid',
-      token_type: 'Bearer' as const,
-      expiry: now + 35,
-      account_id: 'test-account',
-    };
-
-    // Already expired token
-    const expiredToken = {
-      access_token: 'expired',
-      token_type: 'Bearer' as const,
-      expiry: now - 10,
-      account_id: 'test-account',
-    };
-
-    // Verify expiry logic (when implemented, should trigger refresh)
-    expect(soonExpiringToken.expiry).toBeLessThan(now + 30);
-    expect(validToken.expiry).toBeGreaterThan(now + 30);
-    expect(expiredToken.expiry).toBeLessThan(now);
-  });
+  // NOTE: Token expiry buffer test removed per dev-docs/RULES.md
+  // The test was verifying data structure values, not calling any method.
+  // CodexDeviceFlow does not expose a public needsRefresh() method.
+  // Token expiry checking is handled by CodexOAuthProvider.refreshIfNeeded()
+  // which is tested in codex-oauth-provider.test.ts
 
   /**
    * @requirement REQ-160.7
