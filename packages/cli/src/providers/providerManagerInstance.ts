@@ -520,6 +520,7 @@ function registerAliasProviders(
           openaiApiKey,
           openaiBaseUrl,
           openaiProviderConfig,
+          oauthManager,
         );
         if (provider) {
           providerManagerInstance.registerProvider(provider);
@@ -641,6 +642,7 @@ function createOpenAIResponsesAliasProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
+  oauthManager: OAuthManager,
 ): OpenAIResponsesProvider | null {
   const resolvedBaseUrl = entry.config.baseUrl || openaiBaseUrl;
   if (!resolvedBaseUrl) {
@@ -678,6 +680,7 @@ function createOpenAIResponsesAliasProvider(
     aliasApiKey || undefined,
     resolvedBaseUrl,
     aliasProviderConfig,
+    oauthManager,
   );
 
   // Override the provider name to match the alias

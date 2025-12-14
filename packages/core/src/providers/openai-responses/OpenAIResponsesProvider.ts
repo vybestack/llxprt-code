@@ -48,13 +48,12 @@ import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
-import {
-  CodexOAuthTokenSchema,
-  type CodexOAuthToken,
-} from '../../auth/types.js';
+import { CodexOAuthTokenSchema } from '../../auth/types.js';
+import type { OAuthManager } from '../../auth/precedence.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
   private logger: DebugLogger;
+  private _isCodexMode: boolean;
   // @plan:PLAN-20251023-STATELESS-HARDENING.P08
   // @requirement:REQ-SP4-002/REQ-SP4-003
   // Removed static cache scope and conversation cache dependencies to achieve stateless operation
@@ -63,28 +62,34 @@ export class OpenAIResponsesProvider extends BaseProvider {
     apiKey: string | undefined,
     baseURL?: string,
     config?: IProviderConfig,
+    oauthManager?: OAuthManager,
   ) {
+    // Detect Codex mode from baseURL at construction time
+    const isCodex = baseURL?.includes('chatgpt.com/backend-api/codex') ?? false;
+
     const baseConfig: BaseProviderConfig = {
       name: 'openai-responses',
       apiKey,
       baseURL: baseURL || 'https://api.openai.com/v1',
       envKeyNames: ['OPENAI_API_KEY'],
-      isOAuthEnabled: false,
-      oauthProvider: undefined,
-      oauthManager: undefined,
+      isOAuthEnabled: isCodex && !!oauthManager,
+      oauthProvider: isCodex ? 'codex' : undefined,
+      oauthManager: isCodex ? oauthManager : undefined,
     };
 
     super(baseConfig, config);
 
+    this._isCodexMode = isCodex;
     this.logger = new DebugLogger('llxprt:providers:openai-responses');
     this.logger.debug(
       () =>
-        `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, apiKey: ${apiKey?.substring(0, 10) || 'none'}`,
+        `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, apiKey: ${apiKey?.substring(0, 10) || 'none'}, codexMode: ${isCodex}`,
     );
   }
 
   /**
-   * This provider does not support OAuth
+   * OAuth is supported in Codex mode
+   * @plan PLAN-20251213-ISSUE160.P03
    */
 
   // @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -92,7 +97,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
   // Removed stateful conversation cache methods to ensure stateless operation
 
   protected supportsOAuth(): boolean {
-    return false;
+    return this._isCodexMode;
   }
 
   /**
@@ -107,19 +112,25 @@ export class OpenAIResponsesProvider extends BaseProvider {
    * Get account_id from Codex OAuth token
    * @plan PLAN-20251213-ISSUE160.P03
    */
-  private getCodexAccountId(options: NormalizedGenerateChatOptions): string {
-    // Get token from invocation metadata
-    const token = options.invocation?.metadata?.codexToken as
-      | CodexOAuthToken
-      | undefined;
-
-    if (!token) {
+  private async getCodexAccountId(): Promise<string> {
+    // Get OAuth manager from base config
+    const oauthManager = this.baseProviderConfig.oauthManager;
+    if (!oauthManager) {
       throw new Error(
-        'Codex mode requires OAuth authentication with account_id',
+        'Codex mode requires OAuth authentication with account_id - no OAuth manager available',
       );
     }
 
-    // Validate with Zod schema
+    // Get the full token from the OAuth manager
+    // getOAuthToken returns the full token object (with account_id preserved via passthrough)
+    const token = await oauthManager.getOAuthToken?.('codex');
+    if (!token) {
+      throw new Error(
+        'Codex mode requires OAuth authentication - no token available. Run /auth codex enable',
+      );
+    }
+
+    // Validate with Zod schema to get account_id
     const validatedToken = CodexOAuthTokenSchema.parse(token);
     return validatedToken.account_id;
   }
@@ -504,7 +515,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @plan PLAN-20251213-ISSUE160.P03
     // Add Codex-specific headers when in Codex mode
     if (isCodex) {
-      const accountId = this.getCodexAccountId(options);
+      const accountId = await this.getCodexAccountId();
       headers['ChatGPT-Account-ID'] = accountId;
       headers['originator'] = 'codex_cli_rs';
       this.logger.debug(
