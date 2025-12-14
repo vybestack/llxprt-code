@@ -72,7 +72,7 @@ if (experimentalUi) {
   const uiChild = spawn('bun', uiArgs, {
     stdio: 'inherit',
     env: { ...process.env, CLI_VERSION: pkg.version, DEV: 'true' },
-    cwd: root,
+    cwd: join(root, 'packages/ui'),
   });
 
   uiChild.on('close', (code) => {

@@ -71,6 +71,7 @@ import {
   // IDE connection logging removed - telemetry disabled in llxprt
   SettingsService,
   DebugLogger,
+  ProfileManager,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -159,8 +160,11 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
 };
 
 import { existsSync, mkdirSync } from 'fs';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
+import commandExists from 'command-exists';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function setupUnhandledRejectionHandler() {
@@ -356,8 +360,10 @@ export async function main() {
     workspaceRoot,
     { settingsService: runtimeSettingsService },
   );
+  const profileManager = new ProfileManager();
   setCliRuntimeContext(runtimeSettingsService, config, {
     metadata: { source: 'cli-bootstrap', stage: 'post-config' },
+    profileManager,
   });
 
   // Check for invalid input combinations early to prevent crashes
@@ -369,7 +375,12 @@ export async function main() {
   }
 
   const wasRaw = process.stdin.isRaw;
-  if (config.isInteractive() && !wasRaw && process.stdin.isTTY) {
+  if (
+    config.isInteractive() &&
+    !argv.experimentalUi &&
+    !wasRaw &&
+    process.stdin.isTTY
+  ) {
     // Set this as early as possible to avoid spurious characters from
     // input showing up in the output.
     process.stdin.setRawMode(true);
@@ -420,10 +431,15 @@ export async function main() {
     (typeof process.env.LLXPRT_BOOTSTRAP_PROFILE === 'string'
       ? process.env.LLXPRT_BOOTSTRAP_PROFILE.trim()
       : '');
+  // Only reload profile if it wasn't already loaded in config.ts
+  // (checking if currentProfileName is null means no profile was loaded yet)
+  // If the profile was already loaded, don't reload - especially important for
+  // load balancer profiles where reloading advances the round-robin counter
+  const currentProfileName = runtimeSettingsService.getCurrentProfileName();
   if (
     !argv.provider &&
     bootstrapProfileName !== '' &&
-    runtimeSettingsService.getCurrentProfileName?.() !== null
+    currentProfileName === null
   ) {
     try {
       await loadProfileByName(bootstrapProfileName);
@@ -777,24 +793,148 @@ export async function main() {
 
   // Check for experimental UI flag
   if (argv.experimentalUi) {
+    if (!commandExists.sync('bun')) {
+      console.error('--experimental-ui requires Bun to be installed.');
+      console.error(
+        'Install bun from https://bun.sh or via your package manager.',
+      );
+      process.exit(1);
+    }
+
+    const resolveImportMeta = (
+      import.meta as unknown as {
+        resolve?: (specifier: string, parent?: string) => string;
+      }
+    ).resolve;
+    if (typeof resolveImportMeta !== 'function') {
+      console.error(
+        '--experimental-ui requires a Node version that supports import.meta.resolve.',
+      );
+      process.exit(1);
+    }
+
+    let uiEntryPath: string;
     try {
-      const { startNui } = await import('@vybestack/llxprt-ui');
-      await startNui({
-        workingDir: workspaceRoot,
-        args: process.argv.slice(2),
-      });
-      return;
+      const uiEntryUrl = resolveImportMeta('@vybestack/llxprt-ui');
+      uiEntryPath = fileURLToPath(uiEntryUrl);
     } catch (e: unknown) {
       const error = e as { code?: string };
-      if (error.code === 'ERR_MODULE_NOT_FOUND') {
+      if (
+        error.code === 'MODULE_NOT_FOUND' ||
+        error.code === 'ERR_MODULE_NOT_FOUND'
+      ) {
         console.error(
           '--experimental-ui requires @vybestack/llxprt-ui to be installed',
         );
-        console.error('Run: npm install @vybestack/llxprt-ui');
+        console.error('Run: npm install -g @vybestack/llxprt-ui');
         process.exit(1);
       }
       throw e;
     }
+
+    // If we enabled raw mode earlier, restore cooked mode before handing
+    // the terminal to bun/OpenTUI.
+    if (process.stdin.isTTY && process.stdin.isRaw && !wasRaw) {
+      try {
+        process.stdin.setRawMode(wasRaw);
+      } catch {
+        // ignore
+      }
+    }
+    // Ensure the parent process isn't consuming stdin while bun runs
+    // (inherited stdio means both processes share the same TTY fd).
+    if (process.stdin.isTTY) {
+      process.stdin.pause();
+    }
+
+    let uiRoot = dirname(uiEntryPath);
+    while (
+      uiRoot !== dirname(uiRoot) &&
+      !existsSync(join(uiRoot, 'package.json'))
+    ) {
+      uiRoot = dirname(uiRoot);
+    }
+    if (!existsSync(join(uiRoot, 'package.json'))) {
+      console.error(
+        `Unable to locate @vybestack/llxprt-ui package root from: ${uiEntryPath}`,
+      );
+      process.exit(1);
+    }
+
+    const uiEntry = join(uiRoot, 'src', 'main.tsx');
+    const rawArgs = process.argv.slice(2);
+    const filteredArgs: string[] = [];
+    for (let i = 0; i < rawArgs.length; i += 1) {
+      const arg = rawArgs[i];
+      if (arg === '--experimental-ui') {
+        const next = rawArgs[i + 1];
+        if (next === 'true' || next === 'false') {
+          i += 1;
+        }
+        continue;
+      }
+      if (arg.startsWith('--experimental-ui=')) {
+        continue;
+      }
+      filteredArgs.push(arg);
+    }
+
+    const child = spawn('bun', ['run', uiEntry, ...filteredArgs], {
+      stdio: 'inherit',
+      cwd: workspaceRoot,
+      env: { ...process.env },
+    });
+
+    const forwardSignal = (signal: NodeJS.Signals) => {
+      if (!child.killed) {
+        child.kill(signal);
+      }
+      const killTimer = setTimeout(() => {
+        if (!child.killed) {
+          child.kill('SIGKILL');
+        }
+      }, 800);
+      killTimer.unref();
+
+      const exitTimer = setTimeout(async () => {
+        await runExitCleanup();
+        process.exit(signal === 'SIGINT' ? 130 : 143);
+      }, 1200);
+      exitTimer.unref();
+    };
+
+    ['SIGINT', 'SIGTERM'].forEach((signal) => {
+      process.on(signal, () => forwardSignal(signal as NodeJS.Signals));
+    });
+
+    child.on('error', async (err) => {
+      console.error('Failed to launch experimental UI via bun:', err);
+      await runExitCleanup();
+      process.exit(1);
+    });
+
+    child.on('close', async (code, signal) => {
+      if (process.stdin.isTTY && process.stdin.isRaw !== wasRaw) {
+        try {
+          process.stdin.setRawMode(wasRaw);
+        } catch {
+          // ignore
+        }
+      }
+      await runExitCleanup();
+
+      if (signal === 'SIGINT') {
+        process.exit(130);
+        return;
+      }
+      if (signal === 'SIGTERM') {
+        process.exit(143);
+        return;
+      }
+      process.exit(code ?? 0);
+    });
+
+    return;
   }
 
   // Render UI, passing necessary config values. Check that there is no command line question.

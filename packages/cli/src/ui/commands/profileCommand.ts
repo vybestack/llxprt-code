@@ -38,17 +38,87 @@ const profileNameCompleter: CompleterFn = withFuzzyFilter(async () => {
   }
 });
 
+const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
+  async (_ctx, _partial, tokens) => {
+    try {
+      const profiles = await listProfiles();
+      // tokens.tokens format: ["save", "loadbalancer", "lb-name", "policy", "prof1", "prof2", ...]
+      // Skip first 4 tokens (save, loadbalancer, lb-name, policy) to get already selected profiles
+      const alreadySelected = tokens.tokens
+        .slice(4)
+        .filter((p) => p.length > 0);
+      const available = profiles.filter((p) => !alreadySelected.includes(p));
+      return available.map((profile) => ({
+        value: profile,
+        description: 'Add to load balancer',
+      }));
+    } catch {
+      return [];
+    }
+  },
+);
+
+// Recursive schema for unlimited profile selection
+// Each profile entry has a 'next' that points back to the same structure
+const createLbMemberProfileEntry = (
+  depth: number,
+): CommandArgumentSchema[number] => ({
+  kind: 'value',
+  name: depth === 0 ? 'profile1' : `profile${depth + 1}`,
+  description:
+    depth === 0
+      ? 'Select first profile'
+      : 'Add another profile (ESC to finish)',
+  completer: lbMemberProfileCompleter,
+  hint: 'ESC to finish selection',
+  // Create a reasonably deep chain (20 levels should be more than enough)
+  next: depth < 20 ? [createLbMemberProfileEntry(depth + 1)] : undefined,
+});
+
+const lbMemberProfileSchema: CommandArgumentSchema = [
+  createLbMemberProfileEntry(0),
+];
+
 const profileSaveSchema: CommandArgumentSchema = [
   {
-    kind: 'value',
-    name: 'profile',
-    description: 'Enter profile name to save',
-    /**
-     * @plan:PLAN-20251013-AUTOCOMPLETE.P11
-     * @requirement:REQ-004
-     * Schema-driven completion replaces legacy helpers.
-     */
-    completer: profileNameCompleter,
+    kind: 'literal',
+    value: 'model',
+    description: 'Save current model configuration',
+    next: [
+      {
+        kind: 'value',
+        name: 'profile-name',
+        description: 'Enter profile name',
+        completer: profileNameCompleter,
+      },
+    ],
+  },
+  {
+    kind: 'literal',
+    value: 'loadbalancer',
+    description: 'Create a load balancer profile',
+    next: [
+      {
+        kind: 'value',
+        name: 'lb-name',
+        description: 'Enter load balancer profile name',
+        completer: profileNameCompleter,
+        next: [
+          {
+            kind: 'literal',
+            value: 'roundrobin',
+            description: 'Distribute requests across backends in sequence',
+            next: lbMemberProfileSchema,
+          },
+          {
+            kind: 'literal',
+            value: 'failover',
+            description: 'Try backends sequentially until one succeeds',
+            next: lbMemberProfileSchema,
+          },
+        ],
+      },
+    ],
   },
 ];
 
@@ -102,57 +172,183 @@ const saveCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   schema: profileSaveSchema,
   action: async (
-    context: CommandContext,
+    _context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
-    // Parse profile name from args
     const trimmedArgs = args?.trim();
 
     if (!trimmedArgs) {
-      // For now, show usage until dialog system is implemented
       return {
         type: 'message',
         messageType: 'error',
-        content: 'Usage: /profile save "<profile-name>"',
+        content:
+          'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
       };
     }
 
-    // Extract profile name - handle quoted names
-    const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
-    const profileName = profileNameMatch ? profileNameMatch[1] : trimmedArgs;
+    const parts = trimmedArgs.split(/\s+/);
+    const profileType = parts[0];
 
-    if (!profileName) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /profile save "<profile-name>"',
-      };
+    if (profileType === 'model') {
+      if (parts.length < 2) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Usage: /profile save model "<profile-name>"',
+        };
+      }
+
+      const profileNameArg = parts.slice(1).join(' ');
+      const profileNameMatch = profileNameArg.match(/^"([^"]+)"$/);
+      const profileName = profileNameMatch
+        ? profileNameMatch[1]
+        : profileNameArg;
+
+      if (!profileName) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Usage: /profile save model "<profile-name>"',
+        };
+      }
+
+      if (profileName.includes('/') || profileName.includes('\\')) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Profile name cannot contain path separators',
+        };
+      }
+
+      try {
+        const runtime = getRuntimeApi();
+        await runtime.saveProfileSnapshot(profileName);
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Profile '${profileName}' saved`,
+        };
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to save profile: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
     }
 
-    // Validate profile name - basic validation
-    if (profileName.includes('/') || profileName.includes('\\')) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Profile name cannot contain path separators',
-      };
+    if (profileType === 'loadbalancer') {
+      if (parts.length < 5) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content:
+            'Usage: /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
+        };
+      }
+
+      const lbProfileName = parts[1];
+
+      if (lbProfileName.includes('/') || lbProfileName.includes('\\')) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Profile name cannot contain path separators',
+        };
+      }
+
+      const policyInput = parts[2]?.toLowerCase();
+
+      if (policyInput !== 'failover' && policyInput !== 'roundrobin') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Invalid policy "${parts[2]}". Must be "roundrobin" or "failover".`,
+        };
+      }
+
+      const policy: 'roundrobin' | 'failover' = policyInput;
+
+      const selectedProfiles = parts.slice(3).filter((p) => p.length > 0);
+
+      if (selectedProfiles.length < 2) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Load balancer profile requires at least 2 profiles',
+        };
+      }
+
+      try {
+        const runtime = getRuntimeApi();
+        const availableProfiles = await runtime.listSavedProfiles();
+
+        for (const profileName of selectedProfiles) {
+          if (!availableProfiles.includes(profileName)) {
+            return {
+              type: 'message',
+              messageType: 'error',
+              content: `Profile ${profileName} does not exist`,
+            };
+          }
+        }
+
+        const PROTECTED_SETTINGS = [
+          'auth-key',
+          'auth-keyfile',
+          'base-url',
+          'apiKey',
+          'apiKeyfile',
+          'model',
+          'provider',
+          'currentProfile',
+          'GOOGLE_CLOUD_PROJECT',
+          'GOOGLE_CLOUD_LOCATION',
+        ];
+
+        const currentEphemerals = runtime.getEphemeralSettings();
+        const filteredEphemerals = Object.fromEntries(
+          Object.entries(currentEphemerals).filter(
+            ([key, value]) =>
+              !PROTECTED_SETTINGS.includes(key) &&
+              value !== undefined &&
+              value !== null,
+          ),
+        );
+
+        const lbProfile = {
+          version: 1 as const,
+          type: 'loadbalancer' as const,
+          policy,
+          profiles: selectedProfiles,
+          provider: '',
+          model: '',
+          modelParams: {},
+          ephemeralSettings: filteredEphemerals,
+        };
+
+        await runtime.saveLoadBalancerProfile(lbProfileName, lbProfile);
+
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Load balancer profile '${lbProfileName}' saved with ${selectedProfiles.length} profiles (policy: ${policy})`,
+        };
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to save load balancer profile: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
     }
 
-    try {
-      const runtime = getRuntimeApi();
-      await runtime.saveProfileSnapshot(profileName);
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Profile '${profileName}' saved`,
-      };
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to save profile: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
+    return {
+      type: 'message',
+      messageType: 'error',
+      content:
+        'Usage: /profile save model <name> or /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]',
+    };
   },
 };
 
@@ -580,10 +776,12 @@ export const profileCommand: SlashCommand = {
     type: 'message',
     messageType: 'info',
     content: `Profile management commands:
-  /profile save "<name>"        - Save current configuration
-  /profile load "<name>"        - Load a saved profile
-  /profile delete "<name>"      - Delete a saved profile
-  /profile set-default "<name>" - Set profile to load on startup (or "none")
+  /profile save model <name>    - Save current model configuration
+  /profile save loadbalancer <lb-name> <roundrobin|failover> <profile1> <profile2> [...]
+                                - Save a load balancer profile
+  /profile load <name>          - Load a saved profile
+  /profile delete <name>        - Delete a saved profile
+  /profile set-default <name>   - Set profile to load on startup (or "none")
   /profile list                 - List all saved profiles`,
   }),
 };

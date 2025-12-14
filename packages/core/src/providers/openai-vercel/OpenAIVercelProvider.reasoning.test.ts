@@ -78,7 +78,7 @@ describe('OpenAIVercelProvider reasoning support @issue:722', () => {
         mockRuntime as unknown as import('../../runtime/providerRuntimeContext.js').ProviderRuntimeContext,
       resolved: {
         model: 'gpt-4o',
-        authToken: { token: 'test-token', type: 'api-key' },
+        authToken: 'test-token',
         streaming,
       },
       metadata: {},

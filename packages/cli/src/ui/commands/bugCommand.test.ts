@@ -63,7 +63,7 @@ describe('bugCommand', () => {
 * **IDE Client:** VSCode
 `;
     const expectedUrl =
-      'https://github.com/acoliver/llxprt-code/issues/new?template=bug_report.yml&title=A%20test%20bug&info=' +
+      'https://github.com/vybestack/llxprt-code/issues/new?template=bug_report.yml&title=A%20test%20bug&info=' +
       encodeURIComponent(expectedInfo);
 
     expect(open).toHaveBeenCalledWith(expectedUrl);

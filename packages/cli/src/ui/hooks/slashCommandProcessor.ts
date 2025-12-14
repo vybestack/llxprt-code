@@ -205,6 +205,10 @@ export const useSlashCommandProcessor = (
         historyItemContent = {
           type: 'cache_stats',
         };
+      } else if (message.type === MessageType.LB_STATS) {
+        historyItemContent = {
+          type: 'lb_stats',
+        };
       } else if (
         message.type === MessageType.INFO ||
         message.type === MessageType.ERROR ||
@@ -456,6 +460,8 @@ export const useSlashCommandProcessor = (
                       return { type: 'handled' };
                     case 'loadProfile':
                       actions.openLoadProfileDialog();
+                      return { type: 'handled' };
+                    case 'saveProfile':
                       return { type: 'handled' };
                     default: {
                       const unhandled: never = result.dialog;

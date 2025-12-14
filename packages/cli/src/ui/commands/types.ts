@@ -136,7 +136,8 @@ export interface OpenDialogActionReturn {
     | 'providerModel'
     | 'permissions'
     | 'provider'
-    | 'loadProfile';
+    | 'loadProfile'
+    | 'saveProfile';
   dialogData?: unknown;
 }
 

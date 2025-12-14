@@ -411,10 +411,52 @@ export const Footer = React.memo<FooterProps>(
           {/* Right: Model, Session Tokens and other status */}
           {!hideModelInfo && (
             <Box flexDirection="row" alignItems="center">
-              {/* Show model name */}
-              {showModelName && (
-                <Text color={SemanticColors.text.accent}>{model}</Text>
-              )}
+              {/* Show model name - for load balancer, show sub-profile name instead */}
+              {showModelName &&
+                (() => {
+                  const providerStatus = runtime.getActiveProviderStatus();
+                  if (providerStatus.providerName === 'load-balancer') {
+                    try {
+                      const providerManager = runtime.getCliProviderManager();
+                      const lbProvider =
+                        providerManager.getProviderByName('load-balancer');
+                      if (
+                        lbProvider &&
+                        'getStats' in lbProvider &&
+                        typeof (lbProvider as { getStats?: () => unknown })
+                          .getStats === 'function'
+                      ) {
+                        const lbStats = (
+                          lbProvider as {
+                            getStats: () => {
+                              lastSelected: string | null;
+                              profileName: string;
+                            };
+                          }
+                        ).getStats();
+                        if (lbStats?.lastSelected) {
+                          return (
+                            <>
+                              <Text color={SemanticColors.text.primary}>
+                                {lbStats.lastSelected}
+                              </Text>
+                              <Text color={SemanticColors.text.secondary}>
+                                {' '}
+                                via {lbStats.profileName}
+                              </Text>
+                            </>
+                          );
+                        }
+                      }
+                    } catch {
+                      // Silently ignore errors fetching LB stats in the footer
+                    }
+                  }
+                  // Default: show model name in primary color (not accent)
+                  return (
+                    <Text color={SemanticColors.text.primary}>{model}</Text>
+                  );
+                })()}
 
               {/* Show paid/free mode for Gemini provider */}
               {isPaidMode !== undefined &&

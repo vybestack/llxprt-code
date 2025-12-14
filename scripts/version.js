@@ -89,7 +89,23 @@ if (cliPackageJson.config?.sandboxImageUri) {
   writeJson(cliPackageJsonPath, cliPackageJson);
 }
 
-// 6. Run `npm install` to update package-lock.json.
+// 6. Bump the version in the UI package (not an npm workspace).
+const uiPackageJsonPath = resolve(process.cwd(), 'packages/ui/package.json');
+try {
+  const uiPackageJson = readJson(uiPackageJsonPath);
+  uiPackageJson.version = newVersion;
+  if (uiPackageJson.peerDependencies?.['@vybestack/llxprt-code-core']) {
+    uiPackageJson.peerDependencies['@vybestack/llxprt-code-core'] =
+      `^${newVersion}`;
+  }
+  console.log(`Updated ui package to version ${newVersion}`);
+  writeJson(uiPackageJsonPath, uiPackageJson);
+} catch (err) {
+  console.error('Error updating ui package version:', err);
+  process.exit(1);
+}
+
+// 7. Run `npm install` to update package-lock.json.
 run('npm install');
 
 console.log(`Successfully bumped versions to v${newVersion}.`);

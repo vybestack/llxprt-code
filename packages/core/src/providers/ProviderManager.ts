@@ -422,6 +422,13 @@ export class ProviderManager implements IProviderManager {
     const providerSettings =
       settingsService.getProviderSettings(targetProvider);
     const providerInstance = this.providers.get(targetProvider);
+    // Debug: Log incoming authToken before normalization
+    logger.debug(() => {
+      const token = rawOptions.resolved?.authToken;
+      const tokenStr = typeof token === 'string' ? token : '';
+      return `[normalizeRuntimeInputs] provider=${targetProvider}, incoming authToken present=${Boolean(tokenStr.trim())} length=${tokenStr.length}`;
+    });
+
     const resolved = {
       model:
         rawOptions.resolved?.model ??
@@ -446,6 +453,13 @@ export class ProviderManager implements IProviderManager {
     };
 
     const effectiveConfig = rawOptions.config ?? config ?? null;
+    // Debug: Log resolved authToken before global auth-key check
+    logger.debug(() => {
+      const token = resolved.authToken;
+      const tokenStr = typeof token === 'string' ? token : '';
+      return `[normalizeRuntimeInputs] provider=${targetProvider}, resolved authToken present=${Boolean(tokenStr.trim())} length=${tokenStr.length}`;
+    });
+
     if (
       effectiveConfig &&
       typeof (
@@ -461,6 +475,12 @@ export class ProviderManager implements IProviderManager {
           getEphemeralSetting?: (key: string) => unknown;
         }
       ).getEphemeralSetting?.('auth-key') as string | undefined;
+
+      // Debug: Log global auth-key check
+      logger.debug(() => {
+        const tokenStr = typeof globalAuthKey === 'string' ? globalAuthKey : '';
+        return `[normalizeRuntimeInputs] provider=${targetProvider}, global auth-key present=${Boolean(tokenStr.trim())} length=${tokenStr.length}, will use: ${globalAuthKey ? 'YES' : 'NO'}`;
+      });
 
       if (globalAuthKey && globalAuthKey.trim() !== '') {
         resolved.authToken = globalAuthKey.trim();
@@ -502,6 +522,7 @@ export class ProviderManager implements IProviderManager {
       'openai-responses',
       'anthropic',
       'openaivercel',
+      'load-balancer', // Resolves baseURL at request time via sub-profile selection
     ]);
     if (!resolved.baseURL && !baseUrlOptionalProviders.has(targetProvider)) {
       missingFields.push('baseURL');

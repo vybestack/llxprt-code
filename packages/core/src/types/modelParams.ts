@@ -90,14 +90,51 @@ export interface EphemeralSettings {
   'prompt-caching'?: 'off' | '5m' | '1h';
   /** Load tool-specific prompts from ~/.llxprt/prompts/tools/** (default: false) */
   'enable-tool-prompts'?: boolean;
+
+  // Load balancer advanced failover settings (Phase 3, Issue #489)
+  /** Minimum tokens per minute before triggering failover */
+  tpm_threshold?: number;
+  /** Maximum request duration in milliseconds before timeout */
+  timeout_ms?: number;
+  /** Enable circuit breaker pattern for failing backends */
+  circuit_breaker_enabled?: boolean;
+  /** Number of failures before opening circuit */
+  circuit_breaker_failure_threshold?: number;
+  /** Time window for counting failures in milliseconds */
+  circuit_breaker_failure_window_ms?: number;
+  /** Cooldown period before retrying after circuit opens in milliseconds */
+  circuit_breaker_recovery_timeout_ms?: number;
 }
 
 /**
- * Complete profile configuration
+ * Sub-profile configuration for load balancing (NEW ARCHITECTURE)
+ * @plan PLAN-20251211issue486b
  */
-export interface Profile {
+export interface LoadBalancerSubProfileConfig {
+  name: string;
+  provider: string;
+  model?: string;
+  baseURL?: string;
+  apiKey?: string;
+}
+
+/**
+ * Load balancer configuration (NEW ARCHITECTURE)
+ * @plan PLAN-20251211issue486b
+ */
+export interface LoadBalancerConfig {
+  strategy: 'round-robin';
+  subProfiles: LoadBalancerSubProfileConfig[];
+}
+
+/**
+ * Standard profile configuration (single model)
+ */
+export interface StandardProfile {
   /** Profile format version */
   version: 1;
+  /** Profile type (optional for backward compatibility) */
+  type?: 'standard';
   /** Provider name */
   provider: string;
   /** Model name */
@@ -106,4 +143,51 @@ export interface Profile {
   modelParams: ModelParams;
   /** Ephemeral settings */
   ephemeralSettings: EphemeralSettings;
+  /** Load balancer configuration (NEW ARCHITECTURE - optional) */
+  loadBalancer?: LoadBalancerConfig;
+}
+
+/**
+ * Load balancer profile configuration (multiple profiles)
+ */
+export interface LoadBalancerProfile {
+  /** Profile format version */
+  version: 1;
+  /** Profile type */
+  type: 'loadbalancer';
+  /** Load balancing policy */
+  policy: 'roundrobin' | 'failover';
+  /** List of profile names to load balance across */
+  profiles: string[];
+  /** Provider name (empty for load balancer) */
+  provider: string;
+  /** Model name (empty for load balancer) */
+  model: string;
+  /** Model parameters (empty for load balancer) */
+  modelParams: ModelParams;
+  /** Ephemeral settings (empty for load balancer) */
+  ephemeralSettings: EphemeralSettings;
+}
+
+/**
+ * Complete profile configuration (union type)
+ */
+export type Profile = StandardProfile | LoadBalancerProfile;
+
+/**
+ * Type guard to check if a profile is a load balancer profile
+ */
+export function isLoadBalancerProfile(
+  profile: Profile,
+): profile is LoadBalancerProfile {
+  return profile.type === 'loadbalancer';
+}
+
+/**
+ * Type guard to check if a profile is a standard profile
+ */
+export function isStandardProfile(
+  profile: Profile,
+): profile is StandardProfile {
+  return profile.type !== 'loadbalancer';
 }

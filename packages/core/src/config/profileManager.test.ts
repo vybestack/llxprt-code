@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ProfileManager } from './profileManager.js';
 import { ISettingsService } from '../settings/types.js';
-import { Profile } from '../types/modelParams.js';
+import { Profile, LoadBalancerProfile } from '../types/modelParams.js';
 import type { SettingsService } from '../settings/SettingsService.js';
 import fs from 'fs/promises';
 import os from 'os';
@@ -443,6 +443,391 @@ describe('ProfileManager', () => {
       const profiles = await profileManager.listProfiles();
 
       expect(profiles).toEqual([]);
+    });
+  });
+
+  describe('loadProfile with LoadBalancer profiles', () => {
+    it('should return LB profile when file has type loadbalancer', async () => {
+      const standardProfile1 = {
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const standardProfile2 = {
+        version: 1,
+        provider: 'anthropic',
+        model: 'claude-3',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const lbProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['profile1', 'profile2'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      mockFs.readFile.mockImplementation(async (filePath: string) => {
+        if (filePath.includes('lb-profile.json')) {
+          return JSON.stringify(lbProfile);
+        } else if (filePath.includes('profile1.json')) {
+          return JSON.stringify(standardProfile1);
+        } else if (filePath.includes('profile2.json')) {
+          return JSON.stringify(standardProfile2);
+        }
+        throw new Error('ENOENT');
+      });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue([
+        'profile1.json',
+        'profile2.json',
+        'lb-profile.json',
+      ] as never);
+
+      const result = await profileManager.loadProfile('lb-profile');
+
+      expect(result).toEqual(lbProfile);
+      expect(result.type).toBe('loadbalancer');
+    });
+
+    it('should reject LB profile with empty profiles array', async () => {
+      const lbProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: [],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      mockFs.readFile.mockResolvedValue(JSON.stringify(lbProfile));
+
+      await expect(
+        profileManager.loadProfile('empty-lb-profile'),
+      ).rejects.toThrow(
+        "LoadBalancer profile 'empty-lb-profile' must reference at least one profile",
+      );
+    });
+
+    it('should reject LB profile referencing non-existent profile', async () => {
+      const standardProfile1 = {
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const lbProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['profile1', 'missing-profile'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      mockFs.readFile.mockImplementation(async (filePath: string) => {
+        if (filePath.includes('invalid-lb-profile.json')) {
+          return JSON.stringify(lbProfile);
+        } else if (filePath.includes('profile1.json')) {
+          return JSON.stringify(standardProfile1);
+        }
+        throw new Error('ENOENT');
+      });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue(['profile1.json'] as never);
+
+      await expect(
+        profileManager.loadProfile('invalid-lb-profile'),
+      ).rejects.toThrow(
+        "LoadBalancer profile 'invalid-lb-profile' references non-existent profile 'missing-profile'",
+      );
+    });
+
+    it('should reject LB profile referencing another LB profile', async () => {
+      const nestedLbProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['profile1'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const lbProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['nested-lb'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      mockFs.readFile
+        .mockResolvedValueOnce(JSON.stringify(lbProfile))
+        .mockResolvedValueOnce(JSON.stringify(nestedLbProfile));
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue(['nested-lb.json'] as never);
+
+      await expect(
+        profileManager.loadProfile('nested-lb-profile'),
+      ).rejects.toThrow(
+        "LoadBalancer profile 'nested-lb-profile' cannot reference another LoadBalancer profile 'nested-lb'",
+      );
+    });
+
+    it('should reject LB profile with unsupported version', async () => {
+      const lbProfile = {
+        version: 2,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['profile1'],
+      };
+      mockFs.readFile.mockResolvedValue(JSON.stringify(lbProfile));
+
+      await expect(
+        profileManager.loadProfile('unsupported-version-lb'),
+      ).rejects.toThrow('unsupported profile version');
+    });
+
+    it('should still work for standard profiles backward compatibility', async () => {
+      const standardProfile = {
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {
+          temperature: 0.7,
+        },
+        ephemeralSettings: {},
+      };
+      mockFs.readFile.mockResolvedValue(JSON.stringify(standardProfile));
+
+      const result = await profileManager.loadProfile('standard-profile');
+
+      expect(result).toEqual(standardProfile);
+      expect(result.provider).toBe('openai');
+      expect(result.model).toBe('gpt-4');
+    });
+  });
+
+  describe('saveLoadBalancerProfile', () => {
+    it('should save valid LB profile to file', async () => {
+      const profile1: Profile = {
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const profile2: Profile = {
+        version: 1,
+        provider: 'anthropic',
+        model: 'claude-3',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const lbProfile: LoadBalancerProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['profile1', 'profile2'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+
+      mockFs.readFile.mockImplementation(async (filePath: string) => {
+        if (filePath.includes('profile1.json')) {
+          return JSON.stringify(profile1);
+        } else if (filePath.includes('profile2.json')) {
+          return JSON.stringify(profile2);
+        }
+        throw new Error('ENOENT');
+      });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue([
+        'profile1.json',
+        'profile2.json',
+      ] as never);
+      mockFs.writeFile.mockResolvedValue();
+
+      await profileManager.saveLoadBalancerProfile('lb-profile', lbProfile);
+
+      expect(mockFs.writeFile).toHaveBeenCalledWith(
+        '/home/test/.llxprt/profiles/lb-profile.json',
+        JSON.stringify(lbProfile, null, 2),
+        'utf8',
+      );
+    });
+
+    it('should reject if member profile does not exist', async () => {
+      const lbProfile: LoadBalancerProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['profile1', 'missing-profile'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+
+      const profile1: Profile = {
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+
+      mockFs.readFile.mockImplementation(async (filePath: string) => {
+        if (filePath.includes('profile1.json')) {
+          return JSON.stringify(profile1);
+        }
+        throw new Error('ENOENT');
+      });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue(['profile1.json'] as never);
+
+      await expect(
+        profileManager.saveLoadBalancerProfile('lb-profile', lbProfile),
+      ).rejects.toThrow(
+        "LoadBalancer profile 'lb-profile' references non-existent profile 'missing-profile'",
+      );
+    });
+
+    it('should reject if member profile is an LB profile', async () => {
+      const nestedLbProfile: LoadBalancerProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['profile1'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const lbProfile: LoadBalancerProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['nested-lb'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+
+      mockFs.readFile.mockResolvedValue(JSON.stringify(nestedLbProfile));
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue(['nested-lb.json'] as never);
+
+      await expect(
+        profileManager.saveLoadBalancerProfile('lb-profile', lbProfile),
+      ).rejects.toThrow(
+        "LoadBalancer profile 'lb-profile' cannot reference another LoadBalancer profile 'nested-lb'",
+      );
+    });
+
+    it('should reject empty profiles array', async () => {
+      const lbProfile: LoadBalancerProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: [],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+
+      await expect(
+        profileManager.saveLoadBalancerProfile('empty-lb', lbProfile),
+      ).rejects.toThrow(
+        "LoadBalancer profile 'empty-lb' must reference at least one profile",
+      );
+    });
+
+    it('should reject unsupported version', async () => {
+      const lbProfile = {
+        version: 2,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['profile1'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      } as LoadBalancerProfile;
+
+      await expect(
+        profileManager.saveLoadBalancerProfile('invalid-version', lbProfile),
+      ).rejects.toThrow('unsupported profile version');
+    });
+
+    it('should allow saved LB profile to be loaded back correctly', async () => {
+      const profile1: Profile = {
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const profile2: Profile = {
+        version: 1,
+        provider: 'anthropic',
+        model: 'claude-3',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+      const lbProfile: LoadBalancerProfile = {
+        version: 1,
+        type: 'loadbalancer',
+        policy: 'roundrobin',
+        profiles: ['profile1', 'profile2'],
+        provider: '',
+        model: '',
+        modelParams: {},
+        ephemeralSettings: {},
+      };
+
+      let savedContent = '';
+      mockFs.readFile.mockImplementation(async (filePath: string) => {
+        if (filePath.includes('lb-profile.json')) {
+          return savedContent;
+        } else if (filePath.includes('profile1.json')) {
+          return JSON.stringify(profile1);
+        } else if (filePath.includes('profile2.json')) {
+          return JSON.stringify(profile2);
+        }
+        throw new Error('ENOENT');
+      });
+      mockFs.mkdir.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue([
+        'profile1.json',
+        'profile2.json',
+        'lb-profile.json',
+      ] as never);
+      mockFs.writeFile.mockImplementation(
+        async (_path: string, content: string) => {
+          savedContent = content;
+        },
+      );
+
+      await profileManager.saveLoadBalancerProfile('lb-profile', lbProfile);
+      const loadedProfile = await profileManager.loadProfile('lb-profile');
+
+      expect(loadedProfile).toEqual(lbProfile);
     });
   });
 });

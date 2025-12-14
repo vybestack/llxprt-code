@@ -21,6 +21,7 @@ import type {
   IModel,
   ModelParams,
   RuntimeAuthScopeFlushResult,
+  LoadBalancerProfile,
 } from '@vybestack/llxprt-code-core';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
@@ -34,12 +35,21 @@ import {
   enterRuntimeScope,
 } from './runtimeContextFactory.js';
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P07
-import { applyProfileWithGuards } from './profileApplication.js';
+import {
+  applyProfileWithGuards,
+  getLoadBalancerStats,
+  getLoadBalancerLastSelected,
+  getAllLoadBalancerStats,
+} from './profileApplication.js';
 import {
   formatMissingRuntimeMessage,
   formatNormalizationFailureMessage,
 } from './messages.js';
 import { ensureOAuthProviderRegistered } from '../providers/oauth-provider-registration.js';
+import {
+  loadProviderAliasEntries,
+  type ProviderAliasConfig,
+} from '../providers/providerAliases.js';
 
 type ProfileApplicationResult = Awaited<
   ReturnType<typeof applyProfileWithGuards>
@@ -55,6 +65,13 @@ export type {
   IsolatedRuntimeContextHandle,
   IsolatedRuntimeContextOptions,
 } from './runtimeContextFactory.js';
+
+// Load balancer stats exports
+export {
+  getLoadBalancerStats,
+  getLoadBalancerLastSelected,
+  getAllLoadBalancerStats,
+};
 
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P06
@@ -206,6 +223,7 @@ interface RuntimeRegistryEntry {
   config: Config | null;
   providerManager: ProviderManager | null;
   oauthManager: OAuthManager | null;
+  profileManager: ProfileManager | null;
   metadata: Record<string, unknown>;
 }
 
@@ -257,6 +275,12 @@ function upsertRuntimeEntry(
     oauthManager: Object.prototype.hasOwnProperty.call(update, 'oauthManager')
       ? (update.oauthManager ?? null)
       : (current?.oauthManager ?? null),
+    profileManager: Object.prototype.hasOwnProperty.call(
+      update,
+      'profileManager',
+    )
+      ? (update.profileManager ?? null)
+      : (current?.profileManager ?? null),
     metadata:
       update.metadata !== undefined
         ? { ...(current?.metadata ?? {}), ...update.metadata }
@@ -302,6 +326,7 @@ export interface CliRuntimeServices {
   settingsService: SettingsService;
   config: Config;
   providerManager: ProviderManager;
+  profileManager?: ProfileManager;
 }
 
 /**
@@ -409,7 +434,8 @@ export function getCliRuntimeServices(): CliRuntimeServices {
       }),
     );
   }
-  return { settingsService, config, providerManager };
+  const profileManager = entry.profileManager ?? undefined;
+  return { settingsService, config, providerManager, profileManager };
 }
 
 export function getCliProviderManager(
@@ -1102,6 +1128,20 @@ export async function saveProfileSnapshot(
   return snapshot;
 }
 
+/**
+ * @deprecated This function saves old-style load balancer profiles (type='loadbalancer').
+ * The old architecture did round-robin at profile-load time (selecting a profile once).
+ * Use the new subProfiles architecture instead which does per-request load balancing.
+ * This function is kept for backward compatibility only.
+ */
+export async function saveLoadBalancerProfile(
+  profileName: string,
+  profile: LoadBalancerProfile,
+): Promise<void> {
+  const manager = new ProfileManager();
+  await manager.saveLoadBalancerProfile(profileName, profile);
+}
+
 export async function loadProfileByName(
   profileName: string,
 ): Promise<ProfileLoadResult> {
@@ -1190,6 +1230,7 @@ export function setCliRuntimeContext(
   options: {
     metadata?: ProviderRuntimeContext['metadata'];
     runtimeId?: string;
+    profileManager?: ProfileManager;
   } = {},
 ): void {
   const runtimeId =
@@ -1214,6 +1255,7 @@ export function setCliRuntimeContext(
     settingsService,
     config: config ?? null,
     metadata,
+    profileManager: options.profileManager,
   });
 }
 
@@ -1517,6 +1559,15 @@ export async function switchActiveProvider(
     }
     return trimmed;
   };
+
+  let aliasConfig: ProviderAliasConfig | undefined;
+  try {
+    aliasConfig = loadProviderAliasEntries().find(
+      (entry) => entry.alias === name,
+    )?.config;
+  } catch {
+    aliasConfig = undefined;
+  }
   const storedModelSetting = normalizeSetting(providerSettingsBefore.model);
   const storedBaseUrlSetting =
     normalizeSetting(providerSettingsBefore.baseUrl) ??
@@ -1571,7 +1622,9 @@ export async function switchActiveProvider(
     settingsService.setProviderSetting(name, 'baseURL', undefined);
   }
 
-  const defaultModel = normalizeSetting(activeProvider.getDefaultModel?.());
+  const aliasDefaultModel = normalizeSetting(aliasConfig?.defaultModel);
+  const defaultModel =
+    aliasDefaultModel ?? normalizeSetting(activeProvider.getDefaultModel?.());
   let modelToApply =
     explicitConfigModel ??
     (currentProvider === name &&
@@ -1735,6 +1788,86 @@ export async function switchActiveProvider(
       if (authOnlyBeforeSwitch !== undefined) {
         config.setEphemeralSetting('authOnly', authOnlyBeforeSwitch);
       }
+    }
+  }
+
+  // Apply alias-specific ephemeral settings (defaults) after the switch.
+  const aliasEphemeralSettings = aliasConfig?.ephemeralSettings;
+  if (
+    aliasEphemeralSettings &&
+    typeof aliasEphemeralSettings === 'object' &&
+    !Array.isArray(aliasEphemeralSettings)
+  ) {
+    const protectedAliasEphemeralKeys = new Set([
+      'activeprovider',
+      'base-url',
+      'baseurl',
+      'base_url',
+      'model',
+      'auth-key',
+      'auth-keyfile',
+      'authkey',
+      'authkeyfile',
+      'api-key',
+      'api-keyfile',
+      'api_key',
+      'api_keyfile',
+      'apikey',
+      'apikeyfile',
+    ]);
+
+    for (const [rawKey, rawValue] of Object.entries(aliasEphemeralSettings)) {
+      const key = rawKey.trim();
+      if (!key) {
+        continue;
+      }
+
+      const normalizedKey = key.toLowerCase();
+      if (protectedAliasEphemeralKeys.has(normalizedKey)) {
+        logger.warn(
+          () =>
+            `[cli-runtime] Skipping protected alias ephemeral setting '${key}' for provider '${name}'.`,
+        );
+        continue;
+      }
+
+      if (config.getEphemeralSetting(key) !== undefined) {
+        continue;
+      }
+
+      if (
+        rawValue === null ||
+        rawValue === undefined ||
+        Array.isArray(rawValue)
+      ) {
+        logger.warn(
+          () =>
+            `[cli-runtime] Skipping non-scalar alias ephemeral setting '${key}' for provider '${name}'.`,
+        );
+        continue;
+      }
+
+      if (typeof rawValue === 'number' && !Number.isFinite(rawValue)) {
+        logger.warn(
+          () =>
+            `[cli-runtime] Skipping non-finite alias ephemeral setting '${key}' for provider '${name}'.`,
+        );
+        continue;
+      }
+
+      const isScalar =
+        typeof rawValue === 'string' ||
+        typeof rawValue === 'number' ||
+        typeof rawValue === 'boolean';
+      if (!isScalar) {
+        logger.warn(
+          () =>
+            `[cli-runtime] Skipping non-scalar alias ephemeral setting '${key}' for provider '${name}'.`,
+        );
+        continue;
+      }
+
+      config.setEphemeralSetting(key, rawValue);
     }
   }
 

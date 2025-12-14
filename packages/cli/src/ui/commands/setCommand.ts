@@ -125,6 +125,29 @@ const directSettingSpecs: SettingLiteralSpec[] = [
     hint: 'API version (e.g., v1, 2024-05-01)',
   },
   {
+    value: 'stream-options',
+    hint: 'JSON object (e.g., {"include_usage":false})',
+    description:
+      'Stream options for OpenAI-compatible APIs (disable include_usage for Mistral)',
+    options: [
+      {
+        value: '{"include_usage":true}',
+        description: 'Include usage stats (default)',
+      },
+      {
+        value: '{"include_usage":false}',
+        description: 'No usage stats (for Mistral)',
+      },
+      { value: '{}', description: 'Omit stream_options entirely' },
+    ],
+  },
+  {
+    value: 'streaming',
+    hint: 'enabled or disabled',
+    description: 'boolean value',
+    options: booleanOptions,
+  },
+  {
     value: 'streaming',
     hint: 'enabled or disabled',
     description: 'streaming mode',
@@ -274,6 +297,33 @@ const directSettingSpecs: SettingLiteralSpec[] = [
     value: 'reasoning.maxTokens',
     hint: 'positive integer (e.g., 8000)',
     description: 'Cap on thinking tokens (limits thinking length)',
+  },
+  // Load balancer settings (Phase 3, Issue #489)
+  {
+    value: 'tpm_threshold',
+    hint: 'positive integer (e.g., 1000)',
+  },
+  {
+    value: 'timeout_ms',
+    hint: 'positive integer in milliseconds (e.g., 30000)',
+  },
+  {
+    value: 'circuit_breaker_enabled',
+    hint: 'true or false',
+    description: 'boolean value',
+    options: booleanOptions,
+  },
+  {
+    value: 'circuit_breaker_failure_threshold',
+    hint: 'positive integer (e.g., 3)',
+  },
+  {
+    value: 'circuit_breaker_failure_window_ms',
+    hint: 'positive integer in milliseconds (e.g., 60000)',
+  },
+  {
+    value: 'circuit_breaker_recovery_timeout_ms',
+    hint: 'positive integer in milliseconds (e.g., 30000)',
   },
 ];
 
@@ -951,6 +1001,39 @@ export const setCommand: SlashCommand = {
           type: 'message',
           messageType: 'error',
           content: `${key} must be a positive integer in milliseconds (e.g., 1000)`,
+        };
+      }
+    }
+
+    // Validate load balancer numeric settings (Phase 3, Issue #489)
+    if (
+      key === 'tpm_threshold' ||
+      key === 'timeout_ms' ||
+      key === 'circuit_breaker_failure_threshold' ||
+      key === 'circuit_breaker_failure_window_ms' ||
+      key === 'circuit_breaker_recovery_timeout_ms'
+    ) {
+      const numValue = parsedValue as number;
+      if (
+        typeof numValue !== 'number' ||
+        numValue <= 0 ||
+        !Number.isInteger(numValue)
+      ) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `${key} must be a positive integer`,
+        };
+      }
+    }
+
+    // Validate load balancer boolean settings (Phase 3, Issue #489)
+    if (key === 'circuit_breaker_enabled') {
+      if (typeof parsedValue !== 'boolean') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `${key} must be either 'true' or 'false'`,
         };
       }
     }

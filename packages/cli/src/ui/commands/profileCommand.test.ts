@@ -18,6 +18,8 @@ const runtimeMocks = vi.hoisted(() => ({
   getActiveProfileName: vi.fn(),
   switchActiveProvider: vi.fn(),
   getActiveProviderStatus: vi.fn(),
+  saveLoadBalancerProfile: vi.fn(),
+  getEphemeralSettings: vi.fn(),
 }));
 
 vi.mock('../contexts/RuntimeContext.js', () => ({
@@ -43,9 +45,25 @@ describe('profileCommand', () => {
       (cmd) => cmd?.name === 'save',
     )!;
 
-    it('saves profile with provided name', async () => {
-      await save.action!(context, 'demo');
+    it('saves model profile with provided name', async () => {
+      await save.action!(context, 'model demo');
       expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith('demo');
+    });
+
+    it('shows usage when no args provided', async () => {
+      const result = await save.action!(context, '');
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('type', 'message');
+      expect(result).toHaveProperty('messageType', 'error');
+      const content = (result as { content: string }).content;
+      expect(content).toContain('Usage');
+    });
+
+    it('shows error for unknown profile type', async () => {
+      const result = await save.action!(context, 'unknown myprofile');
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('type', 'message');
+      expect(result).toHaveProperty('messageType', 'error');
     });
   });
 
@@ -141,6 +159,119 @@ describe('profileCommand', () => {
       expect(result).toBeDefined();
       expect((result as { content: string }).content).toContain('alpha');
       expect((result as { content: string }).content).toContain('beta');
+    });
+  });
+
+  describe('save subcommand - load balancer', () => {
+    const save = profileCommand.subCommands!.find(
+      (cmd) => cmd?.name === 'save',
+    )!;
+
+    beforeEach(() => {
+      runtimeMocks.listSavedProfiles.mockResolvedValue([
+        'profile1',
+        'profile2',
+        'profile3',
+      ]);
+      runtimeMocks.getEphemeralSettings.mockReturnValue({});
+    });
+
+    it('saves load balancer profile with selected profiles', async () => {
+      runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
+
+      const result = await save.action!(
+        context,
+        'loadbalancer lb-profile roundrobin profile1 profile2',
+      );
+
+      expect(runtimeMocks.saveLoadBalancerProfile).toHaveBeenCalledWith(
+        'lb-profile',
+        {
+          version: 1,
+          type: 'loadbalancer',
+          policy: 'roundrobin',
+          profiles: ['profile1', 'profile2'],
+          provider: '',
+          model: '',
+          modelParams: {},
+          ephemeralSettings: {},
+        },
+      );
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('type', 'message');
+      expect(result).toHaveProperty(
+        'content',
+        "Load balancer profile 'lb-profile' saved with 2 profiles (policy: roundrobin)",
+      );
+    });
+
+    it('requires at least 2 profiles for load balancer', async () => {
+      const result = await save.action!(
+        context,
+        'loadbalancer lb-profile roundrobin profile1',
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('type', 'message');
+      expect(result).toHaveProperty('messageType', 'error');
+      const content = (result as { content: string }).content;
+      // Gets usage error since parts.length < 5
+      expect(content).toMatch(/Usage.*roundrobin.*failover/i);
+    });
+
+    it('validates profile names exist', async () => {
+      runtimeMocks.listSavedProfiles.mockResolvedValue(['profile1']);
+
+      const result = await save.action!(
+        context,
+        'loadbalancer lb-profile roundrobin profile1 nonexistent',
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('type', 'message');
+      expect(result).toHaveProperty('messageType', 'error');
+      const content = (result as { content: string }).content;
+      expect(content).toContain('Profile nonexistent does not exist');
+    });
+
+    it('prevents circular references in load balancer profiles', async () => {
+      runtimeMocks.listSavedProfiles.mockResolvedValue([
+        'profile1',
+        'lb-existing',
+      ]);
+      runtimeMocks.saveLoadBalancerProfile.mockRejectedValue(
+        new Error(
+          "LoadBalancer profile 'lb-new' cannot reference another LoadBalancer profile 'lb-existing'",
+        ),
+      );
+
+      const result = await save.action!(
+        context,
+        'loadbalancer lb-new roundrobin profile1 lb-existing',
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('type', 'message');
+      expect(result).toHaveProperty('messageType', 'error');
+      const content = (result as { content: string }).content;
+      expect(content).toContain('cannot reference another LoadBalancer');
+    });
+
+    it('handles save errors gracefully', async () => {
+      runtimeMocks.saveLoadBalancerProfile.mockRejectedValue(
+        new Error('disk full'),
+      );
+
+      const result = await save.action!(
+        context,
+        'loadbalancer lb-profile roundrobin profile1 profile2',
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toHaveProperty('type', 'message');
+      expect(result).toHaveProperty('messageType', 'error');
+      const content = (result as { content: string }).content;
+      expect(content).toContain('disk full');
     });
   });
 });
