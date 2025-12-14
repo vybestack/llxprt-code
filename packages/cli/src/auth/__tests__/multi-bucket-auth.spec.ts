@@ -53,8 +53,15 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
     delayLog = [];
 
     authenticator = new MultiBucketAuthenticator(
-      async (provider: string, bucket: string, index: number, total: number) => {
-        authLog.push(`Authenticating bucket ${index}/${total}: ${provider}/${bucket}`);
+      async (
+        provider: string,
+        bucket: string,
+        index: number,
+        total: number,
+      ) => {
+        authLog.push(
+          `Authenticating bucket ${index}/${total}: ${provider}/${bucket}`,
+        );
       },
       async (provider: string, bucket: string) => {
         authLog.push(`Prompt for ${provider}/${bucket}`);
@@ -64,7 +71,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         delayLog.push({ ms, bucket });
         authLog.push(`Delay ${ms}ms before ${bucket}`);
       },
-      getEphemeralSetting
+      getEphemeralSetting,
     );
   });
 
@@ -126,7 +133,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
 
       expect(result.authenticatedBuckets).toHaveLength(2);
       expect(delayLog).toHaveLength(0); // No delays when using prompts
-      expect(authLog.filter(l => l.includes('Prompt'))).toHaveLength(2);
+      expect(authLog.filter((l) => l.includes('Prompt'))).toHaveLength(2);
     });
 
     /**
@@ -151,7 +158,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
      * @then Defaults to true (auto-open)
      */
     it('should default auth-browser-open to true', () => {
-      const autoOpenSetting = getEphemeralSetting<boolean>('auth-browser-open') ?? true;
+      const autoOpenSetting =
+        getEphemeralSetting<boolean>('auth-browser-open') ?? true;
       expect(autoOpenSetting).toBe(true);
     });
   });
@@ -167,7 +175,11 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
     it('should authenticate buckets sequentially in order', async () => {
       const result = await authenticator.authenticateMultipleBuckets({
         provider: 'anthropic',
-        buckets: ['work@company.com', 'personal@gmail.com', 'backup@example.com'],
+        buckets: [
+          'work@company.com',
+          'personal@gmail.com',
+          'backup@example.com',
+        ],
       });
 
       expect(result.authenticatedBuckets).toEqual([
@@ -269,7 +281,11 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
     it('should show bucket count and name for each bucket', async () => {
       await authenticator.authenticateMultipleBuckets({
         provider: 'anthropic',
-        buckets: ['work@company.com', 'personal@gmail.com', 'backup@example.com'],
+        buckets: [
+          'work@company.com',
+          'personal@gmail.com',
+          'backup@example.com',
+        ],
       });
 
       expect(authLog[0]).toContain('bucket 1/3');
@@ -296,7 +312,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1', 'bucket2'],
       });
 
-      expect(authLog.filter(l => l.includes('Prompt'))).toHaveLength(2);
+      expect(authLog.filter((l) => l.includes('Prompt'))).toHaveLength(2);
     });
 
     /**
@@ -314,8 +330,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1', 'bucket2'],
       });
 
-      expect(authLog.some(l => l.includes('Delay 5000ms'))).toBe(true);
-      expect(authLog.some(l => l.includes('bucket2'))).toBe(true);
+      expect(authLog.some((l) => l.includes('Delay 5000ms'))).toBe(true);
+      expect(authLog.some((l) => l.includes('bucket2'))).toBe(true);
     });
 
     /**
@@ -334,8 +350,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['work@example.com'],
       });
 
-      expect(authLog.some(l => l.includes('gemini'))).toBe(true);
-      expect(authLog.some(l => l.includes('work@example.com'))).toBe(true);
+      expect(authLog.some((l) => l.includes('gemini'))).toBe(true);
+      expect(authLog.some((l) => l.includes('work@example.com'))).toBe(true);
     });
   });
 
@@ -394,10 +410,17 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
 
       const result = await authenticator.authenticateMultipleBuckets({
         provider: 'anthropic',
-        buckets: ['work@company.com', 'personal@gmail.com', 'backup@example.com'],
+        buckets: [
+          'work@company.com',
+          'personal@gmail.com',
+          'backup@example.com',
+        ],
       });
 
-      expect(result.authenticatedBuckets).toEqual(['work@company.com', 'personal@gmail.com']);
+      expect(result.authenticatedBuckets).toEqual([
+        'work@company.com',
+        'personal@gmail.com',
+      ]);
       expect(result.failedBuckets).toEqual(['backup@example.com']);
       expect(result.cancelled).toBe(true);
     });
@@ -435,12 +458,12 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
 
       const slowAuthenticator = new MultiBucketAuthenticator(
         async (provider: string, bucket: string) => {
-          await new Promise(resolve => setTimeout(resolve, 50));
+          await new Promise((resolve) => setTimeout(resolve, 50));
           authLog.push(`Authenticated ${bucket}`);
         },
         async () => true,
         async () => {},
-        getEphemeralSetting
+        getEphemeralSetting,
       );
 
       // Start auth
@@ -470,7 +493,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
     it('should auto-open browser when auth-browser-open is true', () => {
       setEphemeralSetting('auth-browser-open', true);
 
-      const shouldOpen = getEphemeralSetting<boolean>('auth-browser-open') ?? true;
+      const shouldOpen =
+        getEphemeralSetting<boolean>('auth-browser-open') ?? true;
       expect(shouldOpen).toBe(true);
     });
 
@@ -484,7 +508,8 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
     it('should show URL when auth-browser-open is false', () => {
       setEphemeralSetting('auth-browser-open', false);
 
-      const shouldOpen = getEphemeralSetting<boolean>('auth-browser-open') ?? true;
+      const shouldOpen =
+        getEphemeralSetting<boolean>('auth-browser-open') ?? true;
       expect(shouldOpen).toBe(false);
     });
 
@@ -525,7 +550,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1', 'bucket2'],
       });
 
-      expect(authLog.filter(l => l.includes('Prompt'))).toHaveLength(2);
+      expect(authLog.filter((l) => l.includes('Prompt'))).toHaveLength(2);
     });
 
     /**
@@ -563,14 +588,18 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
 
       const result = await authenticator.authenticateMultipleBuckets({
         provider: 'anthropic',
-        buckets: ['work@company.com', 'personal@gmail.com', 'backup@example.com'],
+        buckets: [
+          'work@company.com',
+          'personal@gmail.com',
+          'backup@example.com',
+        ],
       });
 
       expect(result.authenticatedBuckets).toHaveLength(3);
       expect(result.failedBuckets).toHaveLength(0);
       expect(result.cancelled).toBe(false);
       expect(delayLog).toHaveLength(2);
-      expect(delayLog.every(d => d.ms === 1000)).toBe(true);
+      expect(delayLog.every((d) => d.ms === 1000)).toBe(true);
     });
 
     /**
@@ -642,7 +671,12 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
      */
     it('should continue to next bucket on authentication error', async () => {
       const errorAuthenticator = new MultiBucketAuthenticator(
-        async (_provider: string, bucket: string, _index: number, _total: number) => {
+        async (
+          _provider: string,
+          bucket: string,
+          _index: number,
+          _total: number,
+        ) => {
           if (bucket === 'bucket2') {
             throw new Error('Auth failed for bucket2');
           }
@@ -650,7 +684,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         },
         async () => true,
         async () => {},
-        getEphemeralSetting
+        getEphemeralSetting,
       );
 
       const result = await errorAuthenticator.authenticateMultipleBuckets({
@@ -677,7 +711,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         },
         async () => true,
         async () => {},
-        getEphemeralSetting
+        getEphemeralSetting,
       );
 
       const result = await failAuthenticator.authenticateMultipleBuckets({

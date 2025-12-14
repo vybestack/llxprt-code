@@ -27,7 +27,10 @@ const profileSuggestionDescription = 'Saved profile';
 
 const RESERVED_BUCKET_NAMES = ['login', 'logout', 'status', 'switch', '--all'];
 
-function validateBucketName(bucket: string): { valid: boolean; error?: string } {
+function validateBucketName(bucket: string): {
+  valid: boolean;
+  error?: string;
+} {
   const invalidChars = /[:/\\<>"|?*]/;
   if (invalidChars.test(bucket)) {
     return {
@@ -218,7 +221,8 @@ const saveCommand: SlashCommand = {
         return {
           type: 'message',
           messageType: 'error',
-          content: 'Usage: /profile save model "<profile-name>" [bucket1] [bucket2] ...',
+          content:
+            'Usage: /profile save model "<profile-name>" [bucket1] [bucket2] ...',
         };
       }
 
@@ -228,11 +232,16 @@ const saveCommand: SlashCommand = {
       let bucketArgs: string[] = [];
 
       // Check if profile name is quoted
-      const profileNameMatch = parts.slice(1).join(' ').match(/^"([^"]+)"(?:\s+(.+))?$/);
+      const profileNameMatch = parts
+        .slice(1)
+        .join(' ')
+        .match(/^"([^"]+)"(?:\s+(.+))?$/);
       if (profileNameMatch) {
         profileName = profileNameMatch[1];
         if (profileNameMatch[2]) {
-          bucketArgs = profileNameMatch[2].split(/\s+/).filter((b) => b.length > 0);
+          bucketArgs = profileNameMatch[2]
+            .split(/\s+/)
+            .filter((b) => b.length > 0);
         }
       } else {
         // Profile name is not quoted, take first arg as name, rest as buckets
@@ -244,7 +253,8 @@ const saveCommand: SlashCommand = {
         return {
           type: 'message',
           messageType: 'error',
-          content: 'Usage: /profile save model "<profile-name>" [bucket1] [bucket2] ...',
+          content:
+            'Usage: /profile save model "<profile-name>" [bucket1] [bucket2] ...',
         };
       }
 
@@ -309,9 +319,10 @@ const saveCommand: SlashCommand = {
         const runtime = getRuntimeApi();
 
         // Build auth config if buckets specified
-        const authConfig = bucketArgs.length > 0
-          ? { auth: { type: 'oauth' as const, buckets: bucketArgs } }
-          : undefined;
+        const authConfig =
+          bucketArgs.length > 0
+            ? { auth: { type: 'oauth' as const, buckets: bucketArgs } }
+            : undefined;
 
         await runtime.saveProfileSnapshot(profileName, authConfig);
         return {

@@ -72,7 +72,10 @@ export class OAuthBucketManager {
   /**
    * Get bucket status including authentication and expiry information
    */
-  async getBucketStatus(provider: string, bucket: string): Promise<BucketStatus> {
+  async getBucketStatus(
+    provider: string,
+    bucket: string,
+  ): Promise<BucketStatus> {
     const token = await this.tokenStore.getToken(provider, bucket);
 
     if (!token) {
@@ -118,7 +121,7 @@ export class OAuthBucketManager {
     if (!token) {
       throw new Error(
         `OAuth bucket '${bucket}' for provider '${provider}' not found. ` +
-          `Use /auth ${provider} login ${bucket} to authenticate.`
+          `Use /auth ${provider} login ${bucket} to authenticate.`,
       );
     }
   }
@@ -130,7 +133,7 @@ export class OAuthBucketManager {
   getNextBucket(
     provider: string,
     currentBucket: string,
-    profileBuckets: string[]
+    profileBuckets: string[],
   ): string | undefined {
     const currentIndex = profileBuckets.indexOf(currentBucket);
 

@@ -221,7 +221,6 @@ export class AuthCommandExecutor {
     }
   }
 
-
   /**
    * Clear the cached client for a provider after logout
    * This ensures the provider doesn't use stale credentials
@@ -349,7 +348,8 @@ export class AuthCommandExecutor {
     provider: string,
   ): Promise<MessageActionReturn> {
     try {
-      const buckets = await this.oauthManager.getAuthStatusWithBuckets(provider);
+      const buckets =
+        await this.oauthManager.getAuthStatusWithBuckets(provider);
 
       if (buckets.length === 0) {
         return {
@@ -364,7 +364,9 @@ export class AuthCommandExecutor {
 
       for (const bucket of buckets) {
         const marker = bucket.isSessionBucket ? '* ' : '  ';
-        const statusStr = bucket.authenticated ? 'authenticated' : 'not authenticated';
+        const statusStr = bucket.authenticated
+          ? 'authenticated'
+          : 'not authenticated';
 
         if (bucket.authenticated && bucket.expiry) {
           const expiryDate = new Date(bucket.expiry * 1000);

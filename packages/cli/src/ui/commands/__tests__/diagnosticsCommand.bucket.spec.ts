@@ -40,27 +40,30 @@ const createMockTokenStore = (): TokenStore => ({
 });
 
 // Mock OAuthManager
-const createMockOAuthManager = (): OAuthManager => ({
-  registerProvider: vi.fn(),
-  toggleOAuthEnabled: vi.fn(),
-  isOAuthEnabled: vi.fn(),
-  isAuthenticated: vi.fn(),
-  getAuthStatus: vi.fn(),
-  getToken: vi.fn(),
-  getOAuthToken: vi.fn(),
-  peekStoredToken: vi.fn(),
-  getSupportedProviders: vi.fn().mockReturnValue(['anthropic', 'gemini', 'qwen']),
-  getHigherPriorityAuth: vi.fn(),
-  logout: vi.fn(),
-  authenticate: vi.fn(),
-  getAuthStatusWithBuckets: vi.fn(),
-  setSessionBucket: vi.fn(),
-  clearSessionBucket: vi.fn(),
-  getSessionBucket: vi.fn(),
-  logoutAllBuckets: vi.fn(),
-  listBuckets: vi.fn(),
-  getTokenStore: vi.fn(),
-}) as unknown as OAuthManager;
+const createMockOAuthManager = (): OAuthManager =>
+  ({
+    registerProvider: vi.fn(),
+    toggleOAuthEnabled: vi.fn(),
+    isOAuthEnabled: vi.fn(),
+    isAuthenticated: vi.fn(),
+    getAuthStatus: vi.fn(),
+    getToken: vi.fn(),
+    getOAuthToken: vi.fn(),
+    peekStoredToken: vi.fn(),
+    getSupportedProviders: vi
+      .fn()
+      .mockReturnValue(['anthropic', 'gemini', 'qwen']),
+    getHigherPriorityAuth: vi.fn(),
+    logout: vi.fn(),
+    authenticate: vi.fn(),
+    getAuthStatusWithBuckets: vi.fn(),
+    setSessionBucket: vi.fn(),
+    clearSessionBucket: vi.fn(),
+    getSessionBucket: vi.fn(),
+    logoutAllBuckets: vi.fn(),
+    listBuckets: vi.fn(),
+    getTokenStore: vi.fn(),
+  }) as unknown as OAuthManager;
 
 // Mock runtime API
 const createMockRuntimeApi = () => ({
@@ -90,11 +93,15 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
     mockOAuthManager = createMockOAuthManager();
 
     // Mock getTokenStore to return our mock
-    (mockOAuthManager.getTokenStore as unknown) = vi.fn().mockReturnValue(mockTokenStore);
+    (mockOAuthManager.getTokenStore as unknown) = vi
+      .fn()
+      .mockReturnValue(mockTokenStore);
 
     mockRuntimeApi = createMockRuntimeApi();
     // Override getCliOAuthManager to return our mock
-    mockRuntimeApi.getCliOAuthManager = vi.fn().mockReturnValue(mockOAuthManager);
+    mockRuntimeApi.getCliOAuthManager = vi
+      .fn()
+      .mockReturnValue(mockOAuthManager);
 
     // Set up runtime API mock
     runtimeMocks.getRuntimeApiMock.mockReturnValue(mockRuntimeApi);
@@ -173,7 +180,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show both buckets
       expect(result?.type).toBe('message');
@@ -202,7 +209,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show bucket count
       const content = (result as { content?: string }).content || '';
@@ -224,10 +231,9 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         token_type: 'Bearer',
       };
 
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue([
-        'default',
-        'expired-bucket',
-      ]);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default', 'expired-bucket']);
 
       (mockTokenStore.getToken as unknown) = vi
         .fn()
@@ -238,7 +244,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show both statuses
       const content = (result as { content?: string }).content || '';
@@ -256,12 +262,16 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         token_type: 'Bearer',
       };
 
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
 
-      (mockTokenStore.getToken as unknown) = vi.fn().mockResolvedValue(mockToken);
+      (mockTokenStore.getToken as unknown) = vi
+        .fn()
+        .mockResolvedValue(mockToken);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show expiry date and remaining time
       const content = (result as { content?: string }).content || '';
@@ -285,10 +295,9 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         token_type: 'Bearer',
       };
 
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue([
-        'with-refresh',
-        'without-refresh',
-      ]);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['with-refresh', 'without-refresh']);
 
       (mockTokenStore.getToken as unknown) = vi
         .fn()
@@ -299,7 +308,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show refresh token status for both
       const content = (result as { content?: string }).content || '';
@@ -327,7 +336,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should group by provider
       const content = (result as { content?: string }).content || '';
@@ -353,7 +362,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Each provider should show correct count
       const content = (result as { content?: string }).content || '';
@@ -363,7 +372,9 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       expect(anthropicSection).toMatch(/Buckets:\s*2/);
 
       // Gemini section should have 1 bucket
-      const geminiSection = content.split('gemini:')[1]?.split('qwen:')[0] || content.split('gemini:')[1];
+      const geminiSection =
+        content.split('gemini:')[1]?.split('qwen:')[0] ||
+        content.split('gemini:')[1];
       if (geminiSection) {
         expect(geminiSection).toMatch(/Buckets:\s*1/);
       }
@@ -380,7 +391,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue([]);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show current bucket
       const content = (result as { content?: string }).content || '';
@@ -390,11 +401,13 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
 
     it('should show "default" when no session bucket is set', async () => {
       // Given: No session bucket override
-      (mockOAuthManager.getSessionBucket as unknown) = vi.fn().mockReturnValue(undefined);
+      (mockOAuthManager.getSessionBucket as unknown) = vi
+        .fn()
+        .mockReturnValue(undefined);
       (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue([]);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show default
       const content = (result as { content?: string }).content || '';
@@ -418,7 +431,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue([]);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should correlate profile with bucket
       const content = (result as { content?: string }).content || '';
@@ -460,7 +473,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Format should match specification
       const content = (result as { content?: string }).content || '';
@@ -486,7 +499,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
 
     it('should format time remaining in hours and minutes', async () => {
       // Given: Token expiring in exactly 23 hours and 15 minutes
-      const expiry = Date.now() / 1000 + (23 * 3600) + (15 * 60);
+      const expiry = Date.now() / 1000 + 23 * 3600 + 15 * 60;
       const mockToken: OAuthToken = {
         access_token: 'token',
         refresh_token: 'refresh',
@@ -494,11 +507,15 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         token_type: 'Bearer',
       };
 
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
-      (mockTokenStore.getToken as unknown) = vi.fn().mockResolvedValue(mockToken);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
+      (mockTokenStore.getToken as unknown) = vi
+        .fn()
+        .mockResolvedValue(mockToken);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should format as "23h 15m"
       const content = (result as { content?: string }).content || '';
@@ -507,7 +524,9 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
 
     it('should use indentation to show bucket hierarchy under providers', async () => {
       // Given: Multiple levels of information
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
       (mockTokenStore.getToken as unknown) = vi.fn().mockResolvedValue({
         access_token: 'token',
         refresh_token: 'refresh',
@@ -516,7 +535,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Indentation should be consistent
       const content = (result as { content?: string }).content || '';
@@ -542,7 +561,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue([]);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show "no tokens" message
       const content = (result as { content?: string }).content || '';
@@ -566,7 +585,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should only show anthropic, not gemini or qwen
       const content = (result as { content?: string }).content || '';
@@ -577,11 +596,13 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
 
     it('should handle missing token data gracefully', async () => {
       // Given: Bucket exists but token is null
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
       (mockTokenStore.getToken as unknown) = vi.fn().mockResolvedValue(null);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show bucket with "None" status or skip it
       const content = (result as { content?: string }).content || '';
@@ -600,11 +621,15 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         token_type: 'Bearer',
       };
 
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
-      (mockTokenStore.getToken as unknown) = vi.fn().mockResolvedValue(futureToken);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
+      (mockTokenStore.getToken as unknown) = vi
+        .fn()
+        .mockResolvedValue(futureToken);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show Authenticated
       const content = (result as { content?: string }).content || '';
@@ -620,11 +645,15 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         token_type: 'Bearer',
       };
 
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
-      (mockTokenStore.getToken as unknown) = vi.fn().mockResolvedValue(expiredToken);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
+      (mockTokenStore.getToken as unknown) = vi
+        .fn()
+        .mockResolvedValue(expiredToken);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should show Expired
       const content = (result as { content?: string }).content || '';
@@ -640,11 +669,15 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         token_type: 'Bearer',
       };
 
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
-      (mockTokenStore.getToken as unknown) = vi.fn().mockResolvedValue(soonToken);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
+      (mockTokenStore.getToken as unknown) = vi
+        .fn()
+        .mockResolvedValue(soonToken);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should still show Authenticated (not expired yet)
       const content = (result as { content?: string }).content || '';
@@ -661,7 +694,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
         .mockRejectedValue(new Error('Storage error'));
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should still return diagnostics with error indication
       expect(result?.type).toBe('message');
@@ -687,7 +720,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(contextWithoutOAuth, "");
+      const result = await diagnosticsCommand.action!(contextWithoutOAuth, '');
 
       // Then: Should show appropriate message
       expect(result?.type).toBe('message');
@@ -698,7 +731,9 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
 
     it('should handle malformed token data gracefully', async () => {
       // Given: Token missing required fields
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
       (mockTokenStore.getToken as unknown) = vi.fn().mockResolvedValue({
         access_token: 'token',
         // Missing expiry field
@@ -706,7 +741,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       } as OAuthToken);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: Should handle gracefully
       expect(result?.type).toBe('message');
@@ -721,7 +756,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue([]);
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: All standard sections should be present
       const content = (result as { content?: string }).content || '';
@@ -736,7 +771,9 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
 
     it('should show OAuth section after standard sections', async () => {
       // Given: Standard diagnostics setup
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
       (mockTokenStore.getToken as unknown) = vi.fn().mockResolvedValue({
         access_token: 'token',
         expiry: Date.now() / 1000 + 3600,
@@ -744,7 +781,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
       });
 
       // When: User runs /diagnostics
-      const result = await diagnosticsCommand.action!(mockContext, "");
+      const result = await diagnosticsCommand.action!(mockContext, '');
 
       // Then: OAuth section should come after Provider Information
       const content = (result as { content?: string }).content || '';

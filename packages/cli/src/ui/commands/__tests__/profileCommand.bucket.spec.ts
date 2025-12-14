@@ -334,7 +334,9 @@ describe('profileCommand - OAuth Buckets (Phase 5)', () => {
         providerName: 'anthropic',
         modelName: 'claude-sonnet-4',
         infoMessages: [],
-        warnings: ['Bucket work@company.com token expired, re-authentication required'],
+        warnings: [
+          'Bucket work@company.com token expired, re-authentication required',
+        ],
       });
 
       const result = await load.action!(context, 'myprofile');
@@ -454,7 +456,9 @@ describe('profileCommand - OAuth Buckets (Phase 5)', () => {
 
       const allBuckets = await tokenStoreMocks.listBuckets('anthropic');
       const alreadySelected = ['work@company.com'];
-      const available = allBuckets.filter((b: string) => !alreadySelected.includes(b));
+      const available = allBuckets.filter(
+        (b: string) => !alreadySelected.includes(b),
+      );
 
       expect(available).toEqual(['default', 'personal@gmail.com']);
     });

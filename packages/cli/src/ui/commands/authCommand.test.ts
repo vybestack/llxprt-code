@@ -211,7 +211,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Invalid action: invalid. Use enable, disable, login, logout, status, or switch',
+        content:
+          'Invalid action: invalid. Use enable, disable, login, logout, status, or switch',
       });
     });
   });

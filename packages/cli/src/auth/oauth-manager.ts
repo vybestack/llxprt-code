@@ -273,7 +273,10 @@ export class OAuthManager {
    * @param bucket - Optional bucket name
    * @returns True if authenticated, false otherwise
    */
-  async isAuthenticated(providerName: string, bucket?: string): Promise<boolean> {
+  async isAuthenticated(
+    providerName: string,
+    bucket?: string,
+  ): Promise<boolean> {
     // Lines 52-55: VALIDATE providerName
     if (!providerName || typeof providerName !== 'string') {
       return false;
@@ -514,7 +517,11 @@ export class OAuthManager {
           const refreshedToken = await provider.refreshIfNeeded();
           if (refreshedToken) {
             // 4. Update stored token if refreshed
-            await this.tokenStore.saveToken(providerName, refreshedToken, bucketToUse);
+            await this.tokenStore.saveToken(
+              providerName,
+              refreshedToken,
+              bucketToUse,
+            );
             return refreshedToken;
           } else {
             // Refresh failed, return null
@@ -809,9 +816,7 @@ export class OAuthManager {
   /**
    * Get authentication status with bucket information
    */
-  async getAuthStatusWithBuckets(
-    provider: string,
-  ): Promise<
+  async getAuthStatusWithBuckets(provider: string): Promise<
     Array<{
       bucket: string;
       authenticated: boolean;

@@ -30,27 +30,30 @@ const createMockTokenStore = (): TokenStore => ({
 });
 
 // Mock OAuthManager
-const createMockOAuthManager = (): OAuthManager => ({
-  registerProvider: vi.fn(),
-  toggleOAuthEnabled: vi.fn(),
-  isOAuthEnabled: vi.fn(),
-  isAuthenticated: vi.fn(),
-  getAuthStatus: vi.fn(),
-  getToken: vi.fn(),
-  getOAuthToken: vi.fn(),
-  peekStoredToken: vi.fn(),
-  getSupportedProviders: vi.fn().mockReturnValue(['anthropic', 'gemini', 'qwen']),
-  getHigherPriorityAuth: vi.fn(),
-  logout: vi.fn(),
-  authenticate: vi.fn(),
-  getAuthStatusWithBuckets: vi.fn(),
-  setSessionBucket: vi.fn(),
-  clearSessionBucket: vi.fn(),
-  getSessionBucket: vi.fn(),
-  logoutAllBuckets: vi.fn(),
-  listBuckets: vi.fn(),
-  getTokenStore: vi.fn(),
-}) as unknown as OAuthManager;
+const createMockOAuthManager = (): OAuthManager =>
+  ({
+    registerProvider: vi.fn(),
+    toggleOAuthEnabled: vi.fn(),
+    isOAuthEnabled: vi.fn(),
+    isAuthenticated: vi.fn(),
+    getAuthStatus: vi.fn(),
+    getToken: vi.fn(),
+    getOAuthToken: vi.fn(),
+    peekStoredToken: vi.fn(),
+    getSupportedProviders: vi
+      .fn()
+      .mockReturnValue(['anthropic', 'gemini', 'qwen']),
+    getHigherPriorityAuth: vi.fn(),
+    logout: vi.fn(),
+    authenticate: vi.fn(),
+    getAuthStatusWithBuckets: vi.fn(),
+    setSessionBucket: vi.fn(),
+    clearSessionBucket: vi.fn(),
+    getSessionBucket: vi.fn(),
+    logoutAllBuckets: vi.fn(),
+    listBuckets: vi.fn(),
+    getTokenStore: vi.fn(),
+  }) as unknown as OAuthManager;
 
 describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
   let mockContext: CommandContext;
@@ -65,7 +68,9 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
     mockOAuthManager = createMockOAuthManager();
 
     // Mock getTokenStore to return our mock
-    (mockOAuthManager.getTokenStore as unknown) = vi.fn().mockReturnValue(mockTokenStore);
+    (mockOAuthManager.getTokenStore as unknown) = vi
+      .fn()
+      .mockReturnValue(mockTokenStore);
 
     mockContext = {
       services: {
@@ -121,12 +126,17 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
           if (provider === 'anthropic') {
             return mockBucketStats.find((s) => s.bucket === bucket);
           }
-          return { bucket, requestCount: 0, percentage: 0, lastUsed: undefined };
+          return {
+            bucket,
+            requestCount: 0,
+            percentage: 0,
+            lastUsed: undefined,
+          };
         });
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       expect(bucketsSubCommand).toBeDefined();
 
@@ -155,14 +165,24 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
         .fn()
         .mockImplementation(async (provider: string, bucket: string) => {
           if (bucket === 'default') {
-            return { bucket, requestCount: 75, percentage: 75.0, lastUsed: Date.now() };
+            return {
+              bucket,
+              requestCount: 75,
+              percentage: 75.0,
+              lastUsed: Date.now(),
+            };
           }
-          return { bucket, requestCount: 25, percentage: 25.0, lastUsed: Date.now() };
+          return {
+            bucket,
+            requestCount: 25,
+            percentage: 25.0,
+            lastUsed: Date.now(),
+          };
         });
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -175,7 +195,9 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
     it('should show last used timestamp per bucket', async () => {
       // Given: Buckets with last-used timestamps
       const lastUsedTime = new Date('2023-12-15T10:30:00Z');
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
 
       (mockTokenStore.getBucketStats as unknown) = vi.fn().mockResolvedValue({
         bucket: 'default',
@@ -186,7 +208,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -225,7 +247,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -254,20 +276,40 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
         .fn()
         .mockImplementation(async (provider: string, bucket: string) => {
           if (provider === 'anthropic' && bucket === 'default') {
-            return { bucket, requestCount: 47, percentage: 68.1, lastUsed: Date.now() };
+            return {
+              bucket,
+              requestCount: 47,
+              percentage: 68.1,
+              lastUsed: Date.now(),
+            };
           }
           if (provider === 'anthropic' && bucket === 'work@company.com') {
-            return { bucket, requestCount: 22, percentage: 31.9, lastUsed: Date.now() };
+            return {
+              bucket,
+              requestCount: 22,
+              percentage: 31.9,
+              lastUsed: Date.now(),
+            };
           }
           if (provider === 'gemini' && bucket === 'default') {
-            return { bucket, requestCount: 15, percentage: 100, lastUsed: Date.now() };
+            return {
+              bucket,
+              requestCount: 15,
+              percentage: 100,
+              lastUsed: Date.now(),
+            };
           }
-          return { bucket, requestCount: 0, percentage: 0, lastUsed: undefined };
+          return {
+            bucket,
+            requestCount: 0,
+            percentage: 0,
+            lastUsed: undefined,
+          };
         });
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -308,7 +350,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -327,7 +369,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -357,7 +399,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -370,7 +412,9 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
     it('should handle buckets with zero requests gracefully', async () => {
       // Given: Bucket exists but has never been used
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
 
       (mockTokenStore.getBucketStats as unknown) = vi.fn().mockResolvedValue({
         bucket: 'default',
@@ -381,7 +425,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -412,20 +456,40 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
         .fn()
         .mockImplementation(async (provider: string, bucket: string) => {
           if (provider === 'anthropic' && bucket === 'default') {
-            return { bucket, requestCount: 47, percentage: 68.1, lastUsed: Date.now() };
+            return {
+              bucket,
+              requestCount: 47,
+              percentage: 68.1,
+              lastUsed: Date.now(),
+            };
           }
           if (provider === 'anthropic' && bucket === 'work@company.com') {
-            return { bucket, requestCount: 22, percentage: 31.9, lastUsed: Date.now() };
+            return {
+              bucket,
+              requestCount: 22,
+              percentage: 31.9,
+              lastUsed: Date.now(),
+            };
           }
           if (provider === 'gemini' && bucket === 'default') {
-            return { bucket, requestCount: 15, percentage: 100, lastUsed: Date.now() };
+            return {
+              bucket,
+              requestCount: 15,
+              percentage: 100,
+              lastUsed: Date.now(),
+            };
           }
-          return { bucket, requestCount: 0, percentage: 0, lastUsed: undefined };
+          return {
+            bucket,
+            requestCount: 0,
+            percentage: 0,
+            lastUsed: undefined,
+          };
         });
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -451,7 +515,9 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
     it('should format percentages with one decimal place', async () => {
       // Given: Buckets with various percentage values
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
 
       (mockTokenStore.getBucketStats as unknown) = vi.fn().mockResolvedValue({
         bucket: 'default',
@@ -462,7 +528,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -475,7 +541,9 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
     it('should format last used timestamp in readable format', async () => {
       // Given: Bucket with specific last used time
       const lastUsedTime = new Date('2023-12-15T14:30:00Z');
-      (mockTokenStore.listBuckets as unknown) = vi.fn().mockResolvedValue(['default']);
+      (mockTokenStore.listBuckets as unknown) = vi
+        .fn()
+        .mockResolvedValue(['default']);
 
       (mockTokenStore.getBucketStats as unknown) = vi.fn().mockResolvedValue({
         bucket: 'default',
@@ -486,7 +554,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -507,7 +575,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -521,7 +589,11 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
       // Given: Provider with multiple buckets
       (mockTokenStore.listBuckets as unknown) = vi
         .fn()
-        .mockResolvedValue(['default', 'work@company.com', 'personal@gmail.com']);
+        .mockResolvedValue([
+          'default',
+          'work@company.com',
+          'personal@gmail.com',
+        ]);
 
       (mockTokenStore.getBucketStats as unknown) = vi.fn().mockResolvedValue({
         bucket: 'default',
@@ -532,22 +604,22 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
       // Then: Should query stats for each bucket
       expect(mockTokenStore.getBucketStats).toHaveBeenCalledWith(
         expect.any(String),
-        'default'
+        'default',
       );
       expect(mockTokenStore.getBucketStats).toHaveBeenCalledWith(
         expect.any(String),
-        'work@company.com'
+        'work@company.com',
       );
       expect(mockTokenStore.getBucketStats).toHaveBeenCalledWith(
         expect.any(String),
-        'personal@gmail.com'
+        'personal@gmail.com',
       );
     });
   });
@@ -561,7 +633,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(mockContext, '');
 
@@ -583,7 +655,7 @@ describe('Phase 7: Stats Buckets Command - TDD Tests', () => {
 
       // When: User runs /stats buckets
       const bucketsSubCommand = statsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'buckets'
+        (cmd) => cmd.name === 'buckets',
       );
       await bucketsSubCommand!.action!(contextWithoutOAuth, '');
 

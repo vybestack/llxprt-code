@@ -45,7 +45,7 @@ export interface NotificationLog {
 export function notifyBucketSwitch(
   fromBucket: string,
   toBucket: string,
-  log: NotificationLog
+  log: NotificationLog,
 ): void {
   const message = `Bucket '${fromBucket}' quota exceeded, switching to '${toBucket}'`;
   log.messages.push(message);
@@ -61,7 +61,7 @@ export interface ProfileBucketConfig {
  */
 export function resolveBucketsForFailover(
   profileConfig: ProfileBucketConfig,
-  sessionBucket?: string
+  sessionBucket?: string,
 ): string[] {
   if (sessionBucket) {
     return [sessionBucket];
@@ -84,7 +84,7 @@ export interface BucketStatus {
  */
 export function formatAllBucketsExhaustedError(
   provider: string,
-  bucketStatuses: BucketStatus[]
+  bucketStatuses: BucketStatus[],
 ): Error {
   let message = `All buckets exhausted for provider '${provider}':\n`;
 
@@ -115,7 +115,7 @@ export interface MockTokenStore {
  */
 export async function validateProfileBucketsExist(
   profile: MockProfile,
-  tokenStore: MockTokenStore
+  tokenStore: MockTokenStore,
 ): Promise<{ valid: boolean; errors: string[] }> {
   const errors: string[] = [];
 
@@ -127,7 +127,7 @@ export async function validateProfileBucketsExist(
     if (!token) {
       errors.push(
         `OAuth bucket '${bucket}' for provider '${profile.provider}' not found. ` +
-          `Use /auth ${profile.provider} login ${bucket} to authenticate.`
+          `Use /auth ${profile.provider} login ${bucket} to authenticate.`,
       );
     }
   }
@@ -161,7 +161,7 @@ export interface MockResponse {
 
 export type RequestExecutor = (
   request: MockRequest,
-  bucket: string
+  bucket: string,
 ) => Promise<MockResponse>;
 
 /**
@@ -170,7 +170,7 @@ export type RequestExecutor = (
 export async function executeWithBucketFailover(
   request: MockRequest,
   buckets: string[],
-  executor: RequestExecutor
+  executor: RequestExecutor,
 ): Promise<MockResponse> {
   let lastError: Error | null = null;
 
@@ -189,9 +189,7 @@ export async function executeWithBucketFailover(
           continue;
         } else {
           // Last bucket also failed with failover error
-          throw new Error(
-            `All buckets exhausted. Last error: ${err.message}`
-          );
+          throw new Error(`All buckets exhausted. Last error: ${err.message}`);
         }
       }
 
@@ -200,7 +198,7 @@ export async function executeWithBucketFailover(
   }
 
   const exhaustedError = new Error(
-    `All buckets exhausted. Last error: ${lastError?.message ?? 'Unknown error'}`
+    `All buckets exhausted. Last error: ${lastError?.message ?? 'Unknown error'}`,
   );
   throw exhaustedError;
 }

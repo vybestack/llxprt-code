@@ -33,10 +33,7 @@ let tokenCounter = 0;
 /**
  * Creates a mock OAuth token for testing
  */
-function createMockToken(
-  bucket: string,
-  expiresIn: number = 3600,
-): OAuthToken {
+function createMockToken(bucket: string, expiresIn: number = 3600): OAuthToken {
   tokenCounter++;
   return {
     access_token: `mock_access_token_${bucket}_${tokenCounter}`,
@@ -68,7 +65,9 @@ function createMockProvider(name: string): OAuthProvider {
 /**
  * Creates a valid StandardProfile for testing with minimal required fields
  */
-function createValidProfile(overrides: Partial<StandardProfile> = {}): StandardProfile {
+function createValidProfile(
+  overrides: Partial<StandardProfile> = {},
+): StandardProfile {
   return {
     version: 1,
     type: 'standard',
@@ -79,7 +78,6 @@ function createValidProfile(overrides: Partial<StandardProfile> = {}): StandardP
     ...overrides,
   };
 }
-
 
 describe('Phase 10: OAuth Buckets Integration Testing', () => {
   let tempDir: string;
@@ -237,8 +235,14 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       expect(buckets).toContain('personal@gmail.com');
 
       // Verify tokens can be retrieved from both buckets
-      const workToken = await tokenStore.getToken('anthropic', 'work@company.com');
-      const personalToken = await tokenStore.getToken('anthropic', 'personal@gmail.com');
+      const workToken = await tokenStore.getToken(
+        'anthropic',
+        'work@company.com',
+      );
+      const personalToken = await tokenStore.getToken(
+        'anthropic',
+        'personal@gmail.com',
+      );
       expect(workToken).not.toBeNull();
       expect(personalToken).not.toBeNull();
     });
@@ -249,7 +253,11 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       // Create buckets for anthropic
       const anthropicWork = createMockToken('work@company.com');
       const anthropicPersonal = createMockToken('personal@gmail.com');
-      await tokenStore.saveToken('anthropic', anthropicWork, 'work@company.com');
+      await tokenStore.saveToken(
+        'anthropic',
+        anthropicWork,
+        'work@company.com',
+      );
       await tokenStore.saveToken(
         'anthropic',
         anthropicPersonal,
@@ -260,7 +268,11 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       const geminiWork = createMockToken('work@company.com');
       const geminiPersonal = createMockToken('personal@gmail.com');
       await tokenStore.saveToken('gemini', geminiWork, 'work@company.com');
-      await tokenStore.saveToken('gemini', geminiPersonal, 'personal@gmail.com');
+      await tokenStore.saveToken(
+        'gemini',
+        geminiPersonal,
+        'personal@gmail.com',
+      );
 
       // Create buckets for qwen
       const qwenWork = createMockToken('work@company.com');
@@ -280,7 +292,10 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
         'anthropic',
         'work@company.com',
       );
-      const geminiToken = await tokenStore.getToken('gemini', 'work@company.com');
+      const geminiToken = await tokenStore.getToken(
+        'gemini',
+        'work@company.com',
+      );
 
       expect(anthropicToken?.access_token).toBe(anthropicWork.access_token);
       expect(geminiToken?.access_token).toBe(geminiWork.access_token);
@@ -350,13 +365,17 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       expect(oauthManager.getSessionBucket('anthropic')).toBe(
         'work@company.com',
       );
-      expect(oauthManager.getSessionBucket('gemini')).toBe('personal@gmail.com');
+      expect(oauthManager.getSessionBucket('gemini')).toBe(
+        'personal@gmail.com',
+      );
 
       // Clear one provider's session
       oauthManager.clearSessionBucket('anthropic');
 
       expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
-      expect(oauthManager.getSessionBucket('gemini')).toBe('personal@gmail.com');
+      expect(oauthManager.getSessionBucket('gemini')).toBe(
+        'personal@gmail.com',
+      );
     });
   });
 
@@ -390,10 +409,7 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
       await createTempProfile(tempDir, 'multi-bucket-profile', profile);
 
       // Load profile and verify bucket order preserved
-      const profilePath = path.join(
-        profilesDir,
-        'multi-bucket-profile.json',
-      );
+      const profilePath = path.join(profilesDir, 'multi-bucket-profile.json');
       const loadedContent = await fs.readFile(profilePath, 'utf8');
       const loadedProfile = JSON.parse(loadedContent) as StandardProfile;
 
@@ -929,7 +945,10 @@ describe('Phase 10: OAuth Buckets Integration Testing', () => {
         'anthropic',
         'work@company.com',
       );
-      const geminiWork = await tokenStore.getToken('gemini', 'work@company.com');
+      const geminiWork = await tokenStore.getToken(
+        'gemini',
+        'work@company.com',
+      );
 
       expect(anthropicWork).not.toBeNull();
       expect(geminiWork).not.toBeNull();

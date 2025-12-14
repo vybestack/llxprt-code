@@ -14,12 +14,19 @@ import type { TokenStore, OAuthToken } from '../types.js';
 class MockTokenStore implements TokenStore {
   private tokens = new Map<string, OAuthToken>();
 
-  async saveToken(provider: string, token: OAuthToken, bucket?: string): Promise<void> {
+  async saveToken(
+    provider: string,
+    token: OAuthToken,
+    bucket?: string,
+  ): Promise<void> {
     const key = this.getKey(provider, bucket);
     this.tokens.set(key, token);
   }
 
-  async getToken(provider: string, bucket?: string): Promise<OAuthToken | null> {
+  async getToken(
+    provider: string,
+    bucket?: string,
+  ): Promise<OAuthToken | null> {
     const key = this.getKey(provider, bucket);
     return this.tokens.get(key) || null;
   }
@@ -67,7 +74,10 @@ class MockTokenStore implements TokenStore {
   }
 }
 
-function createMockToken(accessToken: string, expiryOffset: number): OAuthToken {
+function createMockToken(
+  accessToken: string,
+  expiryOffset: number,
+): OAuthToken {
   return {
     access_token: accessToken,
     refresh_token: 'refresh_token',
@@ -168,8 +178,12 @@ describe('OAuthBucketManager', () => {
       bucketManager.setSessionBucket('anthropic', 'work@company.com');
       bucketManager.setSessionBucket('gemini', 'personal@gmail.com');
 
-      expect(bucketManager.getSessionBucket('anthropic')).toBe('work@company.com');
-      expect(bucketManager.getSessionBucket('gemini')).toBe('personal@gmail.com');
+      expect(bucketManager.getSessionBucket('anthropic')).toBe(
+        'work@company.com',
+      );
+      expect(bucketManager.getSessionBucket('gemini')).toBe(
+        'personal@gmail.com',
+      );
     });
 
     /**
@@ -215,7 +229,10 @@ describe('OAuthBucketManager', () => {
      */
     it('should prioritize session override over profile buckets', () => {
       bucketManager.setSessionBucket('anthropic', 'work@company.com');
-      const result = bucketManager.resolveBucket('anthropic', ['bucket1', 'bucket2']);
+      const result = bucketManager.resolveBucket('anthropic', [
+        'bucket1',
+        'bucket2',
+      ]);
       expect(result).toBe('work@company.com');
     });
 
@@ -227,7 +244,10 @@ describe('OAuthBucketManager', () => {
      * @then Returns first profile bucket 'bucket1'
      */
     it('should use first profile bucket when no session override', () => {
-      const result = bucketManager.resolveBucket('anthropic', ['bucket1', 'bucket2']);
+      const result = bucketManager.resolveBucket('anthropic', [
+        'bucket1',
+        'bucket2',
+      ]);
       expect(result).toBe('bucket1');
     });
 
@@ -264,11 +284,15 @@ describe('OAuthBucketManager', () => {
      */
     it('should follow resolution priority: session > profile > default', () => {
       bucketManager.setSessionBucket('anthropic', 'session-bucket');
-      const result = bucketManager.resolveBucket('anthropic', ['profile-bucket']);
+      const result = bucketManager.resolveBucket('anthropic', [
+        'profile-bucket',
+      ]);
       expect(result).toBe('session-bucket');
 
       bucketManager.clearSessionBucket('anthropic');
-      const result2 = bucketManager.resolveBucket('anthropic', ['profile-bucket']);
+      const result2 = bucketManager.resolveBucket('anthropic', [
+        'profile-bucket',
+      ]);
       expect(result2).toBe('profile-bucket');
 
       const result3 = bucketManager.resolveBucket('anthropic');
@@ -289,7 +313,10 @@ describe('OAuthBucketManager', () => {
       const token = createMockToken('access_token', 3600000); // 1 hour from now
       tokenStore.setToken('anthropic', token, 'work@company.com');
 
-      const status = await bucketManager.getBucketStatus('anthropic', 'work@company.com');
+      const status = await bucketManager.getBucketStatus(
+        'anthropic',
+        'work@company.com',
+      );
 
       expect(status).toBeDefined();
       expect(status.bucket).toBe('work@company.com');
@@ -307,7 +334,10 @@ describe('OAuthBucketManager', () => {
      * @and No expiry info
      */
     it('should return unauthenticated status for non-existent bucket', async () => {
-      const status = await bucketManager.getBucketStatus('anthropic', 'nonexistent');
+      const status = await bucketManager.getBucketStatus(
+        'anthropic',
+        'nonexistent',
+      );
 
       expect(status).toBeDefined();
       expect(status.bucket).toBe('nonexistent');
@@ -328,7 +358,10 @@ describe('OAuthBucketManager', () => {
       const token = createMockToken('access_token', -3600000); // 1 hour ago
       tokenStore.setToken('anthropic', token, 'work@company.com');
 
-      const status = await bucketManager.getBucketStatus('anthropic', 'work@company.com');
+      const status = await bucketManager.getBucketStatus(
+        'anthropic',
+        'work@company.com',
+      );
 
       expect(status.authenticated).toBe(true);
       expect(status.expiry).toBe(token.expiry);
@@ -352,9 +385,11 @@ describe('OAuthBucketManager', () => {
       const statuses = await bucketManager.getAllBucketStatus('anthropic');
 
       expect(statuses).toHaveLength(2);
-      expect(statuses.some(s => s.bucket === 'work@company.com')).toBe(true);
-      expect(statuses.some(s => s.bucket === 'personal@gmail.com')).toBe(true);
-      expect(statuses.every(s => s.authenticated)).toBe(true);
+      expect(statuses.some((s) => s.bucket === 'work@company.com')).toBe(true);
+      expect(statuses.some((s) => s.bucket === 'personal@gmail.com')).toBe(
+        true,
+      );
+      expect(statuses.every((s) => s.authenticated)).toBe(true);
     });
 
     /**
@@ -380,7 +415,10 @@ describe('OAuthBucketManager', () => {
       const token = createMockToken('access_token', 3600000);
       tokenStore.setToken('anthropic', token, 'work@company.com');
 
-      const status = await bucketManager.getBucketStatus('anthropic', 'work@company.com');
+      const status = await bucketManager.getBucketStatus(
+        'anthropic',
+        'work@company.com',
+      );
       expect(status.bucket).toBe('work@company.com');
     });
   });
@@ -398,7 +436,7 @@ describe('OAuthBucketManager', () => {
       tokenStore.setToken('anthropic', token, 'work@company.com');
 
       await expect(
-        bucketManager.validateBucketExists('anthropic', 'work@company.com')
+        bucketManager.validateBucketExists('anthropic', 'work@company.com'),
       ).resolves.not.toThrow();
     });
 
@@ -412,11 +450,11 @@ describe('OAuthBucketManager', () => {
      */
     it('should throw error for non-existent bucket', async () => {
       await expect(
-        bucketManager.validateBucketExists('anthropic', 'nonexistent')
+        bucketManager.validateBucketExists('anthropic', 'nonexistent'),
       ).rejects.toThrow('nonexistent');
 
       await expect(
-        bucketManager.validateBucketExists('anthropic', 'nonexistent')
+        bucketManager.validateBucketExists('anthropic', 'nonexistent'),
       ).rejects.toThrow('anthropic');
     });
 
@@ -429,7 +467,7 @@ describe('OAuthBucketManager', () => {
      */
     it('should throw error for non-existent default bucket', async () => {
       await expect(
-        bucketManager.validateBucketExists('anthropic', 'default')
+        bucketManager.validateBucketExists('anthropic', 'default'),
       ).rejects.toThrow();
     });
 
@@ -442,7 +480,7 @@ describe('OAuthBucketManager', () => {
      */
     it('should validate bucket before switching', async () => {
       await expect(
-        bucketManager.validateBucketExists('anthropic', 'nonexistent')
+        bucketManager.validateBucketExists('anthropic', 'nonexistent'),
       ).rejects.toThrow();
     });
 
@@ -455,7 +493,7 @@ describe('OAuthBucketManager', () => {
      */
     it('should provide actionable error message', async () => {
       await expect(
-        bucketManager.validateBucketExists('anthropic', 'missing')
+        bucketManager.validateBucketExists('anthropic', 'missing'),
       ).rejects.toThrow(/authenticate|login|auth/i);
     });
   });
@@ -470,7 +508,11 @@ describe('OAuthBucketManager', () => {
      */
     it('should return next bucket in failover chain', () => {
       const profileBuckets = ['bucket1', 'bucket2', 'bucket3'];
-      const result = bucketManager.getNextBucket('anthropic', 'bucket1', profileBuckets);
+      const result = bucketManager.getNextBucket(
+        'anthropic',
+        'bucket1',
+        profileBuckets,
+      );
       expect(result).toBe('bucket2');
     });
 
@@ -483,7 +525,11 @@ describe('OAuthBucketManager', () => {
      */
     it('should return undefined when no more buckets in chain', () => {
       const profileBuckets = ['bucket1', 'bucket2', 'bucket3'];
-      const result = bucketManager.getNextBucket('anthropic', 'bucket3', profileBuckets);
+      const result = bucketManager.getNextBucket(
+        'anthropic',
+        'bucket3',
+        profileBuckets,
+      );
       expect(result).toBeUndefined();
     });
 
@@ -496,7 +542,11 @@ describe('OAuthBucketManager', () => {
      */
     it('should return undefined for single bucket profile', () => {
       const profileBuckets = ['bucket1'];
-      const result = bucketManager.getNextBucket('anthropic', 'bucket1', profileBuckets);
+      const result = bucketManager.getNextBucket(
+        'anthropic',
+        'bucket1',
+        profileBuckets,
+      );
       expect(result).toBeUndefined();
     });
 
@@ -509,7 +559,11 @@ describe('OAuthBucketManager', () => {
      */
     it('should return next bucket from middle of chain', () => {
       const profileBuckets = ['bucket1', 'bucket2', 'bucket3'];
-      const result = bucketManager.getNextBucket('anthropic', 'bucket2', profileBuckets);
+      const result = bucketManager.getNextBucket(
+        'anthropic',
+        'bucket2',
+        profileBuckets,
+      );
       expect(result).toBe('bucket3');
     });
 
@@ -522,7 +576,11 @@ describe('OAuthBucketManager', () => {
      */
     it('should return undefined when current bucket not in chain', () => {
       const profileBuckets = ['bucket1', 'bucket2'];
-      const result = bucketManager.getNextBucket('anthropic', 'unknown', profileBuckets);
+      const result = bucketManager.getNextBucket(
+        'anthropic',
+        'unknown',
+        profileBuckets,
+      );
       expect(result).toBeUndefined();
     });
 
@@ -536,16 +594,32 @@ describe('OAuthBucketManager', () => {
     it('should maintain failover chain order', () => {
       const profileBuckets = ['first', 'second', 'third', 'fourth'];
 
-      const next1 = bucketManager.getNextBucket('anthropic', 'first', profileBuckets);
+      const next1 = bucketManager.getNextBucket(
+        'anthropic',
+        'first',
+        profileBuckets,
+      );
       expect(next1).toBe('second');
 
-      const next2 = bucketManager.getNextBucket('anthropic', 'second', profileBuckets);
+      const next2 = bucketManager.getNextBucket(
+        'anthropic',
+        'second',
+        profileBuckets,
+      );
       expect(next2).toBe('third');
 
-      const next3 = bucketManager.getNextBucket('anthropic', 'third', profileBuckets);
+      const next3 = bucketManager.getNextBucket(
+        'anthropic',
+        'third',
+        profileBuckets,
+      );
       expect(next3).toBe('fourth');
 
-      const next4 = bucketManager.getNextBucket('anthropic', 'fourth', profileBuckets);
+      const next4 = bucketManager.getNextBucket(
+        'anthropic',
+        'fourth',
+        profileBuckets,
+      );
       expect(next4).toBeUndefined();
     });
 
@@ -578,18 +652,27 @@ describe('OAuthBucketManager', () => {
 
       bucketManager.setSessionBucket('anthropic', 'work@company.com');
 
-      const resolved = bucketManager.resolveBucket('anthropic', ['personal@gmail.com']);
+      const resolved = bucketManager.resolveBucket('anthropic', [
+        'personal@gmail.com',
+      ]);
       expect(resolved).toBe('work@company.com');
 
-      const status = await bucketManager.getBucketStatus('anthropic', 'work@company.com');
+      const status = await bucketManager.getBucketStatus(
+        'anthropic',
+        'work@company.com',
+      );
       expect(status.authenticated).toBe(true);
 
       await expect(
-        bucketManager.validateBucketExists('anthropic', 'work@company.com')
+        bucketManager.validateBucketExists('anthropic', 'work@company.com'),
       ).resolves.not.toThrow();
 
       const profileBuckets = ['work@company.com', 'personal@gmail.com'];
-      const next = bucketManager.getNextBucket('anthropic', 'work@company.com', profileBuckets);
+      const next = bucketManager.getNextBucket(
+        'anthropic',
+        'work@company.com',
+        profileBuckets,
+      );
       expect(next).toBe('personal@gmail.com');
     });
 
@@ -610,11 +693,21 @@ describe('OAuthBucketManager', () => {
       bucketManager.setSessionBucket('anthropic', 'work@company.com');
       bucketManager.setSessionBucket('gemini', 'personal@gmail.com');
 
-      expect(bucketManager.getSessionBucket('anthropic')).toBe('work@company.com');
-      expect(bucketManager.getSessionBucket('gemini')).toBe('personal@gmail.com');
+      expect(bucketManager.getSessionBucket('anthropic')).toBe(
+        'work@company.com',
+      );
+      expect(bucketManager.getSessionBucket('gemini')).toBe(
+        'personal@gmail.com',
+      );
 
-      const anthropicStatus = await bucketManager.getBucketStatus('anthropic', 'work@company.com');
-      const geminiStatus = await bucketManager.getBucketStatus('gemini', 'work@company.com');
+      const anthropicStatus = await bucketManager.getBucketStatus(
+        'anthropic',
+        'work@company.com',
+      );
+      const geminiStatus = await bucketManager.getBucketStatus(
+        'gemini',
+        'work@company.com',
+      );
 
       expect(anthropicStatus.authenticated).toBe(true);
       expect(geminiStatus.authenticated).toBe(true);

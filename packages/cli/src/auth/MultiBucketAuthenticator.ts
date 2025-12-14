@@ -68,14 +68,17 @@ export class MultiBucketAuthenticator {
       bucket: string,
     ) => Promise<boolean>,
     private readonly onDelay: (ms: number, bucket: string) => Promise<void>,
-    private readonly getEphemeralSetting: <T>(key: string) => T | undefined = () =>
-      undefined,
+    private readonly getEphemeralSetting: <T>(
+      key: string,
+    ) => T | undefined = () => undefined,
   ) {}
 
   /**
    * Create authenticator from callbacks object
    */
-  static fromCallbacks(callbacks: MultiBucketAuthCallbacks): MultiBucketAuthenticator {
+  static fromCallbacks(
+    callbacks: MultiBucketAuthCallbacks,
+  ): MultiBucketAuthenticator {
     return new MultiBucketAuthenticator(
       callbacks.onAuthBucket,
       callbacks.onPrompt,
@@ -158,7 +161,10 @@ export class MultiBucketAuthenticator {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        logger.error('Bucket authentication failed', { bucket, error: errorMessage });
+        logger.error('Bucket authentication failed', {
+          bucket,
+          error: errorMessage,
+        });
         failedBuckets.push(bucket);
         if (!firstError) {
           firstError = errorMessage;

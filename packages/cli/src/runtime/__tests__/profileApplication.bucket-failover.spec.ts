@@ -65,7 +65,9 @@ describe('shouldFailover - failover triggers', () => {
   });
 
   it('should return false for 400 bad request (non-auth)', () => {
-    const error = new Error('Request failed with status code 400: Invalid parameter');
+    const error = new Error(
+      'Request failed with status code 400: Invalid parameter',
+    );
     expect(shouldFailover(error)).toBe(false);
   });
 
@@ -96,14 +98,13 @@ describe('shouldFailover - failover triggers', () => {
 
   it('should handle errors with detailed quota messages', () => {
     const error = new Error(
-      'API quota exceeded: You have used 100% of your allocated quota for the current period'
+      'API quota exceeded: You have used 100% of your allocated quota for the current period',
     );
     expect(shouldFailover(error)).toBe(true);
   });
 });
 
 describe('executeWithBucketFailover - failover execution', () => {
-
   it('should use first bucket initially', async () => {
     const request = { prompt: 'test' };
     const buckets = ['work@company.com', 'personal@gmail.com'];
@@ -189,7 +190,7 @@ describe('executeWithBucketFailover - failover execution', () => {
     };
 
     await expect(
-      executeWithBucketFailover(request, buckets, executor)
+      executeWithBucketFailover(request, buckets, executor),
     ).rejects.toThrow('400');
 
     expect(calledBuckets).toEqual(['bucket1']); // Should only try first bucket
@@ -204,7 +205,7 @@ describe('executeWithBucketFailover - failover execution', () => {
     };
 
     await expect(
-      executeWithBucketFailover(request, buckets, executor)
+      executeWithBucketFailover(request, buckets, executor),
     ).rejects.toThrow(/all buckets exhausted/i);
   });
 
@@ -217,13 +218,12 @@ describe('executeWithBucketFailover - failover execution', () => {
     };
 
     await expect(
-      executeWithBucketFailover(request, buckets, executor)
+      executeWithBucketFailover(request, buckets, executor),
     ).rejects.toThrow(/Quota exceeded - specific error message/i);
   });
 });
 
 describe('bucket failover notifications', () => {
-
   it('should notify user when switching buckets', () => {
     const log: NotificationLog = { messages: [] };
 
@@ -245,7 +245,6 @@ describe('bucket failover notifications', () => {
 });
 
 describe('profile bucket resolution for failover', () => {
-
   it('should use profile buckets for failover chain when no session override', () => {
     const config: ProfileBucketConfig = {
       provider: 'anthropic',
@@ -296,7 +295,6 @@ describe('profile bucket resolution for failover', () => {
 });
 
 describe('all buckets exhausted error handling', () => {
-
   it('should show clear error message when all buckets exhausted', () => {
     const bucketStatuses: BucketStatus[] = [
       { bucket: 'work@company.com', error: 'Rate limited until 2:30 PM' },
@@ -339,7 +337,6 @@ describe('all buckets exhausted error handling', () => {
 });
 
 describe('integration: profile loading with bucket failover', () => {
-
   it('should validate all buckets exist when loading profile', async () => {
     const profile: MockProfile = {
       provider: 'anthropic',
@@ -432,7 +429,6 @@ describe('integration: profile loading with bucket failover', () => {
 });
 
 describe('failover with expired buckets', () => {
-
   it('should skip expired buckets during failover', () => {
     const validToken: MockToken = {
       access_token: 'valid',
@@ -453,9 +449,9 @@ describe('failover with expired buckets', () => {
     // but we define the expected behavior here
     const now = Date.now() / 1000;
     const tokens: Record<string, MockToken> = {
-      'bucket1': { access_token: 'tok1', expiry: now - 100 }, // expired
-      'bucket2': { access_token: 'tok2', expiry: now + 3600 }, // valid
-      'bucket3': { access_token: 'tok3', expiry: now + 7200 }, // valid
+      bucket1: { access_token: 'tok1', expiry: now - 100 }, // expired
+      bucket2: { access_token: 'tok2', expiry: now + 3600 }, // valid
+      bucket3: { access_token: 'tok3', expiry: now + 7200 }, // valid
     };
 
     const bucket1Expired = isTokenExpired(tokens['bucket1']);

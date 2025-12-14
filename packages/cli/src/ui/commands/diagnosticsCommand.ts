@@ -307,8 +307,6 @@ export const diagnosticsCommand: SlashCommand = {
           let hasMCPTokens = false;
 
           if (supportedProviders.length > 0) {
-            diagnostics.push('### Provider Tokens');
-
             const tokenStore = oauthManager.getTokenStore();
 
             for (const provider of supportedProviders) {
@@ -327,7 +325,11 @@ export const diagnosticsCommand: SlashCommand = {
                 continue;
               }
 
-              hasProviderTokens = true;
+              if (!hasProviderTokens) {
+                diagnostics.push('### Provider Tokens');
+                hasProviderTokens = true;
+              }
+
               diagnostics.push(`- ${provider}:`);
               diagnostics.push(`  - Buckets: ${buckets.length}`);
 
@@ -348,7 +350,9 @@ export const diagnosticsCommand: SlashCommand = {
                   diagnostics.push(
                     `    - Status: ${isExpired ? 'Expired' : 'Authenticated'}`,
                   );
-                  diagnostics.push(`    - Expires: ${expiryDate.toISOString()}`);
+                  diagnostics.push(
+                    `    - Expires: ${expiryDate.toISOString()}`,
+                  );
                   diagnostics.push(
                     `    - Time Remaining: ${hours}h ${minutes}m`,
                   );

@@ -28,7 +28,9 @@ const mockOAuthManager = {
   getToken: vi.fn(),
   getOAuthToken: vi.fn(),
   peekStoredToken: vi.fn(),
-  getSupportedProviders: vi.fn().mockReturnValue(['anthropic', 'gemini', 'qwen']),
+  getSupportedProviders: vi
+    .fn()
+    .mockReturnValue(['anthropic', 'gemini', 'qwen']),
   getHigherPriorityAuth: vi.fn(),
   logout: vi.fn(),
   authenticate: vi.fn(),
@@ -66,10 +68,16 @@ describe('Phase 5: Auth Command Bucket Support - Login with Bucket', () => {
       (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
 
       // When: User enters /auth anthropic login work@company.com
-      const result = await executor.execute(mockContext, 'anthropic login work@company.com');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic login work@company.com',
+      );
 
       // Then: Should trigger OAuth with bucket parameter
-      expect(mockAuthenticate).toHaveBeenCalledWith('anthropic', 'work@company.com');
+      expect(mockAuthenticate).toHaveBeenCalledWith(
+        'anthropic',
+        'work@company.com',
+      );
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
@@ -100,7 +108,10 @@ describe('Phase 5: Auth Command Bucket Support - Login with Bucket', () => {
       (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
 
       // When: User enters /auth anthropic login default
-      const result = await executor.execute(mockContext, 'anthropic login default');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic login default',
+      );
 
       // Then: Should authenticate to default bucket
       expect(mockAuthenticate).toHaveBeenCalledWith('anthropic', 'default');
@@ -113,11 +124,16 @@ describe('Phase 5: Auth Command Bucket Support - Login with Bucket', () => {
 
     it('should handle authentication failure gracefully', async () => {
       // Given: Authentication will fail
-      const mockAuthenticate = vi.fn().mockRejectedValue(new Error('OAuth flow cancelled'));
+      const mockAuthenticate = vi
+        .fn()
+        .mockRejectedValue(new Error('OAuth flow cancelled'));
       (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
 
       // When: User attempts to login
-      const result = await executor.execute(mockContext, 'anthropic login work@company.com');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic login work@company.com',
+      );
 
       // Then: Should return error message
       expect(result).toEqual({
@@ -129,11 +145,16 @@ describe('Phase 5: Auth Command Bucket Support - Login with Bucket', () => {
 
     it('should validate provider before login', async () => {
       // Given: Invalid provider specified
-      const mockGetSupported = vi.fn().mockReturnValue(['anthropic', 'gemini', 'qwen']);
+      const mockGetSupported = vi
+        .fn()
+        .mockReturnValue(['anthropic', 'gemini', 'qwen']);
       (mockOAuthManager.getSupportedProviders as unknown) = mockGetSupported;
 
       // When: User tries to login with invalid provider
-      const result = await executor.execute(mockContext, 'invalid-provider login bucket1');
+      const result = await executor.execute(
+        mockContext,
+        'invalid-provider login bucket1',
+      );
 
       // Then: Should return provider validation error
       expect(result).toEqual({
@@ -166,7 +187,10 @@ describe('Phase 5: Auth Command Bucket Support - Login with Bucket', () => {
         await executor.execute(mockContext, args);
 
         // Then: Should parse bucket name correctly
-        expect(mockAuthenticate).toHaveBeenCalledWith('anthropic', expectedBucket);
+        expect(mockAuthenticate).toHaveBeenCalledWith(
+          'anthropic',
+          expectedBucket,
+        );
       }
     });
 
@@ -176,10 +200,16 @@ describe('Phase 5: Auth Command Bucket Support - Login with Bucket', () => {
       (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
 
       // When: User enters command with extra spaces
-      await executor.execute(mockContext, '  anthropic   login   work@company.com  ');
+      await executor.execute(
+        mockContext,
+        '  anthropic   login   work@company.com  ',
+      );
 
       // Then: Should trim and parse correctly
-      expect(mockAuthenticate).toHaveBeenCalledWith('anthropic', 'work@company.com');
+      expect(mockAuthenticate).toHaveBeenCalledWith(
+        'anthropic',
+        'work@company.com',
+      );
     });
   });
 });
@@ -212,7 +242,10 @@ describe('Phase 5: Auth Command Bucket Support - Logout with Bucket', () => {
       (mockOAuthManager.isAuthenticated as unknown) = mockIsAuthenticated;
 
       // When: User logs out from specific bucket
-      const result = await executor.execute(mockContext, 'anthropic logout work@company.com');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic logout work@company.com',
+      );
 
       // Then: Should remove only that bucket
       expect(mockLogout).toHaveBeenCalledWith('anthropic', 'work@company.com');
@@ -229,7 +262,10 @@ describe('Phase 5: Auth Command Bucket Support - Logout with Bucket', () => {
       (mockOAuthManager.logoutAllBuckets as unknown) = mockLogoutAll;
 
       // When: User logs out with --all flag
-      const result = await executor.execute(mockContext, 'anthropic logout --all');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic logout --all',
+      );
 
       // Then: Should remove all buckets for provider
       expect(mockLogoutAll).toHaveBeenCalledWith('anthropic');
@@ -242,13 +278,18 @@ describe('Phase 5: Auth Command Bucket Support - Logout with Bucket', () => {
 
     it('should show error for non-existent bucket', async () => {
       // Given: User tries to logout from non-existent bucket
-      const mockLogout = vi.fn().mockRejectedValue(new Error('Bucket not found'));
+      const mockLogout = vi
+        .fn()
+        .mockRejectedValue(new Error('Bucket not found'));
       const mockIsAuthenticated = vi.fn().mockResolvedValue(false);
       (mockOAuthManager.logout as unknown) = mockLogout;
       (mockOAuthManager.isAuthenticated as unknown) = mockIsAuthenticated;
 
       // When: User attempts logout from non-existent bucket
-      const result = await executor.execute(mockContext, 'anthropic logout nonexistent');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic logout nonexistent',
+      );
 
       // Then: Should return error message
       expect(result).toEqual({
@@ -345,7 +386,8 @@ describe('Phase 5: Auth Command Bucket Support - Status with Buckets', () => {
           isSessionBucket: false,
         },
       ]);
-      (mockOAuthManager.getAuthStatusWithBuckets as unknown) = mockGetBucketsStatus;
+      (mockOAuthManager.getAuthStatusWithBuckets as unknown) =
+        mockGetBucketsStatus;
 
       // When: User checks status
       const result = await executor.execute(mockContext, 'anthropic status');
@@ -355,7 +397,9 @@ describe('Phase 5: Auth Command Bucket Support - Status with Buckets', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: expect.stringMatching(/default.*work@company\.com.*personal@gmail\.com/s),
+        content: expect.stringMatching(
+          /default.*work@company\.com.*personal@gmail\.com/s,
+        ),
       });
     });
 
@@ -375,7 +419,8 @@ describe('Phase 5: Auth Command Bucket Support - Status with Buckets', () => {
           isSessionBucket: true, // Active session bucket
         },
       ]);
-      (mockOAuthManager.getAuthStatusWithBuckets as unknown) = mockGetBucketsStatus;
+      (mockOAuthManager.getAuthStatusWithBuckets as unknown) =
+        mockGetBucketsStatus;
 
       // When: User checks status
       const result = await executor.execute(mockContext, 'anthropic status');
@@ -405,7 +450,8 @@ describe('Phase 5: Auth Command Bucket Support - Status with Buckets', () => {
           isSessionBucket: false,
         },
       ]);
-      (mockOAuthManager.getAuthStatusWithBuckets as unknown) = mockGetBucketsStatus;
+      (mockOAuthManager.getAuthStatusWithBuckets as unknown) =
+        mockGetBucketsStatus;
 
       // When: User checks status
       const result = await executor.execute(mockContext, 'anthropic status');
@@ -421,7 +467,8 @@ describe('Phase 5: Auth Command Bucket Support - Status with Buckets', () => {
     it('should handle provider with no buckets', async () => {
       // Given: Provider has no authenticated buckets
       const mockGetBucketsStatus = vi.fn().mockResolvedValue([]);
-      (mockOAuthManager.getAuthStatusWithBuckets as unknown) = mockGetBucketsStatus;
+      (mockOAuthManager.getAuthStatusWithBuckets as unknown) =
+        mockGetBucketsStatus;
 
       // When: User checks status
       const result = await executor.execute(mockContext, 'anthropic status');
@@ -452,7 +499,8 @@ describe('Phase 5: Auth Command Bucket Support - Status with Buckets', () => {
           isSessionBucket: false,
         },
       ]);
-      (mockOAuthManager.getAuthStatusWithBuckets as unknown) = mockGetBucketsStatus;
+      (mockOAuthManager.getAuthStatusWithBuckets as unknown) =
+        mockGetBucketsStatus;
 
       // When: User checks status
       const result = await executor.execute(mockContext, 'anthropic status');
@@ -490,15 +538,27 @@ describe('Phase 5: Auth Command Bucket Support - Switch Bucket', () => {
     it('should switch to specified bucket', async () => {
       // Given: User wants to switch to work bucket
       const mockSetSession = vi.fn();
-      const mockListBuckets = vi.fn().mockResolvedValue(['default', 'work@company.com', 'personal@gmail.com']);
+      const mockListBuckets = vi
+        .fn()
+        .mockResolvedValue([
+          'default',
+          'work@company.com',
+          'personal@gmail.com',
+        ]);
       (mockOAuthManager.setSessionBucket as unknown) = mockSetSession;
       (mockOAuthManager.listBuckets as unknown) = mockListBuckets;
 
       // When: User switches bucket
-      const result = await executor.execute(mockContext, 'anthropic switch work@company.com');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic switch work@company.com',
+      );
 
       // Then: Should set session bucket
-      expect(mockSetSession).toHaveBeenCalledWith('anthropic', 'work@company.com');
+      expect(mockSetSession).toHaveBeenCalledWith(
+        'anthropic',
+        'work@company.com',
+      );
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
@@ -508,11 +568,16 @@ describe('Phase 5: Auth Command Bucket Support - Switch Bucket', () => {
 
     it('should error on non-existent bucket', async () => {
       // Given: User tries to switch to non-existent bucket
-      const mockListBuckets = vi.fn().mockResolvedValue(['default', 'work@company.com']);
+      const mockListBuckets = vi
+        .fn()
+        .mockResolvedValue(['default', 'work@company.com']);
       (mockOAuthManager.listBuckets as unknown) = mockListBuckets;
 
       // When: User switches to non-existent bucket
-      const result = await executor.execute(mockContext, 'anthropic switch nonexistent');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic switch nonexistent',
+      );
 
       // Then: Should return error
       expect(result).toEqual({
@@ -525,15 +590,23 @@ describe('Phase 5: Auth Command Bucket Support - Switch Bucket', () => {
     it('should not modify profile file', async () => {
       // Given: User switches bucket in session
       const mockSetSession = vi.fn();
-      const mockListBuckets = vi.fn().mockResolvedValue(['default', 'work@company.com']);
+      const mockListBuckets = vi
+        .fn()
+        .mockResolvedValue(['default', 'work@company.com']);
       (mockOAuthManager.setSessionBucket as unknown) = mockSetSession;
       (mockOAuthManager.listBuckets as unknown) = mockListBuckets;
 
       // When: User switches bucket
-      const result = await executor.execute(mockContext, 'anthropic switch work@company.com');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic switch work@company.com',
+      );
 
       // Then: Should only set session (no profile modification)
-      expect(mockSetSession).toHaveBeenCalledWith('anthropic', 'work@company.com');
+      expect(mockSetSession).toHaveBeenCalledWith(
+        'anthropic',
+        'work@company.com',
+      );
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
@@ -544,15 +617,23 @@ describe('Phase 5: Auth Command Bucket Support - Switch Bucket', () => {
     it('should work without profile loaded', async () => {
       // Given: No profile is currently loaded
       const mockSetSession = vi.fn();
-      const mockListBuckets = vi.fn().mockResolvedValue(['default', 'work@company.com']);
+      const mockListBuckets = vi
+        .fn()
+        .mockResolvedValue(['default', 'work@company.com']);
       (mockOAuthManager.setSessionBucket as unknown) = mockSetSession;
       (mockOAuthManager.listBuckets as unknown) = mockListBuckets;
 
       // When: User switches bucket
-      const result = await executor.execute(mockContext, 'anthropic switch work@company.com');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic switch work@company.com',
+      );
 
       // Then: Should still work (session-level override)
-      expect(mockSetSession).toHaveBeenCalledWith('anthropic', 'work@company.com');
+      expect(mockSetSession).toHaveBeenCalledWith(
+        'anthropic',
+        'work@company.com',
+      );
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
@@ -564,11 +645,16 @@ describe('Phase 5: Auth Command Bucket Support - Switch Bucket', () => {
   describe('Switch bucket validation', () => {
     it('should validate bucket exists before switching', async () => {
       // Given: Available buckets list
-      const mockListBuckets = vi.fn().mockResolvedValue(['default', 'work@company.com']);
+      const mockListBuckets = vi
+        .fn()
+        .mockResolvedValue(['default', 'work@company.com']);
       (mockOAuthManager.listBuckets as unknown) = mockListBuckets;
 
       // When: User tries to switch to non-existent bucket
-      const result = await executor.execute(mockContext, 'anthropic switch invalid-bucket');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic switch invalid-bucket',
+      );
 
       // Then: Should validate and error
       expect(mockListBuckets).toHaveBeenCalledWith('anthropic');
@@ -581,17 +667,28 @@ describe('Phase 5: Auth Command Bucket Support - Switch Bucket', () => {
 
     it('should list available buckets in error message', async () => {
       // Given: Available buckets
-      const mockListBuckets = vi.fn().mockResolvedValue(['default', 'work@company.com', 'personal@gmail.com']);
+      const mockListBuckets = vi
+        .fn()
+        .mockResolvedValue([
+          'default',
+          'work@company.com',
+          'personal@gmail.com',
+        ]);
       (mockOAuthManager.listBuckets as unknown) = mockListBuckets;
 
       // When: User tries invalid bucket
-      const result = await executor.execute(mockContext, 'anthropic switch invalid');
+      const result = await executor.execute(
+        mockContext,
+        'anthropic switch invalid',
+      );
 
       // Then: Should show available buckets
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: expect.stringMatching(/Available buckets.*default.*work@company\.com.*personal@gmail\.com/),
+        content: expect.stringMatching(
+          /Available buckets.*default.*work@company\.com.*personal@gmail\.com/,
+        ),
       });
     });
   });
@@ -600,7 +697,9 @@ describe('Phase 5: Auth Command Bucket Support - Switch Bucket', () => {
     it('should parse switch command correctly', async () => {
       // Given: Switch command with bucket name
       const mockSetSession = vi.fn();
-      const mockListBuckets = vi.fn().mockResolvedValue(['default', 'mybucket']);
+      const mockListBuckets = vi
+        .fn()
+        .mockResolvedValue(['default', 'mybucket']);
       (mockOAuthManager.setSessionBucket as unknown) = mockSetSession;
       (mockOAuthManager.listBuckets as unknown) = mockListBuckets;
 
@@ -646,11 +745,16 @@ describe('Phase 5: Auth Command Bucket Support - Error Handling', () => {
 
   it('should handle bucket operation failures gracefully', async () => {
     // Given: OAuth manager will fail
-    const mockAuthenticate = vi.fn().mockRejectedValue(new Error('Network error'));
+    const mockAuthenticate = vi
+      .fn()
+      .mockRejectedValue(new Error('Network error'));
     (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
 
     // When: User attempts bucket login
-    const result = await executor.execute(mockContext, 'anthropic login work@company.com');
+    const result = await executor.execute(
+      mockContext,
+      'anthropic login work@company.com',
+    );
 
     // Then: Should return user-friendly error
     expect(result).toEqual({
@@ -666,7 +770,10 @@ describe('Phase 5: Auth Command Bucket Support - Error Handling', () => {
     (mockOAuthManager.listBuckets as unknown) = mockListBuckets;
 
     // When: User tries non-existent bucket
-    const result = await executor.execute(mockContext, 'anthropic switch nonexistent');
+    const result = await executor.execute(
+      mockContext,
+      'anthropic switch nonexistent',
+    );
 
     // Then: Should suggest valid options
     expect(result).toEqual({
@@ -682,7 +789,10 @@ describe('Phase 5: Auth Command Bucket Support - Error Handling', () => {
     (mockOAuthManager.listBuckets as unknown) = mockListBuckets;
 
     // When: User tries to switch bucket
-    const result = await executor.execute(mockContext, 'anthropic switch somebucket');
+    const result = await executor.execute(
+      mockContext,
+      'anthropic switch somebucket',
+    );
 
     // Then: Should provide helpful error
     expect(result).toEqual({
