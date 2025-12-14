@@ -84,6 +84,95 @@ interface CaptureBuffer {
   headers?: Headers;
 }
 
+function isQwenBaseURL(baseURL: string | undefined): boolean {
+  if (!baseURL) return false;
+
+  try {
+    const hostname = new URL(baseURL).hostname.toLowerCase();
+    return (
+      hostname === 'dashscope.aliyuncs.com' ||
+      hostname.endsWith('.dashscope.aliyuncs.com') ||
+      hostname === 'portal.qwen.ai' ||
+      hostname.endsWith('.qwen.ai') ||
+      hostname === 'api.qwen.com' ||
+      hostname.endsWith('.qwen.com')
+    );
+  } catch {
+    const lowered = baseURL.toLowerCase();
+    return (
+      lowered.includes('dashscope.aliyuncs.com') ||
+      lowered.includes('portal.qwen.ai') ||
+      lowered.includes('qwen.ai') ||
+      lowered.includes('api.qwen.com') ||
+      lowered.includes('qwen.com')
+    );
+  }
+}
+
+/**
+ * Some OpenAI-compatible providers reject the OpenAI "developer" role. The Vercel
+ * OpenAI provider maps system prompts to "developer" for non-gpt-* model IDs, so
+ * we rewrite it back to "system" for compatibility.
+ */
+function createDeveloperRoleToSystemFetch(
+  innerFetch: typeof fetch,
+): typeof fetch {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (!init || typeof init.body !== 'string') {
+      return innerFetch(input, init);
+    }
+
+    let parsedBody: unknown;
+    try {
+      parsedBody = JSON.parse(init.body) as unknown;
+    } catch {
+      return innerFetch(input, init);
+    }
+
+    if (
+      !parsedBody ||
+      typeof parsedBody !== 'object' ||
+      !('messages' in parsedBody) ||
+      !Array.isArray(
+        (parsedBody as { messages?: unknown }).messages as unknown[],
+      )
+    ) {
+      return innerFetch(input, init);
+    }
+
+    let changed = false;
+    const rewrittenMessages = (
+      parsedBody as { messages: Array<Record<string, unknown>> }
+    ).messages.map((message) => {
+      if (
+        message &&
+        typeof message === 'object' &&
+        (message as { role?: unknown }).role === 'developer'
+      ) {
+        changed = true;
+        return { ...message, role: 'system' };
+      }
+      return message;
+    });
+
+    if (!changed) {
+      return innerFetch(input, init);
+    }
+
+    const headers = new Headers(init.headers);
+    headers.delete('content-length');
+
+    return innerFetch(input, {
+      ...init,
+      headers,
+      body: JSON.stringify({
+        ...(parsedBody as Record<string, unknown>),
+        messages: rewrittenMessages,
+      }),
+    });
+  };
+}
+
 /**
  * Creates a custom fetch function that intercepts streaming responses
  * and extracts reasoning_content from SSE chunks.
@@ -213,28 +302,7 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     };
     const forceQwenOAuth = Boolean(providerConfig?.forceQwenOAuth);
 
-    let isQwenEndpoint = false;
-    if (baseURL) {
-      try {
-        const hostname = new URL(baseURL).hostname.toLowerCase();
-        isQwenEndpoint =
-          hostname === 'dashscope.aliyuncs.com' ||
-          hostname.endsWith('.dashscope.aliyuncs.com') ||
-          hostname === 'portal.qwen.ai' ||
-          hostname.endsWith('.qwen.ai') ||
-          hostname === 'api.qwen.com' ||
-          hostname.endsWith('.qwen.com');
-      } catch {
-        const lowered = baseURL.toLowerCase();
-        isQwenEndpoint =
-          lowered.includes('dashscope.aliyuncs.com') ||
-          lowered.includes('portal.qwen.ai') ||
-          lowered.includes('qwen.ai') ||
-          lowered.includes('api.qwen.com') ||
-          lowered.includes('qwen.com');
-      }
-    }
-    const shouldEnableQwenOAuth = isQwenEndpoint || forceQwenOAuth;
+    const shouldEnableQwenOAuth = isQwenBaseURL(baseURL) || forceQwenOAuth;
 
     super(
       {
@@ -289,6 +357,11 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     const authToken =
       (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
     const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
+    const providerConfig = this.providerConfig as IProviderConfig & {
+      forceQwenOAuth?: boolean;
+    };
+    const shouldForceSystemRole =
+      Boolean(providerConfig?.forceQwenOAuth) || isQwenBaseURL(baseURL);
 
     // Allow local endpoints without authentication
     if (!authToken && !isLocalEndpoint(baseURL)) {
@@ -299,12 +372,15 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     }
 
     const headers = this.getCustomHeaders();
+    const fetchWithCompatibility = shouldForceSystemRole
+      ? createDeveloperRoleToSystemFetch(customFetch ?? fetch)
+      : customFetch;
 
     return createOpenAI({
       apiKey: authToken || undefined,
       baseURL: baseURL || undefined,
       headers: headers || undefined,
-      fetch: customFetch,
+      fetch: fetchWithCompatibility,
     });
   }
 

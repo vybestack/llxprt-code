@@ -275,6 +275,117 @@ describe('OpenAIVercelProvider', () => {
       expect(supportsOAuth).toBe(false);
     });
   });
+
+  describe('Qwen Chat Role Compatibility', () => {
+    let originalFetch: typeof fetch | undefined;
+
+    beforeEach(() => {
+      originalFetch = global.fetch;
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      if (originalFetch) {
+        global.fetch = originalFetch;
+      } else {
+        // @ts-expect-error test cleanup
+        delete global.fetch;
+      }
+    });
+
+    it('sends system role (not developer) to Qwen chat completions', async () => {
+      const settingsService = new SettingsService();
+      settingsService.set('activeProvider', 'openaivercel');
+
+      const provider = new OpenAIVercelProvider(
+        'test-api-key',
+        'https://portal.qwen.ai/v1',
+        { settingsService },
+      );
+
+      let observedRoles: string[] | undefined;
+      const fetchMock = vi.fn(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url =
+            typeof input === 'string'
+              ? input
+              : input instanceof URL
+                ? input.toString()
+                : input.url;
+
+          if (!url.includes('/chat/completions')) {
+            throw new Error(`Unexpected URL: ${url}`);
+          }
+
+          const parsedBody = JSON.parse(String(init?.body ?? '{}')) as {
+            messages?: Array<{ role?: string }>;
+            model?: string;
+          };
+          const roles = (parsedBody.messages ?? []).map(
+            (msg) => msg.role ?? '',
+          );
+          observedRoles = roles;
+
+          if (roles.includes('developer')) {
+            return new Response(
+              JSON.stringify({
+                error: {
+                  message:
+                    "developer is not one of ['system', 'assistant', 'user', 'tool', 'function'] - 'messages.[0].role'",
+                },
+              }),
+              { status: 400, headers: { 'content-type': 'application/json' } },
+            );
+          }
+
+          return new Response(
+            JSON.stringify({
+              id: 'chatcmpl-test',
+              object: 'chat.completion',
+              created: 0,
+              model: parsedBody.model ?? 'qwen3-coder-plus',
+              choices: [
+                {
+                  index: 0,
+                  message: { role: 'assistant', content: 'Hello from Qwen' },
+                  finish_reason: 'stop',
+                },
+              ],
+              usage: {
+                prompt_tokens: 1,
+                completion_tokens: 1,
+                total_tokens: 2,
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        },
+      );
+
+      vi.stubGlobal('fetch', fetchMock);
+
+      const options = createProviderCallOptions({
+        providerName: 'openaivercel',
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
+        ],
+        settings: settingsService,
+        resolved: { streaming: false, model: 'qwen3-coder-plus' },
+      });
+
+      const iterator = provider.generateChatCompletion(options);
+      const results: unknown[] = [];
+      for await (const chunk of iterator) {
+        results.push(chunk);
+      }
+
+      expect(fetchMock).toHaveBeenCalled();
+      expect(observedRoles).toBeDefined();
+      expect(observedRoles).not.toContain('developer');
+      expect(observedRoles?.[0]).toBe('system');
+      expect(results.length).toBeGreaterThan(0);
+    });
+  });
 });
 
 /**

@@ -131,3 +131,44 @@ Run in order:
 - `git push -u origin issue780`
 - `gh pr create --fill --repo vybestack/llxprt-code`
 
+---
+
+# Addendum — Qwen Vercel Provider Fix: "developer" Role Rejection
+
+## Problem
+
+When using the Vercel-based provider against Qwen (e.g. `/provider qwenvercel`), Qwen rejects the OpenAI Chat Completions request if any message has `role: "developer"`:
+
+- Error: `developer is not one of ['system', 'assistant', 'user', 'tool', 'function'] - 'messages.[0].role'`
+
+Root cause: `@ai-sdk/openai` maps system prompts to the OpenAI `"developer"` role when the model id is not a known `gpt-*`/`chatgpt-*` prefix; Qwen’s OpenAI-compatible endpoint rejects that role.
+
+## PHASE 4 — RED → GREEN: Rewrite developer→system for Qwen endpoints
+
+### 4A) RED: Add an integration test that fails before the fix
+
+**Modify** `packages/core/src/providers/openai-vercel/OpenAIVercelProvider.test.ts`
+
+- Add a test that stubs `global.fetch` and returns a Qwen-style 400 error whenever it sees any `messages[].role === 'developer'`.
+- Run `generateChatCompletion` using:
+  - `baseURL: https://portal.qwen.ai/v1`
+  - `model: qwen3-coder-plus`
+- Assert the request uses `role: 'system'` (and never `'developer'`).
+
+This should fail pre-fix because the underlying AI SDK emits a `"developer"` role.
+
+### 4B) GREEN: Implement a fetch wrapper in `OpenAIVercelProvider`
+
+**Edit** `packages/core/src/providers/openai-vercel/OpenAIVercelProvider.ts`
+
+- Add a request-middleware fetch wrapper that:
+  - Parses the JSON request body
+  - Rewrites `messages[].role === 'developer'` → `'system'`
+  - Preserves all other request fields
+- Enable the wrapper only for:
+  - Qwen endpoints (detected from `baseURL`), OR
+  - `forceQwenOAuth: true` in provider config
+
+### 4C) Verify (targeted)
+
+- `npm run test --workspace @vybestack/llxprt-code-core -- src/providers/openai-vercel/OpenAIVercelProvider.test.ts`
