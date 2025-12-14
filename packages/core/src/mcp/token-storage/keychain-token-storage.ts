@@ -22,6 +22,21 @@ interface Keytar {
 }
 
 const KEYCHAIN_TEST_PREFIX = '__keychain_test__';
+type KeytarModule = Keytar | { default: Keytar };
+
+export type KeytarLoader = () => Promise<KeytarModule>;
+
+const defaultKeytarLoader: KeytarLoader = async () =>
+  (await import('keytar')) as KeytarModule;
+let keytarLoader: KeytarLoader = defaultKeytarLoader;
+
+export function setKeytarLoader(loader: KeytarLoader): void {
+  keytarLoader = loader;
+}
+
+export function resetKeytarLoader(): void {
+  keytarLoader = defaultKeytarLoader;
+}
 
 export class KeychainTokenStorage extends BaseTokenStorage {
   private keychainAvailable: boolean | null = null;
@@ -38,11 +53,25 @@ export class KeychainTokenStorage extends BaseTokenStorage {
 
     try {
       // Try to import keytar without any timeout - let the OS handle it
-      const moduleName = 'keytar';
-      const module = await import(moduleName);
-      this.keytarModule = module.default || module;
+      const module = await keytarLoader();
+      this.keytarModule =
+        'default' in module ? module.default || null : module || null;
     } catch (error) {
-      console.error(error);
+      const err = error as NodeJS.ErrnoException;
+      const isModuleMissing =
+        err?.code === 'ERR_MODULE_NOT_FOUND' ||
+        err?.code === 'MODULE_NOT_FOUND' ||
+        err?.message?.includes(`'keytar'`);
+
+      if (isModuleMissing) {
+        console.warn(
+          'keytar not available; falling back to encrypted file storage for MCP tokens.',
+        );
+      } else {
+        console.error('Failed to load keytar module:', error);
+      }
+
+      this.keytarModule = null;
     }
     return this.keytarModule;
   }
