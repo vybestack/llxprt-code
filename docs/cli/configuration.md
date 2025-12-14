@@ -693,10 +693,7 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
   - **Only required if using Google's Gemini provider.** LLxprt Code supports multiple providers.
   - Set this in your shell profile (e.g., `~/.bashrc`, `~/.zshrc`) or an `.env` file.
   - Alternatively, use `/key` command or other provider's API keys.
-- **`GEMINI_MODEL`**:
-  - Specifies the default Gemini model to use.
-  - Overrides the hardcoded default
-  - Example: `export GEMINI_MODEL="gemini-2.5-flash"`
+
 - **`GOOGLE_API_KEY`**:
   - Your Google Cloud API key.
   - Required for using Vertex AI in express mode.
