@@ -45,7 +45,7 @@ const JwtPayloadSchema = z.object({
  */
 export class CodexDeviceFlow {
   private logger: DebugLogger;
-  private codeVerifier: string | null = null;
+  private codeVerifiers: Map<string, string> = new Map();
 
   constructor() {
     this.logger = new DebugLogger('llxprt:auth:codex-device-flow');
@@ -58,7 +58,8 @@ export class CodexDeviceFlow {
    * @returns Authorization URL to open in browser
    */
   buildAuthorizationUrl(redirectUri: string, state: string): string {
-    const { challenge } = this.generatePKCE();
+    const { verifier, challenge } = this.generatePKCE();
+    this.codeVerifiers.set(state, verifier);
     // Manually construct query string to use %20 for spaces (not +)
     // This ensures proper parsing with decodeURIComponent
     // Include all required params per shell-scripts/codex-oauth.sh
@@ -82,15 +83,18 @@ export class CodexDeviceFlow {
    * Exchange authorization code for OAuth tokens
    * @param authCode Authorization code from OAuth callback
    * @param redirectUri Callback URL (must match the one used in authorization request)
+   * @param state State parameter from OAuth callback
    * @returns Validated CodexOAuthToken with account_id
-   * @throws Error if code verifier not initialized or token exchange fails
+   * @throws Error if code verifier not found for state or token exchange fails
    */
   async exchangeCodeForToken(
     authCode: string,
     redirectUri: string,
+    state: string,
   ): Promise<CodexOAuthToken> {
-    if (!this.codeVerifier) {
-      throw new Error('PKCE code verifier not initialized');
+    const codeVerifier = this.codeVerifiers.get(state);
+    if (!codeVerifier) {
+      throw new Error(`PKCE code verifier not found for state: ${state}`);
     }
 
     this.logger.debug(() => 'Exchanging authorization code for tokens');
@@ -106,7 +110,7 @@ export class CodexDeviceFlow {
         code: authCode,
         redirect_uri: redirectUri,
         client_id: CODEX_CONFIG.clientId,
-        code_verifier: this.codeVerifier,
+        code_verifier: codeVerifier,
       }).toString(),
     });
 
@@ -143,6 +147,9 @@ export class CodexDeviceFlow {
       () =>
         `Token exchange successful, account_id: ${accountId.substring(0, 8)}...`,
     );
+
+    this.codeVerifiers.delete(state);
+
     return codexToken;
   }
 
@@ -248,7 +255,6 @@ export class CodexDeviceFlow {
     // Create SHA-256 hash of verifier for challenge (S256 method)
     const challenge = createHash('sha256').update(verifier).digest('base64url');
 
-    this.codeVerifier = verifier;
     return { verifier, challenge };
   }
 }

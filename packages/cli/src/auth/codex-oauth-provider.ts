@@ -17,6 +17,13 @@ import { startLocalOAuthCallback } from './local-oauth-callback.js';
 import type { HistoryItemWithoutId } from '../ui/types.js';
 import { globalOAuthUI } from './global-oauth-ui.js';
 
+enum InitializationState {
+  NotStarted = 'not-started',
+  InProgress = 'in-progress',
+  Completed = 'completed',
+  Failed = 'failed',
+}
+
 /**
  * Port configuration for Codex OAuth callback
  * Use 1455 for compatibility with Codex CLI, fallback to range if busy
@@ -38,6 +45,9 @@ export class CodexOAuthProvider implements OAuthProvider {
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,
   ) => number;
+  private initializationState = InitializationState.NotStarted;
+  private initializationPromise?: Promise<void>;
+  private authInProgress: Promise<void> | null = null;
 
   constructor(
     tokenStore: TokenStore,
@@ -65,10 +75,72 @@ export class CodexOAuthProvider implements OAuthProvider {
   }
 
   /**
+   * Lazy initialization pattern
+   * Ensures initialization only happens once and handles concurrent calls
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (this.initializationState === InitializationState.Completed) {
+      return;
+    }
+
+    if (this.initializationState === InitializationState.Failed) {
+      this.initializationState = InitializationState.NotStarted;
+      this.initializationPromise = undefined;
+    }
+
+    if (this.initializationState === InitializationState.NotStarted) {
+      this.initializationState = InitializationState.InProgress;
+      this.initializationPromise = this.initializeToken();
+    }
+
+    if (this.initializationPromise) {
+      try {
+        await this.initializationPromise;
+        this.initializationState = InitializationState.Completed;
+      } catch (error) {
+        this.initializationState = InitializationState.Failed;
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Initialize token from storage if available
+   */
+  private async initializeToken(): Promise<void> {
+    try {
+      const savedToken = await this.tokenStore.getToken('codex');
+      if (savedToken) {
+        this.logger.debug(() => 'Loaded existing Codex token from storage');
+      }
+    } catch (error) {
+      this.logger.debug(() => `Token initialization failed: ${error}`);
+    }
+  }
+
+  /**
    * Initiate Codex OAuth authentication flow
    * Starts local callback server and opens browser for authentication
    */
   async initiateAuth(): Promise<void> {
+    if (this.authInProgress) {
+      this.logger.debug(() => 'OAuth already in progress, waiting...');
+      await this.authInProgress;
+      return;
+    }
+
+    this.authInProgress = this.performAuth();
+    try {
+      await this.authInProgress;
+    } finally {
+      this.authInProgress = null;
+    }
+  }
+
+  /**
+   * Perform the actual OAuth authentication flow
+   */
+  private async performAuth(): Promise<void> {
     this.logger.debug(() => 'Initiating Codex OAuth flow');
 
     const state = crypto.randomUUID();
@@ -94,8 +166,8 @@ export class CodexOAuthProvider implements OAuthProvider {
       this.logger.debug(() => `Primary port busy, using fallback port ${port}`);
     }
 
-    // Use localhost and /auth/callback path per shell-scripts/codex-oauth.sh
-    const redirectUri = `http://localhost:${port}/auth/callback`;
+    // Use the server's redirectUri - it already includes the correct path
+    const redirectUri = localCallback.redirectUri;
     const authUrl = this.deviceFlow.buildAuthorizationUrl(redirectUri, state);
 
     // Display URL in TUI if available
@@ -119,23 +191,29 @@ export class CodexOAuthProvider implements OAuthProvider {
 
     // Wait for callback
     this.logger.debug(() => 'Waiting for OAuth callback');
-    const { code } = await waitForCallback();
+    const { code, state: callbackState } = await waitForCallback();
 
-    // Exchange code for tokens
-    await this.completeAuth(code, redirectUri);
+    // Exchange code for tokens with state
+    await this.completeAuth(code, redirectUri, callbackState);
   }
 
   /**
    * Complete authentication by exchanging authorization code for tokens
    * @param authCode Authorization code from OAuth callback
    * @param redirectUri Callback URL used in the flow
+   * @param state State parameter from OAuth callback
    */
-  async completeAuth(authCode: string, redirectUri: string): Promise<void> {
+  async completeAuth(
+    authCode: string,
+    redirectUri: string,
+    state: string,
+  ): Promise<void> {
     this.logger.debug(() => 'Exchanging auth code for tokens');
 
     const token = await this.deviceFlow.exchangeCodeForToken(
       authCode,
       redirectUri,
+      state,
     );
 
     // Save to MultiProviderTokenStore location (~/.llxprt/oauth/codex.json)
@@ -150,6 +228,8 @@ export class CodexOAuthProvider implements OAuthProvider {
    * @returns CodexOAuthToken if available, null otherwise
    */
   async getToken(): Promise<CodexOAuthToken | null> {
+    await this.ensureInitialized();
+
     // Get token from ~/.llxprt/oauth/codex.json
     const token = await this.tokenStore.getToken('codex');
 
