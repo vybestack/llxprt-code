@@ -1902,6 +1902,33 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         ...(customHeaders ? { headers: customHeaders } : {}),
       });
 
+    // Bucket failover callback for 429 errors
+    // @plan PLAN-20251213issue686 Bucket failover integration for OpenAIProvider
+    const onPersistent429Callback = async (): Promise<boolean | null> => {
+      // Try to get the bucket failover handler from runtime context config
+      const failoverHandler =
+        options.runtime?.config?.getBucketFailoverHandler();
+
+      if (failoverHandler && failoverHandler.isEnabled()) {
+        logger.debug(() => 'Attempting bucket failover on persistent 429');
+        const success = await failoverHandler.tryFailover();
+        if (success) {
+          logger.debug(
+            () =>
+              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
+          );
+          return true; // Signal retry with new bucket
+        }
+        logger.debug(
+          () => 'Bucket failover failed - no more buckets available',
+        );
+        return false; // No more buckets, stop retrying
+      }
+
+      // No bucket failover configured
+      return null;
+    };
+
     let response:
       | OpenAI.Chat.Completions.ChatCompletion
       | AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>
@@ -1913,6 +1940,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         initialDelayMs,
         shouldRetryOnError: this.shouldRetryResponse.bind(this),
         trackThrottleWaitTime: this.throttleTracker,
+        onPersistent429: onPersistent429Callback,
       });
     } else {
       let compressedOnce = false;
@@ -1923,6 +1951,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             initialDelayMs,
             shouldRetryOnError: this.shouldRetryResponse.bind(this),
             trackThrottleWaitTime: this.throttleTracker,
+            onPersistent429: onPersistent429Callback,
           })) as OpenAI.Chat.Completions.ChatCompletion;
           break;
         } catch (error) {
@@ -3387,6 +3416,33 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
     const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
 
+    // Bucket failover callback for 429 errors - tools mode
+    // @plan PLAN-20251213issue686 Bucket failover integration for OpenAIProvider
+    const onPersistent429CallbackTools = async (): Promise<boolean | null> => {
+      // Try to get the bucket failover handler from runtime context config
+      const failoverHandler =
+        options.runtime?.config?.getBucketFailoverHandler();
+
+      if (failoverHandler && failoverHandler.isEnabled()) {
+        logger.debug(() => 'Attempting bucket failover on persistent 429');
+        const success = await failoverHandler.tryFailover();
+        if (success) {
+          logger.debug(
+            () =>
+              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
+          );
+          return true; // Signal retry with new bucket
+        }
+        logger.debug(
+          () => 'Bucket failover failed - no more buckets available',
+        );
+        return false; // No more buckets, stop retrying
+      }
+
+      // No bucket failover configured
+      return null;
+    };
+
     if (streamingEnabled) {
       // Streaming mode - use retry loop with compression support
       let compressedOnce = false;
@@ -3403,6 +3459,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               initialDelayMs,
               shouldRetryOnError: this.shouldRetryResponse.bind(this),
               trackThrottleWaitTime: this.throttleTracker,
+              onPersistent429: onPersistent429CallbackTools,
             },
           );
 
@@ -3521,6 +3578,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               initialDelayMs,
               shouldRetryOnError: this.shouldRetryResponse.bind(this),
               trackThrottleWaitTime: this.throttleTracker,
+              onPersistent429: onPersistent429CallbackTools,
             },
           )) as OpenAI.Chat.Completions.ChatCompletion;
 

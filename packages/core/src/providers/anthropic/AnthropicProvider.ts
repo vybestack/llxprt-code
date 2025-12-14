@@ -1595,12 +1595,41 @@ export class AnthropicProvider extends BaseProvider {
       return { data: await promise, response: undefined };
     };
 
+    // Bucket failover callback for 429 errors
+    // @plan PLAN-20251213issue686 Bucket failover integration for AnthropicProvider
+    const logger = this.getLogger();
+    const onPersistent429Callback = async (): Promise<boolean | null> => {
+      // Try to get the bucket failover handler from runtime context config
+      const failoverHandler =
+        options.runtime?.config?.getBucketFailoverHandler();
+
+      if (failoverHandler && failoverHandler.isEnabled()) {
+        logger.debug(() => 'Attempting bucket failover on persistent 429');
+        const success = await failoverHandler.tryFailover();
+        if (success) {
+          logger.debug(
+            () =>
+              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
+          );
+          return true; // Signal retry with new bucket
+        }
+        logger.debug(
+          () => 'Bucket failover failed - no more buckets available',
+        );
+        return false; // No more buckets, stop retrying
+      }
+
+      // No bucket failover configured
+      return null;
+    };
+
     try {
       const result = await retryWithBackoff(apiCallWithResponse, {
         maxAttempts,
         initialDelayMs,
         shouldRetryOnError: this.shouldRetryAnthropicResponse.bind(this),
         trackThrottleWaitTime: this.throttleTracker,
+        onPersistent429: onPersistent429Callback,
       });
 
       response = result.data;
