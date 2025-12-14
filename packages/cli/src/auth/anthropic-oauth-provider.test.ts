@@ -59,6 +59,8 @@ describe('AnthropicOAuthProvider', () => {
       saveToken: vi.fn().mockResolvedValue(undefined),
       removeToken: vi.fn().mockResolvedValue(undefined),
       listProviders: vi.fn().mockResolvedValue([]),
+      listBuckets: vi.fn().mockResolvedValue(['default']),
+      getBucketStats: vi.fn().mockResolvedValue(null),
     };
 
     mockAddItem = vi.fn();

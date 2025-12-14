@@ -213,7 +213,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Invalid action: invalid. Use enable, disable, or logout',
+        content:
+          'Invalid action: invalid. Use enable, disable, login, logout, status, or switch',
       });
     });
   });
@@ -500,7 +501,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const { authCommand } = await import('./authCommand.js');
       expect(authCommand.name).toBe('auth');
       expect(authCommand.description).toBe(
-        'toggle OAuth enablement for providers (gemini, qwen, anthropic, codex)',
+        'Manage OAuth authentication for providers',
       );
     });
   });

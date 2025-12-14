@@ -12,12 +12,170 @@ import {
   MessageActionReturn,
 } from './types.js';
 import { OAuthManager } from '../../auth/oauth-manager.js';
-import { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
+import {
+  MultiProviderTokenStore,
+  DebugLogger,
+} from '@vybestack/llxprt-code-core';
 import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
 import { CodexOAuthProvider } from '../../auth/codex-oauth-provider.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import {
+  type CommandArgumentSchema,
+  type CompleterFn,
+} from './schema/types.js';
+import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
+
+const logger = new DebugLogger('llxprt:ui:auth-command');
+
+/**
+ * Get the OAuth manager instance
+ */
+function getOAuthManager(): OAuthManager {
+  const runtime = getRuntimeApi();
+  let oauthManager = runtime.getCliOAuthManager();
+
+  if (!oauthManager) {
+    const tokenStore = new MultiProviderTokenStore();
+    oauthManager = new OAuthManager(tokenStore);
+    oauthManager.registerProvider(new GeminiOAuthProvider());
+    oauthManager.registerProvider(new QwenOAuthProvider());
+    oauthManager.registerProvider(new AnthropicOAuthProvider());
+  }
+
+  return oauthManager;
+}
+
+/**
+ * Completer for provider names
+ */
+const providerCompleter: CompleterFn = withFuzzyFilter(async () => {
+  try {
+    const oauthManager = getOAuthManager();
+    const providers = oauthManager.getSupportedProviders();
+    return providers.map((provider) => ({
+      value: provider,
+      description: `Configure ${provider} OAuth`,
+    }));
+  } catch {
+    return [];
+  }
+});
+
+/**
+ * Completer for bucket names for a given provider
+ */
+const bucketCompleter: CompleterFn = withFuzzyFilter(
+  async (_ctx, _partial, tokens) => {
+    try {
+      const provider = tokens.tokens[0];
+      if (!provider) return [];
+
+      const oauthManager = getOAuthManager();
+      const buckets = await oauthManager.listBuckets(provider);
+      return buckets.map((bucket) => ({
+        value: bucket,
+        description: `OAuth bucket: ${bucket}`,
+      }));
+    } catch {
+      return [];
+    }
+  },
+);
+
+/**
+ * Completer for logout command (buckets + --all flag)
+ */
+const logoutCompleter: CompleterFn = withFuzzyFilter(
+  async (_ctx, _partial, tokens) => {
+    try {
+      const provider = tokens.tokens[0];
+      if (!provider) return [];
+
+      const oauthManager = getOAuthManager();
+      const buckets = await oauthManager.listBuckets(provider);
+      const options = [
+        { value: '--all', description: 'Logout from all buckets' },
+        ...buckets.map((bucket) => ({
+          value: bucket,
+          description: `Logout from bucket: ${bucket}`,
+        })),
+      ];
+      return options;
+    } catch {
+      return [];
+    }
+  },
+);
+
+/**
+ * Command schema for auth command autocomplete
+ */
+const authCommandSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'provider',
+    description: 'Select OAuth provider',
+    completer: providerCompleter,
+    next: [
+      {
+        kind: 'literal',
+        value: 'login',
+        description: 'Login to provider with optional bucket',
+        next: [
+          {
+            kind: 'value',
+            name: 'bucket',
+            description: 'Bucket name (optional)',
+            completer: bucketCompleter,
+          },
+        ],
+      },
+      {
+        kind: 'literal',
+        value: 'logout',
+        description: 'Logout from provider',
+        next: [
+          {
+            kind: 'value',
+            name: 'bucket-or-flag',
+            description: 'Bucket name or --all',
+            completer: logoutCompleter,
+          },
+        ],
+      },
+      {
+        kind: 'literal',
+        value: 'status',
+        description: 'Show authentication status and buckets',
+      },
+      {
+        kind: 'literal',
+        value: 'switch',
+        description: 'Switch to a different bucket',
+        next: [
+          {
+            kind: 'value',
+            name: 'bucket',
+            description: 'Bucket name to switch to',
+            completer: bucketCompleter,
+          },
+        ],
+      },
+      {
+        kind: 'literal',
+        value: 'enable',
+        description: 'Enable OAuth for provider',
+      },
+      {
+        kind: 'literal',
+        value: 'disable',
+        description: 'Disable OAuth for provider',
+      },
+    ],
+  },
+];
 
 export class AuthCommandExecutor {
   constructor(private oauthManager: OAuthManager) {}
@@ -31,6 +189,7 @@ export class AuthCommandExecutor {
     const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0); // Remove empty parts
     const provider = parts[0];
     const action = parts[1];
+    const param = parts[2];
 
     // For error messages, we want to show the provider as the user typed it
     // This should be the first word from the arguments, trimmed of leading/trailing spaces
@@ -67,16 +226,31 @@ export class AuthCommandExecutor {
       return this.setProviderOAuth(provider, action === 'enable');
     }
 
+    // Handle login action with optional bucket
+    if (action === 'login') {
+      return this.loginWithBucket(provider, param);
+    }
+
+    // Handle status action to show all buckets
+    if (action === 'status') {
+      return this.showBucketStatus(provider);
+    }
+
+    // Handle switch action to set session bucket
+    if (action === 'switch') {
+      return this.switchBucket(provider, param);
+    }
+
     // Lines 15-17: Handle logout action (NEW) @pseudocode lines 15-17
     if (action === 'logout' || action === 'signout') {
-      return this.logoutProvider(provider);
+      return this.logoutWithBucket(provider, param);
     }
 
     // Lines 19-24: Invalid action @pseudocode lines 19-24
     return {
       type: 'message',
       messageType: 'error',
-      content: `Invalid action: ${action}. Use enable, disable, or logout`,
+      content: `Invalid action: ${action}. Use enable, disable, login, logout, status, or switch`,
     };
   }
 
@@ -96,7 +270,7 @@ export class AuthCommandExecutor {
         try {
           token = await this.oauthManager.peekStoredToken(provider);
         } catch (error) {
-          console.debug(
+          logger.debug(
             `Failed to read stored OAuth token for ${provider}:`,
             error,
           );
@@ -202,67 +376,6 @@ export class AuthCommandExecutor {
   }
 
   /**
-   * @plan PLAN-20250823-AUTHFIXES.P14
-   * @requirement REQ-002.3
-   * @pseudocode lines 26-63
-   * Logout from a specific provider
-   * @param provider - Name of the provider to logout from
-   * @returns MessageActionReturn with logout result
-   */
-  private async logoutProvider(provider: string): Promise<MessageActionReturn> {
-    try {
-      // Provider validation is now done in execute(), so we can proceed directly
-
-      // Lines 38-49: Check if user is authenticated and perform logout
-      const isAuthenticated = await this.oauthManager.isAuthenticated(provider);
-      if (!isAuthenticated) {
-        // Still attempt logout in case there's an expired/invalid token to clean up
-        try {
-          await this.oauthManager.logout(provider);
-        } catch (error) {
-          // OAuth manager failures should be treated as errors
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          return {
-            type: 'message',
-            messageType: 'error',
-            content: `Failed to logout from ${provider}: ${errorMessage}`,
-          };
-        }
-        // If logout succeeded for unauthenticated user, they had stale tokens
-        // Clear provider cache if it's a Qwen provider
-        this.clearProviderCache(provider);
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Successfully logged out of ${provider}`,
-        };
-      } else {
-        // User is authenticated, perform logout
-        await this.oauthManager.logout(provider);
-        // Clear provider cache if it's a Qwen provider
-        this.clearProviderCache(provider);
-      }
-
-      // Lines 51-55: Return success message
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Successfully logged out of ${provider}`,
-      };
-    } catch (error) {
-      // Lines 56-62: Handle errors
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to logout from ${provider}: ${errorMessage}`,
-      };
-    }
-  }
-
-  /**
    * Clear the cached client for a provider after logout
    * This ensures the provider doesn't use stale credentials
    */
@@ -285,7 +398,226 @@ export class AuthCommandExecutor {
       }
     } catch (error) {
       // Failing to clear cache is not critical, just log it
-      console.debug(`Failed to clear provider cache for ${provider}:`, error);
+      logger.debug(`Failed to clear provider cache for ${provider}:`, error);
+    }
+  }
+
+  /**
+   * Login to a provider with optional bucket parameter
+   */
+  private async loginWithBucket(
+    provider: string,
+    bucket?: string,
+  ): Promise<SlashCommandActionReturn> {
+    try {
+      // Authenticate with bucket (default if not specified)
+      await this.oauthManager.authenticate(provider, bucket);
+
+      const bucketInfo = bucket ? ` (bucket: ${bucket})` : '';
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Successfully authenticated ${provider}${bucketInfo}`,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Authentication failed for ${provider}: ${errorMessage}`,
+      };
+    }
+  }
+
+  /**
+   * Logout from provider with optional bucket parameter or --all flag
+   */
+  private async logoutWithBucket(
+    provider: string,
+    bucketOrFlag?: string,
+  ): Promise<MessageActionReturn> {
+    try {
+      // Check if --all flag specified
+      if (bucketOrFlag === '--all') {
+        await this.oauthManager.logoutAllBuckets(provider);
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Successfully logged out of all buckets for ${provider}`,
+        };
+      }
+
+      // Check if authenticated before logout
+      const isAuthenticated = await this.oauthManager.isAuthenticated(
+        provider,
+        bucketOrFlag,
+      );
+
+      if (!isAuthenticated && bucketOrFlag) {
+        // Still attempt logout to clean up stale tokens
+        try {
+          await this.oauthManager.logout(provider, bucketOrFlag);
+          // Clear session bucket after successful logout
+          this.oauthManager.clearSessionBucket(provider);
+          // Clear provider cache
+          this.clearProviderCache(provider);
+          return {
+            type: 'message',
+            messageType: 'info',
+            content: `Successfully logged out of ${provider} (bucket: ${bucketOrFlag})`,
+          };
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Bucket not found: ${errorMessage}`,
+          };
+        }
+      }
+
+      // Perform logout for authenticated session or default bucket
+      await this.oauthManager.logout(provider, bucketOrFlag);
+
+      // Clear session bucket
+      this.oauthManager.clearSessionBucket(provider);
+
+      // Clear provider cache
+      this.clearProviderCache(provider);
+
+      const bucketInfo = bucketOrFlag ? ` (bucket: ${bucketOrFlag})` : '';
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Successfully logged out of ${provider}${bucketInfo}`,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to logout from ${provider}: ${errorMessage}`,
+      };
+    }
+  }
+
+  /**
+   * Show status for all buckets of a provider
+   */
+  private async showBucketStatus(
+    provider: string,
+  ): Promise<MessageActionReturn> {
+    try {
+      const buckets =
+        await this.oauthManager.getAuthStatusWithBuckets(provider);
+
+      if (buckets.length === 0) {
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `${provider} has no buckets authenticated`,
+        };
+      }
+
+      const lines: string[] = [`Authentication Status (${provider}):`];
+      lines.push('  OAuth Buckets:');
+
+      for (const bucket of buckets) {
+        const marker = bucket.isSessionBucket ? '* ' : '  ';
+        const statusStr = bucket.authenticated
+          ? 'authenticated'
+          : 'not authenticated';
+
+        if (bucket.authenticated && bucket.expiry) {
+          const expiryDate = new Date(bucket.expiry * 1000);
+          const now = Date.now() / 1000;
+          const isExpired = bucket.expiry <= now;
+
+          if (isExpired) {
+            lines.push(`${marker}- ${bucket.bucket} (expired)`);
+          } else {
+            const activeStr = bucket.isSessionBucket ? 'active, ' : '';
+            lines.push(
+              `${marker}- ${bucket.bucket} (${activeStr}expires: ${expiryDate.toLocaleString()})`,
+            );
+          }
+        } else {
+          lines.push(`${marker}- ${bucket.bucket} (${statusStr})`);
+        }
+      }
+
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: lines.join('\n'),
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to get bucket status for ${provider}: ${errorMessage}`,
+      };
+    }
+  }
+
+  /**
+   * Switch session bucket for a provider
+   */
+  private async switchBucket(
+    provider: string,
+    bucket?: string,
+  ): Promise<MessageActionReturn> {
+    try {
+      // Bucket name is required
+      if (!bucket) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Bucket name required for switch command',
+        };
+      }
+
+      // Validate bucket exists
+      const buckets = await this.oauthManager.listBuckets(provider);
+
+      if (buckets.length === 0) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `No buckets available for ${provider}. Please authenticate first.`,
+        };
+      }
+
+      if (!buckets.includes(bucket)) {
+        const availableStr = buckets.join(', ');
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Bucket not found: ${bucket}. Available buckets: ${availableStr}`,
+        };
+      }
+
+      // Set session bucket
+      this.oauthManager.setSessionBucket(provider, bucket);
+
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Session bucket for ${provider} set to: ${bucket} (temporary override)`,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to switch bucket for ${provider}: ${errorMessage}`,
+      };
     }
   }
 
@@ -313,9 +645,9 @@ export class AuthCommandExecutor {
 
 export const authCommand: SlashCommand = {
   name: 'auth',
-  description:
-    'toggle OAuth enablement for providers (gemini, qwen, anthropic, codex)',
+  description: 'Manage OAuth authentication for providers',
   kind: CommandKind.BUILT_IN,
+  schema: authCommandSchema,
   action: async (context, args) => {
     const runtime = getRuntimeApi();
     // Ensure provider manager is initialized (throws if bootstrap skipped registration)

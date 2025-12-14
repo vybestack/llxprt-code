@@ -17,10 +17,37 @@ import {
   type CompleterFn,
 } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
+import {
+  DebugLogger,
+  MultiProviderTokenStore,
+} from '@vybestack/llxprt-code-core';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const profileSuggestionDescription = 'Saved profile';
+
+const RESERVED_BUCKET_NAMES = ['login', 'logout', 'status', 'switch', '--all'];
+
+function validateBucketName(bucket: string): {
+  valid: boolean;
+  error?: string;
+} {
+  const invalidChars = /[:/\\<>"|?*]/;
+  if (invalidChars.test(bucket)) {
+    return {
+      valid: false,
+      error: `Bucket name "${bucket}" contains unsafe characters. Cannot contain: : / \\ < > " | ? *`,
+    };
+  }
+
+  if (RESERVED_BUCKET_NAMES.includes(bucket.toLowerCase())) {
+    return {
+      valid: false,
+      error: `"${bucket}" is a reserved word and cannot be used as a bucket name`,
+    };
+  }
+
+  return { valid: true };
+}
 
 async function listProfiles(): Promise<string[]> {
   return getRuntimeApi().listSavedProfiles();
@@ -58,6 +85,37 @@ const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
   },
 );
 
+const bucketCompleter: CompleterFn = withFuzzyFilter(
+  async (_ctx, _partial, tokens) => {
+    try {
+      const runtime = getRuntimeApi();
+      const status = runtime.getActiveProviderStatus();
+      const provider = status.providerName;
+
+      if (!provider) {
+        return [];
+      }
+
+      const tokenStore = new MultiProviderTokenStore();
+      const buckets = await tokenStore.listBuckets(provider);
+
+      // tokens.tokens format: ["save", "model", "profile-name", "bucket1", "bucket2", ...]
+      // Skip first 3 tokens (save, model, profile-name) to get already selected buckets
+      const alreadySelected = tokens.tokens
+        .slice(3)
+        .filter((b) => b.length > 0);
+      const available = buckets.filter((b) => !alreadySelected.includes(b));
+
+      return available.map((bucket) => ({
+        value: bucket,
+        description: 'Add bucket to profile',
+      }));
+    } catch {
+      return [];
+    }
+  },
+);
+
 // Recursive schema for unlimited profile selection
 // Each profile entry has a 'next' that points back to the same structure
 const createLbMemberProfileEntry = (
@@ -79,6 +137,23 @@ const lbMemberProfileSchema: CommandArgumentSchema = [
   createLbMemberProfileEntry(0),
 ];
 
+// Recursive schema for unlimited bucket selection
+// Each bucket entry has a 'next' that points back to the same structure
+const createBucketEntry = (depth: number): CommandArgumentSchema[number] => ({
+  kind: 'value',
+  name: depth === 0 ? 'bucket1' : `bucket${depth + 1}`,
+  description:
+    depth === 0
+      ? 'Select first bucket (optional)'
+      : 'Add another bucket (ESC to finish)',
+  completer: bucketCompleter,
+  hint: 'ESC to finish selection',
+  // Create a reasonably deep chain (20 levels should be more than enough)
+  next: depth < 20 ? [createBucketEntry(depth + 1)] : undefined,
+});
+
+const bucketSchema: CommandArgumentSchema = [createBucketEntry(0)];
+
 const profileSaveSchema: CommandArgumentSchema = [
   {
     kind: 'literal',
@@ -90,6 +165,7 @@ const profileSaveSchema: CommandArgumentSchema = [
         name: 'profile-name',
         description: 'Enter profile name',
         completer: profileNameCompleter,
+        next: bucketSchema,
       },
     ],
   },
@@ -194,21 +270,40 @@ const saveCommand: SlashCommand = {
         return {
           type: 'message',
           messageType: 'error',
-          content: 'Usage: /profile save model "<profile-name>"',
+          content:
+            'Usage: /profile save model "<profile-name>" [bucket1] [bucket2] ...',
         };
       }
 
-      const profileNameArg = parts.slice(1).join(' ');
-      const profileNameMatch = profileNameArg.match(/^"([^"]+)"$/);
-      const profileName = profileNameMatch
-        ? profileNameMatch[1]
-        : profileNameArg;
+      // Parse profile name and bucket arguments
+      // Format: /profile save model <name> [bucket1] [bucket2] ...
+      let profileName: string;
+      let bucketArgs: string[] = [];
+
+      // Check if profile name is quoted
+      const profileNameMatch = parts
+        .slice(1)
+        .join(' ')
+        .match(/^"([^"]+)"(?:\s+(.+))?$/);
+      if (profileNameMatch) {
+        profileName = profileNameMatch[1];
+        if (profileNameMatch[2]) {
+          bucketArgs = profileNameMatch[2]
+            .split(/\s+/)
+            .filter((b) => b.length > 0);
+        }
+      } else {
+        // Profile name is not quoted, take first arg as name, rest as buckets
+        profileName = parts[1];
+        bucketArgs = parts.slice(2);
+      }
 
       if (!profileName) {
         return {
           type: 'message',
           messageType: 'error',
-          content: 'Usage: /profile save model "<profile-name>"',
+          content:
+            'Usage: /profile save model "<profile-name>" [bucket1] [bucket2] ...',
         };
       }
 
@@ -220,9 +315,65 @@ const saveCommand: SlashCommand = {
         };
       }
 
+      // Validate bucket names
+      for (const bucket of bucketArgs) {
+        const validation = validateBucketName(bucket);
+        if (!validation.valid) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: validation.error ?? 'Invalid bucket name',
+          };
+        }
+      }
+
+      // Verify buckets exist if any specified
+      if (bucketArgs.length > 0) {
+        try {
+          const runtime = getRuntimeApi();
+          const status = runtime.getActiveProviderStatus();
+          const provider = status.providerName;
+
+          if (!provider) {
+            return {
+              type: 'message',
+              messageType: 'error',
+              content: 'No active provider found',
+            };
+          }
+
+          // Get token store to check bucket existence
+          const tokenStore = new MultiProviderTokenStore();
+          const availableBuckets = await tokenStore.listBuckets(provider);
+
+          for (const bucket of bucketArgs) {
+            if (!availableBuckets.includes(bucket)) {
+              return {
+                type: 'message',
+                messageType: 'error',
+                content: `Bucket '${bucket}' not found for provider ${provider}. Use /auth ${provider} login ${bucket}`,
+              };
+            }
+          }
+        } catch (error) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Failed to validate buckets: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+      }
+
       try {
         const runtime = getRuntimeApi();
-        await runtime.saveProfileSnapshot(profileName);
+
+        // Build auth config if buckets specified
+        const authConfig =
+          bucketArgs.length > 0
+            ? { auth: { type: 'oauth' as const, buckets: bucketArgs } }
+            : undefined;
+
+        await runtime.saveProfileSnapshot(profileName, authConfig);
         return {
           type: 'message',
           messageType: 'info',
@@ -505,6 +656,14 @@ const loadCommand: SlashCommand = {
       );
       // Handle specific error messages
       if (error instanceof Error) {
+        // Check for bucket-specific errors first (before generic "not found")
+        if (error.message.includes('OAuth bucket')) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: error.message,
+          };
+        }
         if (error.message.includes('not found')) {
           return {
             type: 'message',

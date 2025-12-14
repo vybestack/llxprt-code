@@ -47,7 +47,10 @@ describe('profileCommand', () => {
 
     it('saves model profile with provided name', async () => {
       await save.action!(context, 'model demo');
-      expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith('demo');
+      expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
+        'demo',
+        undefined,
+      );
     });
 
     it('shows usage when no args provided', async () => {

@@ -6,13 +6,16 @@
 
 import { OAuthToken, AuthStatus, TokenStore } from './types.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
+import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import {
   getSettingsService,
   flushRuntimeAuthScope,
   DebugLogger,
+  MessageBus,
+  Config,
 } from '@vybestack/llxprt-code-core';
 
-const oauthManagerLogger = new DebugLogger('llxprt:auth:oauth-manager');
+const logger = new DebugLogger('llxprt:oauth:manager');
 
 function isAuthOnlyEnabled(value: unknown): boolean {
   if (typeof value === 'boolean') {
@@ -107,12 +110,38 @@ export class OAuthManager {
   private settings?: LoadedSettings;
   // In-memory OAuth enablement state for when settings aren't available
   private inMemoryOAuthState: Map<string, boolean>;
+  // Session bucket overrides (in-memory only)
+  private sessionBuckets: Map<string, string>;
+  // Getter function for message bus (lazy resolution for TUI prompts)
+  private getMessageBus?: () => MessageBus | undefined;
+  // Getter function for config (lazy resolution for bucket failover handler)
+  private getConfig?: () => Config | undefined;
 
   constructor(tokenStore: TokenStore, settings?: LoadedSettings) {
     this.providers = new Map();
     this.tokenStore = tokenStore;
     this.settings = settings;
     this.inMemoryOAuthState = new Map();
+    this.sessionBuckets = new Map();
+  }
+
+  /**
+   * Set the message bus getter for interactive TUI prompts
+   * Uses a getter function to enable lazy resolution after TUI is initialized
+   * @param getter - Function that returns the message bus instance from Config
+   */
+  setMessageBus(getter: () => MessageBus | undefined): void {
+    this.getMessageBus = getter;
+  }
+
+  /**
+   * Set the config getter for bucket failover handler setup
+   * Uses a getter function to enable lazy resolution
+   * @plan PLAN-20251213issue490
+   * @param getter - Function that returns the Config instance
+   */
+  setConfigGetter(getter: () => Config | undefined): void {
+    this.getConfig = getter;
   }
 
   /**
@@ -161,9 +190,10 @@ export class OAuthManager {
   /**
    * Authenticate with a specific provider
    * @param providerName - Name of the provider to authenticate with
+   * @param bucket - Optional bucket name for multi-account support
    */
-  async authenticate(providerName: string): Promise<void> {
-    oauthManagerLogger.debug(
+  async authenticate(providerName: string, bucket?: string): Promise<void> {
+    logger.debug(
       () => `[FLOW] authenticate() called for provider: ${providerName}`,
     );
     if (!providerName || typeof providerName !== 'string') {
@@ -177,52 +207,50 @@ export class OAuthManager {
 
     try {
       // 1. Initiate authentication with the provider
-      oauthManagerLogger.debug(
+      logger.debug(
         () => `[FLOW] Calling provider.initiateAuth() for ${providerName}...`,
       );
       await provider.initiateAuth();
-      oauthManagerLogger.debug(
+      logger.debug(
         () => `[FLOW] provider.initiateAuth() completed for ${providerName}`,
       );
 
       // 2. Get token from provider after successful auth
-      oauthManagerLogger.debug(
+      logger.debug(
         () => `[FLOW] Calling provider.getToken() for ${providerName}...`,
       );
       const providerToken = await provider.getToken();
       if (!providerToken) {
-        oauthManagerLogger.debug(
+        logger.debug(
           () => `[FLOW] provider.getToken() returned null for ${providerName}!`,
         );
         throw new Error('Authentication completed but no token was returned');
       }
-      oauthManagerLogger.debug(
+      logger.debug(
         () =>
           `[FLOW] provider.getToken() returned token for ${providerName}: access_token=${String(providerToken.access_token).substring(0, 10)}...`,
       );
 
-      // 3. Store token using tokenStore
-      oauthManagerLogger.debug(
+      // 3. Store token using tokenStore with bucket parameter
+      logger.debug(
         () => `[FLOW] Saving token to tokenStore for ${providerName}...`,
       );
-      await this.tokenStore.saveToken(providerName, providerToken);
-      oauthManagerLogger.debug(
+      await this.tokenStore.saveToken(providerName, providerToken, bucket);
+      logger.debug(
         () => `[FLOW] Token saved to tokenStore for ${providerName}`,
       );
 
       // 4. Ensure provider marked as OAuth enabled after successful auth
       if (!this.isOAuthEnabled(providerName)) {
-        oauthManagerLogger.debug(
-          () => `[FLOW] Enabling OAuth for ${providerName}`,
-        );
+        logger.debug(() => `[FLOW] Enabling OAuth for ${providerName}`);
         this.setOAuthEnabledState(providerName, true);
       }
-      oauthManagerLogger.debug(
+      logger.debug(
         () =>
           `[FLOW] authenticate() completed successfully for ${providerName}`,
       );
     } catch (error) {
-      oauthManagerLogger.debug(
+      logger.debug(
         () =>
           `[FLOW] authenticate() FAILED for ${providerName}: ${error instanceof Error ? error.message : error}`,
       );
@@ -302,9 +330,13 @@ export class OAuthManager {
    * @pseudocode lines 51-68
    * Check if authenticated with a specific provider (required by precedence resolver)
    * @param providerName - Name of the provider
+   * @param bucket - Optional bucket name
    * @returns True if authenticated, false otherwise
    */
-  async isAuthenticated(providerName: string): Promise<boolean> {
+  async isAuthenticated(
+    providerName: string,
+    bucket?: string,
+  ): Promise<boolean> {
     // Lines 52-55: VALIDATE providerName
     if (!providerName || typeof providerName !== 'string') {
       return false;
@@ -316,8 +348,8 @@ export class OAuthManager {
       return true;
     }
 
-    // Lines 57-60: SET token = AWAIT this.tokenStore.getToken(providerName)
-    const token = await this.tokenStore.getToken(providerName);
+    // Lines 57-60: SET token = AWAIT this.tokenStore.getToken(providerName, bucket)
+    const token = await this.tokenStore.getToken(providerName, bucket);
     if (!token) {
       return false;
     }
@@ -338,8 +370,9 @@ export class OAuthManager {
    * @pseudocode lines 4-37
    * Logout from a specific provider by clearing stored tokens
    * @param providerName - Name of the provider to logout from
+   * @param bucket - Optional bucket name for multi-account support
    */
-  async logout(providerName: string): Promise<void> {
+  async logout(providerName: string, bucket?: string): Promise<void> {
     // Line 5-8: VALIDATE providerName
     if (!providerName || typeof providerName !== 'string') {
       throw new Error('Provider name must be a non-empty string');
@@ -356,10 +389,10 @@ export class OAuthManager {
       try {
         await provider.logout();
       } catch (error) {
-        console.warn(`Provider logout failed:`, error);
+        logger.warn(`Provider logout failed:`, error);
       }
     } else {
-      await this.tokenStore.removeToken(providerName);
+      await this.tokenStore.removeToken(providerName, bucket);
     }
 
     // CRITICAL FIX: Clear all provider auth caches after logout
@@ -378,7 +411,7 @@ export class OAuthManager {
         const legacyCredsPath = path.join(llxprtDir, 'oauth_creds.json');
         try {
           await fs.unlink(legacyCredsPath);
-          console.log('Cleared Gemini OAuth credentials');
+          logger.debug('Cleared Gemini OAuth credentials');
         } catch {
           // File might not exist
         }
@@ -387,7 +420,7 @@ export class OAuthManager {
         const googleAccountsPath = path.join(llxprtDir, 'google_accounts.json');
         try {
           await fs.unlink(googleAccountsPath);
-          console.log('Cleared Google account info');
+          logger.debug('Cleared Google account info');
         } catch {
           // File might not exist
         }
@@ -395,7 +428,7 @@ export class OAuthManager {
         // Force the OAuth client to re-authenticate by clearing any cached state
         // The next request will need to re-authenticate
       } catch (error) {
-        console.debug('Error clearing Gemini credentials:', error);
+        logger.debug('Error clearing Gemini credentials:', error);
       }
     }
   }
@@ -417,7 +450,7 @@ export class OAuthManager {
         await this.logout(provider);
       } catch (error) {
         // Lines 45-47: LOG "Failed to logout from " + provider + ": " + error
-        console.warn(`Failed to logout from ${provider}: ${error}`);
+        logger.warn(`Failed to logout from ${provider}: ${error}`);
         // Continue with other providers even if one fails
       }
     }
@@ -432,24 +465,24 @@ export class OAuthManager {
    */
   async getToken(
     providerName: string,
-    _metadata?: unknown,
+    bucket?: string | unknown,
   ): Promise<string | null> {
-    oauthManagerLogger.debug(
+    logger.debug(
       () => `[FLOW] getToken() called for provider: ${providerName}`,
     );
     // Check if OAuth is enabled for this provider
     if (!this.isOAuthEnabled(providerName)) {
-      oauthManagerLogger.debug(
+      logger.debug(
         () => `[FLOW] OAuth is NOT enabled for ${providerName}, returning null`,
       );
       return null;
     }
 
-    oauthManagerLogger.debug(
+    logger.debug(
       () =>
         `[FLOW] OAuth is enabled for ${providerName}, calling getOAuthToken()...`,
     );
-    const token = await this.getOAuthToken(providerName);
+    const token = await this.getOAuthToken(providerName, bucket);
 
     // Special handling for different providers
     // @plan:PLAN-20250823-AUTHFIXES.P15
@@ -458,7 +491,7 @@ export class OAuthManager {
 
     // For Qwen, return the OAuth token to be used as API key
     if (providerName === 'qwen' && token) {
-      oauthManagerLogger.debug(
+      logger.debug(
         () =>
           `[FLOW] Returning Qwen token: ${token.access_token.substring(0, 10)}...`,
       );
@@ -466,7 +499,7 @@ export class OAuthManager {
     }
 
     if (token) {
-      oauthManagerLogger.debug(
+      logger.debug(
         () =>
           `[FLOW] Returning existing token for ${providerName}: ${token.access_token.substring(0, 10)}...`,
       );
@@ -474,32 +507,41 @@ export class OAuthManager {
     }
 
     // For other providers, trigger OAuth flow
-    oauthManagerLogger.debug(
+    // Check if the current profile has multiple buckets - if so, use MultiBucketAuthenticator
+    logger.debug(
       () =>
         `[FLOW] No existing token for ${providerName}, triggering OAuth flow...`,
     );
     try {
-      await this.authenticate(providerName);
-      oauthManagerLogger.debug(
+      const buckets = await this.getProfileBuckets(providerName);
+      if (buckets.length > 1) {
+        logger.debug(
+          `Multi-bucket lazy auth triggered for ${providerName} with ${buckets.length} buckets`,
+        );
+        await this.authenticateMultipleBuckets(providerName, buckets);
+      } else {
+        await this.authenticate(providerName);
+      }
+      logger.debug(
         () =>
           `[FLOW] authenticate() completed for ${providerName}, fetching new token...`,
       );
       const newToken = await this.getOAuthToken(providerName);
       // Return the access token without any prefix - OAuth Bearer tokens should be used as-is
       if (newToken) {
-        oauthManagerLogger.debug(
+        logger.debug(
           () =>
             `[FLOW] Returning new token for ${providerName}: ${newToken.access_token.substring(0, 10)}...`,
         );
       } else {
-        oauthManagerLogger.debug(
+        logger.debug(
           () =>
             `[FLOW] getOAuthToken() returned null after authenticate() for ${providerName}`,
         );
       }
       return newToken ? newToken.access_token : null;
     } catch (error) {
-      oauthManagerLogger.debug(
+      logger.debug(
         () =>
           `[FLOW] getToken() OAuth flow FAILED for ${providerName}: ${error instanceof Error ? error.message : error}`,
       );
@@ -515,7 +557,7 @@ export class OAuthManager {
       }
 
       // Re-throw the error so it's not silently swallowed
-      console.error(`OAuth authentication failed for ${providerName}:`, error);
+      logger.error(`OAuth authentication failed for ${providerName}:`, error);
       throw error;
     }
   }
@@ -536,7 +578,7 @@ export class OAuthManager {
     try {
       return await this.tokenStore.getToken(providerName);
     } catch (error) {
-      console.debug(`Failed to load stored token for ${providerName}:`, error);
+      logger.debug(`Failed to load stored token for ${providerName}:`, error);
       return null;
     }
   }
@@ -544,14 +586,14 @@ export class OAuthManager {
   /**
    * Get OAuth token object for a specific provider
    * @param providerName - Name of the provider
-   * @param _metadata - Optional metadata for token request (unused in CLI implementation)
+   * @param bucket - Optional bucket name for multi-account support (if string), or metadata (for backward compatibility)
    * @returns OAuth token if available, null otherwise
    */
   async getOAuthToken(
     providerName: string,
-    _metadata?: unknown,
+    bucket?: string | unknown,
   ): Promise<OAuthToken | null> {
-    oauthManagerLogger.debug(
+    logger.debug(
       () => `[FLOW] getOAuthToken() called for provider: ${providerName}`,
     );
     if (!providerName || typeof providerName !== 'string') {
@@ -563,37 +605,41 @@ export class OAuthManager {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
+    // Determine the bucket to use: explicit bucket parameter or session bucket override
+    let bucketToUse: string | undefined;
+    if (typeof bucket === 'string') {
+      bucketToUse = bucket;
+    } else if (this.sessionBuckets.has(providerName)) {
+      bucketToUse = this.sessionBuckets.get(providerName);
+    }
+
     try {
-      // 1. Try to get token from store
-      oauthManagerLogger.debug(
+      // 1. Try to get token from store with bucket parameter
+      logger.debug(
         () => `[FLOW] Reading token from tokenStore for ${providerName}...`,
       );
-      const token = await this.tokenStore.getToken(providerName);
+      const token = await this.tokenStore.getToken(providerName, bucketToUse);
       if (!token) {
-        oauthManagerLogger.debug(
-          () => `[FLOW] No token in tokenStore for ${providerName}`,
-        );
+        logger.debug(() => `[FLOW] No token in tokenStore for ${providerName}`);
         return null;
       }
-      oauthManagerLogger.debug(
+      logger.debug(
         () =>
           `[FLOW] Token found in tokenStore for ${providerName}: expiry=${token.expiry}, keys=${Object.keys(token).join(',')}`,
       );
 
-      // 2. Check if token expires within 30 seconds (30000ms)
-      const now = Date.now();
-      const thirtySecondsFromNow = now + 30000;
-      // Note: token.expiry is in SECONDS, comparison needs to be in same units
-      const expiryMs = token.expiry * 1000;
+      // 2. Check if token expires within 30 seconds
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const thirtySecondsFromNow = nowInSeconds + 30;
 
-      oauthManagerLogger.debug(
+      logger.debug(
         () =>
-          `[FLOW] Token expiry check: now=${now}, expiryMs=${expiryMs}, isExpired=${expiryMs <= thirtySecondsFromNow}`,
+          `[FLOW] Token expiry check: now=${nowInSeconds}, expiry=${token.expiry}, isExpired=${token.expiry <= thirtySecondsFromNow}`,
       );
 
-      if (expiryMs <= thirtySecondsFromNow) {
+      if (token.expiry <= thirtySecondsFromNow) {
         // 3. Token is expired or about to expire, try refresh
-        oauthManagerLogger.debug(
+        logger.debug(
           () =>
             `[FLOW] Token expired or expiring soon for ${providerName}, attempting refresh...`,
         );
@@ -601,22 +647,26 @@ export class OAuthManager {
           const refreshedToken = await provider.refreshIfNeeded();
           if (refreshedToken) {
             // 4. Update stored token if refreshed
-            oauthManagerLogger.debug(
+            logger.debug(
               () =>
                 `[FLOW] Token refreshed for ${providerName}, saving to store...`,
             );
-            await this.tokenStore.saveToken(providerName, refreshedToken);
+            await this.tokenStore.saveToken(
+              providerName,
+              refreshedToken,
+              bucketToUse,
+            );
             return refreshedToken;
           } else {
             // Refresh failed, return null
-            oauthManagerLogger.debug(
+            logger.debug(
               () => `[FLOW] Token refresh returned null for ${providerName}`,
             );
             return null;
           }
         } catch (refreshError) {
           // Token refresh failure: Return null, no logging
-          oauthManagerLogger.debug(
+          logger.debug(
             () =>
               `[FLOW] Token refresh FAILED for ${providerName}: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
           );
@@ -625,12 +675,10 @@ export class OAuthManager {
       }
 
       // 5. Return valid token
-      oauthManagerLogger.debug(
-        () => `[FLOW] Returning valid token for ${providerName}`,
-      );
+      logger.debug(() => `[FLOW] Returning valid token for ${providerName}`);
       return token;
     } catch (error) {
-      oauthManagerLogger.debug(
+      logger.debug(
         () =>
           `[FLOW] getOAuthToken() ERROR for ${providerName}: ${error instanceof Error ? error.message : error}`,
       );
@@ -803,7 +851,7 @@ export class OAuthManager {
       );
 
       if (!provider) {
-        console.debug(
+        logger.debug(
           `Provider ${providerName} is not registered; skipping auth cache clear.`,
         );
         return;
@@ -851,21 +899,368 @@ export class OAuthManager {
           flushRuntimeAuthScope(runtimeContext.runtimeId);
         }
       } catch (runtimeError) {
-        if (process.env.DEBUG) {
-          console.debug(
-            `Skipped runtime auth scope flush for ${providerName}:`,
-            runtimeError,
-          );
-        }
+        logger.debug(
+          `Skipped runtime auth scope flush for ${providerName}:`,
+          runtimeError,
+        );
       }
 
-      console.debug(`Cleared auth caches for provider: ${providerName}`);
+      logger.debug(`Cleared auth caches for provider: ${providerName}`);
     } catch (error) {
       // Cache clearing failures should not prevent logout from succeeding
-      console.debug(
+      logger.debug(
         `Failed to clear provider auth caches for ${providerName}:`,
         error,
       );
+    }
+  }
+
+  /**
+   * Set session bucket override for a provider
+   * Session state is in-memory only and not persisted
+   */
+  setSessionBucket(provider: string, bucket: string): void {
+    this.sessionBuckets.set(provider, bucket);
+  }
+
+  /**
+   * Get session bucket override for a provider
+   * Returns undefined if no session override set
+   */
+  getSessionBucket(provider: string): string | undefined {
+    return this.sessionBuckets.get(provider);
+  }
+
+  /**
+   * Clear session bucket override for a provider
+   */
+  clearSessionBucket(provider: string): void {
+    this.sessionBuckets.delete(provider);
+  }
+
+  /**
+   * List all buckets for a provider
+   */
+  async listBuckets(provider: string): Promise<string[]> {
+    return this.tokenStore.listBuckets(provider);
+  }
+
+  /**
+   * Logout from all buckets for a provider
+   */
+  async logoutAllBuckets(provider: string): Promise<void> {
+    const buckets = await this.tokenStore.listBuckets(provider);
+    for (const bucket of buckets) {
+      try {
+        await this.logout(provider, bucket);
+      } catch (error) {
+        logger.warn(`Failed to logout from bucket ${bucket}:`, error);
+      }
+    }
+    this.clearSessionBucket(provider);
+  }
+
+  /**
+   * Get authentication status with bucket information
+   */
+  async getAuthStatusWithBuckets(provider: string): Promise<
+    Array<{
+      bucket: string;
+      authenticated: boolean;
+      expiry?: number;
+      isSessionBucket: boolean;
+    }>
+  > {
+    const buckets = await this.tokenStore.listBuckets(provider);
+    const sessionBucket = this.sessionBuckets.get(provider);
+    const statuses: Array<{
+      bucket: string;
+      authenticated: boolean;
+      expiry?: number;
+      isSessionBucket: boolean;
+    }> = [];
+
+    for (const bucket of buckets) {
+      const token = await this.tokenStore.getToken(provider, bucket);
+      const isSessionBucket = bucket === sessionBucket;
+
+      if (token) {
+        statuses.push({
+          bucket,
+          authenticated: true,
+          expiry: token.expiry,
+          isSessionBucket,
+        });
+      } else {
+        statuses.push({
+          bucket,
+          authenticated: false,
+          isSessionBucket,
+        });
+      }
+    }
+
+    return statuses;
+  }
+
+  /**
+   * Get the list of buckets for the current profile for a given provider
+   * If the current profile has auth.buckets configured, return those.
+   * Otherwise, return empty array (single-bucket or non-OAuth profile)
+   */
+  private async getProfileBuckets(providerName: string): Promise<string[]> {
+    try {
+      // Try to get profile from runtime settings
+      const { getCliRuntimeServices } = await import(
+        '../runtime/runtimeSettings.js'
+      );
+      const { settingsService } = getCliRuntimeServices();
+
+      // Get current profile name
+      const currentProfileName =
+        typeof settingsService.getCurrentProfileName === 'function'
+          ? settingsService.getCurrentProfileName()
+          : (settingsService.get('currentProfile') as string | null);
+
+      if (!currentProfileName) {
+        return [];
+      }
+
+      // Load the profile to check for auth.buckets
+      const { ProfileManager } = await import('@vybestack/llxprt-code-core');
+      const profileManager = new ProfileManager();
+      const profile = await profileManager.loadProfile(currentProfileName);
+
+      // Check if profile has auth.buckets for this provider
+      if (
+        'auth' in profile &&
+        profile.auth &&
+        typeof profile.auth === 'object' &&
+        'type' in profile.auth &&
+        profile.auth.type === 'oauth' &&
+        'buckets' in profile.auth &&
+        Array.isArray(profile.auth.buckets)
+      ) {
+        return profile.auth.buckets;
+      }
+
+      return [];
+    } catch (error) {
+      logger.debug(
+        `Could not load profile buckets for ${providerName}:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Authenticate multiple OAuth buckets sequentially using MultiBucketAuthenticator
+   * with timing controls (delay/prompt) and browser auto-open settings
+   */
+  private async authenticateMultipleBuckets(
+    providerName: string,
+    buckets: string[],
+  ): Promise<void> {
+    const { MultiBucketAuthenticator } = await import(
+      './MultiBucketAuthenticator.js'
+    );
+
+    // Get ephemeral settings for timing controls
+    const { getEphemeralSetting: getRuntimeEphemeralSetting } = await import(
+      '../runtime/runtimeSettings.js'
+    );
+    const getEphemeralSetting = <T>(key: string): T | undefined =>
+      getRuntimeEphemeralSetting(key) as T | undefined;
+
+    // Debug: log the raw setting value
+    const rawBucketPrompt = getRuntimeEphemeralSetting('auth-bucket-prompt');
+    logger.debug('Checking auth-bucket-prompt setting', {
+      rawValue: rawBucketPrompt,
+      typeof: typeof rawBucketPrompt,
+    });
+
+    // Callback to authenticate a single bucket
+    const onAuthBucket = async (
+      provider: string,
+      bucket: string,
+      index: number,
+      total: number,
+    ): Promise<void> => {
+      // Show visible console output for user
+      console.log(`\n=== Bucket ${index} of ${total}: ${bucket} ===\n`);
+
+      logger.debug(`Authenticating bucket ${index} of ${total}: ${bucket}`);
+      await this.authenticate(provider, bucket);
+    };
+
+    // Callback for prompting - uses TUI dialog if available, falls back to delay
+    const onPrompt = async (
+      provider: string,
+      bucket: string,
+    ): Promise<boolean> => {
+      // Try interactive TUI prompt if message bus getter is available
+      // Use lazy resolution to get message bus after TUI is initialized
+      const messageBus = this.getMessageBus?.();
+      if (messageBus) {
+        try {
+          logger.debug('Requesting bucket auth confirmation via message bus', {
+            provider,
+            bucket,
+          });
+
+          // Request confirmation via message bus with a timeout
+          // If TUI is ready, it will respond; otherwise we fall back to delay
+          const confirmPromise = messageBus.requestBucketAuthConfirmation(
+            provider,
+            bucket,
+            buckets.indexOf(bucket) + 1,
+            buckets.length,
+          );
+
+          // Race with a 3-second timeout to give TUI time to respond
+          const timeoutPromise = new Promise<'timeout'>((resolve) =>
+            setTimeout(() => resolve('timeout'), 3000),
+          );
+
+          const result = await Promise.race([confirmPromise, timeoutPromise]);
+
+          if (result !== 'timeout') {
+            // TUI responded - return the confirmation result
+            logger.debug('TUI responded to bucket auth confirmation', {
+              result,
+            });
+            return result;
+          }
+          // TUI didn't respond in time - fall back to delay
+          logger.debug('TUI not ready, falling back to delay-based prompt');
+        } catch (error) {
+          logger.debug('Error using message bus, falling back to delay', {
+            error,
+          });
+        }
+      } else {
+        logger.debug('No message bus available');
+      }
+
+      // TUI not available or timed out - try stdin if TTY and prompt enabled
+      const showPrompt = getEphemeralSetting<boolean>('auth-bucket-prompt');
+      logger.debug('Checking TTY prompt fallback', {
+        showPrompt,
+        isTTY: process.stdin.isTTY,
+      });
+      if (showPrompt && process.stdin.isTTY) {
+        // Interactive terminal - wait for keypress
+        console.log(`\nReady to authenticate bucket: ${bucket}`);
+        console.log('Press ENTER to continue, or Ctrl+C to cancel...\n');
+        let rawModeSet = false;
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const cleanup = (): void => {
+              process.stdin.removeListener('data', onData);
+              process.stdin.removeListener('error', onError);
+              if (rawModeSet && process.stdin.isTTY) {
+                process.stdin.setRawMode(false);
+              }
+              process.stdin.pause();
+            };
+            const onData = (): void => {
+              cleanup();
+              resolve();
+            };
+            const onError = (err: Error): void => {
+              cleanup();
+              reject(err);
+            };
+            if (process.stdin.isTTY) {
+              process.stdin.setRawMode(true);
+              rawModeSet = true;
+            }
+            process.stdin.resume();
+            process.stdin.once('data', onData);
+            process.stdin.once('error', onError);
+          });
+        } catch (error) {
+          // Ensure raw mode is reset even on unexpected errors
+          if (rawModeSet && process.stdin.isTTY) {
+            try {
+              process.stdin.setRawMode(false);
+            } catch {
+              // Ignore cleanup errors
+            }
+          }
+          throw error;
+        }
+        return true;
+      }
+
+      // Fall back to delay-based prompting (no TTY or prompt disabled)
+      const delay = getEphemeralSetting<number>('auth-bucket-delay') ?? 5000;
+      console.log(`\nReady to authenticate bucket: ${bucket}`);
+      console.log(
+        `(waiting ${delay / 1000} seconds - switch browser window if needed...)\n`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return true;
+    };
+
+    // Callback for delay with visible console output
+    const onDelay = async (ms: number, bucket: string): Promise<void> => {
+      // Show visible console output for user
+      console.log(`(waiting ${ms / 1000} seconds before opening browser...)\n`);
+
+      logger.debug(`Waiting ${ms}ms before authenticating bucket: ${bucket}`);
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    };
+
+    const authenticator = MultiBucketAuthenticator.fromCallbacks({
+      onAuthBucket,
+      onPrompt,
+      onDelay,
+      getEphemeralSetting,
+    });
+
+    const result = await authenticator.authenticateMultipleBuckets({
+      provider: providerName,
+      buckets,
+    });
+
+    if (result.cancelled) {
+      throw new Error(
+        `Multi-bucket authentication cancelled after ${result.authenticatedBuckets.length} of ${buckets.length} buckets`,
+      );
+    }
+
+    if (result.failedBuckets.length > 0) {
+      throw new Error(
+        `Failed to authenticate ${result.failedBuckets.length} bucket(s): ${result.failedBuckets.join(', ')}`,
+      );
+    }
+
+    logger.debug(
+      `Successfully authenticated ${result.authenticatedBuckets.length} buckets for ${providerName}`,
+    );
+
+    // Set up bucket failover handler if we have multiple buckets and config is available
+    // @plan PLAN-20251213issue490
+    if (buckets.length > 1) {
+      const config = this.getConfig?.();
+      if (config) {
+        const handler = new BucketFailoverHandlerImpl(
+          buckets,
+          providerName,
+          this,
+        );
+        config.setBucketFailoverHandler(handler);
+        logger.debug('Bucket failover handler configured', {
+          provider: providerName,
+          bucketCount: buckets.length,
+        });
+      } else {
+        logger.debug(
+          'Config not available, bucket failover handler not configured',
+        );
+      }
     }
   }
 }

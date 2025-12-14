@@ -26,6 +26,7 @@ import { Notifications } from '../components/Notifications.js';
 import { TodoPanel } from '../components/TodoPanel.js';
 import { Footer } from '../components/Footer.js';
 import { DialogManager } from '../components/DialogManager.js';
+import { BucketAuthConfirmation } from '../components/BucketAuthConfirmation.js';
 import { Composer } from '../components/Composer.js';
 import { LoadingIndicator } from '../components/LoadingIndicator.js';
 import { AutoAcceptIndicator } from '../components/AutoAcceptIndicator.js';
@@ -216,6 +217,9 @@ export const DefaultAppLayout = ({
           />
 
           {showTodoPanelSetting && <TodoPanel width={inputWidth} />}
+
+          {/* OAuth bucket auth confirmation - manages its own state via message bus */}
+          <BucketAuthConfirmation config={config} isFocused={!dialogsVisible} />
 
           {dialogsVisible ? (
             <DialogManager

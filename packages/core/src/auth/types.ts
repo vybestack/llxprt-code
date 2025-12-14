@@ -88,9 +88,20 @@ export const CodexTokenResponseSchema = z.object({
 
 export type CodexTokenResponse = z.infer<typeof CodexTokenResponseSchema>;
 
+/**
+ * Bucket statistics schema
+ */
+export const BucketStatsSchema = z.object({
+  bucket: z.string(),
+  requestCount: z.number(),
+  percentage: z.number(),
+  lastUsed: z.number().optional(), // Unix timestamp in milliseconds
+});
+
 // Export TypeScript types inferred from schemas
 export type OAuthToken = z.infer<typeof OAuthTokenSchema>;
 export type ProviderOAuthConfig = z.infer<typeof ProviderOAuthConfigSchema>;
 export type DeviceCodeResponse = z.infer<typeof DeviceCodeResponseSchema>;
 export type TokenResponse = z.infer<typeof TokenResponseSchema>;
 export type AuthStatus = z.infer<typeof AuthStatusSchema>;
+export type BucketStats = z.infer<typeof BucketStatsSchema>;

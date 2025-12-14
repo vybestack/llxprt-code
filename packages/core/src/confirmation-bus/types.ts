@@ -11,6 +11,8 @@ export enum MessageBusType {
   TOOL_EXECUTION_SUCCESS = 'tool-execution-success',
   TOOL_EXECUTION_FAILURE = 'tool-execution-failure',
   UPDATE_POLICY = 'update-policy',
+  BUCKET_AUTH_CONFIRMATION_REQUEST = 'bucket-auth-confirmation-request',
+  BUCKET_AUTH_CONFIRMATION_RESPONSE = 'bucket-auth-confirmation-response',
 }
 
 export interface ToolConfirmationRequest {
@@ -67,10 +69,33 @@ export interface UpdatePolicy {
   toolName: string;
 }
 
+/**
+ * Request to confirm OAuth bucket authentication
+ */
+export interface BucketAuthConfirmationRequest {
+  type: MessageBusType.BUCKET_AUTH_CONFIRMATION_REQUEST;
+  correlationId: string;
+  provider: string;
+  bucket: string;
+  bucketIndex: number;
+  totalBuckets: number;
+}
+
+/**
+ * Response to bucket auth confirmation request
+ */
+export interface BucketAuthConfirmationResponse {
+  type: MessageBusType.BUCKET_AUTH_CONFIRMATION_RESPONSE;
+  correlationId: string;
+  confirmed: boolean;
+}
+
 export type MessageBusMessage =
   | ToolConfirmationRequest
   | ToolConfirmationResponse
   | ToolPolicyRejection
   | ToolExecutionSuccess
   | ToolExecutionFailure
-  | UpdatePolicy;
+  | UpdatePolicy
+  | BucketAuthConfirmationRequest
+  | BucketAuthConfirmationResponse;

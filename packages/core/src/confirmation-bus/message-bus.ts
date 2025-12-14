@@ -7,6 +7,7 @@ import {
   MessageBusType,
   type MessageBusMessage,
   type ToolConfirmationResponse,
+  type BucketAuthConfirmationResponse,
 } from './types.js';
 import {
   ToolConfirmationOutcome,
@@ -173,6 +174,70 @@ export class MessageBus {
       payload,
       confirmed,
       requiresUserConfirmation,
+    });
+  }
+
+  /**
+   * Requests confirmation for OAuth bucket authentication.
+   * Publishes a confirmation request and waits for user response.
+   *
+   * @param provider - The provider name (e.g., 'anthropic')
+   * @param bucket - The bucket name (e.g., 'work@company.com')
+   * @param bucketIndex - Current bucket index (1-based)
+   * @param totalBuckets - Total number of buckets
+   * @returns Promise<boolean> - true if approved, false if denied
+   */
+  async requestBucketAuthConfirmation(
+    provider: string,
+    bucket: string,
+    bucketIndex: number,
+    totalBuckets: number,
+  ): Promise<boolean> {
+    const correlationId = randomUUID();
+
+    return new Promise<boolean>((resolve) => {
+      const timeout = setTimeout(() => {
+        unsubscribe();
+        resolve(false); // Timeout = deny
+      }, 300000); // 5 minute timeout
+
+      const unsubscribe = this.subscribe<BucketAuthConfirmationResponse>(
+        MessageBusType.BUCKET_AUTH_CONFIRMATION_RESPONSE,
+        (response) => {
+          if (response.correlationId === correlationId) {
+            clearTimeout(timeout);
+            unsubscribe();
+            resolve(response.confirmed);
+          }
+        },
+      );
+
+      // Publish confirmation request
+      this.publish({
+        type: MessageBusType.BUCKET_AUTH_CONFIRMATION_REQUEST,
+        correlationId,
+        provider,
+        bucket,
+        bucketIndex,
+        totalBuckets,
+      });
+    });
+  }
+
+  /**
+   * Responds to a bucket auth confirmation request.
+   *
+   * @param correlationId - The correlation ID from the request
+   * @param confirmed - Whether the user confirmed
+   */
+  respondToBucketAuthConfirmation(
+    correlationId: string,
+    confirmed: boolean,
+  ): void {
+    this.publish({
+      type: MessageBusType.BUCKET_AUTH_CONFIRMATION_RESPONSE,
+      correlationId,
+      confirmed,
     });
   }
 

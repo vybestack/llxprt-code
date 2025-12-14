@@ -18,6 +18,8 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       saveToken: vi.fn().mockResolvedValue(undefined),
       removeToken: vi.fn().mockResolvedValue(undefined),
       listProviders: vi.fn().mockResolvedValue([]),
+      listBuckets: vi.fn().mockResolvedValue([]),
+      getBucketStats: vi.fn().mockResolvedValue(null),
     };
 
     provider = new CodexOAuthProvider(mockTokenStore);
