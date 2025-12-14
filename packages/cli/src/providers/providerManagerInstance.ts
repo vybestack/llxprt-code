@@ -363,15 +363,14 @@ export function createProviderManager(
 
   void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
 
-  if (effectiveOpenaiResponsesEnabled) {
-    manager.registerProvider(
-      getOpenAIResponsesProvider(
-        openaiApiKey,
-        openaiBaseUrl,
-        allowBrowserEnvironment,
-      ),
-    );
-  }
+  // Always register OpenAI Responses provider (openaiResponsesEnabled setting is obsolete)
+  manager.registerProvider(
+    getOpenAIResponsesProvider(
+      openaiApiKey,
+      openaiBaseUrl,
+      allowBrowserEnvironment,
+    ),
+  );
 
   manager.registerProvider(
     getAnthropicProvider(
@@ -508,6 +507,18 @@ function registerAliasProviders(
         }
         break;
       }
+      case 'openai-responses': {
+        const provider = createOpenAIResponsesAliasProvider(
+          entry,
+          openaiApiKey,
+          openaiBaseUrl,
+          openaiProviderConfig,
+        );
+        if (provider) {
+          providerManagerInstance.registerProvider(provider);
+        }
+        break;
+      }
       default: {
         console.warn(
           `[ProviderManager] Unsupported base provider '${entry.config.baseProvider}' for alias '${entry.alias}', skipping.`,
@@ -614,6 +625,71 @@ function createOpenAIAliasProvider(
   }
 
   bindOpenAIAliasIdentity(provider, entry.alias);
+
+  return provider;
+}
+
+function createOpenAIResponsesAliasProvider(
+  entry: ProviderAliasEntry,
+  openaiApiKey: string | undefined,
+  openaiBaseUrl: string | undefined,
+  openaiProviderConfig: IProviderConfig,
+): OpenAIResponsesProvider | null {
+  const resolvedBaseUrl = entry.config.baseUrl || openaiBaseUrl;
+  if (!resolvedBaseUrl) {
+    console.warn(
+      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
+    );
+    return null;
+  }
+
+  const aliasProviderConfig: IProviderConfig = {
+    ...openaiProviderConfig,
+    baseUrl: resolvedBaseUrl,
+  };
+
+  if (entry.config.providerConfig) {
+    Object.assign(aliasProviderConfig, entry.config.providerConfig);
+  }
+
+  if (entry.config.defaultModel) {
+    aliasProviderConfig.defaultModel = entry.config.defaultModel;
+  }
+
+  let aliasApiKey: string | undefined;
+  if (entry.config.apiKeyEnv) {
+    const envValue = process.env[entry.config.apiKeyEnv];
+    if (envValue && envValue.trim() !== '') {
+      aliasApiKey = sanitizeApiKey(envValue);
+    }
+  }
+  if (!aliasApiKey && openaiApiKey) {
+    aliasApiKey = openaiApiKey;
+  }
+
+  const provider = new OpenAIResponsesProvider(
+    aliasApiKey || undefined,
+    resolvedBaseUrl,
+    aliasProviderConfig,
+  );
+
+  // Override the provider name to match the alias
+  Object.defineProperty(provider, 'name', {
+    value: entry.alias,
+    writable: false,
+    enumerable: true,
+    configurable: true,
+  });
+
+  if (
+    entry.config.defaultModel &&
+    typeof provider.getDefaultModel === 'function'
+  ) {
+    const configuredDefaultModel = entry.config.defaultModel;
+    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
+    provider.getDefaultModel = () =>
+      configuredDefaultModel || originalGetDefaultModel();
+  }
 
   return provider;
 }
