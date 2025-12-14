@@ -429,8 +429,17 @@ export class OAuthManager {
     }
 
     // For other providers, trigger OAuth flow
+    // Check if the current profile has multiple buckets - if so, use MultiBucketAuthenticator
     try {
-      await this.authenticate(providerName);
+      const buckets = await this.getProfileBuckets(providerName);
+      if (buckets.length > 1) {
+        logger.debug(
+          `Multi-bucket lazy auth triggered for ${providerName} with ${buckets.length} buckets`,
+        );
+        await this.authenticateMultipleBuckets(providerName, buckets);
+      } else {
+        await this.authenticate(providerName);
+      }
       const newToken = await this.getOAuthToken(providerName);
       // Return the access token without any prefix - OAuth Bearer tokens should be used as-is
       return newToken ? newToken.access_token : null;
@@ -854,5 +863,128 @@ export class OAuthManager {
     }
 
     return statuses;
+  }
+
+  /**
+   * Get the list of buckets for the current profile for a given provider
+   * If the current profile has auth.buckets configured, return those.
+   * Otherwise, return empty array (single-bucket or non-OAuth profile)
+   */
+  private async getProfileBuckets(providerName: string): Promise<string[]> {
+    try {
+      // Try to get profile from runtime settings
+      const { getCliRuntimeServices } =
+        await import('../runtime/runtimeSettings.js');
+      const { settingsService } = getCliRuntimeServices();
+
+      // Get current profile name
+      const currentProfileName =
+        typeof settingsService.getCurrentProfileName === 'function'
+          ? settingsService.getCurrentProfileName()
+          : (settingsService.get('currentProfile') as string | null);
+
+      if (!currentProfileName) {
+        return [];
+      }
+
+      // Load the profile to check for auth.buckets
+      const { ProfileManager } = await import('@vybestack/llxprt-code-core');
+      const profileManager = new ProfileManager();
+      const profile = await profileManager.loadProfile(currentProfileName);
+
+      // Check if profile has auth.buckets for this provider
+      if (
+        'auth' in profile &&
+        profile.auth &&
+        typeof profile.auth === 'object' &&
+        'type' in profile.auth &&
+        profile.auth.type === 'oauth' &&
+        'buckets' in profile.auth &&
+        Array.isArray(profile.auth.buckets)
+      ) {
+        return profile.auth.buckets;
+      }
+
+      return [];
+    } catch (error) {
+      logger.debug(
+        `Could not load profile buckets for ${providerName}:`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Authenticate multiple OAuth buckets sequentially using MultiBucketAuthenticator
+   * with timing controls (delay/prompt) and browser auto-open settings
+   */
+  private async authenticateMultipleBuckets(
+    providerName: string,
+    buckets: string[],
+  ): Promise<void> {
+    const { MultiBucketAuthenticator } =
+      await import('./MultiBucketAuthenticator.js');
+
+    // Get ephemeral settings for timing controls
+    const { getEphemeralSetting: getRuntimeEphemeralSetting } =
+      await import('../runtime/runtimeSettings.js');
+    const getEphemeralSetting = <T>(key: string): T | undefined =>
+      getRuntimeEphemeralSetting(key) as T | undefined;
+
+    // Callback to authenticate a single bucket
+    const onAuthBucket = async (
+      provider: string,
+      bucket: string,
+      index: number,
+      total: number,
+    ): Promise<void> => {
+      logger.debug(
+        `Authenticating bucket ${index} of ${total}: ${bucket}`,
+      );
+      await this.authenticate(provider, bucket);
+    };
+
+    // Callback for prompting (not implemented for CLI - would need TUI integration)
+    const onPrompt = async (
+      _provider: string,
+      _bucket: string,
+    ): Promise<boolean> =>
+      // For now, always continue (no user prompting in non-interactive mode)
+      true;
+
+    // Callback for delay
+    const onDelay = async (ms: number, bucket: string): Promise<void> => {
+      logger.debug(`Waiting ${ms}ms before authenticating bucket: ${bucket}`);
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    };
+
+    const authenticator = MultiBucketAuthenticator.fromCallbacks({
+      onAuthBucket,
+      onPrompt,
+      onDelay,
+      getEphemeralSetting,
+    });
+
+    const result = await authenticator.authenticateMultipleBuckets({
+      provider: providerName,
+      buckets,
+    });
+
+    if (result.cancelled) {
+      throw new Error(
+        `Multi-bucket authentication cancelled after ${result.authenticatedBuckets.length} of ${buckets.length} buckets`,
+      );
+    }
+
+    if (result.failedBuckets.length > 0) {
+      throw new Error(
+        `Failed to authenticate ${result.failedBuckets.length} bucket(s): ${result.failedBuckets.join(', ')}`,
+      );
+    }
+
+    logger.debug(
+      `Successfully authenticated ${result.authenticatedBuckets.length} buckets for ${providerName}`,
+    );
   }
 }
