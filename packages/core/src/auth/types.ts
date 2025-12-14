@@ -14,7 +14,7 @@ export const OAuthTokenSchema = z.object({
   refresh_token: z.string().optional(),
   expiry: z.number(), // Unix timestamp
   scope: z.string().nullable().optional(),
-  token_type: z.literal('Bearer'),
+  token_type: z.enum(['Bearer', 'bearer']), // OpenAI returns lowercase 'bearer'
   resource_url: z.string().optional(), // For Qwen OAuth - indicates the API endpoint to use
 });
 

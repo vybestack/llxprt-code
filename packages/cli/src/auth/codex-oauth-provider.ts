@@ -123,17 +123,31 @@ export class CodexOAuthProvider implements OAuthProvider {
    * Starts local callback server and opens browser for authentication
    */
   async initiateAuth(): Promise<void> {
+    this.logger.debug(
+      () =>
+        `[FLOW] initiateAuth() called, authInProgress=${!!this.authInProgress}`,
+    );
     if (this.authInProgress) {
-      this.logger.debug(() => 'OAuth already in progress, waiting...');
+      this.logger.debug(() => '[FLOW] OAuth already in progress, waiting...');
       await this.authInProgress;
+      this.logger.debug(() => '[FLOW] Finished waiting for existing auth flow');
       return;
     }
 
+    this.logger.debug(() => '[FLOW] Starting new auth flow via performAuth()');
     this.authInProgress = this.performAuth();
     try {
       await this.authInProgress;
+      this.logger.debug(() => '[FLOW] performAuth() completed successfully');
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `[FLOW] performAuth() failed: ${error instanceof Error ? error.message : error}`,
+      );
+      throw error;
     } finally {
       this.authInProgress = null;
+      this.logger.debug(() => '[FLOW] authInProgress reset to null');
     }
   }
 
@@ -141,15 +155,20 @@ export class CodexOAuthProvider implements OAuthProvider {
    * Perform the actual OAuth authentication flow
    */
   private async performAuth(): Promise<void> {
-    this.logger.debug(() => 'Initiating Codex OAuth flow');
+    this.logger.debug(() => '[FLOW] performAuth() starting');
 
     const state = crypto.randomUUID();
+    this.logger.debug(
+      () => `[FLOW] Generated state: ${state.substring(0, 8)}...`,
+    );
 
     // Try primary port first (Codex CLI compatible), fallback to range
+    this.logger.debug(() => '[FLOW] Starting local callback server...');
     const localCallback = await startLocalOAuthCallback({
       state,
       portRange: [CODEX_PRIMARY_PORT, CODEX_FALLBACK_RANGE[1]],
       timeoutMs: CALLBACK_TIMEOUT_MS,
+      provider: 'codex',
     });
 
     const port = parseInt(
@@ -158,17 +177,17 @@ export class CodexOAuthProvider implements OAuthProvider {
     );
     const waitForCallback = localCallback.waitForCallback;
 
-    if (port === CODEX_PRIMARY_PORT) {
-      this.logger.debug(
-        () => `Started callback server on primary port ${CODEX_PRIMARY_PORT}`,
-      );
-    } else {
-      this.logger.debug(() => `Primary port busy, using fallback port ${port}`);
-    }
+    this.logger.debug(
+      () =>
+        `[FLOW] Callback server started on port ${port}, redirectUri: ${localCallback.redirectUri}`,
+    );
 
     // Use the server's redirectUri - it already includes the correct path
     const redirectUri = localCallback.redirectUri;
     const authUrl = this.deviceFlow.buildAuthorizationUrl(redirectUri, state);
+    this.logger.debug(
+      () => `[FLOW] Built auth URL: ${authUrl.substring(0, 80)}...`,
+    );
 
     // Display URL in TUI if available
     const addItem = this.addItem || globalOAuthUI.getAddItem();
@@ -184,17 +203,25 @@ export class CodexOAuthProvider implements OAuthProvider {
 
     // Open browser if in interactive mode
     const interactive = shouldLaunchBrowser();
+    this.logger.debug(() => `[FLOW] Interactive mode: ${interactive}`);
     if (interactive) {
-      this.logger.debug(() => 'Opening browser for authentication');
+      this.logger.debug(() => '[FLOW] Opening browser for authentication');
       await openBrowserSecurely(authUrl);
+      this.logger.debug(() => '[FLOW] Browser opened');
     }
 
     // Wait for callback
-    this.logger.debug(() => 'Waiting for OAuth callback');
+    this.logger.debug(() => '[FLOW] Waiting for OAuth callback...');
     const { code, state: callbackState } = await waitForCallback();
+    this.logger.debug(
+      () =>
+        `[FLOW] Callback received! code: ${code.substring(0, 10)}..., state: ${callbackState.substring(0, 8)}...`,
+    );
 
     // Exchange code for tokens with state
+    this.logger.debug(() => '[FLOW] Calling completeAuth()...');
     await this.completeAuth(code, redirectUri, callbackState);
+    this.logger.debug(() => '[FLOW] completeAuth() finished');
   }
 
   /**
@@ -208,18 +235,30 @@ export class CodexOAuthProvider implements OAuthProvider {
     redirectUri: string,
     state: string,
   ): Promise<void> {
-    this.logger.debug(() => 'Exchanging auth code for tokens');
+    this.logger.debug(
+      () =>
+        `[FLOW] completeAuth() called with code: ${authCode.substring(0, 10)}..., redirectUri: ${redirectUri}`,
+    );
 
+    this.logger.debug(
+      () => '[FLOW] Calling deviceFlow.exchangeCodeForToken()...',
+    );
     const token = await this.deviceFlow.exchangeCodeForToken(
       authCode,
       redirectUri,
       state,
     );
+    this.logger.debug(
+      () =>
+        `[FLOW] Token received: access_token=${token.access_token.substring(0, 10)}..., account_id=${token.account_id?.substring(0, 8) ?? 'MISSING'}..., expiry=${token.expiry}`,
+    );
 
     // Save to MultiProviderTokenStore location (~/.llxprt/oauth/codex.json)
+    this.logger.debug(() => '[FLOW] Saving token to tokenStore...');
     await this.tokenStore.saveToken('codex', token);
+    this.logger.debug(() => '[FLOW] Token saved to tokenStore');
 
-    this.logger.debug(() => 'Codex OAuth authentication complete');
+    this.logger.debug(() => '[FLOW] completeAuth() completed successfully');
   }
 
   /**
@@ -228,20 +267,42 @@ export class CodexOAuthProvider implements OAuthProvider {
    * @returns CodexOAuthToken if available, null otherwise
    */
   async getToken(): Promise<CodexOAuthToken | null> {
+    this.logger.debug(() => '[FLOW] getToken() called');
     await this.ensureInitialized();
 
     // Get token from ~/.llxprt/oauth/codex.json
+    this.logger.debug(() => '[FLOW] Reading token from tokenStore...');
     const token = await this.tokenStore.getToken('codex');
 
     if (!token) {
+      this.logger.debug(
+        () => '[FLOW] No token found in tokenStore, returning null',
+      );
       return null;
     }
 
+    const tokenWithAccountId = token as { account_id?: string };
+    this.logger.debug(
+      () =>
+        `[FLOW] Token found in store: access_token=${String(token.access_token).substring(0, 10)}..., has_account_id=${'account_id' in token && !!tokenWithAccountId.account_id}, expiry=${token.expiry}`,
+    );
+
     // Validate with Zod schema
     try {
-      return CodexOAuthTokenSchema.parse(token);
-    } catch (_error) {
-      this.logger.debug(() => 'Token validation failed (missing account_id?)');
+      const validated = CodexOAuthTokenSchema.parse(token);
+      this.logger.debug(
+        () =>
+          `[FLOW] Token validated successfully, account_id=${validated.account_id.substring(0, 8)}...`,
+      );
+      return validated;
+    } catch (error) {
+      this.logger.debug(
+        () =>
+          `[FLOW] Token validation FAILED: ${error instanceof Error ? error.message : error}`,
+      );
+      this.logger.debug(
+        () => `[FLOW] Token keys present: ${Object.keys(token).join(', ')}`,
+      );
       return null;
     }
   }

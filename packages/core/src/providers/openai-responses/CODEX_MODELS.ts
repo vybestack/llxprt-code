@@ -16,28 +16,41 @@
 
 /**
  * Hardcoded Codex models for fallback when API fetch fails
- * @plan PLAN-20251213-ISSUE160.P04
- * Default model: gpt-5.2
+ * Note: /models endpoint is behind Cloudflare bot protection, so we must use fallback
+ * Models based on codex-rs/core/tests/suite/list_models.rs
+ * @plan PLAN-20251214-ISSUE160.P06
  */
 
 import { type IModel } from '../IModel.js';
 
 export const CODEX_MODELS: IModel[] = [
   {
-    id: 'gpt-5.2',
-    name: 'GPT-5.2',
-    provider: 'codex',
-    supportedToolFormats: ['openai'],
-  },
-  {
     id: 'gpt-5.1-codex-max',
-    name: 'GPT-5.1 Codex Max',
+    name: 'gpt-5.1-codex-max',
     provider: 'codex',
     supportedToolFormats: ['openai'],
   },
   {
-    id: 'gpt-5.1-preview',
-    name: 'GPT-5.1 Preview',
+    id: 'gpt-5.1-codex',
+    name: 'gpt-5.1-codex',
+    provider: 'codex',
+    supportedToolFormats: ['openai'],
+  },
+  {
+    id: 'gpt-5.1-codex-mini',
+    name: 'gpt-5.1-codex-mini',
+    provider: 'codex',
+    supportedToolFormats: ['openai'],
+  },
+  {
+    id: 'gpt-5.2',
+    name: 'gpt-5.2',
+    provider: 'codex',
+    supportedToolFormats: ['openai'],
+  },
+  {
+    id: 'gpt-5.1',
+    name: 'gpt-5.1',
     provider: 'codex',
     supportedToolFormats: ['openai'],
   },

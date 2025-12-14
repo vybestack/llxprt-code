@@ -57,14 +57,16 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       );
       const models = await provider.getModels();
 
-      // Verify all expected Codex models are present
+      // Verify all expected Codex models are present (based on codex-rs list_models.rs)
       const modelIds = models.map((m) => m.id);
-      expect(modelIds).toContain('gpt-5.2');
       expect(modelIds).toContain('gpt-5.1-codex-max');
-      expect(modelIds).toContain('gpt-5.1-preview');
+      expect(modelIds).toContain('gpt-5.1-codex');
+      expect(modelIds).toContain('gpt-5.1-codex-mini');
+      expect(modelIds).toContain('gpt-5.2');
+      expect(modelIds).toContain('gpt-5.1');
 
-      // Verify gpt-5.2 is first (default)
-      expect(models[0].id).toBe('gpt-5.2');
+      // Verify gpt-5.1-codex-max is first (highest priority in codex-rs)
+      expect(models[0].id).toBe('gpt-5.1-codex-max');
 
       // Verify all models have correct provider and tool format
       for (const model of models) {
@@ -82,8 +84,8 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
 
       // Verify we get standard models, not Codex models
       const modelIds = models.map((m) => m.id);
-      expect(modelIds).not.toContain('gpt-5.2');
-      expect(modelIds).not.toContain('gpt-5.1-codex-max');
+      expect(modelIds).not.toContain('gpt-5.1-codex');
+      expect(modelIds).not.toContain('gpt-5.1-codex-mini');
 
       // All models should have openai-responses as provider (not codex)
       for (const model of models) {
@@ -98,15 +100,17 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       );
       const models = await provider.getModels();
 
-      // Expected models in order (gpt-5.2 first as default)
+      // Expected models in priority order (based on codex-rs list_models.rs)
       const expectedModelIds = [
-        'gpt-5.2',
         'gpt-5.1-codex-max',
-        'gpt-5.1-preview',
+        'gpt-5.1-codex',
+        'gpt-5.1-codex-mini',
+        'gpt-5.2',
+        'gpt-5.1',
       ];
 
       // Verify order and presence
-      expect(models.length).toBeGreaterThanOrEqual(expectedModelIds.length);
+      expect(models.length).toBe(expectedModelIds.length);
       for (let i = 0; i < expectedModelIds.length; i++) {
         expect(models[i].id).toBe(expectedModelIds[i]);
       }
@@ -119,18 +123,18 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
       );
       const models = await provider.getModels();
 
-      // Find specific models and verify their names
-      const gpt52 = models.find((m) => m.id === 'gpt-5.2');
-      expect(gpt52).toBeDefined();
-      expect(gpt52?.name).toBe('GPT-5.2');
-
+      // Find specific models and verify their names (names match IDs in codex-rs)
       const codexMax = models.find((m) => m.id === 'gpt-5.1-codex-max');
       expect(codexMax).toBeDefined();
-      expect(codexMax?.name).toBe('GPT-5.1 Codex Max');
+      expect(codexMax?.name).toBe('gpt-5.1-codex-max');
 
-      const preview = models.find((m) => m.id === 'gpt-5.1-preview');
-      expect(preview).toBeDefined();
-      expect(preview?.name).toBe('GPT-5.1 Preview');
+      const gpt52 = models.find((m) => m.id === 'gpt-5.2');
+      expect(gpt52).toBeDefined();
+      expect(gpt52?.name).toBe('gpt-5.2');
+
+      const gpt51 = models.find((m) => m.id === 'gpt-5.1');
+      expect(gpt51).toBeDefined();
+      expect(gpt51?.name).toBe('gpt-5.1');
     });
   });
 });

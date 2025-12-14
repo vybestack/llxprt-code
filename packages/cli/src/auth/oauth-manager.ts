@@ -9,7 +9,10 @@ import { LoadedSettings, SettingScope } from '../config/settings.js';
 import {
   getSettingsService,
   flushRuntimeAuthScope,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
+
+const oauthManagerLogger = new DebugLogger('llxprt:auth:oauth-manager');
 
 function isAuthOnlyEnabled(value: unknown): boolean {
   if (typeof value === 'boolean') {
@@ -160,6 +163,9 @@ export class OAuthManager {
    * @param providerName - Name of the provider to authenticate with
    */
   async authenticate(providerName: string): Promise<void> {
+    oauthManagerLogger.debug(
+      () => `[FLOW] authenticate() called for provider: ${providerName}`,
+    );
     if (!providerName || typeof providerName !== 'string') {
       throw new Error('Provider name must be a non-empty string');
     }
@@ -171,22 +177,55 @@ export class OAuthManager {
 
     try {
       // 1. Initiate authentication with the provider
+      oauthManagerLogger.debug(
+        () => `[FLOW] Calling provider.initiateAuth() for ${providerName}...`,
+      );
       await provider.initiateAuth();
+      oauthManagerLogger.debug(
+        () => `[FLOW] provider.initiateAuth() completed for ${providerName}`,
+      );
 
       // 2. Get token from provider after successful auth
+      oauthManagerLogger.debug(
+        () => `[FLOW] Calling provider.getToken() for ${providerName}...`,
+      );
       const providerToken = await provider.getToken();
       if (!providerToken) {
+        oauthManagerLogger.debug(
+          () => `[FLOW] provider.getToken() returned null for ${providerName}!`,
+        );
         throw new Error('Authentication completed but no token was returned');
       }
+      oauthManagerLogger.debug(
+        () =>
+          `[FLOW] provider.getToken() returned token for ${providerName}: access_token=${String(providerToken.access_token).substring(0, 10)}...`,
+      );
 
       // 3. Store token using tokenStore
+      oauthManagerLogger.debug(
+        () => `[FLOW] Saving token to tokenStore for ${providerName}...`,
+      );
       await this.tokenStore.saveToken(providerName, providerToken);
+      oauthManagerLogger.debug(
+        () => `[FLOW] Token saved to tokenStore for ${providerName}`,
+      );
 
       // 4. Ensure provider marked as OAuth enabled after successful auth
       if (!this.isOAuthEnabled(providerName)) {
+        oauthManagerLogger.debug(
+          () => `[FLOW] Enabling OAuth for ${providerName}`,
+        );
         this.setOAuthEnabledState(providerName, true);
       }
+      oauthManagerLogger.debug(
+        () =>
+          `[FLOW] authenticate() completed successfully for ${providerName}`,
+      );
     } catch (error) {
+      oauthManagerLogger.debug(
+        () =>
+          `[FLOW] authenticate() FAILED for ${providerName}: ${error instanceof Error ? error.message : error}`,
+      );
       // Propagate provider authentication errors
       if (error instanceof Error) {
         throw error;
@@ -395,11 +434,21 @@ export class OAuthManager {
     providerName: string,
     _metadata?: unknown,
   ): Promise<string | null> {
+    oauthManagerLogger.debug(
+      () => `[FLOW] getToken() called for provider: ${providerName}`,
+    );
     // Check if OAuth is enabled for this provider
     if (!this.isOAuthEnabled(providerName)) {
+      oauthManagerLogger.debug(
+        () => `[FLOW] OAuth is NOT enabled for ${providerName}, returning null`,
+      );
       return null;
     }
 
+    oauthManagerLogger.debug(
+      () =>
+        `[FLOW] OAuth is enabled for ${providerName}, calling getOAuthToken()...`,
+    );
     const token = await this.getOAuthToken(providerName);
 
     // Special handling for different providers
@@ -409,20 +458,51 @@ export class OAuthManager {
 
     // For Qwen, return the OAuth token to be used as API key
     if (providerName === 'qwen' && token) {
+      oauthManagerLogger.debug(
+        () =>
+          `[FLOW] Returning Qwen token: ${token.access_token.substring(0, 10)}...`,
+      );
       return token.access_token;
     }
 
     if (token) {
+      oauthManagerLogger.debug(
+        () =>
+          `[FLOW] Returning existing token for ${providerName}: ${token.access_token.substring(0, 10)}...`,
+      );
       return token.access_token;
     }
 
     // For other providers, trigger OAuth flow
+    oauthManagerLogger.debug(
+      () =>
+        `[FLOW] No existing token for ${providerName}, triggering OAuth flow...`,
+    );
     try {
       await this.authenticate(providerName);
+      oauthManagerLogger.debug(
+        () =>
+          `[FLOW] authenticate() completed for ${providerName}, fetching new token...`,
+      );
       const newToken = await this.getOAuthToken(providerName);
       // Return the access token without any prefix - OAuth Bearer tokens should be used as-is
+      if (newToken) {
+        oauthManagerLogger.debug(
+          () =>
+            `[FLOW] Returning new token for ${providerName}: ${newToken.access_token.substring(0, 10)}...`,
+        );
+      } else {
+        oauthManagerLogger.debug(
+          () =>
+            `[FLOW] getOAuthToken() returned null after authenticate() for ${providerName}`,
+        );
+      }
       return newToken ? newToken.access_token : null;
     } catch (error) {
+      oauthManagerLogger.debug(
+        () =>
+          `[FLOW] getToken() OAuth flow FAILED for ${providerName}: ${error instanceof Error ? error.message : error}`,
+      );
       // Special handling for Gemini - USE_EXISTING_GEMINI_OAUTH is not an error
       // It's a signal to use the existing LOGIN_WITH_GOOGLE flow
       if (
@@ -471,6 +551,9 @@ export class OAuthManager {
     providerName: string,
     _metadata?: unknown,
   ): Promise<OAuthToken | null> {
+    oauthManagerLogger.debug(
+      () => `[FLOW] getOAuthToken() called for provider: ${providerName}`,
+    );
     if (!providerName || typeof providerName !== 'string') {
       throw new Error('Provider name must be a non-empty string');
     }
@@ -482,36 +565,75 @@ export class OAuthManager {
 
     try {
       // 1. Try to get token from store
+      oauthManagerLogger.debug(
+        () => `[FLOW] Reading token from tokenStore for ${providerName}...`,
+      );
       const token = await this.tokenStore.getToken(providerName);
       if (!token) {
+        oauthManagerLogger.debug(
+          () => `[FLOW] No token in tokenStore for ${providerName}`,
+        );
         return null;
       }
+      oauthManagerLogger.debug(
+        () =>
+          `[FLOW] Token found in tokenStore for ${providerName}: expiry=${token.expiry}, keys=${Object.keys(token).join(',')}`,
+      );
 
       // 2. Check if token expires within 30 seconds (30000ms)
       const now = Date.now();
       const thirtySecondsFromNow = now + 30000;
+      // Note: token.expiry is in SECONDS, comparison needs to be in same units
+      const expiryMs = token.expiry * 1000;
 
-      if (token.expiry <= thirtySecondsFromNow) {
+      oauthManagerLogger.debug(
+        () =>
+          `[FLOW] Token expiry check: now=${now}, expiryMs=${expiryMs}, isExpired=${expiryMs <= thirtySecondsFromNow}`,
+      );
+
+      if (expiryMs <= thirtySecondsFromNow) {
         // 3. Token is expired or about to expire, try refresh
+        oauthManagerLogger.debug(
+          () =>
+            `[FLOW] Token expired or expiring soon for ${providerName}, attempting refresh...`,
+        );
         try {
           const refreshedToken = await provider.refreshIfNeeded();
           if (refreshedToken) {
             // 4. Update stored token if refreshed
+            oauthManagerLogger.debug(
+              () =>
+                `[FLOW] Token refreshed for ${providerName}, saving to store...`,
+            );
             await this.tokenStore.saveToken(providerName, refreshedToken);
             return refreshedToken;
           } else {
             // Refresh failed, return null
+            oauthManagerLogger.debug(
+              () => `[FLOW] Token refresh returned null for ${providerName}`,
+            );
             return null;
           }
-        } catch (_error) {
+        } catch (refreshError) {
           // Token refresh failure: Return null, no logging
+          oauthManagerLogger.debug(
+            () =>
+              `[FLOW] Token refresh FAILED for ${providerName}: ${refreshError instanceof Error ? refreshError.message : refreshError}`,
+          );
           return null;
         }
       }
 
       // 5. Return valid token
+      oauthManagerLogger.debug(
+        () => `[FLOW] Returning valid token for ${providerName}`,
+      );
       return token;
     } catch (error) {
+      oauthManagerLogger.debug(
+        () =>
+          `[FLOW] getOAuthToken() ERROR for ${providerName}: ${error instanceof Error ? error.message : error}`,
+      );
       // For unknown provider or other critical errors, throw
       if (
         error instanceof Error &&

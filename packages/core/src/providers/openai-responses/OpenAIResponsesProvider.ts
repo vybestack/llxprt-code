@@ -33,6 +33,7 @@ import {
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
+import { CODEX_SYSTEM_PROMPT } from './CODEX_PROMPT.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -143,12 +144,19 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
   override async getModels(): Promise<IModel[]> {
     const baseURL = this.getBaseURL() || 'https://api.openai.com/v1';
+    const isCodex = this.isCodexMode(baseURL);
 
-    // @plan PLAN-20251213-ISSUE160.P04
-    // Return hardcoded Codex models when in Codex mode
-    if (this.isCodexMode(baseURL)) {
-      this.logger.debug(() => 'Codex mode: returning hardcoded Codex models');
-      return CODEX_MODELS;
+    // @plan PLAN-20251214-ISSUE160.P05
+    // Debug logging for model listing
+    this.logger.debug(
+      () =>
+        `getModels() called: baseURL=${baseURL}, isCodexMode=${isCodex}, providerName=${this.name}`,
+    );
+
+    // @plan PLAN-20251214-ISSUE160.P06
+    // Fetch models from Codex API when in Codex mode
+    if (isCodex) {
+      return this.getCodexModels(baseURL);
     }
 
     // Try to fetch models dynamically from the API
@@ -213,6 +221,24 @@ export class OpenAIResponsesProvider extends BaseProvider {
       provider: 'openai-responses',
       supportedToolFormats: ['openai'],
     }));
+  }
+
+  /**
+   * Get Codex models
+   *
+   * Note: The Codex /models endpoint is protected by Cloudflare bot detection
+   * which blocks automated requests (even with proper auth headers).
+   * The /responses endpoint works fine, but /models returns a Cloudflare challenge.
+   * Therefore, we use a hardcoded list based on codex-rs/core/tests/suite/list_models.rs
+   *
+   * @plan PLAN-20251214-ISSUE160.P06
+   */
+  private async getCodexModels(_baseURL: string): Promise<IModel[]> {
+    this.logger.debug(
+      () =>
+        'Codex mode: returning hardcoded models (API blocked by Cloudflare)',
+    );
+    return CODEX_MODELS;
   }
 
   override getCurrentModel(): string {
@@ -466,21 +492,17 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Detect Codex mode and handle accordingly
     const isCodex = this.isCodexMode(baseURL);
 
-    // Build request input - handle Codex mode system prompt injection
+    // Build request input - filter out system messages for Codex (uses instructions field instead)
     let requestInput = input;
-    if (isCodex && systemPrompt) {
-      // In Codex mode, inject system prompt as first user message
+    if (isCodex) {
+      // In Codex mode, system prompt goes in instructions field, not input array
       requestInput = requestInput.filter((msg) => msg.role !== 'system');
-      const systemAsUser = {
-        role: 'user' as const,
-        content: `<system>\n${systemPrompt}\n</system>\n\nUser conversation begins:`,
-      };
-      requestInput.unshift(systemAsUser);
     }
 
     const request: {
       model: string;
       input: typeof requestInput;
+      instructions?: string;
       tools?: typeof responsesTools;
       stream: boolean;
       [key: string]: unknown;
@@ -495,17 +517,28 @@ export class OpenAIResponsesProvider extends BaseProvider {
       request.tools = responsesTools;
     }
 
-    // @plan PLAN-20251213-ISSUE160.P03
+    // @plan PLAN-20251214-ISSUE160.P05
     // Add Codex-specific request parameters
     if (isCodex) {
+      // Codex API requires the official system prompt in instructions field
+      request.instructions = CODEX_SYSTEM_PROMPT;
       request.store = false;
-      this.logger.debug(() => 'Codex mode: setting store=false');
+      this.logger.debug(
+        () => 'Codex mode: setting instructions and store=false',
+      );
     }
 
     const responsesURL = `${baseURL}/responses`;
     const requestBody = JSON.stringify(request);
+
+    // @plan PLAN-20251214-ISSUE160.P05
+    // Codex API requires Content-Type without charset suffix
+    const contentType = isCodex
+      ? 'application/json'
+      : 'application/json; charset=utf-8';
+
     const bodyBlob = new Blob([requestBody], {
-      type: 'application/json; charset=utf-8',
+      type: contentType,
     });
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
@@ -514,11 +547,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
     const customHeaders = this.getCustomHeaders();
     const headers: Record<string, string> = {
       Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Type': contentType,
       ...(customHeaders ?? {}),
     };
 
-    // @plan PLAN-20251213-ISSUE160.P03
+    // @plan PLAN-20251214-ISSUE160.P05
     // Add Codex-specific headers when in Codex mode
     if (isCodex) {
       const accountId = await this.getCodexAccountId();
