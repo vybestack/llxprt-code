@@ -601,12 +601,12 @@ describe('MultiProviderTokenStore - Behavioral Tests', () => {
      */
     it('should list all buckets for a provider', async () => {
       await tokenStore.saveToken('anthropic', workToken, 'default');
-      await tokenStore.saveToken('anthropic', personalToken, 'work@company.com');
       await tokenStore.saveToken(
         'anthropic',
-        workToken,
-        'personal@gmail.com',
+        personalToken,
+        'work@company.com',
       );
+      await tokenStore.saveToken('anthropic', workToken, 'personal@gmail.com');
 
       const buckets = await tokenStore.listBuckets('anthropic');
       expect(buckets).toHaveLength(3);
@@ -682,13 +682,14 @@ describe('MultiProviderTokenStore - Behavioral Tests', () => {
         'anthropic',
         'work@company.com',
       );
-      const geminiToken = await tokenStore.getToken('gemini', 'work@company.com');
+      const geminiToken = await tokenStore.getToken(
+        'gemini',
+        'work@company.com',
+      );
 
       expect(anthropicToken).toEqual(workToken);
       expect(geminiToken).toEqual(personalToken);
-      expect(anthropicToken?.access_token).not.toBe(
-        geminiToken?.access_token,
-      );
+      expect(anthropicToken?.access_token).not.toBe(geminiToken?.access_token);
     });
 
     /**

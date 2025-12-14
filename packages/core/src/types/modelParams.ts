@@ -24,9 +24,11 @@ export const AuthConfigSchema = z.discriminatedUnion('type', [
     type: z.literal('oauth'),
     buckets: z.array(z.string()).optional(),
   }),
-  z.object({
-    type: z.literal('apikey'),
-  }).strict(),
+  z
+    .object({
+      type: z.literal('apikey'),
+    })
+    .strict(),
 ]);
 
 /**

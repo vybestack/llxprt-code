@@ -25,7 +25,8 @@ let isOAuthProfile: unknown;
 try {
   // These imports will fail until the implementation is complete
   const imports = await import('../modelParams.js');
-  AuthConfigSchema = (imports as { AuthConfigSchema?: unknown }).AuthConfigSchema;
+  AuthConfigSchema = (imports as { AuthConfigSchema?: unknown })
+    .AuthConfigSchema;
   hasAuthConfig = (imports as { hasAuthConfig?: unknown }).hasAuthConfig;
   isOAuthProfile = (imports as { isOAuthProfile?: unknown }).isOAuthProfile;
 } catch {
@@ -369,7 +370,11 @@ describe('Multi-bucket failover scenarios', () => {
       ephemeralSettings: {},
       auth: {
         type: 'oauth',
-        buckets: ['primary@company.com', 'backup@company.com', 'emergency@personal.com'],
+        buckets: [
+          'primary@company.com',
+          'backup@company.com',
+          'emergency@personal.com',
+        ],
       },
     };
 
@@ -395,7 +400,12 @@ describe('Multi-bucket failover scenarios', () => {
     };
 
     // Order must be preserved for failover sequence
-    expect(profile.auth?.buckets).toEqual(['bucket1', 'bucket2', 'bucket3', 'bucket4']);
+    expect(profile.auth?.buckets).toEqual([
+      'bucket1',
+      'bucket2',
+      'bucket3',
+      'bucket4',
+    ]);
   });
 });
 

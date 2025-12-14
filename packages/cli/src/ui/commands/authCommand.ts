@@ -20,8 +20,161 @@ import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import {
+  type CommandArgumentSchema,
+  type CompleterFn,
+} from './schema/types.js';
+import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 
 const logger = new DebugLogger('llxprt:ui:auth-command');
+
+/**
+ * Get the OAuth manager instance
+ */
+function getOAuthManager(): OAuthManager {
+  const runtime = getRuntimeApi();
+  let oauthManager = runtime.getCliOAuthManager();
+
+  if (!oauthManager) {
+    const tokenStore = new MultiProviderTokenStore();
+    oauthManager = new OAuthManager(tokenStore);
+    oauthManager.registerProvider(new GeminiOAuthProvider());
+    oauthManager.registerProvider(new QwenOAuthProvider());
+    oauthManager.registerProvider(new AnthropicOAuthProvider());
+  }
+
+  return oauthManager;
+}
+
+/**
+ * Completer for provider names
+ */
+const providerCompleter: CompleterFn = withFuzzyFilter(async () => {
+  try {
+    const oauthManager = getOAuthManager();
+    const providers = oauthManager.getSupportedProviders();
+    return providers.map((provider) => ({
+      value: provider,
+      description: `Configure ${provider} OAuth`,
+    }));
+  } catch {
+    return [];
+  }
+});
+
+/**
+ * Completer for bucket names for a given provider
+ */
+const bucketCompleter: CompleterFn = withFuzzyFilter(
+  async (_ctx, _partial, tokens) => {
+    try {
+      const provider = tokens.tokens[0];
+      if (!provider) return [];
+
+      const oauthManager = getOAuthManager();
+      const buckets = await oauthManager.listBuckets(provider);
+      return buckets.map((bucket) => ({
+        value: bucket,
+        description: `OAuth bucket: ${bucket}`,
+      }));
+    } catch {
+      return [];
+    }
+  },
+);
+
+/**
+ * Completer for logout command (buckets + --all flag)
+ */
+const logoutCompleter: CompleterFn = withFuzzyFilter(
+  async (_ctx, _partial, tokens) => {
+    try {
+      const provider = tokens.tokens[0];
+      if (!provider) return [];
+
+      const oauthManager = getOAuthManager();
+      const buckets = await oauthManager.listBuckets(provider);
+      const options = [
+        { value: '--all', description: 'Logout from all buckets' },
+        ...buckets.map((bucket) => ({
+          value: bucket,
+          description: `Logout from bucket: ${bucket}`,
+        })),
+      ];
+      return options;
+    } catch {
+      return [];
+    }
+  },
+);
+
+/**
+ * Command schema for auth command autocomplete
+ */
+const authCommandSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'provider',
+    description: 'Select OAuth provider',
+    completer: providerCompleter,
+    next: [
+      {
+        kind: 'literal',
+        value: 'login',
+        description: 'Login to provider with optional bucket',
+        next: [
+          {
+            kind: 'value',
+            name: 'bucket',
+            description: 'Bucket name (optional)',
+            completer: bucketCompleter,
+          },
+        ],
+      },
+      {
+        kind: 'literal',
+        value: 'logout',
+        description: 'Logout from provider',
+        next: [
+          {
+            kind: 'value',
+            name: 'bucket-or-flag',
+            description: 'Bucket name or --all',
+            completer: logoutCompleter,
+          },
+        ],
+      },
+      {
+        kind: 'literal',
+        value: 'status',
+        description: 'Show authentication status and buckets',
+      },
+      {
+        kind: 'literal',
+        value: 'switch',
+        description: 'Switch to a different bucket',
+        next: [
+          {
+            kind: 'value',
+            name: 'bucket',
+            description: 'Bucket name to switch to',
+            completer: bucketCompleter,
+          },
+        ],
+      },
+      {
+        kind: 'literal',
+        value: 'enable',
+        description: 'Enable OAuth for provider',
+      },
+      {
+        kind: 'literal',
+        value: 'disable',
+        description: 'Disable OAuth for provider',
+      },
+    ],
+  },
+];
 
 export class AuthCommandExecutor {
   constructor(private oauthManager: OAuthManager) {}
@@ -482,9 +635,9 @@ export class AuthCommandExecutor {
 
 export const authCommand: SlashCommand = {
   name: 'auth',
-  description:
-    'toggle OAuth enablement for providers (gemini, qwen, anthropic)',
+  description: 'Manage OAuth authentication for providers',
   kind: CommandKind.BUILT_IN,
+  schema: authCommandSchema,
   action: async (context, args) => {
     const runtime = getRuntimeApi();
     // Ensure provider manager is initialized (throws if bootstrap skipped registration)

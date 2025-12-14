@@ -7,7 +7,11 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { type OAuthToken, OAuthTokenSchema, type BucketStats } from './types.js';
+import {
+  type OAuthToken,
+  OAuthTokenSchema,
+  type BucketStats,
+} from './types.js';
 
 /**
  * Interface for multi-provider OAuth token storage
@@ -19,7 +23,11 @@ export interface TokenStore {
    * @param token - The OAuth token to save
    * @param bucket - Optional bucket name for multi-account support
    */
-  saveToken(provider: string, token: OAuthToken, bucket?: string): Promise<void>;
+  saveToken(
+    provider: string,
+    token: OAuthToken,
+    bucket?: string,
+  ): Promise<void>;
 
   /**
    * Retrieve an OAuth token for a specific provider
@@ -72,7 +80,11 @@ export class MultiProviderTokenStore implements TokenStore {
   /**
    * Save an OAuth token for a specific provider
    */
-  async saveToken(provider: string, token: OAuthToken, bucket?: string): Promise<void> {
+  async saveToken(
+    provider: string,
+    token: OAuthToken,
+    bucket?: string,
+  ): Promise<void> {
     // Validate provider name
     if (!provider || provider.trim() === '') {
       throw new Error('Provider name cannot be empty');
@@ -120,7 +132,10 @@ export class MultiProviderTokenStore implements TokenStore {
   /**
    * Retrieve an OAuth token for a specific provider
    */
-  async getToken(provider: string, bucket?: string): Promise<OAuthToken | null> {
+  async getToken(
+    provider: string,
+    bucket?: string,
+  ): Promise<OAuthToken | null> {
     // Validate bucket name if provided
     if (bucket) {
       this.validateBucketName(bucket);
@@ -201,7 +216,9 @@ export class MultiProviderTokenStore implements TokenStore {
       const files = await fs.readdir(this.basePath);
       const providerPrefix = `${provider}`;
       const buckets = files
-        .filter((file) => file.startsWith(providerPrefix) && file.endsWith('.json'))
+        .filter(
+          (file) => file.startsWith(providerPrefix) && file.endsWith('.json'),
+        )
         .map((file) => {
           const name = file.slice(0, -5); // Remove .json extension
           if (name === provider) {
@@ -230,7 +247,10 @@ export class MultiProviderTokenStore implements TokenStore {
    * Get usage statistics for a specific bucket
    * Returns placeholder statistics for now
    */
-  async getBucketStats(provider: string, bucket: string): Promise<BucketStats | null> {
+  async getBucketStats(
+    provider: string,
+    bucket: string,
+  ): Promise<BucketStats | null> {
     // Validate bucket name if provided
     if (bucket) {
       this.validateBucketName(bucket);
@@ -297,7 +317,7 @@ export class MultiProviderTokenStore implements TokenStore {
     const invalidChars = /[:/\\<>"|?*]/;
     if (invalidChars.test(bucket)) {
       throw new Error(
-        `Invalid bucket name: "${bucket}". Bucket names cannot contain: : / \\ < > " | ? *`
+        `Invalid bucket name: "${bucket}". Bucket names cannot contain: : / \\ < > " | ? *`,
       );
     }
   }
