@@ -65,8 +65,8 @@ export interface TokenStore {
 export class MultiProviderTokenStore implements TokenStore {
   private readonly basePath: string;
 
-  constructor() {
-    this.basePath = join(homedir(), '.llxprt', 'oauth');
+  constructor(basePath?: string) {
+    this.basePath = basePath ?? join(homedir(), '.llxprt', 'oauth');
   }
 
   /**

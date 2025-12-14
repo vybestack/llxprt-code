@@ -402,14 +402,14 @@ export class OAuthManager {
    */
   async getToken(
     providerName: string,
-    _metadata?: unknown,
+    bucket?: string | unknown,
   ): Promise<string | null> {
     // Check if OAuth is enabled for this provider
     if (!this.isOAuthEnabled(providerName)) {
       return null;
     }
 
-    const token = await this.getOAuthToken(providerName);
+    const token = await this.getOAuthToken(providerName, bucket);
 
     // Special handling for different providers
     // @plan:PLAN-20250823-AUTHFIXES.P15
@@ -473,12 +473,12 @@ export class OAuthManager {
   /**
    * Get OAuth token object for a specific provider
    * @param providerName - Name of the provider
-   * @param _metadata - Optional metadata for token request (unused in CLI implementation)
+   * @param bucket - Optional bucket name for multi-account support (if string), or metadata (for backward compatibility)
    * @returns OAuth token if available, null otherwise
    */
   async getOAuthToken(
     providerName: string,
-    _metadata?: unknown,
+    bucket?: string | unknown,
   ): Promise<OAuthToken | null> {
     if (!providerName || typeof providerName !== 'string') {
       throw new Error('Provider name must be a non-empty string');
@@ -489,16 +489,24 @@ export class OAuthManager {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
+    // Determine the bucket to use: explicit bucket parameter or session bucket override
+    let bucketToUse: string | undefined;
+    if (typeof bucket === 'string') {
+      bucketToUse = bucket;
+    } else if (this.sessionBuckets.has(providerName)) {
+      bucketToUse = this.sessionBuckets.get(providerName);
+    }
+
     try {
-      // 1. Try to get token from store
-      const token = await this.tokenStore.getToken(providerName);
+      // 1. Try to get token from store with bucket parameter
+      const token = await this.tokenStore.getToken(providerName, bucketToUse);
       if (!token) {
         return null;
       }
 
-      // 2. Check if token expires within 30 seconds (30000ms)
-      const now = Date.now();
-      const thirtySecondsFromNow = now + 30000;
+      // 2. Check if token expires within 30 seconds
+      const nowInSeconds = Math.floor(Date.now() / 1000);
+      const thirtySecondsFromNow = nowInSeconds + 30;
 
       if (token.expiry <= thirtySecondsFromNow) {
         // 3. Token is expired or about to expire, try refresh
@@ -506,7 +514,7 @@ export class OAuthManager {
           const refreshedToken = await provider.refreshIfNeeded();
           if (refreshedToken) {
             // 4. Update stored token if refreshed
-            await this.tokenStore.saveToken(providerName, refreshedToken);
+            await this.tokenStore.saveToken(providerName, refreshedToken, bucketToUse);
             return refreshedToken;
           } else {
             // Refresh failed, return null
