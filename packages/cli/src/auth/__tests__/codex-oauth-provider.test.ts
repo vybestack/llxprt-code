@@ -88,10 +88,8 @@ describe('CodexOAuthProvider', () => {
 
       const retrievedToken = await provider.getToken();
       expect(retrievedToken).not.toBeNull();
-      if (retrievedToken) {
-        expect(retrievedToken.access_token).toBe('test-access-token');
-        expect(retrievedToken.account_id).toBe('test-account-id');
-      }
+      expect(retrievedToken?.access_token).toBe('test-access-token');
+      expect(retrievedToken?.account_id).toBe('test-account-id');
     });
 
     it('should validate token with CodexOAuthTokenSchema', async () => {
@@ -134,9 +132,7 @@ describe('CodexOAuthProvider', () => {
 
       const result = await provider.refreshIfNeeded();
       expect(result).not.toBeNull();
-      if (result) {
-        expect(result.access_token).toBe('test-access-token');
-      }
+      expect(result?.access_token).toBe('test-access-token');
     });
 
     it('should refresh expired token automatically', async () => {

@@ -433,9 +433,8 @@ describe('startInteractiveUI', () => {
 
   it('should perform all startup tasks in correct order', async () => {
     const { getCliVersion } = await import('./utils/version.js');
-    const { detectAndEnableKittyProtocol } = await import(
-      './ui/utils/kittyProtocolDetector.js'
-    );
+    const { detectAndEnableKittyProtocol } =
+      await import('./ui/utils/kittyProtocolDetector.js');
     const { checkForUpdates } = await import('./ui/utils/updateCheck.js');
     const { registerCleanup } = await import('./utils/cleanup.js');
 

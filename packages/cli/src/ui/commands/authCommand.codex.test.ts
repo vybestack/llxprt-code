@@ -77,9 +77,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
 
       // Then: Should show provider status (not error)
       expect(result.type).toBe('message');
-      if (result.type === 'message') {
-        expect(result.messageType).toBe('info');
-      }
+      expect((result as { messageType?: string }).messageType).toBe('info');
       expect(mockIsEnabled).toHaveBeenCalledWith('codex');
     });
   });

@@ -20,8 +20,9 @@ import {
 /**
  * A declarative tool that supports a modify operation.
  */
-export interface ModifiableDeclarativeTool<TParams extends object>
-  extends DeclarativeTool<TParams, ToolResult> {
+export interface ModifiableDeclarativeTool<
+  TParams extends object,
+> extends DeclarativeTool<TParams, ToolResult> {
   getModifyContext(abortSignal: AbortSignal): ModifyContext<TParams>;
 }
 

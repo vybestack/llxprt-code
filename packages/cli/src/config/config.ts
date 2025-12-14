@@ -1266,9 +1266,8 @@ export async function loadCliConfig(
 
   // Register provider infrastructure AFTER runtime context but BEFORE any profile application
   // This is critical for applyProfileSnapshot to access the provider manager
-  const { registerCliProviderInfrastructure } = await import(
-    '../runtime/runtimeSettings.js'
-  );
+  const { registerCliProviderInfrastructure } =
+    await import('../runtime/runtimeSettings.js');
   if (runtimeState.oauthManager) {
     registerCliProviderInfrastructure(
       runtimeState.providerManager,
@@ -1449,9 +1448,8 @@ export async function loadCliConfig(
       bootstrapArgs.baseurlOverride ||
       (bootstrapArgs.setOverrides && bootstrapArgs.setOverrides.length > 0))
   ) {
-    const { applyCliArgumentOverrides } = await import(
-      '../runtime/runtimeSettings.js'
-    );
+    const { applyCliArgumentOverrides } =
+      await import('../runtime/runtimeSettings.js');
     await applyCliArgumentOverrides(
       {
         key: argv.key,
