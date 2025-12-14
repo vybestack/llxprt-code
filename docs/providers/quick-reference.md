@@ -48,25 +48,29 @@ Examples:
 - Large coding session: context-limit 121000, max_tokens 10000 → prompt budget ≈ 110k (minus safety).
 - Writing mode: context-limit 200000, max_tokens 4000 → prompt budget ≈ 196k (minus safety).
 
+> **Reasoning tips:**  
+> MiniMax M2 relies on interleaved thinking tokens, so keep prior reasoning in context (`/set reasoning.stripFromContext none`).  
+> Kimi K2 can trim older reasoning when you need to manage its 256k window (`/set reasoning.stripFromContext allButLast` or `all`) while still surfacing recent thinking blocks.
+
 ### OpenAI
 
 ```bash
 /provider openai
 /key sk-your-openai-key
-/model o3-mini
+/model gpt-5
 ```
 
 #### Model geometry & recommended settings (OpenAI)
 
-Common models: o3-mini, o1-preview, gpt-4o, gpt-4.1
+Common models: gpt-5, gpt-5-mini, gpt-5-nano, gpt-5-thinking, gpt-5-pro, gpt-5.2-instant
 
 Guidance:
 
 - Start with context-limit 200000 unless you know the model's smaller limit; adjust down if you get limit errors.
 - Typical defaults:
-  - gpt-4.1: context-limit 200000
-  - gpt-4o / gpt-4o-mini: context-limit 128000
-- Example setup:
+  - gpt-5/gpt-5-thinking: context-limit 200000
+  - gpt-5.2-instant / gpt-5.2-pro: context-limit 165000
+  - Example setup:
 
 ```bash
 /set context-limit 200000
@@ -80,13 +84,13 @@ Guidance:
 {
   "version": 1,
   "provider": "openai",
-  "model": "o3-mini",
+  "model": "gpt-5",
   "modelParams": { "temperature": 0.2, "max_tokens": 4096 },
   "ephemeralSettings": { "context-limit": 200000 }
 }
 ```
 
-**Common models:** `o3-mini`, `o1-preview`, `gpt-4o`, `gpt-4.1`
+**Common models:** `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5-thinking`, `gpt-5-pro`, `gpt-5.2-instant`
 
 **Environment variable:** `export OPENAI_API_KEY=sk-...`
 
@@ -97,7 +101,7 @@ Guidance:
 ```bash
 /provider anthropic
 /key sk-ant-your-key
-/model claude-sonnet-4-20250115
+/model claude-sonnet-4-5-20250929
 ```
 
 #### Or OAuth (Claude Pro/Max)
@@ -110,7 +114,7 @@ Note: OAuth is lazy - authentication happens when you first use the provider.
 
 #### Model geometry & recommended settings (Anthropic)
 
-Common models: claude-sonnet-4-20250115, claude-opus-4, claude-sonnet-3.5
+Common models: claude-haiku-4-5-20251001, claude-sonnet-4-5-20250929, claude-opus-4-5-20251101
 
 Guidance:
 
@@ -119,9 +123,9 @@ Guidance:
 - Example setup:
 
 ```bash
-/set context-limit 200000
-/set modelparam max_tokens 4096
-/set modelparam temperature 0.7
+ /set context-limit 200000
+ /set modelparam max_tokens 4096
+ /set modelparam temperature 0.7
 ```
 
 **Profile JSON:**
@@ -130,13 +134,13 @@ Guidance:
 {
   "version": 1,
   "provider": "anthropic",
-  "model": "claude-sonnet-4-20250115",
+  "model": "claude-sonnet-4-5-20250929",
   "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
   "ephemeralSettings": { "context-limit": 200000 }
 }
 ```
 
-**Common models:** `claude-sonnet-4-20250115`, `claude-opus-4`, `claude-sonnet-3.5`
+**Common models:** `claude-haiku-4-5-20251001`, `claude-sonnet-4-5-20250929`, `claude-opus-4-5-20251101`
 
 **Environment variable:** `export ANTHROPIC_API_KEY=sk-ant-...`
 
@@ -144,19 +148,25 @@ Guidance:
 
 #### Using Alias
 
-````bash
+```bash
+/provider gemini
+/key your-gemini-key
+/model gemini-2.5-flash
+```
 
 #### Model geometry & recommended settings (Gemini)
 
-Common models: gemini-2.0-flash, gemini-pro
+Common models: gemini-2.5-flash, gemini-2.5-flash-lite, gemini-2.5-pro
 
 Guidance:
+
 - Use context-limit 200000 as a safe starting value; lower if you see provider limit errors.
 - Example setup:
+
 ```bash
 /set context-limit 200000
 /set modelparam max_tokens 4096   # Gemini often uses camelCase params in native SDKs, but LLxprt forwards what you set
-````
+```
 
 **Profile JSON:**
 
@@ -164,7 +174,7 @@ Guidance:
 {
   "version": 1,
   "provider": "gemini",
-  "model": "gemini-2.0-flash",
+  "model": "gemini-2.5-flash",
   "modelParams": { "temperature": 0.7, "max_tokens": 4096 },
   "ephemeralSettings": { "context-limit": 200000 }
 }
@@ -196,21 +206,15 @@ Guidance:
 }
 ```
 
-/provider gemini
-/key your-gemini-key
-/model gemini-2.0-flash
-
-````
-
 #### Or OAuth
 
 ```bash
 /auth gemini enable
-````
+```
 
 Note: OAuth is lazy - authentication happens when you first use the provider.
 
-**Common models:** `gemini-2.0-flash`, `gemini-pro`
+**Common models:** `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.5-pro`
 
 **Environment variable:** `export GEMINI_API_KEY=...`
 
