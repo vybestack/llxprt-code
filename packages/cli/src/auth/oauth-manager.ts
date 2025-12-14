@@ -6,10 +6,13 @@
 
 import { OAuthToken, AuthStatus, TokenStore } from './types.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
+import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
 import {
   getSettingsService,
   flushRuntimeAuthScope,
   DebugLogger,
+  MessageBus,
+  Config,
 } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:oauth:manager');
@@ -109,6 +112,10 @@ export class OAuthManager {
   private inMemoryOAuthState: Map<string, boolean>;
   // Session bucket overrides (in-memory only)
   private sessionBuckets: Map<string, string>;
+  // Getter function for message bus (lazy resolution for TUI prompts)
+  private getMessageBus?: () => MessageBus | undefined;
+  // Getter function for config (lazy resolution for bucket failover handler)
+  private getConfig?: () => Config | undefined;
 
   constructor(tokenStore: TokenStore, settings?: LoadedSettings) {
     this.providers = new Map();
@@ -116,6 +123,25 @@ export class OAuthManager {
     this.settings = settings;
     this.inMemoryOAuthState = new Map();
     this.sessionBuckets = new Map();
+  }
+
+  /**
+   * Set the message bus getter for interactive TUI prompts
+   * Uses a getter function to enable lazy resolution after TUI is initialized
+   * @param getter - Function that returns the message bus instance from Config
+   */
+  setMessageBus(getter: () => MessageBus | undefined): void {
+    this.getMessageBus = getter;
+  }
+
+  /**
+   * Set the config getter for bucket failover handler setup
+   * Uses a getter function to enable lazy resolution
+   * @plan PLAN-20251213issue490
+   * @param getter - Function that returns the Config instance
+   */
+  setConfigGetter(getter: () => Config | undefined): void {
+    this.getConfig = getter;
   }
 
   /**
@@ -932,6 +958,13 @@ export class OAuthManager {
     const getEphemeralSetting = <T>(key: string): T | undefined =>
       getRuntimeEphemeralSetting(key) as T | undefined;
 
+    // Debug: log the raw setting value
+    const rawBucketPrompt = getRuntimeEphemeralSetting('auth-bucket-prompt');
+    logger.debug('Checking auth-bucket-prompt setting', {
+      rawValue: rawBucketPrompt,
+      typeof: typeof rawBucketPrompt,
+    });
+
     // Callback to authenticate a single bucket
     const onAuthBucket = async (
       provider: string,
@@ -939,22 +972,105 @@ export class OAuthManager {
       index: number,
       total: number,
     ): Promise<void> => {
-      logger.debug(
-        `Authenticating bucket ${index} of ${total}: ${bucket}`,
-      );
+      // Show visible console output for user
+      console.log(`\n=== Bucket ${index} of ${total}: ${bucket} ===\n`);
+
+      logger.debug(`Authenticating bucket ${index} of ${total}: ${bucket}`);
       await this.authenticate(provider, bucket);
     };
 
-    // Callback for prompting (not implemented for CLI - would need TUI integration)
+    // Callback for prompting - uses TUI dialog if available, falls back to delay
     const onPrompt = async (
-      _provider: string,
-      _bucket: string,
-    ): Promise<boolean> =>
-      // For now, always continue (no user prompting in non-interactive mode)
-      true;
+      provider: string,
+      bucket: string,
+    ): Promise<boolean> => {
+      // Try interactive TUI prompt if message bus getter is available
+      // Use lazy resolution to get message bus after TUI is initialized
+      const messageBus = this.getMessageBus?.();
+      if (messageBus) {
+        try {
+          logger.debug('Requesting bucket auth confirmation via message bus', {
+            provider,
+            bucket,
+          });
 
-    // Callback for delay
+          // Request confirmation via message bus with a timeout
+          // If TUI is ready, it will respond; otherwise we fall back to delay
+          const confirmPromise = messageBus.requestBucketAuthConfirmation(
+            provider,
+            bucket,
+            buckets.indexOf(bucket) + 1,
+            buckets.length,
+          );
+
+          // Race with a 3-second timeout to give TUI time to respond
+          const timeoutPromise = new Promise<'timeout'>((resolve) =>
+            setTimeout(() => resolve('timeout'), 3000),
+          );
+
+          const result = await Promise.race([confirmPromise, timeoutPromise]);
+
+          if (result !== 'timeout') {
+            // TUI responded - return the confirmation result
+            logger.debug('TUI responded to bucket auth confirmation', {
+              result,
+            });
+            return result;
+          }
+          // TUI didn't respond in time - fall back to delay
+          logger.debug('TUI not ready, falling back to delay-based prompt');
+        } catch (error) {
+          logger.debug('Error using message bus, falling back to delay', {
+            error,
+          });
+        }
+      } else {
+        logger.debug('No message bus available');
+      }
+
+      // TUI not available or timed out - try stdin if TTY and prompt enabled
+      const showPrompt = getEphemeralSetting<boolean>('auth-bucket-prompt');
+      logger.debug('Checking TTY prompt fallback', {
+        showPrompt,
+        isTTY: process.stdin.isTTY,
+      });
+      if (showPrompt && process.stdin.isTTY) {
+        // Interactive terminal - wait for keypress
+        console.log(`\nReady to authenticate bucket: ${bucket}`);
+        console.log('Press ENTER to continue, or Ctrl+C to cancel...\n');
+        await new Promise<void>((resolve) => {
+          const onData = (): void => {
+            process.stdin.removeListener('data', onData);
+            if (process.stdin.isTTY) {
+              process.stdin.setRawMode(false);
+            }
+            process.stdin.pause();
+            resolve();
+          };
+          if (process.stdin.isTTY) {
+            process.stdin.setRawMode(true);
+          }
+          process.stdin.resume();
+          process.stdin.once('data', onData);
+        });
+        return true;
+      }
+
+      // Fall back to delay-based prompting (no TTY or prompt disabled)
+      const delay = getEphemeralSetting<number>('auth-bucket-delay') ?? 5000;
+      console.log(`\nReady to authenticate bucket: ${bucket}`);
+      console.log(
+        `(waiting ${delay / 1000} seconds - switch browser window if needed...)\n`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return true;
+    };
+
+    // Callback for delay with visible console output
     const onDelay = async (ms: number, bucket: string): Promise<void> => {
+      // Show visible console output for user
+      console.log(`(waiting ${ms / 1000} seconds before opening browser...)\n`);
+
       logger.debug(`Waiting ${ms}ms before authenticating bucket: ${bucket}`);
       await new Promise((resolve) => setTimeout(resolve, ms));
     };
@@ -986,5 +1102,27 @@ export class OAuthManager {
     logger.debug(
       `Successfully authenticated ${result.authenticatedBuckets.length} buckets for ${providerName}`,
     );
+
+    // Set up bucket failover handler if we have multiple buckets and config is available
+    // @plan PLAN-20251213issue490
+    if (buckets.length > 1) {
+      const config = this.getConfig?.();
+      if (config) {
+        const handler = new BucketFailoverHandlerImpl(
+          buckets,
+          providerName,
+          this,
+        );
+        config.setBucketFailoverHandler(handler);
+        logger.debug('Bucket failover handler configured', {
+          provider: providerName,
+          bucketCount: buckets.length,
+        });
+      } else {
+        logger.debug(
+          'Config not available, bucket failover handler not configured',
+        );
+      }
+    }
   }
 }

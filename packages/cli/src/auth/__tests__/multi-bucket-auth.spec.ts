@@ -90,9 +90,11 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       });
 
       expect(result.authenticatedBuckets).toHaveLength(2);
-      expect(delayLog).toHaveLength(1);
+      expect(delayLog).toHaveLength(2); // Delay before ALL buckets including first
       expect(delayLog[0].ms).toBe(5000);
-      expect(delayLog[0].bucket).toBe('bucket2');
+      expect(delayLog[0].bucket).toBe('bucket1');
+      expect(delayLog[1].ms).toBe(5000);
+      expect(delayLog[1].bucket).toBe('bucket2');
     });
 
     /**
@@ -111,8 +113,9 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       });
 
       expect(result.authenticatedBuckets).toHaveLength(2);
-      expect(delayLog).toHaveLength(1);
+      expect(delayLog).toHaveLength(2); // Delay before ALL buckets including first
       expect(delayLog[0].ms).toBe(10000);
+      expect(delayLog[1].ms).toBe(10000);
     });
 
     /**
@@ -264,9 +267,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         buckets: ['bucket1', 'bucket2', 'bucket3'],
       });
 
-      expect(delayLog).toHaveLength(2);
-      expect(delayLog[0]).toEqual({ ms: 3000, bucket: 'bucket2' });
-      expect(delayLog[1]).toEqual({ ms: 3000, bucket: 'bucket3' });
+      expect(delayLog).toHaveLength(3); // Delay before ALL buckets including first
+      expect(delayLog[0]).toEqual({ ms: 3000, bucket: 'bucket1' });
+      expect(delayLog[1]).toEqual({ ms: 3000, bucket: 'bucket2' });
+      expect(delayLog[2]).toEqual({ ms: 3000, bucket: 'bucket3' });
     });
   });
 
@@ -288,12 +292,14 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         ],
       });
 
-      expect(authLog[0]).toContain('bucket 1/3');
-      expect(authLog[0]).toContain('work@company.com');
-      expect(authLog[2]).toContain('bucket 2/3');
-      expect(authLog[2]).toContain('personal@gmail.com');
-      expect(authLog[4]).toContain('bucket 3/3');
-      expect(authLog[4]).toContain('backup@example.com');
+      // With delays before each bucket, authLog has: [delay, auth, delay, auth, delay, auth]
+      // So bucket 1 auth is at index 1, bucket 2 at index 3, bucket 3 at index 5
+      expect(authLog[1]).toContain('bucket 1/3');
+      expect(authLog[1]).toContain('work@company.com');
+      expect(authLog[3]).toContain('bucket 2/3');
+      expect(authLog[3]).toContain('personal@gmail.com');
+      expect(authLog[5]).toContain('bucket 3/3');
+      expect(authLog[5]).toContain('backup@example.com');
     });
 
     /**
@@ -598,7 +604,7 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
       expect(result.authenticatedBuckets).toHaveLength(3);
       expect(result.failedBuckets).toHaveLength(0);
       expect(result.cancelled).toBe(false);
-      expect(delayLog).toHaveLength(2);
+      expect(delayLog).toHaveLength(3); // Delay before ALL buckets including first
       expect(delayLog.every((d) => d.ms === 1000)).toBe(true);
     });
 

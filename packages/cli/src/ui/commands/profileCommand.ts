@@ -139,9 +139,7 @@ const lbMemberProfileSchema: CommandArgumentSchema = [
 
 // Recursive schema for unlimited bucket selection
 // Each bucket entry has a 'next' that points back to the same structure
-const createBucketEntry = (
-  depth: number,
-): CommandArgumentSchema[number] => ({
+const createBucketEntry = (depth: number): CommandArgumentSchema[number] => ({
   kind: 'value',
   name: depth === 0 ? 'bucket1' : `bucket${depth + 1}`,
   description:

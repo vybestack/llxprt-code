@@ -17,7 +17,10 @@ import {
   SettingsService,
   createProviderRuntimeContext,
   getSettingsService,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
+
+const logger = new DebugLogger('llxprt:provider:manager:instance');
 import { IFileSystem, NodeFileSystem } from './IFileSystem.js';
 import {
   Settings,
@@ -238,9 +241,23 @@ export function createProviderManager(
 
   const { config, allowBrowserEnvironment = false, addItem } = options;
 
+  logger.debug('createProviderManager config check', {
+    hasConfig: !!config,
+    configType: config?.constructor?.name,
+  });
+
   if (config) {
     manager.setConfig(config);
     config.setProviderManager(manager);
+    // Set message bus getter on OAuthManager for interactive TUI prompts
+    // Uses a getter function to enable lazy resolution after TUI is initialized
+    oauthManager.setMessageBus(() => config.getMessageBus());
+    // Set config getter on OAuthManager for bucket failover handler setup
+    // @plan PLAN-20251213issue490
+    oauthManager.setConfigGetter(() => config);
+    logger.debug('OAuthManager message bus getter configured');
+  } else {
+    logger.debug('No config provided, message bus getter NOT configured');
   }
 
   const authOnlyEnabled = resolveAuthOnlyFlag(config, loadedSettings);

@@ -594,9 +594,17 @@ export function registerCliProviderInfrastructure(
   if (config) {
     config.setProviderManager(manager);
     manager.setConfig(config);
+    // Set message bus getter on OAuthManager for interactive TUI prompts
+    // This enables the bucket auth confirmation dialog to work via message bus
+    // @plan PLAN-20251213issue490
+    oauthManager.setMessageBus(() => config.getMessageBus());
+    oauthManager.setConfigGetter(() => config);
     logger.debug(
       () =>
         `[cli-runtime] ProviderManager#setConfig applied (loggingEnabled=${config.getConversationLoggingEnabled?.() ?? false})`,
+    );
+    logger.debug(
+      () => `[cli-runtime] OAuthManager message bus getter configured`,
     );
     upsertRuntimeEntry(runtimeId, { config });
   }

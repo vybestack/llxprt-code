@@ -116,10 +116,17 @@ export class MultiBucketAuthenticator {
       options.delay ??
       this.getEphemeralSetting<number>('auth-bucket-delay') ??
       5000;
+    const rawShowPromptSetting =
+      this.getEphemeralSetting<boolean>('auth-bucket-prompt');
     const effectiveShowPrompt =
-      options.showPrompt ??
-      this.getEphemeralSetting<boolean>('auth-bucket-prompt') ??
-      false;
+      options.showPrompt ?? rawShowPromptSetting ?? false;
+
+    logger.debug('Multi-bucket auth settings', {
+      optionsShowPrompt: options.showPrompt,
+      rawShowPromptSetting,
+      effectiveShowPrompt,
+      effectiveDelay,
+    });
 
     for (let i = 0; i < buckets.length; i++) {
       if (this.cancelled) {
@@ -137,7 +144,6 @@ export class MultiBucketAuthenticator {
       }
 
       const bucket = buckets[i];
-      const isFirst = i === 0;
 
       if (effectiveShowPrompt) {
         const shouldContinue = await this.onPrompt(provider, bucket);
@@ -151,7 +157,8 @@ export class MultiBucketAuthenticator {
             error: firstError,
           };
         }
-      } else if (!isFirst) {
+      } else {
+        // Apply delay before EVERY bucket (including first) so user can pick browser
         await this.onDelay(effectiveDelay, bucket);
       }
 
