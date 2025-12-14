@@ -31,6 +31,10 @@ export default tseslint.config(
     // Global ignores
     ignores: [
       'node_modules/*',
+      '.yalc/**',
+      '**/.yalc/**',
+      'yalc.lock',
+      '**/yalc.lock',
       '.integration-tests/**',
       'eslint.config.js',
       'packages/**/dist/**',
