@@ -332,14 +332,8 @@ export function createProviderManager(
         ? providerBaseUrl
         : process.env.OPENAI_BASE_URL;
 
-  if (process.env.DEBUG || process.env.VERBOSE) {
-    console.log('[ProviderManager] Initializing OpenAI provider with:', {
-      hasApiKey: !!openaiApiKey,
-      hasEphemeralAuthKey: !!ephemeralAuthKey,
-      hasProviderApiKey: !!openaiProviderApiKey,
-      baseUrl: openaiBaseUrl || 'default',
-    });
-  }
+  // Debug logging removed - was using console.log which violates project guidelines
+  // Use DebugLogger if detailed logging is needed here
 
   const openaiProviderConfig: ProviderConfigWithToolMode = {
     enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
@@ -384,11 +378,13 @@ export function createProviderManager(
   void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
 
   // Always register OpenAI Responses provider (openaiResponsesEnabled setting is obsolete)
+  // Pass oauthManager for Codex mode support
   manager.registerProvider(
     getOpenAIResponsesProvider(
       openaiApiKey,
       openaiBaseUrl,
       allowBrowserEnvironment,
+      oauthManager,
     ),
   );
 
@@ -806,11 +802,13 @@ function getOpenAIResponsesProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   allowBrowserEnvironment: boolean,
+  oauthManager?: OAuthManager,
 ): OpenAIResponsesProvider {
   const openaiResponsesProvider = new OpenAIResponsesProvider(
     openaiApiKey || undefined,
     openaiBaseUrl,
     { allowBrowserEnvironment },
+    oauthManager,
   );
   return openaiResponsesProvider;
 }

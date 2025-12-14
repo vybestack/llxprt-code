@@ -6,7 +6,9 @@
 #
 # Prerequisites: curl, openssl, nc (netcat), base64
 
-set -e
+set -euo pipefail
+# Ensure set -e propagates into command substitutions
+shopt -s inherit_errexit 2>/dev/null || true
 
 # ============================================================================
 # Configuration (from codex-rs source)
@@ -46,10 +48,10 @@ generate_state() {
     openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n' || true
 }
 
-# URL encode a string
+# URL encode a string (using stdin to avoid command injection)
 urlencode() {
     local string="${1}"
-    python3 -c "import urllib.parse; print(urllib.parse.quote('${string}', safe=''))"
+    printf '%s' "${string}" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))"
 }
 
 # ============================================================================
@@ -216,10 +218,11 @@ else
     echo "API Key received: ${CODEX_API_KEY:0:20}..."
 fi
 
-# Save tokens
+# Save tokens with secure permissions
 echo ""
 echo "Saving tokens to ${AUTH_FILE}..."
 mkdir -p "${AUTH_DIR}"
+chmod 700 "${AUTH_DIR}"  # Restrict directory access to owner only
 
 cat > "${AUTH_FILE}" << EOF
 {
@@ -232,6 +235,7 @@ cat > "${AUTH_FILE}" << EOF
     "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 }
 EOF
+chmod 600 "${AUTH_FILE}"  # Restrict file access to owner only
 
 echo ""
 echo "=== Authentication Complete ==="

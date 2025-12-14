@@ -38,6 +38,8 @@ describe('AuthCommand Codex OAuth Integration', () => {
         .mockReturnValue(['gemini', 'qwen', 'anthropic', 'codex']),
       getHigherPriorityAuth: vi.fn(),
       logout: vi.fn(),
+      clearSessionBucket: vi.fn(),
+      listBuckets: vi.fn().mockResolvedValue([]),
     } as unknown as OAuthManager;
 
     executor = new AuthCommandExecutor(mockOAuthManager);
@@ -187,8 +189,8 @@ describe('AuthCommand Codex OAuth Integration', () => {
       // When: User enters /auth codex logout
       const result = await executor.execute(mockContext, 'codex logout');
 
-      // Then: Should logout
-      expect(mockLogout).toHaveBeenCalledWith('codex');
+      // Then: Should logout (undefined bucket means default/no bucket)
+      expect(mockLogout).toHaveBeenCalledWith('codex', undefined);
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',

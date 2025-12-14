@@ -6,7 +6,9 @@
 #
 # Prerequisites: curl, jq (optional, for pretty-printing)
 
-set -e
+set -euo pipefail
+# Ensure set -e propagates into command substitutions
+shopt -s inherit_errexit 2>/dev/null || true
 
 # ============================================================================
 # Configuration

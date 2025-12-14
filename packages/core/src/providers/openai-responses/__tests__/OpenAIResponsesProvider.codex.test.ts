@@ -57,14 +57,16 @@ function buildCodexCallOptions(
   return options;
 }
 
-// Mock fetch globally
+// Mock fetch globally with proper restoration
+const originalFetch = global.fetch;
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockClear();
+    // Install mock fetch before each test
+    global.fetch = mockFetch as unknown as typeof fetch;
 
     // Set up default runtime context
     setActiveProviderRuntimeContext(
@@ -77,6 +79,8 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
 
   afterEach(() => {
     clearActiveProviderRuntimeContext();
+    // Restore original fetch to prevent test pollution
+    global.fetch = originalFetch;
   });
 
   describe('isCodexMode detection', () => {

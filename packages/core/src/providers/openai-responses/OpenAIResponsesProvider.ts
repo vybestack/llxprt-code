@@ -87,7 +87,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
     this.logger = new DebugLogger('llxprt:providers:openai-responses');
     this.logger.debug(
       () =>
-        `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, apiKey: ${apiKey?.substring(0, 10) || 'none'}, codexMode: ${isCodex}`,
+        `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, hasApiKey: ${!!apiKey}, codexMode: ${isCodex}`,
     );
   }
 
@@ -396,10 +396,18 @@ export class OpenAIResponsesProvider extends BaseProvider {
       toolNamesForPrompt,
     );
 
-    const input: Array<{
-      role: 'user' | 'assistant' | 'system';
-      content?: string;
-    }> = [];
+    // Responses API input types: messages, function_call, function_call_output
+    type ResponsesInputItem =
+      | { role: 'user' | 'assistant' | 'system'; content?: string }
+      | {
+          type: 'function_call';
+          call_id: string;
+          name: string;
+          arguments: string;
+        }
+      | { type: 'function_call_output'; call_id: string; output: string };
+
+    const input: ResponsesInputItem[] = [];
 
     if (systemPrompt) {
       input.push({
@@ -425,31 +433,39 @@ export class OpenAIResponsesProvider extends BaseProvider {
         ) as ToolCallBlock[];
 
         const contentText = textBlocks.map((b) => b.text).join('');
-        if (contentText || toolCallBlocks.length > 0) {
-          const assistantMsg: { role: 'assistant'; content?: string } = {
+
+        // Add assistant text content if present
+        if (contentText) {
+          input.push({
             role: 'assistant',
-          };
+            content: contentText,
+          });
+        }
 
-          if (contentText) {
-            assistantMsg.content = contentText;
-          } else {
-            assistantMsg.content = `[Called ${toolCallBlocks.length} tool${toolCallBlocks.length > 1 ? 's' : ''}: ${toolCallBlocks.map((tc) => tc.name).join(', ')}]`;
-          }
-
-          input.push(assistantMsg);
+        // Add function_call items for each tool call (Responses API format)
+        for (const toolCall of toolCallBlocks) {
+          input.push({
+            type: 'function_call',
+            call_id: toolCall.id,
+            name: toolCall.name,
+            arguments: JSON.stringify(toolCall.parameters),
+          });
         }
       } else if (c.speaker === 'tool') {
-        const toolResponseBlock = c.blocks.find(
+        // Convert tool responses to function_call_output format (Responses API)
+        const toolResponseBlocks = c.blocks.filter(
           (b) => b.type === 'tool_response',
-        ) as ToolResponseBlock | undefined;
-        if (toolResponseBlock) {
+        ) as ToolResponseBlock[];
+
+        for (const toolResponseBlock of toolResponseBlocks) {
           const result =
             typeof toolResponseBlock.result === 'string'
               ? toolResponseBlock.result
               : JSON.stringify(toolResponseBlock.result);
           input.push({
-            role: 'assistant',
-            content: `[Tool ${toolResponseBlock.toolName} result]: ${result}`,
+            type: 'function_call_output',
+            call_id: toolResponseBlock.callId,
+            output: result,
           });
         }
       }
@@ -474,10 +490,30 @@ export class OpenAIResponsesProvider extends BaseProvider {
     );
 
     // Include both ephemeral and persistent settings, with ephemeral settings taking precedence
-    const requestOverrides: Record<string, unknown> = {
+    const mergedParams: Record<string, unknown> = {
       ...(filteredSettingsParams ?? {}),
       ...(filteredEphemeralParams ?? {}),
     };
+
+    // Translate max_tokens/max_completion_tokens to max_output_tokens for Responses API
+    // The Responses API uses max_output_tokens, not max_tokens (GPT-5 models)
+    const requestOverrides: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(mergedParams)) {
+      if (key === 'max_tokens' || key === 'max_completion_tokens') {
+        // Responses API uses max_output_tokens
+        requestOverrides['max_output_tokens'] = value;
+        this.logger.debug(
+          () =>
+            `Translated ${key}=${value} to max_output_tokens for Responses API`,
+        );
+      } else {
+        requestOverrides[key] = value;
+      }
+    }
+    this.logger.debug(
+      () =>
+        `Request overrides: ${JSON.stringify(Object.keys(requestOverrides))}`,
+    );
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002/REQ-SP4-003
@@ -496,7 +532,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
     let requestInput = input;
     if (isCodex) {
       // In Codex mode, system prompt goes in instructions field, not input array
-      requestInput = requestInput.filter((msg) => msg.role !== 'system');
+      // Only filter items that have a 'role' property (function_call/function_call_output don't)
+      requestInput = requestInput.filter(
+        (msg) => !('role' in msg) || msg.role !== 'system',
+      );
     }
 
     const request: {
@@ -523,6 +562,15 @@ export class OpenAIResponsesProvider extends BaseProvider {
       // Codex API requires the official system prompt in instructions field
       request.instructions = CODEX_SYSTEM_PROMPT;
       request.store = false;
+      // Codex API (ChatGPT backend) doesn't support max_output_tokens parameter
+      // Remove it to prevent 400 errors
+      if ('max_output_tokens' in request) {
+        delete request.max_output_tokens;
+        this.logger.debug(
+          () =>
+            'Codex mode: removed unsupported max_output_tokens from request',
+        );
+      }
       this.logger.debug(
         () => 'Codex mode: setting instructions and store=false',
       );
@@ -571,6 +619,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     if (!response.ok) {
       const errorBody = await response.text();
+      this.logger.debug(
+        () => `API error ${response.status}: ${errorBody.substring(0, 500)}`,
+      );
       throw parseErrorResponse(response.status, errorBody, this.name);
     }
 

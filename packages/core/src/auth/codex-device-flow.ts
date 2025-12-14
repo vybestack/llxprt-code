@@ -86,7 +86,7 @@ export class CodexDeviceFlow {
       `codex_cli_simplified_flow=true`,
       `state=${encodeURIComponent(state)}`,
       `originator=${encodeURIComponent(CODEX_CONFIG.originator)}`,
-      `theme=dark`, // Request dark mode for login page
+      `theme=dark`,
     ].join('&');
     this.logger.debug(() => '[FLOW] Built authorization URL with PKCE S256');
     return `${CODEX_CONFIG.authorizationEndpoint}?${params}`;
