@@ -85,6 +85,37 @@ const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
   },
 );
 
+const bucketCompleter: CompleterFn = withFuzzyFilter(
+  async (_ctx, _partial, tokens) => {
+    try {
+      const runtime = getRuntimeApi();
+      const status = runtime.getActiveProviderStatus();
+      const provider = status.providerName;
+
+      if (!provider) {
+        return [];
+      }
+
+      const tokenStore = new MultiProviderTokenStore();
+      const buckets = await tokenStore.listBuckets(provider);
+
+      // tokens.tokens format: ["save", "model", "profile-name", "bucket1", "bucket2", ...]
+      // Skip first 3 tokens (save, model, profile-name) to get already selected buckets
+      const alreadySelected = tokens.tokens
+        .slice(3)
+        .filter((b) => b.length > 0);
+      const available = buckets.filter((b) => !alreadySelected.includes(b));
+
+      return available.map((bucket) => ({
+        value: bucket,
+        description: 'Add bucket to profile',
+      }));
+    } catch {
+      return [];
+    }
+  },
+);
+
 // Recursive schema for unlimited profile selection
 // Each profile entry has a 'next' that points back to the same structure
 const createLbMemberProfileEntry = (
@@ -106,6 +137,25 @@ const lbMemberProfileSchema: CommandArgumentSchema = [
   createLbMemberProfileEntry(0),
 ];
 
+// Recursive schema for unlimited bucket selection
+// Each bucket entry has a 'next' that points back to the same structure
+const createBucketEntry = (
+  depth: number,
+): CommandArgumentSchema[number] => ({
+  kind: 'value',
+  name: depth === 0 ? 'bucket1' : `bucket${depth + 1}`,
+  description:
+    depth === 0
+      ? 'Select first bucket (optional)'
+      : 'Add another bucket (ESC to finish)',
+  completer: bucketCompleter,
+  hint: 'ESC to finish selection',
+  // Create a reasonably deep chain (20 levels should be more than enough)
+  next: depth < 20 ? [createBucketEntry(depth + 1)] : undefined,
+});
+
+const bucketSchema: CommandArgumentSchema = [createBucketEntry(0)];
+
 const profileSaveSchema: CommandArgumentSchema = [
   {
     kind: 'literal',
@@ -117,6 +167,7 @@ const profileSaveSchema: CommandArgumentSchema = [
         name: 'profile-name',
         description: 'Enter profile name',
         completer: profileNameCompleter,
+        next: bucketSchema,
       },
     ],
   },
