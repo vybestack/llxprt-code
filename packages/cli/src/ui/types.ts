@@ -149,6 +149,10 @@ export type HistoryItemCacheStats = HistoryItemBase & {
   type: 'cache_stats';
 };
 
+export type HistoryItemLBStats = HistoryItemBase & {
+  type: 'lb_stats';
+};
+
 export type HistoryItemQuit = HistoryItemBase & {
   type: 'quit';
   duration: string;
@@ -230,6 +234,7 @@ export type HistoryItemWithoutId =
   | HistoryItemModelStats
   | HistoryItemToolStats
   | HistoryItemCacheStats
+  | HistoryItemLBStats
   | HistoryItemQuit
   | HistoryItemCompression
   | HistoryItemOAuthURL
@@ -252,6 +257,7 @@ export enum MessageType {
   MODEL_STATS = 'model_stats',
   TOOL_STATS = 'tool_stats',
   CACHE_STATS = 'cache_stats',
+  LB_STATS = 'lb_stats',
   QUIT = 'quit',
   GEMINI = 'gemini',
   COMPRESSION = 'compression',
@@ -307,6 +313,11 @@ export type Message =
     }
   | {
       type: MessageType.CACHE_STATS;
+      timestamp: Date;
+      content?: string;
+    }
+  | {
+      type: MessageType.LB_STATS;
       timestamp: Date;
       content?: string;
     }

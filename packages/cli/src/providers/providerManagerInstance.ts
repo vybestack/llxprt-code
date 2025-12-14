@@ -363,7 +363,12 @@ export function createProviderManager(
   );
 
   manager.registerProvider(
-    new OpenAIVercelProvider(openaiApiKey, openaiBaseUrl),
+    new OpenAIVercelProvider(
+      openaiApiKey,
+      openaiBaseUrl,
+      openaiProviderConfig,
+      oauthManager,
+    ),
   );
 
   const aliasEntries = loadProviderAliasEntries();
@@ -375,8 +380,6 @@ export function createProviderManager(
     openaiProviderConfig,
     oauthManager,
   );
-
-  manager.registerProvider(getQwenProvider(openaiProviderConfig, oauthManager));
 
   void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
 
@@ -525,6 +528,19 @@ function registerAliasProviders(
         }
         break;
       }
+      case 'openaivercel': {
+        const provider = createOpenAIVercelAliasProvider(
+          entry,
+          openaiApiKey,
+          openaiBaseUrl,
+          openaiProviderConfig,
+          oauthManager,
+        );
+        if (provider) {
+          providerManagerInstance.registerProvider(provider);
+        }
+        break;
+      }
       default: {
         console.warn(
           `[ProviderManager] Unsupported base provider '${entry.config.baseProvider}' for alias '${entry.alias}', skipping.`,
@@ -534,9 +550,9 @@ function registerAliasProviders(
   }
 }
 
-type AliasAwareOpenAIProvider = OpenAIProvider & {
+type AliasAwareBaseProvider = {
   authResolver?: {
-    updateConfig: (config: { providerId?: string }) => void;
+    updateConfig?: (config: { providerId?: string }) => void;
   };
   baseProviderConfig?: {
     name?: string;
@@ -552,6 +568,10 @@ export function bindOpenAIAliasIdentity(
   provider: OpenAIProvider,
   alias: string,
 ): void {
+  bindProviderAliasIdentity(provider, alias);
+}
+
+function bindProviderAliasIdentity(provider: unknown, alias: string): void {
   const aliasName = alias?.trim();
   if (!aliasName) {
     return;
@@ -564,7 +584,7 @@ export function bindOpenAIAliasIdentity(
     configurable: true,
   });
 
-  const aliasAwareProvider = provider as unknown as AliasAwareOpenAIProvider;
+  const aliasAwareProvider = provider as AliasAwareBaseProvider;
   if (aliasAwareProvider.baseProviderConfig) {
     aliasAwareProvider.baseProviderConfig.name = aliasName;
   }
@@ -635,27 +655,65 @@ function createOpenAIAliasProvider(
   return provider;
 }
 
-function getQwenProvider(
+function createOpenAIVercelAliasProvider(
+  entry: ProviderAliasEntry,
+  openaiApiKey: string | undefined,
+  openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
-): OpenAIProvider {
-  const qwenProviderConfig = {
+): OpenAIVercelProvider | null {
+  const resolvedBaseUrl = entry.config.baseUrl || openaiBaseUrl;
+  if (!resolvedBaseUrl) {
+    console.warn(
+      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
+    );
+    return null;
+  }
+
+  const aliasProviderConfig: IProviderConfig = {
     ...openaiProviderConfig,
-    forceQwenOAuth: true,
+    baseUrl: resolvedBaseUrl,
   };
-  const qwenProvider = new OpenAIProvider(
-    undefined,
-    'https://portal.qwen.ai/v1',
-    qwenProviderConfig,
+
+  if (entry.config.providerConfig) {
+    Object.assign(aliasProviderConfig, entry.config.providerConfig);
+  }
+
+  if (entry.config.defaultModel) {
+    aliasProviderConfig.defaultModel = entry.config.defaultModel;
+  }
+
+  let aliasApiKey: string | undefined;
+  if (entry.config.apiKeyEnv) {
+    const envValue = process.env[entry.config.apiKeyEnv];
+    if (envValue && envValue.trim() !== '') {
+      aliasApiKey = sanitizeApiKey(envValue);
+    }
+  }
+  if (!aliasApiKey && openaiApiKey) {
+    aliasApiKey = openaiApiKey;
+  }
+
+  const provider = new OpenAIVercelProvider(
+    aliasApiKey || undefined,
+    resolvedBaseUrl,
+    aliasProviderConfig,
     oauthManager,
   );
-  Object.defineProperty(qwenProvider, 'name', {
-    value: 'qwen',
-    writable: false,
-    enumerable: true,
-    configurable: true,
-  });
-  return qwenProvider;
+
+  if (
+    entry.config.defaultModel &&
+    typeof provider.getDefaultModel === 'function'
+  ) {
+    const configuredDefaultModel = entry.config.defaultModel;
+    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
+    provider.getDefaultModel = () =>
+      configuredDefaultModel || originalGetDefaultModel();
+  }
+
+  bindProviderAliasIdentity(provider, entry.alias);
+
+  return provider;
 }
 
 function getOpenAIResponsesProvider(

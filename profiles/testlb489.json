@@ -1,0 +1,20 @@
+{
+  "name": "testlb489",
+  "version": 1,
+  "type": "loadbalancer",
+  "policy": "failover",
+  "profiles": ["synthetic", "synthetic", "synthetic"],
+  "provider": "",
+  "model": "",
+  "modelParams": {},
+  "ephemeralSettings": {
+    "tpm_threshold": 500,
+    "timeout_ms": 30000,
+    "circuit_breaker_enabled": true,
+    "circuit_breaker_failure_threshold": 3,
+    "circuit_breaker_failure_window_ms": 60000,
+    "circuit_breaker_recovery_timeout_ms": 30000,
+    "failover_retry_count": 2,
+    "failover_retry_delay_ms": 1000
+  }
+}
