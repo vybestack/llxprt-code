@@ -387,6 +387,13 @@ export function createProviderManager(
     addItem,
   );
 
+  void ensureOAuthProviderRegistered(
+    'codex',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
+
   manager.setActiveProvider('gemini');
   attachAddItemToOAuthProviders(oauthManager, addItem);
 
