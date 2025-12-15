@@ -13,6 +13,9 @@ REIMPLEMENT details are maintained as **per-commit playbooks**:
 
 - `project-plans/20251215gemerge/<sha>-plan.md` (canonical per-commit plan)
 - `project-plans/20251215gemerge/PLAN-DETAILED.md` (deprecated, inline legacy copy kept for reference)
+- Progress + notes while executing:
+  - `project-plans/20251215gemerge/PROGRESS.md`
+  - `project-plans/20251215gemerge/NOTES.md`
 
 References:
 
@@ -351,9 +354,12 @@ git cherry-pick dabe161a6f73f25e97c5bae914eb6e26454b6253
 4. Run verification:
    - Always: quick verification (`npm run typecheck && npm run lint`)
    - If batch is even-numbered: run full suite.
-5. If you had to make extra fixes that are *not* part of a conflict resolution:
+5. Update execution tracking:
+   - Check off the batch in `project-plans/20251215gemerge/PROGRESS.md`.
+   - Append a batch entry in `project-plans/20251215gemerge/NOTES.md` (conflicts, decisions, follow-ups, verification).
+6. If you had to make extra fixes that are *not* part of a conflict resolution:
    - Create a fix commit: `git commit -am "fix: batch NN follow-ups"`
-6. Do not proceed to next batch until the required verification is green.
+7. Do not proceed to next batch until the required verification is green.
 
 ---
 
