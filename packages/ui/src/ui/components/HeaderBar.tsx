@@ -1,7 +1,6 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
-import type { ReactElement } from 'react';
 import type { ThemeDefinition } from '../../features/theme';
 
 const LOGO_ASPECT_RATIO = 415 / 260;
@@ -15,14 +14,14 @@ function getPackageRoot(): string | undefined {
   // Bun: import.meta.dir
   // Node 20.11+: import.meta.dirname
   const meta = import.meta as ImportMeta & {
-    readonly dir?: string;
-    readonly dirname?: string;
+    readonly dir: string;
+    readonly dirname: string;
   };
 
-  return meta.dir ?? meta.dirname;
+  return meta.dir || meta.dirname;
 }
 
-export function HeaderBar({ text, theme }: HeaderBarProps): ReactElement {
+export function HeaderBar({ text, theme }: HeaderBarProps) {
   const headerHeight = 3;
 
   const packageRoot = getPackageRoot();
