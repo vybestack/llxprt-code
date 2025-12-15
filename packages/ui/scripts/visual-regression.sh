@@ -1,6 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+UNAME="$(uname)"
+if [[ "${UNAME}" != "Darwin" ]]; then
+  echo "Error: visual regression capture requires macOS." >&2
+  exit 2
+fi
+
+for cmd in osascript swift screencapture magick python3; do
+  if ! command -v "${cmd}" >/dev/null 2>&1; then
+    echo "Error: required command not found: ${cmd}" >&2
+    exit 2
+  fi
+done
+
+ITERM_APP_PATH="${LLXPRT_UI_ITERM_APP_PATH:-/Applications/iTerm2.app}"
+if [[ ! -d "${ITERM_APP_PATH}" ]]; then
+  echo "Error: iTerm2 is not installed at ${ITERM_APP_PATH}" >&2
+  echo "Install iTerm2 or set LLXPRT_UI_ITERM_APP_PATH to the correct path." >&2
+  exit 2
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 
 UPDATE_BASELINE=0
@@ -126,7 +146,7 @@ python3 - <<PY
 import sys
 fraction=float("${GREEN_FRACTION}")
 if fraction < 0.0005:
-  sys.stderr.write(f"Capture sanity check failed (green border fraction={fraction}).\\n")
+  sys.stderr.write(f"Capture sanity check failed for ${CROP_PATH} (green border fraction={fraction}).\\n")
   sys.stderr.write("This usually means macOS Screen Recording permission is missing for your terminal/shell.\\n")
   sys.exit(2)
 PY
