@@ -101,6 +101,10 @@ OVERRIDES: dict[str, Override] = {
     "dabe161a": Override(
         "PICK", "UI: don't accept input until slash commands load"
     ),
+    "467a305f": Override(
+        "PICK",
+        "UX: enable interactive shell by default (matches llxprt intent)",
+    ),
     # Existing REIMPLEMENTs (from initial pass)
     "0cd490a9": Override(
         "REIMPLEMENT", "Gemini/GCA: add GOOGLE_CLOUD_PROJECT_ID fallback"
@@ -449,4 +453,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

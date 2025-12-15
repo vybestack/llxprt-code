@@ -3,7 +3,7 @@
 Upstream: https://github.com/google-gemini/gemini-cli
 
 - Range: `v0.9.0..v0.10.0` (135 commits)
-- Recommended: 41 PICK, 29 REIMPLEMENT, 65 SKIP
+- Recommended: 42 PICK, 29 REIMPLEMENT, 64 SKIP
 
 ## Notes
 
@@ -24,7 +24,7 @@ Upstream: https://github.com/google-gemini/gemini-cli
 | 8 | [`b45bd5ff`](https://github.com/google-gemini/gemini-cli/commit/b45bd5ff7b0c68456cb1927eb9f6c389376ce511) | 2025-10-08 | integration-tests | SKIP | Upstream integration tests only | Fix(infra) - Skip file system interactive test since it is currently broken (#10734) |
 | 9 | [`c0552ceb`](https://github.com/google-gemini/gemini-cli/commit/c0552ceb2274f9f5e53bf37eb6ead2b2ab388cc2) | 2025-10-08 | core | SKIP | Touches ClearcutLogger (removed in llxprt) | feat(core): add telemetry for subagent execution (#10456) |
 | 10 | [`b0b1be0c`](https://github.com/google-gemini/gemini-cli/commit/b0b1be0c2a0641bf8c78098869c570df2a6f2d3c) | 2025-10-08 | cli, integration-tests | SKIP | Tests: upstream skips flaky tests; prefer deflake tooling + targeted stabilizations over blanket skips | chore(int): skip flaky tests (#10736) |
-| 11 | [`467a305f`](https://github.com/google-gemini/gemini-cli/commit/467a305f266d30047d3c69b5fd680745e7580e39) | 2025-10-08 | cli, core, docs | SKIP | Not selected for llxprt (low value or conflicts) | chore(shell): Enable interactive shell by default (#10661) |
+| 11 | [`467a305f`](https://github.com/google-gemini/gemini-cli/commit/467a305f266d30047d3c69b5fd680745e7580e39) | 2025-10-08 | cli, core, docs | PICK | UX: enable interactive shell by default (matches llxprt intent) | chore(shell): Enable interactive shell by default (#10661) |
 | 12 | [`b92e3bca`](https://github.com/google-gemini/gemini-cli/commit/b92e3bca508036514bd7bb3fb566e93f82edfc18) | 2025-10-09 | cli | PICK | MCP: server removal persists to settings | fix(mcp): fix MCP server removal not persisting to settings (#10098) |
 | 13 | [`1962b51d`](https://github.com/google-gemini/gemini-cli/commit/1962b51d8d3b971d820eef288d9d4f3346d3a1a0) | 2025-10-09 | cli, core | PICK | CLI: positional prompt args with --extensions (drop Clearcut test hunk) | fix: ensure positional prompt arguments work with extensions flag (#10077) |
 | 14 | [`f2852056`](https://github.com/google-gemini/gemini-cli/commit/f2852056a11d10cd56045b57ba1deec5822a089e) | 2025-10-08 | cli | PICK | CLI: strip ANSI codes from extension MCP server output | feat: prevent ansi codes in extension MCP Servers (#10748) |

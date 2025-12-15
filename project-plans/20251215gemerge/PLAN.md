@@ -9,6 +9,11 @@ This plan executes the `PICK`/`REIMPLEMENT` decisions in `project-plans/20251215
   - After **every** batch: “quick” verification (**compile + lint**).
   - After **every 2nd** batch: **full verification suite**.
 
+REIMPLEMENT details are maintained as **per-commit playbooks**:
+
+- `project-plans/20251215gemerge/<sha>-plan.md` (canonical per-commit plan)
+- `project-plans/20251215gemerge/PLAN-DETAILED.md` (deprecated, inline legacy copy kept for reference)
+
 References:
 
 - `dev-docs/cherrypicking.md` (process + what to preserve/skip)
@@ -35,7 +40,7 @@ These are the rules for conflict resolution and reimplementation. If an upstream
 ### Tool scheduler and batching
 
 - `dev-docs/cherrypicking.md` explicitly warns against upstream scheduler/queue work that reduces LLxprt batching.
-- If upstream fixes a real correctness bug in scheduling, **port the fix** but keep LLxprt’s parallel batching model (see reimplementation playbook for `ada179f5`).
+- If upstream fixes a real correctness bug in scheduling, **port the fix** but keep LLxprt’s parallel batching model (see `project-plans/20251215gemerge/ada179f5-plan.md`).
 
 ### Branding / naming (apply everywhere)
 
@@ -71,6 +76,77 @@ These are the rules for conflict resolution and reimplementation. If an upstream
 
 ---
 
+## File Existence Pre-Check
+
+Before starting the batches, verify which upstream-targeted files exist in LLXPRT. Any batch whose **LLXPRT target files are missing** must follow its playbook’s `SKIP-IF-MISSING` rule.
+
+| File | Current Status | Affected Batches |
+|------|----------------|------------------|
+| `integration-tests/test-helper.ts` | MUST EXIST | 30, 34, 38, 39, 48, 52 |
+| `integration-tests/file-system-interactive.test.ts` | LIKELY MISSING | 16, 25, 38 |
+| `integration-tests/ctrl-c-exit.test.ts` | MUST EXIST | 47 |
+| `docs/integration-tests.md` | MISSING (use `dev-docs/`) | 05, 12, 36 |
+| `dev-docs/integration-tests.md` | MUST EXIST | 05, 12, 36 |
+| `docs/changelogs/index.md` | MISSING (use grep fallback) | 24 |
+
+Run this check:
+
+```bash
+for f in \
+  integration-tests/test-helper.ts \
+  integration-tests/file-system-interactive.test.ts \
+  integration-tests/ctrl-c-exit.test.ts \
+  dev-docs/integration-tests.md \
+  docs/integration-tests.md \
+  docs/changelogs/index.md; do
+  test -f "$f" && echo "✓ $f" || echo "✗ $f MISSING"
+done
+```
+
+---
+
+## Branding Substitutions (apply to ALL files touched)
+
+Apply these substitutions whenever upstream content uses Gemini CLI naming, unless a playbook explicitly says “keep for compatibility”.
+
+| Pattern | Replacement |
+|---------|-------------|
+| `@google/gemini-cli-core` | `@vybestack/llxprt-code-core` |
+| `@google/gemini-cli` | `@vybestack/llxprt-code` |
+| `gemini-cli-a2a-server` | `llxprt-code-a2a-server` (or chosen LLXPRT bin name) |
+| `.gemini` (primary config dir) | `.llxprt` |
+| `GEMINI.md` | `LLXPRT.md` |
+| `GEMINI_CLI_*` (env vars) | `LLXPRT_CODE_*` |
+| `gemini` (CLI command) | `llxprt` |
+
+Bulk replacement helper (macOS `sed`):
+
+```bash
+sed -i '' \
+  -e 's/@google\\/gemini-cli-core/@vybestack\\/llxprt-code-core/g' \
+  -e 's/@google\\/gemini-cli/@vybestack\\/llxprt-code/g' \
+  -e 's/gemini-cli-a2a-server/llxprt-code-a2a-server/g' \
+  -e 's/\\.gemini\\//\\.llxprt\\//g' \
+  -e 's/GEMINI\\.md/LLXPRT\\.md/g' \
+  -e 's/GEMINI_CLI_/LLXPRT_CODE_/g' \
+  "$FILE"
+```
+
+Bulk replacement helper (GNU `sed`):
+
+```bash
+sed -i \
+  -e 's/@google\\/gemini-cli-core/@vybestack\\/llxprt-code-core/g' \
+  -e 's/@google\\/gemini-cli/@vybestack\\/llxprt-code/g' \
+  -e 's/gemini-cli-a2a-server/llxprt-code-a2a-server/g' \
+  -e 's/\\.gemini\\//\\.llxprt\\//g' \
+  -e 's/GEMINI\\.md/LLXPRT\\.md/g' \
+  -e 's/GEMINI_CLI_/LLXPRT_CODE_/g' \
+  "$FILE"
+```
+
+---
+
 ## Verification Commands
 
 ### After every batch (Quick: compile + lint)
@@ -94,7 +170,7 @@ npm run lint
 npm run typecheck
 npm run test
 npm run build
-node scripts/start.js --profile-load synthetic --prompt \"write me a haiku\"
+node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
 ```
 
 If anything fails: fix, then re-run the full suite (don’t proceed with a red batch).
@@ -134,8 +210,8 @@ Legend:
 |---:|:---:|:---|:---|:---|:---|
 | 01 | QUICK | PICK | 3 | 8980276b | Rationalize different Extension typings (#10435) |
 | 02 | FULL | REIMPLEMENT | 4 | 8ac2c684 | chore: bundle a2a-server (#10265) |
-| 03 | QUICK | PICK | 6,7,12,13,14 | 1af3fef3, 603ec2b2, b92e3bca, 1962b51d, f2852056 | fix(infra) - Remove auto update from integration tests (#10656) / Add script to deflake integration tests (#10666) / fix(mcp): fix MCP server removal not persisting to settings (#10098) / fix: ensure positional prompt arguments work with extensions flag (#10077) / feat: prevent ansi codes in extension MCP Servers (#10748) |
-| 04 | FULL | PICK | 15,16 | 76b1deec, 118aade8 | fix(core): refresh file contents in smart edit given newer edits from user/external process (#10084) / citations documentation (#10742) |
+| 03 | QUICK | PICK | 6,7,11,12,13 | 1af3fef3, 603ec2b2, 467a305f, b92e3bca, 1962b51d | fix(infra) - Remove auto update from integration tests (#10656) / Add script to deflake integration tests (#10666) / chore(shell): Enable interactive shell by default (#10661) / fix(mcp): fix MCP server removal not persisting to settings (#10098) / fix: ensure positional prompt arguments work with extensions flag (#10077) |
+| 04 | FULL | PICK | 14,15,16 | f2852056, 76b1deec, 118aade8 | feat: prevent ansi codes in extension MCP Servers (#10748) / fix(core): refresh file contents in smart edit given newer edits from user/external process (#10084) / citations documentation (#10742) |
 | 05 | QUICK | REIMPLEMENT | 18 | 8d8a2ab6 | Fix(doc) - Add section in docs for deflaking (#10750) |
 | 06 | FULL | PICK | 19 | 741b57ed | fix(core): Use shell for spawn on Windows (#9995) |
 | 07 | QUICK | REIMPLEMENT | 22 | bcbcaeb8 | fix(docs): Update docs/faq.md per Srinanth (#10667) |
@@ -154,7 +230,7 @@ Legend:
 | 20 | FULL | REIMPLEMENT | 50 | 558be873 | Re-land bbiggs changes to reduce margin on narrow screens with fixes + full width setting (#10522) |
 | 21 | QUICK | PICK | 52 | 65b9e367 | Docs: Fix broken links in architecture.md (#10747) |
 | 22 | FULL | PICK | 53 | 971eb64e | fix(cli) : fixed bug #8310 where /memory refresh will create discrepancies with initial memory load ignoring settings/config for trusted folder and file filters (#10611) |
-| 23 | QUICK | PICK | 56,57 | affd3cae, 249ea559 | fix: Prevent garbled input during \"Login With Google\" OAuth prompt on… (#10888) / fix(test): Fix flaky shell command test using date command (#10863) |
+| 23 | QUICK | PICK | 56,57 | affd3cae, 249ea559 | fix: Prevent garbled input during "Login With Google" OAuth prompt on… (#10888) / fix(test): Fix flaky shell command test using date command (#10863) |
 | 24 | FULL | REIMPLEMENT | 58 | 849cd1f9 | Docs: Fix Flutter extension link in docs/changelogs/index.md (#10797) |
 | 25 | QUICK | REIMPLEMENT | 59 | 32db4ff6 | Disable flakey tests. (#10914) |
 | 26 | FULL | PICK | 60,62,63 | c6af4eaa, a5e47c62, 0a7ee677 | fix: Usage of folder trust config flags in FileCommandLoader (#10837) / Docs: Update to tos-privacy.md (#10754) / Show notification in screen reader mode (#10900) |
@@ -195,11 +271,11 @@ Run these exactly for `PICK` batches (git will pause on conflicts as needed):
 # Batch 01 PICK #3 (8980276b)
 git cherry-pick 8980276b205e2b8f327b8b55f785a01e36ce18b8
 
-# Batch 03 PICK #6 #7 #12 #13 #14 (1af3fef3 603ec2b2 b92e3bca 1962b51d f2852056)
-git cherry-pick 1af3fef33a611f17957f8043211b9e1ea3ac15bb 603ec2b21bd95be249f0f0c6d4d6ee267fab436a b92e3bca508036514bd7bb3fb566e93f82edfc18 1962b51d8d3b971d820eef288d9d4f3346d3a1a0 f2852056a11d10cd56045b57ba1deec5822a089e
+# Batch 03 PICK #6 #7 #11 #12 #13 (1af3fef3 603ec2b2 467a305f b92e3bca 1962b51d)
+git cherry-pick 1af3fef33a611f17957f8043211b9e1ea3ac15bb 603ec2b21bd95be249f0f0c6d4d6ee267fab436a 467a305f266d30047d3c69b5fd680745e7580e39 b92e3bca508036514bd7bb3fb566e93f82edfc18 1962b51d8d3b971d820eef288d9d4f3346d3a1a0
 
-# Batch 04 PICK #15 #16 (76b1deec 118aade8)
-git cherry-pick 76b1deec25c7fa528c42c42a0e1b47c1e0d9f2ec 118aade84cc7e3f6d4680bd17adf73561153050c
+# Batch 04 PICK #14 #15 #16 (f2852056 76b1deec 118aade8)
+git cherry-pick f2852056a11d10cd56045b57ba1deec5822a089e 76b1deec25c7fa528c42c42a0e1b47c1e0d9f2ec 118aade84cc7e3f6d4680bd17adf73561153050c
 
 # Batch 06 PICK #19 (741b57ed)
 git cherry-pick 741b57ed061c767ed25777f39b9fe826aaa1bcbc
@@ -271,7 +347,7 @@ git cherry-pick dabe161a6f73f25e97c5bae914eb6e26454b6253
    - `git status` should not show “cherry-pick in progress”.
 3. Apply the batch:
    - `PICK`: run the batch command; resolve conflicts; `git cherry-pick --continue`.
-   - `REIMPLEMENT`: follow the playbook section below; make **one local commit**.
+   - `REIMPLEMENT`: follow the per-commit playbook referenced below; make **one local commit**.
 4. Run verification:
    - Always: quick verification (`npm run typecheck && npm run lint`)
    - If batch is even-numbered: run full suite.
@@ -281,678 +357,66 @@ git cherry-pick dabe161a6f73f25e97c5bae914eb6e26454b6253
 
 ---
 
-## Reimplementation Playbooks (Detailed, “Stupid-LLM-Ready”)
-
-Implementation convention for reimplement commits:
-
-- Create exactly one local commit per upstream reimplementation, named like:
-  - `reimplement: <short subject> (upstream <shortsha>)`
-- In the commit body, include:
-  - the upstream SHA
-  - the key LLXPRT adaptations (branding, tool rename, telemetry removal)
-
-### Batch 02 — `8ac2c684` — Bundle a2a-server
-
-Upstream files touched:
-
-- `esbuild.config.js`
-
-Goal in LLXPRT:
-
-- Ensure `npm run bundle` also produces a **single-file runnable bundle** for the a2a-server (so later `c82c2c2b` bin wiring has a real target).
-
-Steps:
-
-1. Inspect upstream diff: `git show 8ac2c684 -- esbuild.config.js`.
-2. Update LLXPRT `esbuild.config.js` to build **two outputs**:
-   - CLI bundle (existing): `bundle/llxprt.js`
-   - A2A bundle (new): `packages/a2a-server/dist/a2a-server.mjs`
-3. Use a shared “base” esbuild config (bundle/platform/format/external/loader) and two per-target configs.
-4. Use `Promise.allSettled([ … ])` so CLI bundling failures still fail the build, but a2a bundling can be either:
-   - strict (fail the build), or
-   - soft (warn only).
-   Decide based on whether LLXPRT wants a2a-server to be required for releases.
-5. Ensure the a2a output is executable:
-   - `fs.chmodSync('packages/a2a-server/dist/a2a-server.mjs', 0o755)`
-6. Quick verify: `npm run bundle` (or `node esbuild.config.js`) then ensure file exists:
-   - `test -f packages/a2a-server/dist/a2a-server.mjs`
-
-Acceptance criteria:
-
-- `npm run bundle` succeeds and produces `packages/a2a-server/dist/a2a-server.mjs`.
-- Batch 02 verification passes (quick + full).
-
-### Batch 05 — `8d8a2ab6` — Deflake docs + default `runs=5`
-
-Upstream files touched:
-
-- `docs/integration-tests.md`
-- `scripts/deflake.js` (default runs: 50 → 5)
-
-LLXPRT target files:
-
-- `scripts/deflake.js` (added by `603ec2b2` in Batch 03)
-- `dev-docs/integration-tests.md` (LLXPRT docs home for integration test guidance)
-
-Steps:
-
-1. Ensure `scripts/deflake.js` exists (Batch 03 must have landed).
-2. Change the default `--runs` value to `5` (not `50`).
-3. Add a “Deflaking” section to `dev-docs/integration-tests.md`:
-   - When to use `deflake` (new test cases; flaky failures).
-   - Example command patterns that match LLXPRT scripts (`npm run test:e2e` / `vitest`).
-4. Do **not** copy upstream “gemini” command examples; use LLXPRT equivalents.
-
-Acceptance criteria:
-
-- `node scripts/deflake.js --help` shows default runs=5.
-- Docs section exists in `dev-docs/integration-tests.md`.
-
-### Batch 07 — `bcbcaeb8` — Docs: FAQ + extensions tweaks
-
-Upstream files touched:
-
-- `docs/extensions/index.md`
-- `docs/faq.md`
-
-LLXPRT mapping:
-
-- LLXPRT has `docs/extension.md` and no `docs/faq.md` (use `docs/troubleshooting.md` or add a small FAQ page if desired).
-
-Steps:
-
-1. Inspect upstream diff: `git show bcbcaeb8`.
-2. Port the “fix stray backtick” style cleanup to `docs/extension.md` (ensure command examples don’t have broken markup).
-3. Decide where “Not seeing your question?” belongs:
-   - If LLXPRT uses GitHub Issues for support, keep issue tracker links.
-   - If LLXPRT prefers Discussions, update to Discussions (but point to LLXPRT org/repo, not google-gemini).
-4. Make sure any `gemini …` CLI command examples become `llxprt …`.
-
-Acceptance criteria:
-
-- Docs changes are LLXPRT-branded and links point to LLXPRT repo destinations.
-
-### Batch 10 — `0cd490a9` — Support `GOOGLE_CLOUD_PROJECT_ID` fallback
-
-Upstream files touched:
-
-- `packages/core/src/code_assist/setup.ts`
-- `packages/core/src/core/contentGenerator.ts`
-- `docs/get-started/authentication.md`
-
-LLXPRT target files:
-
-- `packages/core/src/code_assist/setup.ts`
-- `packages/core/src/core/contentGenerator.ts`
-- `docs/cli/authentication.md` (LLXPRT doc path)
-
-Steps:
-
-1. Inspect upstream diff: `git show 0cd490a9`.
-2. In `packages/core/src/code_assist/setup.ts`:
-   - Where project ID is read from `process.env.GOOGLE_CLOUD_PROJECT`, change to:
-     - `process.env.GOOGLE_CLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT_ID || undefined`
-   - Update/extend existing tests in `packages/core/src/code_assist/setup.test.ts`:
-     - Add test: when `GOOGLE_CLOUD_PROJECT` unset and `GOOGLE_CLOUD_PROJECT_ID` set, it uses `_ID`.
-3. In `packages/core/src/core/contentGenerator.ts`:
-   - Apply same fallback for reading project ID.
-   - Update/extend tests in `packages/core/src/core/contentGenerator.test.ts`.
-4. In docs (`docs/cli/authentication.md`):
-   - Mention `GOOGLE_CLOUD_PROJECT_ID` as a fallback and explain precedence.
-   - Keep LLXPRT branding and existing auth flow text; do not introduce Google-only assumptions beyond GCP env vars.
-
-Acceptance criteria:
-
-- Unit tests cover fallback behavior.
-- No behavior regression when `GOOGLE_CLOUD_PROJECT` is set.
-
-### Batch 12 — `bd6bba8d` — Docs: deflake command invocation fix
-
-Upstream file touched:
-
-- `docs/integration-tests.md` (adds extra `--` in example)
-
-LLXPRT target:
-
-- `dev-docs/integration-tests.md`
-
-Steps:
-
-1. Update deflake example(s) in `dev-docs/integration-tests.md` to use correct npm-arg forwarding.
-2. Ensure examples match LLXPRT scripts:
-   - `npm run test:e2e -- --test-name-pattern "…"`
-   - Or if invoking vitest directly, show `vitest run --root ./integration-tests --testNamePattern …`.
-
-### Batch 15 — `5e688b81` — Replace test: “old_string not found”
-
-Upstream change:
-
-- Skips `integration-tests/replace.test.ts` case that was flaky upstream.
-
-LLXPRT reality:
-
-- LLXPRT’s `integration-tests/replace.test.ts` already contains a stronger, less flaky assertion (file content remains unchanged).
-
-Steps:
-
-1. Compare upstream vs LLXPRT `integration-tests/replace.test.ts`.
-2. Prefer **keeping** LLXPRT’s stronger test (do not blindly `it.skip`).
-3. If the test flakes in LLXPRT:
-   - First try to fix determinism via harness changes (Batch 48) and/or tool constraints.
-   - Only if still flaky, add a temporary `it.skip` with a LLXPRT issue link (not upstream issue link).
-
-### Batch 16 — `5aab793c` — Interactive test reliability (file-system-interactive)
-
-Upstream file touched:
-
-- `integration-tests/file-system-interactive.test.ts`
-
-LLXPRT reality:
-
-- LLXPRT currently does **not** carry `file-system-interactive.test.ts` (we have `file-system.test.ts`).
-
-Two options (choose one):
-
-1. **Skip-port** (minimal):
-   - No code change; record as “not applicable” because file doesn’t exist.
-2. **Adopt upstream test** (recommended only if we want this coverage):
-   - Add `integration-tests/file-system-interactive.test.ts` from upstream (latest version, after later deflake commits).
-   - Ensure `TestRig.runInteractive()` passes provider/model flags and doesn’t hang on auth prompts.
-   - Apply upstream timeout adjustments (increase ready + text timeouts).
-
-Acceptance criteria (if adopting):
-
-- Test is `skipIf(process.platform === 'win32')` initially (avoid PTY flake) until stable.
-
-### Batch 17 — `0b6c0200` — Failed-response retry via extra prompt injection
-
-Upstream files touched:
-
-- `packages/core/src/config/config.ts` (+ config flag)
-- `packages/core/src/core/client.ts` (invalid stream handling + retry injection)
-- `packages/core/src/core/turn.ts` (InvalidStream event)
-- `packages/cli/src/ui/hooks/useGeminiStream.ts` (wiring)
-- tests in those areas
-
-LLXPRT reality:
-
-- LLXPRT already has `GeminiEventType.InvalidStream` in `packages/core/src/core/turn.ts`, but the client-side retry behavior is not fully implemented.
-
-Steps:
-
-1. Inspect upstream diff: `git show 0b6c0200`.
-2. Add `continueOnFailedApiCall?: boolean` to LLXPRT core config:
-   - File: `packages/core/src/config/config.ts`
-   - Default: `true` (match upstream intent).
-3. In `packages/core/src/core/client.ts`:
-   - Detect `GeminiEventType.InvalidStream` events coming from `Turn.run()`.
-   - If `continueOnFailedApiCall` is true:
-     - Inject a single retry by appending a system message like `System: Please continue.` and re-running the stream once.
-     - Ensure we do not infinite-loop (retry at most once per prompt_id).
-   - Do **not** add or call Clearcut telemetry/loggers.
-4. Add/port tests:
-   - Add a unit test that simulates an InvalidStream error and asserts we retry once (and then stop).
-5. Ensure UI does not crash when InvalidStream happens:
-   - If needed, handle/ignore the InvalidStream event in CLI stream hook.
-
-Acceptance criteria:
-
-- InvalidStream does not terminate the session abruptly; it retries once then yields a terminal state.
-- No telemetry-to-Google added.
-
-### Batch 19 — `c82c2c2b` — a2a-server bin + main entry + shebang tweaks
-
-Upstream files touched:
-
-- `packages/a2a-server/package.json` (main, bin)
-- `packages/a2a-server/src/http/server.ts` (shebang + main-module detection)
-
-LLXPRT target files:
-
-- `packages/a2a-server/package.json`
-- `packages/a2a-server/src/http/server.ts`
-
-Steps:
-
-1. Inspect upstream diff: `git show c82c2c2b`.
-2. Update `packages/a2a-server/package.json`:
-   - Set `"main"` to `"dist/index.js"` (LLXPRT already builds `dist/index.js`).
-   - Add a `"bin"` entry, but **rename the binary**:
-     - Do NOT use `gemini-cli-a2a-server`.
-     - Use something like `llxprt-code-a2a-server` or `llxprt-a2a-server` (pick one and keep it consistent).
-   - Point the bin target to the file produced by Batch 02:
-     - `"dist/a2a-server.mjs"`
-3. Update `packages/a2a-server/src/http/server.ts`:
-   - Add shebang `#!/usr/bin/env node` at top (before license comment).
-   - Adjust `isMainModule` logic if needed (upstream uses `basename()` compare).
-   - Ensure `process.on('uncaughtException', …)` is only registered when running as main module (not when imported).
-4. Verify the bin works:
-   - After `npm run bundle`, run: `node packages/a2a-server/dist/a2a-server.mjs` (or the bin name if wired).
-
-Acceptance criteria:
-
-- `packages/a2a-server/dist/a2a-server.mjs` exists and is executable.
-- Running it starts the server (or prints meaningful errors) without import-side effects.
-
-### Batch 20 — `558be873` — UI margins + `ui.useFullWidth` setting
-
-Upstream files touched (selected):
-
-- `packages/cli/src/config/settingsSchema.ts` (add `ui.useFullWidth`)
-- `packages/cli/src/ui/utils/ui-sizing.ts` (new)
-- Many UI components and snapshots
-- `packages/cli/src/utils/math.ts` (new `lerp`)
-
-LLXPRT plan (port selectively, keep tests green):
-
-1. Inspect upstream diff: `git show 558be873 --name-only` and `git show 558be873 -- <file>`.
-2. Add a `ui.useFullWidth` boolean setting to `packages/cli/src/config/settingsSchema.ts` (showInDialog: true).
-3. Add new file `packages/cli/src/utils/math.ts` with `export function lerp(a,b,t)`.
-4. Add new file `packages/cli/src/ui/utils/ui-sizing.ts` with `calculateMainAreaWidth(terminalWidth, settings)`:
-   - If `ui.useFullWidth` is true, return `terminalWidth`.
-   - Otherwise, use upstream interpolation logic (80→132 columns mapping).
-5. Update `packages/cli/src/ui/AppContainer.tsx` to:
-   - Use `calculateMainAreaWidth()` and feed that into `calculatePromptWidths()`.
-6. Port the UI spacing changes incrementally:
-   - `MainContent.tsx`, `Footer.tsx`, `InputPrompt.tsx`, tool message layout components.
-7. Update snapshots and UI tests as needed:
-   - Run `npm test` and update snapshots intentionally if output changes are acceptable.
-
-Acceptance criteria:
-
-- New setting exists and is wired (defaults to current behavior).
-- Enabling `ui.useFullWidth` visibly expands content width.
-- Tests/snapshots updated intentionally (not as accidental churn).
-
-### Batch 24 — `849cd1f9` — Docs: Flutter extension link fix
-
-Upstream file touched:
-
-- `docs/changelogs/index.md`
-
-LLXPRT reality:
-
-- LLXPRT does not carry `docs/changelogs/index.md` (uses `docs/release-notes/`).
-
-Steps:
-
-1. Search LLXPRT docs for “Flutter extension” or the old link target.
-2. If present, fix link; if not present, treat as N/A (no-op).
-
-### Batch 25 — `32db4ff6` — Blanket “disable flaky tests” (avoid, port selectively)
-
-Upstream changes:
-
-- Skips interactive file-system test
-- Skips entire replace suite
-
-LLXPRT guidance:
-
-- Prefer **targeted deflaking** and harness fixes over blanket `describe.skip`.
-
-Steps:
-
-1. Do not apply upstream `describe.skip('replace')` in LLXPRT.
-2. If a specific test is unfixably flaky:
-   - `it.skip` only that test, with a LLXPRT issue link and rationale.
-3. Apply only generally-useful harness/timeout improvements (if any).
-
-### Batch 27 — `ab3804d8` — Web search tool-name refactor (LLXPRT already renamed)
-
-Upstream files touched:
-
-- `packages/core/src/tools/web-search.ts`
-- `packages/core/src/tools/tool-names.ts`
-- `packages/core/src/agents/executor.ts`
-- `integration-tests/google_web_search.test.ts`
-
-LLXPRT mapping:
-
-- LLXPRT uses `packages/core/src/tools/google-web-search.ts` (tool name `google_web_search`) and optionally `exa-web-search`.
-
-Steps:
-
-1. Inspect upstream diff: `git show ab3804d8`.
-2. Determine whether LLXPRT already has the key benefit (centralizing tool name constants):
-   - If we already use `GoogleWebSearchTool.Name` everywhere, most of this is NOP.
-3. If there is value:
-   - Add/extend a “tool name constants” module in LLXPRT (or keep class `.Name` constants).
-   - Ensure allowlists use the canonical tool name constants.
-4. Ensure integration test `integration-tests/google_web_search.test.ts` still matches the tool name (`google_web_search`).
-
-### Batch 29 — `a6e00d91` — Extension update rough edges (port without telemetry)
-
-Upstream files touched:
-
-- CLI extension install/update/uninstall flows
-- Core telemetry files (Clearcut) — DO NOT PORT
-
-LLXPRT target files:
-
-- `packages/cli/src/config/extension.ts`
-- `packages/cli/src/commands/extensions/install.ts`
-- `packages/cli/src/config/extensions/update.ts`
-- relevant tests under `packages/cli/src/config/extension.test.ts`
-
-Key upstream behaviors worth porting:
-
-- Preserve extension enablement state across updates (don’t “remove” on update).
-- Ensure `${extensionPath}` substitution refers to the **installed path**, not the temp source path.
-- Unify “install vs update” behavior (optional) via `installOrUpdateExtension`.
-
-Steps:
-
-1. Inspect upstream diff: `git show a6e00d91`.
-2. Add `installOrUpdateExtension(...)` to `packages/cli/src/config/extension.ts` (or refactor existing `installExtension` to support update mode).
-3. Change update flow to avoid wiping enablement:
-   - Modify `uninstallExtension` to accept `isUpdate: boolean` (or add a private helper).
-   - When updating, delete the extension directory but DO NOT remove enablement state.
-4. Fix variable hydration:
-   - In `loadExtensionConfig`, parse raw JSON first to get extension name.
-   - Compute `installDir = new ExtensionStorage(rawName).getExtensionDir()` and use that as `extensionPath` when hydrating strings.
-5. Remove all telemetry additions from upstream (Clearcut logger/events).
-6. Update CLI command `extensions install` to call the unified `installOrUpdateExtension` (so install can upgrade if already installed, if desired).
-7. Add/adjust tests verifying:
-   - Updating does not re-enable a previously disabled extension.
-   - `extensionPath` is stable and points at install dir (not temp).
-
-### Batch 30 — `a64bb433` — Simplify auth in interactive tests (adapt to LLXPRT harness)
-
-Upstream touched:
-
-- interactive test helper settings to avoid auth prompt
-- makes `waitForText` assert (uses `expect`)
-
-LLXPRT mapping:
-
-- LLXPRT interactive runs should not block on provider/auth prompts; they should use the same provider/model args as non-interactive tests.
-
-Steps:
-
-1. Update `integration-tests/test-helper.ts` so `runInteractive()` uses the same provider/model flags as `run()`.
-2. Add helper(s) to wait for “ready” text (`Type your message`) with a generous timeout.
-3. If interactive auth dialogs still appear, force a deterministic path:
-   - Prefer passing flags/env so the dialog never appears.
-   - Avoid brittle “press 2” scripting unless absolutely required.
-
-### Batch 31 — `37678acb` — Docs restructure (deployment → installation)
-
-Upstream touched:
-
-- `docs/get-started/*` + sidebar links
-
-LLXPRT mapping:
-
-- LLXPRT already has `docs/deployment.md` and a different docs structure.
-
-Steps:
-
-1. Read upstream content and identify value-add sections (installation steps, prerequisites, onboarding).
-2. Port content selectively into LLXPRT docs:
-   - `docs/deployment.md` (or introduce `docs/installation.md` if it matches LLXPRT navigation).
-3. Update internal links and keep LLXPRT branding.
-
-### Batch 34 — `5dc7059b` — Introduce `InteractiveRun` wrapper for PTY tests
-
-Upstream adds:
-
-- `InteractiveRun` class with:
-  - `expectText()` (originally `waitForText`)
-  - `type()`
-  - `expectExit()`
-
-LLXPRT target:
-
-- `integration-tests/test-helper.ts`
-
-Steps:
-
-1. Add an `InteractiveRun` class (either inline in `test-helper.ts` or separate module).
-2. Change `TestRig.runInteractive()` to return `Promise<InteractiveRun>` and:
-   - spawn pty process
-   - accumulate output
-   - wait for readiness text before returning
-3. Update existing PTY tests (e.g., `integration-tests/ctrl-c-exit.test.ts`) to use the wrapper incrementally.
-
-### Batch 36 — `19c1d734` — Docs: integration tests require `npm run bundle`
-
-Upstream adds a docs section “Building the tests”.
-
-LLXPRT target:
-
-- `dev-docs/integration-tests.md`
-
-Steps:
-
-1. Add a section near the top:
-   - “Before running integration tests, run `npm run bundle`”
-   - Explain when it must be re-run (CLI changes, not test-only changes).
-
-### Batch 37 — `518caae6` — Extract `.gemini` dir constant (LLXPRT uses `.llxprt` + compat)
-
-Upstream touched many files to replace `'.gemini'` literal with `GEMINI_DIR`.
-
-LLXPRT reality:
-
-- LLXPRT already defines:
-  - `LLXPRT_CONFIG_DIR = '.llxprt'`
-  - `GEMINI_DIR = LLXPRT_CONFIG_DIR` (compat alias) in `packages/core/src/tools/memoryTool.ts`
-
-Steps:
-
-1. Identify remaining hardcoded `.gemini` usage in LLXPRT code that should be `.llxprt`:
-   - Especially in `packages/a2a-server/src/config/*` (currently hardcodes `.gemini`).
-2. Replace those literals with imported constants:
-   - Prefer importing `LLXPRT_CONFIG_DIR`/`GEMINI_DIR` from `@vybestack/llxprt-code-core`.
-3. Decide backward-compat behavior:
-   - If we must read legacy `.gemini` directories, implement fallback reads (do not switch back the primary dir).
-4. Update tests that use `.gemini` paths unless they are explicitly testing backward compatibility.
-
-### Batch 38 — `4a5ef4d9` — Add `expectToolCallSuccess` helper
-
-Upstream adds:
-
-- `TestRig.expectToolCallSuccess(toolNames, timeout?)`
-
-LLXPRT target:
-
-- `integration-tests/test-helper.ts`
-
-Steps:
-
-1. Add `expectToolCallSuccess` to LLXPRT `TestRig`:
-   - Wait for telemetry ready
-   - Poll until a tool call exists with `success: true` for any of the names
-   - Assert using `expect(...)`
-2. Use it in flaky integration tests where success is required (especially shell/write tests).
-
-### Batch 39 — `a73b8145` — Rename `waitFor*` to `expect*` in interactive run helper
-
-LLXPRT target:
-
-- `integration-tests/test-helper.ts` (InteractiveRun methods)
-
-Steps:
-
-1. If LLXPRT implemented `InteractiveRun.waitForText` / `waitForExit`, rename to:
-   - `expectText`
-   - `expectExit`
-2. Update any interactive tests accordingly.
-
-### Batch 41 — `c4bd7594` — Settings docs + showInDialog settings
-
-Upstream touched:
-
-- `packages/cli/src/config/settingsSchema.ts` (showInDialog)
-- `docs/get-started/configuration.md`
-
-LLXPRT mapping:
-
-- Docs live at `docs/cli/configuration.md`.
-
-Steps:
-
-1. Audit `packages/cli/src/config/settingsSchema.ts`:
-   - Ensure user-facing settings have `showInDialog: true`.
-   - Do not expose internal-only settings unless intentionally.
-2. Port relevant documentation updates into `docs/cli/configuration.md`.
-
-### Batch 42 — `ada179f5` — Sequential tool call execution (port carefully)
-
-Upstream changes:
-
-- `CoreToolScheduler` executes “scheduled” tool calls sequentially (await per tool).
-
-LLXPRT constraint:
-
-- LLXPRT values parallel batching for performance, but must preserve correctness.
-
-Plan (do not blindly make everything sequential):
-
-1. Inspect upstream diff: `git show ada179f5`.
-2. Identify the correctness issue it fixes:
-   - Is it about ordering of tool responses?
-   - Is it about race conditions in scheduler state?
-3. Add a regression test in LLXPRT `packages/core/src/core/coreToolScheduler.test.ts`:
-   - Create a fake tool registry with two tools.
-   - Have tool A be slow and tool B be fast.
-   - Ensure the scheduler’s produced history/response ordering remains deterministic and correct.
-4. Implement the minimal fix that passes the regression test:
-   - Option A (match upstream): make `attemptExecutionOfScheduledCalls` async and process calls sequentially.
-   - Option B (preserve concurrency): execute concurrently but buffer results and publish/apply them in original order.
-5. Ensure this does not break LLXPRT requestQueue/batching guarantees (per `dev-docs/cherrypicking.md`).
-
-Acceptance criteria:
-
-- Regression test passes.
-- No new deadlocks or performance regressions visible in basic smoke.
-
-### Batch 46 — `7c1a9024` — Retry on specific fetch errors (may be already covered)
-
-Upstream adds:
-
-- Optional retry on a specific “fetch failed sending request” message.
-
-LLXPRT reality:
-
-- `packages/core/src/utils/retry.ts` already treats many “fetch failed” variants as transient.
-
-Steps:
-
-1. Add a focused unit test in `packages/core/src/utils/retry.test.ts`:
-   - Build an `Error('exception TypeError: fetch failed sending request …')`
-   - Assert `isNetworkTransientError(error) === true` or that `retryWithBackoff` retries.
-2. If test already passes, treat this as NOP (no behavior change).
-3. If not, extend transient-error matching (don’t add Google-only settings unless needed).
-
-### Batch 47 — `49b66733` — Disable Ctrl+C test (likely N/A in LLXPRT)
-
-Upstream disables `integration-tests/ctrl-c-exit.test.ts` due to flake.
-
-LLXPRT reality:
-
-- LLXPRT already `describe.skipIf(process.env.CI === 'true')` for this file.
-
-Steps:
-
-1. If the test still flakes locally:
-   - Consider disabling it fully (`describe.skip`) or increasing timeouts.
-2. Otherwise treat as NOP.
-
-### Batch 48 — `99c7108b` — Integration test harness fixes + real allowlist testing
-
-Upstream files touched:
-
-- `integration-tests/test-helper.ts` (yolo flag; matchArgs; log schema)
-- `integration-tests/run_shell_command.test.ts` (actually tests allowlist by setting `yolo:false`)
-- plus minor TS-safe env access in `globalSetup.ts`
-
-LLXPRT required port (this is correctness-critical):
-
-- LLXPRT currently passes `args: [...]` inside the options object to `TestRig.run`, but `TestRig.run` ignores that field. This means allowlist tests are not actually passing `--allowed-tools=...`.
-
-Steps:
-
-1. Update `integration-tests/test-helper.ts`:
-   - Extend `TestRig.run` options to support:
-     - `yolo?: boolean` (default true)
-   - Do not use `args: [...]` inside the options object; instead rely on `...args` rest parameter.
-2. Change `run_shell_command.test.ts`:
-   - Replace all `{ stdin, args: [...] }` usage with:
-     - `rig.run({ stdin, yolo: false }, '--allowed-tools=…', …)`
-3. Add `matchArgs` support to `waitForToolCall`:
-   - `waitForToolCall(toolName, timeout?, matchArgs?)`
-4. Ensure allowlist tests truly run without `--yolo` so permissioning is exercised.
-5. Fix any TypeScript env-index signature issues by using bracket notation where required.
-
-Acceptance criteria:
-
-- The allowlist tests fail if `--allowed-tools` is not passed (i.e., they now validate the intended behavior).
-- Integration tests still run on configured providers in CI/local.
-
-### Batch 49 — `769fe8b1` — Replace test cleanup (upstream deletes a flaky case)
-
-Upstream deletes a flaky replace test and unskips suite.
-
-LLXPRT reality:
-
-- LLXPRT’s replace suite is not fully skipped; we already have a safer “old_string not found” assertion.
-
-Steps:
-
-1. Re-evaluate whether LLXPRT still needs its skipped replace test (`it.skip('should be able to replace content…')`).
-2. If we can make it deterministic (after Batch 48 harness fixes), unskip it.
-3. If a specific case is unworkable, delete/skip only that case (prefer LLXPRT’s stronger assertion patterns).
-
-### Batch 50 — `6f0107e7` — Robust URL validation for web fetch
-
-Upstream adds `parsePrompt()` which:
-
-- Extracts URLs by tokenizing prompt
-- Validates with `new URL()`
-- Errors on malformed/unsupported protocols
-
-LLXPRT mapping:
-
-- Port this behavior into:
-  - `packages/core/src/tools/google-web-fetch.ts`
-  - (optionally) `packages/core/src/tools/direct-web-fetch.ts` for stricter URL validation
-
-Steps:
-
-1. Add `parsePrompt()` to `packages/core/src/tools/google-web-fetch.ts` (export it for testing).
-2. Replace `extractUrls()` usage with `parsePrompt().validUrls`.
-3. Update `validateToolParamValues` to:
-   - return aggregated error messages if malformed URLs exist
-   - require at least one valid http/https URL
-4. Add/extend tests:
-   - Add case: `prompt` contains `https://`-looking but malformed token → validation error
-   - Add case: `ftp://…` token → “unsupported protocol” error
-
-Acceptance criteria:
-
-- Tool rejects malformed URLs with a helpful message.
-- No regression for existing valid prompt flows.
-
-### Batch 52 — `4f5b3357` — Add cyclic-schema MCP integration test
-
-Upstream adds:
-
-- `integration-tests/mcp_server_cyclic_schema.test.ts` with a small inline MCP server script
-
-LLXPRT plan:
-
-1. Implement/confirm `InteractiveRun` is available (Batch 34 + 39).
-2. Add the new test file:
-   - Copy upstream test and adjust settings file structure if LLXPRT differs.
-   - Ensure it runs `llxprt` bundle, not `gemini`.
-3. Ensure MCP server config is written under the correct settings key path and config dir (`.llxprt`).
-4. Run the test locally with `npm run test:integration:sandbox:none` (or `npm run test:e2e`) after `npm run bundle`.
-
-Acceptance criteria:
-
-- `/mcp list` shows the cyclic schema tool name.
-- Test passes consistently (use deflake script if needed).
+## Reimplementation Playbooks (Per-Commit Files)
+
+For every `REIMPLEMENT` batch, follow these rules exactly:
+
+- Make exactly one local commit (even if the batch becomes a NO-OP due to missing files).
+- Use this commit message template (subject line must match exactly):
+
+  ```text
+  reimplement: <subject> (upstream <shortsha>)
+  ```
+
+- In the commit body, always include:
+  - `Upstream: <full sha>`
+  - `LLXPRT adaptations:` (bulleted list)
+  - If NO-OP: `SKIPPED: <reason>`
+
+If a playbook says `SKIP-IF-MISSING` and its target file does not exist:
+
+- DO NOT create the file.
+- Create an empty commit with the template above and the skip reason in the body.
+
+Notes:
+
+- The per-commit playbooks are canonical: `project-plans/20251215gemerge/<sha>-plan.md`
+- Some per-commit playbooks may include absolute paths from the author’s machine; treat those as `<repo-root>/...`.
+- If a per-commit playbook conflicts with `Non-Negotiables (LLxprt Invariants)`, follow `Non-Negotiables`.
+
+### Playbook Index
+
+| Batch | Upstream | Playbook | Dependency Notes |
+|---:|:---:|:---|:---|
+| 02 | `8ac2c684` | `project-plans/20251215gemerge/8ac2c684-plan.md` | Required before Batch 19 |
+| 05 | `8d8a2ab6` | `project-plans/20251215gemerge/8d8a2ab6-plan.md` | Requires Batch 03 (`603ec2b2`) to add `scripts/deflake.js` |
+| 07 | `bcbcaeb8` | `project-plans/20251215gemerge/bcbcaeb8-plan.md` | — |
+| 10 | `0cd490a9` | `project-plans/20251215gemerge/0cd490a9-plan.md` | — |
+| 12 | `bd6bba8d` | `project-plans/20251215gemerge/bd6bba8d-plan.md` | Requires Batch 03 (`603ec2b2`) to add `scripts/deflake.js` |
+| 15 | `5e688b81` | `project-plans/20251215gemerge/5e688b81-plan.md` | — |
+| 16 | `5aab793c` | `project-plans/20251215gemerge/5aab793c-plan.md` | — |
+| 17 | `0b6c0200` | `project-plans/20251215gemerge/0b6c0200-plan.md` | — |
+| 19 | `c82c2c2b` | `project-plans/20251215gemerge/c82c2c2b-plan.md` | Requires Batch 02 (`8ac2c684`) |
+| 20 | `558be873` | `project-plans/20251215gemerge/558be873-plan.md` | — |
+| 24 | `849cd1f9` | `project-plans/20251215gemerge/849cd1f9-plan.md` | — |
+| 25 | `32db4ff6` | `project-plans/20251215gemerge/32db4ff6-plan.md` | — |
+| 27 | `ab3804d8` | `project-plans/20251215gemerge/ab3804d8-plan.md` | — |
+| 29 | `a6e00d91` | `project-plans/20251215gemerge/a6e00d91-plan.md` | — |
+| 30 | `a64bb433` | `project-plans/20251215gemerge/a64bb433-plan.md` | — |
+| 31 | `37678acb` | `project-plans/20251215gemerge/37678acb-plan.md` | — |
+| 34 | `5dc7059b` | `project-plans/20251215gemerge/5dc7059b-plan.md` | Required before Batch 52; incorporates Batch 39 |
+| 36 | `19c1d734` | `project-plans/20251215gemerge/19c1d734-plan.md` | — |
+| 37 | `518caae6` | `project-plans/20251215gemerge/518caae6-plan.md` | — |
+| 38 | `4a5ef4d9` | `project-plans/20251215gemerge/4a5ef4d9-plan.md` | — |
+| 39 | `a73b8145` | `project-plans/20251215gemerge/a73b8145-plan.md` | NO-OP (folded into Batch 34) |
+| 41 | `c4bd7594` | `project-plans/20251215gemerge/c4bd7594-plan.md` | — |
+| 42 | `ada179f5` | `project-plans/20251215gemerge/ada179f5-plan.md` | Must preserve parallel batching (buffered publish ordering) |
+| 46 | `7c1a9024` | `project-plans/20251215gemerge/7c1a9024-plan.md` | NO-OP (already covered) |
+| 47 | `49b66733` | `project-plans/20251215gemerge/49b66733-plan.md` | — |
+| 48 | `99c7108b` | `project-plans/20251215gemerge/99c7108b-plan.md` | — |
+| 49 | `769fe8b1` | `project-plans/20251215gemerge/769fe8b1-plan.md` | — |
+| 50 | `6f0107e7` | `project-plans/20251215gemerge/6f0107e7-plan.md` | — |
+| 52 | `4f5b3357` | `project-plans/20251215gemerge/4f5b3357-plan.md` | Requires Batch 34 (`5dc7059b`) |
 
 ---
 
@@ -963,6 +427,5 @@ If you want an explicit “sync point” marker in git history (per `dev-docs/ch
 ```bash
 # IMPORTANT: merge a specific upstream commit hash, not upstream/main.
 # Choose the upstream commit you consider the sync point (e.g. the last commit in v0.10.0 range).
-git merge -s ours --no-ff <upstream-sync-sha> -m \"Merge upstream gemini-cli up to <sha> (marker only)\"
+git merge -s ours --no-ff <upstream-sync-sha> -m "Merge upstream gemini-cli up to <sha> (marker only)"
 ```
-
