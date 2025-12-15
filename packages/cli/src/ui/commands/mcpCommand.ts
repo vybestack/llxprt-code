@@ -88,7 +88,8 @@ const getMcpStatus = async (
   const blockedMcpServers = config.getBlockedMcpServers() || [];
 
   if (serverNames.length === 0 && blockedMcpServers.length === 0) {
-    const docsUrl = 'https://goo.gle/gemini-cli-docs-mcp';
+    const docsUrl =
+      'https://github.com/vybestack/llxprt-code/blob/main/docs/tools/mcp-server.md';
     return {
       type: 'message',
       messageType: 'info',
