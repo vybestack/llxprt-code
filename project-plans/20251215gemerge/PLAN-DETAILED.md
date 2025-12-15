@@ -43,7 +43,7 @@ These are the rules for conflict resolution and reimplementation. If an upstream
 
 - CLI name: **`llxprt`**, not `gemini`.
 - Packages: **`@vybestack/llxprt-code-*`**, not `@google/gemini-cli-*`.
-- Config dir: **`.llxprt`**, not `.gemini` (except where we intentionally support backward compatibility; prefer `LLXPRT_CONFIG_DIR`/`GEMINI_DIR` constants).
+- Config dir: **`.llxprt`**, not `.gemini` (only keep `.gemini` in explicit migration code paths; prefer `LLXPRT_CONFIG_DIR` constant).
 - Context file: **`LLXPRT.md`**, not `GEMINI.md`.
 - Env vars: **`LLXPRT_CODE_*`** (and existing LLXPRT vars), not `GEMINI_CLI_*`.
   - Examples to preserve:
@@ -1522,10 +1522,9 @@ Steps (numbered, imperative, no ambiguity):
 
 1. Inspect upstream approach:
    - `git show 518caae6 --name-only`
-2. Add a central constant (compat shim):
-   1. In `packages/core/src/utils/paths.ts`, add:
-      - `export const GEMINI_DIR = LLXPRT_DIR;`
-   2. Do not change the value of `LLXPRT_DIR` (it must remain `'.llxprt'`).
+2. Avoid new “compat shims”:
+   1. Prefer existing LLXPRT constants (`LLXPRT_CONFIG_DIR`, `LLXPRT_DIR`) over introducing new aliases.
+   2. Only keep `.gemini` in explicit migration code paths (e.g., credential migration read-paths).
 3. Find `.gemini` hardcoding in LLXPRT (code/tests only):
 
    ```bash
@@ -1534,9 +1533,7 @@ Steps (numbered, imperative, no ambiguity):
 
 4. For every match returned by the command above:
    1. IF the file path starts with `docs/` OR `dev-docs/` OR `project-plans/` THEN do not change it in this batch.
-   2. ELSE replace hardcoded `.gemini` path segments with the imported constant:
-      - Prefer `LLXPRT_DIR` (from `@vybestack/llxprt-code-core` or local `paths.ts`).
-      - Use `GEMINI_DIR` only as a compatibility alias when you are mechanically porting upstream code and the surrounding file already uses that name.
+   2. ELSE replace hardcoded `.gemini` path segments with the imported LLXPRT constant (prefer `LLXPRT_DIR` / `LLXPRT_CONFIG_DIR`).
 5. Update tests to build paths via the constants:
    - Example pattern (use one, do not hardcode):
      - `path.join(process.cwd(), LLXPRT_DIR, 'extensions', ...)`

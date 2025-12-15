@@ -13,7 +13,7 @@ Upstream commit `518caae6` ("chore: Extract '.gemini' to GEMINI_DIR constant (#1
 **Location:** `packages/core/src/tools/memoryTool.ts` (lines 75-77)
 ```typescript
 export const LLXPRT_CONFIG_DIR = '.llxprt';
-// Alias for backward compatibility with gemini-cli code
+// Internal alias to ease upstream merges (still points at .llxprt)
 export const GEMINI_DIR = LLXPRT_CONFIG_DIR;
 ```
 
@@ -84,28 +84,23 @@ content: 'Could not determine the configuration directory path.',
 
 **File 5: `packages/cli/src/ui/commands/setupGithubCommand.ts` (line 57)**
 ```typescript
-const gitignoreEntries = ['.gemini/', 'gha-creds-*.json'];
+const gitignoreEntries = ['.llxprt/', 'gha-creds-*.json'];
 ```
-**Change:** This adds `.gemini/` to .gitignore for upstream compatibility
-**Action:** Keep as-is OR document that we're maintaining upstream compatibility
-**Add comment:**
-```typescript
-// Note: Using .gemini/ for upstream gemini-cli compatibility
-const gitignoreEntries = ['.gemini/', 'gha-creds-*.json'];
-```
+**Change:** Use `.llxprt/` (LLXPRT’s config dir) and do not add `.gemini/` entries.
+**Rationale:** Avoid Gemini branding; `.gemini/` is not an LLXPRT directory.
 
 ## Implementation Strategy
 
 ### Option 1: Minimal Changes (RECOMMENDED)
-Only update the two a2a-server files that define constants. This provides consistency in our constant definitions while maintaining backward compatibility elsewhere.
+Only update the a2a-server constants and user-facing strings that incorrectly mention `.gemini`. Keep `.gemini` only in the OAuth credential migration read-path (already present in LLXPRT).
 
 **Pros:**
 - Minimal risk
-- Maintains existing migration/legacy paths
-- Clear separation between config dir constants and legacy compatibility
+- Maintains existing OAuth migration read-path
+- Clear separation between LLXPRT config dir and legacy migration path
 
 **Cons:**
-- Some hardcoded strings remain (but they're intentional for compatibility)
+- Some hardcoded strings may remain (but should not introduce `.gemini` outside migration code)
 
 ### Option 2: Full Replacement
 Replace all 5 occurrences with constants or import LLXPRT_CONFIG_DIR.
@@ -143,8 +138,8 @@ legacyPaths.push(path.join(homeDir, '.gemini', OAUTH_FILE));
 **File:** `packages/cli/src/ui/commands/setupGithubCommand.ts` (line 57)
 - Add comment before line 57:
 ```typescript
-// Using .gemini/ for upstream gemini-cli compatibility in GitHub workflows
-const gitignoreEntries = ['.gemini/', 'gha-creds-*.json'];
+// Ignore LLXPRT config dir in repos
+const gitignoreEntries = ['.llxprt/', 'gha-creds-*.json'];
 ```
 
 ### Step 3: Improve Error Message
@@ -165,8 +160,8 @@ const gitignoreEntries = ['.gemini/', 'gha-creds-*.json'];
 ## Backward Compatibility
 
 **Current approach already handles this:**
-- `GEMINI_DIR` is exported as an alias to `LLXPRT_CONFIG_DIR` in memoryTool.ts
-- Legacy migration path in oauth-credential-storage.ts checks both `.llxprt/` and `.gemini/`
+- `GEMINI_DIR` is an internal alias of `LLXPRT_CONFIG_DIR` (points to `.llxprt`)
+- OAuth credential migration reads `.gemini/<oauth-file>` if present (legacy), then writes to the new storage
 - No breaking changes to existing user configurations
 
 **No additional fallback logic needed.**
@@ -190,5 +185,5 @@ const gitignoreEntries = ['.gemini/', 'gha-creds-*.json'];
 
 - This is a minimal-impact merge of upstream's constant extraction
 - We maintain `.llxprt` as our primary config directory
-- Legacy `.gemini` references are preserved only where needed for backward compatibility
+- Keep `.gemini` only in legacy OAuth credential migration; do not add new `.gemini` usage elsewhere
 - The bulk of grep results (92 occurrences) are property names, not directory paths

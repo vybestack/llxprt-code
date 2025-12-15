@@ -290,7 +290,7 @@ export * from './tool-names.js';
 
 **Upstream Intent:** Centralize tool name constants to prevent typos, ensure consistency, and **prevent circular dependencies**.
 
-**LLxprt Implementation:** Will implement tool-names.ts pattern while keeping Class.Name pattern for backward compatibility and convenience.
+**LLxprt Implementation:** Implement the tool-names.ts pattern while keeping the existing Class.Name API for tools.
 
 **Architecture Benefit:** Breaks circular dependency chains:
 - Config modules can import tool names without importing tool classes

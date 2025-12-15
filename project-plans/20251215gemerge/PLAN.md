@@ -46,7 +46,7 @@ These are the rules for conflict resolution and reimplementation. If an upstream
 
 - CLI name: **`llxprt`**, not `gemini`.
 - Packages: **`@vybestack/llxprt-code-*`**, not `@google/gemini-cli-*`.
-- Config dir: **`.llxprt`**, not `.gemini` (except where we intentionally support backward compatibility; prefer `LLXPRT_CONFIG_DIR`/`GEMINI_DIR` constants).
+- Config dir: **`.llxprt`**, not `.gemini` (only keep `.gemini` in explicit migration code paths; prefer `LLXPRT_CONFIG_DIR` constant).
 - Context file: **`LLXPRT.md`**, not `GEMINI.md`.
 - Env vars: **`LLXPRT_CODE_*`** (and existing LLXPRT vars), not `GEMINI_CLI_*`.
   - Examples to preserve:

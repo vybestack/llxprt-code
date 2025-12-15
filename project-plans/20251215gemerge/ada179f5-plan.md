@@ -493,11 +493,11 @@ No runtime feature flag: LLXPRT must remain parallel-by-default.
 ## Risk Mitigation
 
 **Risk 1: Performance Regression**
-- *Mitigation:* Benchmark before/after, feature flag for rollback
+- *Mitigation:* Benchmark before/after; if regression is unacceptable, revert the reimplementation commit(s)
 - *Threshold:* < 5% acceptable, > 5% requires optimization
 
 **Risk 2: Buffering Logic Bugs**
-- *Mitigation:* Comprehensive unit tests, feature flag fallback
+- *Mitigation:* Comprehensive unit tests; revert if a correctness bug is found
 - *Detection:* Out-of-order results, missing results
 
 **Risk 3: Memory Leaks (Unbounded Buffer)**
@@ -523,8 +523,7 @@ No runtime feature flag: LLXPRT must remain parallel-by-default.
 ### Best of Both Worlds
 - Execute fast (parallel)
 - Publish correctly (ordered)
-- Maintain compatibility (feature flag)
-- Enable debugging (dual strategies)
+- Rollback is a revert (no runtime switches)
 
 ## Post-Implementation Verification
 
@@ -533,7 +532,7 @@ After merging:
 1. Monitor production performance metrics
 2. Watch for ordering-related bug reports
 3. Collect user feedback on responsiveness
-4. Consider removing feature flag after 2-week stabilization period
+4. If issues are discovered: revert the reimplementation commit(s)
 
 ## Notes
 
