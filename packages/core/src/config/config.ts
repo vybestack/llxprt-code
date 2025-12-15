@@ -347,7 +347,7 @@ export interface ConfigParameters {
   shellReplacement?: boolean;
   trustedFolder?: boolean;
   useRipgrep?: boolean;
-  enableInteractiveShell?: boolean;
+  shouldUseNodePtyShell?: boolean;
   skipNextSpeakerCheck?: boolean;
   extensionManagement?: boolean;
   enablePromptCompletion?: boolean;
@@ -502,7 +502,7 @@ export class Config {
   private readonly interactive: boolean;
   private readonly trustedFolder: boolean | undefined;
   private readonly useRipgrep: boolean;
-  private readonly enableInteractiveShell: boolean;
+  private readonly shouldUseNodePtyShell: boolean;
   private readonly skipNextSpeakerCheck: boolean;
   private readonly extensionManagement: boolean;
   private readonly enablePromptCompletion: boolean = false;
@@ -1552,8 +1552,8 @@ export class Config {
     return this.useRipgrep;
   }
 
-  getEnableInteractiveShell(): boolean {
-    return this.enableInteractiveShell;
+  getShouldUseNodePtyShell(): boolean {
+    return this.shouldUseNodePtyShell;
   }
 
   getSkipNextSpeakerCheck(): boolean {
