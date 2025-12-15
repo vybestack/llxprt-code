@@ -1896,11 +1896,47 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
-    const executeRequest = () =>
-      client.chat.completions.create(requestBody, {
+    // Track failover client - only rebuilt after bucket failover succeeds
+    // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
+    let failoverClient: OpenAI | null = null;
+
+    // Bucket failover callback for 429 errors
+    // @plan PLAN-20251213issue686 Bucket failover integration for OpenAIProvider
+    const onPersistent429Callback = async (): Promise<boolean | null> => {
+      // Try to get the bucket failover handler from runtime context config
+      const failoverHandler =
+        options.runtime?.config?.getBucketFailoverHandler();
+
+      if (failoverHandler && failoverHandler.isEnabled()) {
+        logger.debug(() => 'Attempting bucket failover on persistent 429');
+        const success = await failoverHandler.tryFailover();
+        if (success) {
+          // Rebuild client with fresh credentials from new bucket
+          failoverClient = await this.getClient(options);
+          logger.debug(
+            () =>
+              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
+          );
+          return true; // Signal retry with new bucket
+        }
+        logger.debug(
+          () => 'Bucket failover failed - no more buckets available',
+        );
+        return false; // No more buckets, stop retrying
+      }
+
+      // No bucket failover configured
+      return null;
+    };
+
+    // Use failover client if bucket failover happened, otherwise use original client
+    const executeRequest = () => {
+      const currentClient = failoverClient ?? client;
+      return currentClient.chat.completions.create(requestBody, {
         ...(abortSignal ? { signal: abortSignal } : {}),
         ...(customHeaders ? { headers: customHeaders } : {}),
       });
+    };
 
     let response:
       | OpenAI.Chat.Completions.ChatCompletion
@@ -1913,6 +1949,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         initialDelayMs,
         shouldRetryOnError: this.shouldRetryResponse.bind(this),
         trackThrottleWaitTime: this.throttleTracker,
+        onPersistent429: onPersistent429Callback,
       });
     } else {
       let compressedOnce = false;
@@ -1923,6 +1960,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             initialDelayMs,
             shouldRetryOnError: this.shouldRetryResponse.bind(this),
             trackThrottleWaitTime: this.throttleTracker,
+            onPersistent429: onPersistent429Callback,
           })) as OpenAI.Chat.Completions.ChatCompletion;
           break;
         } catch (error) {
@@ -3387,22 +3425,60 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
     const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
 
+    // Track failover client - only rebuilt after bucket failover succeeds
+    // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
+    let failoverClientTools: OpenAI | null = null;
+
+    // Bucket failover callback for 429 errors - tools mode
+    // @plan PLAN-20251213issue686 Bucket failover integration for OpenAIProvider
+    const onPersistent429CallbackTools = async (): Promise<boolean | null> => {
+      // Try to get the bucket failover handler from runtime context config
+      const failoverHandler =
+        options.runtime?.config?.getBucketFailoverHandler();
+
+      if (failoverHandler && failoverHandler.isEnabled()) {
+        logger.debug(() => 'Attempting bucket failover on persistent 429');
+        const success = await failoverHandler.tryFailover();
+        if (success) {
+          // Rebuild client with fresh credentials from new bucket
+          failoverClientTools = await this.getClient(options);
+          logger.debug(
+            () =>
+              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
+          );
+          return true; // Signal retry with new bucket
+        }
+        logger.debug(
+          () => 'Bucket failover failed - no more buckets available',
+        );
+        return false; // No more buckets, stop retrying
+      }
+
+      // No bucket failover configured
+      return null;
+    };
+
     if (streamingEnabled) {
       // Streaming mode - use retry loop with compression support
       let compressedOnce = false;
       while (true) {
         try {
+          // Use failover client if bucket failover happened, otherwise use original client
+          // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
           response = await retryWithBackoff(
-            () =>
-              client.chat.completions.create(requestBody, {
+            () => {
+              const currentClient = failoverClientTools ?? client;
+              return currentClient.chat.completions.create(requestBody, {
                 ...(abortSignal ? { signal: abortSignal } : {}),
                 ...(customHeaders ? { headers: customHeaders } : {}),
-              }),
+              });
+            },
             {
               maxAttempts: maxRetries,
               initialDelayMs,
               shouldRetryOnError: this.shouldRetryResponse.bind(this),
               trackThrottleWaitTime: this.throttleTracker,
+              onPersistent429: onPersistent429CallbackTools,
             },
           );
 
@@ -3510,17 +3586,22 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       let compressedOnce = false;
       while (true) {
         try {
+          // Use failover client if bucket failover happened, otherwise use original client
+          // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
           response = (await retryWithBackoff(
-            () =>
-              client.chat.completions.create(requestBody, {
+            () => {
+              const currentClient = failoverClientTools ?? client;
+              return currentClient.chat.completions.create(requestBody, {
                 ...(abortSignal ? { signal: abortSignal } : {}),
                 ...(customHeaders ? { headers: customHeaders } : {}),
-              }),
+              });
+            },
             {
               maxAttempts: maxRetries,
               initialDelayMs,
               shouldRetryOnError: this.shouldRetryResponse.bind(this),
               trackThrottleWaitTime: this.throttleTracker,
+              onPersistent429: onPersistent429CallbackTools,
             },
           )) as OpenAI.Chat.Completions.ChatCompletion;
 
