@@ -1896,11 +1896,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
-    const executeRequest = () =>
-      client.chat.completions.create(requestBody, {
-        ...(abortSignal ? { signal: abortSignal } : {}),
-        ...(customHeaders ? { headers: customHeaders } : {}),
-      });
+    // Track failover client - only rebuilt after bucket failover succeeds
+    // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
+    let failoverClient: OpenAI | null = null;
 
     // Bucket failover callback for 429 errors
     // @plan PLAN-20251213issue686 Bucket failover integration for OpenAIProvider
@@ -1913,6 +1911,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         logger.debug(() => 'Attempting bucket failover on persistent 429');
         const success = await failoverHandler.tryFailover();
         if (success) {
+          // Rebuild client with fresh credentials from new bucket
+          failoverClient = await this.getClient(options);
           logger.debug(
             () =>
               `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
@@ -1927,6 +1927,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // No bucket failover configured
       return null;
+    };
+
+    // Use failover client if bucket failover happened, otherwise use original client
+    const executeRequest = () => {
+      const currentClient = failoverClient ?? client;
+      return currentClient.chat.completions.create(requestBody, {
+        ...(abortSignal ? { signal: abortSignal } : {}),
+        ...(customHeaders ? { headers: customHeaders } : {}),
+      });
     };
 
     let response:
@@ -3416,6 +3425,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const shouldDumpSuccess = shouldDumpSDKContext(dumpMode, false);
     const shouldDumpError = shouldDumpSDKContext(dumpMode, true);
 
+    // Track failover client - only rebuilt after bucket failover succeeds
+    // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
+    let failoverClientTools: OpenAI | null = null;
+
     // Bucket failover callback for 429 errors - tools mode
     // @plan PLAN-20251213issue686 Bucket failover integration for OpenAIProvider
     const onPersistent429CallbackTools = async (): Promise<boolean | null> => {
@@ -3427,6 +3440,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         logger.debug(() => 'Attempting bucket failover on persistent 429');
         const success = await failoverHandler.tryFailover();
         if (success) {
+          // Rebuild client with fresh credentials from new bucket
+          failoverClientTools = await this.getClient(options);
           logger.debug(
             () =>
               `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
@@ -3448,12 +3463,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       let compressedOnce = false;
       while (true) {
         try {
+          // Use failover client if bucket failover happened, otherwise use original client
+          // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
           response = await retryWithBackoff(
-            () =>
-              client.chat.completions.create(requestBody, {
+            () => {
+              const currentClient = failoverClientTools ?? client;
+              return currentClient.chat.completions.create(requestBody, {
                 ...(abortSignal ? { signal: abortSignal } : {}),
                 ...(customHeaders ? { headers: customHeaders } : {}),
-              }),
+              });
+            },
             {
               maxAttempts: maxRetries,
               initialDelayMs,
@@ -3567,12 +3586,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       let compressedOnce = false;
       while (true) {
         try {
+          // Use failover client if bucket failover happened, otherwise use original client
+          // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
           response = (await retryWithBackoff(
-            () =>
-              client.chat.completions.create(requestBody, {
+            () => {
+              const currentClient = failoverClientTools ?? client;
+              return currentClient.chat.completions.create(requestBody, {
                 ...(abortSignal ? { signal: abortSignal } : {}),
                 ...(customHeaders ? { headers: customHeaders } : {}),
-              }),
+              });
+            },
             {
               maxAttempts: maxRetries,
               initialDelayMs,

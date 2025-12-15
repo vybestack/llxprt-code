@@ -769,7 +769,10 @@ export class AnthropicProvider extends BaseProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    const { client, authToken } = await this.buildProviderClient(
+    // Build client and authToken. Client is used for initial requests;
+    // after bucket failover, a new client is built with fresh credentials.
+    // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
+    const { client: initialClient, authToken } = await this.buildProviderClient(
       options,
       options.resolved.telemetry,
     );
@@ -1539,16 +1542,6 @@ export class AnthropicProvider extends BaseProvider {
       );
     }
 
-    const apiCall = () =>
-      Object.keys(customHeaders).length > 0
-        ? client.messages.create(
-            requestBody as Parameters<typeof client.messages.create>[0],
-            { headers: customHeaders },
-          )
-        : client.messages.create(
-            requestBody as Parameters<typeof client.messages.create>[0],
-          );
-
     const { maxAttempts, initialDelayMs } = this.getRetryConfig(
       configEphemeralSettings,
     );
@@ -1577,8 +1570,63 @@ export class AnthropicProvider extends BaseProvider {
       | Anthropic.Message
       | AsyncIterable<Anthropic.MessageStreamEvent>;
 
-    // Create a wrapper that calls withResponse() to get headers
+    // Track failover client - only rebuilt after bucket failover succeeds
+    // The initialClient is created at the start of generateChatCompletionWithOptions
+    // @plan PLAN-20251213issue686 Fix: client must be rebuilt after bucket failover
+    let failoverClient: Anthropic | null = null;
+
+    // Bucket failover callback for 429 errors
+    // @plan PLAN-20251213issue686 Bucket failover integration for AnthropicProvider
+    const logger = this.getLogger();
+    const onPersistent429Callback = async (): Promise<boolean | null> => {
+      // Try to get the bucket failover handler from runtime context config
+      const failoverHandler =
+        options.runtime?.config?.getBucketFailoverHandler();
+
+      if (failoverHandler && failoverHandler.isEnabled()) {
+        logger.debug(() => 'Attempting bucket failover on persistent 429');
+        const success = await failoverHandler.tryFailover();
+        if (success) {
+          // Rebuild client with fresh credentials from new bucket
+          const { client: newClient } = await this.buildProviderClient(
+            options,
+            options.resolved.telemetry,
+          );
+          failoverClient = newClient;
+          logger.debug(
+            () =>
+              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
+          );
+          return true; // Signal retry with new bucket
+        }
+        logger.debug(
+          () => 'Bucket failover failed - no more buckets available',
+        );
+        return false; // No more buckets, stop retrying
+      }
+
+      // No bucket failover configured
+      return null;
+    };
+
+    // Use failover client if bucket failover happened, otherwise use initial client
     const apiCallWithResponse = async () => {
+      const currentClient = failoverClient ?? initialClient;
+
+      const apiCall = () =>
+        Object.keys(customHeaders).length > 0
+          ? currentClient.messages.create(
+              requestBody as Parameters<
+                typeof currentClient.messages.create
+              >[0],
+              { headers: customHeaders },
+            )
+          : currentClient.messages.create(
+              requestBody as Parameters<
+                typeof currentClient.messages.create
+              >[0],
+            );
+
       const promise = apiCall();
       // The promise has a withResponse() method we can call
       if (promise && typeof promise === 'object' && 'withResponse' in promise) {
@@ -1595,34 +1643,6 @@ export class AnthropicProvider extends BaseProvider {
       }
       // Fallback if withResponse is not available
       return { data: await promise, response: undefined };
-    };
-
-    // Bucket failover callback for 429 errors
-    // @plan PLAN-20251213issue686 Bucket failover integration for AnthropicProvider
-    const logger = this.getLogger();
-    const onPersistent429Callback = async (): Promise<boolean | null> => {
-      // Try to get the bucket failover handler from runtime context config
-      const failoverHandler =
-        options.runtime?.config?.getBucketFailoverHandler();
-
-      if (failoverHandler && failoverHandler.isEnabled()) {
-        logger.debug(() => 'Attempting bucket failover on persistent 429');
-        const success = await failoverHandler.tryFailover();
-        if (success) {
-          logger.debug(
-            () =>
-              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
-          );
-          return true; // Signal retry with new bucket
-        }
-        logger.debug(
-          () => 'Bucket failover failed - no more buckets available',
-        );
-        return false; // No more buckets, stop retrying
-      }
-
-      // No bucket failover configured
-      return null;
     };
 
     try {
