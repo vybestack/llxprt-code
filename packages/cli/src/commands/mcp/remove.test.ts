@@ -154,7 +154,7 @@ describe('mcp remove command', () => {
       expect(updatedContent).toContain('// Server to keep');
       expect(updatedContent).toContain('"context7"');
       expect(updatedContent).not.toContain('"oldServer"');
-      expect(updatedContent).toContain('// Server to remove');
+      expect(updatedContent).not.toContain('// Server to remove');
 
       consoleSpy.mockRestore();
     });

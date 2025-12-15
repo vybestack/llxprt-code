@@ -146,6 +146,7 @@ export interface CliArgs {
   sessionSummary: string | undefined;
   dumponerror: boolean | undefined;
   promptWords: string[] | undefined;
+  query: string | undefined;
   set: string[] | undefined;
 }
 
@@ -553,12 +554,19 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     process.exit(0);
   }
 
+  const promptWords = result.promptWords as string[] | undefined;
+  const promptWordsFiltered =
+    promptWords?.filter((word) => word.trim() !== '') || [];
+  const queryFromPromptWords =
+    promptWordsFiltered.length > 0 ? promptWordsFiltered.join(' ') : undefined;
+
   const cliArgs: CliArgs = {
     model: result.model as string | undefined,
     sandbox: result.sandbox as boolean | string | undefined,
     sandboxImage: result.sandboxImage as string | undefined,
     debug: result.debug as boolean | undefined,
-    prompt: result.prompt as string | undefined,
+    prompt:
+      (result.prompt as string | undefined) || queryFromPromptWords || undefined,
     promptInteractive: result.promptInteractive as string | undefined,
     allFiles: result.allFiles as boolean | undefined,
     showMemoryUsage: result.showMemoryUsage as boolean | undefined,
@@ -591,6 +599,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     dumponerror: result.dumponerror as boolean | undefined,
     allowedTools: result.allowedTools as string[] | undefined,
     promptWords: result.promptWords as string[] | undefined,
+    query: queryFromPromptWords,
     set: result.set as string[] | undefined,
   };
 
@@ -1022,8 +1031,10 @@ export async function loadCliConfig(
     approvalMode = ApprovalMode.DEFAULT;
   }
 
-  // Fix: If promptWords are provided, always use non-interactive mode
-  const hasPromptWords = argv.promptWords && argv.promptWords.length > 0;
+  // Fix: If promptWords are provided (and non-empty), always use non-interactive mode
+  const hasPromptWords =
+    argv.promptWords &&
+    argv.promptWords.some((word) => word.trim() !== '');
   const interactive =
     !!argv.promptInteractive ||
     (process.stdin.isTTY && !hasPromptWords && !argv.prompt);
