@@ -21,7 +21,9 @@ const mockOAuthManager = {
   getToken: vi.fn(),
   getOAuthToken: getOAuthTokenMock,
   peekStoredToken: peekStoredTokenMock,
-  getSupportedProviders: vi.fn().mockReturnValue(['gemini', 'qwen']),
+  getSupportedProviders: vi
+    .fn()
+    .mockReturnValue(['gemini', 'qwen', 'anthropic', 'codex']),
   getHigherPriorityAuth: vi.fn(),
   logout: vi.fn(),
 } as unknown as OAuthManager;
@@ -235,8 +237,10 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
   describe('Provider validation', () => {
     it('@given unknown provider @when provider not supported @then returns error message', async () => {
-      // Given: getSupportedProviders returns gemini, qwen
-      const mockGetSupported = vi.fn().mockReturnValue(['gemini', 'qwen']);
+      // Given: getSupportedProviders returns gemini, qwen, anthropic, codex
+      const mockGetSupported = vi
+        .fn()
+        .mockReturnValue(['gemini', 'qwen', 'anthropic', 'codex']);
       (mockOAuthManager.getSupportedProviders as unknown) = mockGetSupported;
 
       // When: User enters unknown provider
@@ -247,7 +251,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Unknown provider: unknown-provider. Supported providers: gemini, qwen',
+          'Unknown provider: unknown-provider. Supported providers: gemini, qwen, anthropic, codex',
       });
     });
 

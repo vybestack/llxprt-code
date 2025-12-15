@@ -19,6 +19,7 @@ import {
 import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
+import { CodexOAuthProvider } from '../../auth/codex-oauth-provider.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   type CommandArgumentSchema,
@@ -665,6 +666,7 @@ export const authCommand: SlashCommand = {
       oauthManager.registerProvider(new GeminiOAuthProvider());
       oauthManager.registerProvider(new QwenOAuthProvider());
       oauthManager.registerProvider(new AnthropicOAuthProvider());
+      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
 
       runtime.registerCliProviderInfrastructure(providerManager, oauthManager);
     }

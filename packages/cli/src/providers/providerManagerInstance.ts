@@ -332,14 +332,8 @@ export function createProviderManager(
         ? providerBaseUrl
         : process.env.OPENAI_BASE_URL;
 
-  if (process.env.DEBUG || process.env.VERBOSE) {
-    console.log('[ProviderManager] Initializing OpenAI provider with:', {
-      hasApiKey: !!openaiApiKey,
-      hasEphemeralAuthKey: !!ephemeralAuthKey,
-      hasProviderApiKey: !!openaiProviderApiKey,
-      baseUrl: openaiBaseUrl || 'default',
-    });
-  }
+  // Debug logging removed - was using console.log which violates project guidelines
+  // Use DebugLogger if detailed logging is needed here
 
   const openaiProviderConfig: ProviderConfigWithToolMode = {
     enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
@@ -383,15 +377,16 @@ export function createProviderManager(
 
   void ensureOAuthProviderRegistered('qwen', oauthManager, tokenStore, addItem);
 
-  if (effectiveOpenaiResponsesEnabled) {
-    manager.registerProvider(
-      getOpenAIResponsesProvider(
-        openaiApiKey,
-        openaiBaseUrl,
-        allowBrowserEnvironment,
-      ),
-    );
-  }
+  // Always register OpenAI Responses provider (openaiResponsesEnabled setting is obsolete)
+  // Pass oauthManager for Codex mode support
+  manager.registerProvider(
+    getOpenAIResponsesProvider(
+      openaiApiKey,
+      openaiBaseUrl,
+      allowBrowserEnvironment,
+      oauthManager,
+    ),
+  );
 
   manager.registerProvider(
     getAnthropicProvider(
@@ -403,6 +398,13 @@ export function createProviderManager(
 
   void ensureOAuthProviderRegistered(
     'anthropic',
+    oauthManager,
+    tokenStore,
+    addItem,
+  );
+
+  void ensureOAuthProviderRegistered(
+    'codex',
     oauthManager,
     tokenStore,
     addItem,
@@ -517,6 +519,19 @@ function registerAliasProviders(
     switch (entry.config.baseProvider.toLowerCase()) {
       case 'openai': {
         const provider = createOpenAIAliasProvider(
+          entry,
+          openaiApiKey,
+          openaiBaseUrl,
+          openaiProviderConfig,
+          oauthManager,
+        );
+        if (provider) {
+          providerManagerInstance.registerProvider(provider);
+        }
+        break;
+      }
+      case 'openai-responses': {
+        const provider = createOpenAIResponsesAliasProvider(
           entry,
           openaiApiKey,
           openaiBaseUrl,
@@ -655,6 +670,73 @@ function createOpenAIAliasProvider(
   return provider;
 }
 
+function createOpenAIResponsesAliasProvider(
+  entry: ProviderAliasEntry,
+  openaiApiKey: string | undefined,
+  openaiBaseUrl: string | undefined,
+  openaiProviderConfig: IProviderConfig,
+  oauthManager: OAuthManager,
+): OpenAIResponsesProvider | null {
+  const resolvedBaseUrl = entry.config.baseUrl || openaiBaseUrl;
+  if (!resolvedBaseUrl) {
+    console.warn(
+      `[ProviderManager] Alias '${entry.alias}' is missing a baseUrl and no default is available, skipping.`,
+    );
+    return null;
+  }
+
+  const aliasProviderConfig: IProviderConfig = {
+    ...openaiProviderConfig,
+    baseUrl: resolvedBaseUrl,
+  };
+
+  if (entry.config.providerConfig) {
+    Object.assign(aliasProviderConfig, entry.config.providerConfig);
+  }
+
+  if (entry.config.defaultModel) {
+    aliasProviderConfig.defaultModel = entry.config.defaultModel;
+  }
+
+  let aliasApiKey: string | undefined;
+  if (entry.config.apiKeyEnv) {
+    const envValue = process.env[entry.config.apiKeyEnv];
+    if (envValue && envValue.trim() !== '') {
+      aliasApiKey = sanitizeApiKey(envValue);
+    }
+  }
+  if (!aliasApiKey && openaiApiKey) {
+    aliasApiKey = openaiApiKey;
+  }
+
+  const provider = new OpenAIResponsesProvider(
+    aliasApiKey || undefined,
+    resolvedBaseUrl,
+    aliasProviderConfig,
+    oauthManager,
+  );
+
+  // Override the provider name to match the alias
+  Object.defineProperty(provider, 'name', {
+    value: entry.alias,
+    writable: false,
+    enumerable: true,
+    configurable: true,
+  });
+
+  if (
+    entry.config.defaultModel &&
+    typeof provider.getDefaultModel === 'function'
+  ) {
+    const configuredDefaultModel = entry.config.defaultModel;
+    const originalGetDefaultModel = provider.getDefaultModel.bind(provider);
+    provider.getDefaultModel = () =>
+      configuredDefaultModel || originalGetDefaultModel();
+  }
+
+  return provider;
+}
+
 function createOpenAIVercelAliasProvider(
   entry: ProviderAliasEntry,
   openaiApiKey: string | undefined,
@@ -720,11 +802,13 @@ function getOpenAIResponsesProvider(
   openaiApiKey: string | undefined,
   openaiBaseUrl: string | undefined,
   allowBrowserEnvironment: boolean,
+  oauthManager?: OAuthManager,
 ): OpenAIResponsesProvider {
   const openaiResponsesProvider = new OpenAIResponsesProvider(
     openaiApiKey || undefined,
     openaiBaseUrl,
     { allowBrowserEnvironment },
+    oauthManager,
   );
   return openaiResponsesProvider;
 }

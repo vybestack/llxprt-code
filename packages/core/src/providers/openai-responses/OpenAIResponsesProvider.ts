@@ -32,6 +32,8 @@ import {
 } from '../../services/history/IContent.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
+import { CODEX_MODELS } from './CODEX_MODELS.js';
+import { CODEX_SYSTEM_PROMPT } from './CODEX_PROMPT.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -47,9 +49,12 @@ import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 import { resolveUserMemory } from '../utils/userMemory.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
+import { CodexOAuthTokenSchema } from '../../auth/types.js';
+import type { OAuthManager } from '../../auth/precedence.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
   private logger: DebugLogger;
+  private _isCodexMode: boolean;
   // @plan:PLAN-20251023-STATELESS-HARDENING.P08
   // @requirement:REQ-SP4-002/REQ-SP4-003
   // Removed static cache scope and conversation cache dependencies to achieve stateless operation
@@ -58,36 +63,78 @@ export class OpenAIResponsesProvider extends BaseProvider {
     apiKey: string | undefined,
     baseURL?: string,
     config?: IProviderConfig,
+    oauthManager?: OAuthManager,
   ) {
+    // Detect Codex mode from baseURL at construction time
+    const isCodex = baseURL?.includes('chatgpt.com/backend-api/codex') ?? false;
+
     const baseConfig: BaseProviderConfig = {
       name: 'openai-responses',
       apiKey,
       baseURL: baseURL || 'https://api.openai.com/v1',
       envKeyNames: ['OPENAI_API_KEY'],
-      isOAuthEnabled: false,
-      oauthProvider: undefined,
-      oauthManager: undefined,
+      isOAuthEnabled: isCodex && !!oauthManager,
+      oauthProvider: isCodex ? 'codex' : undefined,
+      oauthManager: isCodex ? oauthManager : undefined,
+      // Must set supportsOAuth here because supportsOAuth() is called in super()
+      // before _isCodexMode is set
+      supportsOAuth: isCodex,
     };
 
     super(baseConfig, config);
 
+    this._isCodexMode = isCodex;
     this.logger = new DebugLogger('llxprt:providers:openai-responses');
     this.logger.debug(
       () =>
-        `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, apiKey: ${apiKey?.substring(0, 10) || 'none'}`,
+        `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, hasApiKey: ${!!apiKey}, codexMode: ${isCodex}`,
     );
   }
 
   /**
-   * This provider does not support OAuth
+   * OAuth is supported in Codex mode
+   * Check baseURL directly to avoid timing issues with instance properties
+   * @plan PLAN-20251213-ISSUE160.P03
    */
-
-  // @plan:PLAN-20251023-STATELESS-HARDENING.P08
-  // @requirement:REQ-SP4-002/REQ-SP4-003
-  // Removed stateful conversation cache methods to ensure stateless operation
-
   protected supportsOAuth(): boolean {
-    return false;
+    // Check baseURL directly - don't rely on _isCodexMode which may not be set yet
+    const baseURL = this.getBaseURL();
+    return this.isCodexMode(baseURL);
+  }
+
+  /**
+   * Detect if provider is in Codex mode based on baseURL
+   * @plan PLAN-20251213-ISSUE160.P03
+   */
+  private isCodexMode(baseURL: string | undefined): boolean {
+    return baseURL?.includes('chatgpt.com/backend-api/codex') ?? false;
+  }
+
+  /**
+   * Get account_id from Codex OAuth token
+   * @plan PLAN-20251213-ISSUE160.P03
+   */
+  private async getCodexAccountId(): Promise<string> {
+    // Get OAuth manager from base config
+    const oauthManager = this.baseProviderConfig.oauthManager;
+    if (!oauthManager) {
+      throw new Error(
+        'Codex mode requires OAuth authentication with account_id - no OAuth manager available',
+      );
+    }
+
+    // Get the full token from the OAuth manager
+    // getOAuthToken returns the full token object (with account_id preserved via passthrough)
+    const token = await oauthManager.getOAuthToken?.('codex');
+    if (!token) {
+      throw new Error(
+        'Codex mode requires OAuth authentication - no token available. Run /auth codex enable',
+      );
+    }
+
+    // Validate with Zod schema to get account_id
+    const validatedToken = CodexOAuthTokenSchema.parse(token);
+    return validatedToken.account_id;
   }
 
   override getToolFormat(): ToolFormat {
@@ -96,6 +143,22 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
+    const baseURL = this.getBaseURL() || 'https://api.openai.com/v1';
+    const isCodex = this.isCodexMode(baseURL);
+
+    // @plan PLAN-20251214-ISSUE160.P05
+    // Debug logging for model listing
+    this.logger.debug(
+      () =>
+        `getModels() called: baseURL=${baseURL}, isCodexMode=${isCodex}, providerName=${this.name}`,
+    );
+
+    // @plan PLAN-20251214-ISSUE160.P06
+    // Fetch models from Codex API when in Codex mode
+    if (isCodex) {
+      return this.getCodexModels(baseURL);
+    }
+
     // Try to fetch models dynamically from the API
     const apiKey = await this.getAuthToken();
     if (!apiKey) {
@@ -110,7 +173,6 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     try {
       // Fetch models from the API
-      const baseURL = this.getBaseURL() || 'https://api.openai.com/v1';
       const response = await fetch(`${baseURL}/models`, {
         method: 'GET',
         headers: {
@@ -161,11 +223,35 @@ export class OpenAIResponsesProvider extends BaseProvider {
     }));
   }
 
+  /**
+   * Get Codex models
+   *
+   * Note: The Codex /models endpoint is protected by Cloudflare bot detection
+   * which blocks automated requests (even with proper auth headers).
+   * The /responses endpoint works fine, but /models returns a Cloudflare challenge.
+   * Therefore, we use a hardcoded list based on codex-rs/core/tests/suite/list_models.rs
+   *
+   * @plan PLAN-20251214-ISSUE160.P06
+   */
+  private async getCodexModels(_baseURL: string): Promise<IModel[]> {
+    this.logger.debug(
+      () =>
+        'Codex mode: returning hardcoded models (API blocked by Cloudflare)',
+    );
+    return CODEX_MODELS;
+  }
+
   override getCurrentModel(): string {
     return this.getModel();
   }
 
   override getDefaultModel(): string {
+    // @plan PLAN-20251213-ISSUE160.P04
+    // Return gpt-5.2 as default when in Codex mode
+    const baseURL = this.getBaseURL();
+    if (this.isCodexMode(baseURL)) {
+      return 'gpt-5.2';
+    }
     // Return the default model for responses API
     return 'o3-mini';
   }
@@ -270,12 +356,17 @@ export class OpenAIResponsesProvider extends BaseProvider {
   ): AsyncIterableIterator<IContent> {
     const { contents: content, tools } = options;
 
+    // Use getAuthTokenForPrompt() to trigger OAuth if needed
     const apiKey =
-      (await this.getAuthToken()) ??
+      (await this.getAuthTokenForPrompt()) ??
       (await resolveRuntimeAuthToken(options.resolved.authToken)) ??
       '';
     if (!apiKey) {
-      throw new Error('OpenAI API key is required to generate completions');
+      throw new Error(
+        this._isCodexMode
+          ? 'Codex authentication required. Run /auth codex enable to authenticate.'
+          : 'OpenAI API key is required',
+      );
     }
 
     const resolvedModel = options.resolved.model || this.getDefaultModel();
@@ -305,10 +396,18 @@ export class OpenAIResponsesProvider extends BaseProvider {
       toolNamesForPrompt,
     );
 
-    const input: Array<{
-      role: 'user' | 'assistant' | 'system';
-      content?: string;
-    }> = [];
+    // Responses API input types: messages, function_call, function_call_output
+    type ResponsesInputItem =
+      | { role: 'user' | 'assistant' | 'system'; content?: string }
+      | {
+          type: 'function_call';
+          call_id: string;
+          name: string;
+          arguments: string;
+        }
+      | { type: 'function_call_output'; call_id: string; output: string };
+
+    const input: ResponsesInputItem[] = [];
 
     if (systemPrompt) {
       input.push({
@@ -334,31 +433,39 @@ export class OpenAIResponsesProvider extends BaseProvider {
         ) as ToolCallBlock[];
 
         const contentText = textBlocks.map((b) => b.text).join('');
-        if (contentText || toolCallBlocks.length > 0) {
-          const assistantMsg: { role: 'assistant'; content?: string } = {
+
+        // Add assistant text content if present
+        if (contentText) {
+          input.push({
             role: 'assistant',
-          };
+            content: contentText,
+          });
+        }
 
-          if (contentText) {
-            assistantMsg.content = contentText;
-          } else {
-            assistantMsg.content = `[Called ${toolCallBlocks.length} tool${toolCallBlocks.length > 1 ? 's' : ''}: ${toolCallBlocks.map((tc) => tc.name).join(', ')}]`;
-          }
-
-          input.push(assistantMsg);
+        // Add function_call items for each tool call (Responses API format)
+        for (const toolCall of toolCallBlocks) {
+          input.push({
+            type: 'function_call',
+            call_id: toolCall.id,
+            name: toolCall.name,
+            arguments: JSON.stringify(toolCall.parameters),
+          });
         }
       } else if (c.speaker === 'tool') {
-        const toolResponseBlock = c.blocks.find(
+        // Convert tool responses to function_call_output format (Responses API)
+        const toolResponseBlocks = c.blocks.filter(
           (b) => b.type === 'tool_response',
-        ) as ToolResponseBlock | undefined;
-        if (toolResponseBlock) {
+        ) as ToolResponseBlock[];
+
+        for (const toolResponseBlock of toolResponseBlocks) {
           const result =
             typeof toolResponseBlock.result === 'string'
               ? toolResponseBlock.result
               : JSON.stringify(toolResponseBlock.result);
           input.push({
-            role: 'assistant',
-            content: `[Tool ${toolResponseBlock.toolName} result]: ${result}`,
+            type: 'function_call_output',
+            call_id: toolResponseBlock.callId,
+            output: result,
           });
         }
       }
@@ -383,10 +490,30 @@ export class OpenAIResponsesProvider extends BaseProvider {
     );
 
     // Include both ephemeral and persistent settings, with ephemeral settings taking precedence
-    const requestOverrides: Record<string, unknown> = {
+    const mergedParams: Record<string, unknown> = {
       ...(filteredSettingsParams ?? {}),
       ...(filteredEphemeralParams ?? {}),
     };
+
+    // Translate max_tokens/max_completion_tokens to max_output_tokens for Responses API
+    // The Responses API uses max_output_tokens, not max_tokens (GPT-5 models)
+    const requestOverrides: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(mergedParams)) {
+      if (key === 'max_tokens' || key === 'max_completion_tokens') {
+        // Responses API uses max_output_tokens
+        requestOverrides['max_output_tokens'] = value;
+        this.logger.debug(
+          () =>
+            `Translated ${key}=${value} to max_output_tokens for Responses API`,
+        );
+      } else {
+        requestOverrides[key] = value;
+      }
+    }
+    this.logger.debug(
+      () =>
+        `Request overrides: ${JSON.stringify(Object.keys(requestOverrides))}`,
+    );
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002/REQ-SP4-003
@@ -397,15 +524,30 @@ export class OpenAIResponsesProvider extends BaseProvider {
       'https://api.openai.com/v1';
     const baseURL = baseURLCandidate.replace(/\/+$/u, '');
 
+    // @plan PLAN-20251213-ISSUE160.P03
+    // Detect Codex mode and handle accordingly
+    const isCodex = this.isCodexMode(baseURL);
+
+    // Build request input - filter out system messages for Codex (uses instructions field instead)
+    let requestInput = input;
+    if (isCodex) {
+      // In Codex mode, system prompt goes in instructions field, not input array
+      // Only filter items that have a 'role' property (function_call/function_call_output don't)
+      requestInput = requestInput.filter(
+        (msg) => !('role' in msg) || msg.role !== 'system',
+      );
+    }
+
     const request: {
       model: string;
-      input: typeof input;
+      input: typeof requestInput;
+      instructions?: string;
       tools?: typeof responsesTools;
       stream: boolean;
       [key: string]: unknown;
     } = {
       model: resolvedModel,
-      input,
+      input: requestInput,
       stream: true,
       ...(requestOverrides || {}),
     };
@@ -414,21 +556,60 @@ export class OpenAIResponsesProvider extends BaseProvider {
       request.tools = responsesTools;
     }
 
+    // @plan PLAN-20251214-ISSUE160.P05
+    // Add Codex-specific request parameters
+    if (isCodex) {
+      // Codex API requires the official system prompt in instructions field
+      request.instructions = CODEX_SYSTEM_PROMPT;
+      request.store = false;
+      // Codex API (ChatGPT backend) doesn't support max_output_tokens parameter
+      // Remove it to prevent 400 errors
+      if ('max_output_tokens' in request) {
+        delete request.max_output_tokens;
+        this.logger.debug(
+          () =>
+            'Codex mode: removed unsupported max_output_tokens from request',
+        );
+      }
+      this.logger.debug(
+        () => 'Codex mode: setting instructions and store=false',
+      );
+    }
+
     const responsesURL = `${baseURL}/responses`;
     const requestBody = JSON.stringify(request);
+
+    // @plan PLAN-20251214-ISSUE160.P05
+    // Codex API requires Content-Type without charset suffix
+    const contentType = isCodex
+      ? 'application/json'
+      : 'application/json; charset=utf-8';
+
     const bodyBlob = new Blob([requestBody], {
-      type: 'application/json; charset=utf-8',
+      type: contentType,
     });
 
     // @plan:PLAN-20251023-STATELESS-HARDENING.P08
     // @requirement:REQ-SP4-002/REQ-SP4-003
     // Source custom headers from normalized provider configuration each call
     const customHeaders = this.getCustomHeaders();
-    const headers = {
+    const headers: Record<string, string> = {
       Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Type': contentType,
       ...(customHeaders ?? {}),
     };
+
+    // @plan PLAN-20251214-ISSUE160.P05
+    // Add Codex-specific headers when in Codex mode
+    if (isCodex) {
+      const accountId = await this.getCodexAccountId();
+      headers['ChatGPT-Account-ID'] = accountId;
+      headers['originator'] = 'codex_cli_rs';
+      this.logger.debug(
+        () =>
+          `Codex mode: adding headers for account ${accountId.substring(0, 8)}...`,
+      );
+    }
 
     const response = await fetch(responsesURL, {
       method: 'POST',
@@ -438,6 +619,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     if (!response.ok) {
       const errorBody = await response.text();
+      this.logger.debug(
+        () => `API error ${response.status}: ${errorBody.substring(0, 500)}`,
+      );
       throw parseErrorResponse(response.status, errorBody, this.name);
     }
 

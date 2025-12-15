@@ -74,6 +74,11 @@ export function AuthDialog({
       value: 'oauth_anthropic',
     },
     {
+      key: 'oauth_codex',
+      label: `Codex (ChatGPT OAuth) ${enabledProviders.has('oauth_codex') ? '[ON]' : '[OFF]'}`,
+      value: 'oauth_codex',
+    },
+    {
       key: 'close',
       label: 'Close',
       value: 'close',

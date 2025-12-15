@@ -63,14 +63,6 @@ describe('OpenAIResponsesProvider custom headers', () => {
         'custom-headers': customHeaders,
       }),
     });
-    const authSpy = vi
-      .spyOn(
-        provider as unknown as {
-          getAuthToken: () => Promise<string>;
-        },
-        'getAuthToken',
-      )
-      .mockResolvedValue('resolved-key');
 
     const generator = provider.generateChatCompletion(
       createProviderCallOptions({
@@ -98,12 +90,10 @@ describe('OpenAIResponsesProvider custom headers', () => {
     const [, options] = call;
     expect(options).toBeDefined();
     expect(options?.headers).toMatchObject({
-      Authorization: 'Bearer resolved-key',
+      Authorization: 'Bearer test-key',
       'Content-Type': 'application/json; charset=utf-8',
       ...customHeaders,
       'X-Provider-Header': 'provider-value',
     });
-
-    authSpy.mockRestore();
   });
 });

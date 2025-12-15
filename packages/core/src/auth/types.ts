@@ -14,7 +14,7 @@ export const OAuthTokenSchema = z.object({
   refresh_token: z.string().optional(),
   expiry: z.number(), // Unix timestamp
   scope: z.string().nullable().optional(),
-  token_type: z.literal('Bearer'),
+  token_type: z.enum(['Bearer', 'bearer']), // OpenAI returns lowercase 'bearer'
   resource_url: z.string().optional(), // For Qwen OAuth - indicates the API endpoint to use
 });
 
@@ -63,6 +63,30 @@ export const AuthStatusSchema = z.object({
   expiresIn: z.number().optional(), // seconds until expiry
   oauthEnabled: z.boolean().optional(), // whether OAuth is enabled for this provider
 });
+
+/**
+ * Codex OAuth token schema - extends OAuthTokenSchema with account_id
+ * Required for ChatGPT-Account-ID header
+ */
+export const CodexOAuthTokenSchema = OAuthTokenSchema.extend({
+  account_id: z.string().describe('Required for ChatGPT-Account-ID header'),
+  id_token: z.string().optional().describe('JWT containing account claims'),
+});
+
+export type CodexOAuthToken = z.infer<typeof CodexOAuthTokenSchema>;
+
+/**
+ * Codex token response schema
+ */
+export const CodexTokenResponseSchema = z.object({
+  access_token: z.string(),
+  id_token: z.string().optional(),
+  expires_in: z.number().optional(),
+  refresh_token: z.string().optional(),
+  token_type: z.string(),
+});
+
+export type CodexTokenResponse = z.infer<typeof CodexTokenResponseSchema>;
 
 /**
  * Bucket statistics schema

@@ -95,8 +95,8 @@ export class MultiProviderTokenStore implements TokenStore {
       this.validateBucketName(bucket);
     }
 
-    // Validate token structure
-    const validatedToken = OAuthTokenSchema.parse(token);
+    // Validate token structure, but allow extra provider-specific fields (e.g., account_id for Codex)
+    const validatedToken = OAuthTokenSchema.passthrough().parse(token);
 
     // Ensure directory exists with secure permissions
     await this.ensureDirectory();
@@ -146,8 +146,8 @@ export class MultiProviderTokenStore implements TokenStore {
       const content = await fs.readFile(tokenPath, 'utf8');
       const parsed = JSON.parse(content);
 
-      // Validate token structure
-      const validatedToken = OAuthTokenSchema.parse(parsed);
+      // Validate token structure, but allow extra provider-specific fields (e.g., account_id for Codex)
+      const validatedToken = OAuthTokenSchema.passthrough().parse(parsed);
       return validatedToken;
     } catch (_error) {
       // Token not found
