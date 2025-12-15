@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-import type { IContent } from '../../services/history/IContent.js';
 import type {
+  IContent,
   TextBlock,
   ToolCallBlock,
   ToolResponseBlock,
-} from '../../services/history/ContentBlocks.js';
+} from '../../services/history/IContent.js';
 import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 
 export type ResponsesInputItem =
