@@ -30,6 +30,7 @@ import {
   type ToolCallBlock,
   type ToolResponseBlock,
 } from '../../services/history/IContent.js';
+import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
@@ -481,10 +482,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
         }
 
         // Add function_call items for each tool call (Responses API format)
+        // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
         for (const toolCall of toolCallBlocks) {
           input.push({
             type: 'function_call',
-            call_id: toolCall.id,
+            call_id: normalizeToOpenAIToolId(toolCall.id),
             name: toolCall.name,
             arguments: JSON.stringify(toolCall.parameters),
           });
@@ -495,6 +497,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock[];
 
+        // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
         for (const toolResponseBlock of toolResponseBlocks) {
           const result =
             typeof toolResponseBlock.result === 'string'
@@ -502,7 +505,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
               : JSON.stringify(toolResponseBlock.result);
           input.push({
             type: 'function_call_output',
-            call_id: toolResponseBlock.callId,
+            call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
             output: result,
           });
         }
