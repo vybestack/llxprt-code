@@ -60,7 +60,9 @@ export const ModelStatsDisplay: React.FC = () => {
         paddingY={1}
         paddingX={2}
       >
-        <Text>No API calls have been made in this session.</Text>
+        <Text color={Colors.Foreground}>
+          No API calls have been made in this session.
+        </Text>
       </Box>
     );
   }
@@ -91,18 +93,22 @@ export const ModelStatsDisplay: React.FC = () => {
       paddingX={2}
     >
       <Text bold color={Colors.AccentPurple}>
-        Model Stats For Nerds
+        Model Stats
       </Text>
       <Box height={1} />
 
       {/* Header */}
       <Box>
         <Box width={METRIC_COL_WIDTH}>
-          <Text bold>Metric</Text>
+          <Text bold color={Colors.Foreground}>
+            Metric
+          </Text>
         </Box>
         {modelNames.map((name) => (
           <Box width={MODEL_COL_WIDTH} key={name}>
-            <Text bold>{name}</Text>
+            <Text bold color={Colors.Foreground}>
+              {name}
+            </Text>
           </Box>
         ))}
       </Box>
@@ -114,6 +120,7 @@ export const ModelStatsDisplay: React.FC = () => {
         borderTop={false}
         borderLeft={false}
         borderRight={false}
+        borderColor={Colors.Gray}
       />
 
       {/* API Section */}
