@@ -1,0 +1,2355 @@
+[
+  {
+    "sha": "8cd2ec7c9b9d44c83a151334bda3441d010ce1b2",
+    "short": "8cd2ec7c",
+    "date": "2025-10-08",
+    "subject": "[Part 4/6] feat(telemetry): add memory monitor with activity-aware recording and tests (#8122)",
+    "files": [
+      "packages/core/src/telemetry/index.ts",
+      "packages/core/src/telemetry/memory-monitor.test.ts",
+      "packages/core/src/telemetry/memory-monitor.ts",
+      "packages/core/src/utils/formatters.test.ts",
+      "packages/core/src/utils/formatters.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "5d09ab7eb381aee129d57d2249300f74b0d51e39",
+    "short": "5d09ab7e",
+    "date": "2025-10-08",
+    "subject": "chore: refactored test-helper to handle boilerplate for interactive mode (#10322)",
+    "files": [
+      "integration-tests/context-compress-interactive.test.ts",
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "8980276b205e2b8f327b8b55f785a01e36ce18b8",
+    "short": "8980276b",
+    "date": "2025-10-08",
+    "subject": "Rationalize different Extension typings (#10435)",
+    "files": [
+      "packages/a2a-server/src/config/config.ts",
+      "packages/a2a-server/src/config/extension.ts",
+      "packages/cli/src/commands/mcp/list.test.ts",
+      "packages/cli/src/commands/mcp/list.ts",
+      "packages/cli/src/config/config.test.ts",
+      "packages/cli/src/config/config.ts",
+      "packages/cli/src/config/extension.test.ts",
+      "packages/cli/src/config/extension.ts",
+      "packages/cli/src/config/extensions/extensionEnablement.test.ts",
+      "packages/cli/src/config/extensions/extensionEnablement.ts",
+      "packages/cli/src/config/extensions/github.test.ts",
+      "packages/cli/src/config/extensions/github.ts",
+      "packages/cli/src/config/extensions/update.ts",
+      "packages/cli/src/gemini.tsx",
+      "packages/cli/src/ui/components/WorkspaceMigrationDialog.tsx",
+      "packages/cli/src/ui/hooks/useExtensionUpdates.test.ts",
+      "packages/cli/src/ui/hooks/useWorkspaceMigration.ts",
+      "packages/cli/src/zed-integration/zedIntegration.ts",
+      "packages/core/src/config/config.ts"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "packages"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "8ac2c6842d222c6417f6de365878b66056656e48",
+    "short": "8ac2c684",
+    "date": "2025-10-08",
+    "subject": "chore: bundle a2a-server (#10265)",
+    "files": [
+      "esbuild.config.js"
+    ],
+    "areas": [
+      "esbuild.config.js"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "8aa730082e33f5352f5b1d058339bc6ac2b47e6e",
+    "short": "8aa73008",
+    "date": "2025-10-08",
+    "subject": "refactor(core): Centralize 'write_todos_list' tool name (#10690)",
+    "files": [
+      "packages/core/src/tools/tool-names.ts",
+      "packages/core/src/tools/write-todos.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "1af3fef33a611f17957f8043211b9e1ea3ac15bb",
+    "short": "1af3fef3",
+    "date": "2025-10-08",
+    "subject": "fix(infra) - Remove auto update from integration tests (#10656)",
+    "files": [
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "603ec2b21bd95be249f0f0c6d4d6ee267fab436a",
+    "short": "603ec2b2",
+    "date": "2025-10-08",
+    "subject": "Add script to deflake integration tests (#10666)",
+    "files": [
+      "package.json",
+      "scripts/deflake.js"
+    ],
+    "areas": [
+      "package.json",
+      "scripts"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "b45bd5ff7b0c68456cb1927eb9f6c389376ce511",
+    "short": "b45bd5ff",
+    "date": "2025-10-08",
+    "subject": "Fix(infra) - Skip file system interactive test since it is currently broken (#10734)",
+    "files": [
+      "integration-tests/file-system-interactive.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "c0552ceb2274f9f5e53bf37eb6ead2b2ab388cc2",
+    "short": "c0552ceb",
+    "date": "2025-10-08",
+    "subject": "feat(core): add telemetry for subagent execution (#10456)",
+    "files": [
+      "packages/core/src/agents/executor.test.ts",
+      "packages/core/src/agents/executor.ts",
+      "packages/core/src/telemetry/clearcut-logger/clearcut-logger.test.ts",
+      "packages/core/src/telemetry/clearcut-logger/clearcut-logger.ts",
+      "packages/core/src/telemetry/clearcut-logger/event-metadata-key.ts",
+      "packages/core/src/telemetry/constants.ts",
+      "packages/core/src/telemetry/loggers.test.ts",
+      "packages/core/src/telemetry/loggers.ts",
+      "packages/core/src/telemetry/metrics.test.ts",
+      "packages/core/src/telemetry/metrics.ts",
+      "packages/core/src/telemetry/types.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "b0b1be0c2a0641bf8c78098869c570df2a6f2d3c",
+    "short": "b0b1be0c",
+    "date": "2025-10-08",
+    "subject": "chore(int): skip flaky tests (#10736)",
+    "files": [
+      "integration-tests/mcp_server_cyclic_schema.test.ts",
+      "integration-tests/run_shell_command.test.ts",
+      "integration-tests/simple-mcp-server.test.ts",
+      "packages/cli/src/config/extension.test.ts",
+      "packages/cli/src/ui/commands/setupGithubCommand.test.ts"
+    ],
+    "areas": [
+      "cli",
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "467a305f266d30047d3c69b5fd680745e7580e39",
+    "short": "467a305f",
+    "date": "2025-10-08",
+    "subject": "chore(shell): Enable interactive shell by default (#10661)",
+    "files": [
+      "docs/get-started/configuration.md",
+      "packages/cli/src/config/config.ts",
+      "packages/cli/src/config/settings.ts",
+      "packages/cli/src/config/settingsSchema.ts",
+      "packages/cli/src/services/prompt-processors/shellProcessor.test.ts",
+      "packages/cli/src/services/prompt-processors/shellProcessor.ts",
+      "packages/cli/src/ui/components/messages/ToolMessage.tsx",
+      "packages/cli/src/ui/hooks/shellCommandProcessor.test.ts",
+      "packages/cli/src/ui/hooks/shellCommandProcessor.ts",
+      "packages/core/src/config/config.ts",
+      "packages/core/src/tools/shell.test.ts",
+      "packages/core/src/tools/shell.ts"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "b92e3bca508036514bd7bb3fb566e93f82edfc18",
+    "short": "b92e3bca",
+    "date": "2025-10-09",
+    "subject": "fix(mcp): fix MCP server removal not persisting to settings (#10098)",
+    "files": [
+      "packages/cli/src/commands/mcp/remove.test.ts",
+      "packages/cli/src/utils/commentJson.test.ts",
+      "packages/cli/src/utils/commentJson.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "1962b51d8d3b971d820eef288d9d4f3346d3a1a0",
+    "short": "1962b51d",
+    "date": "2025-10-09",
+    "subject": "fix: ensure positional prompt arguments work with extensions flag (#10077)",
+    "files": [
+      "packages/cli/src/config/config.test.ts",
+      "packages/cli/src/config/config.ts",
+      "packages/core/src/ide/detect-ide.test.ts",
+      "packages/core/src/telemetry/clearcut-logger/clearcut-logger.test.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "f2852056a11d10cd56045b57ba1deec5822a089e",
+    "short": "f2852056",
+    "date": "2025-10-08",
+    "subject": "feat: prevent ansi codes in extension MCP Servers (#10748)",
+    "files": [
+      "packages/cli/src/config/extension.test.ts",
+      "packages/cli/src/config/extension.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "76b1deec25c7fa528c42c42a0e1b47c1e0d9f2ec",
+    "short": "76b1deec",
+    "date": "2025-10-08",
+    "subject": "fix(core): refresh file contents in smart edit given newer edits from user/external process (#10084)",
+    "files": [
+      "packages/core/src/tools/smart-edit.test.ts",
+      "packages/core/src/tools/smart-edit.ts",
+      "packages/core/src/utils/llm-edit-fixer.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "118aade84cc7e3f6d4680bd17adf73561153050c",
+    "short": "118aade8",
+    "date": "2025-10-08",
+    "subject": "citations documentation (#10742)",
+    "files": [
+      "docs/core/index.md"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "3d106186f49abe2b983090ff769234fbb4ea3ab8",
+    "short": "3d106186",
+    "date": "2025-10-08",
+    "subject": "Docs: Add updates to changelog for v0.8.0 (#10732)",
+    "files": [
+      "docs/changelogs/index.md"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "8d8a2ab64ef63bf7a722213f39d947c262d63042",
+    "short": "8d8a2ab6",
+    "date": "2025-10-08",
+    "subject": "Fix(doc) - Add section in docs for deflaking (#10750)",
+    "files": [
+      "docs/integration-tests.md",
+      "scripts/deflake.js"
+    ],
+    "areas": [
+      "docs",
+      "scripts"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "741b57ed061c767ed25777f39b9fe826aaa1bcbc",
+    "short": "741b57ed",
+    "date": "2025-10-08",
+    "subject": "fix(core): Use shell for spawn on Windows (#9995)",
+    "files": [
+      "packages/cli/src/gemini.test.tsx",
+      "packages/cli/src/validateNonInterActiveAuth.test.ts",
+      "packages/core/src/ide/ide-installer.test.ts",
+      "packages/core/src/ide/ide-installer.ts",
+      "packages/core/src/utils/editor.test.ts",
+      "packages/core/src/utils/editor.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "56ca62cf3c4b251c1fd73740226a07f64a0119b9",
+    "short": "56ca62cf",
+    "date": "2025-10-08",
+    "subject": "Pre releases (#10752)",
+    "files": [
+      "docs/extensions/extension-releasing.md",
+      "packages/cli/src/commands/extensions/install.ts",
+      "packages/cli/src/config/extensions/github.test.ts",
+      "packages/cli/src/config/extensions/github.ts",
+      "packages/cli/src/config/extensions/github_fetch.ts",
+      "packages/core/src/config/config.ts"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "29aabd7bfcfef37d43ab0b30941072c47da1796c",
+    "short": "29aabd7b",
+    "date": "2025-10-08",
+    "subject": "Remove 'hello' extension (#10741)",
+    "files": [
+      "hello/GEMINI.md",
+      "hello/gemini-extension.json"
+    ],
+    "areas": [
+      "hello"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "bcbcaeb82c256a36ae3d43a96df673cef61333a6",
+    "short": "bcbcaeb8",
+    "date": "2025-10-08",
+    "subject": "fix(docs): Update docs/faq.md per Srinanth (#10667)",
+    "files": [
+      "docs/extensions/index.md",
+      "docs/faq.md"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "06920402f8acd2c53857c06253c05a71ac42f05e",
+    "short": "06920402",
+    "date": "2025-10-08",
+    "subject": "feat(core): Stop context window overflow when sending chat (#10459)",
+    "files": [
+      "packages/cli/src/ui/hooks/useGeminiStream.test.tsx",
+      "packages/cli/src/ui/hooks/useGeminiStream.ts",
+      "packages/core/src/core/client.test.ts",
+      "packages/core/src/core/client.ts",
+      "packages/core/src/core/turn.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "95268b266dfb741cbfe7dcf6cabd671105a38311",
+    "short": "95268b26",
+    "date": "2025-10-08",
+    "subject": "chore(release): bump version to 0.10.0-nightly.20251007.c195a9aa (#10669)",
+    "files": [
+      "package-lock.json",
+      "package.json",
+      "packages/a2a-server/package.json",
+      "packages/cli/package.json",
+      "packages/core/package.json",
+      "packages/test-utils/package.json",
+      "packages/vscode-ide-companion/package.json"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "package-lock.json",
+      "package.json",
+      "packages",
+      "vscode"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "3ea5581ad7b5574d6cd068032b1c0e6057e2da80",
+    "short": "3ea5581a",
+    "date": "2025-10-08",
+    "subject": "chore(int): disable flaky tests (#10771)",
+    "files": [
+      "integration-tests/context-compress-interactive.test.ts",
+      "integration-tests/run_shell_command.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "3d24575239d6b53d0d232fc8ffbf7997d94b8b1d",
+    "short": "3d245752",
+    "date": "2025-10-09",
+    "subject": "refactor(core): Centralize 'write_file' tool name (#10694)",
+    "files": [
+      "packages/cli/src/config/config.ts",
+      "packages/cli/src/config/policy.ts",
+      "packages/cli/src/ui/hooks/useGeminiStream.ts",
+      "packages/core/src/core/prompts.ts",
+      "packages/core/src/index.ts",
+      "packages/core/src/tools/tool-names.ts",
+      "packages/core/src/tools/write-file.ts",
+      "packages/core/src/utils/editCorrector.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a044c25981d7ae74fa1cd42cb002ed721b65c7a0",
+    "short": "a044c259",
+    "date": "2025-10-08",
+    "subject": "fix: Add a message about permissions command on startup in untrusted \u2026 (#10755)",
+    "files": [
+      "packages/cli/src/ui/AppContainer.tsx",
+      "packages/cli/src/ui/hooks/useFolderTrust.test.ts",
+      "packages/cli/src/ui/hooks/useFolderTrust.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "0cd490a9b803041c69279bc8bf857fb3ea9baafe",
+    "short": "0cd490a9",
+    "date": "2025-10-09",
+    "subject": "feat: support GOOGLE_CLOUD_PROJECT_ID fallback (fixes #2262) (#2725)",
+    "files": [
+      "docs/get-started/authentication.md",
+      "packages/core/src/code_assist/setup.ts",
+      "packages/core/src/core/contentGenerator.ts"
+    ],
+    "areas": [
+      "core",
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a08938010c26ae07733a26a1ec6abf12a6a8c5f5",
+    "short": "a0893801",
+    "date": "2025-10-09",
+    "subject": "cleanup(markdown): Prettier format all markdown @ 80 char width (#10714)",
+    "files": [
+      ".prettierrc.json",
+      ".vscode/settings.json",
+      "CONTRIBUTING.md",
+      "GEMINI.md",
+      "README.md",
+      "ROADMAP.md",
+      "SECURITY.md",
+      "docs/architecture.md",
+      "docs/changelogs/index.md",
+      "docs/cli/checkpointing.md",
+      "docs/cli/commands.md",
+      "docs/cli/custom-commands.md",
+      "docs/cli/enterprise.md",
+      "docs/cli/gemini-ignore.md",
+      "docs/cli/gemini-md.md",
+      "docs/cli/headless.md",
+      "docs/cli/index.md",
+      "docs/cli/sandbox.md",
+      "docs/cli/telemetry.md",
+      "docs/cli/themes.md",
+      "docs/cli/token-caching.md",
+      "docs/cli/trusted-folders.md",
+      "docs/cli/tutorials.md",
+      "docs/cli/uninstall.md",
+      "docs/core/index.md",
+      "docs/core/memport.md",
+      "docs/core/tools-api.md",
+      "docs/examples/proxy-script.md",
+      "docs/extensions/extension-releasing.md",
+      "docs/extensions/getting-started-extensions.md",
+      "docs/extensions/index.md",
+      "docs/faq.md",
+      "docs/get-started/authentication.md",
+      "docs/get-started/configuration-v1.md",
+      "docs/get-started/configuration.md",
+      "docs/get-started/deployment.md",
+      "docs/get-started/examples.md",
+      "docs/get-started/index.md",
+      "docs/ide-integration/ide-companion-spec.md",
+      "docs/ide-integration/index.md",
+      "docs/index.md",
+      "docs/integration-tests.md",
+      "docs/issue-and-pr-automation.md",
+      "docs/npm.md",
+      "docs/quota-and-pricing.md",
+      "docs/releases.md",
+      "docs/tools/file-system.md",
+      "docs/tools/index.md",
+      "docs/tools/mcp-server.md",
+      "docs/tools/memory.md",
+      "docs/tools/multi-file.md",
+      "docs/tools/shell.md",
+      "docs/tools/web-fetch.md",
+      "docs/tools/web-search.md",
+      "docs/tos-privacy.md",
+      "docs/troubleshooting.md",
+      "packages/a2a-server/development-extension-rfc.md",
+      "packages/cli/src/commands/extensions/examples/context/GEMINI.md",
+      "packages/vscode-ide-companion/README.md",
+      "packages/vscode-ide-companion/development.md"
+    ],
+    "areas": [
+      ".prettierrc.json",
+      ".vscode",
+      "CONTRIBUTING.md",
+      "GEMINI.md",
+      "README.md",
+      "ROADMAP.md",
+      "SECURITY.md",
+      "cli",
+      "docs",
+      "packages",
+      "vscode"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "70610c740ed640cd4522cd03c76743c6f8dfb6e2",
+    "short": "70610c74",
+    "date": "2025-10-09",
+    "subject": "feat(telemetry): Add telemetry for web_fetch fallback attempts (#10749)",
+    "files": [
+      "packages/core/src/telemetry/clearcut-logger/clearcut-logger.test.ts",
+      "packages/core/src/telemetry/clearcut-logger/clearcut-logger.ts",
+      "packages/core/src/telemetry/clearcut-logger/event-metadata-key.ts",
+      "packages/core/src/telemetry/constants.ts",
+      "packages/core/src/telemetry/index.ts",
+      "packages/core/src/telemetry/loggers.test.ts",
+      "packages/core/src/telemetry/loggers.ts",
+      "packages/core/src/telemetry/types.ts",
+      "packages/core/src/tools/web-fetch.test.ts",
+      "packages/core/src/tools/web-fetch.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "b60c8858afefd84de4cae672aa62161e8a42b0d8",
+    "short": "b60c8858",
+    "date": "2025-10-09",
+    "subject": "feat(ui): shorten context overflow message when <50% of limit (#10812)",
+    "files": [
+      "packages/cli/src/ui/hooks/useGeminiStream.test.tsx",
+      "packages/cli/src/ui/hooks/useGeminiStream.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "cd354aebedebe5380ccc5a4917268b4d756fe80c",
+    "short": "cd354aeb",
+    "date": "2025-10-09",
+    "subject": "Fix hooks to avoid unnecessary re-renders (#10820)",
+    "files": [
+      "packages/cli/src/ui/AppContainer.tsx",
+      "packages/cli/src/ui/hooks/useHistoryManager.ts",
+      "packages/cli/src/ui/hooks/useWorkspaceMigration.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "bd6bba8d07cf8cc3627516305895fe9bd1f9e95f",
+    "short": "bd6bba8d",
+    "date": "2025-10-09",
+    "subject": "fix(doc) - Update doc for deflake command (#10829)",
+    "files": [
+      "docs/integration-tests.md"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "433ca84ce06569b653a67fa8fd2f9a21256fedf0",
+    "short": "433ca84c",
+    "date": "2025-10-09",
+    "subject": "fix(tests): log actual output in validateModelOutput on failure (#10843)",
+    "files": [
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "ae02236c63fa605f5e473b81efe922025e5b140f",
+    "short": "ae02236c",
+    "date": "2025-10-09",
+    "subject": "feat(core): generalize path correction for use across tools (#10612)",
+    "files": [
+      "packages/core/src/tools/smart-edit.test.ts",
+      "packages/core/src/tools/smart-edit.ts",
+      "packages/core/src/utils/pathCorrector.test.ts",
+      "packages/core/src/utils/pathCorrector.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "6d84d4dc9c163ad5c34b0c9279617c84c3a0918c",
+    "short": "6d84d4dc",
+    "date": "2025-10-09",
+    "subject": "Fix prompt to make it a bit more deterministic (#10848)",
+    "files": [
+      "integration-tests/run_shell_command.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a8379d1f4bea1c0786a41b22694119dee97972f2",
+    "short": "a8379d1f",
+    "date": "2025-10-09",
+    "subject": "fix(tests): enable and update prompt for MCP add tool test (#10850)",
+    "files": [
+      "integration-tests/simple-mcp-server.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "5f96eba54a013b47f8110a1338ece5d9b8aeb1f8",
+    "short": "5f96eba5",
+    "date": "2025-10-09",
+    "subject": "fix(cli): prevent exit on non-fatal tool errors (#10671)",
+    "files": [
+      "integration-tests/json-output.test.ts",
+      "packages/cli/src/utils/errors.test.ts",
+      "packages/cli/src/utils/errors.ts",
+      "packages/core/src/tools/tool-error.ts"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "5e688b8113b6ee005baee85ccd22d96a4daf9919",
+    "short": "5e688b81",
+    "date": "2025-10-09",
+    "subject": "Skip should fail safely when old_string is not found test (#10853)",
+    "files": [
+      "integration-tests/replace.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "5aab793cfdffade162789410bd4eb016adf96868",
+    "short": "5aab793c",
+    "date": "2025-10-09",
+    "subject": "fix(infra) - Fix interactive system error (#10805)",
+    "files": [
+      "integration-tests/file-system-interactive.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "1f6716f98a7b981aa0c23a344f99c34446329ee6",
+    "short": "1f6716f9",
+    "date": "2025-10-09",
+    "subject": "feat(telemetry): add diff stats to tool call metrics (#10819)",
+    "files": [
+      "docs/cli/telemetry.md",
+      "packages/core/src/telemetry/loggers.test.ts",
+      "packages/core/src/telemetry/loggers.ts",
+      "packages/core/src/telemetry/metrics.ts"
+    ],
+    "areas": [
+      "core",
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "0b6c02000f2301717c38fb3c8ba2423d70d6c0b0",
+    "short": "0b6c0200",
+    "date": "2025-10-09",
+    "subject": "feat(core): Failed Response Retry via Extra Prompt (#10828)",
+    "files": [
+      "packages/cli/src/ui/hooks/useGeminiStream.ts",
+      "packages/core/src/config/config.test.ts",
+      "packages/core/src/config/config.ts",
+      "packages/core/src/core/client.test.ts",
+      "packages/core/src/core/client.ts",
+      "packages/core/src/core/turn.test.ts",
+      "packages/core/src/core/turn.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "ed37b7c5e7a88c69654a9328a2240577900d32fc",
+    "short": "ed37b7c5",
+    "date": "2025-10-09",
+    "subject": "fix some isWorkspaceTrusted mocks (#10836)",
+    "files": [
+      "packages/cli/src/config/config.test.ts",
+      "packages/cli/src/config/settings.test.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "21062dd30e0e8509f420e6ffeb8ad78e7f56297b",
+    "short": "21062dd3",
+    "date": "2025-10-09",
+    "subject": "clean up extension tests (#10857)",
+    "files": [
+      "packages/cli/src/config/extension.test.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "d190188aaf898bd972853566f15f3f9c1288d29d",
+    "short": "d190188a",
+    "date": "2025-10-09",
+    "subject": "Add a joke to usePhraseCycler.ts (#10685)",
+    "files": [
+      "packages/cli/src/ui/hooks/usePhraseCycler.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "fda3b543573a7bb60b57a98a761b30076226aaf3",
+    "short": "fda3b543",
+    "date": "2025-10-09",
+    "subject": "chore(int): disable skip on \"should trigger chat compression with /co\u2026 (#10854)",
+    "files": [
+      "integration-tests/context-compress-interactive.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "cce245738e8314e6fca8f6cba23dd33741ef75e5",
+    "short": "cce24573",
+    "date": "2025-10-09",
+    "subject": "Fix for race condition in extension install / uninstall logging (#10856)",
+    "files": [
+      "packages/core/src/telemetry/clearcut-logger/clearcut-logger.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "83075b280054457f8f36b8224f86a88a906742ac",
+    "short": "83075b28",
+    "date": "2025-10-09",
+    "subject": "refactor: make log/event structure clear (#10467)",
+    "files": [
+      "packages/cli/src/gemini.tsx",
+      "packages/cli/src/zed-integration/zedIntegration.ts",
+      "packages/core/src/telemetry/constants.ts",
+      "packages/core/src/telemetry/loggers.test.ts",
+      "packages/core/src/telemetry/loggers.ts",
+      "packages/core/src/telemetry/metrics.ts",
+      "packages/core/src/telemetry/telemetryAttributes.ts",
+      "packages/core/src/telemetry/types.ts",
+      "packages/core/src/telemetry/uiTelemetry.test.ts",
+      "packages/core/src/telemetry/uiTelemetry.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "c82c2c2b1513717a71693b6156337dda07d15a52",
+    "short": "c82c2c2b",
+    "date": "2025-10-10",
+    "subject": "chore: add a2a server bin (#10592)",
+    "files": [
+      "package-lock.json",
+      "packages/a2a-server/package.json",
+      "packages/a2a-server/src/http/server.ts"
+    ],
+    "areas": [
+      "package-lock.json",
+      "packages"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "558be8731157d131b53d5775933dc8a2fa0748f3",
+    "short": "558be873",
+    "date": "2025-10-09",
+    "subject": "Re-land bbiggs changes to reduce margin on narrow screens with fixes + full width setting (#10522)",
+    "files": [
+      "packages/cli/src/config/settingsSchema.ts",
+      "packages/cli/src/gemini.test.tsx",
+      "packages/cli/src/gemini.tsx",
+      "packages/cli/src/test-utils/render.tsx",
+      "packages/cli/src/ui/AppContainer.tsx",
+      "packages/cli/src/ui/components/AnsiOutput.test.tsx",
+      "packages/cli/src/ui/components/AnsiOutput.tsx",
+      "packages/cli/src/ui/components/Composer.tsx",
+      "packages/cli/src/ui/components/ContextSummaryDisplay.test.tsx",
+      "packages/cli/src/ui/components/ContextSummaryDisplay.tsx",
+      "packages/cli/src/ui/components/ContextUsageDisplay.tsx",
+      "packages/cli/src/ui/components/Footer.test.tsx",
+      "packages/cli/src/ui/components/Footer.tsx",
+      "packages/cli/src/ui/components/InputPrompt.tsx",
+      "packages/cli/src/ui/components/MainContent.tsx",
+      "packages/cli/src/ui/components/__snapshots__/Footer.test.tsx.snap",
+      "packages/cli/src/ui/components/__snapshots__/InputPrompt.test.tsx.snap",
+      "packages/cli/src/ui/components/messages/ToolConfirmationMessage.tsx",
+      "packages/cli/src/ui/components/messages/ToolGroupMessage.tsx",
+      "packages/cli/src/ui/components/messages/ToolMessage.tsx",
+      "packages/cli/src/ui/components/messages/__snapshots__/ToolGroupMessage.test.tsx.snap",
+      "packages/cli/src/ui/hooks/useTerminalSize.ts",
+      "packages/cli/src/ui/layouts/DefaultAppLayout.tsx",
+      "packages/cli/src/ui/utils/ui-sizing.ts",
+      "packages/cli/src/utils/math.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "112790cbaa76bc140343940b4214ea83de421ec2",
+    "short": "112790cb",
+    "date": "2025-10-10",
+    "subject": "fix(infra) - Create a step to calculate the inputs for the nightly-release (#10825)",
+    "files": [
+      ".github/actions/calculate-vars/action.yml",
+      ".github/workflows/release-nightly.yml"
+    ],
+    "areas": [
+      "github"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "65b9e367f080298c78b754b694aa2603bf1c1651",
+    "short": "65b9e367",
+    "date": "2025-10-10",
+    "subject": "Docs: Fix broken links in architecture.md (#10747)",
+    "files": [
+      "docs/architecture.md"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "971eb64e9867a9fc8a4f7395e9915bfd87b0a9c7",
+    "short": "971eb64e",
+    "date": "2025-10-10",
+    "subject": "fix(cli) : fixed bug #8310 where /memory refresh will create discrepancies with initial memory load ignoring settings/config for trusted folder and file filters (#10611)",
+    "files": [
+      "packages/cli/src/config/config.integration.test.ts",
+      "packages/cli/src/config/config.test.ts",
+      "packages/cli/src/config/config.ts",
+      "packages/cli/src/ui/commands/memoryCommand.test.ts",
+      "packages/cli/src/ui/commands/memoryCommand.ts",
+      "packages/core/src/config/config.test.ts",
+      "packages/core/src/config/config.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "38bc856212b957e845113fa5fd58a1f81ffbe4ac",
+    "short": "38bc8562",
+    "date": "2025-10-10",
+    "subject": "feat(telemetry): ensure all telemetry includes user email and installation id (#10897)",
+    "files": [
+      "docs/cli/telemetry.md",
+      "packages/core/src/telemetry/loggers.test.ts",
+      "packages/core/src/telemetry/metrics.test.ts",
+      "packages/core/src/telemetry/metrics.ts",
+      "packages/core/src/telemetry/telemetryAttributes.ts"
+    ],
+    "areas": [
+      "core",
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "8dc397c0a50fed77d072bf889140f5f8876bcb30",
+    "short": "8dc397c0",
+    "date": "2025-10-10",
+    "subject": "fix(core): set temperature to 1 on retry in sendMessageStream (#10866)",
+    "files": [
+      "packages/core/src/core/geminiChat.test.ts",
+      "packages/core/src/core/geminiChat.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "affd3cae9afd9785064849cac8009409b661e515",
+    "short": "affd3cae",
+    "date": "2025-10-10",
+    "subject": "fix: Prevent garbled input during \"Login With Google\" OAuth prompt on\u2026 (#10888)",
+    "files": [
+      "packages/cli/src/gemini.tsx"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "249ea5594202c9d39cce894fbe92c1da39666a25",
+    "short": "249ea559",
+    "date": "2025-10-10",
+    "subject": "fix(test): Fix flaky shell command test using date command (#10863)",
+    "files": [
+      "integration-tests/run_shell_command.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "849cd1f9ed9418bb89e25b9dd99c5e40f4f9a15e",
+    "short": "849cd1f9",
+    "date": "2025-10-10",
+    "subject": "Docs: Fix Flutter extension link in docs/changelogs/index.md (#10797)",
+    "files": [
+      "docs/changelogs/index.md"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "32db4ff66d041a66321d2212b4b8ce6241842bb7",
+    "short": "32db4ff6",
+    "date": "2025-10-10",
+    "subject": "Disable flakey tests. (#10914)",
+    "files": [
+      "integration-tests/file-system-interactive.test.ts",
+      "integration-tests/replace.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "c6af4eaa0099c390e4e1a503b52e92339e0755c8",
+    "short": "c6af4eaa",
+    "date": "2025-10-10",
+    "subject": "fix: Usage of folder trust config flags in FileCommandLoader (#10837)",
+    "files": [
+      "packages/cli/src/nonInteractiveCli.test.ts",
+      "packages/cli/src/services/FileCommandLoader.test.ts",
+      "packages/cli/src/services/FileCommandLoader.ts",
+      "packages/core/src/config/config.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "2a7c71667ddbe7cd535057e51a7f76a24d5b831c",
+    "short": "2a7c7166",
+    "date": "2025-10-10",
+    "subject": "Reenable NPM integration tests (#10623)",
+    "files": [
+      ".github/actions/verify-release/action.yml"
+    ],
+    "areas": [
+      "github"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a5e47c62e4372e02259fafeec21c247e63af87c0",
+    "short": "a5e47c62",
+    "date": "2025-10-10",
+    "subject": "Docs: Update to tos-privacy.md (#10754)",
+    "files": [
+      "docs/tos-privacy.md"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "0a7ee67707f0cbd0357442ae33f8a5cb602d22c2",
+    "short": "0a7ee677",
+    "date": "2025-10-10",
+    "subject": "Show notification in screen reader mode (#10900)",
+    "files": [
+      "docs/get-started/configuration.md",
+      "packages/cli/src/config/settingsSchema.ts",
+      "packages/cli/src/ui/components/Notifications.tsx"
+    ],
+    "areas": [
+      "cli",
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "ab3804d8231850afe6ea92e787a36b1bd8e064b6",
+    "short": "ab3804d8",
+    "date": "2025-10-10",
+    "subject": "refactor(core): migrate web search tool to tool-names (#10782)",
+    "files": [
+      "integration-tests/google_web_search.test.ts",
+      "packages/core/src/agents/executor.ts",
+      "packages/core/src/tools/tool-names.ts",
+      "packages/core/src/tools/web-search.ts"
+    ],
+    "areas": [
+      "core",
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "ae48e964f0f32122a994a1ff0bb57b4da0322e59",
+    "short": "ae48e964",
+    "date": "2025-10-10",
+    "subject": "feat(ui): add flicker detection and metrics (#10821)",
+    "files": [
+      "packages/cli/src/ui/App.test.tsx",
+      "packages/cli/src/ui/AppContainer.tsx",
+      "packages/cli/src/ui/components/DebugProfiler.test.tsx",
+      "packages/cli/src/ui/components/DebugProfiler.tsx",
+      "packages/cli/src/ui/contexts/UIStateContext.tsx",
+      "packages/cli/src/ui/hooks/useFlickerDetector.test.ts",
+      "packages/cli/src/ui/hooks/useFlickerDetector.ts",
+      "packages/cli/src/ui/layouts/DefaultAppLayout.tsx",
+      "packages/cli/src/ui/layouts/ScreenReaderAppLayout.tsx",
+      "packages/cli/src/utils/events.ts",
+      "packages/core/src/telemetry/index.ts",
+      "packages/core/src/telemetry/metrics.test.ts",
+      "packages/core/src/telemetry/metrics.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "bf0f61e656c4a4d3fe8dd4c98a811073b060eae6",
+    "short": "bf0f61e6",
+    "date": "2025-10-10",
+    "subject": "Show final install path in extension consent dialog and fix isWorkspaceTrusted check (#10830)",
+    "files": [
+      "packages/cli/src/config/extension.test.ts",
+      "packages/cli/src/config/extension.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a6e00d9183a52d027eca76617b114d4268264ee2",
+    "short": "a6e00d91",
+    "date": "2025-10-10",
+    "subject": "Fix rough edges around extension updates (#10926)",
+    "files": [
+      "packages/cli/src/commands/extensions/install.test.ts",
+      "packages/cli/src/commands/extensions/install.ts",
+      "packages/cli/src/commands/extensions/link.ts",
+      "packages/cli/src/commands/extensions/uninstall.ts",
+      "packages/cli/src/config/extension.test.ts",
+      "packages/cli/src/config/extension.ts",
+      "packages/cli/src/config/extensions/update.ts",
+      "packages/core/index.ts",
+      "packages/core/src/telemetry/clearcut-logger/clearcut-logger.ts",
+      "packages/core/src/telemetry/clearcut-logger/event-metadata-key.ts",
+      "packages/core/src/telemetry/index.ts",
+      "packages/core/src/telemetry/loggers.test.ts",
+      "packages/core/src/telemetry/loggers.ts",
+      "packages/core/src/telemetry/types.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a64bb433b0b84da43e41554a4e529a1c354b3adf",
+    "short": "a64bb433",
+    "date": "2025-10-10",
+    "subject": "Simplify auth in interactive tests. (#10921)",
+    "files": [
+      "integration-tests/context-compress-interactive.test.ts",
+      "integration-tests/ctrl-c-exit.test.ts",
+      "integration-tests/file-system-interactive.test.ts",
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "37678acb1a15ee07e065b93bcd7bdc01b726e1d3",
+    "short": "37678acb",
+    "date": "2025-10-10",
+    "subject": "Update deployment.md -> installation.md and sidebar links. (#10662)",
+    "files": [
+      "docs/get-started/deployment.md",
+      "docs/get-started/index.md",
+      "docs/get-started/installation.md",
+      "docs/index.md",
+      "docs/sidebar.json"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "265d39f337893c53e58896b3d94061889d9eca8b",
+    "short": "265d39f3",
+    "date": "2025-10-10",
+    "subject": "feat(core): improve shell execution service reliability (#10607)",
+    "files": [
+      "packages/cli/src/ui/hooks/shellCommandProcessor.test.ts",
+      "packages/cli/src/ui/hooks/shellCommandProcessor.ts",
+      "packages/core/src/services/shellExecutionService.test.ts",
+      "packages/core/src/services/shellExecutionService.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "ead8928c39018b08fad5a173243df37519f8c2ae",
+    "short": "ead8928c",
+    "date": "2025-10-10",
+    "subject": "Deflake test. (#10932)",
+    "files": [
+      "integration-tests/json-output.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "cd9193466e95539f8e3defcd17f24705c28dabec",
+    "short": "cd919346",
+    "date": "2025-10-10",
+    "subject": "Clean up integration test warnings. (#10931)",
+    "files": [
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "09ef33ec3a5ea9b9d09ff0a43c6013f66bcc4641",
+    "short": "09ef33ec",
+    "date": "2025-10-10",
+    "subject": "fix(cli): prioritize configured auth over env vars in non-interactive mode (#10935)",
+    "files": [
+      "integration-tests/json-output.test.ts",
+      "packages/cli/src/validateNonInterActiveAuth.test.ts",
+      "packages/cli/src/validateNonInterActiveAuth.ts"
+    ],
+    "areas": [
+      "cli",
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "5dc7059ba35e563935c6ebee5ad423b4e03fda21",
+    "short": "5dc7059b",
+    "date": "2025-10-11",
+    "subject": "Refactor: Introduce InteractiveRun class (#10947)",
+    "files": [
+      "integration-tests/context-compress-interactive.test.ts",
+      "integration-tests/ctrl-c-exit.test.ts",
+      "integration-tests/file-system-interactive.test.ts",
+      "integration-tests/json-output.test.ts",
+      "integration-tests/list_directory.test.ts",
+      "integration-tests/simple-mcp-server.test.ts",
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "907e51ac01def8682110d3a6cacf1ac3a75aa09c",
+    "short": "907e51ac",
+    "date": "2025-10-11",
+    "subject": "Code guide command (#10940)",
+    "files": [
+      ".gemini/commands/code-guide.toml"
+    ],
+    "areas": [
+      ".gemini"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "87f175bb2c0d71d032b1337f714fe5795da6cabb",
+    "short": "87f175bb",
+    "date": "2025-10-12",
+    "subject": "feat: Support Alt+key combinations (#10767)",
+    "files": [
+      "packages/cli/src/ui/contexts/KeypressContext.test.tsx",
+      "packages/cli/src/ui/contexts/KeypressContext.tsx"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "cfb71b9d60adbea4f0b8a1f25716a1ae1c7a44cf",
+    "short": "cfb71b9d",
+    "date": "2025-10-13",
+    "subject": "chore: wire a2a-server up for publishing (#10627)",
+    "files": [
+      ".github/actions/publish-release/action.yml",
+      ".github/actions/tag-npm-release/action.yml",
+      ".github/workflows/release-change-tags.yml",
+      ".github/workflows/release-manual.yml",
+      ".github/workflows/release-nightly.yml",
+      ".github/workflows/release-patch-3-release.yml",
+      ".github/workflows/release-promote.yml",
+      ".github/workflows/release-rollback.yml",
+      "packages/a2a-server/package.json"
+    ],
+    "areas": [
+      "github",
+      "packages"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "c23eb84b049ff5d8d19e5f0a5d8f37ba643e1278",
+    "short": "c23eb84b",
+    "date": "2025-10-13",
+    "subject": "fix(remove private) from gemini-cli-a2a-server (#11018)",
+    "files": [
+      "packages/a2a-server/package.json"
+    ],
+    "areas": [
+      "packages"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "90de8416cc44f62eecc106c0f45413b5c1e01eee",
+    "short": "90de8416",
+    "date": "2025-10-13",
+    "subject": "Swap all self-hosted runners to ubuntu-latest per b/451586626 (#11023)",
+    "files": [
+      ".github/workflows/release-manual.yml",
+      ".github/workflows/smoke-test.yml",
+      ".github/workflows/stale.yml"
+    ],
+    "areas": [
+      "github"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "f68f27e7f178d80078ab37208e84c0987dc4c510",
+    "short": "f68f27e7",
+    "date": "2025-10-13",
+    "subject": "Revert \"feat: Support Alt+key combinations\" (#11025)",
+    "files": [
+      "packages/cli/src/ui/contexts/KeypressContext.test.tsx",
+      "packages/cli/src/ui/contexts/KeypressContext.tsx"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "28e667bd97820859b9f28bbd535fd35ec661cd41",
+    "short": "28e667bd",
+    "date": "2025-10-13",
+    "subject": "Give explicit instructions for failure text in json-output.test.ts (#11029)",
+    "files": [
+      "integration-tests/json-output.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "19c1d7340596c4f4b01b7e66e0394d760a8a1979",
+    "short": "19c1d734",
+    "date": "2025-10-13",
+    "subject": "add bundle command info to integration test docs (#11034)",
+    "files": [
+      "docs/integration-tests.md"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "7beaa368a9df80363d24f0ca3307e322c8c512ce",
+    "short": "7beaa368",
+    "date": "2025-10-14",
+    "subject": "refactor(core): use assertConnected in McpClient discover method (#10989)",
+    "files": [
+      "packages/core/src/tools/mcp-client.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "518caae62ee2c8c0f499ed469817f03d5447fbcd",
+    "short": "518caae6",
+    "date": "2025-10-14",
+    "subject": "chore: Extract '.gemini' to GEMINI_DIR constant (#10540)",
+    "files": [
+      "integration-tests/globalSetup.ts",
+      "integration-tests/test-helper.ts",
+      "packages/a2a-server/src/config/config.ts",
+      "packages/a2a-server/src/config/extension.ts",
+      "packages/a2a-server/src/config/settings.ts",
+      "packages/cli/src/commands/mcp/list.test.ts",
+      "packages/cli/src/commands/mcp/remove.test.ts",
+      "packages/cli/src/config/config.test.ts",
+      "packages/cli/src/config/extensions/extensionEnablement.test.ts",
+      "packages/cli/src/config/settings.test.ts",
+      "packages/cli/src/config/settings.ts",
+      "packages/cli/src/config/trustedFolders.ts",
+      "packages/cli/src/services/FileCommandLoader.test.ts",
+      "packages/cli/src/ui/commands/restoreCommand.test.ts",
+      "packages/cli/src/ui/components/Notifications.tsx",
+      "packages/cli/src/ui/hooks/useFlickerDetector.test.ts",
+      "packages/cli/src/ui/hooks/useShellHistory.test.ts",
+      "packages/cli/src/utils/sandbox.ts",
+      "packages/core/src/code_assist/oauth-credential-storage.ts",
+      "packages/core/src/code_assist/oauth2.test.ts",
+      "packages/core/src/config/config.test.ts",
+      "packages/core/src/config/storage.test.ts",
+      "packages/core/src/config/storage.ts",
+      "packages/core/src/core/logger.test.ts",
+      "packages/core/src/core/prompts.test.ts",
+      "packages/core/src/core/prompts.ts",
+      "packages/core/src/mcp/token-storage/file-token-storage.test.ts",
+      "packages/core/src/mcp/token-storage/file-token-storage.ts",
+      "packages/core/src/tools/memoryTool.test.ts",
+      "packages/core/src/tools/memoryTool.ts",
+      "packages/core/src/utils/getFolderStructure.test.ts",
+      "packages/core/src/utils/installationManager.test.ts",
+      "packages/core/src/utils/userAccountManager.test.ts",
+      "scripts/sandbox_command.js",
+      "scripts/telemetry.js",
+      "scripts/telemetry_utils.js"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "integration-tests",
+      "packages",
+      "scripts"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "4a5ef4d9f76d85af14c4b7bd0664a2d23cb6e7c0",
+    "short": "4a5ef4d9",
+    "date": "2025-10-13",
+    "subject": "fix(infra) - Fix flake for file interactive system (#11019)",
+    "files": [
+      "integration-tests/file-system-interactive.test.ts",
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a73b81452d766c74b602602641e4399f77734313",
+    "short": "a73b8145",
+    "date": "2025-10-13",
+    "subject": "Rename expect methods. (#11046)",
+    "files": [
+      "integration-tests/context-compress-interactive.test.ts",
+      "integration-tests/ctrl-c-exit.test.ts",
+      "integration-tests/file-system-interactive.test.ts",
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "771627505daf4357b8cb6e1ff386ad8fda6c3a08",
+    "short": "77162750",
+    "date": "2025-10-13",
+    "subject": "chore(settings): Enable 'useSmartEdit' by default (#11051)",
+    "files": [
+      "packages/cli/src/config/settingsSchema.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "c4bd75946765683efffe4ac8f46d23282ee56fa4",
+    "short": "c4bd7594",
+    "date": "2025-10-13",
+    "subject": "document all settings with showInDialog: true (#11049)",
+    "files": [
+      "docs/get-started/configuration.md",
+      "packages/cli/src/config/settingsSchema.ts"
+    ],
+    "areas": [
+      "cli",
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "f3424844dcd2d08f3f473ab0ce158cd695be43c4",
+    "short": "f3424844",
+    "date": "2025-10-13",
+    "subject": "Revert \"chore: wire a2a-server up for publishing\" (#11064)",
+    "files": [
+      ".github/actions/publish-release/action.yml",
+      ".github/actions/tag-npm-release/action.yml",
+      ".github/workflows/release-change-tags.yml",
+      ".github/workflows/release-manual.yml",
+      ".github/workflows/release-nightly.yml",
+      ".github/workflows/release-patch-3-release.yml",
+      ".github/workflows/release-promote.yml",
+      ".github/workflows/release-rollback.yml",
+      "packages/a2a-server/package.json"
+    ],
+    "areas": [
+      "github",
+      "packages"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "20fc7abc8c46965a7042a2eddcb9d92134860f70",
+    "short": "20fc7abc",
+    "date": "2025-10-13",
+    "subject": "Docs: Quick fix: Sidebar link. (#11065)",
+    "files": [
+      "docs/sidebar.json"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "ada179f572804ce09170773e3877daf5f01ba27c",
+    "short": "ada179f5",
+    "date": "2025-10-13",
+    "subject": "bug(core): Process returned function calls sequentially. (#10659)",
+    "files": [
+      "packages/core/src/core/coreToolScheduler.test.ts",
+      "packages/core/src/core/coreToolScheduler.ts",
+      "packages/core/src/core/geminiChat.test.ts",
+      "packages/core/src/core/geminiChat.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "dd01af609e12be26e42b8ee513a711e376291268",
+    "short": "dd01af60",
+    "date": "2025-10-13",
+    "subject": "refactor: set max retry attempts to 3 (#11072)",
+    "files": [
+      "packages/core/src/utils/retry.test.ts",
+      "packages/core/src/utils/retry.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "f56a561f022a459fb25be378dd9b78984edd71e7",
+    "short": "f56a561f",
+    "date": "2025-10-13",
+    "subject": "Fix and unskip flakey integration test in replace.test.ts (#11060)",
+    "files": [
+      "integration-tests/replace.test.ts",
+      "scripts/deflake.js"
+    ],
+    "areas": [
+      "integration-tests",
+      "scripts"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "9185f68e5294247af902b07334580e97b283a2f3",
+    "short": "9185f68e",
+    "date": "2025-10-13",
+    "subject": "Expose Codebase Investigator settings to the user (#10844)",
+    "files": [
+      "packages/cli/src/config/config.test.ts",
+      "packages/cli/src/config/config.ts",
+      "packages/cli/src/config/settingsSchema.test.ts",
+      "packages/cli/src/config/settingsSchema.ts",
+      "packages/cli/src/ui/components/SettingsDialog.test.tsx",
+      "packages/core/src/agents/registry.ts",
+      "packages/core/src/config/config.test.ts",
+      "packages/core/src/config/config.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "6787d42de4ce46bc764ccd788d4605aef4868fdd",
+    "short": "6787d42d",
+    "date": "2025-10-13",
+    "subject": "perf(core): optimize Windows IDE process detection from O(N) to O(1) (#11048)",
+    "files": [
+      "packages/core/src/ide/process-utils.test.ts",
+      "packages/core/src/ide/process-utils.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "0f8199dde3462c2b78025d1bef11b97bfb6e7572",
+    "short": "0f8199dd",
+    "date": "2025-10-13",
+    "subject": "fix(site): Fix broken site link (#11079)",
+    "files": [
+      "docs/tos-privacy.md"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a3fe9279d8b1b8826502d1f0522e381792003ec4",
+    "short": "a3fe9279",
+    "date": "2025-10-14",
+    "subject": "fix(compression): prevent unnecessary summarization when history is too short (#11082)",
+    "files": [
+      "packages/cli/src/ui/components/messages/CompressionMessage.tsx",
+      "packages/core/src/core/client.test.ts",
+      "packages/core/src/core/client.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "249a193c001b4d63f9eb28c29d401a70ac4465a0",
+    "short": "249a193c",
+    "date": "2025-10-13",
+    "subject": "Update system instructions for optimizing shell tool commands (#10651)",
+    "files": [
+      "docs/get-started/configuration.md",
+      "packages/core/src/config/config.ts",
+      "packages/core/src/core/__snapshots__/prompts.test.ts.snap",
+      "packages/core/src/core/prompts.test.ts",
+      "packages/core/src/core/prompts.ts",
+      "packages/core/src/core/subagent.test.ts"
+    ],
+    "areas": [
+      "core",
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "b2ba67f33742461024c5a113ca3658b76d7685cf",
+    "short": "b2ba67f3",
+    "date": "2025-10-14",
+    "subject": "fix: Exit app on pressing esc on trust dialog at launch (#10668)",
+    "files": [
+      "packages/cli/src/ui/components/FolderTrustDialog.test.tsx",
+      "packages/cli/src/ui/components/FolderTrustDialog.tsx"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "481ba01c973dea73f805ab75e736d24b2aaed07f",
+    "short": "481ba01c",
+    "date": "2025-10-14",
+    "subject": "chore: resubmit a2a-publishing after rollout (#11100)",
+    "files": [
+      ".github/actions/publish-release/action.yml",
+      ".github/actions/tag-npm-release/action.yml",
+      ".github/workflows/release-change-tags.yml",
+      ".github/workflows/release-manual.yml",
+      ".github/workflows/release-nightly.yml",
+      ".github/workflows/release-patch-3-release.yml",
+      ".github/workflows/release-promote.yml",
+      ".github/workflows/release-rollback.yml"
+    ],
+    "areas": [
+      "github"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "1e838393a92b6d09d457b50828045a50cd25eea8",
+    "short": "1e838393",
+    "date": "2025-10-14",
+    "subject": "Skip flakey tests (#11101)",
+    "files": [
+      "integration-tests/context-compress-interactive.test.ts",
+      "integration-tests/file-system-interactive.test.ts",
+      "integration-tests/replace.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "3ba4ba79fa09ce990e25e272cffca8d5d5a239fd",
+    "short": "3ba4ba79",
+    "date": "2025-10-14",
+    "subject": "Remove workflow examples from system instruction  (#10811)",
+    "files": [
+      "packages/core/src/core/__snapshots__/prompts.test.ts.snap",
+      "packages/core/src/core/prompts.test.ts",
+      "packages/core/src/core/prompts.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "9e8c76769434eb578e566d06b16084e01cc36073",
+    "short": "9e8c7676",
+    "date": "2025-10-14",
+    "subject": "fix(cli): record tool calls in non-interactive mode (#10951)",
+    "files": [
+      "packages/cli/src/nonInteractiveCli.test.ts",
+      "packages/cli/src/nonInteractiveCli.ts",
+      "packages/core/src/agents/executor.test.ts",
+      "packages/core/src/agents/executor.ts",
+      "packages/core/src/core/nonInteractiveToolExecutor.test.ts",
+      "packages/core/src/core/nonInteractiveToolExecutor.ts",
+      "packages/core/src/core/subagent.test.ts",
+      "packages/core/src/core/subagent.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "7b06a0bebd48c2bbcba730ab4b085c7cc07ef4b6",
+    "short": "7b06a0be",
+    "date": "2025-10-14",
+    "subject": "fix(e2e): Use rmSync instead of rm -rf for e2e tests (#11087)",
+    "files": [
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "c86ee4cc83e42f4eaf7206647918aba4acfecbe9",
+    "short": "c86ee4cc",
+    "date": "2025-10-14",
+    "subject": "feat: Support Alt+key combinations (#11038)",
+    "files": [
+      "packages/cli/src/ui/contexts/KeypressContext.test.tsx",
+      "packages/cli/src/ui/contexts/KeypressContext.tsx"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "7c1a90244a3a5b8f4f283c28177f1393eb38d19d",
+    "short": "7c1a9024",
+    "date": "2025-10-14",
+    "subject": "fix(core): add retry logic for specific fetch errors (#11066)",
+    "files": [
+      "packages/cli/src/config/config.ts",
+      "packages/cli/src/config/settings.ts",
+      "packages/cli/src/config/settingsSchema.ts",
+      "packages/core/src/config/config.ts",
+      "packages/core/src/core/geminiChat.test.ts",
+      "packages/core/src/core/geminiChat.ts",
+      "packages/core/src/utils/retry.test.ts",
+      "packages/core/src/utils/retry.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "061a89fc2bf12e3c5185164ef2270a5e1ba7df70",
+    "short": "061a89fc",
+    "date": "2025-10-14",
+    "subject": "Disable retries when deflaking integrationt tests (#11118)",
+    "files": [
+      "package.json"
+    ],
+    "areas": [
+      "package.json"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "92dbdbb93b61dc4227909fe7ccfa4eb838239f21",
+    "short": "92dbdbb9",
+    "date": "2025-10-14",
+    "subject": "Shell approval rework (#11073)",
+    "files": [
+      "docs/cli/commands.md",
+      "docs/tools/shell.md",
+      "package-lock.json",
+      "packages/cli/src/services/prompt-processors/shellProcessor.test.ts",
+      "packages/core/package.json",
+      "packages/core/src/services/shellExecutionService.test.ts",
+      "packages/core/src/services/shellExecutionService.ts",
+      "packages/core/src/tools/__snapshots__/shell.test.ts.snap",
+      "packages/core/src/tools/shell.test.ts",
+      "packages/core/src/tools/shell.ts",
+      "packages/core/src/utils/shell-utils.test.ts",
+      "packages/core/src/utils/shell-utils.ts"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "docs",
+      "package-lock.json"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a6720d60074ceb97e4cbccd815c10a8152f6780d",
+    "short": "a6720d60",
+    "date": "2025-10-14",
+    "subject": "Make codebase investigator less prone to be triggered for simple searches (#10655)",
+    "files": [
+      "packages/core/src/agents/codebase-investigator.ts",
+      "packages/core/src/core/prompts.test.ts",
+      "packages/core/src/core/prompts.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "49b66733c24ed8f14bf0e57343752556dc268134",
+    "short": "49b66733",
+    "date": "2025-10-14",
+    "subject": "fix(infra) - Disable CTRL-C test (#11122)",
+    "files": [
+      "integration-tests/ctrl-c-exit.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "99c7108bb08e52b6550743dbe721a579af58c1f8",
+    "short": "99c7108b",
+    "date": "2025-10-14",
+    "subject": "fix integration test static errors, and run_shell_command tests to actually be testing what they intend (#11050)",
+    "files": [
+      "integration-tests/context-compress-interactive.test.ts",
+      "integration-tests/globalSetup.ts",
+      "integration-tests/run_shell_command.test.ts",
+      "integration-tests/stdin-context.test.ts",
+      "integration-tests/test-helper.ts",
+      "integration-tests/write_file.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "0a3e492e6b9edda654395a6e028a09c92596ab8b",
+    "short": "0a3e492e",
+    "date": "2025-10-14",
+    "subject": "Integration test for UI flickers (#11067)",
+    "files": [
+      "integration-tests/flicker.test.ts",
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "8c78b62b7505db74afe7a69319ddb054c15d81ce",
+    "short": "8c78b62b",
+    "date": "2025-10-14",
+    "subject": "fix: set a2a-server publish to --no-tag (#11138)",
+    "files": [
+      ".github/actions/publish-release/action.yml"
+    ],
+    "areas": [
+      "github"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "ef3186d441536966710bfbabd08d45c595a88c49",
+    "short": "ef3186d4",
+    "date": "2025-10-14",
+    "subject": "Enable codease investigator by default before the next preview release (#11136)",
+    "files": [
+      "packages/cli/src/config/settingsSchema.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "769fe8b161a59d3690feb7069ee717e2be4829cc",
+    "short": "769fe8b1",
+    "date": "2025-10-14",
+    "subject": "Delete unworkable replace test and enabled the rest (#11125)",
+    "files": [
+      "integration-tests/json-output.test.ts",
+      "integration-tests/replace.test.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "6f0107e7b793f24597fe04258ada4f2639b6c69a",
+    "short": "6f0107e7",
+    "date": "2025-10-14",
+    "subject": "fix(core): implement robust URL validation in web_fetch tool (#10834)",
+    "files": [
+      "packages/core/src/tools/web-fetch.test.ts",
+      "packages/core/src/tools/web-fetch.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "bd5c158a62adca9e6d9d45204d3e9798e2719949",
+    "short": "bd5c158a",
+    "date": "2025-10-14",
+    "subject": "Revert \"Shell approval rework\" (#11143)",
+    "files": [
+      "docs/cli/commands.md",
+      "docs/tools/shell.md",
+      "package-lock.json",
+      "packages/cli/src/services/prompt-processors/shellProcessor.test.ts",
+      "packages/core/package.json",
+      "packages/core/src/services/shellExecutionService.test.ts",
+      "packages/core/src/services/shellExecutionService.ts",
+      "packages/core/src/tools/__snapshots__/shell.test.ts.snap",
+      "packages/core/src/tools/shell.test.ts",
+      "packages/core/src/tools/shell.ts",
+      "packages/core/src/utils/shell-utils.test.ts",
+      "packages/core/src/utils/shell-utils.ts"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "docs",
+      "package-lock.json"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "996c9f59552fc55fbd1552e93f44c56ddadd5f59",
+    "short": "996c9f59",
+    "date": "2025-10-14",
+    "subject": "Revert \"fix: handle request retries and model fallback correctly\" (#11164)",
+    "files": [
+      "packages/cli/src/ui/hooks/useQuotaAndFallback.test.ts",
+      "packages/cli/src/ui/hooks/useQuotaAndFallback.ts",
+      "packages/core/index.ts",
+      "packages/core/src/utils/errorParsing.test.ts",
+      "packages/core/src/utils/errorParsing.ts",
+      "packages/core/src/utils/flashFallback.test.ts",
+      "packages/core/src/utils/googleErrors.test.ts",
+      "packages/core/src/utils/googleErrors.ts",
+      "packages/core/src/utils/googleQuotaErrors.test.ts",
+      "packages/core/src/utils/googleQuotaErrors.ts",
+      "packages/core/src/utils/quotaErrorDetection.ts",
+      "packages/core/src/utils/retry.test.ts",
+      "packages/core/src/utils/retry.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a2f3339a0e744551b50dafbc33f24ce894a55343",
+    "short": "a2f3339a",
+    "date": "2025-10-14",
+    "subject": "Enable Model Routing (#11154)",
+    "files": [
+      "packages/cli/src/config/config.test.ts",
+      "packages/cli/src/config/config.ts",
+      "packages/cli/src/config/settingsSchema.test.ts",
+      "packages/cli/src/config/settingsSchema.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "dabe161a6f73f25e97c5bae914eb6e26454b6253",
+    "short": "dabe161a",
+    "date": "2025-10-14",
+    "subject": "Don't accept input until slash commands are loaded (#11162)",
+    "files": [
+      "packages/cli/src/nonInteractiveCliCommands.ts",
+      "packages/cli/src/ui/AppContainer.tsx",
+      "packages/cli/src/ui/components/Composer.tsx",
+      "packages/cli/src/ui/contexts/UIStateContext.tsx",
+      "packages/cli/src/ui/hooks/slashCommandProcessor.test.ts",
+      "packages/cli/src/ui/hooks/slashCommandProcessor.ts"
+    ],
+    "areas": [
+      "cli"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "4f5b335792d1c8ad0df5d2bb1a7437e9567f20a3",
+    "short": "4f5b3357",
+    "date": "2025-10-14",
+    "subject": "fix(tests): enable cyclic schema MCP tool test (#10912)",
+    "files": [
+      "integration-tests/context-compress-interactive.test.ts",
+      "integration-tests/ctrl-c-exit.test.ts",
+      "integration-tests/file-system-interactive.test.ts",
+      "integration-tests/mcp_server_cyclic_schema.test.ts",
+      "integration-tests/test-helper.ts"
+    ],
+    "areas": [
+      "integration-tests"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "203bad7c06895bbf815272614710e5c154811bed",
+    "short": "203bad7c",
+    "date": "2025-10-15",
+    "subject": "Docs: Point to extensions gallery from extensions docs in the project (#10763)",
+    "files": [
+      "docs/extensions/index.md"
+    ],
+    "areas": [
+      "docs"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "984415f6c718934ef2efa111673d9c3942bfaf91",
+    "short": "984415f6",
+    "date": "2025-10-15",
+    "subject": "feat(ci): Update release to use github env variables. (#11068)",
+    "files": [
+      ".github/actions/npm-auth-token/action.yml",
+      ".github/actions/publish-release/action.yml",
+      ".github/actions/setup-npmrc/action.yml",
+      ".github/actions/tag-npm-release/action.yml",
+      ".github/actions/verify-release/action.yml",
+      ".github/workflows/release-change-tags.yml",
+      ".github/workflows/release-manual.yml",
+      ".github/workflows/release-nightly.yml",
+      ".github/workflows/release-patch-3-release.yml",
+      ".github/workflows/release-promote.yml",
+      ".github/workflows/release-rollback.yml",
+      ".github/workflows/smoke-test.yml",
+      ".github/workflows/verify-release.yml"
+    ],
+    "areas": [
+      "github"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "cb1ec755f654c814af12b94b123d5f7367b0d63d",
+    "short": "cb1ec755",
+    "date": "2025-10-15",
+    "subject": "fix(ci): Move from self-hosted -> ubuntu-latest (#11205)",
+    "files": [
+      ".github/workflows/release-manual.yml"
+    ],
+    "areas": [
+      "github"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "0dea354457bd04f944c51c787ff020fef5b1ff78",
+    "short": "0dea3544",
+    "date": "2025-10-15",
+    "subject": "Add a GH Issue template for a website issue that gets tagged appropriately. (#10923)",
+    "files": [
+      ".github/ISSUE_TEMPLATE/website_issue.yml"
+    ],
+    "areas": [
+      "github"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "0e79bd4000ac751c7b2c9c8c505e8f2054150ced",
+    "short": "0e79bd40",
+    "date": "2025-10-15",
+    "subject": "chore(release): v0.10.0-preview.0",
+    "files": [
+      "package-lock.json",
+      "package.json",
+      "packages/a2a-server/package.json",
+      "packages/cli/package.json",
+      "packages/core/package.json",
+      "packages/test-utils/package.json",
+      "packages/vscode-ide-companion/package.json"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "package-lock.json",
+      "package.json",
+      "packages",
+      "vscode"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a6311e3c4c48aa340b8e5d490db3aa7abd67d838",
+    "short": "a6311e3c",
+    "date": "2025-10-16",
+    "subject": "fix(patch): cherry-pick 5aaa0e6 to release/v0.10.0-preview.0-pr-11259 to patch version v0.10.0-preview.0 and create version 0.10.0-preview.1 (#11287)",
+    "files": [
+      "packages/core/src/config/config.ts"
+    ],
+    "areas": [
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "fa1097dfed28bc429c63ac86ac8b27a30ffeec9d",
+    "short": "fa1097df",
+    "date": "2025-10-16",
+    "subject": "chore(release): v0.10.0-preview.1",
+    "files": [
+      "package-lock.json",
+      "package.json",
+      "packages/a2a-server/package.json",
+      "packages/cli/package.json",
+      "packages/core/package.json",
+      "packages/test-utils/package.json",
+      "packages/vscode-ide-companion/package.json"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "package-lock.json",
+      "package.json",
+      "packages",
+      "vscode"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "a186083866c3e8b8fbe59bec70c17a2bfac247cb",
+    "short": "a1860838",
+    "date": "2025-10-17",
+    "subject": "fix(patch): cherry-pick 0ded546 to release/v0.10.0-preview.1-pr-11225 to patch version v0.10.0-preview.1 and create version 0.10.0-preview.2 (#11415)",
+    "files": [
+      "packages/cli/src/config/config.ts",
+      "packages/core/src/config/config.ts",
+      "packages/core/src/core/__snapshots__/prompts.test.ts.snap",
+      "packages/core/src/core/prompts.test.ts",
+      "packages/core/src/core/prompts.ts",
+      "packages/core/src/index.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "076123e31572ebee11c20cabe4708af99e55a92e",
+    "short": "076123e3",
+    "date": "2025-10-17",
+    "subject": "chore(release): v0.10.0-preview.2",
+    "files": [
+      "package-lock.json",
+      "package.json",
+      "packages/a2a-server/package.json",
+      "packages/cli/package.json",
+      "packages/core/package.json",
+      "packages/test-utils/package.json",
+      "packages/vscode-ide-companion/package.json"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "package-lock.json",
+      "package.json",
+      "packages",
+      "vscode"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "f35e241770e2d1f9aff0afd9f0e60fc6b7937c11",
+    "short": "f35e2417",
+    "date": "2025-10-21",
+    "subject": "fix(patch): cherry-pick 8aace3a to release/v0.10.0-preview.2-pr-11549 [CONFLICTS] (#11595)",
+    "files": [
+      "packages/cli/src/config/config.test.ts",
+      "packages/cli/src/config/config.ts",
+      "packages/cli/src/config/settingsSchema.test.ts",
+      "packages/cli/src/config/settingsSchema.ts",
+      "packages/vscode-ide-companion/NOTICES.txt"
+    ],
+    "areas": [
+      "cli",
+      "vscode"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "845471ea0be17f346d8034f9d27df5d8332ffb7a",
+    "short": "845471ea",
+    "date": "2025-10-21",
+    "subject": "chore(release): v0.10.0-preview.3",
+    "files": [
+      "package-lock.json",
+      "package.json",
+      "packages/a2a-server/package.json",
+      "packages/cli/package.json",
+      "packages/core/package.json",
+      "packages/test-utils/package.json",
+      "packages/vscode-ide-companion/package.json"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "package-lock.json",
+      "package.json",
+      "packages",
+      "vscode"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "cbb5e39332557598962d16c4c7927210d8898dea",
+    "short": "cbb5e393",
+    "date": "2025-10-21",
+    "subject": "fix(patch): cherry-pick 5b750f5 to release/v0.10.0-preview.3-pr-11615 to patch version v0.10.0-preview.3 and create version 0.10.0-preview.4 (#11625)",
+    "files": [
+      "packages/cli/src/config/settingsSchema.ts",
+      "packages/core/src/config/config.ts"
+    ],
+    "areas": [
+      "cli",
+      "core"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "5d92b507be58733a655fcb79427f93ee5ad8b72e",
+    "short": "5d92b507",
+    "date": "2025-10-22",
+    "subject": "chore(release): v0.10.0-preview.4",
+    "files": [
+      "package-lock.json",
+      "package.json",
+      "packages/a2a-server/package.json",
+      "packages/cli/package.json",
+      "packages/core/package.json",
+      "packages/test-utils/package.json",
+      "packages/vscode-ide-companion/package.json"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "package-lock.json",
+      "package.json",
+      "packages",
+      "vscode"
+    ],
+    "is_merge": false
+  },
+  {
+    "sha": "5eb56494ea8f3e624fa549033672bf097309cd9c",
+    "short": "5eb56494",
+    "date": "2025-10-22",
+    "subject": "chore(release): v0.10.0",
+    "files": [
+      "package-lock.json",
+      "package.json",
+      "packages/a2a-server/package.json",
+      "packages/cli/package.json",
+      "packages/core/package.json",
+      "packages/test-utils/package.json",
+      "packages/vscode-ide-companion/package.json"
+    ],
+    "areas": [
+      "cli",
+      "core",
+      "package-lock.json",
+      "package.json",
+      "packages",
+      "vscode"
+    ],
+    "is_merge": false
+  }
+]
