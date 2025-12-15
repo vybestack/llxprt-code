@@ -186,8 +186,7 @@ export class ExtensionAutoUpdater {
     this.notify = options.notify;
     this.stateStore = options.stateStore ?? createFileStateStore();
     this.extensionLoader =
-      options.extensionLoader ??
-      (async () => loadUserExtensions());
+      options.extensionLoader ?? (async () => loadUserExtensions());
     this.updateExecutor =
       options.updateExecutor ??
       ((extension, cwd, currentState, setExtensionUpdateState) =>
@@ -305,15 +304,12 @@ export class ExtensionAutoUpdater {
       return;
     }
 
-    const settings = this.getEffectiveSettingsForExtension(
-      extension.name,
-    );
+    const settings = this.getEffectiveSettingsForExtension(extension.name);
     if (!settings.enabled) {
       return;
     }
 
-    const entry =
-      state[extension.name] ?? (state[extension.name] = {});
+    const entry = state[extension.name] ?? (state[extension.name] = {});
     const now = this.now();
     const intervalMs = settings.checkIntervalHours * HOUR_IN_MS;
     if (entry.lastCheck && now - entry.lastCheck < intervalMs) {

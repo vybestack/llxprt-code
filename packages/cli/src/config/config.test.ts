@@ -1127,7 +1127,7 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should merge excludeTools from settings and extensions', async () => {
-    const settings: Settings = { tools: { exclude: ['tool1', 'tool2'] } };
+    const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
     const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
@@ -1165,7 +1165,7 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should handle overlapping excludeTools between settings and extensions', async () => {
-    const settings: Settings = { tools: { exclude: ['tool1', 'tool2'] } };
+    const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
     const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
@@ -1195,7 +1195,7 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should handle overlapping excludeTools between extensions', async () => {
-    const settings: Settings = { tools: { exclude: ['tool1'] } };
+    const settings: Settings = { excludeTools: ['tool1'] };
     const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
@@ -1273,7 +1273,7 @@ describe('mergeExcludeTools', () => {
   it('should handle settings with excludeTools but no extensions', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const settings: Settings = { tools: { exclude: ['tool1', 'tool2'] } };
+    const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
     const extensions: GeminiCLIExtension[] = [];
     const config = await loadCliConfig(
       settings,
@@ -1322,7 +1322,7 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should not modify the original settings object', async () => {
-    const settings: Settings = { tools: { exclude: ['tool1'] } };
+    const settings: Settings = { excludeTools: ['tool1'] };
     const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext',
@@ -1545,6 +1545,8 @@ describe('Approval mode tool exclusion logic', () => {
       'test',
     ];
     const argv = await parseArguments({} as Settings);
+    const settings: Settings = { excludeTools: ['custom_tool'] };
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,

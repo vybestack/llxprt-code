@@ -430,9 +430,11 @@ describe('extension tests', () => {
 
       expect(extensions).toHaveLength(1);
       expect(extensions[0].name).toBe('good-ext');
-      expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(
+      expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(
+        expect.stringContaining(
           `Warning: Skipping extension in ${badExtDir}: Expected`,
-        ));
+        ),
+      );
 
       consoleSpy.mockRestore();
     });
@@ -461,9 +463,11 @@ describe('extension tests', () => {
 
       expect(extensions).toHaveLength(1);
       expect(extensions[0].name).toBe('good-ext');
-      expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(
+      expect(consoleSpy).toHaveBeenCalledExactlyOnceWith(
+        expect.stringContaining(
           `Invalid extension config in ${badConfigPath}: missing name or version.`,
-        ));
+        ),
+      );
 
       consoleSpy.mockRestore();
     });
