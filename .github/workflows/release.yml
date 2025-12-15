@@ -177,6 +177,7 @@ jobs:
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
           LLXPRT_AUTH_TYPE: none
           LLXPRT_TEST_PROFILE: synthetic
+          LLXPRT_SKIP_IMAGE_HARNESS: 'true' # Avoid libspng flake on Linux runners (issue #816)
 
       - name: Build Bundle for Integration Tests
         run: npm run bundle
