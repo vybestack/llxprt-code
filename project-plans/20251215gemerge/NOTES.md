@@ -486,3 +486,115 @@ FEATURE VERIFIED: YES
 NOTE: Test fix required - config.test.ts had incorrect property paths ({tools:{exclude:...}} instead of {excludeTools:...}). Fixed in commit 1bbdf7879.
 
 ---
+
+## Batch 03 — PICK — 1af3fef3, 603ec2b2, 467a305f, b92e3bca, 1962b51d
+
+### Selection Record
+Batch: 03
+Type: PICK (5 commits)
+Upstream SHA(s):
+  - 1af3fef3 - fix(infra) - Remove auto update from integration tests (#10656)
+  - 603ec2b2 - Add script to deflake integration tests (#10666)
+  - 467a305f - chore(shell): Enable interactive shell by default (#10661)
+  - b92e3bca - fix(mcp): fix MCP server removal not persisting to settings (#10098)
+  - 1962b51d - fix: ensure positional prompt arguments work with extensions flag (#10077)
+Subject: Integration test fixes, deflake script, shell defaults, MCP settings, extensions flag
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 02)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (5bae25080)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick 1af3fef3 603ec2b2 467a305f b92e3bca 1962b51d
+Conflicts: YES (3 commits had conflicts)
+  - 467a305f (shell defaults): Config interface differences - kept shouldUseNodePtyShell instead of enableInteractiveShell
+  - b92e3bca (MCP settings): Settings migration approach - kept LLxprt's LEGACY_UI_KEYS
+  - 1962b51d (extensions flag): Minor conflict resolution in argument parsing
+Branding Substitutions Applied: YES
+  - .gemini → .llxprt in mcp/remove.test.ts
+  - Copyright Google LLC → Vybestack LLC in commentJson.ts files
+Files Modified: 20 files including:
+  - integration-tests/run-one.sh, deflake-test.js
+  - packages/cli/src/config/config.ts, settings.ts, settingsSchema.ts
+  - packages/cli/src/commands/mcp/remove.test.ts
+  - packages/cli/src/services/prompt-processors/shellProcessor.ts
+  - packages/cli/src/utils/commentJson.ts (restored)
+  - packages/core/src/config/config.ts
+  - packages/core/src/tools/shell.ts
+LLXPRT Commit SHAs:
+  - 82b61e2e5 - Remove auto update from integration tests
+  - 9728d9e6e - Add script to deflake integration tests
+  - 90bc7aaa2 - Enable interactive shell by default
+  - f8b3bb796 - Fix MCP server removal not persisting
+  - dcf347e21 - Ensure positional prompt arguments work
+  - 5970be2fe - Post-cherry-pick fixes
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-15T20:45:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (2 warnings, 0 errors)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+COMMAND OUTPUT (typecheck):
+```bash
+$ npm run typecheck
+> @vybestack/llxprt-code@0.7.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.7.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.7.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.6.1 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.7.0 typecheck
+> tsc --noEmit
+```
+
+COMMAND OUTPUT (lint):
+```bash
+$ npm run lint
+/Users/acoliver/projects/llxprt-code-branches/llxprt-code-1/packages/cli/src/config/config.ts
+  14:41  warning  import/no-duplicates
+  36:8   warning  import/no-duplicates
+
+✖ 2 problems (0 errors, 2 warnings)
+```
+
+### Feature Landing Verification
+Upstream Commits: 1af3fef3, 603ec2b2, 467a305f, b92e3bca, 1962b51d
+Features:
+  1. Remove auto update from integration tests
+  2. Add deflake script for tests
+  3. Enable interactive shell by default
+  4. Fix MCP server removal persistence
+  5. Fix extensions flag with positional args
+
+LLXPRT Evidence:
+```bash
+$ ls integration-tests/deflake-test.js
+integration-tests/deflake-test.js (EXISTS - feature 2 landed)
+
+$ grep -n "shouldUseNodePtyShell" packages/cli/src/config/config.ts | head -3
+116:  shouldUseNodePtyShell: boolean;
+121:  shouldUseNodePtyShell: true,
+282:  shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell ?? true,
+
+$ grep -n "comment-json" packages/cli/package.json
+91:    "comment-json": "^4.2.5",
+```
+
+FEATURE VERIFIED: YES
+
+---

@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 02 |
+| **Last Completed** | Batch 03 |
 | **In Progress** | — |
-| **Next Up** | Batch 03 |
-| **Progress** | 2/52 (4%) |
+| **Next Up** | Batch 04 |
+| **Progress** | 3/52 (6%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -71,7 +71,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 01 record exists
   - Record Location: NOTES.md ## Batch 02
 
-- [ ] Batch 03 — QUICK — PICK — `1af3fef3, 603ec2b2, 467a305f, b92e3bca, 1962b51d` — fix(infra) - Remove auto update from integration tests (#10656) / Add script to deflake integration tests (#10666) / chore(shell): Enable interactive shell by default (#10661) / fix(mcp): fix MCP server removal not persisting to settings (#10098) / fix: ensure positional prompt arguments work with extensions flag (#10077)
+- [x] Batch 03 — QUICK — PICK — `1af3fef3, 603ec2b2, 467a305f, b92e3bca, 1962b51d` — fix(infra) - Remove auto update from integration tests (#10656) / Add script to deflake integration tests (#10666) / chore(shell): Enable interactive shell by default (#10661) / fix(mcp): fix MCP server removal not persisting to settings (#10098) / fix: ensure positional prompt arguments work with extensions flag (#10077)
   - Prerequisites: Batch 02 record exists
   - Record Location: NOTES.md ## Batch 03
 
