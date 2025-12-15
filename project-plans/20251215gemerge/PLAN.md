@@ -154,21 +154,23 @@ sed -i \
 
 This merge is executed using a subagent workflow defined in `project-plans/20251215gemerge/SUBAGENT-WORKFLOW.md`.
 
-### Subagent Roles
+### Subagent Types and Roles
 
-| Role | Purpose | Used For |
-|------|---------|----------|
-| **Picker** | Select next batch, verify prerequisites | All batches |
-| **Merger** | Cherry-pick and resolve conflicts | PICK batches |
-| **Implementer** | Manual port following playbook | REIMPLEMENT batches |
-| **Verifier** | Run verification suite, confirm feature landed | All batches |
-| **Researcher** | Fill missing prerequisite records | When gaps detected |
+| Role | Subagent Type | Purpose |
+|------|---------------|---------|
+| **Picker** | `general-purpose` | Select next batch, verify prerequisites |
+| **Merger** | `llxprt-cherrypicker` | Cherry-pick and resolve conflicts (PICK batches) |
+| **Conflict Resolver** | `llxprt-conflict-merger` | Complex merge conflict resolution |
+| **Implementer** | `typescript-coder` | Manual port following playbook (REIMPLEMENT batches) |
+| **Verifier** | `integration-tester` | Run verification suite |
+| **Code Reviewer** | `typescript-code-reviewer` | Verify feature landed correctly |
+| **Researcher** | `general-purpose` or `Explore` | Fill missing prerequisite records |
 
 ### Execution Flow Per Batch
 
-1. **Picker** selects batch, verifies prerequisites
-2. **Merger** or **Implementer** executes the batch
-3. **Verifier** runs verification (QUICK or FULL)
+1. `general-purpose` (Picker) selects batch, verifies prerequisites
+2. `llxprt-cherrypicker` or `typescript-coder` executes the batch
+3. `integration-tester` (Verifier) runs verification (QUICK or FULL)
 4. Records appended to `NOTES.md`
 5. Commit and push
 

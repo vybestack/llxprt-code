@@ -4,20 +4,43 @@ This document defines the subagent-based execution workflow for the gemini-cli v
 
 ---
 
-## Subagent Roles
+## Available Subagent Types
 
-### 1. Picker Subagent
+These are the actual subagent types available for this workflow:
+
+| Subagent Type | Model | Use For |
+|---------------|-------|---------|
+| `general-purpose` | sonnet | Batch selection, prerequisite checking, research |
+| `llxprt-cherrypicker` | opus | Cherry-picking commits from upstream, conflict resolution during cherry-pick |
+| `llxprt-conflict-merger` | sonnet | Resolving merge conflicts after cherry-pick |
+| `typescript-coder` | sonnet | Reimplementing features (REIMPLEMENT batches) |
+| `typescript-code-reviewer` | sonnet | Code review, verification of changes |
+| `integration-tester` | sonnet | Running full test suite, integration testing |
+| `Explore` | sonnet | Quick codebase exploration, finding files |
+
+---
+
+## Subagent Role Mapping
+
+### 1. Picker Role → `general-purpose`
 
 **Purpose**: Select and prepare the next batch for execution.
+
+**Invoke with**:
+```
+Task(
+  subagent_type="general-purpose",
+  description="Select batch NN",
+  prompt="Read PROGRESS.md and select the next uncompleted batch..."
+)
+```
 
 **Responsibilities**:
 
 - Read `PROGRESS.md` to identify the next uncompleted batch
 - Verify prerequisites are met (prior phase records exist and are valid)
-- If prerequisites missing, invoke Researcher Subagent to fill gaps
+- If prerequisites missing, report back (orchestrator invokes Researcher)
 - Output the batch details and cherry-pick/reimplement instructions
-
-**Tools Available**: Read, Glob, Grep
 
 **Output Required**:
 
@@ -35,9 +58,18 @@ Ready to Execute: YES | NO
 
 ---
 
-### 2. Merger Subagent (for PICK batches)
+### 2. Merger Role → `llxprt-cherrypicker`
 
 **Purpose**: Execute cherry-pick and resolve conflicts.
+
+**Invoke with**:
+```
+Task(
+  subagent_type="llxprt-cherrypicker",
+  description="Cherry-pick batch NN",
+  prompt="Cherry-pick upstream commits <sha(s)> following the plan..."
+)
+```
 
 **Responsibilities**:
 
@@ -46,8 +78,6 @@ Ready to Execute: YES | NO
 - Apply branding substitutions per PLAN.md
 - Run quick verification after resolution
 - Create the batch commit
-
-**Tools Available**: Bash, Read, Edit, Write, Glob, Grep
 
 **Output Required**:
 
@@ -78,11 +108,29 @@ COMMAND OUTPUT (lint):
 ```
 ```
 
+**For complex conflicts**, use `llxprt-conflict-merger`:
+```
+Task(
+  subagent_type="llxprt-conflict-merger",
+  description="Resolve conflicts in batch NN",
+  prompt="Resolve the merge conflicts in <files> preserving LLxprt's multi-provider architecture..."
+)
+```
+
 ---
 
-### 3. Implementer Subagent (for REIMPLEMENT batches)
+### 3. Implementer Role → `typescript-coder`
 
 **Purpose**: Manually port upstream changes following the playbook.
+
+**Invoke with**:
+```
+Task(
+  subagent_type="typescript-coder",
+  description="Reimplement batch NN",
+  prompt="Follow the playbook at project-plans/20251215gemerge/<sha>-plan.md to reimplement..."
+)
+```
 
 **Responsibilities**:
 
@@ -91,8 +139,6 @@ COMMAND OUTPUT (lint):
 - Apply LLxprt adaptations per `Non-Negotiables`
 - Apply branding substitutions
 - Create a single commit with proper message format
-
-**Tools Available**: Bash, Read, Edit, Write, Glob, Grep
 
 **Output Required**:
 
@@ -129,9 +175,27 @@ Feature Verification:
 
 ---
 
-### 4. Verifier Subagent
+### 4. Verifier Role → `integration-tester` + `typescript-code-reviewer`
 
 **Purpose**: Run full verification suite and confirm feature landed.
+
+**Invoke with** (for running tests):
+```
+Task(
+  subagent_type="integration-tester",
+  description="Verify batch NN",
+  prompt="Run the full verification suite for batch NN: test, lint, typecheck, build, synthetic..."
+)
+```
+
+**Invoke with** (for code review):
+```
+Task(
+  subagent_type="typescript-code-reviewer",
+  description="Review batch NN changes",
+  prompt="Review the changes from batch NN for compliance with LLxprt standards..."
+)
+```
 
 **Responsibilities**:
 
@@ -144,8 +208,6 @@ Feature Verification:
 - Verify the actual feature from the batch landed (not just that tests pass)
 - Compare upstream diff vs downstream diff to confirm code landed
 - Generate evidence record
-
-**Tools Available**: Bash, Read, Glob, Grep
 
 **Verification Commands** (run in order):
 
@@ -239,9 +301,27 @@ Failure Reasons (if any):
 
 ---
 
-### 5. Researcher Subagent
+### 5. Researcher Role → `general-purpose` or `Explore`
 
 **Purpose**: Fill in missing prerequisite records when prior phases are incomplete.
+
+**Invoke with** (for detailed investigation):
+```
+Task(
+  subagent_type="general-purpose",
+  description="Research batch NN",
+  prompt="Investigate what was done in batch NN. Check git log, verify commits exist..."
+)
+```
+
+**Invoke with** (for quick file searches):
+```
+Task(
+  subagent_type="Explore",
+  description="Find batch NN evidence",
+  prompt="Search the codebase for evidence that batch NN feature landed..."
+)
+```
 
 **Responsibilities**:
 
@@ -249,8 +329,6 @@ Failure Reasons (if any):
 - Verify commits exist via git log
 - Check that features landed via code inspection
 - Generate missing batch records based on evidence
-
-**Tools Available**: Bash (git commands only), Read, Glob, Grep
 
 **Output Required**:
 
@@ -275,12 +353,12 @@ Reconstructed Record:
 ### Phase 1: Batch Selection
 
 ```
-Orchestrator -> Picker Subagent
+Orchestrator → general-purpose (Picker role)
   Input: Current progress state
   Output: Batch selection record
 
 If prerequisites missing:
-  Picker -> Researcher Subagent
+  Orchestrator → general-purpose or Explore (Researcher role)
     Input: Missing prerequisite details
     Output: Research record filling the gap
 ```
@@ -290,15 +368,20 @@ If prerequisites missing:
 **For PICK batches:**
 
 ```
-Orchestrator -> Merger Subagent
+Orchestrator → llxprt-cherrypicker (Merger role)
   Input: Batch selection record
   Output: Merge execution record
+
+If complex conflicts:
+  Orchestrator → llxprt-conflict-merger
+    Input: Conflict details
+    Output: Resolved conflicts
 ```
 
 **For REIMPLEMENT batches:**
 
 ```
-Orchestrator -> Implementer Subagent
+Orchestrator → typescript-coder (Implementer role)
   Input: Batch selection record + playbook path
   Output: Reimplementation execution record
 ```
@@ -308,7 +391,7 @@ Orchestrator -> Implementer Subagent
 **After every batch (Quick Verification):**
 
 ```
-Orchestrator -> Verifier Subagent
+Orchestrator → integration-tester (Verifier role)
   Input: Batch number, verification type = QUICK
   Output: Verification record (typecheck + lint only)
 ```
@@ -316,9 +399,14 @@ Orchestrator -> Verifier Subagent
 **After every 2nd batch (Full Verification):**
 
 ```
-Orchestrator -> Verifier Subagent
+Orchestrator → integration-tester (Verifier role)
   Input: Batch number, verification type = FULL
   Output: Full verification record (all checks + feature landing)
+
+Optionally also:
+Orchestrator → typescript-code-reviewer
+  Input: Batch changes
+  Output: Code quality review
 ```
 
 ### Phase 4: Commit/Push
