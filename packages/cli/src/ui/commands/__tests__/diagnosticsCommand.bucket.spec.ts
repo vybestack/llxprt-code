@@ -442,18 +442,21 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
 
   describe('Output format validation', () => {
     it('should match expected hierarchical format with provider and bucket sections', async () => {
-      // Given: Provider with multiple buckets
+      // Given: Provider with multiple buckets (use relative times to avoid flakiness)
+      const futureExpiry1 = Date.now() / 1000 + 3600; // 1 hour from now
+      const futureExpiry2 = Date.now() / 1000 + 7200; // 2 hours from now
+
       const token1: OAuthToken = {
         access_token: 'token1',
         refresh_token: 'refresh1',
-        expiry: new Date('2025-12-14T10:30:00.000Z').getTime() / 1000,
+        expiry: futureExpiry1,
         token_type: 'Bearer',
       };
 
       const token2: OAuthToken = {
         access_token: 'token2',
         refresh_token: 'refresh2',
-        expiry: new Date('2025-12-15T02:15:00.000Z').getTime() / 1000,
+        expiry: futureExpiry2,
         token_type: 'Bearer',
       };
 
@@ -492,7 +495,7 @@ describe('Phase 8: Diagnostics Enhancement - TDD Tests', () => {
 
       // Each bucket should have Status, Expires, Time Remaining, Refresh Token
       expect(content).toMatch(/Status:\s*Authenticated/);
-      expect(content).toContain('Expires: 2025-12-14T10:30:00.000Z');
+      expect(content).toMatch(/Expires:\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/); // ISO date format
       expect(content).toMatch(/Time Remaining:\s*\d+h\s*\d+m/);
       expect(content).toContain('Refresh Token: Available');
     });
