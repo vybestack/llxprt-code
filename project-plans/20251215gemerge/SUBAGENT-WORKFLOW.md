@@ -13,7 +13,8 @@ These are the actual subagent types available for this workflow:
 | `general-purpose` | sonnet | Batch selection, prerequisite checking, research |
 | `llxprt-cherrypicker` | opus | Cherry-picking commits from upstream, conflict resolution during cherry-pick |
 | `llxprt-conflict-merger` | sonnet | Resolving merge conflicts after cherry-pick |
-| `typescript-coder` | sonnet | Reimplementing features (REIMPLEMENT batches) |
+| `typescript-master-coder` | opus | Reimplementing features (REIMPLEMENT batches) - complex playbooks |
+| `typescript-coder` | sonnet | Simple code changes (fallback for simple batches) |
 | `typescript-code-reviewer` | sonnet | Code review, verification of changes |
 | `integration-tester` | sonnet | Running full test suite, integration testing |
 | `Explore` | sonnet | Quick codebase exploration, finding files |
@@ -119,14 +120,14 @@ Task(
 
 ---
 
-### 3. Implementer Role → `typescript-coder`
+### 3. Implementer Role → `typescript-master-coder`
 
 **Purpose**: Manually port upstream changes following the playbook.
 
 **Invoke with**:
 ```
 Task(
-  subagent_type="typescript-coder",
+  subagent_type="typescript-master-coder",
   description="Reimplement batch NN",
   prompt="Follow the playbook at project-plans/20251215gemerge/<sha>-plan.md to reimplement..."
 )
@@ -381,7 +382,7 @@ If complex conflicts:
 **For REIMPLEMENT batches:**
 
 ```
-Orchestrator → typescript-coder (Implementer role)
+Orchestrator → typescript-master-coder (Implementer role)
   Input: Batch selection record + playbook path
   Output: Reimplementation execution record
 ```

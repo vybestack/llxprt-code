@@ -156,20 +156,20 @@ This merge is executed using a subagent workflow defined in `project-plans/20251
 
 ### Subagent Types and Roles
 
-| Role | Subagent Type | Purpose |
-|------|---------------|---------|
-| **Picker** | `general-purpose` | Select next batch, verify prerequisites |
-| **Merger** | `llxprt-cherrypicker` | Cherry-pick and resolve conflicts (PICK batches) |
-| **Conflict Resolver** | `llxprt-conflict-merger` | Complex merge conflict resolution |
-| **Implementer** | `typescript-coder` | Manual port following playbook (REIMPLEMENT batches) |
-| **Verifier** | `integration-tester` | Run verification suite |
-| **Code Reviewer** | `typescript-code-reviewer` | Verify feature landed correctly |
-| **Researcher** | `general-purpose` or `Explore` | Fill missing prerequisite records |
+| Role | Subagent Type | Model | Purpose |
+|------|---------------|-------|---------|
+| **Picker** | `general-purpose` | sonnet | Select next batch, verify prerequisites |
+| **Merger** | `llxprt-cherrypicker` | opus | Cherry-pick and resolve conflicts (PICK batches) |
+| **Conflict Resolver** | `llxprt-conflict-merger` | sonnet | Complex merge conflict resolution |
+| **Implementer** | `typescript-master-coder` | opus | Manual port following playbook (REIMPLEMENT batches) |
+| **Verifier** | `integration-tester` | sonnet | Run verification suite |
+| **Code Reviewer** | `typescript-code-reviewer` | sonnet | Verify feature landed correctly |
+| **Researcher** | `general-purpose` or `Explore` | sonnet | Fill missing prerequisite records |
 
 ### Execution Flow Per Batch
 
 1. `general-purpose` (Picker) selects batch, verifies prerequisites
-2. `llxprt-cherrypicker` or `typescript-coder` executes the batch
+2. `llxprt-cherrypicker` (PICK) or `typescript-master-coder` (REIMPLEMENT) executes the batch
 3. `integration-tester` (Verifier) runs verification (QUICK or FULL)
 4. Records appended to `NOTES.md`
 5. Commit and push
