@@ -9,7 +9,8 @@ const forceHarness =
 const skipVar = process.env.LLXPRT_SKIP_IMAGE_HARNESS;
 const shouldSkipHarness =
   !forceHarness &&
-  (skipVar === '1' ||
+  (process.env.CI === 'true' ||
+    skipVar === '1' ||
     skipVar === 'true' ||
     (process.platform === 'linux' && process.env.CI === 'true'));
 
