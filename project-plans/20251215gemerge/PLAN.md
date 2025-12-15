@@ -163,6 +163,22 @@ npm run lint
 
 If either fails: fix the batch issues, then re-run the quick verification before proceeding.
 
+### Docs-only batches (format only; skip verification)
+
+If the batch results in a single commit and that commit only changes docs assets (e.g., `.md`, `.mdx`, `.json`), do **not** run the quick/full verification for that batch. Only format the touched files:
+
+```bash
+files="$(git show --name-only --pretty='' HEAD)"
+if echo "$files" | rg -qv '\\.(md|mdx|json)$'; then
+  echo "Not docs-only; run normal verification."
+else
+  echo "Docs-only batch; formatting only."
+  while IFS= read -r f; do
+    npx prettier --experimental-cli --write "$f"
+  done <<<"$files"
+fi
+```
+
 ### After every 2nd batch (Full suite)
 
 Run the full repository checklist (matches AGENTS.md):
@@ -352,7 +368,8 @@ git cherry-pick dabe161a6f73f25e97c5bae914eb6e26454b6253
    - `PICK`: run the batch command; resolve conflicts; `git cherry-pick --continue`.
    - `REIMPLEMENT`: follow the per-commit playbook referenced below; make **one local commit**.
 4. Run verification:
-   - Always: quick verification (`npm run typecheck && npm run lint`)
+   - If docs-only: format only (see “Docs-only batches” in `project-plans/20251215gemerge/PLAN.md`)
+   - Otherwise: quick verification (`npm run typecheck && npm run lint`)
    - If batch is even-numbered: run full suite.
 5. Update execution tracking:
    - Check off the batch in `project-plans/20251215gemerge/PROGRESS.md`.
