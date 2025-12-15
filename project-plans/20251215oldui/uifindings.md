@@ -91,3 +91,15 @@ Using `scripts/oldui-tmux-harness.js --scenario scrollback`, we run a determinis
 - capture scrollback and count duplicate occurrences of `SCROLLTEST LINE 0001`.
 
 If `SCROLLTEST LINE 0001` appears more than once in captured scrollback, we have objective evidence that the UI is re-printing the same content into scrollback (i.e., redraw spam).
+
+### LLM-driven UI automation is currently flaky (tool approval flows)
+I attempted to script an “agent prompts -> tool call -> approve -> next prompt” sequence using `scripts/oldui-tmux-script.approvals.json` (run via `node scripts/oldui-tmux-harness.js --script ...`). It is not reliably completing end-to-end yet due to UI/runtime behavior with real model calls.
+
+Observed issues:
+- After a tool finishes, the UI often stays in an “`esc to cancel` (Xm)” streaming state for minutes with `TPM: 0`, even though the input prompt is visible. This blocks deterministic “step 2, step 3…” scripting.
+- Sending `Escape` cancels the in-flight request, but it commonly restores the previous prompt text into the input buffer.
+  - Clearing restored input can be done with `Ctrl+C` (InputPrompt binds this to “clear input”).
+- `Enter` is frequently intercepted by the suggestions/completion UI (accept suggestion vs submit), which makes submission flaky if we don’t use a stable “submit” key sequence.
+
+Conclusion:
+- tmux gives us all the right primitives (TTY, key injection, screen + scrollback capture), but to make “LLM-driven tool approval scripts” reliable we likely need a deterministic provider / harness mode (or some way to disable/short-circuit post-tool follow-up generations) so the UI returns to idle predictably.

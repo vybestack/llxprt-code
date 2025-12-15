@@ -258,6 +258,120 @@ function sanitizeLabel(label) {
   return label.replace(/[^a-z0-9._-]+/gi, '_').replace(/^_+|_+$/g, '');
 }
 
+function deepCloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function applyMacroArgs(value, args) {
+  if (typeof value === 'string') {
+    const exact = value.match(/^\$\{([A-Za-z0-9_]+)\}$/);
+    if (exact) {
+      const key = exact[1];
+      if (Object.prototype.hasOwnProperty.call(args, key)) {
+        return args[key];
+      }
+    }
+
+    return value.replace(/\$\{([A-Za-z0-9_]+)\}/g, (match, key) => {
+      if (!Object.prototype.hasOwnProperty.call(args, key)) return match;
+      return String(args[key]);
+    });
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => applyMacroArgs(item, args));
+  }
+
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = applyMacroArgs(v, args);
+    }
+    return out;
+  }
+
+  return value;
+}
+
+function expandScriptMacros(steps, macros) {
+  if (!Array.isArray(steps)) {
+    throw new Error(`script.steps must be an array`);
+  }
+  if (macros === undefined || macros === null) return steps;
+  if (typeof macros !== 'object') {
+    throw new Error(`script.macros must be an object`);
+  }
+
+  const expand = (inputSteps, stack) => {
+    const output = [];
+    for (const step of inputSteps) {
+      if (step && typeof step === 'object' && step.type === 'macro') {
+        const name = step.name;
+        if (typeof name !== 'string' || name.trim().length === 0) {
+          throw new Error(`macro step requires non-empty "name"`);
+        }
+        if (stack.includes(name)) {
+          throw new Error(
+            `Macro cycle detected: ${[...stack, name].join(' -> ')}`,
+          );
+        }
+
+        const template = macros[name];
+        if (!Array.isArray(template)) {
+          throw new Error(`Macro "${name}" must be an array of steps`);
+        }
+        const args =
+          step.args &&
+          typeof step.args === 'object' &&
+          !Array.isArray(step.args)
+            ? step.args
+            : {};
+
+        const expandedTemplate = expand(template, [...stack, name]);
+        for (const templateStep of expandedTemplate) {
+          output.push(applyMacroArgs(deepCloneJson(templateStep), args));
+        }
+        continue;
+      }
+
+      output.push(step);
+    }
+    return output;
+  };
+
+  return expand(steps, []);
+}
+
+function parseToolConfirmationOptions(screen) {
+  const options = [];
+  const lines = screen.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/^ *│?/, '').replace(/│ *$/, '');
+    const match = line.match(/^\s*(?:●\s*)?(\d+)\.\s*(.*?)\s*$/u);
+    if (!match) continue;
+    const number = Number(match[1]);
+    const label = match[2] ?? '';
+    if (!Number.isFinite(number) || number <= 0) continue;
+
+    const labelTrimmed = label.trim();
+    const labelLower = labelTrimmed.toLowerCase();
+    if (
+      !labelLower.startsWith('yes') &&
+      !labelLower.startsWith('no') &&
+      !labelLower.startsWith('modify')
+    ) {
+      continue;
+    }
+
+    options.push({
+      number,
+      label: labelTrimmed,
+      selected: line.includes('●'),
+    });
+  }
+  return options;
+}
+
 async function captureArtifacts({
   sessionName,
   outDir,
@@ -297,6 +411,31 @@ async function waitFor({
   }
   throw new Error(
     `Timed out waiting for ${description ?? formatMatcher(matcher)} in ${scope} after ${timeoutMs}ms`,
+  );
+}
+
+async function waitForNot({
+  sessionName,
+  scope,
+  matcher,
+  timeoutMs,
+  pollMs,
+  scrollbackLines,
+  description,
+}) {
+  const start = Date.now();
+  while (Date.now() - start <= timeoutMs) {
+    const text =
+      scope === 'scrollback'
+        ? captureScrollback(sessionName, scrollbackLines)
+        : captureScreen(sessionName);
+    if (!matchText(text, matcher)) {
+      return;
+    }
+    await sleep(pollMs);
+  }
+  throw new Error(
+    `Timed out waiting for absence of ${description ?? formatMatcher(matcher)} in ${scope} after ${timeoutMs}ms`,
   );
 }
 
@@ -370,6 +509,33 @@ async function runScriptSteps({ sessionName, outDir, steps, defaults }) {
           await sendKeys(step.keys);
           break;
         }
+        case 'selectToolOption': {
+          const matcher = compileMatcher(step);
+          const screen = captureScreen(sessionName);
+          const options = parseToolConfirmationOptions(screen);
+          if (options.length === 0) {
+            throw new Error(`No tool confirmation options found on screen`);
+          }
+
+          const currentIndex = options.findIndex((option) => option.selected);
+          const startIndex = currentIndex === -1 ? 0 : currentIndex;
+          const targetIndex = options.findIndex((option) =>
+            matchText(option.label, matcher),
+          );
+          if (targetIndex === -1) {
+            throw new Error(
+              `No tool option matches ${formatMatcher(matcher)} (options: ${options.map((o) => o.label).join(', ')})`,
+            );
+          }
+
+          const delta = targetIndex - startIndex;
+          if (delta > 0) {
+            await sendKeys(Array.from({ length: delta }, () => 'Down'));
+          } else if (delta < 0) {
+            await sendKeys(Array.from({ length: -delta }, () => 'Up'));
+          }
+          break;
+        }
         case 'copyMode': {
           if (step.enter) {
             runTmux(['copy-mode', '-t', `${sessionName}:0.0`]);
@@ -436,6 +602,25 @@ async function runScriptSteps({ sessionName, outDir, steps, defaults }) {
             step.scrollbackLines ?? defaults.scrollbackLines,
           );
           await waitFor({
+            sessionName,
+            scope,
+            matcher,
+            timeoutMs,
+            pollMs,
+            scrollbackLines,
+            description: `step ${i} (${formatMatcher(matcher)})`,
+          });
+          break;
+        }
+        case 'waitForNot': {
+          const matcher = compileMatcher(step);
+          const timeoutMs = Number(step.timeoutMs ?? defaults.timeoutMs);
+          const pollMs = Number(step.pollMs ?? defaults.pollMs);
+          const scope = step.scope === 'scrollback' ? 'scrollback' : 'screen';
+          const scrollbackLines = Number(
+            step.scrollbackLines ?? defaults.scrollbackLines,
+          );
+          await waitForNot({
             sessionName,
             scope,
             matcher,
@@ -704,6 +889,10 @@ async function main() {
       )
     : null;
 
+  if (script?.steps) {
+    script.steps = expandScriptMacros(script.steps, script.macros);
+  }
+
   const tmuxCols = options.cols ?? script?.tmux?.cols ?? 120;
   const tmuxRows = options.rows ?? script?.tmux?.rows ?? 40;
   const initialWaitMs =
@@ -774,7 +963,7 @@ async function main() {
         defaults: {
           postTypeMs: 600,
           submitKeys: ['Escape', 'Enter'],
-          shellSubmitKeys: ['Enter', 'Enter'],
+          shellSubmitKeys: ['Enter'],
           timeoutMs: 15000,
           pollMs: 250,
           scrollbackLines:
@@ -822,6 +1011,13 @@ async function main() {
     if (!options.keepSession) {
       tryTmux(['kill-session', '-t', sessionName]);
     }
+    console.error(
+      [
+        `tmux session: ${sessionName}`,
+        `artifacts: ${outDir}`,
+        `scenario: ${script?.steps ? 'script' : scenario}`,
+      ].join('\n'),
+    );
     throw error;
   }
 

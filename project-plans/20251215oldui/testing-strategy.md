@@ -64,6 +64,7 @@ To avoid rewriting Node code for each new reproduction, the harness also support
 Script primitives:
 - `line`: type text and submit with configurable `submitKeys` (defaults to `["Escape","Enter"]`).
 - `waitFor` / `expect` / `expectCount`: verify screen or scrollback contains (or matches regex) and optionally assert counts.
+- `waitForNot`: wait until a matcher is absent (useful for “spinner gone” / “idle again” checks).
 - `approveShell`: detect the Shell approval dialog and choose `once|always|no`.
 - `approveTool`: approve a tool confirmation prompt (e.g. `run_shell_command`) with `once|always|no`.
 - `copyMode`: enter/exit and scroll (`pageUp`, `pageDown`, `up`, `down`).
@@ -87,3 +88,10 @@ Artifacts:
 Quick interpretation:
 - `metrics.json.counts.sentinelCount` should ideally be `1`. If it’s `>1`, we reprinted the same output multiple times into scrollback (the bug symptom).
 - `metrics.json.history.deltaDuringCopyMode` should be small for “stable UI”; a large delta indicates scrollback growth while the user is “scrolled up”.
+
+### Known flakiness: LLM-driven flows
+When scripts depend on a real model to reliably emit tool calls (e.g., “ask model to call `run_shell_command` twice, approve both”), we currently see frequent stalls in an “`esc to cancel` (Xm)” state and/or the model simply not emitting the tool call on the next prompt.
+
+For repeatable UI regressions, prefer:
+- “pure UI” scripts that don’t depend on the model (e.g., shell mode commands for long output + scrollback reproduction), and/or
+- a deterministic/mock provider for harness runs (future work).
