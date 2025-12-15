@@ -47,6 +47,7 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
   });
 
   afterEach(() => {
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
@@ -247,7 +248,8 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
 
   describe('Latency tracking', () => {
     it('should calculate latency from start to finish', async () => {
-      vi.useRealTimers();
+      vi.useFakeTimers();
+      vi.setSystemTime(0);
 
       const lb = new LoadBalancingProvider(config, providerManager);
 
@@ -267,22 +269,24 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       const gen = lb.generateChatCompletion({
         contents: [{ role: 'user', parts: [{ text: 'test' }] }],
       });
-      for await (const _chunk of gen) {
-        // consume
-      }
+
+      const consume = (async () => {
+        for await (const _chunk of gen) {
+          // consume
+        }
+      })();
+
+      await vi.advanceTimersByTimeAsync(50);
+      await consume;
 
       const stats = lb.getStats();
-      // Latency should be at least 50ms
-      expect(
-        stats.backendMetrics.backend1.totalLatencyMs,
-      ).toBeGreaterThanOrEqual(50);
-      expect(stats.backendMetrics.backend1.avgLatencyMs).toBeGreaterThanOrEqual(
-        50,
-      );
+      expect(stats.backendMetrics.backend1.totalLatencyMs).toBe(50);
+      expect(stats.backendMetrics.backend1.avgLatencyMs).toBe(50);
     });
 
     it('should compute average latency correctly', async () => {
-      vi.useRealTimers();
+      vi.useFakeTimers();
+      vi.setSystemTime(0);
 
       const lb = new LoadBalancingProvider(config, providerManager);
 
@@ -308,20 +312,19 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
         const gen = lb.generateChatCompletion({
           contents: [{ role: 'user', parts: [{ text: `test${i}` }] }],
         });
-        for await (const _chunk of gen) {
-          // consume
-        }
+        const expectedDelay = i === 0 ? 50 : 100;
+        const consume = (async () => {
+          for await (const _chunk of gen) {
+            // consume
+          }
+        })();
+        await vi.advanceTimersByTimeAsync(expectedDelay);
+        await consume;
       }
 
       const stats = lb.getStats();
-      // Total should be ~150ms, average ~75ms
-      expect(
-        stats.backendMetrics.backend1.totalLatencyMs,
-      ).toBeGreaterThanOrEqual(150);
-      expect(stats.backendMetrics.backend1.avgLatencyMs).toBeGreaterThanOrEqual(
-        70,
-      );
-      expect(stats.backendMetrics.backend1.avgLatencyMs).toBeLessThan(100);
+      expect(stats.backendMetrics.backend1.totalLatencyMs).toBe(150);
+      expect(stats.backendMetrics.backend1.avgLatencyMs).toBe(75);
     });
   });
 

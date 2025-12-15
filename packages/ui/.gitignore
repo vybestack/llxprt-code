@@ -12,3 +12,5 @@ log/
 reference/
 .npm-cache/
 resource/
+visual-artifacts/
+visual-baselines/

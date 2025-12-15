@@ -16,6 +16,12 @@
 node_modules
 bower_components
 
+# yalc local packages
+.yalc/
+**/.yalc/
+yalc.lock
+**/yalc.lock
+
 # Editors
 .idea
 *.iml
