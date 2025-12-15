@@ -264,4 +264,75 @@ PREFLIGHT COMPLETE: YES
 
 ## Batch Records Start Below
 
-<!-- Add batch records here as you complete them -->
+## Batch 01 — PICK — 8980276b
+
+### Selection Record
+Batch: 01
+Type: PICK
+Upstream SHA(s): 8980276b205e2b8f327b8b55f785a01e36ce18b8
+Subject: Rationalize different Extension typings (#10435)
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: N/A (first batch)
+  - Previous batch verification: N/A
+  - Previous batch pushed: N/A
+  - Special dependencies: Preflight complete
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick 8980276b205e2b8f327b8b55f785a01e36ce18b8
+Conflicts: YES (9 files)
+  - packages/a2a-server/src/config/config.ts: Updated import to use GeminiCLIExtension type
+  - packages/a2a-server/src/config/extension.ts: Updated imports from @vybestack/llxprt-code-core
+  - packages/cli/src/config/config.test.ts: Fixed Extension type references and test data
+  - packages/cli/src/config/config.ts: Updated imports and extension property access
+  - packages/cli/src/config/extension.test.ts: Changed extension.config.name to extension.name
+  - packages/cli/src/config/extension.ts: Removed workspaceDir param, updated signatures
+  - packages/cli/src/config/extensions/github.ts: Fixed property access patterns
+  - packages/cli/src/gemini.tsx: Fixed extension property access in list command
+  - packages/cli/src/zed-integration/zedIntegration.ts: Updated function signature and imports
+Branding Substitutions Applied: YES (@google/gemini-cli-core → @vybestack/llxprt-code-core)
+Files Modified: 24 files
+LLXPRT Commit SHA: 51cdc1993c0172c082845c00ef51b423f68b1b3b
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-15T12:00:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (2 warnings - import consolidation)
+  - test: SKIPPED
+  - build: SKIPPED
+  - synthetic: SKIPPED
+
+COMMAND OUTPUT (typecheck):
+```bash
+$ npm run typecheck
+> @vybestack/llxprt-code@0.7.0 typecheck
+> npm run typecheck --workspaces --if-present
+(all packages passed)
+```
+
+COMMAND OUTPUT (lint):
+```bash
+$ npm run lint
+✖ 2 problems (0 errors, 2 warnings)
+  import/no-duplicates warnings in packages/cli/src/config/config.ts
+```
+
+### Feature Landing Verification
+Upstream Commit: 8980276b
+Feature Description: Rationalize Extension typings - use GeminiCLIExtension from core
+
+LLXPRT Evidence:
+```bash
+$ grep -n "GeminiCLIExtension" packages/cli/src/config/extension.ts | head -5
+9:  GeminiCLIExtension,
+38: * GeminiCLIExtension class defined in Core.
+98:): GeminiCLIExtension[] {
+```
+
+FEATURE VERIFIED: YES
+
+---

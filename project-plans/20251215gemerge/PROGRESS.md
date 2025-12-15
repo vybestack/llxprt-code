@@ -8,11 +8,11 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | None (not started) |
-| **In Progress** | None |
-| **Next Up** | Preflight |
-| **Progress** | 0/52 (0%) |
-| **Last Updated** | Not started |
+| **Last Completed** | Batch 01 |
+| **In Progress** | Batch 02 |
+| **Next Up** | Batch 03 |
+| **Progress** | 1/52 (2%) |
+| **Last Updated** | 2025-12-15 |
 
 ---
 
@@ -63,7 +63,7 @@ Each completed batch MUST have the following in `NOTES.md`:
 
 ### Batch Checklist
 
-- [ ] Batch 01 — QUICK — PICK — `8980276b` — Rationalize different Extension typings (#10435)
+- [x] Batch 01 — QUICK — PICK — `8980276b` — Rationalize different Extension typings (#10435)
   - Prerequisites: Preflight complete
   - Record Location: NOTES.md ## Batch 01
 
