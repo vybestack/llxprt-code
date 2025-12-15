@@ -23,13 +23,7 @@
  * This causes a 400 error: "No tool call found for function call output with call_id"
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SettingsService } from '../../../settings/SettingsService.js';
-import {
-  clearActiveProviderRuntimeContext,
-  createProviderRuntimeContext,
-  setActiveProviderRuntimeContext,
-} from '../../../runtime/providerRuntimeContext.js';
+import { describe, it, expect } from 'vitest';
 import type { IContent } from '../../../services/history/IContent.js';
 import { normalizeToOpenAIToolId } from '../../utils/toolIdNormalization.js';
 import { buildResponsesInputFromContent } from '../buildResponsesInputFromContent.js';
