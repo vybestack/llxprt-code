@@ -163,6 +163,7 @@ This merge is executed using a subagent workflow defined in `project-plans/20251
 | **Conflict Resolver** | `llxprt-conflict-merger` | sonnet | Complex merge conflict resolution |
 | **Implementer** | `typescript-master-coder` | opus | Manual port following playbook (REIMPLEMENT batches) |
 | **Verifier** | `integration-tester` | sonnet | Run verification suite |
+| **Remediation** | `typescript-coder` | sonnet | **MANDATORY** - Fix failures when verification fails |
 | **Code Reviewer** | `typescript-code-reviewer` | sonnet | Verify feature landed correctly |
 | **Researcher** | `general-purpose` or `Explore` | sonnet | Fill missing prerequisite records |
 
@@ -171,8 +172,12 @@ This merge is executed using a subagent workflow defined in `project-plans/20251
 1. `general-purpose` (Picker) selects batch, verifies prerequisites
 2. `llxprt-cherrypicker` (PICK) or `typescript-master-coder` (REIMPLEMENT) executes the batch
 3. `integration-tester` (Verifier) runs verification (QUICK or FULL)
-4. Records appended to `NOTES.md`
-5. Commit and push
+4. **IF VERIFICATION FAILS:**
+   - `typescript-coder` (Remediation) fixes all failures
+   - Re-run verification
+   - Loop until ALL PASS (max 3 attempts, then escalate)
+5. Records appended to `NOTES.md` (including any remediation records)
+6. Commit and push
 
 ---
 
@@ -243,6 +248,55 @@ node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
 ```
 
 If anything fails: fix, then re-run the full suite (don't proceed with a red batch).
+
+---
+
+## MANDATORY REMEDIATION ON VERIFICATION FAILURE
+
+**THIS IS NOT OPTIONAL. Verification failures MUST trigger automatic remediation.**
+
+### When Verification Fails
+
+1. **STOP** - Do NOT proceed to next batch
+2. **INVOKE REMEDIATION** - Launch `typescript-coder` subagent with exact failure output
+3. **FIX ALL FAILURES** - Not "some" or "most" - ALL
+4. **RE-VERIFY** - Run full verification after fixes
+5. **LOOP IF NEEDED** - Repeat up to 3 times
+6. **ESCALATE** - After 3 failed remediation attempts, stop and request human review
+
+### Remediation Subagent Invocation
+
+```
+Task(
+  subagent_type="typescript-coder",
+  description="Remediate batch NN failures",
+  prompt="Fix the following verification failures from batch NN:
+
+FAILURES:
+<paste exact failure output>
+
+REQUIREMENTS:
+1. Root-cause each failure
+2. Fix ALL failures
+3. Run verification after each fix to confirm
+4. Do NOT declare done until ALL checks pass
+5. Commit fixes with message: 'fix: <description> addresses #707'
+
+OUTPUT: Full verification output showing ALL PASS."
+)
+```
+
+### Critical Rules
+
+- ❌ **NEVER** skip verification steps
+- ❌ **NEVER** declare partial success ("5 of 6 pass" = FAILURE)
+- ❌ **NEVER** proceed to next batch with failures
+- ❌ **NEVER** commit with failing tests
+- ❌ **NEVER** summarize failure output - include actual terminal output
+- ✅ **ALWAYS** run ALL verification (test, lint, typecheck, build, synthetic)
+- ✅ **ALWAYS** invoke remediation on ANY failure
+- ✅ **ALWAYS** re-verify after remediation
+- ✅ **ALWAYS** include full command output in records
 
 ---
 

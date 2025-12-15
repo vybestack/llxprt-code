@@ -19,6 +19,9 @@ These are the actual subagent types available for this workflow:
 | `integration-tester` | sonnet | Running full test suite, integration testing |
 | `Explore` | sonnet | Quick codebase exploration, finding files |
 
+**Remediation Subagent** (used when verification fails):
+| `typescript-coder` | sonnet | Remediation - fixing test failures, lint errors, type errors |
+
 ---
 
 ## Subagent Role Mapping
@@ -349,6 +352,97 @@ Reconstructed Record:
 
 ---
 
+### 6. Remediation Role → `typescript-coder`
+
+**Purpose**: Fix verification failures (test failures, lint errors, type errors).
+
+**MANDATORY INVOCATION**: When Verifier reports ANY failure, Remediation MUST be invoked. No exceptions.
+
+**Invoke with**:
+```
+Task(
+  subagent_type="typescript-coder",
+  description="Remediate batch NN failures",
+  prompt="Fix the following verification failures from batch NN:
+
+FAILURES:
+<paste exact failure output from Verifier>
+
+REQUIREMENTS:
+1. Root-cause each failure
+2. Fix all failures - not 'some' or 'most' - ALL
+3. Run verification after each fix to confirm
+4. Do NOT declare done until ALL checks pass
+5. Commit fixes with message: 'fix: <description> addresses #707'
+
+VERIFICATION COMMANDS TO RUN AFTER FIXING:
+npm run typecheck
+npm run lint
+npm run test
+npm run build
+node scripts/start.js --profile-load synthetic --prompt 'write me a haiku'
+
+OUTPUT: Full verification output showing ALL PASS."
+)
+```
+
+**Responsibilities**:
+
+- Analyze the exact failure messages
+- Root-cause WHY the failure occurred (not just patch symptoms)
+- Fix all failures completely
+- Re-run verification to confirm fixes
+- Commit the fixes with proper message format
+- Only report success when ALL checks pass
+
+**Output Required**:
+
+```
+REMEDIATION RECORD
+==================
+Batch: NN
+Failures Received:
+  - test: FAIL (N tests failing)
+  - lint: FAIL (N errors)
+  - typecheck: FAIL (N errors)
+
+Root Cause Analysis:
+- Failure 1: <exact error> caused by <root cause>
+- Failure 2: <exact error> caused by <root cause>
+
+Fixes Applied:
+- File: <path>
+  - Line: <line number>
+  - Change: <what was changed and why>
+
+Verification After Fix:
+- typecheck: PASS | FAIL
+- lint: PASS | FAIL
+- test: PASS | FAIL
+- build: PASS | FAIL
+- synthetic: PASS | FAIL
+
+COMMAND OUTPUT (all verification):
+```bash
+<actual full verification output>
+```
+
+Fix Commit SHA: <sha>
+Commit Message: <message>
+
+REMEDIATION RESULT: SUCCESS | NEEDS_MORE_WORK
+```
+
+**CRITICAL RULES FOR REMEDIATION**:
+
+1. **Never declare partial success** - "5 of 6 tests pass" is FAILURE
+2. **Never skip verification** - Must run ALL checks after fixing
+3. **Never guess at fixes** - Root-cause first, then fix
+4. **Loop until green** - If re-verification fails, fix again
+5. **Include full output** - No summarizing, actual terminal output required
+
+---
+
 ## Workflow Phases
 
 ### Phase 1: Batch Selection
@@ -497,12 +591,59 @@ All records MUST include:
 
 ## Failure Handling
 
-### Verification Failure
+### Verification Failure — MANDATORY REMEDIATION LOOP
 
-1. Stop execution
-2. Log the failure with full command output
-3. Do NOT proceed to next batch
-4. Do NOT commit/push until fixed
+**THIS IS NOT OPTIONAL. Any verification failure triggers this loop.**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    VERIFICATION FAILURE LOOP                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Verifier runs → ANY FAIL?                                       │
+│       │                                                          │
+│       ├── NO → Proceed to commit/push                            │
+│       │                                                          │
+│       └── YES → MANDATORY: Invoke Remediation Subagent           │
+│                     │                                            │
+│                     ▼                                            │
+│             Remediation fixes failures                           │
+│                     │                                            │
+│                     ▼                                            │
+│             Remediation runs full verification                   │
+│                     │                                            │
+│                     ├── ALL PASS? → Continue to commit/push      │
+│                     │                                            │
+│                     └── STILL FAILING? → Loop (max 3 attempts)   │
+│                                   │                              │
+│                                   └── After 3 attempts → STOP    │
+│                                         Request human review     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Failure Response Steps:**
+
+1. **STOP** - Do not proceed to next batch
+2. **LOG** - Full command output showing exact failures
+3. **INVOKE** - Remediation Subagent with exact failure messages
+4. **FIX** - Remediation fixes all issues, runs verification
+5. **LOOP** - If still failing, repeat (max 3 attempts)
+6. **ESCALATE** - After 3 failed attempts, stop and request human review
+
+**NEVER DO:**
+- ❌ Skip verification steps
+- ❌ Declare "mostly passing" as success
+- ❌ Proceed to next batch with failures
+- ❌ Commit with failing tests
+- ❌ Summarize failure output instead of including actual output
+
+**ALWAYS DO:**
+- ✅ Run ALL verification steps (test, lint, typecheck, build, synthetic)
+- ✅ Include full command output in records
+- ✅ Invoke Remediation on ANY failure
+- ✅ Re-verify after Remediation fixes
+- ✅ Only proceed when ALL checks pass
 
 ### Prerequisite Missing
 
