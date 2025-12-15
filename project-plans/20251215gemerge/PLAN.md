@@ -150,7 +150,43 @@ sed -i \
 
 ---
 
+## Subagent-Based Execution
+
+This merge is executed using a subagent workflow defined in `project-plans/20251215gemerge/SUBAGENT-WORKFLOW.md`.
+
+### Subagent Roles
+
+| Role | Purpose | Used For |
+|------|---------|----------|
+| **Picker** | Select next batch, verify prerequisites | All batches |
+| **Merger** | Cherry-pick and resolve conflicts | PICK batches |
+| **Implementer** | Manual port following playbook | REIMPLEMENT batches |
+| **Verifier** | Run verification suite, confirm feature landed | All batches |
+| **Researcher** | Fill missing prerequisite records | When gaps detected |
+
+### Execution Flow Per Batch
+
+1. **Picker** selects batch, verifies prerequisites
+2. **Merger** or **Implementer** executes the batch
+3. **Verifier** runs verification (QUICK or FULL)
+4. Records appended to `NOTES.md`
+5. Commit and push
+
+---
+
 ## Verification Commands
+
+### IMPORTANT: Kill vitest before/after tests
+
+```bash
+# Before running tests
+ps -ef | grep -i vitest | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
+
+# Run your tests here...
+
+# After tests complete
+ps -ef | grep -i vitest | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
+```
 
 ### After every batch (Quick: compile + lint)
 
@@ -169,7 +205,13 @@ If the batch results in a single commit and that commit only changes docs assets
 
 ```bash
 files="$(git show --name-only --pretty='' HEAD)"
-if echo "$files" | rg -qv '\\.(md|mdx|json)$'; then
+# Use rg if available, otherwise fall back to grep
+if command -v rg &>/dev/null; then
+  is_code=$(echo "$files" | rg -qv '\\.(md|mdx|json)$' && echo "yes" || echo "no")
+else
+  is_code=$(echo "$files" | grep -Ev '\\.(md|mdx|json)$' | grep -q . && echo "yes" || echo "no")
+fi
+if [ "$is_code" = "yes" ]; then
   echo "Not docs-only; run normal verification."
 else
   echo "Docs-only batch; formatting only."
@@ -184,15 +226,97 @@ fi
 Run the full repository checklist (matches AGENTS.md):
 
 ```bash
-npm run format
+# Kill any stale vitest first
+ps -ef | grep -i vitest | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
+
+npm run test
+
+# Kill vitest after tests
+ps -ef | grep -i vitest | grep -v grep | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
+
 npm run lint
 npm run typecheck
-npm run test
 npm run build
 node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
 ```
 
-If anything fails: fix, then re-run the full suite (don’t proceed with a red batch).
+If anything fails: fix, then re-run the full suite (don't proceed with a red batch).
+
+---
+
+## Feature Landing Verification (REQUIRED)
+
+Every batch MUST verify that the actual feature landed, not just that tests pass.
+
+### For PICK batches
+
+1. Identify the key changes from upstream commit:
+   ```bash
+   git show <upstream-sha> --stat
+   git show <upstream-sha> -- <key-file>
+   ```
+
+2. Verify those changes exist in LLXPRT:
+   ```bash
+   git show HEAD -- <same-key-file>
+   # Or for specific code:
+   grep -n "<expected-code-pattern>" <file>
+   ```
+
+3. Document the evidence in the batch record.
+
+### For REIMPLEMENT batches
+
+1. Read the playbook to understand what should be implemented
+2. After implementation, verify each item:
+   - If adding a new function: `grep -n "function functionName" <file>`
+   - If modifying behavior: Show the before/after or the new code
+   - If adding a file: `ls -la <file>` and `head -20 <file>`
+
+3. Document upstream diff vs LLXPRT changes.
+
+### Evidence Format
+
+```
+FEATURE LANDING VERIFICATION:
+Upstream Commit: <sha>
+Feature: <description>
+
+Upstream Change:
+```diff
++ export function newFeature() {
++   // ...
++ }
+```
+
+LLXPRT Evidence:
+```bash
+$ grep -n "newFeature" packages/core/src/file.ts
+42:export function newFeature() {
+```
+
+VERIFIED: YES
+```
+
+---
+
+## Commit/Push After Each Batch
+
+After verification passes, commit and push:
+
+```bash
+# Update tracking files
+git add project-plans/20251215gemerge/PROGRESS.md
+git add project-plans/20251215gemerge/NOTES.md
+
+# Commit with signing
+git commit -S -m "docs: batch NN execution record"
+
+# Push
+git push
+```
+
+**IMPORTANT**: Never proceed to the next batch without committing/pushing the current batch's records.
 
 ---
 
