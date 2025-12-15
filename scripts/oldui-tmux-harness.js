@@ -7,6 +7,9 @@
  *
  * Usage:
  *   node scripts/oldui-tmux-harness.js
+ *
+ * Scripted mode:
+ *   node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.example.json
  */
 
 import { spawnSync } from 'node:child_process';
@@ -17,9 +20,14 @@ import path from 'node:path';
 function parseArgs(argv) {
   const args = [...argv];
   const opts = {
-    scenario: 'haiku', // haiku | scrollback
-    cols: 120,
-    rows: 40,
+    scenario: undefined, // haiku | scrollback
+    scriptPath: undefined,
+    outDir: undefined,
+    cols: undefined,
+    rows: undefined,
+    initialWaitMs: undefined,
+    historyLimit: undefined,
+    scrollbackLines: undefined,
     yolo: false,
     keepSession: false,
   };
@@ -45,10 +53,25 @@ function parseArgs(argv) {
   const scenario = takeValue('--scenario');
   if (scenario) opts.scenario = scenario;
 
+  const scriptPath = takeValue('--script');
+  if (scriptPath) opts.scriptPath = scriptPath;
+
+  const outDir = takeValue('--out-dir');
+  if (outDir) opts.outDir = outDir;
+
   const cols = takeValue('--cols');
   if (cols) opts.cols = Number(cols);
   const rows = takeValue('--rows');
   if (rows) opts.rows = Number(rows);
+
+  const initialWaitMs = takeValue('--initial-wait-ms');
+  if (initialWaitMs) opts.initialWaitMs = Number(initialWaitMs);
+
+  const historyLimit = takeValue('--history-limit');
+  if (historyLimit) opts.historyLimit = Number(historyLimit);
+
+  const scrollbackLines = takeValue('--scrollback-lines');
+  if (scrollbackLines) opts.scrollbackLines = Number(scrollbackLines);
 
   opts.yolo = hasFlag('--yolo');
   opts.keepSession = hasFlag('--keep-session');
@@ -57,14 +80,41 @@ function parseArgs(argv) {
     throw new Error(`Unknown args: ${args.join(' ')}`);
   }
 
-  if (!Number.isFinite(opts.cols) || opts.cols <= 0) {
+  if (
+    opts.cols !== undefined &&
+    (!Number.isFinite(opts.cols) || opts.cols <= 0)
+  ) {
     throw new Error(`Invalid --cols: ${opts.cols}`);
   }
-  if (!Number.isFinite(opts.rows) || opts.rows <= 0) {
+  if (
+    opts.rows !== undefined &&
+    (!Number.isFinite(opts.rows) || opts.rows <= 0)
+  ) {
     throw new Error(`Invalid --rows: ${opts.rows}`);
   }
-  if (!['haiku', 'scrollback'].includes(opts.scenario)) {
+  if (
+    opts.scenario !== undefined &&
+    !['haiku', 'scrollback'].includes(opts.scenario)
+  ) {
     throw new Error(`Invalid --scenario: ${opts.scenario}`);
+  }
+  if (
+    opts.initialWaitMs !== undefined &&
+    (!Number.isFinite(opts.initialWaitMs) || opts.initialWaitMs < 0)
+  ) {
+    throw new Error(`Invalid --initial-wait-ms: ${opts.initialWaitMs}`);
+  }
+  if (
+    opts.historyLimit !== undefined &&
+    (!Number.isFinite(opts.historyLimit) || opts.historyLimit <= 0)
+  ) {
+    throw new Error(`Invalid --history-limit: ${opts.historyLimit}`);
+  }
+  if (
+    opts.scrollbackLines !== undefined &&
+    (!Number.isFinite(opts.scrollbackLines) || opts.scrollbackLines <= 0)
+  ) {
+    throw new Error(`Invalid --scrollback-lines: ${opts.scrollbackLines}`);
   }
 
   return opts;
@@ -140,6 +190,424 @@ function getHistorySize(sessionName) {
   ]).trim();
   const n = Number(out);
   return Number.isFinite(n) ? n : 0;
+}
+
+function captureScreen(sessionName) {
+  return runTmux(['capture-pane', '-p', '-t', sessionName]);
+}
+
+function captureScrollback(sessionName, scrollbackLines) {
+  return runTmux([
+    'capture-pane',
+    '-p',
+    '-t',
+    sessionName,
+    '-S',
+    `-${scrollbackLines}`,
+  ]);
+}
+
+function compileMatcher(step) {
+  if (typeof step.contains === 'string') {
+    return { kind: 'contains', value: step.contains };
+  }
+  if (typeof step.regex === 'string') {
+    const flags = typeof step.regexFlags === 'string' ? step.regexFlags : '';
+    return { kind: 'regex', value: new RegExp(step.regex, flags) };
+  }
+  throw new Error(
+    `Matcher requires "contains" or "regex": ${JSON.stringify(step)}`,
+  );
+}
+
+function matchText(text, matcher) {
+  if (matcher.kind === 'contains') {
+    return text.includes(matcher.value);
+  }
+  return matcher.value.test(text);
+}
+
+function formatMatcher(matcher) {
+  if (matcher.kind === 'contains') {
+    return `contains "${matcher.value}"`;
+  }
+  return `regex /${matcher.value.source}/${matcher.value.flags}`;
+}
+
+function countMatches(text, matcher) {
+  if (matcher.kind === 'contains') {
+    let count = 0;
+    let idx = 0;
+    while (true) {
+      idx = text.indexOf(matcher.value, idx);
+      if (idx === -1) break;
+      count += 1;
+      idx += matcher.value.length;
+    }
+    return count;
+  }
+
+  const flags = matcher.value.flags.includes('g')
+    ? matcher.value.flags
+    : `${matcher.value.flags}g`;
+  const re = new RegExp(matcher.value.source, flags);
+  return Array.from(text.matchAll(re)).length;
+}
+
+function sanitizeLabel(label) {
+  return label.replace(/[^a-z0-9._-]+/gi, '_').replace(/^_+|_+$/g, '');
+}
+
+async function captureArtifacts({
+  sessionName,
+  outDir,
+  label,
+  scrollbackLines,
+}) {
+  const safe = sanitizeLabel(label);
+  const screen = captureScreen(sessionName);
+  const scrollback = captureScrollback(sessionName, scrollbackLines);
+  await fs.writeFile(path.join(outDir, `${safe}-screen.txt`), screen, 'utf8');
+  await fs.writeFile(
+    path.join(outDir, `${safe}-scrollback.txt`),
+    scrollback,
+    'utf8',
+  );
+}
+
+async function waitFor({
+  sessionName,
+  scope,
+  matcher,
+  timeoutMs,
+  pollMs,
+  scrollbackLines,
+  description,
+}) {
+  const start = Date.now();
+  while (Date.now() - start <= timeoutMs) {
+    const text =
+      scope === 'scrollback'
+        ? captureScrollback(sessionName, scrollbackLines)
+        : captureScreen(sessionName);
+    if (matchText(text, matcher)) {
+      return;
+    }
+    await sleep(pollMs);
+  }
+  throw new Error(
+    `Timed out waiting for ${description ?? formatMatcher(matcher)} in ${scope} after ${timeoutMs}ms`,
+  );
+}
+
+function isShellModeActive(sessionName) {
+  const screen = captureScreen(sessionName);
+  return screen.includes('shell mode enabled');
+}
+
+async function runScriptSteps({ sessionName, outDir, steps, defaults }) {
+  const scriptState = {
+    historySamples: [],
+  };
+
+  const sendKeys = async (keys) => {
+    for (const key of keys) {
+      runTmux(['send-keys', '-t', sessionName, key]);
+      await sleep(120);
+    }
+  };
+
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = steps[i];
+    if (!step || typeof step !== 'object') {
+      throw new Error(`Invalid step at index ${i}: ${JSON.stringify(step)}`);
+    }
+
+    try {
+      switch (step.type) {
+        case 'wait': {
+          const ms = Number(step.ms ?? 0);
+          if (!Number.isFinite(ms) || ms < 0) {
+            throw new Error(`Invalid wait.ms`);
+          }
+          await sleep(ms);
+          break;
+        }
+        case 'line': {
+          if (typeof step.text !== 'string') {
+            throw new Error(`Invalid line.text`);
+          }
+          const postTypeMs = Number(step.postTypeMs ?? defaults.postTypeMs);
+
+          const submitKeys = (() => {
+            if (Array.isArray(step.submitKeys)) return step.submitKeys;
+            const treatAsShell =
+              step.text.startsWith('!') || isShellModeActive(sessionName);
+            return treatAsShell
+              ? defaults.shellSubmitKeys
+              : defaults.submitKeys;
+          })();
+
+          runTmux(['send-keys', '-t', sessionName, '-l', step.text]);
+          await sleep(postTypeMs);
+          await sendKeys(submitKeys);
+          break;
+        }
+        case 'key': {
+          if (typeof step.key !== 'string') {
+            throw new Error(`Invalid key.key`);
+          }
+          await sendKeys([step.key]);
+          break;
+        }
+        case 'keys': {
+          if (
+            !Array.isArray(step.keys) ||
+            step.keys.some((k) => typeof k !== 'string')
+          ) {
+            throw new Error(`Invalid keys.keys`);
+          }
+          await sendKeys(step.keys);
+          break;
+        }
+        case 'copyMode': {
+          if (step.enter) {
+            runTmux(['copy-mode', '-t', `${sessionName}:0.0`]);
+          }
+          if (step.exit) {
+            runTmux(['send-keys', '-t', `${sessionName}:0.0`, '-X', 'cancel']);
+          }
+
+          const repeatAction = async (action, count) => {
+            const n = Number(count);
+            if (!Number.isFinite(n) || n <= 0) {
+              throw new Error(`Invalid copyMode count`);
+            }
+            for (let idx = 0; idx < n; idx += 1) {
+              runTmux(['send-keys', '-t', `${sessionName}:0.0`, '-X', action]);
+              await sleep(80);
+            }
+          };
+
+          if (step.pageUp) await repeatAction('page-up', step.pageUp);
+          if (step.pageDown) await repeatAction('page-down', step.pageDown);
+          if (step.up) await repeatAction('cursor-up', step.up);
+          if (step.down) await repeatAction('cursor-down', step.down);
+          break;
+        }
+        case 'capture': {
+          const label =
+            typeof step.label === 'string' ? step.label : `capture_${i}`;
+          const scrollbackLines = Number(
+            step.scrollbackLines ?? defaults.scrollbackLines,
+          );
+          const safe = sanitizeLabel(`${String(i).padStart(3, '0')}-${label}`);
+
+          if (step.scope === 'screen') {
+            const screen = captureScreen(sessionName);
+            await fs.writeFile(
+              path.join(outDir, `${safe}-screen.txt`),
+              screen,
+              'utf8',
+            );
+          } else if (step.scope === 'scrollback') {
+            const scrollback = captureScrollback(sessionName, scrollbackLines);
+            await fs.writeFile(
+              path.join(outDir, `${safe}-scrollback.txt`),
+              scrollback,
+              'utf8',
+            );
+          } else {
+            await captureArtifacts({
+              sessionName,
+              outDir,
+              label: safe,
+              scrollbackLines,
+            });
+          }
+          break;
+        }
+        case 'waitFor': {
+          const matcher = compileMatcher(step);
+          const timeoutMs = Number(step.timeoutMs ?? defaults.timeoutMs);
+          const pollMs = Number(step.pollMs ?? defaults.pollMs);
+          const scope = step.scope === 'scrollback' ? 'scrollback' : 'screen';
+          const scrollbackLines = Number(
+            step.scrollbackLines ?? defaults.scrollbackLines,
+          );
+          await waitFor({
+            sessionName,
+            scope,
+            matcher,
+            timeoutMs,
+            pollMs,
+            scrollbackLines,
+            description: `step ${i} (${formatMatcher(matcher)})`,
+          });
+          break;
+        }
+        case 'expect': {
+          const matcher = compileMatcher(step);
+          const scope = step.scope === 'scrollback' ? 'scrollback' : 'screen';
+          const scrollbackLines = Number(
+            step.scrollbackLines ?? defaults.scrollbackLines,
+          );
+          const text =
+            scope === 'scrollback'
+              ? captureScrollback(sessionName, scrollbackLines)
+              : captureScreen(sessionName);
+
+          if (step.lineNumber !== undefined) {
+            const n = Number(step.lineNumber);
+            if (!Number.isFinite(n) || n <= 0) {
+              throw new Error(`Invalid expect.lineNumber`);
+            }
+            const lines = text.split('\n');
+            const line = lines[n - 1] ?? '';
+            if (!matchText(line, matcher)) {
+              throw new Error(
+                `Expected ${formatMatcher(matcher)} on ${scope} line ${n}`,
+              );
+            }
+          } else if (!matchText(text, matcher)) {
+            throw new Error(`Expected ${formatMatcher(matcher)} in ${scope}`);
+          }
+          break;
+        }
+        case 'expectCount': {
+          const matcher = compileMatcher(step);
+          const scope = step.scope === 'scrollback' ? 'scrollback' : 'screen';
+          const scrollbackLines = Number(
+            step.scrollbackLines ?? defaults.scrollbackLines,
+          );
+          const text =
+            scope === 'scrollback'
+              ? captureScrollback(sessionName, scrollbackLines)
+              : captureScreen(sessionName);
+          const count = countMatches(text, matcher);
+
+          if (step.equals !== undefined && count !== Number(step.equals)) {
+            throw new Error(
+              `Expected count == ${step.equals} but got ${count}`,
+            );
+          }
+          if (step.atLeast !== undefined && count < Number(step.atLeast)) {
+            throw new Error(
+              `Expected count >= ${step.atLeast} but got ${count}`,
+            );
+          }
+          if (step.atMost !== undefined && count > Number(step.atMost)) {
+            throw new Error(
+              `Expected count <= ${step.atMost} but got ${count}`,
+            );
+          }
+          break;
+        }
+        case 'approveShell': {
+          const timeoutMs = Number(step.timeoutMs ?? defaults.timeoutMs);
+          await waitFor({
+            sessionName,
+            scope: 'screen',
+            matcher: { kind: 'contains', value: 'Shell Command Execution' },
+            timeoutMs,
+            pollMs: 200,
+            scrollbackLines: defaults.scrollbackLines,
+            description: `step ${i} (shell confirmation dialog)`,
+          });
+
+          const choice = step.choice ?? 'once';
+          if (choice === 'once') {
+            await sendKeys(['Enter']);
+          } else if (choice === 'always') {
+            await sendKeys(['Down', 'Enter']);
+          } else if (choice === 'no') {
+            await sendKeys(['Down', 'Down', 'Enter']);
+          } else {
+            throw new Error(`Invalid approveShell.choice`);
+          }
+          break;
+        }
+        case 'approveTool': {
+          const timeoutMs = Number(step.timeoutMs ?? defaults.timeoutMs);
+          const confirmMatcher = step.confirmation
+            ? compileMatcher(step.confirmation)
+            : { kind: 'contains', value: 'Yes, allow once' };
+
+          await waitFor({
+            sessionName,
+            scope: 'screen',
+            matcher: confirmMatcher,
+            timeoutMs,
+            pollMs: 200,
+            scrollbackLines: defaults.scrollbackLines,
+            description: `step ${i} (tool confirmation)`,
+          });
+
+          const choice = step.choice ?? 'once';
+          if (choice === 'once') {
+            await sendKeys(['Enter']);
+          } else if (choice === 'always') {
+            const screen = captureScreen(sessionName);
+            if (!screen.includes('Yes, allow always')) {
+              throw new Error(
+                `Requested choice "always" but no "Yes, allow always" option is visible`,
+              );
+            }
+            await sendKeys(['Down', 'Enter']);
+          } else if (choice === 'no') {
+            await sendKeys(['Down', 'Down', 'Enter']);
+          } else {
+            throw new Error(`Invalid approveTool.choice`);
+          }
+          break;
+        }
+        case 'historySample': {
+          scriptState.historySamples.push({
+            tMs: Date.now(),
+            historySize: getHistorySize(sessionName),
+            label: typeof step.label === 'string' ? step.label : `sample_${i}`,
+          });
+          break;
+        }
+        case 'waitForExit': {
+          const timeoutMs = Number(step.timeoutMs ?? 15000);
+          const exited = await waitForPaneDead(sessionName, timeoutMs);
+          if (!exited) {
+            throw new Error(`Timed out waiting for exit`);
+          }
+          break;
+        }
+        default:
+          throw new Error(`Unknown step.type: ${step.type}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const stepLabel = sanitizeLabel(
+        `${String(i).padStart(3, '0')}-error-${step.type ?? 'unknown'}`,
+      );
+      const scrollbackLines = Number(defaults.scrollbackLines);
+      await captureArtifacts({
+        sessionName,
+        outDir,
+        label: stepLabel,
+        scrollbackLines,
+      });
+      await fs.writeFile(
+        path.join(outDir, `${stepLabel}-step.json`),
+        JSON.stringify({ index: i, step, error: message }, null, 2),
+        'utf8',
+      );
+      throw error;
+    }
+  }
+
+  if (scriptState.historySamples.length > 0) {
+    await fs.writeFile(
+      path.join(outDir, 'history-samples.json'),
+      JSON.stringify(scriptState.historySamples, null, 2),
+      'utf8',
+    );
+  }
 }
 
 async function runScenarioHaiku({ typeLineAndSubmit }) {
@@ -222,18 +690,36 @@ async function runScenarioScrollback({
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const sessionName = `llxprt_oldui_${Date.now().toString(16)}`;
-  const outDir = path.join(
-    os.tmpdir(),
-    `llxprt-oldui-tmux-harness-${Date.now()}`,
-  );
+  const outDir = options.outDir
+    ? path.resolve(process.cwd(), options.outDir)
+    : path.join(os.tmpdir(), `llxprt-oldui-tmux-harness-${Date.now()}`);
   await fs.mkdir(outDir, { recursive: true });
+
+  const script = options.scriptPath
+    ? JSON.parse(
+        await fs.readFile(
+          path.resolve(process.cwd(), options.scriptPath),
+          'utf8',
+        ),
+      )
+    : null;
+
+  const tmuxCols = options.cols ?? script?.tmux?.cols ?? 120;
+  const tmuxRows = options.rows ?? script?.tmux?.rows ?? 40;
+  const initialWaitMs =
+    options.initialWaitMs ?? script?.tmux?.initialWaitMs ?? 6000;
+  const historyLimit =
+    options.historyLimit ?? script?.tmux?.historyLimit ?? 50000;
 
   // Ensure no stale session with the same name (unlikely, but safe).
   tryTmux(['kill-session', '-t', sessionName]);
 
   // Start LLxprt in interactive mode (no piped stdin).
-  const startArgs = ['node', 'scripts/start.js'];
-  if (options.yolo) {
+  const startArgs = Array.isArray(script?.startCommand)
+    ? script.startCommand
+    : ['node', 'scripts/start.js'];
+  const shouldYolo = Boolean(options.yolo || script?.yolo);
+  if (shouldYolo && !startArgs.includes('--yolo')) {
     startArgs.push('--yolo');
   }
   runTmux([
@@ -242,18 +728,24 @@ async function main() {
     '-s',
     sessionName,
     '-x',
-    String(options.cols),
+    String(tmuxCols),
     '-y',
-    String(options.rows),
+    String(tmuxRows),
     ...startArgs,
   ]);
   // Keep the session around after the command exits so we can capture the final
   // screen and scrollback even if /quit exits quickly.
   runTmux(['set-option', '-t', `${sessionName}:0`, 'remain-on-exit', 'on']);
-  runTmux(['set-option', '-t', `${sessionName}:0`, 'history-limit', '50000']);
+  runTmux([
+    'set-option',
+    '-t',
+    `${sessionName}:0`,
+    'history-limit',
+    String(historyLimit),
+  ]);
 
   // Let Ink render the initial UI.
-  await sleep(6000);
+  await sleep(initialWaitMs);
 
   const typeLineAndSubmit = async (
     line,
@@ -272,32 +764,77 @@ async function main() {
   };
 
   let scenarioResult;
-  if (options.scenario === 'haiku') {
-    scenarioResult = await runScenarioHaiku({ sessionName, typeLineAndSubmit });
-  } else if (options.scenario === 'scrollback') {
-    scenarioResult = await runScenarioScrollback({
-      sessionName,
-      typeLineAndSubmit,
-      outDir,
-    });
-  } else {
-    throw new Error(`Unhandled scenario: ${options.scenario}`);
+  const scenario = options.scenario ?? 'haiku';
+  try {
+    if (script?.steps) {
+      await runScriptSteps({
+        sessionName,
+        outDir,
+        steps: script.steps,
+        defaults: {
+          postTypeMs: 600,
+          submitKeys: ['Escape', 'Enter'],
+          shellSubmitKeys: ['Enter', 'Enter'],
+          timeoutMs: 15000,
+          pollMs: 250,
+          scrollbackLines:
+            options.scrollbackLines ?? script?.tmux?.scrollbackLines ?? 2000,
+        },
+      });
+      scenarioResult = { kind: 'script' };
+    } else if (scenario === 'haiku') {
+      scenarioResult = await runScenarioHaiku({
+        sessionName,
+        typeLineAndSubmit,
+      });
+    } else if (scenario === 'scrollback') {
+      scenarioResult = await runScenarioScrollback({
+        sessionName,
+        typeLineAndSubmit,
+        outDir,
+      });
+    } else {
+      throw new Error(`Unhandled scenario: ${scenario}`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const scrollbackLines =
+      options.scrollbackLines ?? script?.tmux?.scrollbackLines ?? 2000;
+    try {
+      await captureArtifacts({
+        sessionName,
+        outDir,
+        label: 'error-final',
+        scrollbackLines,
+      });
+    } catch {
+      // ignore
+    }
+    try {
+      await fs.writeFile(
+        path.join(outDir, 'error.json'),
+        JSON.stringify({ message }, null, 2),
+        'utf8',
+      );
+    } catch {
+      // ignore
+    }
+    if (!options.keepSession) {
+      tryTmux(['kill-session', '-t', sessionName]);
+    }
+    throw error;
   }
 
   // Give the process time to exit cleanly (pane should become "dead").
   const exited = await waitForPaneDead(sessionName, 15000);
 
   // Capture both visible screen and some scrollback for inspection.
-  const screen = runTmux(['capture-pane', '-p', '-t', sessionName]);
-  const scrollbackLines = options.scenario === 'scrollback' ? 20000 : 2000;
-  const scrollback = runTmux([
-    'capture-pane',
-    '-p',
-    '-t',
-    sessionName,
-    '-S',
-    `-${scrollbackLines}`,
-  ]);
+  const screen = captureScreen(sessionName);
+  const scrollbackLines =
+    scenario === 'scrollback'
+      ? 20000
+      : (options.scrollbackLines ?? script?.tmux?.scrollbackLines ?? 2000);
+  const scrollback = captureScrollback(sessionName, scrollbackLines);
   await fs.writeFile(path.join(outDir, 'screen.txt'), screen, 'utf8');
   await fs.writeFile(path.join(outDir, 'scrollback.txt'), scrollback, 'utf8');
 
@@ -319,8 +856,8 @@ async function main() {
         {
           scenario: 'scrollback',
           tmux: {
-            cols: options.cols,
-            rows: options.rows,
+            cols: tmuxCols,
+            rows: tmuxRows,
           },
           counts: {
             sentinel: scenarioResult.sentinel,
@@ -348,7 +885,7 @@ async function main() {
     `tmux session: ${sessionName}`,
     `exited: ${exited ? 'yes' : 'no (killed session)'}`,
     `artifacts: ${outDir}`,
-    `scenario: ${options.scenario}`,
+    `scenario: ${script?.steps ? 'script' : scenario}`,
   ].join('\n');
   console.log(summary);
 }

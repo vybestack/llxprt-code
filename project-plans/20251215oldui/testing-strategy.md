@@ -57,6 +57,18 @@ Run `node scripts/start.js` in a tmux session and inject:
 
 With explicit sleeps between steps and a final capture of the pane output.
 
+### Scripted runner (JSON)
+To avoid rewriting Node code for each new reproduction, the harness also supports running a JSON script:
+- Example: `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.example.json`
+
+Script primitives:
+- `line`: type text and submit with configurable `submitKeys` (defaults to `["Escape","Enter"]`).
+- `waitFor` / `expect` / `expectCount`: verify screen or scrollback contains (or matches regex) and optionally assert counts.
+- `approveShell`: detect the Shell approval dialog and choose `once|always|no`.
+- `approveTool`: approve a tool confirmation prompt (e.g. `run_shell_command`) with `once|always|no`.
+- `copyMode`: enter/exit and scroll (`pageUp`, `pageDown`, `up`, `down`).
+- `capture`: write labeled `*-screen.txt` / `*-scrollback.txt` artifacts mid-run.
+
 ### Scrollback/redraw reproduction (automated)
 To “see” the scrollback redraw problem without a human staring at the terminal, we can:
 - launch the interactive Ink UI in tmux,
