@@ -336,3 +336,153 @@ $ grep -n "GeminiCLIExtension" packages/cli/src/config/extension.ts | head -5
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 02 — REIMPLEMENT — 8ac2c684
+
+### Selection Record
+Batch: 02
+Type: REIMPLEMENT
+Upstream SHA(s): 8ac2c684 (chore: bundle a2a-server (#10265))
+Subject: Bundle a2a-server as standalone executable alongside CLI
+Playbook: project-plans/20251215gemerge/8ac2c684-plan.md
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 01)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (51cdc1993)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Playbook Followed: project-plans/20251215gemerge/8ac2c684-plan.md
+Status: COMPLETED
+Implementation Summary:
+  - Refactored esbuild.config.js into shared baseConfig, cliConfig, a2aServerConfig
+  - Added Promise.allSettled() for parallel builds
+  - CLI build failure is FATAL, a2a-server failure is WARNING only
+  - Preserved LLxprt-specific: nodeModulePlugin, minify, production mode, externals
+  - Added writeFileSync import for metafile in DEV mode
+Files Modified:
+  - esbuild.config.js
+LLXPRT Commit SHA: df79e75a0
+Commit Message: reimplement: bundle a2a-server (upstream 8ac2c684) addresses #707
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-15T20:15:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (2 warnings, 0 errors)
+  - test: PASS (4705 core + 1891 cli, 77+8 skipped)
+  - build: PASS
+  - synthetic: PASS
+
+COMMAND OUTPUT (typecheck):
+```bash
+$ npm run typecheck
+> @vybestack/llxprt-code@0.7.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.7.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.7.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.6.1 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.7.0 typecheck
+> tsc --noEmit
+```
+
+COMMAND OUTPUT (lint):
+```bash
+$ npm run lint
+/Users/acoliver/projects/llxprt-code-branches/llxprt-code-1/packages/cli/src/config/config.ts
+  14:41  warning  import/no-duplicates
+  36:8   warning  import/no-duplicates
+
+✖ 2 problems (0 errors, 2 warnings)
+```
+
+COMMAND OUTPUT (test):
+```bash
+$ npm run test
+> @vybestack/llxprt-code@0.7.0 test
+> npm run test --workspaces --if-present
+
+(core) Test Files  284 passed | 7 skipped (291)
+       Tests  4705 passed | 77 skipped (4782)
+       Duration  42.75s
+
+(cli) Test Files  132 passed (132)
+      Tests  1891 passed | 8 skipped (1899)
+      Duration  16.72s
+```
+
+COMMAND OUTPUT (build):
+```bash
+$ npm run build
+> @vybestack/llxprt-code@0.7.0 build
+> node scripts/build.js
+
+Successfully copied files. (all packages)
+[watch] build started
+[watch] build finished
+```
+
+COMMAND OUTPUT (synthetic):
+```bash
+$ node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
+Checking build status...
+Build is up-to-date.
+I'll help you create a haiku. Here's one for you:
+
+Code flows in patterns,
+Bugs reveal themselves at night,
+The fix brings daylight.
+```
+
+### Feature Landing Verification
+Upstream Commit: 8ac2c684
+Feature Description: Add a2a-server bundling via esbuild alongside CLI bundle
+
+Upstream Changes (key files):
+  - esbuild.config.js: Added a2aServerConfig and Promise.allSettled() for parallel builds
+
+LLXPRT Evidence:
+```bash
+$ grep -n "a2aServerConfig\|Promise.allSettled" esbuild.config.js
+85:const a2aServerConfig = {
+103:Promise.allSettled([
+119:  esbuild.build(a2aServerConfig),
+135:  // No .catch() needed - Promise.allSettled never rejects
+
+$ ls -la packages/a2a-server/dist/a2a-server.mjs
+-rw-r--r-- 1 acoliver staff 7569356 Dec 15 20:05 packages/a2a-server/dist/a2a-server.mjs
+```
+
+UPSTREAM VS DOWNSTREAM COMPARISON:
+```diff
+# Upstream (esbuild.config.js):
++ const a2aServerConfig = { ... }
++ Promise.allSettled([esbuild.build(cliConfig), esbuild.build(a2aServerConfig)])
+
+# LLXPRT equivalent (esbuild.config.js lines 85, 103, 119):
++ const a2aServerConfig = {
++   ...baseConfig,
++   entryPoints: ['packages/a2a-server/src/http/server.ts'],
++   outfile: 'packages/a2a-server/dist/a2a-server.mjs',
++ };
++ Promise.allSettled([
++   esbuild.build(cliConfig).then(...),
++   esbuild.build(a2aServerConfig),
++ ])
+```
+
+FEATURE VERIFIED: YES
+
+NOTE: Test fix required - config.test.ts had incorrect property paths ({tools:{exclude:...}} instead of {excludeTools:...}). Fixed in commit 1bbdf7879.
+
+---

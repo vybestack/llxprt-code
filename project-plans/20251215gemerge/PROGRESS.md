@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 01 |
-| **In Progress** | Batch 02 |
+| **Last Completed** | Batch 02 |
+| **In Progress** | — |
 | **Next Up** | Batch 03 |
-| **Progress** | 1/52 (2%) |
+| **Progress** | 2/52 (4%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -67,7 +67,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Preflight complete
   - Record Location: NOTES.md ## Batch 01
 
-- [ ] Batch 02 — FULL — REIMPLEMENT — `8ac2c684` — chore: bundle a2a-server (#10265)
+- [x] Batch 02 — FULL — REIMPLEMENT — `8ac2c684` — chore: bundle a2a-server (#10265)
   - Prerequisites: Batch 01 record exists
   - Record Location: NOTES.md ## Batch 02
 
