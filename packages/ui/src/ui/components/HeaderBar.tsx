@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
+import type { ReactElement } from 'react';
 import type { ThemeDefinition } from '../../features/theme';
 
 const LOGO_ASPECT_RATIO = 415 / 260;
@@ -10,18 +11,29 @@ interface HeaderBarProps {
   readonly theme: ThemeDefinition;
 }
 
-export function HeaderBar({ text, theme }: HeaderBarProps): React.ReactElement {
+function getPackageRoot(): string | undefined {
+  // Bun: import.meta.dir
+  // Node 20.11+: import.meta.dirname
+  const meta = import.meta as ImportMeta & {
+    readonly dir?: string;
+    readonly dirname?: string;
+  };
+
+  return meta.dir ?? meta.dirname;
+}
+
+export function HeaderBar({ text, theme }: HeaderBarProps): ReactElement {
   const headerHeight = 3;
 
-  // Resolve logo path relative to the package root for better compatibility
-  // This works in both development and production bundle scenarios
-  const PACKAGE_ROOT = import.meta.dir;
+  const packageRoot = getPackageRoot();
 
   let logoPath: string;
   try {
+    const root = packageRoot ?? process.cwd();
+
     // Try theme-specific logo first
     const themeLogoPath = resolve(
-      PACKAGE_ROOT,
+      root,
       '..',
       '..',
       'logos',
@@ -31,7 +43,7 @@ export function HeaderBar({ text, theme }: HeaderBarProps): React.ReactElement {
       logoPath = themeLogoPath;
     } else {
       // Fall back to default logo
-      logoPath = resolve(PACKAGE_ROOT, '..', '..', 'llxprt.png');
+      logoPath = resolve(root, '..', '..', 'llxprt.png');
     }
   } catch {
     // Last resort fallback - use relative path for edge cases
