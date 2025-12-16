@@ -40,7 +40,7 @@
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "Allow execution of:",
+      "contains": "Yes, allow once",
       "timeoutMs": 120000
     },
     { "type": "capture", "label": "confirm-shell", "scope": "screen" },

@@ -756,6 +756,53 @@ async function runScriptSteps({ sessionName, outDir, steps, defaults }) {
           });
           break;
         }
+        case 'expectHistoryDelta': {
+          const fromLabel = step.fromLabel ?? step.from;
+          const toLabel = step.toLabel ?? step.to;
+          if (typeof fromLabel !== 'string' || fromLabel.trim().length === 0) {
+            throw new Error(`Invalid expectHistoryDelta.fromLabel`);
+          }
+          if (typeof toLabel !== 'string' || toLabel.trim().length === 0) {
+            throw new Error(`Invalid expectHistoryDelta.toLabel`);
+          }
+
+          const fromSample = scriptState.historySamples.find(
+            (sample) => sample.label === fromLabel,
+          );
+          const toSample = [...scriptState.historySamples]
+            .reverse()
+            .find((sample) => sample.label === toLabel);
+
+          if (!fromSample) {
+            throw new Error(
+              `Missing historySample "${fromLabel}" for expectHistoryDelta`,
+            );
+          }
+          if (!toSample) {
+            throw new Error(
+              `Missing historySample "${toLabel}" for expectHistoryDelta`,
+            );
+          }
+
+          const delta = toSample.historySize - fromSample.historySize;
+
+          if (step.equals !== undefined && delta !== Number(step.equals)) {
+            throw new Error(
+              `Expected history delta == ${step.equals} but got ${delta}`,
+            );
+          }
+          if (step.atLeast !== undefined && delta < Number(step.atLeast)) {
+            throw new Error(
+              `Expected history delta >= ${step.atLeast} but got ${delta}`,
+            );
+          }
+          if (step.atMost !== undefined && delta > Number(step.atMost)) {
+            throw new Error(
+              `Expected history delta <= ${step.atMost} but got ${delta}`,
+            );
+          }
+          break;
+        }
         case 'waitForExit': {
           const timeoutMs = Number(step.timeoutMs ?? 15000);
           const exited = await waitForPaneDead(sessionName, timeoutMs);
@@ -817,7 +864,7 @@ async function runScenarioScrollback({
   await typeLineAndSubmit('/profile load synthetic');
   await sleep(2000);
 
-  const sentinel = 'SCROLLTEST LINE 0001';
+  const sentinel = 'SCROLLTEST LINE';
 
   // Produce incremental output for ~15s so the UI updates repeatedly while the
   // output grows beyond a small terminal height.
@@ -863,6 +910,22 @@ async function runScenarioScrollback({
   // Let the command finish and settle.
   await sleep(2000);
 
+  // Capture before exit: alternate-buffer UIs may not leave output in terminal
+  // scrollback after quitting, so we snapshot the screen while the output is
+  // still visible.
+  const preExitScreen = captureScreen(sessionName);
+  const preExitScrollback = captureScrollback(sessionName, 20000);
+  await fs.writeFile(
+    path.join(outDir, 'during-run-screen.txt'),
+    preExitScreen,
+    'utf8',
+  );
+  await fs.writeFile(
+    path.join(outDir, 'during-run-scrollback.txt'),
+    preExitScrollback,
+    'utf8',
+  );
+
   await typeLineAndSubmit('/quit', { enterRepeats: 1 });
 
   await fs.writeFile(
@@ -871,7 +934,15 @@ async function runScenarioScrollback({
     'utf8',
   );
 
-  return { kind: 'scrollback', sentinel, historySamples };
+  return {
+    kind: 'scrollback',
+    sentinel,
+    historySamples,
+    captures: {
+      screenFile: 'during-run-screen.txt',
+      scrollbackFile: 'during-run-scrollback.txt',
+    },
+  };
 }
 
 async function main() {
@@ -1038,10 +1109,18 @@ async function main() {
 
   let assertionError = null;
   if (scenarioResult?.kind === 'scrollback') {
+    const baselineScrollback = scenarioResult.captures?.scrollbackFile
+      ? await fs.readFile(
+          path.join(outDir, scenarioResult.captures.scrollbackFile),
+          'utf8',
+        )
+      : scrollback;
+
     const sentinelCount =
-      scrollback.match(new RegExp(scenarioResult.sentinel, 'g'))?.length ?? 0;
+      baselineScrollback.match(new RegExp(scenarioResult.sentinel, 'g'))
+        ?.length ?? 0;
     const tipsCount =
-      scrollback.match(/Tips for getting started:/g)?.length ?? 0;
+      baselineScrollback.match(/Tips for getting started:/g)?.length ?? 0;
 
     const historyDelta =
       scenarioResult.historySamples.length >= 2
@@ -1067,6 +1146,7 @@ async function main() {
             deltaDuringCopyMode: historyDelta,
             samplesFile: 'history-samples.json',
           },
+          captures: scenarioResult.captures ?? null,
         },
         null,
         2,
@@ -1075,9 +1155,14 @@ async function main() {
     );
 
     if (options.assert) {
-      if (sentinelCount !== 1) {
+      if (sentinelCount < 1) {
         assertionError = new Error(
-          `Scrollback redraw detected: expected sentinelCount == 1 but got ${sentinelCount} (sentinel: "${scenarioResult.sentinel}")`,
+          `Scrollback output missing: expected sentinelCount >= 1 but got ${sentinelCount} (sentinel: "${scenarioResult.sentinel}")`,
+        );
+      }
+      if (!assertionError && historyDelta !== 0) {
+        assertionError = new Error(
+          `Scrollback redraw detected: expected history delta == 0 but got ${historyDelta}`,
         );
       }
       if (!assertionError && tipsCount > 1) {

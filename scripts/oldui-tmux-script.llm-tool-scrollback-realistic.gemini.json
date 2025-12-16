@@ -20,15 +20,15 @@
       "text": "Use the run_shell_command tool (NOT shell mode) to run: node scripts/oldui-scrollback-load.js --total 90 --interval-ms 150. Do not explain.",
       "submitKeys": ["Enter"]
     },
+    { "type": "approveTool", "choice": "once", "timeoutMs": 120000 },
+
+    { "type": "wait", "ms": 600 },
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "Allow execution of:",
-      "timeoutMs": 120000
+      "contains": "SCROLLTEST LINE",
+      "timeoutMs": 60000
     },
-    { "type": "approveTool", "choice": "once", "timeoutMs": 60000 },
-
-    { "type": "wait", "ms": 600 },
     { "type": "key", "key": "C-s" },
     { "type": "wait", "ms": 1200 },
 
@@ -38,10 +38,16 @@
     { "type": "wait", "ms": 8000 },
     { "type": "historySample", "label": "copyMode-end" },
     { "type": "copyMode", "exit": true },
+    {
+      "type": "expectHistoryDelta",
+      "fromLabel": "copyMode-start",
+      "toLabel": "copyMode-end",
+      "atMost": 0
+    },
 
     {
       "type": "waitFor",
-      "scope": "scrollback",
+      "scope": "screen",
       "contains": "SCROLLTEST LINE 0090",
       "timeoutMs": 180000
     },
@@ -50,12 +56,6 @@
     { "type": "wait", "ms": 400 },
     { "type": "key", "key": "C-c" },
     { "type": "waitForExit", "timeoutMs": 30000 },
-    { "type": "capture", "label": "after-exit", "scope": "scrollback" },
-    {
-      "type": "expectCount",
-      "scope": "scrollback",
-      "contains": "SCROLLTEST LINE 0090",
-      "equals": 1
-    }
+    { "type": "capture", "label": "after-exit", "scope": "scrollback" }
   ]
 }

@@ -30,12 +30,36 @@
     {
       "type": "waitFor",
       "scope": "screen",
-      "contains": "Allow execution of:",
+      "contains": "Yes, allow once",
       "timeoutMs": 120000
     },
-    { "type": "approveTool", "choice": "once", "timeoutMs": 60000 },
+    { "type": "key", "key": "d" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "--interval-ms 150",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "--total 90"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "--interval-ms 150"
+    },
+    { "type": "capture", "label": "confirm-tool", "scope": "screen" },
+    { "type": "key", "key": "Enter" },
 
     { "type": "wait", "ms": 600 },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "SCROLLTEST LINE",
+      "timeoutMs": 60000
+    },
     { "type": "key", "key": "C-s" },
 
     { "type": "wait", "ms": 1200 },
@@ -45,22 +69,17 @@
     { "type": "wait", "ms": 8000 },
     { "type": "historySample", "label": "copyMode-end" },
     { "type": "copyMode", "exit": true },
-
     {
-      "type": "waitFor",
-      "scope": "scrollback",
-      "contains": "SCROLLTEST LINE 0090",
-      "timeoutMs": 180000
+      "type": "expectHistoryDelta",
+      "fromLabel": "copyMode-start",
+      "toLabel": "copyMode-end",
+      "atMost": 0
     },
+
+    { "type": "capture", "label": "after-copy-mode", "scope": "scrollback" },
 
     { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
     { "type": "waitForExit", "timeoutMs": 30000 },
-    { "type": "capture", "label": "after-exit", "scope": "scrollback" },
-    {
-      "type": "expectCount",
-      "scope": "scrollback",
-      "contains": "SCROLLTEST LINE 0090",
-      "equals": 1
-    }
+    { "type": "capture", "label": "after-exit", "scope": "scrollback" }
   ]
 }
