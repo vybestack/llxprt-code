@@ -70,7 +70,9 @@ describe('normalizeToOpenAIToolId', () => {
     });
 
     it('should handle real-world hist_tool IDs', () => {
-      const result = normalizeToOpenAIToolId('hist_tool_mEwqq4nEsxpmHnqnkChAG7KS');
+      const result = normalizeToOpenAIToolId(
+        'hist_tool_mEwqq4nEsxpmHnqnkChAG7KS',
+      );
       expect(result).toBe('call_mEwqq4nEsxpmHnqnkChAG7KS');
     });
 
