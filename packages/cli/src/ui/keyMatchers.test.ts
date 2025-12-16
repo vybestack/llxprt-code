@@ -25,6 +25,12 @@ describe('keyMatchers', () => {
     [Command.RETURN]: (key: Key) => key.name === 'return',
     [Command.HOME]: (key: Key) => key.ctrl && key.name === 'a',
     [Command.END]: (key: Key) => key.ctrl && key.name === 'e',
+    [Command.SCROLL_UP]: (key: Key) => key.shift && key.name === 'up',
+    [Command.SCROLL_DOWN]: (key: Key) => key.shift && key.name === 'down',
+    [Command.SCROLL_HOME]: (key: Key) => key.name === 'home',
+    [Command.SCROLL_END]: (key: Key) => key.name === 'end',
+    [Command.PAGE_UP]: (key: Key) => key.name === 'pageup',
+    [Command.PAGE_DOWN]: (key: Key) => key.name === 'pagedown',
     [Command.KILL_LINE_RIGHT]: (key: Key) => key.ctrl && key.name === 'k',
     [Command.KILL_LINE_LEFT]: (key: Key) => key.ctrl && key.name === 'u',
     [Command.CLEAR_INPUT]: (key: Key) => key.ctrl && key.name === 'c',
@@ -33,16 +39,20 @@ describe('keyMatchers', () => {
     [Command.DELETE_WORD_BACKWARD]: (key: Key) =>
       (key.ctrl || key.meta) && key.name === 'backspace',
     [Command.CLEAR_SCREEN]: (key: Key) => key.ctrl && key.name === 'l',
-    [Command.HISTORY_UP]: (key: Key) => key.ctrl && key.name === 'p',
-    [Command.HISTORY_DOWN]: (key: Key) => key.ctrl && key.name === 'n',
-    [Command.NAVIGATION_UP]: (key: Key) => key.name === 'up',
-    [Command.NAVIGATION_DOWN]: (key: Key) => key.name === 'down',
+    [Command.HISTORY_UP]: (key: Key) =>
+      key.ctrl && !key.shift && key.name === 'p',
+    [Command.HISTORY_DOWN]: (key: Key) =>
+      key.ctrl && !key.shift && key.name === 'n',
+    [Command.NAVIGATION_UP]: (key: Key) => !key.shift && key.name === 'up',
+    [Command.NAVIGATION_DOWN]: (key: Key) => !key.shift && key.name === 'down',
     [Command.ACCEPT_SUGGESTION]: (key: Key) =>
       key.name === 'tab' || (key.name === 'return' && !key.ctrl),
     [Command.COMPLETION_UP]: (key: Key) =>
-      key.name === 'up' || (key.ctrl && key.name === 'p'),
+      (!key.shift && key.name === 'up') ||
+      (key.ctrl && !key.shift && key.name === 'p'),
     [Command.COMPLETION_DOWN]: (key: Key) =>
-      key.name === 'down' || (key.ctrl && key.name === 'n'),
+      (!key.shift && key.name === 'down') ||
+      (key.ctrl && !key.shift && key.name === 'n'),
     [Command.ESCAPE]: (key: Key) => key.name === 'escape',
     [Command.SUBMIT]: (key: Key) =>
       key.name === 'return' && !key.ctrl && !key.meta && !key.paste,
@@ -101,6 +111,38 @@ describe('keyMatchers', () => {
       ],
     },
 
+    // Scrolling
+    {
+      command: Command.SCROLL_UP,
+      positive: [createKey('up', { shift: true })],
+      negative: [createKey('up'), createKey('down', { shift: true })],
+    },
+    {
+      command: Command.SCROLL_DOWN,
+      positive: [createKey('down', { shift: true })],
+      negative: [createKey('down'), createKey('up', { shift: true })],
+    },
+    {
+      command: Command.SCROLL_HOME,
+      positive: [createKey('home')],
+      negative: [createKey('end'), createKey('a', { ctrl: true })],
+    },
+    {
+      command: Command.SCROLL_END,
+      positive: [createKey('end')],
+      negative: [createKey('home'), createKey('e', { ctrl: true })],
+    },
+    {
+      command: Command.PAGE_UP,
+      positive: [createKey('pageup')],
+      negative: [createKey('pagedown'), createKey('up')],
+    },
+    {
+      command: Command.PAGE_DOWN,
+      positive: [createKey('pagedown')],
+      negative: [createKey('pageup'), createKey('down')],
+    },
+
     // Text deletion
     {
       command: Command.KILL_LINE_RIGHT,
@@ -137,22 +179,38 @@ describe('keyMatchers', () => {
     {
       command: Command.HISTORY_UP,
       positive: [createKey('p', { ctrl: true })],
-      negative: [createKey('p'), createKey('up')],
+      negative: [
+        createKey('p'),
+        createKey('up'),
+        createKey('p', { ctrl: true, shift: true }),
+      ],
     },
     {
       command: Command.HISTORY_DOWN,
       positive: [createKey('n', { ctrl: true })],
-      negative: [createKey('n'), createKey('down')],
+      negative: [
+        createKey('n'),
+        createKey('down'),
+        createKey('n', { ctrl: true, shift: true }),
+      ],
     },
     {
       command: Command.NAVIGATION_UP,
       positive: [createKey('up'), createKey('up', { ctrl: true })],
-      negative: [createKey('p'), createKey('u')],
+      negative: [
+        createKey('p'),
+        createKey('u'),
+        createKey('up', { shift: true }),
+      ],
     },
     {
       command: Command.NAVIGATION_DOWN,
       positive: [createKey('down'), createKey('down', { ctrl: true })],
-      negative: [createKey('n'), createKey('d')],
+      negative: [
+        createKey('n'),
+        createKey('d'),
+        createKey('down', { shift: true }),
+      ],
     },
 
     // Auto-completion
@@ -164,12 +222,22 @@ describe('keyMatchers', () => {
     {
       command: Command.COMPLETION_UP,
       positive: [createKey('up'), createKey('p', { ctrl: true })],
-      negative: [createKey('p'), createKey('down')],
+      negative: [
+        createKey('p'),
+        createKey('down'),
+        createKey('up', { shift: true }),
+        createKey('p', { ctrl: true, shift: true }),
+      ],
     },
     {
       command: Command.COMPLETION_DOWN,
       positive: [createKey('down'), createKey('n', { ctrl: true })],
-      negative: [createKey('n'), createKey('up')],
+      negative: [
+        createKey('n'),
+        createKey('up'),
+        createKey('down', { shift: true }),
+        createKey('n', { ctrl: true, shift: true }),
+      ],
     },
 
     // Text input
