@@ -25,6 +25,39 @@ function sanitizeTestName(name: string) {
     .replace(/-+/g, '-');
 }
 
+// Get timeout based on environment
+function getDefaultTimeout() {
+  if (env['CI']) return 60000; // 1 minute in CI
+  if (env['LLXPRT_SANDBOX']) return 30000; // 30s in containers
+  return 15000; // 15s locally
+}
+
+export async function poll(
+  predicate: () => boolean,
+  timeout: number,
+  interval: number,
+): Promise<boolean> {
+  const startTime = Date.now();
+  let attempts = 0;
+  while (Date.now() - startTime < timeout) {
+    attempts++;
+    const result = predicate();
+    if (env['VERBOSE'] === 'true' && attempts % 5 === 0) {
+      console.log(
+        `Poll attempt ${attempts}: ${result ? 'success' : 'waiting...'}`,
+      );
+    }
+    if (result) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+  if (env['VERBOSE'] === 'true') {
+    console.log(`Poll timed out after ${attempts} attempts`);
+  }
+  return false;
+}
+
 // Helper to create detailed error messages
 export function createToolCallErrorMessage(
   expectedTools: string | string[],
@@ -117,6 +150,66 @@ export function validateModelOutput(
   return true;
 }
 
+export class InteractiveRun {
+  ptyProcess: pty.IPty;
+  public output = '';
+
+  constructor(ptyProcess: pty.IPty) {
+    this.ptyProcess = ptyProcess;
+    ptyProcess.onData((data) => {
+      this.output += data;
+      if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
+        process.stdout.write(data);
+      }
+    });
+  }
+
+  // Note: Named expectText (not waitForText) to match upstream final state
+  // This incorporates commit a73b8145 which renames waitFor* → expect*
+  async expectText(text: string, timeout?: number) {
+    if (!timeout) {
+      timeout = getDefaultTimeout();
+    }
+    const found = await poll(
+      () => stripAnsi(this.output).toLowerCase().includes(text.toLowerCase()),
+      timeout,
+      200,
+    );
+    expect(found, `Did not find expected text: "${text}"`).toBe(true);
+  }
+
+  // Simulates typing a string one character at a time to avoid paste detection.
+  async type(text: string) {
+    const delay = 5;
+    for (const char of text) {
+      this.ptyProcess.write(char);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  async kill() {
+    this.ptyProcess.kill();
+  }
+
+  // Note: Named expectExit (not waitForExit) to match upstream final state
+  // This incorporates commit a73b8145 which renames waitFor* → expect*
+  expectExit(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () =>
+          reject(
+            new Error(`Test timed out: process did not exit within a minute.`),
+          ),
+        60000,
+      );
+      this.ptyProcess.onExit(({ exitCode }) => {
+        clearTimeout(timer);
+        resolve(exitCode);
+      });
+    });
+  }
+}
+
 export class TestRig {
   bundlePath: string;
   testDir: string | null;
@@ -129,13 +222,6 @@ export class TestRig {
     this.testDir = null;
 
     // Bundle path is set
-  }
-
-  // Get timeout based on environment
-  getDefaultTimeout() {
-    if (env.CI) return 60000; // 1 minute in CI
-    if (env.LLXPRT_SANDBOX) return 30000; // 30s in containers
-    return 15000; // 15s locally
   }
 
   setup(
@@ -549,7 +635,7 @@ export class TestRig {
     if (!logFilePath) return;
 
     // Wait for telemetry file to exist and have content
-    await this.poll(
+    await poll(
       () => {
         if (!fs.existsSync(logFilePath)) return false;
         try {
@@ -567,12 +653,12 @@ export class TestRig {
 
   async waitForTelemetryEvent(eventName: string, timeout?: number) {
     if (!timeout) {
-      timeout = this.getDefaultTimeout();
+      timeout = getDefaultTimeout();
     }
 
     await this.waitForTelemetryReady();
 
-    return this.poll(
+    return poll(
       () => {
         const logFilePath = join(this.testDir!, 'telemetry.log');
 
@@ -614,13 +700,13 @@ export class TestRig {
   async waitForToolCall(toolName: string, timeout?: number) {
     // Use environment-specific timeout
     if (!timeout) {
-      timeout = this.getDefaultTimeout();
+      timeout = getDefaultTimeout();
     }
 
     // Wait for telemetry to be ready before polling for tool calls
     await this.waitForTelemetryReady();
 
-    return this.poll(
+    return poll(
       () => {
         const toolLogs = this.readToolLogs();
         return toolLogs.some((log) => log.toolRequest.name === toolName);
@@ -633,13 +719,13 @@ export class TestRig {
   async waitForAnyToolCall(toolNames: string[], timeout?: number) {
     // Use environment-specific timeout
     if (!timeout) {
-      timeout = this.getDefaultTimeout();
+      timeout = getDefaultTimeout();
     }
 
     // Wait for telemetry to be ready before polling for tool calls
     await this.waitForTelemetryReady();
 
-    return this.poll(
+    return poll(
       () => {
         const toolLogs = this.readToolLogs();
         return toolNames.some((name) =>
@@ -649,32 +735,6 @@ export class TestRig {
       timeout,
       100,
     );
-  }
-
-  async poll(
-    predicate: () => boolean,
-    timeout: number,
-    interval: number,
-  ): Promise<boolean> {
-    const startTime = Date.now();
-    let attempts = 0;
-    while (Date.now() - startTime < timeout) {
-      attempts++;
-      const result = predicate();
-      if (env.VERBOSE === 'true' && attempts % 5 === 0) {
-        console.log(
-          `Poll attempt ${attempts}: ${result ? 'success' : 'waiting...'}`,
-        );
-      }
-      if (result) {
-        return true;
-      }
-      await new Promise((resolve) => setTimeout(resolve, interval));
-    }
-    if (env.VERBOSE === 'true') {
-      console.log(`Poll timed out after ${attempts} attempts`);
-    }
-    return false;
   }
 
   _parseToolLogsFromStdout(stdout: string) {
@@ -987,9 +1047,9 @@ export class TestRig {
 
   async waitForText(text: string, timeout?: number) {
     if (!timeout) {
-      timeout = this.getDefaultTimeout();
+      timeout = getDefaultTimeout();
     }
-    const found = await this.poll(
+    const found = await poll(
       () =>
         stripAnsi(this._interactiveOutput)
           .toLowerCase()
@@ -1000,9 +1060,7 @@ export class TestRig {
     expect(found, `Did not find expected text: "${text}"`).toBe(true);
   }
 
-  async runInteractive(...args: string[]): Promise<pty.IPty> {
-    this._interactiveOutput = '';
-
+  async runInteractive(...args: string[]): Promise<InteractiveRun> {
     const { command, initialArgs } = this._getCommandAndArgs([
       '--yolo',
       ...args,
@@ -1026,16 +1084,9 @@ export class TestRig {
 
     const ptyProcess = pty.spawn(command, initialArgs, options);
 
-    ptyProcess.onData((data) => {
-      this._interactiveOutput += data;
-      if (env.KEEP_OUTPUT === 'true' || env.VERBOSE === 'true') {
-        process.stdout.write(data);
-      }
-    });
-
-    // Wait for "Type your message" to appear
-    await this.waitForText('Type your message');
-
-    return ptyProcess;
+    const run = new InteractiveRun(ptyProcess);
+    // Wait for the app to be ready (input prompt rendered).
+    await run.expectText('Type your message', 30000);
+    return run;
   }
 }
