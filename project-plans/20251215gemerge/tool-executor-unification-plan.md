@@ -2,9 +2,9 @@
 
 ## Background
 
-- Upstream gemini-cli attempted to unify interactive + non-interactive tool execution by routing non-interactive calls through `CoreToolScheduler` (`15c62bade` — “Reuse CoreToolScheduler for nonInteractiveToolExecutor (#6714)”).
-- `15c62bade` exists in LLxprt history (it was not “skipped”), but LLxprt later re-expanded `packages/core/src/core/nonInteractiveToolExecutor.ts` to preserve LLxprt-specific requirements (emoji filtering semantics, telemetry, tool governance, and tool-call/response pairing) that are not supported by `CoreToolScheduler` as-is.
-- A later upstream follow-up (`9e8c7676` — “record tool calls in non-interactive mode (#10951)”) assumes the scheduler-based shape and changes types/consumers. It cannot be applied cleanly on top of LLxprt’s current executor without explicit design decisions.
+- Upstream gemini-cli attempted to unify interactive + non-interactive tool execution by routing non-interactive calls through `CoreToolScheduler` (`15c62bade` - "Reuse CoreToolScheduler for nonInteractiveToolExecutor (#6714)").
+- `15c62bade` exists in LLxprt history (it was not "skipped"), but LLxprt later re-expanded `packages/core/src/core/nonInteractiveToolExecutor.ts` to preserve LLxprt-specific requirements (emoji filtering semantics, telemetry, tool governance, and tool-call/response pairing) that are not supported by `CoreToolScheduler` as-is.
+- A later upstream follow-up (`9e8c7676` - "record tool calls in non-interactive mode (#10951)") assumes the scheduler-based shape and changes types/consumers. It cannot be applied cleanly on top of LLxprt's current executor without explicit design decisions.
 
 Additionally, Batch 44 (`9e8c7676` - "fix(cli): record tool calls in non-interactive mode #10951") was explicitly skipped due to conflicts with 7 core files.
 
@@ -56,7 +56,7 @@ Location: `packages/core/src/core/coreToolScheduler.ts`
      - Excluded tools (`getExcludeTools()`)
      - Runtime tool call names.
 
-2. **`CoreToolScheduler` currently hardcodes “interactive mode” tool context**
+2. **`CoreToolScheduler` currently hardcodes "interactive mode" tool context**
    - When the scheduler sets `ContextAwareTool.context`, it always sets `interactiveMode: true`.
    - This is observable behavior (e.g. `todo-write` only emits interactive events when `interactiveMode` is true).
    - If `CoreToolScheduler` is ever used for non-interactive execution, it MUST be able to set `interactiveMode: false`.
@@ -77,7 +77,7 @@ Location: `packages/core/src/core/coreToolScheduler.ts`
 
 ## What Upstream Did
 
-Upstream’s scheduler-based approach (conceptually):
+Upstream's scheduler-based approach (conceptually):
 
 ```typescript
 // IMPORTANT: Resolve via onAllToolCallsComplete; do NOT assume getCompletedCalls().
@@ -97,7 +97,7 @@ return new Promise((resolve, reject) => {
 
 ## Why a Straight Cherry-Pick Does Not Work (LLxprt-specific)
 
-1. **`CoreToolScheduler` currently assumes “interactive mode”** (see “Important Divergences” above).
+1. **`CoreToolScheduler` currently assumes "interactive mode"** (see "Important Divergences" above).
 2. **LLxprt needs emoji filtering + tool governance + telemetry** that the upstream thin-wrapper does not provide.
 3. **Type/contract drift**: upstream evolves return types (e.g. returning `CompletedToolCall` vs `ToolCallResponseInfo`) and updates consumers accordingly.
 
@@ -167,7 +167,7 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
 **Prerequisites (MANDATORY):**
 1. Phase 1 is complete (shared governance module).
 2. Phase 2 is complete (scheduler can set `interactiveMode: false`).
-3. Decision recorded for each item below (no “TBD”):
+3. Decision recorded for each item below (no "TBD"):
    - Emoji filtering: where it runs and how to avoid double filtering.
    - Tool-call history: whether to record original args or filtered args in `functionCall` parts.
    - Confirmation handling: how to handle `PolicyDecision.ASK_USER` and `shouldConfirmExecute()` in non-interactive mode.
