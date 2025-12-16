@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import * as crypto from 'node:crypto';
+import crypto from 'node:crypto';
 
 /**
  * Normalize tool IDs from various formats to OpenAI format
@@ -25,12 +25,24 @@ import * as crypto from 'node:crypto';
  * that occurs when tool IDs are in non-OpenAI formats (like hist_tool_XXX from cancelled tools).
  */
 export function normalizeToOpenAIToolId(id: string): string {
+  const generateFallbackId = (): string =>
+    'call_' + crypto.randomUUID().replace(/-/g, '');
+
   const sanitize = (value: string): string => {
     const sanitized = value.replace(/[^a-zA-Z0-9_]/g, '');
     if (sanitized.length === 0 || sanitized === 'call_') {
-      return 'call_' + crypto.randomUUID().replace(/-/g, '');
+      return generateFallbackId();
     }
     return sanitized;
+  };
+
+  const normalizeWithPrefix = (prefix: string): string => {
+    const suffix = id.substring(prefix.length);
+    const sanitizedSuffix = suffix.replace(/[^a-zA-Z0-9_]/g, '');
+    if (sanitizedSuffix.length === 0) {
+      return generateFallbackId();
+    }
+    return 'call_' + sanitizedSuffix;
   };
 
   if (id.startsWith('call_')) {
@@ -38,21 +50,11 @@ export function normalizeToOpenAIToolId(id: string): string {
   }
 
   if (id.startsWith('hist_tool_')) {
-    const suffix = id.substring('hist_tool_'.length);
-    const sanitizedSuffix = suffix.replace(/[^a-zA-Z0-9_]/g, '');
-    if (sanitizedSuffix.length === 0) {
-      return 'call_' + crypto.randomUUID().replace(/-/g, '');
-    }
-    return 'call_' + sanitizedSuffix;
+    return normalizeWithPrefix('hist_tool_');
   }
 
   if (id.startsWith('toolu_')) {
-    const suffix = id.substring('toolu_'.length);
-    const sanitizedSuffix = suffix.replace(/[^a-zA-Z0-9_]/g, '');
-    if (sanitizedSuffix.length === 0) {
-      return 'call_' + crypto.randomUUID().replace(/-/g, '');
-    }
-    return 'call_' + sanitizedSuffix;
+    return normalizeWithPrefix('toolu_');
   }
 
   return sanitize('call_' + id);

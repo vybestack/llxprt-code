@@ -47,11 +47,12 @@ export function buildResponsesInputFromContent(
 
   for (const c of content) {
     if (c.speaker === 'human') {
-      const textBlock = c.blocks.find((b) => b.type === 'text') as
-        | TextBlock
-        | undefined;
-      if (textBlock?.text) {
-        input.push({ role: 'user', content: textBlock.text });
+      const textBlocks = c.blocks.filter(
+        (b): b is TextBlock => b.type === 'text',
+      );
+      const text = textBlocks.map((b) => b.text).join('\n');
+      if (text) {
+        input.push({ role: 'user', content: text });
       }
     } else if (c.speaker === 'ai') {
       const textBlocks = c.blocks.filter(
