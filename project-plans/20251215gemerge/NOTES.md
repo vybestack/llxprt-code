@@ -1759,3 +1759,52 @@ $ grep -n "calculateMainAreaWidth" packages/cli/src/ui/AppContainer.tsx
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 21 — PICK — 65b9e367
+
+### Selection Record
+Batch: 21
+Type: PICK
+Upstream SHA: 65b9e367 - Docs: Fix broken links in architecture.md (#10747)
+Subject: Fix broken doc links
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 20)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (a831b6d77)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick 65b9e367
+Conflicts: YES (docs/architecture.md)
+Resolution: NO-OP - LLxprt uses relative paths (./cli/commands.md) which are correct
+Upstream changes not applicable (uses /docs/cli/commands.md absolute paths)
+LLxprt's docs/cli/configuration.md exists at correct location
+Branding Substitutions Applied: N/A
+Files Modified: NONE (skipped empty cherry-pick)
+LLXPRT Commit SHA: N/A (NO-OP)
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-16T03:45:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+### Feature Landing Verification
+Upstream Commit: 65b9e367
+Feature: Fix broken documentation links
+
+LLxprt Status: NO-OP
+Reason: LLxprt uses relative paths that already work correctly:
+- `./cli/commands.md` instead of `/docs/cli/commands.md`
+- `./cli/configuration.md` exists (upstream moved to `/docs/get-started/configuration.md`)
+
+FEATURE VERIFIED: N/A (NO-OP - paths correct)
+
+---
