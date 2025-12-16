@@ -488,6 +488,12 @@ export class GeminiProvider extends BaseProvider {
           provider: this.name,
           supportedToolFormats: [],
         },
+        {
+          id: 'gemini-3-pro-preview',
+          name: 'Gemini 3 Pro Preview',
+          provider: this.name,
+          supportedToolFormats: [],
+        },
       ];
     }
 
