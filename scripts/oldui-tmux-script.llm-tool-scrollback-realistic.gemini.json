@@ -1,0 +1,61 @@
+{
+  "tmux": {
+    "cols": 100,
+    "rows": 20,
+    "historyLimit": 200000,
+    "scrollbackLines": 50000,
+    "initialWaitMs": 8000
+  },
+  "startCommand": ["gemini", "--model", "gemini-2.5-flash-lite"],
+  "yolo": false,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "line",
+      "text": "Use the run_shell_command tool (NOT shell mode) to run: node scripts/oldui-scrollback-load.js --total 90 --interval-ms 150. Do not explain.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Allow execution of:",
+      "timeoutMs": 120000
+    },
+    { "type": "approveTool", "choice": "once", "timeoutMs": 60000 },
+
+    { "type": "wait", "ms": 600 },
+    { "type": "key", "key": "C-s" },
+    { "type": "wait", "ms": 1200 },
+
+    { "type": "copyMode", "enter": true },
+    { "type": "copyMode", "pageUp": 5 },
+    { "type": "historySample", "label": "copyMode-start" },
+    { "type": "wait", "ms": 8000 },
+    { "type": "historySample", "label": "copyMode-end" },
+    { "type": "copyMode", "exit": true },
+
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "SCROLLTEST LINE 0090",
+      "timeoutMs": 180000
+    },
+
+    { "type": "key", "key": "C-c" },
+    { "type": "wait", "ms": 400 },
+    { "type": "key", "key": "C-c" },
+    { "type": "waitForExit", "timeoutMs": 30000 },
+    { "type": "capture", "label": "after-exit", "scope": "scrollback" },
+    {
+      "type": "expectCount",
+      "scope": "scrollback",
+      "contains": "SCROLLTEST LINE 0090",
+      "equals": 1
+    }
+  ]
+}

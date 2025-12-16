@@ -92,9 +92,28 @@ Quick interpretation:
 Pass/fail mode:
 - Add `--assert` to make the harness exit non-zero when `sentinelCount !== 1` (baseline: with `--rows 20 --cols 100` it currently fails; with larger heights it may pass).
 
+### Apples-to-apples (model-driven) baseline (LLXPRT vs Gemini)
+For a realistic “model runs a long shell tool, user scrolls up” scenario (and to avoid quota blowups), use the flash-lite model on both:
+
+- LLXPRT (expected to fail today):  
+  `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.llxprt.json`
+- Gemini CLI (expected to pass):  
+  `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.gemini.json`
+
+Both scripts:
+- Ask the model to run `node scripts/oldui-scrollback-load.js --total 90 --interval-ms 150` via `run_shell_command`.
+- Approve once.
+- Enter tmux copy-mode (`pageUp: 5`) while the command is still running.
+- Assert that the last line (`SCROLLTEST LINE 0090`) occurs exactly once in the captured scrollback.
+
+Current result:
+- LLXPRT duplicates the output block (count == 2) → fails.
+- Gemini keeps it to a single occurrence (count == 1) → passes.
+
 ### Known flakiness: LLM-driven flows
 When scripts depend on a real model to reliably emit tool calls (e.g., “ask model to call `run_shell_command` twice, approve both”), we currently see frequent stalls in an “`esc to cancel` (Xm)” state and/or the model simply not emitting the tool call on the next prompt.
 
 For repeatable UI regressions, prefer:
-- “pure UI” scripts that don’t depend on the model (e.g., shell mode commands for long output + scrollback reproduction), and/or
-- a deterministic/mock provider for harness runs (future work).
+- deterministic scenarios (shell-mode / UI-only) when possible, and/or
+- single-tool, model-driven scripts using flash-lite (the LLXPRT vs Gemini baseline above), and/or
+- a deterministic/mock provider for harness runs (future work) when we need multi-step tool sequences.

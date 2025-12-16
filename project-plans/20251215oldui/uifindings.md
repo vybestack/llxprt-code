@@ -96,6 +96,27 @@ Practical baseline:
 - `node scripts/oldui-tmux-harness.js --scenario scrollback --rows 20 --cols 100 --assert`
   - On current old UI this reproduces repeated frames in `scrollback.txt` (the LLXPRT logo/tips/tool output repeat) and fails with `sentinelCount > 1`.
 
+#### Apples-to-apples (model-driven) repro + Gemini comparison (flash-lite)
+We now have an “as a user” scenario that:
+- starts an interactive TUI (real TTY),
+- prompts the model to run a long-ish command via the `run_shell_command` tool,
+- approves it (non-YOLO),
+- enters tmux copy-mode (simulated “user scrollback”) while the tool is still running,
+- and asserts on captured scrollback for redraw duplication.
+
+Scripts:
+- LLXPRT (runs `node scripts/start.js` with `--provider gemini --model gemini-2.5-flash-lite`):
+  - `scripts/oldui-tmux-script.llm-tool-scrollback-realistic.llxprt.json`
+- Gemini CLI (runs `gemini --model gemini-2.5-flash-lite`):
+  - `scripts/oldui-tmux-script.llm-tool-scrollback-realistic.gemini.json`
+
+Behavior observed (current old UI):
+- LLXPRT script currently fails with duplicated output in `scrollback.txt` (`SCROLLTEST LINE 0090` appears twice).
+- Gemini CLI script passes (single occurrence of `SCROLLTEST LINE 0090`).
+
+Important nuance:
+- In LLXPRT, the duplication shows up reliably in the **final** scrollback after exit (the script asserts after `/quit` + pane exit), not necessarily immediately at tool completion.
+
 ### LLM-driven UI automation is currently flaky (tool approval flows)
 I attempted to script an “agent prompts -> tool call -> approve -> next prompt” sequence using `scripts/oldui-tmux-script.approvals.json` (run via `node scripts/oldui-tmux-harness.js --script ...`). It is not reliably completing end-to-end yet due to UI/runtime behavior with real model calls.
 
@@ -106,4 +127,5 @@ Observed issues:
 - `Enter` is frequently intercepted by the suggestions/completion UI (accept suggestion vs submit), which makes submission flaky if we don’t use a stable “submit” key sequence.
 
 Conclusion:
-- tmux gives us all the right primitives (TTY, key injection, screen + scrollback capture), but to make “LLM-driven tool approval scripts” reliable we likely need a deterministic provider / harness mode (or some way to disable/short-circuit post-tool follow-up generations) so the UI returns to idle predictably.
+- tmux gives us all the right primitives (TTY, key injection, screen + scrollback capture).
+- Multi-step “agent does many tools in sequence” flows can still be flaky, but a single-tool, flash-lite script is now stable enough to serve as a regression harness for #456.

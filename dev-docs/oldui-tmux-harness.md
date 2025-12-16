@@ -17,6 +17,8 @@ This harness is **not intended** for the new OpenTUI UI in `packages/ui`.
 - Haiku smoke test: `node scripts/oldui-tmux-harness.js`
 - Scrollback redraw reproduction: `node scripts/oldui-tmux-harness.js --scenario scrollback`
 - Scrollback redraw baseline (fails today): `node scripts/oldui-tmux-harness.js --scenario scrollback --rows 20 --cols 100 --assert`
+- LLM/tool scrollback baseline (LLXPRT, expected to fail today): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.llxprt.json`
+- LLM/tool scrollback baseline (Gemini CLI, expected to pass): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.gemini.json`
 - Scripted run: `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.example.json`
 - Scripted run (macros): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.macros.example.json`
 
