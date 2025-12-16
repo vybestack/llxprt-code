@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 15 |
+| **Last Completed** | Batch 16 |
 | **In Progress** | — |
-| **Next Up** | Batch 16 |
-| **Progress** | 15/52 (29%) |
+| **Next Up** | Batch 17 |
+| **Progress** | 16/52 (31%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -124,9 +124,10 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 14 record exists
   - Record Location: NOTES.md ## Batch 15
 
-- [ ] Batch 16 — FULL — REIMPLEMENT — `5aab793c` — fix(infra) - Fix interactive system error (#10805)
+- [x] Batch 16 — FULL — REIMPLEMENT — `5aab793c` — fix(infra) - Fix interactive system error (#10805)
   - Prerequisites: Batch 15 record exists
   - Record Location: NOTES.md ## Batch 16
+  - Note: NO-OP - file doesn't exist in LLxprt
 
 - [ ] Batch 17 — QUICK — REIMPLEMENT — `0b6c0200` — feat(core): Failed Response Retry via Extra Prompt (#10828)
   - Prerequisites: Batch 16 record exists

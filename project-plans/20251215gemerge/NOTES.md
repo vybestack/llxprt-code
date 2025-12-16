@@ -1391,3 +1391,58 @@ $ grep -n "it.skip.*should fail safely" integration-tests/replace.test.ts
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 16 — REIMPLEMENT — 5aab793c
+
+### Selection Record
+Batch: 16
+Type: REIMPLEMENT
+Upstream SHA: 5aab793c - fix(infra) - Fix interactive system error (#10805)
+Subject: Fix interactive file system test
+Playbook: N/A (NO-OP batch)
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 15)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (5388060fc)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Status: NO-OP
+Reason: Target file does not exist in LLxprt codebase
+
+```bash
+$ ls integration-tests/file-system-interactive.test.ts 2>/dev/null || echo "File does not exist"
+File does not exist
+```
+
+Upstream Changes (not applicable to LLxprt):
+  - Removed darwin from skipIf condition
+  - Changed rig.setup call to not await
+  - Increased timeouts from 15000 to 30000ms
+
+Files Modified: NONE (NO-OP)
+LLXPRT Commit SHA: N/A (NO-OP)
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-16T02:41:00Z
+
+Results:
+  - test: PASS (166 test files)
+  - lint: PASS (0 warnings)
+  - typecheck: PASS
+  - build: PASS
+  - bundle: PASS
+  - synthetic: PASS (haiku generated)
+
+### Feature Landing Verification
+Upstream Commit: 5aab793c
+Feature: Interactive file system test fix
+
+LLxprt Status: NO-OP - file does not exist in LLxprt codebase
+The interactive file system test infrastructure is not present in LLxprt.
+
+FEATURE VERIFIED: N/A (NO-OP)
+
+---
