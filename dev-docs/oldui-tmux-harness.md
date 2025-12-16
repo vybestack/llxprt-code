@@ -20,6 +20,7 @@ This harness is **not intended** for the new OpenTUI UI in `packages/ui`.
 - LLM/tool scrollback baseline (LLXPRT): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.llxprt.json`
 - LLM/tool scrollback baseline (Gemini CLI, expected to pass): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.gemini.json`
 - Scroll gap regression (LLXPRT): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-scroll-gap-regression.llxprt.json`
+- `/clear` regression (LLXPRT): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.clear-keeps-input.llxprt.json`
 - Scripted run: `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.example.json`
 - Scripted run (macros): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.macros.example.json`
 

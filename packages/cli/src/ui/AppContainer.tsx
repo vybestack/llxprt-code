@@ -1327,9 +1327,16 @@ export const AppContainer = (props: AppContainerProps) => {
   const handleClearScreen = useCallback(() => {
     clearItems();
     clearConsoleMessagesState();
-    console.clear();
+    if (!useAlternateBuffer) {
+      console.clear();
+    }
     refreshStatic();
-  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
+  }, [
+    clearItems,
+    clearConsoleMessagesState,
+    refreshStatic,
+    useAlternateBuffer,
+  ]);
 
   const handleConfirmationSelect = useCallback(
     (value: boolean) => {
