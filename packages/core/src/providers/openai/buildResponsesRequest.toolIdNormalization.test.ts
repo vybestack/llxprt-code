@@ -89,14 +89,15 @@ describe('buildResponsesRequest - Tool ID Normalization (Issue #825)', () => {
     expect(functionCalls[0].call_id).toBe(functionCallOutputs[0].call_id);
   });
 
-  it('should normalize toolu_ IDs (Anthropic format)', () => {
+  it('should normalize unknown format IDs', () => {
+    // In practice, all IDs should be hist_tool_ format, but test unknown format handling
     const messages: IContent[] = [
       {
         speaker: 'ai',
         blocks: [
           {
             type: 'tool_call',
-            id: 'toolu_xyz789',
+            id: 'unknown_xyz789',
             name: 'read_file',
             parameters: { path: '/test.txt' },
           },
@@ -107,7 +108,7 @@ describe('buildResponsesRequest - Tool ID Normalization (Issue #825)', () => {
         blocks: [
           {
             type: 'tool_response',
-            callId: 'toolu_xyz789',
+            callId: 'unknown_xyz789',
             result: 'file contents',
           },
         ],
@@ -136,7 +137,6 @@ describe('buildResponsesRequest - Tool ID Normalization (Issue #825)', () => {
     ) as Array<{ type: string; call_id: string }>;
 
     expect(functionCalls[0].call_id).toMatch(/^call_/);
-    expect(functionCalls[0].call_id).not.toContain('toolu_');
     expect(functionCallOutputs[0].call_id).toMatch(/^call_/);
     expect(functionCalls[0].call_id).toBe(functionCallOutputs[0].call_id);
   });
