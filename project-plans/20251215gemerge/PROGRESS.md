@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 14 |
+| **Last Completed** | Batch 15 |
 | **In Progress** | — |
-| **Next Up** | Batch 15 |
-| **Progress** | 14/52 (27%) |
+| **Next Up** | Batch 16 |
+| **Progress** | 15/52 (29%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -120,7 +120,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 13 record exists
   - Record Location: NOTES.md ## Batch 14
 
-- [ ] Batch 15 — QUICK — REIMPLEMENT — `5e688b81` — Skip should fail safely when old_string is not found test (#10853)
+- [x] Batch 15 — QUICK — REIMPLEMENT — `5e688b81` — Skip should fail safely when old_string is not found test (#10853)
   - Prerequisites: Batch 14 record exists
   - Record Location: NOTES.md ## Batch 15
 

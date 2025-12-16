@@ -1343,3 +1343,51 @@ $ grep -n "FatalToolExecutionError" packages/core/src/utils/errors.ts
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 15 — REIMPLEMENT — 5e688b81
+
+### Selection Record
+Batch: 15
+Type: REIMPLEMENT
+Upstream SHA: 5e688b81 - Skip should fail safely when old_string is not found test (#10853)
+Subject: Skip flaky replace test
+Playbook: N/A (simple test skip)
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 14)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (7e85c134f)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Status: COMPLETED
+Implementation Summary:
+  - Skipped flaky "should fail safely when old_string is not found" test
+  - Added TODO comment with upstream issue reference
+Files Modified:
+  - integration-tests/replace.test.ts
+LLXPRT Commit SHA: 6be2b113c
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-16T02:38:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+### Feature Landing Verification
+Upstream Commit: 5e688b81
+Feature: Skip flaky replace test
+
+```bash
+$ grep -n "it.skip.*should fail safely" integration-tests/replace.test.ts
+96:  it.skip('should fail safely when old_string is not found', async () => {
+```
+
+FEATURE VERIFIED: YES
+
+---
