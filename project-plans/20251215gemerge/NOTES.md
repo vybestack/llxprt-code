@@ -783,3 +783,60 @@ $ grep "### Deflaking a test" dev-docs/integration-tests.md
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 06 — PICK — 741b57ed
+
+### Selection Record
+Batch: 06
+Type: PICK
+Upstream SHA: 741b57ed - fix(core): Use shell for spawn on Windows (#9995)
+Subject: Use shell: true for spawn on Windows platform
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 05)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (6a992c658)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick 741b57ed
+Conflicts: YES (3 files)
+  - packages/core/src/ide/ide-installer.ts: execSync → spawnSync with shell:true on Windows
+  - packages/core/src/ide/ide-installer.test.ts: Updated tests for spawnSync
+  - packages/core/src/utils/editor.ts: Added shell: process.platform === 'win32'
+Branding Substitutions Applied: YES (kept llxprt extension name)
+Files Modified:
+  - packages/core/src/ide/ide-installer.ts
+  - packages/core/src/ide/ide-installer.test.ts
+  - packages/core/src/utils/editor.ts
+  - packages/core/src/utils/editor.test.ts
+LLXPRT Commit SHA: 09c4fad56
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-15T21:45:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS
+  - test: PASS (flaky qwen test passed on retry)
+  - build: PASS
+  - synthetic: PASS
+
+### Feature Landing Verification
+Upstream Commit: 741b57ed
+Feature: Use shell for spawn on Windows
+
+LLXPRT Evidence:
+```bash
+$ grep -n "shell: process.platform" packages/core/src/ide/ide-installer.ts
+39:    spawnSync(command, args, { shell: process.platform === 'win32' });
+
+$ grep -n "shell: process.platform" packages/core/src/utils/editor.ts
+21:        shell: process.platform === 'win32',
+```
+
+FEATURE VERIFIED: YES
+
+---

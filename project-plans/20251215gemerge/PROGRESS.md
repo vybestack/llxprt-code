@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 05 |
+| **Last Completed** | Batch 06 |
 | **In Progress** | — |
-| **Next Up** | Batch 06 |
-| **Progress** | 5/52 (10%) |
+| **Next Up** | Batch 07 |
+| **Progress** | 6/52 (12%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -83,7 +83,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 04 record exists, Batch 03 (`603ec2b2`) adds `scripts/deflake.js`
   - Record Location: NOTES.md ## Batch 05
 
-- [ ] Batch 06 — FULL — PICK — `741b57ed` — fix(core): Use shell for spawn on Windows (#9995)
+- [x] Batch 06 — FULL — PICK — `741b57ed` — fix(core): Use shell for spawn on Windows (#9995)
   - Prerequisites: Batch 05 record exists
   - Record Location: NOTES.md ## Batch 06
 
