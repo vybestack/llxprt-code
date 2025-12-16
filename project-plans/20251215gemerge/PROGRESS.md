@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 10 |
+| **Last Completed** | Batch 11 |
 | **In Progress** | — |
-| **Next Up** | Batch 11 |
-| **Progress** | 10/52 (19%) |
+| **Next Up** | Batch 12 |
+| **Progress** | 11/52 (21%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -104,7 +104,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 09 record exists
   - Record Location: NOTES.md ## Batch 10
 
-- [ ] Batch 11 — QUICK — PICK — `b60c8858, cd354aeb` — feat(ui): shorten context overflow message when <50% of limit (#10812) / Fix hooks to avoid unnecessary re-renders (#10820)
+- [x] Batch 11 — QUICK — PICK — `b60c8858, cd354aeb` — feat(ui): shorten context overflow message when <50% of limit (#10812) / Fix hooks to avoid unnecessary re-renders (#10820)
   - Prerequisites: Batch 10 record exists
   - Record Location: NOTES.md ## Batch 11
 

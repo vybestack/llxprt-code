@@ -1098,3 +1098,68 @@ $ grep -n "GOOGLE_CLOUD_PROJECT_ID" packages/core/src/core/contentGenerator.ts
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 11 — PICK — b60c8858, cd354aeb
+
+### Selection Record
+Batch: 11
+Type: PICK
+Upstream SHAs:
+  - b60c8858 - feat(ui): shorten context overflow message when <50% of limit (#10812)
+  - cd354aeb - Fix hooks to avoid unnecessary re-renders (#10820)
+Subject: UI performance improvements
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 10)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (b2d113612)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Commands: git cherry-pick b60c8858 && git cherry-pick cd354aeb
+Conflicts: YES (5 files total)
+  - b60c8858:
+    - useGeminiStream.test.tsx: Import conflicts, preserved llxprt imports
+    - useGeminiStream.ts: Import conflicts, added tokenLimit import
+  - cd354aeb:
+    - AppContainer.tsx: Wrapped uiActions in useMemo, preserved full llxprt actions
+    - useHistoryManager.ts: Kept llxprt history trimming imports
+    - useWorkspaceMigration.ts: Added useMemo, kept llxprt package name
+Branding Substitutions Applied: YES (preserved @vybestack/llxprt-code-core)
+Files Modified:
+  - packages/cli/src/ui/hooks/useGeminiStream.ts
+  - packages/cli/src/ui/hooks/useGeminiStream.test.tsx
+  - packages/cli/src/ui/AppContainer.tsx
+  - packages/cli/src/ui/hooks/useHistoryManager.ts
+  - packages/cli/src/ui/hooks/useWorkspaceMigration.ts
+LLXPRT Commit SHAs: d46080d5e, bb8a5b75d
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-16T02:15:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+### Feature Landing Verification
+Upstream Commits: b60c8858, cd354aeb
+Features: Shorter overflow message + re-render optimization
+
+```bash
+$ grep -n "tokenLimit" packages/cli/src/ui/hooks/useGeminiStream.ts | head -3
+30:  tokenLimit,
+885:    remainingTokenCount > tokenLimit * 0.75
+
+$ grep -n "useMemo" packages/cli/src/ui/AppContainer.tsx | head -2
+5:import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+1457:  const uiActions: UiActions = useMemo(
+```
+
+FEATURE VERIFIED: YES
+
+---
