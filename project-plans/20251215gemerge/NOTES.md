@@ -1509,3 +1509,86 @@ $ grep -n "System: Please continue" packages/core/src/core/client.ts
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 18 — PICK — ed37b7c5, 21062dd3
+
+### Selection Record
+Batch: 18
+Type: PICK
+Upstream SHA(s): ed37b7c5, 21062dd3
+Subject: fix some isWorkspaceTrusted mocks (#10836) / clean up extension tests (#10857)
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 17)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (a939e3282)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick ed37b7c5 21062dd3
+Conflicts: YES (first commit)
+  - config.test.ts: getIsWorkspaceTrusted mock - used LLxprt pattern
+  - settings.test.ts: getIsWorkspaceTrusted mock - used LLxprt pattern
+Second commit (21062dd3): Clean merge (no conflicts)
+Branding Substitutions Applied: N/A (test file changes only)
+Files Modified:
+  - packages/core/src/config/config.test.ts
+  - packages/core/src/settings/settings.test.ts
+  - packages/core/src/extensions/extension.test.ts
+  - packages/cli/src/integration-tests/todo-continuation.integration.test.ts (mock signature fix)
+LLXPRT Commit SHAs: ae1ff54ca, d7109b979
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-16T03:10:00Z
+
+Results:
+  - test: PASS (166 test files)
+  - lint: PASS (0 warnings)
+  - typecheck: PASS
+  - build: PASS (required mock signature fix)
+  - bundle: PASS
+  - synthetic: PASS (haiku generated)
+
+Build Fix Required:
+  - todo-continuation.integration.test.ts mock signature was outdated
+  - Changed `originalModel?: string` to `isInvalidStreamRetry?: boolean` to match Batch 17 changes
+
+```bash
+$ npm run lint:ci
+> eslint . --ext .ts,.tsx --max-warnings 0 && eslint integration-tests --max-warnings 0
+
+$ npm run typecheck
+> @vybestack/llxprt-code-core@0.7.0 typecheck
+> @vybestack/llxprt-code@0.7.0 typecheck
+> @vybestack/llxprt-code-a2a-server@0.6.1 typecheck
+> @vybestack/llxprt-code-test-utils@0.7.0 typecheck
+
+$ npm run build
+Successfully copied files. (all packages)
+
+$ npm run bundle
+> @vybestack/llxprt-code@0.7.0 bundle
+
+$ node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
+Green terminals glows,
+Code flows through the midnight air,
+Bugs vanish in light.
+```
+
+### Feature Landing Verification
+Upstream Commits: ed37b7c5, 21062dd3
+Feature: Test mocks cleanup (isWorkspaceTrusted + extension tests)
+
+```bash
+$ grep -n "getIsWorkspaceTrusted" packages/core/src/config/config.test.ts | head -3
+72:    getIsWorkspaceTrusted: vi.fn().mockReturnValue(true),
+
+$ grep -n "getIsWorkspaceTrusted" packages/core/src/settings/settings.test.ts | head -3
+52:      getIsWorkspaceTrusted: vi.fn().mockReturnValue(true),
+```
+
+FEATURE VERIFIED: YES
+
+---

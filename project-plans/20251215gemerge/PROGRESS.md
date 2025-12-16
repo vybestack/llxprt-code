@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 17 |
+| **Last Completed** | Batch 18 |
 | **In Progress** | — |
-| **Next Up** | Batch 18 |
-| **Progress** | 17/52 (33%) |
+| **Next Up** | Batch 19 |
+| **Progress** | 18/52 (35%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -133,7 +133,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 16 record exists
   - Record Location: NOTES.md ## Batch 17
 
-- [ ] Batch 18 — FULL — PICK — `ed37b7c5, 21062dd3` — fix some isWorkspaceTrusted mocks (#10836) / clean up extension tests (#10857)
+- [x] Batch 18 — FULL — PICK — `ed37b7c5, 21062dd3` — fix some isWorkspaceTrusted mocks (#10836) / clean up extension tests (#10857)
   - Prerequisites: Batch 17 record exists
   - Record Location: NOTES.md ## Batch 18
 

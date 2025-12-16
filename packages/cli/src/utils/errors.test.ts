@@ -175,12 +175,7 @@ describe('errors', () => {
 
     describe('non-fatal errors', () => {
       it('should log error message to stderr without exiting for recoverable errors', () => {
-        handleToolError(
-          toolName,
-          toolError,
-          mockConfig,
-          'invalid_tool_params',
-        );
+        handleToolError(toolName, toolError, mockConfig, 'invalid_tool_params');
 
         expect(consoleErrorSpy).toHaveBeenCalledWith(
           'Error executing tool test-tool: Tool failed',

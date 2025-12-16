@@ -14,7 +14,11 @@ import {
 } from './turn.js';
 import { GenerateContentResponse, Part, Content } from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
-import { GeminiChat, InvalidStreamError, StreamEventType } from './geminiChat.js';
+import {
+  GeminiChat,
+  InvalidStreamError,
+  StreamEventType,
+} from './geminiChat.js';
 
 const mockSendMessageStream = vi.fn();
 const mockGetHistory = vi.fn();
