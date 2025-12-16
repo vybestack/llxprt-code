@@ -9,12 +9,12 @@
 | Status | Count |
 |---|---:|
 | PICKED | 35 |
-| REIMPLEMENTED | 22 |
+| REIMPLEMENTED | 23 |
 | SKIPPED_EXPLICIT | 1 |
 | ALREADY_PRESENT | 3 |
 | NO_OP | 6 |
 | DIVERGED | 1 |
-| MISSING | 3 |
+| MISSING | 2 |
 | SKIP | 64 |
 
 ## Missing Planned Upstream Commits
@@ -23,7 +23,6 @@
 |---:|:--|:--|:--|
 | 62 | `a5e47c62` | PICK | Docs: Update to tos-privacy.md (#10754) |
 | 72 | `cd919346` | PICK | Clean up integration test warnings. (#10931) |
-| 120 | `dabe161a` | PICK | Don't accept input until slash commands are loaded (#11162) |
 
 ## Full Upstream Table (Chronological)
 
@@ -148,7 +147,7 @@
 | 117 | `bd5c158a` | SKIP | SKIP |  | Revert "Shell approval rework" (#11143) |  |
 | 118 | `996c9f59` | SKIP | SKIP |  | Revert "fix: handle request retries and model fallback correctly" (#11164) |  |
 | 119 | `a2f3339a` | SKIP | SKIP |  | Enable Model Routing (#11154) |  |
-| 120 | `dabe161a` | PICK | MISSING |  | Don't accept input until slash commands are loaded (#11162) |  |
+| 120 | `dabe161a` | PICK | REIMPLEMENTED | `5cb5c9f77` | Don't accept input until slash commands are loaded (#11162) | Manual reimplement due to architecture divergence |
 | 121 | `4f5b3357` | REIMPLEMENT | REIMPLEMENTED | `3096412be` | fix(tests): enable cyclic schema MCP tool test (#10912) | Commit references #27 (should be #707) |
 | 122 | `203bad7c` | SKIP | SKIP |  | Docs: Point to extensions gallery from extensions docs in the project (#10763) |  |
 | 123 | `984415f6` | SKIP | SKIP |  | feat(ci): Update release to use github env variables. (#11068) |  |
