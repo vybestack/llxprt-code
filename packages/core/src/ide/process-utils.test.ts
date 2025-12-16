@@ -43,7 +43,7 @@ describe('getIdeProcessInfo', () => {
       mockedExec
         .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // ps -o ppid=,command= -p 1000 (find shell)
         .mockResolvedValueOnce({ stdout: '700 /usr/lib/vscode/code' }) // ps -o ppid=,command= -p 800 (get grandparent)
-        .mockResolvedValueOnce({ stdout: '/usr/lib/vscode/code' }); // ps -o ppid=,command= -p 700 (final command lookup)
+        .mockResolvedValueOnce({ stdout: '1 /usr/lib/vscode/code' }); // ps -o ppid=,command= -p 700 (final command lookup)
 
       const result = await getIdeProcessInfo();
 
@@ -55,7 +55,7 @@ describe('getIdeProcessInfo', () => {
       mockedExec
         .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // ps -o ppid=,command= -p 1000
         .mockRejectedValueOnce(new Error('ps failed')) // ps -o ppid=,command= -p 800 fails
-        .mockResolvedValueOnce({ stdout: '/bin/bash' }); // ps -o ppid=,command= -p 800 (final call)
+        .mockResolvedValueOnce({ stdout: '700 /bin/bash' }); // ps -o ppid=,command= -p 800 (final call)
 
       const result = await getIdeProcessInfo();
       expect(result).toEqual({ pid: 800, command: '/bin/bash' });

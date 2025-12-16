@@ -799,6 +799,11 @@ describe('Gemini Client (client.ts)', () => {
       );
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
+        { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
+        { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
       ]);
 
       // Mock the summary response from the chat
@@ -829,6 +834,11 @@ describe('Gemini Client (client.ts)', () => {
       );
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
+        { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
+        { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
       ]);
       mockSendMessage.mockResolvedValue({
         text: 'This is a summary.',
