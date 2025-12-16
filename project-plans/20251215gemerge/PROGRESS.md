@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 04 |
+| **Last Completed** | Batch 05 |
 | **In Progress** | — |
-| **Next Up** | Batch 05 |
-| **Progress** | 4/52 (8%) |
+| **Next Up** | Batch 06 |
+| **Progress** | 5/52 (10%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -79,7 +79,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 03 record exists
   - Record Location: NOTES.md ## Batch 04
 
-- [ ] Batch 05 — QUICK — REIMPLEMENT — `8d8a2ab6` — Fix(doc) - Add section in docs for deflaking (#10750)
+- [x] Batch 05 — QUICK — REIMPLEMENT — `8d8a2ab6` — Fix(doc) - Add section in docs for deflaking (#10750)
   - Prerequisites: Batch 04 record exists, Batch 03 (`603ec2b2`) adds `scripts/deflake.js`
   - Record Location: NOTES.md ## Batch 05
 

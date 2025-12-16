@@ -726,3 +726,60 @@ $ grep -n "Citations" docs/core/index.md
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 05 — REIMPLEMENT — 8d8a2ab6
+
+### Selection Record
+Batch: 05
+Type: REIMPLEMENT
+Upstream SHA: 8d8a2ab6 - Fix(doc) - Add section in docs for deflaking (#10750)
+Subject: Add deflake documentation section
+Playbook: project-plans/20251215gemerge/8d8a2ab6-plan.md
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 04)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (c5ccb1f71)
+  - Special dependencies: scripts/deflake.js exists (from Batch 03)
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Playbook Followed: project-plans/20251215gemerge/8d8a2ab6-plan.md
+Status: COMPLETED
+Implementation Summary:
+  - Changed default runs from 50 to 5 in scripts/deflake.js
+  - Added "### Deflaking a test" section to dev-docs/integration-tests.md
+  - Fixed duplicate import lint warning in config.ts
+Files Modified:
+  - scripts/deflake.js (line 60: default 50 → 5)
+  - dev-docs/integration-tests.md (added section)
+  - packages/cli/src/config/config.ts (lint fix)
+LLXPRT Commit SHA: fd145ce6a
+Commit Message: reimplement: add deflake docs section (upstream 8d8a2ab6) addresses #707
+
+### Verification Record
+Type: QUICK (docs-only batch)
+Timestamp: 2025-12-15T21:30:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED
+  - build: SKIPPED
+  - synthetic: SKIPPED
+
+### Feature Landing Verification
+Upstream Commit: 8d8a2ab6
+Feature: Deflake documentation section
+
+LLXPRT Evidence:
+```bash
+$ grep "default: 5" scripts/deflake.js | grep runs
+  default: 5,
+
+$ grep "### Deflaking a test" dev-docs/integration-tests.md
+### Deflaking a test
+```
+
+FEATURE VERIFIED: YES
+
+---
