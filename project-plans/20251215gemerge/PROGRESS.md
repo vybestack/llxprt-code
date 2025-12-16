@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 08 |
+| **Last Completed** | Batch 09 |
 | **In Progress** | — |
-| **Next Up** | Batch 09 |
-| **Progress** | 8/52 (15%) |
+| **Next Up** | Batch 10 |
+| **Progress** | 9/52 (17%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -96,7 +96,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 07 record exists
   - Record Location: NOTES.md ## Batch 08
 
-- [ ] Batch 09 — QUICK — PICK — `a044c259` — fix: Add a message about permissions command on startup in untrusted … (#10755)
+- [x] Batch 09 — QUICK — PICK — `a044c259` — fix: Add a message about permissions command on startup in untrusted … (#10755)
   - Prerequisites: Batch 08 record exists
   - Record Location: NOTES.md ## Batch 09
 

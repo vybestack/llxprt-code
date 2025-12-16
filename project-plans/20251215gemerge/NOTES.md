@@ -990,3 +990,55 @@ $ grep -n "handleContextWindowWillOverflowEvent" packages/cli/src/ui/hooks/useGe
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 09 — PICK — a044c259
+
+### Selection Record
+Batch: 09
+Type: PICK
+Upstream SHA: a044c259 - fix: Add a message about permissions command on startup in untrusted (#10755)
+Subject: Show permissions message when starting in untrusted folder
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 08)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (173ec6c52)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick a044c259
+Conflicts: YES (3 files)
+  - packages/cli/src/ui/AppContainer.tsx: Updated useFolderTrust call signature
+  - packages/cli/src/ui/hooks/useFolderTrust.ts: Added addItem parameter, permissions message feature
+  - packages/cli/src/ui/hooks/useFolderTrust.test.ts: Updated tests for new signature
+Branding Substitutions Applied: YES (/permissions command)
+Files Modified:
+  - packages/cli/src/ui/AppContainer.tsx
+  - packages/cli/src/ui/hooks/useFolderTrust.ts
+  - packages/cli/src/ui/hooks/useFolderTrust.test.ts
+LLXPRT Commit SHA: 671f8c413
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-16T02:05:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+### Feature Landing Verification
+Upstream Commit: a044c259
+Feature: Permissions message on untrusted startup
+
+```bash
+$ grep -n "/permissions" packages/cli/src/ui/hooks/useFolderTrust.ts
+32:      'This folder is not trusted. Some features may be disabled. Run /permissions to review.',
+```
+
+FEATURE VERIFIED: YES
+
+---
