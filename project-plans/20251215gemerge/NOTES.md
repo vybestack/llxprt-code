@@ -1985,3 +1985,61 @@ LLxprt Status: NO-OP - No Flutter references in LLxprt documentation
 FEATURE VERIFIED: N/A (NO-OP)
 
 ---
+
+## Batch 25 — REIMPLEMENT — 32db4ff6
+
+### Selection Record
+Batch: 25
+Type: REIMPLEMENT
+Upstream SHA: 32db4ff6 - Disable flakey tests. (#10914)
+Subject: Skip flaky tests
+Playbook: project-plans/20251215gemerge/32db4ff6-plan.md
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 24)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (7ffadef80)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Playbook Followed: project-plans/20251215gemerge/32db4ff6-plan.md
+Status: SKIPPED (NO-OP)
+Reason: LLxprt already has targeted skips, not blanket describe.skip()
+
+Current state in LLxprt replace.test.ts:
+```bash
+$ grep -n "it.skip\|describe.skip" integration-tests/replace.test.ts
+11:  it.skip('should be able to replace content in a file', async () => {
+96:  it.skip('should fail safely when old_string is not found', async () => {
+```
+
+LLxprt policy: Targeted it.skip() with issue tracking, not blanket describe.skip()
+Upstream later unskipped and deleted problematic tests
+file-system-interactive.test.ts doesn't exist in LLxprt
+
+Files Modified: NONE
+LLXPRT Commit SHA: N/A (NO-OP)
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-16T04:35:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+### Feature Landing Verification
+Upstream Commit: 32db4ff6
+Feature: Disable flaky tests
+
+LLxprt Status: NO-OP
+- Already has targeted skips per issue #11598
+- Does not apply upstream's blanket describe.skip()
+- file-system-interactive.test.ts doesn't exist
+
+FEATURE VERIFIED: N/A (NO-OP)
+
+---

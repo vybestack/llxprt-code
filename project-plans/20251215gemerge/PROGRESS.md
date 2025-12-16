@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 24 |
+| **Last Completed** | Batch 25 |
 | **In Progress** | — |
-| **Next Up** | Batch 25 |
-| **Progress** | 24/52 (46%) |
+| **Next Up** | Batch 26 |
+| **Progress** | 25/52 (48%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -163,9 +163,10 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Record Location: NOTES.md ## Batch 24
   - Note: NO-OP - No Flutter references in LLxprt docs
 
-- [ ] Batch 25 — QUICK — REIMPLEMENT — `32db4ff6` — Disable flakey tests. (#10914)
+- [x] Batch 25 — QUICK — REIMPLEMENT — `32db4ff6` — Disable flakey tests. (#10914)
   - Prerequisites: Batch 24 record exists
   - Record Location: NOTES.md ## Batch 25
+  - Note: NO-OP - LLxprt uses targeted skips, not blanket describe.skip()
 
 - [ ] Batch 26 — FULL — PICK — `c6af4eaa, a5e47c62, 0a7ee677` — fix: Usage of folder trust config flags in FileCommandLoader (#10837) / Docs: Update to tos-privacy.md (#10754) / Show notification in screen reader mode (#10900)
   - Prerequisites: Batch 25 record exists
