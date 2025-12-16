@@ -118,10 +118,7 @@ describe('extension tests', () => {
     fs.mkdirSync(userExtensionsDir, { recursive: true });
 
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-    vi.mocked(isWorkspaceTrusted).mockReturnValue({
-      isTrusted: true,
-      source: undefined,
-    });
+    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
     vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
     vi.mocked(execSync).mockClear();
     Object.values(mockGit).forEach((fn) => fn.mockReset());
@@ -793,9 +790,7 @@ describe('extension tests', () => {
           { source: sourceExtDir, type: 'local' },
           async (_) => true,
         ),
-      ).rejects.toThrow(
-        `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json file.`,
-      );
+      ).rejects.toThrow('Invalid configuration');
     });
 
     it('should install an extension from a git URL', async () => {
@@ -1135,10 +1130,7 @@ This extension will run the following MCP servers:
 
     describe('folder trust', () => {
       it('refuses to install extensions from untrusted folders', async () => {
-        vi.mocked(isWorkspaceTrusted).mockReturnValue({
-          isTrusted: false,
-          source: undefined,
-        });
+        vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
         const ext1Path = createExtension({
           extensionsDir: workspaceExtensionsDir,
           name: 'ext1',
@@ -1159,10 +1151,7 @@ This extension will run the following MCP servers:
       });
 
       it('does not copy extensions to the user dir', async () => {
-        vi.mocked(isWorkspaceTrusted).mockReturnValue({
-          isTrusted: false,
-          source: undefined,
-        });
+        vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
         const ext1Path = createExtension({
           extensionsDir: workspaceExtensionsDir,
           name: 'ext1',
@@ -1188,10 +1177,7 @@ This extension will run the following MCP servers:
       });
 
       it('does not load any extensions in the workspace config', async () => {
-        vi.mocked(isWorkspaceTrusted).mockReturnValue({
-          isTrusted: false,
-          source: undefined,
-        });
+        vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
         const ext1Path = createExtension({
           extensionsDir: workspaceExtensionsDir,
           name: 'ext1',
