@@ -840,3 +840,81 @@ $ grep -n "shell: process.platform" packages/core/src/utils/editor.ts
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 07 — REIMPLEMENT — bcbcaeb8
+
+### Selection Record
+Batch: 07
+Type: REIMPLEMENT
+Upstream SHA: bcbcaeb8 - fix(docs): Update docs/faq.md per Srinanth (#10667)
+Subject: Fix typo in extensions docs, update FAQ links
+Playbook: N/A (NO-OP batch)
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 06)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (dee21d472)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Status: NO-OP
+Reason: Target files do not exist in LLxprt codebase
+
+```bash
+$ ls docs/faq.md 2>/dev/null || echo "File does not exist"
+File does not exist
+
+$ ls docs/extensions/index.md 2>/dev/null || echo "File does not exist"
+File does not exist
+```
+
+Upstream Changes (not applicable to LLxprt):
+  - docs/extensions/index.md: Typo fix (extra backtick removal)
+  - docs/faq.md: Changed issue tracker link to Q&A discussions
+
+Files Modified: NONE (NO-OP)
+LLXPRT Commit SHA: N/A (docs-only NO-OP)
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-16T00:50:00Z
+
+```bash
+$ npm run typecheck
+> @vybestack/llxprt-code@0.7.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.7.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.7.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.6.1 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.7.0 typecheck
+> tsc --noEmit
+
+$ npm run lint:ci
+> @vybestack/llxprt-code@0.7.0 lint:ci
+> eslint . --ext .ts,.tsx --max-warnings 0 && eslint integration-tests --max-warnings 0
+```
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+### Feature Landing Verification
+Upstream Commit: bcbcaeb8
+Feature: FAQ and extensions docs updates
+
+LLxprt Status: NO-OP - files do not exist in LLxprt codebase
+This is expected as LLxprt has a different documentation structure.
+
+FEATURE VERIFIED: N/A (NO-OP)
+
+---
