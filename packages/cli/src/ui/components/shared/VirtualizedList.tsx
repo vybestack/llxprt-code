@@ -203,13 +203,16 @@ function VirtualizedList<T>(
       return 0;
     }
 
+    const maxScrollTop = Math.max(0, totalHeight - scrollableContainerHeight);
     if (scrollAnchor.offset === SCROLL_TO_ITEM_END) {
       const itemHeight = heights[scrollAnchor.index] ?? 0;
-      return offset + itemHeight - scrollableContainerHeight;
+      const scrollToEnd = offset + itemHeight - scrollableContainerHeight;
+      return Math.max(0, Math.min(maxScrollTop, scrollToEnd));
     }
 
-    return offset + scrollAnchor.offset;
-  }, [scrollAnchor, offsets, heights, scrollableContainerHeight]);
+    const absolute = offset + scrollAnchor.offset;
+    return Math.max(0, Math.min(maxScrollTop, absolute));
+  }, [scrollAnchor, offsets, heights, scrollableContainerHeight, totalHeight]);
 
   const prevDataLength = useRef(data.length);
   const prevTotalHeight = useRef(totalHeight);

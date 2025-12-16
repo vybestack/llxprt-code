@@ -530,6 +530,16 @@ export const SETTINGS_SCHEMA = {
           'Enable incremental rendering for the UI. Only supported when useAlternateBuffer is enabled.',
         showInDialog: true,
       },
+      enableMouseEvents: {
+        type: 'boolean',
+        label: 'Enable Mouse Events',
+        category: 'UI',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Enable mouse event tracking for in-app scrolling. Disables terminal text selection and clickable links while active.',
+        showInDialog: true,
+      },
       showMemoryUsage: {
         type: 'boolean',
         label: 'Show Memory Usage',

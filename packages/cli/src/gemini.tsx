@@ -100,6 +100,7 @@ import { appEvents, AppEvent } from './utils/events.js';
 import { computeWindowTitle } from './utils/windowTitle.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
 import { inkRenderOptions } from './ui/inkRenderOptions.js';
+import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
 import {
   setCliRuntimeContext,
   switchActiveProvider,
@@ -219,7 +220,7 @@ export async function startInteractiveUI(
   setWindowTitle(basename(workspaceRoot), settings);
 
   const renderOptions = inkRenderOptions(config, settings);
-  const mouseEventsEnabled = renderOptions.alternateBuffer === true;
+  const mouseEventsEnabled = isMouseEventsEnabled(renderOptions, settings);
   if (mouseEventsEnabled) {
     enableMouseEvents();
     registerCleanup(() => {
