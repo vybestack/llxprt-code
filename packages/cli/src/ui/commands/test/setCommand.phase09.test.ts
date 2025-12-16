@@ -118,7 +118,7 @@ describe('setCommand schema integration', () => {
           expect.objectContaining({ value: 'compression-threshold' }),
         ]),
       );
-      expect(result.hint).toBe('Select option');
+      expect(result.hint).toBe('Unset option');
       expect(result.position).toBe(1);
     });
 
@@ -149,7 +149,7 @@ describe('setCommand schema integration', () => {
         true,
       );
 
-      expect(result.hint).toBe('Select option');
+      expect(result.hint).toBe('Unset option');
     });
 
     it('should accept exact literal match and advance to next arguments @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', async () => {
