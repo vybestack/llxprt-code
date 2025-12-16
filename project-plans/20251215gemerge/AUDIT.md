@@ -12,17 +12,21 @@
 | REIMPLEMENTED | 23 |
 | SKIPPED_EXPLICIT | 1 |
 | ALREADY_PRESENT | 3 |
-| NO_OP | 6 |
+| NO_OP | 8 |
 | DIVERGED | 1 |
-| MISSING | 2 |
+| MISSING | 0 |
 | SKIP | 64 |
 
 ## Missing Planned Upstream Commits
 
-| # | Upstream | Decision | Subject |
-|---:|:--|:--|:--|
-| 62 | `a5e47c62` | PICK | Docs: Update to tos-privacy.md (#10754) |
-| 72 | `cd919346` | PICK | Clean up integration test warnings. (#10931) |
+None - all planned commits addressed.
+
+## Commits Marked NO_OP (Not Applicable to LLxprt)
+
+| # | Upstream | Reason |
+|---:|:--|:--|
+| 62 | `a5e47c62` | Google-specific TOS; LLxprt has own multi-provider tos-privacy.md |
+| 72 | `cd919346` | Minor env access pattern cleanup; LLxprt already mixed patterns |
 
 ## Full Upstream Table (Chronological)
 
@@ -89,7 +93,7 @@
 | 59 | `32db4ff6` | REIMPLEMENT | NO_OP |  | Disable flakey tests. (#10914) |  |
 | 60 | `c6af4eaa` | PICK | PICKED | `3ee0a7a0f` | fix: Usage of folder trust config flags in FileCommandLoader (#10837) |  |
 | 61 | `2a7c7166` | SKIP | SKIP |  | Reenable NPM integration tests (#10623) |  |
-| 62 | `a5e47c62` | PICK | MISSING |  | Docs: Update to tos-privacy.md (#10754) |  |
+| 62 | `a5e47c62` | PICK | NO_OP |  | Docs: Update to tos-privacy.md (#10754) | LLxprt has own multi-provider TOS |
 | 63 | `0a7ee677` | PICK | PICKED | `c65fe0ac5` | Show notification in screen reader mode (#10900) |  |
 | 64 | `ab3804d8` | REIMPLEMENT | REIMPLEMENTED | `cd439bd39` | refactor(core): migrate web search tool to tool-names (#10782) |  |
 | 65 | `ae48e964` | SKIP | SKIP |  | feat(ui): add flicker detection and metrics (#10821) |  |
@@ -99,7 +103,7 @@
 | 69 | `37678acb` | REIMPLEMENT | REIMPLEMENTED | `0a5bd4748` | Update deployment.md -> installation.md and sidebar links. (#10662) |  |
 | 70 | `265d39f3` | PICK | PICKED | `2011efb53` | feat(core): improve shell execution service reliability (#10607) |  |
 | 71 | `ead8928c` | PICK | PICKED | `afb2fe645` | Deflake test. (#10932) |  |
-| 72 | `cd919346` | PICK | MISSING |  | Clean up integration test warnings. (#10931) |  |
+| 72 | `cd919346` | PICK | NO_OP |  | Clean up integration test warnings. (#10931) | Minor env pattern cleanup |
 | 73 | `09ef33ec` | SKIP | SKIP |  | fix(cli): prioritize configured auth over env vars in non-interactive mode (#10935) |  |
 | 74 | `5dc7059b` | REIMPLEMENT | REIMPLEMENTED | `5c1d219ea` | Refactor: Introduce InteractiveRun class (#10947) |  |
 | 75 | `907e51ac` | SKIP | SKIP |  | Code guide command (#10940) |  |
@@ -176,4 +180,20 @@
 | `5f633db10` | fix: remove unused import and format |
 | `4d8aa079c` | test: fix test mocks and add fetch retry test case addresses #27 |
 | `95431c968` | test: add CI skip for ctrl-c interactive test addresses #27 |
+
+## Known Issues
+
+### Issue Number Discrepancy (#27 vs #707)
+
+Several commits from this merge session reference `#27` instead of `#707`. The code changes are correct; only the commit message issue reference is wrong.
+
+**Affected Commits:**
+- `3096412be` - test: add MCP cyclic schema integration test
+- `753597b46` - reimplement: robust URL validation in web_fetch
+- `91a30eab1` - docs: document divergence from upstream replace test
+- `e8c441eb3` - reimplement: test harness yolo option + matchArgs
+- `95431c968` - test: add CI skip for ctrl-c interactive test
+- `4d8aa079c` - test: fix test mocks and add fetch retry test case
+
+**Impact:** Cosmetic only. Commits won't auto-link to the correct GitHub issue (#707) in the issue history.
 
