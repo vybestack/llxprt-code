@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 21 |
+| **Last Completed** | Batch 22 |
 | **In Progress** | — |
-| **Next Up** | Batch 22 |
-| **Progress** | 21/52 (40%) |
+| **Next Up** | Batch 23 |
+| **Progress** | 22/52 (42%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -150,7 +150,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Record Location: NOTES.md ## Batch 21
   - Note: NO-OP - LLxprt already uses correct relative paths
 
-- [ ] Batch 22 — FULL — PICK — `971eb64e` — fix(cli) : fixed bug #8310 where /memory refresh will create discrepancies with initial memory load ignoring settings/config for trusted folder and file filters (#10611)
+- [x] Batch 22 — FULL — PICK — `971eb64e` — fix(cli) : fixed bug #8310 where /memory refresh will create discrepancies with initial memory load ignoring settings/config for trusted folder and file filters (#10611)
   - Prerequisites: Batch 21 record exists
   - Record Location: NOTES.md ## Batch 22
 

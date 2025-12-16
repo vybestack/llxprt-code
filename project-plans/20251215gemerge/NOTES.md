@@ -1808,3 +1808,74 @@ Reason: LLxprt uses relative paths that already work correctly:
 FEATURE VERIFIED: N/A (NO-OP - paths correct)
 
 ---
+
+## Batch 22 — PICK — 971eb64e
+
+### Selection Record
+Batch: 22
+Type: PICK
+Upstream SHA: 971eb64e - fix(cli): fixed bug #8310 where /memory refresh will create discrepancies with initial memory load ignoring settings/config for trusted folder and file filters (#10611)
+Subject: Fix /memory refresh to respect trusted folder and file filter settings
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 21)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (a90e0dcf9)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick 971eb64e
+Conflicts: YES (6 files)
+  - config.integration.test.ts: Import and msw setup differences
+  - config.test.ts: Import differences, removed unused import
+  - config.ts: Telemetry configuration differences
+  - memoryCommand.test.ts: LLxprt naming (loadHierarchicalLlxprtMemory)
+  - memoryCommand.ts: LLxprt naming, removed extra arg
+  - packages/core/src/config/config.ts: DEFAULT_FILE_FILTERING_OPTIONS usage
+Resolution: Preserved LLxprt naming and multi-provider architecture
+Branding Substitutions Applied: YES
+  - loadHierarchicalGeminiMemory → loadHierarchicalLlxprtMemory
+  - setGeminiMdFileCount → setLlxprtMdFileCount
+  - setGeminiMdFilePaths → setLlxprtMdFilePaths
+Files Modified:
+  - packages/cli/src/config/config.integration.test.ts
+  - packages/cli/src/config/config.test.ts
+  - packages/cli/src/config/config.ts
+  - packages/cli/src/ui/commands/memoryCommand.test.ts
+  - packages/cli/src/ui/commands/memoryCommand.ts
+  - packages/core/src/config/config.ts
+  - packages/core/src/config/config.test.ts
+LLXPRT Commit SHA: 1f0392b9e
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-16T04:00:00Z
+
+Results:
+  - test: PASS (7100+ tests)
+  - lint: PASS (0 warnings) - fixed unused import
+  - typecheck: PASS - fixed extra argument
+  - build: PASS
+  - bundle: PASS
+  - synthetic: PASS (haiku generated)
+
+Post-merge fixes:
+  - Removed unused loadHierarchicalLlxprtMemory import from config.test.ts
+  - Removed extra memoryDiscoveryMaxDirs argument from memoryCommand.ts
+
+### Feature Landing Verification
+Upstream Commit: 971eb64e
+Feature: /memory refresh now respects trusted folder and file filter settings
+
+```bash
+$ grep -n "config.getFileFilteringOptions" packages/cli/src/ui/commands/memoryCommand.ts
+161:                config.getFileFilteringOptions(),
+
+$ grep -n "isTrustedFolder" packages/cli/src/ui/commands/memoryCommand.ts
+158:                config.isTrustedFolder(),
+```
+
+FEATURE VERIFIED: YES
+
+---
