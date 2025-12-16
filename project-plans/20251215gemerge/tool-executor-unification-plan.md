@@ -114,12 +114,28 @@ return new Promise((resolve, reject) => {
 ### Phase 0: Pre-checks (run before any implementation)
 
 ```bash
+# Identify every call site that must change when executeToolCall() returns CompletedToolCall.
+rg -n "executeToolCall\\(" packages/{cli,core}/src
+
+# Identify tests that assert the current ToolCallResponseInfo return shape.
+rg -n "executeToolCall\\(" packages/core/src/core/nonInteractiveToolExecutor.test.ts packages/core/src/core/subagent.test.ts packages/core/src/agents/executor.test.ts packages/cli/src/nonInteractiveCli.test.ts || true
+
 # Confirm current duplication + normalization differences
 rg -n "function buildToolGovernance\\(|function isToolBlocked\\(" packages/core/src/core/coreToolScheduler.ts packages/core/src/core/nonInteractiveToolExecutor.ts
 rg -n "normalizeToolName\\(" packages/core/src/core/coreToolScheduler.ts
 
 # Confirm CoreToolScheduler hardcodes interactiveMode: true
 rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
+
+# Confirm CoreToolScheduler has a message-bus subscription (unification MUST dispose()).
+rg -n "dispose\\(\\)" packages/core/src/core/coreToolScheduler.ts
+
+# Show the exact Config surface CoreToolScheduler consumes (helps build correct wrappers).
+rg -o "this\\.config\\.get[A-Za-z0-9_]+" -n packages/core/src/core/coreToolScheduler.ts | sort -u
+rg -n "getEphemeralSettings\\?\\(\\)|getExcludeTools\\?\\(\\)" packages/core/src/core/coreToolScheduler.ts
+
+# Confirm SubAgent non-interactive currently calls executeToolCall() with a minimal shim (will need to switch to a scheduler-style wrapper).
+rg -n "executeToolCall\\(\\s*this\\.toolExecutorContext" packages/core/src/core/subagent.ts
 ```
 
 ### Locked Decisions (do not revisit during implementation)
@@ -140,6 +156,7 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
 7. **Atomic tool call/response pairing stays intact.** Keep the invariant restored by `9696e92d0` (tool call part immediately followed by its response parts).
 8. **No double telemetry logging.** Once Phase 3 is complete, rely on scheduler-emitted `ToolCallEvent` telemetry (do not also call `logToolCall` from the non-interactive wrapper).
 9. **No new backward-compat shims.** Do not add new tool aliases or legacy settings beyond the already-supported `disabled-tools` key.
+10. **No non-interactive hangs.** The unified non-interactive path must never reach `awaiting_approval`. If it does, treat it as a bug and fail fast.
 
 ### Phase 1 (MANDATORY): Extract Shared Module (`toolGovernance.ts`)
 
@@ -189,7 +206,20 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
 3. All "Locked Decisions" above are implemented as written (no deviations).
 
 **Implementation outline (do not deviate):**
-1. Rewrite `packages/core/src/core/nonInteractiveToolExecutor.ts`:
+1. Update the executor config type to cover what the scheduler needs.
+   - Today `ToolExecutionConfig` (in `nonInteractiveToolExecutor.ts`) is a narrow `Pick<Config, ...>`.
+   - Expand it (or introduce a new `NonInteractiveSchedulerConfig`) so it includes *at minimum*:
+     - `getToolRegistry()`
+     - `getSessionId()`
+     - `getEphemeralSettings()` (optional but used by governance)
+     - `getExcludeTools()` (optional but used by governance)
+     - `getAllowedTools()`
+     - `getApprovalMode()` (preserve config semantics; do NOT force YOLO)
+     - `getMessageBus()` (scheduler subscribes; wrapper MUST call `dispose()`)
+     - `getPolicyEngine()` (must be non-interactive)
+     - `getTelemetryLogPromptsEnabled()` (only if telemetry logging remains in the wrapper before Phase 3 finishes)
+   - IMPORTANT: the SubAgent’s `ToolExecutionConfig` shim does *not* satisfy this; SubAgent must pass a scheduler-style wrapper (see Step 4).
+2. Rewrite `packages/core/src/core/nonInteractiveToolExecutor.ts`:
    - Signature: `executeToolCall(config: Config, toolCallRequest: ToolCallRequestInfo, abortSignal: AbortSignal): Promise<CompletedToolCall>`
    - Behavior:
      - Do NOT re-implement tool governance checks here. `CoreToolScheduler.schedule(...)` already enforces governance (and after Phase 1 it uses the shared module).
@@ -200,20 +230,32 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
            - `rules = config.getPolicyEngine().getRules()`
            - `defaultDecision = config.getPolicyEngine().getDefaultDecision()`
            - `nonInteractive = true`
-       - DO NOT override `getApprovalMode()` (Locked Decision #3). Delegate to the incoming `config.getApprovalMode()` so non-interactive gating matches LLxprt behavior.
-       - Ensure the wrapper provides at least: `getToolRegistry`, `getSessionId`, `getTelemetryLogPromptsEnabled`, `getEphemeralSettings`, `getExcludeTools`, `getAllowedTools`, `getApprovalMode`, `getMessageBus`, `getPolicyEngine`.
+       - DO NOT override `getApprovalMode()` (Locked Decision #3). Delegate to the incoming `config.getApprovalMode()`.
+       - Ensure the wrapper provides at least: `getToolRegistry`, `getSessionId`, `getEphemeralSettings`, `getExcludeTools`, `getAllowedTools`, `getApprovalMode`, `getMessageBus`, `getPolicyEngine` (and telemetry if still needed).
      - Instantiate `CoreToolScheduler` with:
        - `toolContextInteractiveMode: false`
        - `onAllToolCallsComplete` resolves the first completed call
-     - Schedule the (filtered) request and return the `CompletedToolCall`.
-     - After completion, if emoji filtering produced `systemFeedback`, mutate the returned call's `response.responseParts` to append the reminder to the function response output string (Locked Decision #6).
-2. Update consumers to the new return type:
-   - `packages/core/src/core/subagent.ts` non-interactive path: use `(await executeToolCall(...)).response` or `call.response.responseParts`.
-   - `packages/cli/src/nonInteractiveCli.ts`: same update.
-   - `packages/core/src/agents/executor.ts`: same update.
-   - Update mocks in `packages/core/src/core/subagent.test.ts` accordingly.
-3. Keep buffered parallel execution untouched (interactive path).
-4. Resolve via `onAllToolCallsComplete`; do NOT add or rely on any `getCompletedCalls()` API.
+       - `onToolCallsUpdate` FAILS FAST if any tool call reaches `awaiting_approval` (Locked Decision #10). This prevents hangs if policy config is wrong.
+     - Schedule the (filtered) request and return the `CompletedToolCall`:
+       - If `completedToolCalls.length !== 1`, throw (this wrapper is single-call only).
+     - Always call `scheduler.dispose()` in a `finally` block (CoreToolScheduler subscribes to the message bus).
+     - After completion, if emoji filtering produced `systemFeedback`, mutate the returned call’s `response.responseParts` to append the reminder to the function response output string (Locked Decision #6).
+3. Update consumers to the new return type (mechanical refactor):
+   - Pattern:
+     - `const completed = await executeToolCall(...);`
+     - `const toolResponse = completed.response;`
+   - Required call sites:
+     - `packages/cli/src/nonInteractiveCli.ts`
+     - `packages/core/src/agents/executor.ts`
+     - `packages/core/src/core/subagent.ts`
+   - Update mocks/expectations in `packages/core/src/core/subagent.test.ts` and `packages/core/src/core/nonInteractiveToolExecutor.test.ts` accordingly.
+4. Fix the SubAgent non-interactive config mismatch (required):
+   - Current: `executeToolCall(this.toolExecutorContext, ...)` where `toolExecutorContext` is a minimal shim.
+   - Change to: `executeToolCall(this.createSchedulerConfig({ interactive: false }), ...)`
+     - Reason: scheduler-based execution requires `getMessageBus`, `getPolicyEngine`, `getApprovalMode`, `getAllowedTools`, etc.
+     - This also preserves SubAgent tool whitelisting (createSchedulerConfig already computes `allowedTools` for non-interactive runs).
+5. Keep buffered parallel execution untouched (interactive path).
+6. Resolve via `onAllToolCallsComplete`; do NOT add or rely on any `getCompletedCalls()` API.
 
 ### Phase 4 (MANDATORY): Tests and Verification for Unification
 
@@ -225,6 +267,10 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
 
 **New focused test (required):**
 - Add a scheduler unit test proving `toolContextInteractiveMode: false` reaches a context-aware tool that branches on `interactiveMode`.
+- Add a non-interactive determinism test:
+  - Construct a scheduler config with `PolicyEngine({ nonInteractive: true, defaultDecision: ASK_USER })`.
+  - Schedule a tool call that would normally require confirmation.
+  - Assert the run terminates deterministically (success or error) and never enters `awaiting_approval`.
 
 ## Constraints (MUST Preserve)
 
@@ -257,20 +303,24 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
+| Return type churn (`ToolCallResponseInfo` → `CompletedToolCall`) | High | Update 3 call sites + tests in one batch; enforce via typecheck |
+| Non-interactive gating/approval semantics drift | High | Preserve governance-first blocking + enforce `PolicyEngine(nonInteractive: true)`; add “never awaiting_approval” test |
+| Scheduler config wrapper completeness | Medium | Enumerate required config methods in Phase 0; keep wrapper minimal + typed; always `dispose()` |
 | Regression to sequential | High | Preserve forEach pattern, add benchmarks |
-| Loss of emoji filtering | Medium | Add filter path tests |
+| Emoji filtering double-pass surprises | Medium | Preserve current “pre-filter args, tool sees filtered content” behavior; add a regression test ensuring a single `<system-reminder>` appears |
 | Tool governance bypass | High | Add governance tests for both paths |
-| Breaking subagent | High | Test both execution modes |
+| Breaking subagent | High | Switch subagent non-interactive to `createSchedulerConfig({ interactive: false })`; test both execution modes |
+| Test mock migration | Medium | Update mocks to return CompletedToolCall shape; use `completed.response` to keep old assertions mostly unchanged |
 
 ## Estimated Effort
 
-- Phase 1 (Governance): 2-4 hours
-- Phase 2 (Tool context interactiveMode): 1-2 hours
-- Phase 3 (Full unification): 4-8 hours
-- Phase 4 (Tests + verification): 2-6 hours
-- Testing: 4-8 hours
+- Phase 1 (Governance): 3-6 hours
+- Phase 2 (Tool context interactiveMode): 2-4 hours
+- Phase 3 (Full unification): 6-12 hours
+- Phase 4 (Tests + verification): 4-10 hours
+- Testing/debugging (real-world): 5-10 hours
 
-**Total (Full unification): 13-28 hours**
+**Total (Full unification): 20-40 hours**
 
 ## Decision
 
