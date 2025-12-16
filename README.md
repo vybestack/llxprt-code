@@ -26,12 +26,6 @@ Get started immediately with powerful LLM options:
 /auth anthropic enable
 /provider anthropic
 /model claude-sonnet-4-5
-
-# Kimi k2-thinking for deep reasoning
-/auth kimi enable
-/provider kimi
-/model k2-thinking
-/set thinkingBudget 10000  # Adjust based on task complexity
 ```
 
 ## Why Choose LLxprt Code?
