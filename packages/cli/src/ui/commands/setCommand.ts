@@ -330,7 +330,7 @@ const directSettingSpecs: SettingLiteralSpec[] = [
 const createSettingLiteral = (spec: SettingLiteralSpec): LiteralArgument => ({
   kind: 'literal' as const,
   value: spec.value,
-  description: `${toTitleCase(spec.value)} option`,
+  description: spec.description ?? `${toTitleCase(spec.value)} option`,
   stopPropagation: true,
   next: [
     {
