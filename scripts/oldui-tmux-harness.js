@@ -1011,7 +1011,7 @@ async function main() {
 
   const typeLineAndSubmit = async (
     line,
-    { postTypeMs = 600, enterRepeats = 1, escapeBeforeEnter = true } = {},
+    { postTypeMs = 600, enterRepeats = 1, escapeBeforeEnter = false } = {},
   ) => {
     runTmux(['send-keys', '-t', sessionName, '-l', line]);
     await sleep(postTypeMs);
@@ -1035,7 +1035,7 @@ async function main() {
         steps: script.steps,
         defaults: {
           postTypeMs: 600,
-          submitKeys: ['Escape', 'Enter'],
+          submitKeys: ['Enter'],
           shellSubmitKeys: ['Enter'],
           timeoutMs: 15000,
           pollMs: 250,

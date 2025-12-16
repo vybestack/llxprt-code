@@ -151,34 +151,6 @@ function VirtualizedList<T>(
     });
   }, [data, estimatedItemHeight]);
 
-  const startIndex = useMemo(() => {
-    if (scrollAnchor.offset === SCROLL_TO_ITEM_END) {
-      return data.length > 0 ? data.length - 1 : 0;
-    }
-
-    const offset = offsets[scrollAnchor.index];
-    if (offset === undefined) {
-      return 0;
-    }
-
-    const scrollTop = offset + scrollAnchor.offset;
-
-    const index = findLastIndex(offsets, (offset) => offset <= scrollTop);
-    return Math.max(0, index);
-  }, [scrollAnchor, offsets, data.length]);
-
-  const endIndex = useMemo(() => {
-    const viewPortHeight = containerHeight;
-    if (viewPortHeight <= 0) {
-      return startIndex;
-    }
-
-    const scrollTop = offsets[startIndex] ?? 0;
-    const visibleBottom = scrollTop + viewPortHeight;
-    const index = findLastIndex(offsets, (offset) => offset <= visibleBottom);
-    return Math.max(startIndex, Math.min(index, data.length - 1));
-  }, [containerHeight, offsets, startIndex, data.length]);
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     if (containerRef.current) {
@@ -278,7 +250,8 @@ function VirtualizedList<T>(
     ) {
       const newScrollTop = Math.max(0, totalHeight - scrollableContainerHeight);
       setScrollAnchor(getAnchorForScrollTop(newScrollTop, offsets));
-      setIsStickingToBottom(true);
+    } else if (data.length === 0) {
+      setScrollAnchor({ index: 0, offset: 0 });
     }
 
     prevDataLength.current = data.length;
@@ -298,79 +271,99 @@ function VirtualizedList<T>(
 
   const { getScrollTop, setPendingScrollTop } = useBatchedScroll(scrollTop);
 
-  const overscan = useMemo(() => {
-    const viewportHeight = containerHeight;
-    if (viewportHeight <= 0) {
-      return 0;
-    }
-    return Math.max(10, viewportHeight);
-  }, [containerHeight]);
-
-  const overscannedStartIndex = Math.max(
-    0,
-    findLastIndex(offsets, (offset) => offset <= scrollTop - overscan),
-  );
-
-  const overscannedEndIndex = Math.min(
-    data.length - 1,
-    findLastIndex(
-      offsets,
-      (offset) => offset <= scrollTop + containerHeight + overscan,
-    ),
-  );
-
-  const renderedItems = useMemo(() => {
-    const items: React.ReactElement[] = [];
-    for (let i = overscannedStartIndex; i <= overscannedEndIndex; i++) {
-      const item = data[i];
-      if (item === undefined) {
-        continue;
-      }
-      items.push(
-        <Box
-          key={keyExtractor(item, i)}
-          ref={(ref) => {
-            itemRefs.current[i] = ref;
-          }}
-          flexShrink={0}
-          flexDirection="column"
-          width="100%"
-        >
-          {renderItem({ item, index: i })}
-        </Box>,
-      );
-    }
-    return items;
-  }, [
-    data,
-    overscannedStartIndex,
-    overscannedEndIndex,
-    keyExtractor,
-    renderItem,
-  ]);
-
-  const topSpacerHeight = offsets[overscannedStartIndex] ?? 0;
-  const bottomSpacerHeight =
-    totalHeight - (offsets[overscannedEndIndex + 1] ?? totalHeight);
-
   useLayoutEffect(() => {
-    if (isInitialScrollSet.current) {
+    if (
+      isInitialScrollSet.current ||
+      offsets.length <= 1 ||
+      totalHeight <= 0 ||
+      containerHeight <= 0
+    ) {
       return;
     }
-    isInitialScrollSet.current = true;
-    if (scrollAnchor.offset === SCROLL_TO_ITEM_END) {
-      setScrollAnchor({
-        index: data.length > 0 ? data.length - 1 : 0,
-        offset: SCROLL_TO_ITEM_END,
-      });
+
+    if (typeof initialScrollIndex === 'number') {
+      const scrollToEnd =
+        initialScrollIndex === SCROLL_TO_ITEM_END ||
+        (initialScrollIndex >= data.length - 1 &&
+          initialScrollOffsetInIndex === SCROLL_TO_ITEM_END);
+
+      if (scrollToEnd) {
+        setScrollAnchor({
+          index: data.length - 1,
+          offset: SCROLL_TO_ITEM_END,
+        });
+        setIsStickingToBottom(true);
+        isInitialScrollSet.current = true;
+        return;
+      }
+
+      const index = Math.max(0, Math.min(data.length - 1, initialScrollIndex));
+      const offset = initialScrollOffsetInIndex ?? 0;
+      const newScrollTop = (offsets[index] ?? 0) + offset;
+      const clampedScrollTop = Math.max(
+        0,
+        Math.min(totalHeight - scrollableContainerHeight, newScrollTop),
+      );
+
+      setScrollAnchor(getAnchorForScrollTop(clampedScrollTop, offsets));
+      isInitialScrollSet.current = true;
     }
-  }, [scrollAnchor.offset, data.length]);
+  }, [
+    initialScrollIndex,
+    initialScrollOffsetInIndex,
+    offsets,
+    totalHeight,
+    containerHeight,
+    getAnchorForScrollTop,
+    data.length,
+    heights,
+    scrollableContainerHeight,
+  ]);
+
+  const startIndex = Math.max(
+    0,
+    findLastIndex(offsets, (offset) => offset <= scrollTop) - 1,
+  );
+  const endIndexOffset = offsets.findIndex(
+    (offset) => offset > scrollTop + scrollableContainerHeight,
+  );
+  const endIndex =
+    endIndexOffset === -1
+      ? data.length - 1
+      : Math.min(data.length - 1, endIndexOffset);
+
+  const topSpacerHeight = offsets[startIndex] ?? 0;
+  const bottomSpacerHeight =
+    totalHeight - (offsets[endIndex + 1] ?? totalHeight);
+
+  const renderedItems: React.ReactElement[] = [];
+  for (let i = startIndex; i <= endIndex; i++) {
+    const item = data[i];
+    if (item === undefined) {
+      continue;
+    }
+    renderedItems.push(
+      <Box
+        key={keyExtractor(item, i)}
+        ref={(ref) => {
+          itemRefs.current[i] = ref;
+        }}
+        flexShrink={0}
+        flexDirection="column"
+        width="100%"
+      >
+        {renderItem({ item, index: i })}
+      </Box>,
+    );
+  }
 
   useImperativeHandle(
     ref,
     () => ({
       scrollBy: (delta: number) => {
-        setIsStickingToBottom(false);
+        if (delta < 0) {
+          setIsStickingToBottom(false);
+        }
         const newScrollTop = Math.max(
           0,
           Math.min(
@@ -383,15 +376,6 @@ function VirtualizedList<T>(
       },
       scrollTo: (offset: number) => {
         setIsStickingToBottom(false);
-        if (offset === SCROLL_TO_ITEM_END) {
-          setScrollAnchor({
-            index: data.length > 0 ? data.length - 1 : 0,
-            offset: SCROLL_TO_ITEM_END,
-          });
-          setIsStickingToBottom(true);
-          return;
-        }
-
         const newScrollTop = Math.max(
           0,
           Math.min(totalHeight - scrollableContainerHeight, offset),
@@ -400,11 +384,13 @@ function VirtualizedList<T>(
         setScrollAnchor(getAnchorForScrollTop(newScrollTop, offsets));
       },
       scrollToEnd: () => {
-        setScrollAnchor({
-          index: data.length > 0 ? data.length - 1 : 0,
-          offset: SCROLL_TO_ITEM_END,
-        });
         setIsStickingToBottom(true);
+        if (data.length > 0) {
+          setScrollAnchor({
+            index: data.length - 1,
+            offset: SCROLL_TO_ITEM_END,
+          });
+        }
       },
       scrollToIndex: ({
         index,

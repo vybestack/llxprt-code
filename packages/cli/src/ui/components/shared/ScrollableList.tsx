@@ -138,6 +138,7 @@ function ScrollableList<T>(
     <Box
       ref={containerRef}
       flexGrow={1}
+      flexShrink={1}
       flexDirection="column"
       overflow="hidden"
     >

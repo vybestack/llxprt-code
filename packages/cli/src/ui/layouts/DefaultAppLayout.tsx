@@ -86,6 +86,7 @@ export const DefaultAppLayout = ({
 }: DefaultAppLayoutProps) => {
   const uiState = useUIState();
   const uiActions = useUIActions();
+  const [, setSuggestionsVisible] = React.useState(false);
 
   const {
     terminalWidth,
@@ -252,20 +253,31 @@ export const DefaultAppLayout = ({
 
     return (
       <StreamingContext.Provider value={streamingState}>
-        <Box flexDirection="column" width="90%" ref={uiState.rootUiRef}>
-          <Box height={effectiveAvailableHeight} flexDirection="column">
-            <ScrollableList
-              hasFocus={!dialogsVisible}
-              data={listItems}
-              renderItem={renderScrollableMainContentItem}
-              keyExtractor={keyExtractorScrollableMainContentItem}
-              estimatedItemHeight={estimateScrollableMainContentItemHeight}
-              initialScrollIndex={SCROLL_TO_ITEM_END}
-              initialScrollOffsetInIndex={SCROLL_TO_ITEM_END}
-            />
-          </Box>
+        <Box
+          flexDirection="column"
+          width={terminalWidth}
+          height={terminalHeight}
+          flexShrink={0}
+          flexGrow={0}
+          overflow="hidden"
+          ref={uiState.rootUiRef}
+        >
+          <ScrollableList
+            hasFocus={!dialogsVisible}
+            data={listItems}
+            renderItem={renderScrollableMainContentItem}
+            keyExtractor={keyExtractorScrollableMainContentItem}
+            estimatedItemHeight={estimateScrollableMainContentItemHeight}
+            initialScrollIndex={SCROLL_TO_ITEM_END}
+            initialScrollOffsetInIndex={SCROLL_TO_ITEM_END}
+          />
 
-          <Box flexDirection="column" ref={mainControlsRef}>
+          <Box
+            flexDirection="column"
+            ref={mainControlsRef}
+            flexShrink={0}
+            flexGrow={0}
+          >
             <Notifications
               startupWarnings={startupWarnings}
               updateInfo={updateInfo}
@@ -367,7 +379,11 @@ export const DefaultAppLayout = ({
                   </OverflowProvider>
                 )}
                 {isInputActive && (
-                  <Composer config={config} settings={settings} />
+                  <Composer
+                    config={config}
+                    settings={settings}
+                    onSuggestionsVisibilityChange={setSuggestionsVisible}
+                  />
                 )}
               </>
             )}
@@ -566,7 +582,11 @@ export const DefaultAppLayout = ({
                 </OverflowProvider>
               )}
               {isInputActive && (
-                <Composer config={config} settings={settings} />
+                <Composer
+                  config={config}
+                  settings={settings}
+                  onSuggestionsVisibilityChange={setSuggestionsVisible}
+                />
               )}
             </>
           )}

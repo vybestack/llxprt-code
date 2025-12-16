@@ -8,6 +8,7 @@ import { useReducer } from 'react';
 import type { Config } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../config/settings.js';
 import { KeypressProvider } from './contexts/KeypressContext.js';
+import { MouseProvider } from './contexts/MouseContext.js';
 import { SessionStatsProvider } from './contexts/SessionContext.js';
 import { VimModeProvider } from './contexts/VimModeContext.js';
 import { ToolCallProvider } from './contexts/ToolCallProvider.js';
@@ -44,27 +45,37 @@ interface AppProps {
  */
 export const AppWrapper = (props: AppProps) => {
   const kittyProtocolStatus = useKittyKeyboardProtocol();
+  const mouseEventsEnabled =
+    props.settings.merged.ui?.useAlternateBuffer === true &&
+    !props.config.getScreenReader();
+
   return (
     <KeypressProvider
       kittyProtocolEnabled={kittyProtocolStatus.enabled}
       config={props.config}
       debugKeystrokeLogging={props.settings.merged.debugKeystrokeLogging}
+      mouseEventsEnabled={mouseEventsEnabled}
     >
-      <ScrollProvider>
-        <SessionStatsProvider>
-          <VimModeProvider settings={props.settings}>
-            <ToolCallProvider sessionId={props.config.getSessionId()}>
-              <TodoProvider sessionId={props.config.getSessionId()}>
-                <RuntimeContextProvider>
-                  <OverflowProvider>
-                    <AppWithState {...props} />
-                  </OverflowProvider>
-                </RuntimeContextProvider>
-              </TodoProvider>
-            </ToolCallProvider>
-          </VimModeProvider>
-        </SessionStatsProvider>
-      </ScrollProvider>
+      <MouseProvider
+        mouseEventsEnabled={mouseEventsEnabled}
+        debugKeystrokeLogging={props.settings.merged.debugKeystrokeLogging}
+      >
+        <ScrollProvider>
+          <SessionStatsProvider>
+            <VimModeProvider settings={props.settings}>
+              <ToolCallProvider sessionId={props.config.getSessionId()}>
+                <TodoProvider sessionId={props.config.getSessionId()}>
+                  <RuntimeContextProvider>
+                    <OverflowProvider>
+                      <AppWithState {...props} />
+                    </OverflowProvider>
+                  </RuntimeContextProvider>
+                </TodoProvider>
+              </ToolCallProvider>
+            </VimModeProvider>
+          </SessionStatsProvider>
+        </ScrollProvider>
+      </MouseProvider>
     </KeypressProvider>
   );
 };
