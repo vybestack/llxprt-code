@@ -246,7 +246,9 @@ export class CodexDeviceFlow {
     const data: unknown = await response.json();
     const tokenResponse = CodexTokenResponseSchema.parse(data);
 
-    // Extract account_id from new id_token or throw
+    // Extract account_id from new id_token if available
+    // For refresh flows, OpenAI may not always return a new id_token,
+    // so we allow undefined here (caller should preserve original account_id)
     const accountId = tokenResponse.id_token
       ? this.extractAccountIdFromIdToken(tokenResponse.id_token)
       : undefined;
@@ -356,8 +358,10 @@ export class CodexDeviceFlow {
     }
 
     const data: unknown = await response.json();
+    // Log only non-sensitive keys to avoid exposing auth data
     this.logger.debug(
-      () => `[DEVICE] User code response: ${JSON.stringify(data)}`,
+      () =>
+        `[DEVICE] User code response keys: ${Object.keys(data as object).join(', ')}`,
     );
 
     // Parse the response
@@ -427,9 +431,9 @@ export class CodexDeviceFlow {
       );
 
       const responseText = await response.text();
+      // Log status only, not the full response body which may contain sensitive data
       this.logger.debug(
-        () =>
-          `[DEVICE] Poll response status: ${response.status}, body: ${responseText}`,
+        () => `[DEVICE] Poll response status: ${response.status}`,
       );
 
       if (response.ok) {
@@ -445,8 +449,10 @@ export class CodexDeviceFlow {
           );
         }
 
+        // Log only non-sensitive keys to avoid exposing auth data
         this.logger.debug(
-          () => `[DEVICE] Token polling successful: ${JSON.stringify(data)}`,
+          () =>
+            `[DEVICE] Token polling successful, keys: ${Object.keys(data as object).join(', ')}`,
         );
 
         // Parse the successful response - includes authorization_code for token exchange

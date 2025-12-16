@@ -370,7 +370,9 @@ export class CodexOAuthProvider implements OAuthProvider {
       );
 
       // Complete the device auth flow by exchanging authorization code for tokens
-      const redirectUri = 'https://auth.openai.com/deviceauth/callback';
+      // This redirect_uri matches what OpenAI expects for device flow token exchange
+      const redirectUri =
+        'https://auth.openai.com/api/accounts/deviceauth/callback';
       const token = await this.deviceFlow.completeDeviceAuth(
         pollResult.authorization_code,
         pollResult.code_verifier,
