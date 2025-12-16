@@ -126,8 +126,12 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
 
 1. **Unification is the goal.** All non-interactive tool execution routes through `CoreToolScheduler`. `nonInteractiveToolExecutor.ts` becomes a thin wrapper (no direct tool invocation).
 2. **Return type change is allowed/required.** `executeToolCall(...)` returns a `CompletedToolCall` (upstream shape from `9e8c7676`), not a bare `ToolCallResponseInfo`.
-3. **Non-interactive approvals are forced to YOLO.** The scheduler config used for non-interactive execution MUST return `ApprovalMode.YOLO` so `shouldConfirmExecute()` short-circuits and the scheduler never publishes confirmation requests.
-4. **Non-interactive policy is enforced.** The scheduler config used for non-interactive execution MUST use a `PolicyEngine` with `nonInteractive: true` so `ASK_USER` becomes `DENY` deterministically.
+3. **Non-interactive must preserve gating (do NOT force YOLO).**
+   - `getApprovalMode()` MUST reflect the real configured mode (DEFAULT / AUTO_EDIT / YOLO) so LLxprt’s existing `--approval-mode` / `--yolo` behavior is preserved.
+   - This matches upstream gemini-cli behavior: in non-interactive runs it excludes Shell/Edit/WriteFile in DEFAULT, excludes only Shell in AUTO_EDIT, and excludes nothing in YOLO (see `15c62bade` config logic).
+   - Non-interactive determinism comes from policy, not YOLO: ensure the scheduler never publishes confirmation requests by using a non-interactive `PolicyEngine` (Locked Decision #4), which converts any `ASK_USER` outcome into a deterministic `DENY`.
+   - `getAllowedTools()` MUST be preserved so `--allowed-tools` continues to permit specific invocations in non-interactive mode without prompting.
+4. **Non-interactive policy is enforced.** The scheduler config used for non-interactive execution MUST use a `PolicyEngine` with `nonInteractive: true` so `ASK_USER` becomes `DENY` deterministically (and the scheduler cannot reach `awaiting_approval`).
 5. **Emoji filtering happens before scheduling (non-interactive only).**
    - Apply the same emoji-filtering semantics currently implemented in `packages/core/src/core/nonInteractiveToolExecutor.ts`.
    - Replace `ToolCallRequestInfo.args` with the filtered args before scheduling so history + telemetry reflect the executed args.
@@ -191,8 +195,12 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
      - Do NOT re-implement tool governance checks here. `CoreToolScheduler.schedule(...)` already enforces governance (and after Phase 1 it uses the shared module).
      - Apply emoji filtering to `toolCallRequest.args` (Locked Decision #5).
      - Build a scheduler config wrapper that forces:
-       - `getApprovalMode(): ApprovalMode.YOLO` (Locked Decision #3)
-       - `getPolicyEngine(): PolicyEngine(nonInteractive: true)` (Locked Decision #4)
+       - `getPolicyEngine(): PolicyEngine(nonInteractive: true)` (Locked Decision #4).
+         - If `config.getPolicyEngine().isNonInteractive() === false`, create a cloned engine:
+           - `rules = config.getPolicyEngine().getRules()`
+           - `defaultDecision = config.getPolicyEngine().getDefaultDecision()`
+           - `nonInteractive = true`
+       - DO NOT override `getApprovalMode()` (Locked Decision #3). Delegate to the incoming `config.getApprovalMode()` so non-interactive gating matches LLxprt behavior.
        - Ensure the wrapper provides at least: `getToolRegistry`, `getSessionId`, `getTelemetryLogPromptsEnabled`, `getEphemeralSettings`, `getExcludeTools`, `getAllowedTools`, `getApprovalMode`, `getMessageBus`, `getPolicyEngine`.
      - Instantiate `CoreToolScheduler` with:
        - `toolContextInteractiveMode: false`
