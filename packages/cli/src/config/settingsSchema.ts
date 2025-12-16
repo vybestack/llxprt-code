@@ -106,6 +106,10 @@ const DEFAULT_EXTENSION_AUTO_UPDATE = {
  * The canonical schema for all settings.
  * The structure of this object defines the structure of the `Settings` type.
  * `as const` is crucial for TypeScript to infer the most specific types possible.
+ *
+ * IMPORTANT: When adding a new setting with `showInDialog: true`, ensure it is
+ * also documented in docs/cli/configuration.md with a complete description,
+ * type, default value, and example.
  */
 export const SETTINGS_SCHEMA = {
   accessibility: {
