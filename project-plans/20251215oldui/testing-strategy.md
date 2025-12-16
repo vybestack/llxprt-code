@@ -78,7 +78,7 @@ To “see” the scrollback redraw problem without a human staring at the termin
 - capture scrollback and compute objective metrics (duplicate sentinel lines, tmux history growth).
 
 Command:
-- `node scripts/oldui-tmux-harness.js --scenario scrollback --yolo --rows 20 --cols 100`
+- `node scripts/oldui-tmux-harness.js --scenario scrollback --rows 20 --cols 100`
 
 Artifacts:
 - `scrollback.txt` – includes repeated “frames” if redraw spam happens (look for repeated headers/tool blocks).
@@ -88,6 +88,9 @@ Artifacts:
 Quick interpretation:
 - `metrics.json.counts.sentinelCount` should ideally be `1`. If it’s `>1`, we reprinted the same output multiple times into scrollback (the bug symptom).
 - `metrics.json.history.deltaDuringCopyMode` should be small for “stable UI”; a large delta indicates scrollback growth while the user is “scrolled up”.
+
+Pass/fail mode:
+- Add `--assert` to make the harness exit non-zero when `sentinelCount !== 1` (baseline: with `--rows 20 --cols 100` it currently fails; with larger heights it may pass).
 
 ### Known flakiness: LLM-driven flows
 When scripts depend on a real model to reliably emit tool calls (e.g., “ask model to call `run_shell_command` twice, approve both”), we currently see frequent stalls in an “`esc to cancel` (Xm)” state and/or the model simply not emitting the tool call on the next prompt.

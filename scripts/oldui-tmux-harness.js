@@ -30,6 +30,7 @@ function parseArgs(argv) {
     scrollbackLines: undefined,
     yolo: false,
     keepSession: false,
+    assert: false,
   };
 
   const takeValue = (flag) => {
@@ -75,6 +76,7 @@ function parseArgs(argv) {
 
   opts.yolo = hasFlag('--yolo');
   opts.keepSession = hasFlag('--keep-session');
+  opts.assert = hasFlag('--assert');
 
   if (args.length > 0) {
     throw new Error(`Unknown args: ${args.join(' ')}`);
@@ -820,7 +822,7 @@ async function runScenarioScrollback({
   // Produce incremental output for ~15s so the UI updates repeatedly while the
   // output grows beyond a small terminal height.
   const cmd =
-    '!node -e \'let i=0; const total=60; const ms=250; const t=setInterval(() => { i++; console.log("SCROLLTEST LINE " + String(i).padStart(4, "0")); if (i>=total) { clearInterval(t); } }, ms);\'';
+    '!node scripts/oldui-scrollback-load.js --total 60 --interval-ms 250';
   await typeLineAndSubmit(cmd, { enterRepeats: 1, escapeBeforeEnter: false });
 
   // If the shell command triggers a confirmation dialog (non-YOLO mode), accept
@@ -1034,6 +1036,7 @@ async function main() {
   await fs.writeFile(path.join(outDir, 'screen.txt'), screen, 'utf8');
   await fs.writeFile(path.join(outDir, 'scrollback.txt'), scrollback, 'utf8');
 
+  let assertionError = null;
   if (scenarioResult?.kind === 'scrollback') {
     const sentinelCount =
       scrollback.match(new RegExp(scenarioResult.sentinel, 'g'))?.length ?? 0;
@@ -1070,6 +1073,19 @@ async function main() {
       ),
       'utf8',
     );
+
+    if (options.assert) {
+      if (sentinelCount !== 1) {
+        assertionError = new Error(
+          `Scrollback redraw detected: expected sentinelCount == 1 but got ${sentinelCount} (sentinel: "${scenarioResult.sentinel}")`,
+        );
+      }
+      if (!assertionError && tipsCount > 1) {
+        assertionError = new Error(
+          `Scrollback redraw detected: expected tipsCount <= 1 but got ${tipsCount}`,
+        );
+      }
+    }
   }
 
   // Tear down so we don't leak sessions.
@@ -1084,6 +1100,10 @@ async function main() {
     `scenario: ${script?.steps ? 'script' : scenario}`,
   ].join('\n');
   console.log(summary);
+
+  if (assertionError) {
+    throw assertionError;
+  }
 }
 
 main().catch((error) => {

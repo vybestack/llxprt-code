@@ -16,6 +16,7 @@ This harness is **not intended** for the new OpenTUI UI in `packages/ui`.
 
 - Haiku smoke test: `node scripts/oldui-tmux-harness.js`
 - Scrollback redraw reproduction: `node scripts/oldui-tmux-harness.js --scenario scrollback`
+- Scrollback redraw baseline (fails today): `node scripts/oldui-tmux-harness.js --scenario scrollback --rows 20 --cols 100 --assert`
 - Scripted run: `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.example.json`
 - Scripted run (macros): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.macros.example.json`
 
@@ -85,3 +86,7 @@ These are expected to be brittle across UI changes; prefer macros + runner primi
 - **Completions can intercept `Enter`.** For slash commands the runner defaults to `["Escape","Enter"]` to dismiss suggestions before submitting. For other inputs, set `submitKeys` explicitly if needed.
 - **Escape cancels requests.** If you cancel and the previous prompt text reappears in the input buffer, `Ctrl+C` clears the input in the legacy UI.
 - **LLM-driven scripts can be flaky** with real models (stalling in “esc to cancel” or not emitting the expected tool call). For UI regressions, prefer deterministic scenarios (like `--scenario scrollback`) or a deterministic/mock provider (future work).
+
+## Scrollback load generator
+
+The `--scenario scrollback` scenario uses `scripts/oldui-scrollback-load.js` to emit a predictable stream of lines over time.

@@ -92,6 +92,10 @@ Using `scripts/oldui-tmux-harness.js --scenario scrollback`, we run a determinis
 
 If `SCROLLTEST LINE 0001` appears more than once in captured scrollback, we have objective evidence that the UI is re-printing the same content into scrollback (i.e., redraw spam).
 
+Practical baseline:
+- `node scripts/oldui-tmux-harness.js --scenario scrollback --rows 20 --cols 100 --assert`
+  - On current old UI this reproduces repeated frames in `scrollback.txt` (the LLXPRT logo/tips/tool output repeat) and fails with `sentinelCount > 1`.
+
 ### LLM-driven UI automation is currently flaky (tool approval flows)
 I attempted to script an “agent prompts -> tool call -> approve -> next prompt” sequence using `scripts/oldui-tmux-script.approvals.json` (run via `node scripts/oldui-tmux-harness.js --script ...`). It is not reliably completing end-to-end yet due to UI/runtime behavior with real model calls.
 
