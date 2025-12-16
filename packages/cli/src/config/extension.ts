@@ -126,7 +126,7 @@ export async function performWorkspaceExtensionMigration(
         source: extension.path,
         type: 'local',
       };
-      await installExtension(installMetadata, requestConsent);
+      await installOrUpdateExtension(installMetadata, requestConsent);
     } catch (_) {
       failedInstallNames.push(extension.name);
     }
@@ -448,12 +448,13 @@ async function promptForConsentInteractive(
   });
 }
 
-export async function installExtension(
+export async function installOrUpdateExtension(
   installMetadata: ExtensionInstallMetadata,
   requestConsent: (consent: string) => Promise<boolean>,
   cwd: string = process.cwd(),
   previousExtensionConfig?: ExtensionConfig,
 ): Promise<string> {
+  const isUpdate = !!previousExtensionConfig;
   const settings = loadSettings(cwd).merged;
   if (isWorkspaceTrusted(settings) === false) {
     throw new Error(
@@ -514,15 +515,17 @@ export async function installExtension(
     const extensionStorage = new ExtensionStorage(newExtensionName);
     const destinationPath = extensionStorage.getExtensionDir();
 
-    const installedExtensions = loadUserExtensions();
-    if (
-      installedExtensions.some(
-        (installed) => installed.name === newExtensionName,
-      )
-    ) {
-      throw new Error(
-        `Extension "${newExtensionName}" is already installed. Please uninstall it first.`,
-      );
+    if (!isUpdate) {
+      const installedExtensions = loadUserExtensions();
+      if (
+        installedExtensions.some(
+          (installed) => installed.name === newExtensionName,
+        )
+      ) {
+        throw new Error(
+          `Extension "${newExtensionName}" is already installed. Please uninstall it first.`,
+        );
+      }
     }
 
     await maybeRequestConsentOrFail(
@@ -530,6 +533,9 @@ export async function installExtension(
       requestConsent,
       previousExtensionConfig,
     );
+    if (isUpdate) {
+      await uninstallExtension(newExtensionName, true, cwd);
+    }
     await fs.promises.mkdir(destinationPath, { recursive: true });
 
     if (
@@ -682,6 +688,7 @@ export async function loadExtensionConfig(
 
 export async function uninstallExtension(
   extensionIdentifier: string,
+  isUpdate: boolean,
   _cwd: string = process.cwd(),
 ): Promise<void> {
   const installedExtensions = loadUserExtensions();
@@ -697,11 +704,13 @@ export async function uninstallExtension(
     );
   }
 
-  const manager = new ExtensionEnablementManager(
-    ExtensionStorage.getUserExtensionsDir(),
-    [extensionName],
-  );
-  manager.remove(extensionName);
+  if (!isUpdate) {
+    const manager = new ExtensionEnablementManager(
+      ExtensionStorage.getUserExtensionsDir(),
+      [extensionName],
+    );
+    manager.remove(extensionName);
+  }
 
   const storage = new ExtensionStorage(extensionName);
   return await fs.promises.rm(storage.getExtensionDir(), {

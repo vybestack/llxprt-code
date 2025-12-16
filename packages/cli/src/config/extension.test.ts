@@ -15,7 +15,7 @@ import {
   annotateActiveExtensions,
   disableExtension,
   enableExtension,
-  installExtension,
+  installOrUpdateExtension,
   loadExtension,
   loadExtensionConfig,
   loadExtensions,
@@ -266,7 +266,7 @@ describe('extension tests', () => {
       });
       fs.writeFileSync(path.join(sourceExtDir, 'context.md'), 'linked context');
 
-      const extensionName = await installExtension(
+      const extensionName = await installOrUpdateExtension(
         {
           source: sourceExtDir,
           type: 'link',
@@ -697,7 +697,7 @@ describe('extension tests', () => {
     });
   });
 
-  describe('installExtension', () => {
+  describe('installOrUpdateExtension', () => {
     it('should install an extension from a local path', async () => {
       const sourceExtDir = createExtension({
         extensionsDir: tempHomeDir,
@@ -707,7 +707,7 @@ describe('extension tests', () => {
       const targetExtDir = path.join(userExtensionsDir, 'my-local-extension');
       const metadataPath = path.join(targetExtDir, INSTALL_METADATA_FILENAME);
 
-      await installExtension(
+      await installOrUpdateExtension(
         { source: sourceExtDir, type: 'local' },
         async (_) => true,
       );
@@ -728,12 +728,12 @@ describe('extension tests', () => {
         name: 'my-local-extension',
         version: '1.0.0',
       });
-      await installExtension(
+      await installOrUpdateExtension(
         { source: sourceExtDir, type: 'local' },
         async (_) => true,
       );
       await expect(
-        installExtension(
+        installOrUpdateExtension(
           { source: sourceExtDir, type: 'local' },
           async (_) => true,
         ),
@@ -747,7 +747,7 @@ describe('extension tests', () => {
       fs.mkdirSync(sourceExtDir, { recursive: true });
 
       await expect(
-        installExtension(
+        installOrUpdateExtension(
           { source: sourceExtDir, type: 'local' },
           async (_) => true,
         ),
@@ -766,7 +766,7 @@ describe('extension tests', () => {
       fs.writeFileSync(configPath, '{ "name": "bad-json", "version": "1.0.0"'); // Malformed JSON
 
       await expect(
-        installExtension(
+        installOrUpdateExtension(
           { source: sourceExtDir, type: 'local' },
           async (_) => true,
         ),
@@ -786,7 +786,7 @@ describe('extension tests', () => {
       fs.writeFileSync(configPath, JSON.stringify({ version: '1.0.0' }));
 
       await expect(
-        installExtension(
+        installOrUpdateExtension(
           { source: sourceExtDir, type: 'local' },
           async (_) => true,
         ),
@@ -810,7 +810,7 @@ describe('extension tests', () => {
       });
       mockGit.getRemotes.mockResolvedValue([{ name: 'origin' }]);
 
-      await installExtension(
+      await installOrUpdateExtension(
         { source: gitUrl, type: 'git' },
         async (_) => true,
       );
@@ -834,7 +834,7 @@ describe('extension tests', () => {
       const metadataPath = path.join(targetExtDir, INSTALL_METADATA_FILENAME);
       const configPath = path.join(targetExtDir, EXTENSIONS_CONFIG_FILENAME);
 
-      await installExtension(
+      await installOrUpdateExtension(
         { source: sourceExtDir, type: 'link' },
         async (_) => true,
       );
@@ -859,7 +859,7 @@ describe('extension tests', () => {
         version: '1.0.0',
       });
 
-      await installExtension(
+      await installOrUpdateExtension(
         { source: sourceExtDir, type: 'local' },
         async (_) => true,
       );
@@ -889,7 +889,7 @@ describe('extension tests', () => {
       mockRequestConsent.mockResolvedValue(true);
 
       await expect(
-        installExtension(
+        installOrUpdateExtension(
           { source: sourceExtDir, type: 'local' },
           mockRequestConsent,
         ),
@@ -918,7 +918,7 @@ This extension will run the following MCP servers:
       });
 
       await expect(
-        installExtension(
+        installOrUpdateExtension(
           { source: sourceExtDir, type: 'local' },
           async () => true,
         ),
@@ -939,7 +939,7 @@ This extension will run the following MCP servers:
       });
 
       await expect(
-        installExtension(
+        installOrUpdateExtension(
           { source: sourceExtDir, type: 'local' },
           async () => false,
         ),
@@ -955,7 +955,7 @@ This extension will run the following MCP servers:
       const targetExtDir = path.join(userExtensionsDir, 'my-local-extension');
       const metadataPath = path.join(targetExtDir, INSTALL_METADATA_FILENAME);
 
-      await installExtension(
+      await installOrUpdateExtension(
         {
           source: sourceExtDir,
           type: 'local',
@@ -991,7 +991,7 @@ This extension will run the following MCP servers:
       const mockRequestConsent = vi.fn();
 
       await expect(
-        installExtension(
+        installOrUpdateExtension(
           { source: sourceExtDir, type: 'local' },
           mockRequestConsent,
           process.cwd(),
@@ -1014,7 +1014,7 @@ This extension will run the following MCP servers:
       });
 
       await expect(
-        installExtension(
+        installOrUpdateExtension(
           { source: sourceExtDir, type: 'local' },
           async (_) => true,
         ),
@@ -1030,7 +1030,7 @@ This extension will run the following MCP servers:
         version: '1.0.0',
       });
 
-      await uninstallExtension('my-local-extension');
+      await uninstallExtension('my-local-extension', false);
 
       expect(fs.existsSync(sourceExtDir)).toBe(false);
     });
@@ -1047,7 +1047,7 @@ This extension will run the following MCP servers:
         version: '1.0.0',
       });
 
-      await uninstallExtension('my-local-extension');
+      await uninstallExtension('my-local-extension', false);
 
       expect(fs.existsSync(sourceExtDir)).toBe(false);
       expect(
@@ -1061,7 +1061,9 @@ This extension will run the following MCP servers:
     });
 
     it('should throw an error if the extension does not exist', async () => {
-      await expect(uninstallExtension('nonexistent-extension')).rejects.toThrow(
+      await expect(
+        uninstallExtension('nonexistent-extension', false),
+      ).rejects.toThrow(
         'Extension "nonexistent-extension" not found. Run llxprt extensions list to see available extensions.',
       );
     });
@@ -1073,7 +1075,7 @@ This extension will run the following MCP servers:
         version: '1.0.0',
       });
 
-      await uninstallExtension('my-local-extension');
+      await uninstallExtension('my-local-extension', false);
 
       expect(mockLogExtensionUninstall).not.toHaveBeenCalled();
       expect(ExtensionUninstallEvent).not.toHaveBeenCalled();
@@ -1091,7 +1093,7 @@ This extension will run the following MCP servers:
         },
       });
 
-      await uninstallExtension(gitUrl);
+      await uninstallExtension(gitUrl, false);
 
       expect(fs.existsSync(sourceExtDir)).toBe(false);
       expect(mockLogExtensionUninstall).not.toHaveBeenCalled();
@@ -1107,7 +1109,7 @@ This extension will run the following MCP servers:
       });
 
       const identifier = 'https://github.com/google/no-metadata-extension';
-      await expect(uninstallExtension(identifier)).rejects.toThrow(
+      await expect(uninstallExtension(identifier, false)).rejects.toThrow(
         `Extension "${identifier}" not found. Run llxprt extensions list to see available extensions.`,
       );
     });
