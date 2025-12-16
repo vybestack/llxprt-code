@@ -16,8 +16,8 @@ This harness is **not intended** for the new OpenTUI UI in `packages/ui`.
 
 - Haiku smoke test: `node scripts/oldui-tmux-harness.js`
 - Scrollback redraw reproduction: `node scripts/oldui-tmux-harness.js --scenario scrollback`
-- Scrollback redraw baseline (fails today): `node scripts/oldui-tmux-harness.js --scenario scrollback --rows 20 --cols 100 --assert`
-- LLM/tool scrollback baseline (LLXPRT, expected to fail today): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.llxprt.json`
+- Scrollback redraw baseline (asserts): `node scripts/oldui-tmux-harness.js --scenario scrollback --rows 20 --cols 100 --assert`
+- LLM/tool scrollback baseline (LLXPRT): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.llxprt.json`
 - LLM/tool scrollback baseline (Gemini CLI, expected to pass): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.gemini.json`
 - Scripted run: `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.example.json`
 - Scripted run (macros): `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.macros.example.json`
@@ -68,6 +68,7 @@ Macros are the recommended place to encode **LLXPRT/old-UI-specific behavior**, 
 - `waitForNot`: like `waitFor`, but asserts absence until timeout.
 - `expect`: like `waitFor`, but checks immediately (no polling).
 - `expectCount`: counts matches in `screen|scrollback` and asserts `{ equals | atLeast | atMost }`.
+- `expectHistoryDelta`: `{ "type": "expectHistoryDelta", "fromLabel": "...", "toLabel": "...", "equals|atLeast|atMost": N }`
 - `copyMode`: `{ "type": "copyMode", "enter": true, "pageUp": 5, "exit": true }`
 - `capture`: `{ "type": "capture", "label": "name", "scope": "screen"|"scrollback" }` (or omit `scope` to capture both)
 - `historySample`: `{ "type": "historySample", "label": "optional" }` (records tmux `#{history_size}` to `history-samples.json`)
@@ -88,6 +89,7 @@ These are expected to be brittle across UI changes; prefer macros + runner primi
 - **Completions can intercept `Enter`.** For slash commands the runner defaults to `["Escape","Enter"]` to dismiss suggestions before submitting. For other inputs, set `submitKeys` explicitly if needed.
 - **Escape cancels requests.** If you cancel and the previous prompt text reappears in the input buffer, `Ctrl+C` clears the input in the legacy UI.
 - **LLM-driven scripts can be flaky** with real models (stalling in “esc to cancel” or not emitting the expected tool call). For UI regressions, prefer deterministic scenarios (like `--scenario scrollback`) or a deterministic/mock provider (future work).
+- **Alternate-buffer UIs may not leave tool output in terminal scrollback after `/quit`.** The scrollback scenario snapshots `during-run-screen.txt` and `during-run-scrollback.txt` before quitting for assertions.
 
 ## Scrollback load generator
 

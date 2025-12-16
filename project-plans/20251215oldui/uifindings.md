@@ -6,18 +6,20 @@
 
 Issue link: `vybestack/llxprt-code#456` (viewed via `gh issue view 456`).
 
-### Current llxprt-code “old UI” architecture (Ink, normal buffer)
+### Current llxprt-code “old UI” architecture (Ink)
 Key files (current branch `fix-oldui` at time of writing):
 - `packages/cli/src/ui/layouts/DefaultAppLayout.tsx`
-  - Renders header + full history inside Ink `<Static>`.
-  - Renders *pending* items (streaming/tool execution) below Static.
+  - Supports two render paths:
+    - legacy `<Static>` history path (fallback / non-alternate-buffer mode)
+    - alternate-buffer path that renders a single scroll-managed main content region using `ScrollableList`
   - The overall root `<Box>` is `width="90%"`, and there is a large “mainControlsRef” footer stack (notifications/todo/dialogs/composer/footer).
 - `packages/cli/src/ui/AppContainer.tsx`
   - Maintains:
     - `history` (persisted/trimmed; rendered via `<Static>`)
     - `pendingHistoryItems` (streaming/tool exec; rendered live below Static)
     - `constrainHeight` toggle (Ctrl+S flips it to allow more lines)
-  - `refreshStatic()` clears terminal (`ansiEscapes.clearTerminal`) and increments a `staticKey` to remount `<Static>`, then re-sends terminal mode sequences (bracketed paste, kitty protocol enablement, focus tracking, cursor).
+  - `refreshStatic()` clears terminal (`ansiEscapes.clearTerminal`) and increments a `staticKey` to remount `<Static>` in legacy mode.
+  - In alternate-buffer mode, `refreshStatic()` is a no-op (prevents full-history reprints).
 - `packages/cli/src/ui/hooks/useStaticHistoryRefresh.ts`
   - Forces `refreshStatic()` if history shrinks (Ink `<Static>` only appends; shrinking needs a remount).
 - `packages/cli/src/ui/components/shared/MaxSizedBox.tsx` + `packages/cli/src/ui/contexts/OverflowContext.tsx`
@@ -86,15 +88,15 @@ Key takeaways:
 - Example verified command: enabling shell mode and running `seq 1 50` produced a rendered tool output block in capture output.
 
 #### Scrollback/redraw “symptom” can be made machine-checkable
-Using `scripts/oldui-tmux-harness.js --scenario scrollback`, we run a deterministic shell command that prints `SCROLLTEST LINE 0001..0060` over ~15s, then:
+Using `scripts/oldui-tmux-harness.js --scenario scrollback`, we run a deterministic shell command that prints `SCROLLTEST LINE ....` over ~15s, then:
 - enter tmux copy-mode (simulated “user scrollback view”),
-- capture scrollback and count duplicate occurrences of `SCROLLTEST LINE 0001`.
+- sample tmux `#{history_size}` while in copy-mode.
 
-If `SCROLLTEST LINE 0001` appears more than once in captured scrollback, we have objective evidence that the UI is re-printing the same content into scrollback (i.e., redraw spam).
+If tmux history grows while the user is scrolled up (`deltaDuringCopyMode > 0`), we have objective evidence that the UI is printing/re-printing into scrollback (redraw spam).
 
 Practical baseline:
 - `node scripts/oldui-tmux-harness.js --scenario scrollback --rows 20 --cols 100 --assert`
-  - On current old UI this reproduces repeated frames in `scrollback.txt` (the LLXPRT logo/tips/tool output repeat) and fails with `sentinelCount > 1`.
+  - Asserts that output was visible during-run and that `deltaDuringCopyMode == 0`.
 
 #### Apples-to-apples (model-driven) repro + Gemini comparison (flash-lite)
 We now have an “as a user” scenario that:
@@ -102,7 +104,7 @@ We now have an “as a user” scenario that:
 - prompts the model to run a long-ish command via the `run_shell_command` tool,
 - approves it (non-YOLO),
 - enters tmux copy-mode (simulated “user scrollback”) while the tool is still running,
-- and asserts on captured scrollback for redraw duplication.
+- and asserts that tmux history does not grow while in copy-mode (`deltaDuringCopyMode == 0`).
 
 Scripts:
 - LLXPRT (runs `node scripts/start.js` with `--provider gemini --model gemini-2.5-flash-lite`):
@@ -111,11 +113,11 @@ Scripts:
   - `scripts/oldui-tmux-script.llm-tool-scrollback-realistic.gemini.json`
 
 Behavior observed (current old UI):
-- LLXPRT script currently fails with duplicated output in `scrollback.txt` (`SCROLLTEST LINE 0090` appears twice).
-- Gemini CLI script passes (single occurrence of `SCROLLTEST LINE 0090`).
+ - LLXPRT script passes with `deltaDuringCopyMode == 0`.
+ - Gemini CLI script passes with `deltaDuringCopyMode == 0`.
 
 Important nuance:
-- In LLXPRT, the duplication shows up reliably in the **final** scrollback after exit (the script asserts after `/quit` + pane exit), not necessarily immediately at tool completion.
+- In alternate-buffer mode, tool output may not remain in terminal scrollback after `/quit`; capture/metrics are taken while the output is still visible during-run.
 
 ### LLM-driven UI automation is currently flaky (tool approval flows)
 I attempted to script an “agent prompts -> tool call -> approve -> next prompt” sequence using `scripts/oldui-tmux-script.approvals.json` (run via `node scripts/oldui-tmux-harness.js --script ...`). It is not reliably completing end-to-end yet due to UI/runtime behavior with real model calls.

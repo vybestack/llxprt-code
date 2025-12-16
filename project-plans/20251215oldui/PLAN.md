@@ -28,12 +28,14 @@ Scope: **legacy Ink UI** under `packages/cli/src/ui` (not `packages/ui`)
 
 These are the canonical “as a user” scripts:
 
-- LLXPRT (expected failing today):
+- LLXPRT (expected PASS on `fix-oldui`):
   - `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.llxprt.json`
-  - Current symptom: duplicated output blocks in captured scrollback (`SCROLLTEST LINE 0090` count == 2).
-- Gemini CLI comparison (expected passing today):
+  - Assertion: tmux history does not grow while scrolled up (`deltaDuringCopyMode == 0`) and output is visible during-run.
+- Gemini CLI comparison/control (expected PASS):
   - `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.gemini.json`
-  - Current: `SCROLLTEST LINE 0090` count == 1.
+  - Assertion: tmux history does not grow while scrolled up (`deltaDuringCopyMode == 0`) and output is visible during-run.
+
+Historical note: pre-fix baselines used “duplicate sentinel line count” in captured scrollback (see `project-plans/20251215oldui/.completed/P00.5.md`). Once alternate-buffer rendering became the default, “after exit” scrollback became an unreliable place to assert on tool output, so the baseline moved to tmux history growth while in copy-mode.
 
 ### Secondary fast signal (no model, shell-mode)
 
@@ -63,7 +65,7 @@ Reference implementation lives in `tmp/gemini-cli/`:
 **Behavior**:
 - GIVEN: LLXPRT is running interactively (TTY) with legacy Ink UI
 - WHEN: a long-ish `run_shell_command` runs, user scrolls up (tmux copy-mode in harness)
-- THEN: captured scrollback does not contain duplicated tool output blocks (the baseline script’s assertion passes)
+- THEN: tmux history does not grow while in copy-mode (`deltaDuringCopyMode == 0`) while output continues to update
 
 **Verification**: `scripts/oldui-tmux-script.llm-tool-scrollback-realistic.llxprt.json` exits 0.
 
@@ -113,8 +115,8 @@ Run from repo root:
    - `command -v tmux && tmux -V`
    - `command -v gemini && gemini --version`
 2. Verify baseline scripts still reproduce:
-   - LLXPRT fail: `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.llxprt.json`
-   - Gemini pass: `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.gemini.json`
+   - LLXPRT baseline: `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.llxprt.json`
+   - Gemini control: `node scripts/oldui-tmux-harness.js --script scripts/oldui-tmux-script.llm-tool-scrollback-realistic.gemini.json`
 3. Verify upstream reference code is present:
    - `test -d tmp/gemini-cli/packages/cli/src/ui/components/shared`
 4. Verify Ink dependency state (before change):
