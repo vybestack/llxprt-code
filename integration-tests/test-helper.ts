@@ -141,7 +141,7 @@ export function validateModelOutput(
       console.warn('Expected content:', expectedContent);
       console.warn('Actual output:', result);
       return false;
-    } else if (process.env.VERBOSE === 'true') {
+    } else if (env['VERBOSE'] === 'true') {
       console.log(`${testName}: Model output validated successfully.`);
     }
     return true;
@@ -230,7 +230,7 @@ export class TestRig {
   ) {
     this.testName = testName;
     const sanitizedName = sanitizeTestName(testName);
-    this.testDir = join(env.INTEGRATION_TEST_FILE_DIR!, sanitizedName);
+    this.testDir = join(env['INTEGRATION_TEST_FILE_DIR']!, sanitizedName);
     mkdirSync(this.testDir, { recursive: true });
 
     // Create a settings file to point the CLI to the local collector
@@ -266,9 +266,10 @@ export class TestRig {
               'defaults',
             ),
       },
-      sandbox: env.LLXPRT_SANDBOX !== 'false' ? env.LLXPRT_SANDBOX : false,
+      sandbox:
+        env['LLXPRT_SANDBOX'] !== 'false' ? env['LLXPRT_SANDBOX'] : false,
       selectedAuthType: 'provider', // Use provider-based auth (API keys)
-      provider: env.LLXPRT_DEFAULT_PROVIDER, // No default - must be set explicitly
+      provider: env['LLXPRT_DEFAULT_PROVIDER'], // No default - must be set explicitly
       debug: true, // Enable debug logging
       security: {
         auth: {
@@ -282,35 +283,36 @@ export class TestRig {
       JSON.stringify(settings, null, 2),
     );
 
-    const profileName = env.LLXPRT_TEST_PROFILE?.trim();
+    const profileName = env['LLXPRT_TEST_PROFILE']?.trim();
     if (profileName) {
       const profilesDir = join(llxprtDir, 'profiles');
       mkdirSync(profilesDir, { recursive: true });
 
       const profileProvider =
-        env.LLXPRT_DEFAULT_PROVIDER && env.LLXPRT_DEFAULT_PROVIDER.trim().length
-          ? env.LLXPRT_DEFAULT_PROVIDER
+        env['LLXPRT_DEFAULT_PROVIDER'] &&
+        env['LLXPRT_DEFAULT_PROVIDER'].trim().length
+          ? env['LLXPRT_DEFAULT_PROVIDER']
           : 'openai';
       const profileModel =
-        env.LLXPRT_DEFAULT_MODEL && env.LLXPRT_DEFAULT_MODEL.trim().length
-          ? env.LLXPRT_DEFAULT_MODEL
+        env['LLXPRT_DEFAULT_MODEL'] && env['LLXPRT_DEFAULT_MODEL'].trim().length
+          ? env['LLXPRT_DEFAULT_MODEL']
           : 'gpt-4o-mini';
 
       const ephemeralEntries: Array<[string, unknown]> = [];
-      if (env.OPENAI_BASE_URL && env.OPENAI_BASE_URL.trim().length > 0) {
-        ephemeralEntries.push(['base-url', env.OPENAI_BASE_URL]);
+      if (env['OPENAI_BASE_URL'] && env['OPENAI_BASE_URL'].trim().length > 0) {
+        ephemeralEntries.push(['base-url', env['OPENAI_BASE_URL']]);
       }
-      if (env.OPENAI_API_KEY && env.OPENAI_API_KEY.trim().length > 0) {
-        ephemeralEntries.push(['auth-key', env.OPENAI_API_KEY]);
+      if (env['OPENAI_API_KEY'] && env['OPENAI_API_KEY'].trim().length > 0) {
+        ephemeralEntries.push(['auth-key', env['OPENAI_API_KEY']]);
       }
-      if (env.LLXPRT_TEST_PROFILE_KEYFILE) {
+      if (env['LLXPRT_TEST_PROFILE_KEYFILE']) {
         ephemeralEntries.push([
           'auth-keyfile',
-          env.LLXPRT_TEST_PROFILE_KEYFILE,
+          env['LLXPRT_TEST_PROFILE_KEYFILE'],
         ]);
       }
-      if (env.LLXPRT_CONTEXT_LIMIT) {
-        const parsedLimit = Number(env.LLXPRT_CONTEXT_LIMIT);
+      if (env['LLXPRT_CONTEXT_LIMIT']) {
+        const parsedLimit = Number(env['LLXPRT_CONTEXT_LIMIT']);
         if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
           ephemeralEntries.push(['context-limit', parsedLimit]);
         }
@@ -363,13 +365,13 @@ export class TestRig {
     ...args: string[]
   ): Promise<string> {
     // Add provider and model flags from environment - FAIL FAST if not configured
-    const provider = env.LLXPRT_DEFAULT_PROVIDER;
-    const model = env.LLXPRT_DEFAULT_MODEL;
-    const baseUrl = env.OPENAI_BASE_URL;
-    const apiKey = env.OPENAI_API_KEY;
+    const provider = env['LLXPRT_DEFAULT_PROVIDER'];
+    const model = env['LLXPRT_DEFAULT_MODEL'];
+    const baseUrl = env['OPENAI_BASE_URL'];
+    const apiKey = env['OPENAI_API_KEY'];
 
     // Debug: Log environment variables in CI
-    if (env.CI === 'true' || env.VERBOSE === 'true') {
+    if (env['CI'] === 'true' || env['VERBOSE'] === 'true') {
       console.log('[TestRig] Environment variables:', {
         provider,
         model,
@@ -469,14 +471,14 @@ export class TestRig {
     // Add any additional args
     commandArgs.push(...args);
 
-    if (env.LLXPRT_TEST_PROFILE?.trim()) {
-      commandArgs.push('--profile-load', env.LLXPRT_TEST_PROFILE.trim());
+    if (env['LLXPRT_TEST_PROFILE']?.trim()) {
+      commandArgs.push('--profile-load', env['LLXPRT_TEST_PROFILE'].trim());
     }
 
     const node = commandArgs.shift() as string;
 
     // Debug: Log command being executed in CI
-    if (env.CI === 'true' || env.VERBOSE === 'true') {
+    if (env['CI'] === 'true' || env['VERBOSE'] === 'true') {
       console.log('[TestRig] Spawning command:', {
         node,
         args: commandArgs,
@@ -508,14 +510,14 @@ export class TestRig {
 
     child.stdout!.on('data', (data: Buffer) => {
       stdout += data;
-      if (env.KEEP_OUTPUT === 'true' || env.VERBOSE === 'true') {
+      if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
         process.stdout.write(data);
       }
     });
 
     child.stderr!.on('data', (data: Buffer) => {
       stderr += data;
-      if (env.KEEP_OUTPUT === 'true' || env.VERBOSE === 'true') {
+      if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
         process.stderr.write(data);
       }
     });
@@ -558,7 +560,7 @@ export class TestRig {
           // Filter out telemetry output when running with Podman
           // Podman seems to output telemetry to stdout even when writing to file
           let result = stdout;
-          if (env.LLXPRT_SANDBOX === 'podman') {
+          if (env['LLXPRT_SANDBOX'] === 'podman') {
             // Remove telemetry JSON objects from output
             // They are multi-line JSON objects that start with { and contain telemetry fields
             const lines = result.split(EOL);
@@ -610,7 +612,7 @@ export class TestRig {
   readFile(fileName: string) {
     const filePath = join(this.testDir!, fileName);
     const content = readFileSync(filePath, 'utf-8');
-    if (env.KEEP_OUTPUT === 'true' || env.VERBOSE === 'true') {
+    if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
       console.log(`--- FILE: ${filePath} ---`);
       console.log(content);
       console.log(`--- END FILE: ${filePath} ---`);
@@ -620,12 +622,12 @@ export class TestRig {
 
   async cleanup() {
     // Clean up test directory
-    if (this.testDir && !env.KEEP_OUTPUT) {
+    if (this.testDir && !env['KEEP_OUTPUT']) {
       try {
         fs.rmSync(this.testDir, { recursive: true, force: true });
       } catch (error) {
         // Ignore cleanup errors
-        if (env.VERBOSE === 'true') {
+        if (env['VERBOSE'] === 'true') {
           console.warn('Cleanup warning:', (error as Error).message);
         }
       }
@@ -943,7 +945,7 @@ export class TestRig {
   readToolLogs() {
     // For Podman, first check if telemetry file exists and has content
     // If not, fall back to parsing from stdout
-    if (env.LLXPRT_SANDBOX === 'podman') {
+    if (env['LLXPRT_SANDBOX'] === 'podman') {
       // Try reading from file first
       const logFilePath = join(this.testDir!, 'telemetry.log');
 
@@ -974,7 +976,7 @@ export class TestRig {
 
     if (!logFilePath) {
       // Don't warn in CI/test environments, it's expected
-      if (process.env.VERBOSE === 'true') {
+      if (process.env['VERBOSE'] === 'true') {
         console.warn(`TELEMETRY_LOG_FILE environment variable not set`);
       }
       return [];
@@ -1028,7 +1030,7 @@ export class TestRig {
         }
       } catch (e) {
         // Skip objects that aren't valid JSON
-        if (env.VERBOSE === 'true') {
+        if (env['VERBOSE'] === 'true') {
           console.error('Failed to parse telemetry object:', e);
         }
       }
