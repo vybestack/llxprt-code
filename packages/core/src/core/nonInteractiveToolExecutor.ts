@@ -15,8 +15,11 @@ import {
 } from '../index.js';
 import { type Part } from '@google/genai';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
-import type { Config } from '../config/config.js';
+import { type Config, ApprovalMode } from '../config/config.js';
+import type { PolicyEngine } from '../policy/policy-engine.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
+import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
 import { ToolCallDecision } from '../telemetry/types.js';
 import { EmojiFilter, type FilterResult } from '../filters/EmojiFilter.js';
 import { DebugLogger } from '../debug/index.js';
@@ -27,52 +30,6 @@ import { DebugLogger } from '../debug/index.js';
 let emojiFilter: EmojiFilter | null = null;
 
 const logger = new DebugLogger('llxprt:tool-executor');
-
-function buildToolGovernance(config: ToolExecutionConfig): {
-  allowed: Set<string>;
-  disabled: Set<string>;
-  excluded: Set<string>;
-} {
-  const ephemerals =
-    typeof config.getEphemeralSettings === 'function'
-      ? config.getEphemeralSettings() || {}
-      : {};
-
-  const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
-    ? (ephemerals['tools.allowed'] as string[])
-    : [];
-  const disabledRaw = Array.isArray(ephemerals['tools.disabled'])
-    ? (ephemerals['tools.disabled'] as string[])
-    : Array.isArray(ephemerals['disabled-tools'])
-      ? (ephemerals['disabled-tools'] as string[])
-      : [];
-  const excludedRaw = config.getExcludeTools?.() ?? [];
-
-  const normalize = (name: string) => name.trim().toLowerCase();
-
-  return {
-    allowed: new Set(allowedRaw.map(normalize)),
-    disabled: new Set(disabledRaw.map(normalize)),
-    excluded: new Set(excludedRaw.map(normalize)),
-  };
-}
-
-function isToolBlocked(
-  toolName: string,
-  governance: ReturnType<typeof buildToolGovernance>,
-): boolean {
-  const canonical = toolName.trim().toLowerCase();
-  if (governance.excluded.has(canonical)) {
-    return true;
-  }
-  if (governance.disabled.has(canonical)) {
-    return true;
-  }
-  if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
-    return true;
-  }
-  return false;
-}
 
 /**
  * Gets or creates the emoji filter instance based on current configuration
@@ -186,7 +143,12 @@ export type ToolExecutionConfig = Pick<
   | 'getExcludeTools'
   | 'getSessionId'
   | 'getTelemetryLogPromptsEnabled'
->;
+> & {
+  getPolicyEngine?: () => PolicyEngine | undefined;
+  getMessageBus?: () => MessageBus | undefined;
+  getAllowedTools?: () => string[] | undefined;
+  getApprovalMode?: () => ApprovalMode;
+};
 
 export async function executeToolCall(
   config: ToolExecutionConfig,
@@ -388,8 +350,13 @@ export async function executeToolCall(
         };
       }
 
-      // Use filtered arguments
-      filteredArgs = filterResult.filtered as Record<string, unknown>;
+      // Use filtered arguments (filtered is non-null object when !blocked)
+      if (
+        filterResult.filtered !== null &&
+        typeof filterResult.filtered === 'object'
+      ) {
+        filteredArgs = filterResult.filtered as Record<string, unknown>;
+      }
       systemFeedback = filterResult.systemFeedback;
     }
 
@@ -405,8 +372,7 @@ export async function executeToolCall(
 
     const tool_display = toolResult.returnDisplay;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let metadata: { [key: string]: any } = {};
+    let metadata: Record<string, number | undefined> = {};
     if (
       toolResult.error === undefined &&
       typeof tool_display === 'object' &&

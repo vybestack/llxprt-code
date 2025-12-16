@@ -1293,6 +1293,11 @@ export class SubAgentScope {
           })
         : () => this.config.getEphemeralSettings();
 
+    const getEphemeralSetting = (key: string): unknown => {
+      const settings = getEphemeralSettings();
+      return settings[key];
+    };
+
     const getExcludeTools =
       typeof this.toolExecutorContext.getExcludeTools === 'function'
         ? () => this.toolExecutorContext.getExcludeTools()
@@ -1318,6 +1323,7 @@ export class SubAgentScope {
       getToolRegistry: () => this.toolExecutorContext.getToolRegistry(),
       getSessionId: () => this.toolExecutorContext.getSessionId(),
       getEphemeralSettings,
+      getEphemeralSetting,
       getExcludeTools,
       getTelemetryLogPromptsEnabled,
       getAllowedTools: () => allowedTools,

@@ -57,6 +57,7 @@ import {
   type ToolOutputSettingsProvider,
 } from '../utils/toolOutputLimiter.js';
 import { DebugLogger } from '../debug/index.js';
+import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
 
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
@@ -380,6 +381,7 @@ interface CoreToolSchedulerOptions {
   getPreferredEditor: () => EditorType | undefined;
   onEditorClose: () => void;
   onEditorOpen?: () => void;
+  toolContextInteractiveMode?: boolean;
 }
 
 export class CoreToolScheduler {
@@ -409,6 +411,7 @@ export class CoreToolScheduler {
     }
   > = new Map();
   private nextPublishIndex = 0;
+  private readonly toolContextInteractiveMode: boolean;
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -419,6 +422,8 @@ export class CoreToolScheduler {
     this.getPreferredEditor = options.getPreferredEditor;
     this.onEditorClose = options.onEditorClose;
     this.onEditorOpen = options.onEditorOpen;
+    this.toolContextInteractiveMode =
+      options.toolContextInteractiveMode ?? true;
 
     const messageBus = this.config.getMessageBus();
     this.messageBusUnsubscribe = messageBus.subscribe<ToolConfirmationResponse>(
@@ -718,7 +723,7 @@ export class CoreToolScheduler {
         contextAwareTool.context = {
           sessionId: this.config.getSessionId(),
           agentId: call.request.agentId ?? DEFAULT_AGENT_ID,
-          interactiveMode: true, // We're in interactive mode when using CoreToolScheduler
+          interactiveMode: this.toolContextInteractiveMode,
         };
       }
 
@@ -894,7 +899,7 @@ export class CoreToolScheduler {
             contextAwareTool.context = {
               sessionId: this.config.getSessionId(),
               agentId: reqInfo.agentId ?? DEFAULT_AGENT_ID,
-              interactiveMode: true, // We're in interactive mode when using CoreToolScheduler
+              interactiveMode: this.toolContextInteractiveMode,
             };
           }
 
@@ -1592,9 +1597,9 @@ export class CoreToolScheduler {
           this.setStatusInternal(pendingTool.request.callId, 'scheduled');
         }
       } catch (error) {
-        console.error(
-          `Error checking confirmation for tool ${pendingTool.request.callId}:`,
-          error,
+        toolSchedulerLogger.debug(
+          () =>
+            `Error checking confirmation for tool ${pendingTool.request.callId}: ${error}`,
         );
       }
     }
@@ -1676,50 +1681,4 @@ export class CoreToolScheduler {
     this.notifyToolCallsUpdate();
     this.checkAndNotifyCompletion();
   }
-}
-
-import { normalizeToolName } from '../tools/toolNameUtils.js';
-
-function buildToolGovernance(config: Config): {
-  allowed: Set<string>;
-  disabled: Set<string>;
-  excluded: Set<string>;
-} {
-  const ephemerals = config.getEphemeralSettings?.() ?? {};
-  const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
-    ? (ephemerals['tools.allowed'] as string[])
-    : [];
-  const disabledRaw = Array.isArray(ephemerals['tools.disabled'])
-    ? (ephemerals['tools.disabled'] as string[])
-    : Array.isArray(ephemerals['disabled-tools'])
-      ? (ephemerals['disabled-tools'] as string[])
-      : [];
-  const excludedRaw = config.getExcludeTools?.() ?? [];
-
-  return {
-    allowed: new Set(allowedRaw.map((tool) => normalizeToolName(tool) || tool)),
-    disabled: new Set(
-      disabledRaw.map((tool) => normalizeToolName(tool) || tool),
-    ),
-    excluded: new Set(
-      excludedRaw.map((tool) => normalizeToolName(tool) || tool),
-    ),
-  };
-}
-
-function isToolBlocked(
-  toolName: string,
-  governance: ReturnType<typeof buildToolGovernance>,
-): boolean {
-  const canonical = normalizeToolName(toolName) || toolName;
-  if (governance.excluded.has(canonical)) {
-    return true;
-  }
-  if (governance.disabled.has(canonical)) {
-    return true;
-  }
-  if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
-    return true;
-  }
-  return false;
 }
