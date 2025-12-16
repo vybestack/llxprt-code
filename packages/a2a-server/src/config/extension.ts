@@ -11,12 +11,16 @@ import type {
   ExtensionInstallMetadata,
   GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
+import { LLXPRT_CONFIG_DIR } from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { logger } from '../utils/logger.js';
 
-export const EXTENSIONS_DIRECTORY_NAME = path.join('.gemini', 'extensions');
+export const EXTENSIONS_DIRECTORY_NAME = path.join(
+  LLXPRT_CONFIG_DIR,
+  'extensions',
+);
 export const EXTENSIONS_CONFIG_FILENAME = 'gemini-extension.json';
 export const INSTALL_METADATA_FILENAME = '.gemini-extension-install.json';
 
