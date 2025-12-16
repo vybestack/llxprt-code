@@ -23,15 +23,22 @@ import crypto from 'node:crypto';
  * @issue https://github.com/vybestack/llxprt-code/issues/825
  * This function fixes the 400 error "No tool call found for function call output with call_id"
  * that occurs when tool IDs are in non-OpenAI formats (like hist_tool_XXX from cancelled tools).
+ *
+ * IMPORTANT: This function is deterministic - the same input always produces the same output.
+ * For edge cases where the ID has no valid characters after sanitization, we generate a
+ * deterministic hash-based ID from the original input to ensure function_call and
+ * function_call_output items always have matching call_ids.
  */
 export function normalizeToOpenAIToolId(id: string): string {
-  const generateFallbackId = (): string =>
-    'call_' + crypto.randomUUID().replace(/-/g, '');
+  const generateDeterministicFallbackId = (input: string): string => {
+    const hash = crypto.createHash('sha256').update(input).digest('hex');
+    return 'call_' + hash.substring(0, 24);
+  };
 
   const sanitize = (value: string): string => {
     const sanitized = value.replace(/[^a-zA-Z0-9_]/g, '');
     if (sanitized.length === 0 || sanitized === 'call_') {
-      return generateFallbackId();
+      return generateDeterministicFallbackId(id);
     }
     return sanitized;
   };
@@ -40,7 +47,7 @@ export function normalizeToOpenAIToolId(id: string): string {
     const suffix = id.substring(prefix.length);
     const sanitizedSuffix = suffix.replace(/[^a-zA-Z0-9_]/g, '');
     if (sanitizedSuffix.length === 0) {
-      return generateFallbackId();
+      return generateDeterministicFallbackId(id);
     }
     return 'call_' + sanitizedSuffix;
   };

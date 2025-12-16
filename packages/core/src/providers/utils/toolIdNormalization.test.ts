@@ -125,5 +125,40 @@ describe('normalizeToOpenAIToolId', () => {
         normalizeToOpenAIToolId(toolResponseCallId),
       );
     });
+
+    it('should be deterministic - same input always produces same output', () => {
+      const testCases = [
+        '',
+        '!!!@@@###',
+        'hist_tool_',
+        'toolu_',
+        'call_',
+        'hist_tool_abc123',
+        'toolu_xyz789',
+        'random_id',
+      ];
+
+      for (const input of testCases) {
+        const result1 = normalizeToOpenAIToolId(input);
+        const result2 = normalizeToOpenAIToolId(input);
+        const result3 = normalizeToOpenAIToolId(input);
+        expect(result1).toBe(result2);
+        expect(result2).toBe(result3);
+      }
+    });
+
+    it('should generate consistent fallback IDs for edge cases across multiple calls', () => {
+      // These edge cases require fallback ID generation
+      const edgeCases = ['', 'hist_tool_', 'toolu_', '!@#$%'];
+
+      for (const input of edgeCases) {
+        const results = new Set<string>();
+        for (let i = 0; i < 10; i++) {
+          results.add(normalizeToOpenAIToolId(input));
+        }
+        // All 10 calls should produce the exact same result
+        expect(results.size).toBe(1);
+      }
+    });
   });
 });
