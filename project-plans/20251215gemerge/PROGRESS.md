@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 13 |
+| **Last Completed** | Batch 14 |
 | **In Progress** | — |
-| **Next Up** | Batch 14 |
-| **Progress** | 13/52 (25%) |
+| **Next Up** | Batch 15 |
+| **Progress** | 14/52 (27%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -116,7 +116,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 12 record exists
   - Record Location: NOTES.md ## Batch 13
 
-- [ ] Batch 14 — FULL — PICK — `5f96eba5` — fix(cli): prevent exit on non-fatal tool errors (#10671)
+- [x] Batch 14 — FULL — PICK — `5f96eba5` — fix(cli): prevent exit on non-fatal tool errors (#10671)
   - Prerequisites: Batch 13 record exists
   - Record Location: NOTES.md ## Batch 14
 

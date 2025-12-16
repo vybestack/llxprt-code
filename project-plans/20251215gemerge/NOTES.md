@@ -1270,3 +1270,76 @@ $ grep -n "calculate 5+10" integration-tests/simple-mcp-server.test.ts
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 14 — PICK — 5f96eba5
+
+### Selection Record
+Batch: 14
+Type: PICK
+Upstream SHA: 5f96eba5 - fix(cli): prevent exit on non-fatal tool errors (#10671)
+Subject: Don't exit CLI on recoverable tool errors
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 13)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (0e521d628)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick 5f96eba5
+Conflicts: YES (3 files)
+  - MODIFY/DELETE: integration-tests/json-output.test.ts
+  - MODIFY/DELETE: packages/cli/src/utils/errors.test.ts
+  - CONTENT: packages/cli/src/utils/errors.ts
+Branding Substitutions Applied: YES (@vybestack/llxprt-code-core)
+Files Modified:
+  - integration-tests/json-output.test.ts (new)
+  - packages/cli/src/utils/errors.ts
+  - packages/cli/src/utils/errors.test.ts (new)
+  - packages/core/src/tools/tool-error.ts
+  - packages/core/src/utils/output-format.ts (new)
+LLXPRT Commit SHA: 7350855cb
+
+### Remediation Record
+Initial Verification: FAILED (typecheck)
+Errors:
+  - Missing exports: OutputFormat, JsonFormatter, FatalCancellationError, FatalToolExecutionError, isFatalToolError
+  - Missing method: Config.getOutputFormat()
+
+Fixes Applied:
+  - Added FatalToolExecutionError and FatalCancellationError to core/utils/errors.ts
+  - Created packages/core/src/utils/output-format.ts with OutputFormat enum and JsonFormatter
+  - Simplified CLI error handling to text-only output (removed JSON mode dependency)
+  - Fixed lint errors: unused config params renamed to _config
+
+Re-verification: PASS
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-16T02:36:00Z
+
+Results:
+  - test: PASS (166 test files)
+  - lint: PASS (0 warnings)
+  - typecheck: PASS
+  - build: PASS
+  - bundle: PASS
+  - synthetic: PASS (haiku generated)
+
+### Feature Landing Verification
+Upstream Commit: 5f96eba5
+Feature: Non-fatal tool error handling
+
+```bash
+$ grep -n "isFatalToolError" packages/cli/src/utils/errors.ts
+15:  isFatalToolError,
+89:    if (isFatalToolError(error)) {
+
+$ grep -n "FatalToolExecutionError" packages/core/src/utils/errors.ts
+45:export class FatalToolExecutionError extends Error {
+```
+
+FEATURE VERIFIED: YES
+
+---
