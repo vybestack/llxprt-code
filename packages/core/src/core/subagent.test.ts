@@ -79,6 +79,35 @@ vi.mock('./prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
 }));
 
+function createCompletedToolCallResponse(params: {
+  callId: string;
+  responseParts?: Part[];
+  resultDisplay?: unknown;
+  error?: Error;
+  errorType?: ToolErrorType;
+  agentId?: string;
+}) {
+  return {
+    status: params.error ? ('error' as const) : ('success' as const),
+    request: {
+      callId: params.callId,
+      name: 'mock_tool',
+      args: {},
+      isClientInitiated: true,
+      prompt_id: 'mock-prompt',
+      agentId: params.agentId ?? 'primary',
+    },
+    response: {
+      callId: params.callId,
+      responseParts: params.responseParts ?? [],
+      resultDisplay: params.resultDisplay,
+      error: params.error,
+      errorType: params.errorType,
+      agentId: params.agentId ?? 'primary',
+    },
+  };
+}
+
 async function createMockConfig(
   toolRegistryMocks = {},
 ): Promise<{ config: Config; toolRegistry: ToolRegistry }> {
@@ -781,10 +810,12 @@ describe('subagent.ts', () => {
         );
 
         vi.mocked(executeToolCall).mockResolvedValue({
-          callId: 'call1',
-          responseParts: [{ text: 'file content' }],
-          resultDisplay: 'ok',
-          agentId: 'subagent-1',
+          ...createCompletedToolCallResponse({
+            callId: 'call1',
+            responseParts: [{ text: 'file content' }],
+            resultDisplay: 'ok',
+            agentId: 'subagent-1',
+          }),
         } as Awaited<ReturnType<typeof executeToolCall>>);
 
         const runtimeBundle = createStatelessRuntimeBundle({
@@ -840,9 +871,11 @@ describe('subagent.ts', () => {
         );
 
         vi.mocked(executeToolCall).mockResolvedValue({
-          callId: 'call-1',
-          responseParts: [{ text: 'ok' }],
-          resultDisplay: 'ok',
+          ...createCompletedToolCallResponse({
+            callId: 'call-1',
+            responseParts: [{ text: 'ok' }],
+            resultDisplay: 'ok',
+          }),
         } as unknown as Awaited<ReturnType<typeof executeToolCall>>);
 
         const fnCalls: FunctionCall[] = [
@@ -1231,11 +1264,11 @@ describe('subagent.ts', () => {
 
         // Mock the tool execution result
         vi.mocked(executeToolCall).mockResolvedValue({
-          callId: 'call_1',
-          responseParts: [{ text: 'file1.txt\nfile2.ts' }],
-          resultDisplay: 'Listed 2 files',
-          error: undefined,
-          errorType: undefined, // Or ToolErrorType.NONE if available and appropriate
+          ...createCompletedToolCallResponse({
+            callId: 'call_1',
+            responseParts: [{ text: 'file1.txt\nfile2.ts' }],
+            resultDisplay: 'Listed 2 files',
+          }),
         });
 
         const runtimeBundle = createStatelessRuntimeBundle({
@@ -1312,11 +1345,13 @@ describe('subagent.ts', () => {
 
         // Mock the tool execution failure.
         vi.mocked(executeToolCall).mockResolvedValue({
-          callId: 'call_fail',
-          responseParts: [{ text: 'ERROR: Tool failed catastrophically' }], // This should be sent to the model
-          resultDisplay: 'Tool failed catastrophically',
-          error: new Error('Failure'),
-          errorType: ToolErrorType.INVALID_TOOL_PARAMS,
+          ...createCompletedToolCallResponse({
+            callId: 'call_fail',
+            responseParts: [{ text: 'ERROR: Tool failed catastrophically' }],
+            resultDisplay: 'Tool failed catastrophically',
+            error: new Error('Failure'),
+            errorType: ToolErrorType.INVALID_TOOL_PARAMS,
+          }),
         });
 
         const runtimeBundle = createStatelessRuntimeBundle({
@@ -1418,36 +1453,38 @@ describe('subagent.ts', () => {
         );
 
         vi.mocked(executeToolCall).mockResolvedValue({
-          callId: 'call_write',
-          responseParts: [
-            {
-              functionCall: {
-                id: 'call_write',
-                name: 'write_file',
-                args: {
-                  path: 'reports/joetest.md',
-                  content: 'hello',
+          ...createCompletedToolCallResponse({
+            callId: 'call_write',
+            responseParts: [
+              {
+                functionCall: {
+                  id: 'call_write',
+                  name: 'write_file',
+                  args: {
+                    path: 'reports/joetest.md',
+                    content: 'hello',
+                  },
                 },
               },
-            },
-            {
-              functionResponse: {
-                id: 'call_write',
-                name: 'write_file',
-                response: {
-                  error:
-                    'Tool "write_file" is disabled in the current profile.',
+              {
+                functionResponse: {
+                  id: 'call_write',
+                  name: 'write_file',
+                  response: {
+                    error:
+                      'Tool "write_file" is disabled in the current profile.',
+                  },
                 },
               },
-            },
-          ],
-          resultDisplay:
-            'Tool "write_file" is disabled in the current profile.',
-          error: new Error(
-            'Tool "write_file" is disabled in the current profile.',
-          ),
-          errorType: ToolErrorType.TOOL_DISABLED,
-          agentId: 'test-agent',
+            ],
+            resultDisplay:
+              'Tool "write_file" is disabled in the current profile.',
+            error: new Error(
+              'Tool "write_file" is disabled in the current profile.',
+            ),
+            errorType: ToolErrorType.TOOL_DISABLED,
+            agentId: 'test-agent',
+          }),
         });
 
         const scope = await SubAgentScope.create(

@@ -232,11 +232,12 @@ export async function runNonInteractive(
             agentId: requestFromModel.agentId ?? 'primary',
           };
 
-          const toolResponse = await executeToolCall(
+          const completed = await executeToolCall(
             config,
             requestInfo,
             abortController.signal,
           );
+          const toolResponse = completed.response;
 
           if (toolResponse.error) {
             console.error(

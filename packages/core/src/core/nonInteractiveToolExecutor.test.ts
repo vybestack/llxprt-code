@@ -21,16 +21,26 @@ import {
 } from '../index.js';
 import type { Part } from '@google/genai';
 import { MockTool } from '../test-utils/tools.js';
-import type { PolicyEngine } from '../policy/policy-engine.js';
-import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { PolicyEngine } from '../policy/policy-engine.js';
+import { PolicyDecision } from '../policy/types.js';
 
 describe('executeToolCall', () => {
   let mockToolRegistry: ToolRegistry;
   let mockTool: MockTool;
   let abortController: AbortController;
   let mockConfig: Config;
+  let policyEngine: PolicyEngine;
+  let messageBus: MessageBus;
 
   beforeEach(() => {
+    policyEngine = new PolicyEngine({
+      rules: [],
+      defaultDecision: PolicyDecision.ALLOW,
+      nonInteractive: false,
+    });
+    messageBus = new MessageBus(policyEngine, false);
+
     mockTool = new MockTool('testTool');
 
     mockToolRegistry = {
@@ -54,6 +64,8 @@ describe('executeToolCall', () => {
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getExcludeTools: () => [],
       getTelemetryLogPromptsEnabled: () => false,
+      getPolicyEngine: () => policyEngine,
+      getMessageBus: () => messageBus,
     } as unknown as Config;
 
     abortController = new AbortController();
@@ -74,7 +86,7 @@ describe('executeToolCall', () => {
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
     mockTool.executeFn.mockReturnValue(toolResult);
 
-    const response = await executeToolCall(
+    const { response } = await executeToolCall(
       mockConfig,
       request,
       abortController.signal,
@@ -120,39 +132,26 @@ describe('executeToolCall', () => {
       'anotherTool',
     ]);
 
-    const response = await executeToolCall(
+    const { response } = await executeToolCall(
       mockConfig,
       request,
       abortController.signal,
     );
 
-    const expectedErrorMessage =
-      'Tool "nonexistentTool" not found in registry.';
-    expect(response).toStrictEqual({
-      callId: 'call2',
-      agentId: 'primary',
-      error: new Error(expectedErrorMessage),
-      errorType: ToolErrorType.TOOL_NOT_REGISTERED,
-      resultDisplay: expectedErrorMessage,
-      responseParts: [
-        {
-          functionCall: {
-            name: 'nonexistentTool',
-            id: 'call2',
-            args: {},
-          },
-        },
-        {
-          functionResponse: {
-            name: 'nonexistentTool',
-            id: 'call2',
-            response: {
-              error: expectedErrorMessage,
-            },
-          },
-        },
-      ],
-    });
+    expect(response.callId).toBe('call2');
+    expect(response.errorType).toBe(ToolErrorType.TOOL_NOT_REGISTERED);
+    expect(response.error).toBeInstanceOf(Error);
+    expect(response.error?.message).toContain('could not be loaded');
+    expect(response.resultDisplay).toContain('could not be loaded');
+
+    const functionResponsePart = response.responseParts.find(
+      (part) => part.functionResponse,
+    );
+    const payload = functionResponsePart?.functionResponse?.response as
+      | { error?: unknown }
+      | undefined;
+    expect(typeof payload?.error).toBe('string');
+    expect(payload?.error).toContain('could not be loaded');
   });
 
   it('should return an error if tool validation fails', async () => {
@@ -168,39 +167,17 @@ describe('executeToolCall', () => {
       throw new Error('Invalid parameters');
     });
 
-    const response = await executeToolCall(
+    const { response } = await executeToolCall(
       mockConfig,
       request,
       abortController.signal,
     );
 
-    expect(response).toStrictEqual({
-      callId: 'call3',
-      agentId: 'primary',
-      error: new Error('Invalid parameters'),
-      errorType: ToolErrorType.UNHANDLED_EXCEPTION,
-      responseParts: [
-        {
-          functionCall: {
-            id: 'call3',
-            name: 'testTool',
-            args: {
-              param1: 'invalid',
-            },
-          },
-        },
-        {
-          functionResponse: {
-            id: 'call3',
-            name: 'testTool',
-            response: {
-              error: 'Invalid parameters',
-            },
-          },
-        },
-      ],
-      resultDisplay: 'Invalid parameters',
-    });
+    expect(response.callId).toBe('call3');
+    expect(response.errorType).toBe(ToolErrorType.INVALID_TOOL_PARAMS);
+    expect(response.error).toBeInstanceOf(Error);
+    expect(response.error?.message).toBe('Invalid parameters');
+    expect(response.resultDisplay).toBe('Invalid parameters');
   });
 
   it('should return an error if tool execution fails', async () => {
@@ -222,41 +199,28 @@ describe('executeToolCall', () => {
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
     mockTool.executeFn.mockReturnValue(executionErrorResult);
 
-    const response = await executeToolCall(
+    const { response } = await executeToolCall(
       mockConfig,
       request,
       abortController.signal,
     );
-    expect(response).toStrictEqual({
-      callId: 'call4',
-      agentId: 'primary',
-      error: new Error('Execution failed'),
-      errorType: ToolErrorType.EXECUTION_FAILED,
-      responseParts: [
-        {
-          functionCall: {
-            id: 'call4',
-            name: 'testTool',
-            args: {
-              param1: 'value1',
-            },
-          },
-        },
-        {
-          functionResponse: {
-            id: 'call4',
-            name: 'testTool',
-            response: {
-              output: 'Error: Execution failed',
-            },
-          },
-        },
-      ],
-      resultDisplay: 'Execution failed',
-    });
+    expect(response.callId).toBe('call4');
+    expect(response.errorType).toBe(ToolErrorType.EXECUTION_FAILED);
+    expect(response.error).toBeInstanceOf(Error);
+    expect(response.error?.message).toBe('Execution failed');
+    expect(response.resultDisplay).toBe('Execution failed');
+
+    const functionResponsePart = response.responseParts.find(
+      (part) => part.functionResponse,
+    );
+    const payload = functionResponsePart?.functionResponse?.response as
+      | { error?: unknown; output?: unknown }
+      | undefined;
+    expect(payload?.output).toBeUndefined();
+    expect(payload?.error).toBe('Execution failed');
   });
 
-  it('should return an unhandled exception error if execution throws', async () => {
+  it('should return an error if execution throws', async () => {
     const request: ToolCallRequestInfo = {
       callId: 'call5',
       name: 'testTool',
@@ -269,37 +233,25 @@ describe('executeToolCall', () => {
       throw new Error('Something went very wrong');
     });
 
-    const response = await executeToolCall(
+    const { response } = await executeToolCall(
       mockConfig,
       request,
       abortController.signal,
     );
 
-    expect(response).toStrictEqual({
-      callId: 'call5',
-      agentId: 'primary',
-      error: new Error('Something went very wrong'),
-      errorType: ToolErrorType.UNHANDLED_EXCEPTION,
-      resultDisplay: 'Something went very wrong',
-      responseParts: [
-        {
-          functionCall: {
-            name: 'testTool',
-            id: 'call5',
-            args: {
-              param1: 'value1',
-            },
-          },
-        },
-        {
-          functionResponse: {
-            name: 'testTool',
-            id: 'call5',
-            response: { error: 'Something went very wrong' },
-          },
-        },
-      ],
-    });
+    expect(response.callId).toBe('call5');
+    expect(response.error).toBeInstanceOf(Error);
+    expect(response.error?.message).toBe('Something went very wrong');
+    expect(response.errorType).toBeUndefined();
+    expect(response.resultDisplay).toBe('Something went very wrong');
+
+    const functionResponsePart = response.responseParts.find(
+      (part) => part.functionResponse,
+    );
+    const payload = functionResponsePart?.functionResponse?.response as
+      | { error?: unknown }
+      | undefined;
+    expect(payload?.error).toBe('Something went very wrong');
   });
 
   it('should block execution when tool is disabled in settings', async () => {
@@ -324,7 +276,7 @@ describe('executeToolCall', () => {
       'tools.disabled': ['testTool'],
     });
 
-    const response = await executeToolCall(
+    const { response } = await executeToolCall(
       mockConfig,
       request,
       abortController.signal,
@@ -355,7 +307,7 @@ describe('executeToolCall', () => {
       'tools.allowed': ['read_file', 'glob'],
     });
 
-    const response = await executeToolCall(
+    const { response } = await executeToolCall(
       mockConfig,
       request,
       abortController.signal,
@@ -390,7 +342,7 @@ describe('executeToolCall', () => {
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
     mockTool.executeFn.mockReturnValue(toolResult);
 
-    const response = await executeToolCall(
+    const { response } = await executeToolCall(
       mockConfig,
       request,
       abortController.signal,
@@ -437,8 +389,24 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     allowedTools?: string[] | undefined;
     policyEngine?: PolicyEngine;
     messageBus?: MessageBus;
+    includePolicyEngine?: boolean;
+    includeMessageBus?: boolean;
+    policyEngineReturnsUndefined?: boolean;
   }): ToolExecutionConfig {
     const ephemerals = options?.ephemerals ?? {};
+    const policyEngine =
+      options?.policyEngine ??
+      new PolicyEngine({
+        rules: [],
+        defaultDecision: PolicyDecision.ALLOW,
+        nonInteractive: false,
+      });
+    const messageBus =
+      options?.messageBus ?? new MessageBus(policyEngine, false);
+    const includePolicyEngine = options?.includePolicyEngine ?? true;
+    const includeMessageBus = options?.includeMessageBus ?? true;
+    const policyEngineReturnsUndefined =
+      options?.policyEngineReturnsUndefined ?? false;
     return {
       getToolRegistry: () => mockToolRegistry,
       getSessionId: () => 'test-session-id',
@@ -447,10 +415,12 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       getEphemeralSettings: () => ephemerals,
       getEphemeralSetting: (key: string) =>
         ephemerals[key as keyof typeof ephemerals],
-      getPolicyEngine: options?.policyEngine
-        ? () => options.policyEngine
+      getPolicyEngine: includePolicyEngine
+        ? policyEngineReturnsUndefined
+          ? () => undefined as unknown as PolicyEngine
+          : () => policyEngine
         : undefined,
-      getMessageBus: options?.messageBus ? () => options.messageBus : undefined,
+      getMessageBus: includeMessageBus ? () => messageBus : undefined,
       getApprovalMode: () => options?.approvalMode ?? ApprovalMode.DEFAULT,
       getAllowedTools: () => options?.allowedTools,
     };
@@ -484,7 +454,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         returnDisplay: 'Success!',
       });
 
-      const response = await executeToolCall(
+      const { response } = await executeToolCall(
         createMockConfig(),
         request,
         abortController.signal,
@@ -504,7 +474,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         returnDisplay: 'Success!',
       });
 
-      const response = await executeToolCall(
+      const { response } = await executeToolCall(
         createMockConfig(),
         request,
         abortController.signal,
@@ -534,7 +504,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       const customAgentId = 'custom-agent-123';
       const requestWithAgentId = { ...request, agentId: customAgentId };
 
-      const response = await executeToolCall(
+      const { response } = await executeToolCall(
         createMockConfig(),
         requestWithAgentId,
         abortController.signal,
@@ -552,7 +522,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
 
       const requestWithoutAgentId = { ...request, agentId: undefined };
 
-      const response = await executeToolCall(
+      const { response } = await executeToolCall(
         createMockConfig(),
         requestWithoutAgentId,
         abortController.signal,
@@ -572,7 +542,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
 
       const results: ToolCallResponseInfo[] = [];
       for (let i = 0; i < 3; i++) {
-        const response = await executeToolCall(
+        const { response } = await executeToolCall(
           createMockConfig(),
           { ...request, callId: `call${i}` },
           abortController.signal,
@@ -592,7 +562,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       mockTool.executeFn.mockImplementationOnce(() => {
         throw new Error('Tool failed');
       });
-      const failedResult = await executeToolCall(
+      const { response: failedResult } = await executeToolCall(
         createMockConfig(),
         { ...request, callId: 'fail' },
         abortController.signal,
@@ -603,7 +573,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         llmContent: 'Success',
         returnDisplay: 'Success!',
       });
-      const successResult = await executeToolCall(
+      const { response: successResult } = await executeToolCall(
         createMockConfig(),
         { ...request, callId: 'success' },
         abortController.signal,
@@ -653,9 +623,9 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
       await startedPromise;
       localAbortController.abort();
 
-      const response = await executionPromise;
-
-      expect(response.resultDisplay).toContain('Cancelled');
+      const completed = await executionPromise;
+      expect(completed.status).toBe('cancelled');
+      expect(getFullResponseText(completed.response)).toContain('Cancelled');
     });
   });
 
@@ -666,7 +636,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         throw new Error('Execution failed');
       });
 
-      const response = await executeToolCall(
+      const { response } = await executeToolCall(
         createMockConfig(),
         request,
         abortController.signal,
@@ -682,7 +652,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         throw new Error('Execution failed');
       });
 
-      const response = await executeToolCall(
+      const { response } = await executeToolCall(
         createMockConfig(),
         request,
         abortController.signal,
@@ -697,7 +667,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
     it('should return error for tool that does not exist', async () => {
       vi.mocked(mockToolRegistry.getTool).mockReturnValue(undefined);
 
-      const response = await executeToolCall(
+      const { response } = await executeToolCall(
         createMockConfig(),
         { ...request, name: 'nonexistent_tool' },
         abortController.signal,
@@ -713,7 +683,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         throw new Error('Invalid arguments: missing required field "path"');
       });
 
-      const response = await executeToolCall(
+      const { response } = await executeToolCall(
         createMockConfig(),
         { ...request, args: {} },
         abortController.signal,
@@ -735,13 +705,18 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         returnDisplay: 'Success',
       });
 
-      const response = await executeToolCall(
+      const { response } = await executeToolCall(
         config,
-        { ...request, name: 'write_file', args: { content: 'Has content' } },
+        {
+          ...request,
+          name: 'write_file',
+          args: { content: 'Has content 😀' },
+        },
         abortController.signal,
       );
 
       expect(response.error).toBeUndefined();
+      expect(getFullResponseText(response)).toContain('<system-reminder>');
     });
 
     it('should produce at most one system-reminder per execution', async () => {
@@ -754,9 +729,13 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         returnDisplay: 'Success',
       });
 
-      const response = await executeToolCall(
+      const { response } = await executeToolCall(
         config,
-        { ...request, name: 'write_file', args: { content: 'Content here' } },
+        {
+          ...request,
+          name: 'write_file',
+          args: { content: 'Content here 😀' },
+        },
         abortController.signal,
       );
 

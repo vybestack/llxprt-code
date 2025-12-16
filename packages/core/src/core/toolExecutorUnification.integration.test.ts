@@ -49,11 +49,12 @@ function createMockMessageBus() {
   };
 }
 
-function createMockPolicyEngine() {
-  return {
-    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-  };
+function createAllowPolicyEngine(): PolicyEngine {
+  return new PolicyEngine({
+    rules: [],
+    defaultDecision: PolicyDecision.ALLOW,
+    nonInteractive: false,
+  });
 }
 
 class ContextAwareMockTool extends MockTool implements ContextAwareTool {
@@ -89,7 +90,7 @@ function createMockConfig(
     policyEngine?: PolicyEngine;
   },
 ): Config {
-  const mockPolicyEngine = options?.policyEngine ?? createMockPolicyEngine();
+  const policyEngine = options?.policyEngine ?? createAllowPolicyEngine();
   const mockMessageBus = createMockMessageBus();
 
   return {
@@ -108,7 +109,7 @@ function createMockConfig(
     }),
     getToolRegistry: () => toolRegistry,
     getMessageBus: () => mockMessageBus,
-    getPolicyEngine: () => mockPolicyEngine,
+    getPolicyEngine: () => policyEngine,
     getTelemetryLogPromptsEnabled: () => false,
   } as unknown as Config;
 }
@@ -121,8 +122,7 @@ function createMockExecutionConfig(
     policyEngine?: PolicyEngine;
   },
 ): ToolExecutionConfig {
-  const mockPolicyEngine = options?.policyEngine ?? createMockPolicyEngine();
-  const mockMessageBus = createMockMessageBus();
+  const policyEngine = options?.policyEngine ?? createAllowPolicyEngine();
   const ephemeralSettings = options?.ephemeralSettings ?? {};
 
   return {
@@ -132,8 +132,7 @@ function createMockExecutionConfig(
     getEphemeralSettings: () => ephemeralSettings,
     getEphemeralSetting: (key: string) => ephemeralSettings[key],
     getToolRegistry: () => toolRegistry,
-    getPolicyEngine: () => mockPolicyEngine,
-    getMessageBus: () => mockMessageBus,
+    getPolicyEngine: () => policyEngine,
     getApprovalMode: () => options?.approvalMode ?? ApprovalMode.DEFAULT,
     getAllowedTools: () => undefined,
   };
@@ -198,11 +197,12 @@ describe('Tool Executor Unification - Integration Tests', () => {
       const schedulerCalls = await schedulerCompletionPromise;
       const schedulerResponse = schedulerCalls[0].response;
 
-      const executorResponse = await executeToolCall(
+      const executorCompleted = await executeToolCall(
         executorConfig,
         request,
         abortController.signal,
       );
+      const executorResponse = executorCompleted.response;
 
       expect(schedulerResponse.error).toBeDefined();
       expect(schedulerResponse.errorType).toBe(ToolErrorType.TOOL_DISABLED);
@@ -266,11 +266,12 @@ describe('Tool Executor Unification - Integration Tests', () => {
       const schedulerCalls = await schedulerCompletionPromise;
       const schedulerResponse = schedulerCalls[0].response;
 
-      const executorResponse = await executeToolCall(
+      const executorCompleted = await executeToolCall(
         executorConfig,
         request,
         abortController.signal,
       );
+      const executorResponse = executorCompleted.response;
 
       expect(schedulerResponse.error).toBeUndefined();
       expect(executorResponse.error).toBeUndefined();
@@ -331,11 +332,12 @@ describe('Tool Executor Unification - Integration Tests', () => {
       const schedulerCalls = await schedulerCompletionPromise;
       const schedulerResponse = schedulerCalls[0].response;
 
-      const executorResponse = await executeToolCall(
+      const executorCompleted = await executeToolCall(
         executorConfig,
         request,
         abortController.signal,
       );
+      const executorResponse = executorCompleted.response;
 
       expect(schedulerResponse.error).toBeDefined();
       expect(schedulerResponse.errorType).toBe(ToolErrorType.TOOL_DISABLED);
@@ -590,11 +592,12 @@ describe('Tool Executor Unification - Integration Tests', () => {
         agentId: customAgentId,
       };
 
-      const response = await executeToolCall(
+      const completed = await executeToolCall(
         executorConfig,
         request,
         abortController.signal,
       );
+      const response = completed.response;
 
       expect(response.agentId).toBe(customAgentId);
     });
@@ -617,11 +620,12 @@ describe('Tool Executor Unification - Integration Tests', () => {
         prompt_id: 'test-prompt',
       };
 
-      const response = await executeToolCall(
+      const completed = await executeToolCall(
         executorConfig,
         request,
         abortController.signal,
       );
+      const response = completed.response;
 
       expect(response.agentId).toBe(DEFAULT_AGENT_ID);
     });
@@ -716,11 +720,12 @@ describe('Tool Executor Unification - Integration Tests', () => {
       const schedulerCalls = await schedulerCompletionPromise;
       const schedulerResponse = schedulerCalls[0].response;
 
-      const executorResponse = await executeToolCall(
+      const executorCompleted = await executeToolCall(
         executorConfig,
         request,
         abortController.signal,
       );
+      const executorResponse = executorCompleted.response;
 
       expect(schedulerResponse.callId).toBe(executorResponse.callId);
       expect(schedulerResponse.agentId).toBe(executorResponse.agentId);
