@@ -8,14 +8,14 @@
 
 | Status | Count |
 |---|---:|
-| PICKED | 36 |
+| PICKED | 37 |
 | REIMPLEMENTED | 23 |
 | SKIPPED_EXPLICIT | 1 |
 | ALREADY_PRESENT | 3 |
 | NO_OP | 7 |
 | DIVERGED | 1 |
 | MISSING | 0 |
-| SKIP | 64 |
+| SKIP | 63 |
 
 ## Missing Planned Upstream Commits
 
@@ -105,7 +105,7 @@ None - all planned commits addressed.
 | 72 | `cd919346` | PICK | PICKED | `507de4365` | Clean up integration test warnings. (#10931) | Reimplemented env bracket notation |
 | 73 | `09ef33ec` | SKIP | SKIP |  | fix(cli): prioritize configured auth over env vars in non-interactive mode (#10935) |  |
 | 74 | `5dc7059b` | REIMPLEMENT | REIMPLEMENTED | `5c1d219ea` | Refactor: Introduce InteractiveRun class (#10947) |  |
-| 75 | `907e51ac` | SKIP | SKIP |  | Code guide command (#10940) |  |
+| 75 | `907e51ac` | SKIP | PICKED | `c55bf13d4` | Code guide command (#10940) | Adapted for LLxprt |
 | 76 | `87f175bb` | SKIP | SKIP |  | feat: Support Alt+key combinations (#10767) |  |
 | 77 | `cfb71b9d` | SKIP | SKIP |  | chore: wire a2a-server up for publishing (#10627) |  |
 | 78 | `c23eb84b` | PICK | PICKED | `575404134` | fix(remove private) from gemini-cli-a2a-server (#11018) |  |
