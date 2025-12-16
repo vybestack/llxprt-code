@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 22 |
+| **Last Completed** | Batch 23 |
 | **In Progress** | — |
-| **Next Up** | Batch 23 |
-| **Progress** | 22/52 (42%) |
+| **Next Up** | Batch 24 |
+| **Progress** | 23/52 (44%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -154,7 +154,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 21 record exists
   - Record Location: NOTES.md ## Batch 22
 
-- [ ] Batch 23 — QUICK — PICK — `affd3cae, 249ea559` — fix: Prevent garbled input during "Login With Google" OAuth prompt on… (#10888) / fix(test): Fix flaky shell command test using date command (#10863)
+- [x] Batch 23 — QUICK — PICK — `affd3cae, 249ea559` — fix: Prevent garbled input during "Login With Google" OAuth prompt on… (#10888) / fix(test): Fix flaky shell command test using date command (#10863)
   - Prerequisites: Batch 22 record exists
   - Record Location: NOTES.md ## Batch 23
 

@@ -1879,3 +1879,59 @@ $ grep -n "isTrustedFolder" packages/cli/src/ui/commands/memoryCommand.ts
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 23 — PICK — affd3cae, 249ea559
+
+### Selection Record
+Batch: 23
+Type: PICK
+Upstream SHA(s): affd3cae, 249ea559
+Subject: fix: Prevent garbled input during OAuth / fix(test): Fix flaky shell command test
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 22)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (765495e00)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick affd3cae 249ea559
+First commit (affd3cae): SKIPPED (empty - LLxprt already had changes)
+  - Early stdin raw mode setup already present at lines 377-402
+  - detectAndEnableKittyProtocol() already called
+  - OAuth handling already present
+Second commit (249ea559): 1 conflict resolved
+  - run_shell_command.test.ts: test description wording
+Branding Substitutions Applied: N/A
+Files Modified:
+  - integration-tests/run_shell_command.test.ts
+LLXPRT Commit SHA: e719277e9
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-16T04:15:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+### Feature Landing Verification
+Upstream Commits: affd3cae, 249ea559
+Features:
+1. Prevent garbled input during OAuth - already in LLxprt
+2. Fix flaky shell command test - uses getLineCountCommand instead of date
+
+```bash
+$ grep -n "getLineCountCommand" integration-tests/run_shell_command.test.ts | head -3
+8:import { getLineCountCommand } from './test-helper.js';
+121:    const { tool, expectedOutput } = getLineCountCommand();
+164:    const { tool, expectedOutput } = getLineCountCommand();
+```
+
+FEATURE VERIFIED: YES
+
+---
