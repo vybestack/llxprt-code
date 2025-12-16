@@ -390,7 +390,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       if (addItem) {
         addItem(successMessage, Date.now());
       } else {
-        process.stdout.write('Successfully authenticated with Codex!\\n');
+        process.stdout.write('Successfully authenticated with Codex!\n');
       }
     } catch (error) {
       this.logger.debug(
