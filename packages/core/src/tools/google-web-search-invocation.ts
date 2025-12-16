@@ -9,6 +9,7 @@ import { BaseToolInvocation, type ToolResult } from './tools.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { Config } from '../config/config.js';
+import { GOOGLE_WEB_SEARCH_TOOL } from './tool-names.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { ToolErrorType } from './tool-error.js';
 
@@ -70,7 +71,7 @@ export class GoogleWebSearchToolInvocation extends BaseToolInvocation<
   }
 
   override getToolName(): string {
-    return 'google_web_search';
+    return GOOGLE_WEB_SEARCH_TOOL;
   }
 
   override getDescription(): string {
