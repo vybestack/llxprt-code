@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 09 |
+| **Last Completed** | Batch 10 |
 | **In Progress** | — |
-| **Next Up** | Batch 10 |
-| **Progress** | 9/52 (17%) |
+| **Next Up** | Batch 11 |
+| **Progress** | 10/52 (19%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -100,7 +100,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 08 record exists
   - Record Location: NOTES.md ## Batch 09
 
-- [ ] Batch 10 — FULL — REIMPLEMENT — `0cd490a9` — feat: support GOOGLE_CLOUD_PROJECT_ID fallback (fixes #2262) (#2725)
+- [x] Batch 10 — FULL — REIMPLEMENT — `0cd490a9` — feat: support GOOGLE_CLOUD_PROJECT_ID fallback (fixes #2262) (#2725)
   - Prerequisites: Batch 09 record exists
   - Record Location: NOTES.md ## Batch 10
 

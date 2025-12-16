@@ -1042,3 +1042,59 @@ $ grep -n "/permissions" packages/cli/src/ui/hooks/useFolderTrust.ts
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 10 — REIMPLEMENT — 0cd490a9
+
+### Selection Record
+Batch: 10
+Type: REIMPLEMENT
+Upstream SHA: 0cd490a9 - feat: support GOOGLE_CLOUD_PROJECT_ID fallback (fixes #2262) (#2725)
+Subject: Add fallback to GOOGLE_CLOUD_PROJECT_ID env var
+Playbook: N/A (simple feature)
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 09)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (b8f7a321f)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Status: COMPLETED
+Implementation Summary:
+  - Added GOOGLE_CLOUD_PROJECT_ID fallback in setup.ts
+  - Added GOOGLE_CLOUD_PROJECT_ID fallback in contentGenerator.ts
+  - Updated ProjectIdRequiredError message to mention both env vars
+  - docs/get-started/authentication.md skipped (doesn't exist in LLxprt)
+Files Modified:
+  - packages/core/src/code_assist/setup.ts
+  - packages/core/src/core/contentGenerator.ts
+LLXPRT Commit SHA: 40c6f3a83
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-16T02:08:00Z
+
+Results:
+  - test: PASS (165 test files, 2372 tests)
+  - lint: PASS (0 warnings)
+  - typecheck: PASS
+  - build: PASS
+  - bundle: PASS
+  - synthetic: PASS (haiku generated)
+
+### Feature Landing Verification
+Upstream Commit: 0cd490a9
+Feature: GOOGLE_CLOUD_PROJECT_ID fallback
+
+```bash
+$ grep -n "GOOGLE_CLOUD_PROJECT_ID" packages/core/src/code_assist/setup.ts
+18:      'This account requires setting the GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_PROJECT_ID env var. See https://goo.gle/gemini-cli-auth-docs#workspace-gca',
+37:    process.env['GOOGLE_CLOUD_PROJECT_ID'] ||
+
+$ grep -n "GOOGLE_CLOUD_PROJECT_ID" packages/core/src/core/contentGenerator.ts
+66:    process.env['GOOGLE_CLOUD_PROJECT_ID'] ||
+```
+
+FEATURE VERIFIED: YES
+
+---
