@@ -70,50 +70,10 @@ export const darkTheme: ColorsTheme = {
   DiffRemovedBackground: '#f85149',
   DiffRemovedForeground: '#ffffff',
   Comment: '#6a9955',
-  DimComment: '#6a9955',
-  DimComment: '#4d703d',
   DimComment: '#4d703d', // Darker version of #6a9955 for thinking blocks/dimmed text
   Gray: '#808080',
   GradientColors: ['#a855f7', '#ec4899'], // Purple to Pink gradient
 };
-
-export const darkTheme: ColorsTheme = {
-  type: 'dark',
-  Background: '#1E1E2E',
-  Foreground: '',
-  LightBlue: '#ADD8E6',
-  AccentBlue: '#89B4FA',
-  AccentPurple: '#CBA6F7',
-  AccentCyan: '#89DCEB',
-  AccentGreen: '#A6E3A1',
-  AccentYellow: '#F9E2AF',
-  AccentRed: '#F38BA8',
-  DiffAdded: '#28350B',
-  DiffRemoved: '#430000',
-  Comment: '#6C7086',
-  DimComment: '#6C7086',
-  Gray: '#6C7086',
-  GradientColors: ['#4796E4', '#847ACE', '#C3677F'],
-};
-
-export const ansiTheme: ColorsTheme = {
-  type: 'ansi',
-  Background: 'black',
-  Foreground: 'white',
-  LightBlue: 'blue',
-  AccentBlue: 'blue',
-  AccentPurple: 'magenta',
-  AccentCyan: 'cyan',
-  AccentGreen: 'green',
-  AccentYellow: 'yellow',
-  AccentRed: 'red',
-  DiffAdded: 'green',
-  DiffRemoved: 'red',
-  Comment: 'gray',
-  DimComment: 'gray',
-  Gray: 'gray',
-};
-
 export class Theme {
   /**
    * The default foreground color for text when no specific highlight rule applies.
