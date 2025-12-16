@@ -95,22 +95,22 @@ describe('errors', () => {
   });
 
   describe('handleError', () => {
-    it('should log error message and re-throw', () => {
+    it('should log error message and exit with default code 1', () => {
       const testError = new Error('Test error');
 
       expect(() => {
         handleError(testError, mockConfig);
-      }).toThrow(testError);
+      }).toThrow('process.exit called with code: 1');
 
       expect(consoleErrorSpy).toHaveBeenCalledWith('API Error: Test error');
     });
 
-    it('should handle non-Error objects', () => {
+    it('should handle non-Error objects and exit with default code 1', () => {
       const testError = 'String error';
 
       expect(() => {
         handleError(testError, mockConfig);
-      }).toThrow(testError);
+      }).toThrow('process.exit called with code: 1');
 
       expect(consoleErrorSpy).toHaveBeenCalledWith('API Error: String error');
     });

@@ -116,6 +116,7 @@ import {
   DISABLE_FOCUS_TRACKING,
   SHOW_CURSOR,
 } from './utils/terminalSequences.js';
+import { calculateMainAreaWidth } from './utils/ui-sizing.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
@@ -1452,7 +1453,7 @@ export const AppContainer = (props: AppContainerProps) => {
     geminiClient,
   ]);
 
-  const mainAreaWidth = Math.floor(terminalWidth * 0.9);
+  const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
 
   // Detect PowerShell for file reference syntax tip
   const isPowerShell =

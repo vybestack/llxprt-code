@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 19 |
+| **Last Completed** | Batch 20 |
 | **In Progress** | — |
-| **Next Up** | Batch 20 |
-| **Progress** | 19/52 (37%) |
+| **Next Up** | Batch 21 |
+| **Progress** | 20/52 (38%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -141,7 +141,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 18 record exists, Batch 02 (`8ac2c684`) bundles a2a-server
   - Record Location: NOTES.md ## Batch 19
 
-- [ ] Batch 20 — FULL — REIMPLEMENT — `558be873` — Re-land bbiggs changes to reduce margin on narrow screens with fixes + full width setting (#10522)
+- [x] Batch 20 — FULL — REIMPLEMENT — `558be873` — Re-land bbiggs changes to reduce margin on narrow screens with fixes + full width setting (#10522)
   - Prerequisites: Batch 19 record exists
   - Record Location: NOTES.md ## Batch 20
 
