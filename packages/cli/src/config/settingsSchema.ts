@@ -976,7 +976,7 @@ export const SETTINGS_SCHEMA = {
     label: 'Use Smart Edit',
     category: 'Advanced',
     requiresRestart: false,
-    default: false,
+    default: true,
     description: 'Enable the smart-edit tool instead of the replace tool.',
     showInDialog: false,
   },

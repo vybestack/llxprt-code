@@ -254,7 +254,7 @@ describe('Settings Loading and Merging', () => {
           theme: undefined,
         },
         useRipgrep: false,
-        useSmartEdit: false,
+        useSmartEdit: true,
         ...systemSettingsContent,
       });
     });
@@ -337,7 +337,7 @@ describe('Settings Loading and Merging', () => {
           theme: undefined,
         },
         useRipgrep: false,
-        useSmartEdit: false,
+        useSmartEdit: true,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -418,7 +418,7 @@ describe('Settings Loading and Merging', () => {
           theme: undefined,
         },
         useRipgrep: false,
-        useSmartEdit: false,
+        useSmartEdit: true,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -504,7 +504,7 @@ describe('Settings Loading and Merging', () => {
           theme: undefined,
         },
         useRipgrep: false,
-        useSmartEdit: false,
+        useSmartEdit: true,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -602,7 +602,7 @@ describe('Settings Loading and Merging', () => {
           theme: undefined,
         },
         useRipgrep: false,
-        useSmartEdit: false,
+        useSmartEdit: true,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -711,7 +711,7 @@ describe('Settings Loading and Merging', () => {
           theme: undefined,
         },
         useRipgrep: false,
-        useSmartEdit: false,
+        useSmartEdit: true,
       });
     });
 
@@ -1673,7 +1673,7 @@ describe('Settings Loading and Merging', () => {
             theme: undefined,
           },
           useRipgrep: false,
-          useSmartEdit: false,
+          useSmartEdit: true,
           ...systemSettingsContent,
         });
       });
