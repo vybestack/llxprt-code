@@ -13,6 +13,8 @@ import { EOL } from 'node:os';
 import fs from 'node:fs';
 import * as pty from '@lydell/node-pty';
 import * as os from 'node:os';
+import stripAnsi from 'strip-ansi';
+import { expect } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -120,6 +122,7 @@ export class TestRig {
   testDir: string | null;
   testName?: string;
   _lastRunStdout?: string;
+  _interactiveOutput: string = '';
 
   constructor() {
     this.bundlePath = join(__dirname, '..', 'bundle/llxprt.js');
@@ -181,6 +184,11 @@ export class TestRig {
       selectedAuthType: 'provider', // Use provider-based auth (API keys)
       provider: env.LLXPRT_DEFAULT_PROVIDER, // No default - must be set explicitly
       debug: true, // Enable debug logging
+      security: {
+        auth: {
+          selectedType: 'provider',
+        },
+      },
       ...options.settings, // Allow tests to override/add settings
     };
     writeFileSync(
@@ -968,11 +976,37 @@ export class TestRig {
     return lastApiRequest;
   }
 
-  runInteractive(...args: string[]): {
-    ptyProcess: pty.IPty;
-    promise: Promise<{ exitCode: number; signal?: number; output: string }>;
+  private _getCommandAndArgs(extraInitialArgs: string[] = []): {
+    command: string;
+    initialArgs: string[];
   } {
-    const commandArgs = [this.bundlePath, '--yolo', ...args];
+    const command = 'node';
+    const initialArgs = [this.bundlePath, ...extraInitialArgs];
+    return { command, initialArgs };
+  }
+
+  async waitForText(text: string, timeout?: number) {
+    if (!timeout) {
+      timeout = this.getDefaultTimeout();
+    }
+    const found = await this.poll(
+      () =>
+        stripAnsi(this._interactiveOutput)
+          .toLowerCase()
+          .includes(text.toLowerCase()),
+      timeout,
+      200,
+    );
+    expect(found, `Did not find expected text: "${text}"`).toBe(true);
+  }
+
+  async runInteractive(...args: string[]): Promise<pty.IPty> {
+    this._interactiveOutput = '';
+
+    const { command, initialArgs } = this._getCommandAndArgs([
+      '--yolo',
+      ...args,
+    ]);
     const isWindows = os.platform() === 'win32';
 
     const options: pty.IPtyForkOptions = {
@@ -990,26 +1024,18 @@ export class TestRig {
       options.shell = process.env.COMSPEC || 'cmd.exe';
     }
 
-    const ptyProcess = pty.spawn('node', commandArgs, options);
+    const ptyProcess = pty.spawn(command, initialArgs, options);
 
-    let output = '';
     ptyProcess.onData((data) => {
-      output += data;
+      this._interactiveOutput += data;
       if (env.KEEP_OUTPUT === 'true' || env.VERBOSE === 'true') {
         process.stdout.write(data);
       }
     });
 
-    const promise = new Promise<{
-      exitCode: number;
-      signal?: number;
-      output: string;
-    }>((resolve) => {
-      ptyProcess.onExit(({ exitCode, signal }) => {
-        resolve({ exitCode, signal, output });
-      });
-    });
+    // Wait for "Type your message" to appear
+    await this.waitForText('Type your message');
 
-    return { ptyProcess, promise };
+    return ptyProcess;
   }
 }

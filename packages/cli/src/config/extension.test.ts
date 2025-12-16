@@ -976,6 +976,7 @@ This extension will run the following MCP servers:
     });
 
     it('should ignore consent flow if not required', async () => {
+      // First install the extension
       const sourceExtDir = createExtension({
         extensionsDir: tempHomeDir,
         name: 'my-local-extension',
@@ -988,8 +989,15 @@ This extension will run the following MCP servers:
         },
       });
 
+      // Install the extension first
+      await installOrUpdateExtension(
+        { source: sourceExtDir, type: 'local' },
+        async () => true,
+      );
+
       const mockRequestConsent = vi.fn();
 
+      // Now update the extension (previousExtensionConfig provided)
       await expect(
         installOrUpdateExtension(
           { source: sourceExtDir, type: 'local' },
