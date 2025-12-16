@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 07 |
+| **Last Completed** | Batch 08 |
 | **In Progress** | — |
-| **Next Up** | Batch 08 |
-| **Progress** | 7/52 (13%) |
+| **Next Up** | Batch 09 |
+| **Progress** | 8/52 (15%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -92,7 +92,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Record Location: NOTES.md ## Batch 07
   - Note: NO-OP - target files don't exist in LLxprt
 
-- [ ] Batch 08 — FULL — PICK — `06920402` — feat(core): Stop context window overflow when sending chat (#10459)
+- [x] Batch 08 — FULL — PICK — `06920402` — feat(core): Stop context window overflow when sending chat (#10459)
   - Prerequisites: Batch 07 record exists
   - Record Location: NOTES.md ## Batch 08
 

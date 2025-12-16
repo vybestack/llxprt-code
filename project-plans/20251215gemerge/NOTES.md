@@ -918,3 +918,75 @@ This is expected as LLxprt has a different documentation structure.
 FEATURE VERIFIED: N/A (NO-OP)
 
 ---
+
+## Batch 08 — PICK — 06920402
+
+### Selection Record
+Batch: 08
+Type: PICK
+Upstream SHA: 06920402 - feat(core): Stop context window overflow when sending chat (#10459)
+Subject: Warn users when message will exceed context window limit
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 07)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (bd979ad2c)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick 06920402
+Conflicts: YES (4 files)
+  - packages/cli/src/ui/hooks/useGeminiStream.ts: Added handleContextWindowWillOverflowEvent callback
+  - packages/core/src/core/client.test.ts: Added context window overflow tests
+  - packages/core/src/core/client.ts: Added overflow check in sendChat, fixed model resolution for LLxprt
+  - packages/core/src/core/turn.ts: Added ContextWindowWillOverflow event type
+Branding Substitutions Applied: YES (preserved multi-provider architecture)
+Files Modified:
+  - packages/cli/src/ui/hooks/useGeminiStream.ts
+  - packages/cli/src/ui/hooks/useGeminiStream.test.tsx
+  - packages/core/src/core/client.ts
+  - packages/core/src/core/client.test.ts
+  - packages/core/src/core/turn.ts
+LLXPRT Commit SHA: 90e5b9800
+
+### Remediation Record
+Initial Verification: FAILED (typecheck)
+Errors:
+  - client.ts(1115-1118): DEFAULT_GEMINI_MODEL_AUTO, DEFAULT_GEMINI_MODEL, getEffectiveModel undefined
+  - useGeminiStream.ts(957-960): ContextWindowWillOverflow not in GeminiEventType, value property missing
+
+Fixes Applied:
+  - client.ts: Simplified _getEffectiveModelForCurrentTurn() to use config.getModel() (LLxprt's provider-aware resolution)
+  - useGeminiStream.ts: Added ServerGeminiContextWindowWillOverflowEvent import, type assertions for event.value
+
+Re-verification: PASS
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-16T01:58:00Z
+
+Results:
+  - test: PASS (165 test files, 2372 tests)
+  - lint: PASS (0 warnings)
+  - typecheck: PASS
+  - build: PASS
+  - bundle: PASS
+  - synthetic: PASS (haiku generated)
+
+### Feature Landing Verification
+Upstream Commit: 06920402
+Feature: Context window overflow warning
+
+```bash
+$ grep -n "ContextWindowWillOverflow" packages/core/src/core/turn.ts
+74:  ContextWindowWillOverflow = 'context_window_will_overflow',
+
+$ grep -n "handleContextWindowWillOverflowEvent" packages/cli/src/ui/hooks/useGeminiStream.ts
+871:  const handleContextWindowWillOverflowEvent = useCallback(
+957:        handleContextWindowWillOverflowEvent(
+```
+
+FEATURE VERIFIED: YES
+
+---
