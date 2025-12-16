@@ -15,6 +15,7 @@ import { TodoProvider } from './contexts/TodoProvider.js';
 import { RuntimeContextProvider } from './contexts/RuntimeContext.js';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { AppDispatchProvider } from './contexts/AppDispatchContext.js';
+import { ScrollProvider } from './contexts/ScrollProvider.js';
 import { useKittyKeyboardProtocol } from './hooks/useKittyKeyboardProtocol.js';
 import { appReducer, initialAppState } from './reducers/appReducer.js';
 import { AppContainer } from './AppContainer.js';
@@ -49,19 +50,21 @@ export const AppWrapper = (props: AppProps) => {
       config={props.config}
       debugKeystrokeLogging={props.settings.merged.debugKeystrokeLogging}
     >
-      <SessionStatsProvider>
-        <VimModeProvider settings={props.settings}>
-          <ToolCallProvider sessionId={props.config.getSessionId()}>
-            <TodoProvider sessionId={props.config.getSessionId()}>
-              <RuntimeContextProvider>
-                <OverflowProvider>
-                  <AppWithState {...props} />
-                </OverflowProvider>
-              </RuntimeContextProvider>
-            </TodoProvider>
-          </ToolCallProvider>
-        </VimModeProvider>
-      </SessionStatsProvider>
+      <ScrollProvider>
+        <SessionStatsProvider>
+          <VimModeProvider settings={props.settings}>
+            <ToolCallProvider sessionId={props.config.getSessionId()}>
+              <TodoProvider sessionId={props.config.getSessionId()}>
+                <RuntimeContextProvider>
+                  <OverflowProvider>
+                    <AppWithState {...props} />
+                  </OverflowProvider>
+                </RuntimeContextProvider>
+              </TodoProvider>
+            </ToolCallProvider>
+          </VimModeProvider>
+        </SessionStatsProvider>
+      </ScrollProvider>
     </KeypressProvider>
   );
 };

@@ -100,8 +100,8 @@ describe('startInteractiveUI ink render options', () => {
       exitOnCtrlC: false,
       patchConsole: false,
       isScreenReaderEnabled: false,
-      alternateBuffer: false,
-      incrementalRendering: false,
+      alternateBuffer: true,
+      incrementalRendering: true,
     });
   });
 

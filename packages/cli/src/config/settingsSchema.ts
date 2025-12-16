@@ -515,7 +515,7 @@ export const SETTINGS_SCHEMA = {
         label: 'Use Alternate Screen Buffer',
         category: 'UI',
         requiresRestart: true,
-        default: false,
+        default: true,
         description:
           'Use an alternate screen buffer for the UI, preserving shell history.',
         showInDialog: true,
