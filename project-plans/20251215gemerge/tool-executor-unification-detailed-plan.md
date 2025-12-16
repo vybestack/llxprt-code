@@ -45,7 +45,8 @@ For each Phase:
 
 1. **`packages/cli/src/nonInteractiveCli.ts`** - Line 235
    ```typescript
-   const { response: toolResponse } = await executeToolCall(
+   // CURRENT (pre-migration): returns ToolCallResponseInfo
+   const toolResponse = await executeToolCall(
      config,
      requestInfo,
      abortController.signal,
@@ -55,7 +56,8 @@ For each Phase:
 
 2. **`packages/core/src/agents/executor.ts`** - Line 587
    ```typescript
-   const { response: toolResponse } = await executeToolCall(
+   // CURRENT (pre-migration): returns ToolCallResponseInfo
+   const toolResponse = await executeToolCall(
      this.runtimeContext,
      requestInfo,
      signal,
@@ -65,7 +67,8 @@ For each Phase:
 
 3. **`packages/core/src/core/subagent.ts`** - Line 1226
    ```typescript
-   const { response: toolResponse } = await executeToolCall(
+   // CURRENT (pre-migration): returns ToolCallResponseInfo
+   const toolResponse = await executeToolCall(
      this.toolExecutorContext,
      requestInfo,
      abortController.signal,
@@ -73,7 +76,9 @@ For each Phase:
    ```
    Uses `this.toolExecutorContext` which is a `ToolExecutionConfigShim` (minimal interface).
 
-**Key insight:** This is a mechanical API migration across exactly 3 call sites: `ToolCallResponseInfo` → `CompletedToolCall` (use `completed.response`).
+**Key insight:** This is a mechanical API migration across exactly 3 call sites:
+- Before: `const toolResponse = await executeToolCall(...)` → `ToolCallResponseInfo`
+- After: `const completed = await executeToolCall(...)` → `CompletedToolCall` (use `completed.response`)
 
 ---
 
@@ -569,23 +574,24 @@ The original plan proposed `executeToolCallV2` with a compatibility shim. This i
 #### 2. SubAgent Must Use createSchedulerConfig Pattern
 SubAgent currently calls `executeToolCall(this.toolExecutorContext, ...)` where `toolExecutorContext` is a minimal shim. This is **WRONG** for the new design.
 
-**Current (wrong for unified path):**
+**Current (pre-migration):**
 ```typescript
 // subagent.ts line 1226
-toolResponse = (await executeToolCall(
-  this.toolExecutorContext,  // MINIMAL shim - missing policy, message bus, etc.
+toolResponse = await executeToolCall(
+  this.toolExecutorContext, // MINIMAL shim - missing policy, message bus, etc.
   requestInfo,
   abortController.signal,
-)).response;
+);
 ```
 
 **Correct approach:** SubAgent already has `createSchedulerConfig({ interactive: false })` (lines 1279-1331) that builds a proper scheduler-compatible config. The migration must use this:
 ```typescript
-toolResponse = (await executeToolCall(
-  this.createSchedulerConfig({ interactive: false }),
+const completed = await executeToolCall(
+  this.createSchedulerConfig({ interactive: false }), // NOTE: must provide getEphemeralSetting('emojifilter')
   requestInfo,
   abortController.signal,
-)).response;
+);
+toolResponse = completed.response;
 ```
 
 #### 3. Return Type is `CompletedToolCall` (Upstream parity)
@@ -696,7 +702,24 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
       // Fail-safe: no policy = deny
       expect(response.error).toBeDefined();
       expect(response.errorType).toBe(ToolErrorType.POLICY_VIOLATION);
-      expect(response.error?.message).toContain('policy');
+      expect(response.error?.message).toMatch(/policy/i);
+    });
+
+    it('should error if getPolicyEngine() returns undefined (fail-safe)', async () => {
+      // Config with getPolicyEngine present but returning undefined - should still fail safe
+      const configReturnsUndefinedPolicy = {
+        ...mockConfig,
+        getPolicyEngine: () => undefined,
+      };
+
+      const { response } = await executeToolCall(
+        configReturnsUndefinedPolicy,
+        request,
+        abortController.signal,
+      );
+
+      expect(response.error).toBeDefined();
+      expect(response.errorType).toBe(ToolErrorType.POLICY_VIOLATION);
     });
   });
   ```
@@ -788,23 +811,41 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
 
 - [ ] **Test 5: Abort signal propagation**
   ```typescript
-  it('should propagate abort signal to scheduler', async () => {
+  it('should cancel an in-progress tool call when aborted', async () => {
     const abortController = new AbortController();
 
-    // Setup a tool that takes time
-    mockTool.executeFn.mockImplementation(async () => {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return { llmContent: 'Should not reach' };
+    // Setup a tool that *starts*, then waits until aborted.
+    let startedResolver: (() => void) | null = null;
+    const startedPromise = new Promise<void>((resolve) => {
+      startedResolver = resolve;
     });
 
-    // Start execution but abort immediately
-    const executionPromise = executeToolCall(mockConfig, request, abortController.signal);
+    mockTool.executeFn.mockImplementation(async (_args, signal) => {
+      startedResolver?.();
+      await new Promise<void>((resolve) =>
+        signal.addEventListener('abort', () => resolve(), { once: true }),
+      );
+      return { llmContent: 'Should not reach', returnDisplay: 'Should not reach' };
+    });
+
+    // Start execution, wait until tool has actually started, then abort.
+    const executionPromise = executeToolCall(
+      mockConfig,
+      request,
+      abortController.signal,
+    );
+    await startedPromise;
     abortController.abort();
 
-    const { response } = await executionPromise;
+    const completed = await executionPromise;
 
-    // Should be cancelled or error
-    expect(response.error).toBeDefined();
+    expect(completed.status).toBe('cancelled');
+    expect(completed.response.error).toBeUndefined();
+    expect(
+      completed.response.responseParts?.[1]?.functionResponse?.response,
+    ).toMatchObject({
+      error: expect.stringContaining('[Operation Cancelled]'),
+    });
   });
   ```
 
@@ -848,9 +889,11 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
   describe('emoji filtering with errors', () => {
     it('should append systemFeedback to error message when emoji filtering warns', async () => {
       // Setup emoji filter to produce warning
+      const ephemerals = { emojifilter: 'warn' as const };
       const configWithEmojiFilter = {
         ...mockConfig,
-        getEphemeralSettings: () => ({ 'emojifilter': 'warn' }),
+        getEphemeralSettings: () => ephemerals,
+        getEphemeralSetting: (key: string) => ephemerals[key as keyof typeof ephemerals],
       };
 
       vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
@@ -872,6 +915,10 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
 ### 3b.2 Implementation Subagent Tasks
 
 **File to modify:** `packages/core/src/core/nonInteractiveToolExecutor.ts`
+
+- [ ] **Pre-check: Confirm PolicyEngine API used here exists**
+  - Verify `PolicyEngine` includes `getRules()`, `getDefaultDecision()`, and `isNonInteractive()` in `packages/core/src/policy/policy-engine.ts`.
+  - If any method is missing, STOP and update this plan (do not guess method names).
 
 - [ ] **Task 1: Create non-interactive policy wrapper (ASK_USER -> DENY)**
   ```typescript
@@ -924,6 +971,8 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
     | 'getMessageBus'
     | 'getPolicyEngine';
 
+  // NOTE: SchedulerConfig does NOT need getEphemeralSetting(key).
+  // executeToolCall's *input* config DOES need getEphemeralSetting('emojifilter') for emoji filtering.
   type SchedulerConfig = Pick<Config, SchedulerConfigMethods>;
 
   function createSchedulerConfigForNonInteractive(
@@ -959,6 +1008,104 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
       getPolicyEngine: () => policyEngine,
     };
   }
+  ```
+
+- [ ] **Task 2a: Extract emoji filtering into `applyEmojiFiltering` (preserve all special cases)**
+
+  **Goal:** Make emoji filtering behavior explicit and testable, while preserving current non-interactive behavior exactly.
+
+  **Source of truth:** Current logic in `packages/core/src/core/nonInteractiveToolExecutor.ts`:
+  - Search-tool bypass list (do not filter)
+  - File-modification special cases:
+    - **Never filter `file_path`** (paths may legitimately contain emojis)
+    - **Never filter `old_string`** (must match file contents exactly)
+    - Filter only `new_string` / `content`
+
+  ```typescript
+  type EmojiFilteringOutcome = {
+    filteredRequest: ToolCallRequestInfo;
+    systemFeedback?: string;
+  };
+
+  function applyEmojiFiltering(
+    filter: EmojiFilter,
+    toolCallRequest: ToolCallRequestInfo,
+  ): EmojiFilteringOutcome {
+    // Search tools need unfiltered access so users can *find* emojis.
+    const isSearchTool = [
+      'shell',
+      'bash',
+      'exec',
+      'run_shell_command',
+      'grep',
+      'search_file_content',
+      'glob',
+      'find',
+      'ls',
+      'list_directory',
+      'read_file',
+      'read_many_files',
+    ].includes(toolCallRequest.name);
+
+    if (isSearchTool) {
+      return { filteredRequest: toolCallRequest };
+    }
+
+    // File modification tools require special handling (never filter old_string or file_path).
+    const isFileModTool = [
+      'edit_file',
+      'edit',
+      'write_file',
+      'create_file',
+      'replace',
+      'replace_all',
+    ].includes(toolCallRequest.name);
+
+    const filterResult = isFileModTool
+      ? filterFileModificationArgs(
+          filter,
+          toolCallRequest.name,
+          toolCallRequest.args,
+        )
+      : filter.filterToolArgs(toolCallRequest.args);
+
+    if (filterResult.blocked) {
+      // Caller maps this to ToolErrorType.INVALID_TOOL_PARAMS and returns a wrapper-level error response.
+      throw new Error(filterResult.error || 'Tool execution blocked');
+    }
+
+    return {
+      filteredRequest: {
+        ...toolCallRequest,
+        args: filterResult.filtered as Record<string, unknown>,
+      },
+      systemFeedback: filterResult.systemFeedback,
+    };
+  }
+  ```
+
+- [ ] **Task 2b: Expand `ToolExecutionConfig` to include scheduler-required methods**
+
+  **Why:** Current `ToolExecutionConfig` in `packages/core/src/core/nonInteractiveToolExecutor.ts` is a narrow `Pick<Config, ...>` and does not include `getPolicyEngine`, `getMessageBus`, `getApprovalMode`, or `getAllowedTools`, but the unified implementation needs them.
+
+  **Exact type change (minimal, keeps fail-safe behavior):**
+  ```typescript
+  export type ToolExecutionConfig =
+    Pick<
+      Config,
+      | 'getToolRegistry'
+      | 'getEphemeralSettings'
+      | 'getEphemeralSetting'
+      | 'getExcludeTools'
+      | 'getSessionId'
+      | 'getTelemetryLogPromptsEnabled'
+    > &
+      Partial<
+        Pick<
+          Config,
+          'getAllowedTools' | 'getApprovalMode' | 'getMessageBus' | 'getPolicyEngine'
+        >
+      >;
   ```
 
 - [ ] **Task 3: Rewrite executeToolCall to use CoreToolScheduler**
@@ -1003,6 +1150,13 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
       completionResolver = resolve;
     });
 
+    // 3b. Detect awaiting_approval without throwing from scheduler callbacks.
+    // (Requires: import type { ToolCall } from './coreToolScheduler.js')
+    let awaitingApprovalResolver: ((call: ToolCall) => void) | null = null;
+    const awaitingApprovalPromise = new Promise<ToolCall>((resolve) => {
+      awaitingApprovalResolver = resolve;
+    });
+
     // 4. Create scheduler instance
     // TYPING: Cast is safe because we provide all methods CoreToolScheduler uses
     const scheduler = new CoreToolScheduler({
@@ -1016,13 +1170,18 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
         }
       },
       onToolCallsUpdate: (toolCalls) => {
-        // FAIL FAST if any tool reaches awaiting_approval
-        const awaitingApproval = toolCalls.find(c => c.status === 'awaiting_approval');
-        if (awaitingApproval) {
-          throw new Error(
-            'Non-interactive tool execution reached awaiting_approval - this is a bug. ' +
-            'Policy engine should convert ASK_USER to DENY for non-interactive mode.'
+        // IMPORTANT: Never throw from callbacks invoked by CoreToolScheduler internals.
+        // If we ever see awaiting_approval in non-interactive mode, return a deterministic error.
+        try {
+          const awaiting = toolCalls.find(
+            (c) => c.status === 'awaiting_approval',
           );
+          if (awaiting && awaitingApprovalResolver) {
+            awaitingApprovalResolver(awaiting);
+            awaitingApprovalResolver = null;
+          }
+        } catch {
+          // Swallow - callback must be non-throwing.
         }
       },
     });
@@ -1032,8 +1191,29 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
       const effectiveSignal = abortSignal ?? new AbortController().signal;
       await scheduler.schedule([filteredRequest], effectiveSignal);
 
-      // 6. Wait for completion via Promise (safe from race condition)
-      const completedCalls = await completionPromise;
+      // 6. Wait for either completion OR a forbidden awaiting_approval state.
+      const raceResult = await Promise.race([
+        completionPromise.then((calls) => ({
+          kind: 'complete' as const,
+          calls,
+        })),
+        awaitingApprovalPromise.then((call) => ({
+          kind: 'awaiting' as const,
+          call,
+        })),
+      ]);
+
+      if (raceResult.kind === 'awaiting') {
+        return createErrorCompletedToolCall(
+          toolCallRequest,
+          new Error(
+            'Non-interactive tool execution reached awaiting_approval; treat as policy denial (no user interaction is possible).',
+          ),
+          ToolErrorType.POLICY_VIOLATION,
+        );
+      }
+
+      const completedCalls = raceResult.calls;
 
       if (completedCalls.length !== 1) {
         throw new Error('Non-interactive executor expects exactly one tool call');
@@ -1152,8 +1332,9 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
 **Rationale:**
 1. The scheduler does NOT apply emoji filtering
 2. The wrapper applies filtering BEFORE passing to scheduler
-3. This prevents double-filtering
+3. Some individual tools also consult `emojifilter`; wrapper-level filtering must ensure those tools see already-filtered args (so they become a no-op and do not add a second reminder)
 4. System feedback is appended AFTER scheduler returns
+5. File-modification rules are preserved (never filter `old_string` / `file_path`; search tools bypass filtering)
 
 **Flow:**
 ```
@@ -1227,12 +1408,20 @@ Already passes `this.runtimeContext` which is a full `Config`. Must update call 
 
 Verify it handles the response correctly:
 ```typescript
-// Current code (line 587-606):
-const { response: toolResponse } = await executeToolCall(
+// CURRENT (pre-migration):
+const toolResponse = await executeToolCall(
   this.runtimeContext,
   requestInfo,
   signal,
 );
+
+// AFTER (post Phase 3b):
+const completed = await executeToolCall(
+  this.runtimeContext,
+  requestInfo,
+  signal,
+);
+const toolResponse = completed.response;
 
 if (toolResponse.error) {
   this.emitActivity('ERROR', {
@@ -1267,14 +1456,15 @@ The migration below ONLY affects the `runNonInteractive` code path. Interactive 
 Current (WRONG for unified path):
 ```typescript
 // Line 1226 (in processFunctionCalls, called from runNonInteractive)
-toolResponse = (await executeToolCall(
-  this.toolExecutorContext,  // MINIMAL shim - missing critical methods
+toolResponse = await executeToolCall(
+  this.toolExecutorContext, // MINIMAL shim - missing critical methods
   requestInfo,
   abortController.signal,
-)).response;
+);
 ```
 
 SubAgent's `toolExecutorContext` is a `ToolExecutionConfigShim` that does NOT have:
+- `getEphemeralSetting` (needed for `emojifilter` in non-interactive executor)
 - `getPolicyEngine` (needed for policy enforcement)
 - `getMessageBus` (needed for scheduler)
 - `getApprovalMode` (needed for approval mode)
@@ -1284,16 +1474,44 @@ However, SubAgent already has `createSchedulerConfig()` (lines 1279-1331) that b
 
 **Migration:**
 ```typescript
-// Before (line 1226):
-toolResponse = (await executeToolCall(this.toolExecutorContext, requestInfo, abortController.signal)).response;
+// Before (line 1226, pre-migration):
+toolResponse = await executeToolCall(
+  this.toolExecutorContext,
+  requestInfo,
+  abortController.signal,
+);
 
-// After (for runNonInteractive path):
-toolResponse = (await executeToolCall(this.createSchedulerConfig({ interactive: false }), requestInfo, abortController.signal)).response;
+// After (for runNonInteractive path, post Phase 3b):
+const completed = await executeToolCall(
+  this.createSchedulerConfig({ interactive: false }), // NOTE: must provide getEphemeralSetting('emojifilter')
+  requestInfo,
+  abortController.signal,
+);
+toolResponse = completed.response;
 ```
 
 **Note:** The `interactive: false` is correct here because this code path is ONLY executed from `runNonInteractive()`. The `runInteractive()` method does NOT use `executeToolCall` - it uses `CoreToolScheduler` directly with `interactive: true` at line 619.
 
 ### 3c.2 Implementation Tasks
+
+- [ ] **Task 0: Add `getEphemeralSetting(key)` to subagent.ts createSchedulerConfig**
+
+  **Why:** `executeToolCall` reads `config.getEphemeralSetting('emojifilter')`. SubAgent’s `createSchedulerConfig()` currently provides only `getEphemeralSettings()`, so passing it into `executeToolCall` would throw at runtime.
+
+  **File:** `packages/core/src/core/subagent.ts` (method `createSchedulerConfig`, currently returns a `Config` cast)
+
+  **Exact change:** Add `getEphemeralSetting` derived from `getEphemeralSettings`.
+  ```typescript
+  const getEphemeralSetting = (key: string): unknown =>
+    getEphemeralSettings()[key];
+
+  return {
+    // ...existing methods...
+    getEphemeralSettings,
+    getEphemeralSetting,
+    // ...existing methods...
+  } as unknown as Config;
+  ```
 
 - [ ] **Task 1: Update subagent.ts runNonInteractive path to use createSchedulerConfig**
 
@@ -1306,11 +1524,12 @@ toolResponse = (await executeToolCall(this.createSchedulerConfig({ interactive: 
     // @plan PLAN-20251028-STATELESS6.P08
     // @requirement REQ-STAT6-001.1
     // Note: interactive: false is correct here - this path is only called from runNonInteractive()
-    toolResponse = (await executeToolCall(
+    const completed = await executeToolCall(
       this.createSchedulerConfig({ interactive: false }),
       requestInfo,
       abortController.signal,
-    )).response;
+    );
+    toolResponse = completed.response;
   }
   ```
 
@@ -1365,14 +1584,29 @@ Comprehensive test coverage validating the unified execution path.
       });
       const config = createMockConfigWithPolicyEngine(policyEngine);
 
-      const { response } = await executeToolCall(config, request, signal);
+      const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
+        let timeoutId: NodeJS.Timeout | undefined;
+        const timeout = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('timeout')), ms);
+        });
+        try {
+          return await Promise.race([promise, timeout]);
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+        }
+      };
+
+      const { response } = await withTimeout(
+        executeToolCall(config, request, signal),
+        2000,
+      );
 
       // Should be denied deterministically
       expect(response.error).toBeDefined();
       expect(response.errorType).toBe(ToolErrorType.POLICY_VIOLATION);
 
-      // Should never have reached awaiting_approval
-      // (verified by the lack of timeout - if it awaited, the test would hang)
+      // Should never have reached awaiting_approval (guarded by withTimeout above).
+      expect(response.error?.message).not.toMatch(/awaiting_approval/i);
     });
   });
   ```
