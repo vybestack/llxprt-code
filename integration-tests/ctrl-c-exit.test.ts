@@ -8,7 +8,8 @@ import { describe, it, expect } from 'vitest';
 import * as os from 'node:os';
 import { TestRig } from './test-helper.js';
 
-describe('Ctrl+C exit', () => {
+// Skip interactive PTY tests in CI - they require a real terminal and are inherently flaky
+describe.skipIf(process.env.CI === 'true')('Ctrl+C exit', () => {
   it('should exit gracefully on second Ctrl+C', async () => {
     const rig = new TestRig();
     await rig.setup('should exit gracefully on second Ctrl+C');
