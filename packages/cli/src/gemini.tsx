@@ -98,6 +98,7 @@ import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.
 import { appEvents, AppEvent } from './utils/events.js';
 import { computeWindowTitle } from './utils/windowTitle.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
+import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import {
   setCliRuntimeContext,
   switchActiveProvider,
@@ -243,7 +244,7 @@ export async function startInteractiveUI(
         </SettingsContext.Provider>
       </ErrorBoundary>
     </React.StrictMode>,
-    { exitOnCtrlC: false },
+    inkRenderOptions(config, settings),
   );
 
   checkForUpdates()

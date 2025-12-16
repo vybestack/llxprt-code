@@ -101,7 +101,7 @@
     "fast-check": "^4.3.0",
     "glob": "^12.0.0",
     "globals": "^16.0.0",
-    "ink": "^6.5.1",
+    "ink": "npm:@jrichman/ink@6.4.6",
     "json": "^11.0.0",
     "lodash": "^4.17.21",
     "memfs": "^4.17.2",

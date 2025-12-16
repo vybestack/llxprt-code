@@ -510,6 +510,26 @@ export const SETTINGS_SCHEMA = {
         description: 'Hide the footer from the UI',
         showInDialog: true,
       },
+      useAlternateBuffer: {
+        type: 'boolean',
+        label: 'Use Alternate Screen Buffer',
+        category: 'UI',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Use an alternate screen buffer for the UI, preserving shell history.',
+        showInDialog: true,
+      },
+      incrementalRendering: {
+        type: 'boolean',
+        label: 'Incremental Rendering',
+        category: 'UI',
+        requiresRestart: true,
+        default: true,
+        description:
+          'Enable incremental rendering for the UI. Only supported when useAlternateBuffer is enabled.',
+        showInDialog: true,
+      },
       showMemoryUsage: {
         type: 'boolean',
         label: 'Show Memory Usage',
