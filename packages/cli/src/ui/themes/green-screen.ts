@@ -24,6 +24,7 @@ const greenScreenColors: ColorsTheme = {
   DiffRemovedBackground: '#6a9955',
   DiffRemovedForeground: '#000000',
   Comment: '#6a9955',
+  DimComment: '#4a6f3a',
   Gray: '#6a9955',
   GradientColors: ['#00ff00', '#6a9955'],
 };

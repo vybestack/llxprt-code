@@ -47,31 +47,34 @@ export interface ColorsTheme {
   DiffRemovedBackground?: string;
   DiffRemovedForeground?: string;
   Comment: string;
+  DimComment: string;
   Gray: string;
   GradientColors?: string[];
 }
 
-export interface CustomTheme extends ColorsTheme {
-  type: 'custom';
-  name: string;
-}
-
-export const lightTheme: ColorsTheme = {
-  type: 'light',
-  Background: '#FAFAFA',
-  Foreground: '',
-  LightBlue: '#89BDCD',
-  AccentBlue: '#3B82F6',
-  AccentPurple: '#8B5CF6',
-  AccentCyan: '#06B6D4',
-  AccentGreen: '#3CA84B',
-  AccentYellow: '#D5A40A',
-  AccentRed: '#DD4C4C',
-  DiffAdded: '#C6EAD8',
-  DiffRemoved: '#FFCCCC',
-  Comment: '#008000',
-  Gray: '#97a0b0',
-  GradientColors: ['#4796E4', '#847ACE', '#C3677F'],
+export const darkTheme: ColorsTheme = {
+  type: 'dark',
+  Background: '#1e1e1e',
+  Foreground: '#d4d4d4',
+  LightBlue: '#9cdcfe',
+  AccentBlue: '#569cd6',
+  AccentPurple: '#c586c0',
+  AccentCyan: '#4ec9b0',
+  AccentGreen: '#608b4e',
+  AccentYellow: '#dcdcaa',
+  AccentRed: '#d16969',
+  DiffAdded: '#2ea043',
+  DiffRemoved: '#f85149',
+  DiffAddedBackground: '#2ea043',
+  DiffAddedForeground: '#ffffff',
+  DiffRemovedBackground: '#f85149',
+  DiffRemovedForeground: '#ffffff',
+  Comment: '#6a9955',
+  DimComment: '#6a9955',
+  DimComment: '#4d703d',
+  DimComment: '#4d703d', // Darker version of #6a9955 for thinking blocks/dimmed text
+  Gray: '#808080',
+  GradientColors: ['#a855f7', '#ec4899'], // Purple to Pink gradient
 };
 
 export const darkTheme: ColorsTheme = {
@@ -88,6 +91,7 @@ export const darkTheme: ColorsTheme = {
   DiffAdded: '#28350B',
   DiffRemoved: '#430000',
   Comment: '#6C7086',
+  DimComment: '#6C7086',
   Gray: '#6C7086',
   GradientColors: ['#4796E4', '#847ACE', '#C3677F'],
 };
@@ -106,6 +110,7 @@ export const ansiTheme: ColorsTheme = {
   DiffAdded: 'green',
   DiffRemoved: 'red',
   Comment: 'gray',
+  DimComment: 'gray',
   Gray: 'gray',
 };
 

@@ -20,6 +20,7 @@ const ayuLightColors: ColorsTheme = {
   DiffAdded: '#C6EAD8',
   DiffRemoved: '#FFCCCC',
   Comment: '#ABADB1',
+  DimComment: '#ABADB1',
   Gray: '#a6aaaf',
   GradientColors: ['#399ee6', '#86b300'],
 };
