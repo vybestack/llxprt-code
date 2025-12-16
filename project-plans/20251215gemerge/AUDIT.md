@@ -8,11 +8,11 @@
 
 | Status | Count |
 |---|---:|
-| PICKED | 35 |
+| PICKED | 36 |
 | REIMPLEMENTED | 23 |
 | SKIPPED_EXPLICIT | 1 |
 | ALREADY_PRESENT | 3 |
-| NO_OP | 8 |
+| NO_OP | 7 |
 | DIVERGED | 1 |
 | MISSING | 0 |
 | SKIP | 64 |
@@ -26,7 +26,6 @@ None - all planned commits addressed.
 | # | Upstream | Reason |
 |---:|:--|:--|
 | 62 | `a5e47c62` | Google-specific TOS; LLxprt has own multi-provider tos-privacy.md |
-| 72 | `cd919346` | Minor env access pattern cleanup; LLxprt already mixed patterns |
 
 ## Full Upstream Table (Chronological)
 
@@ -103,7 +102,7 @@ None - all planned commits addressed.
 | 69 | `37678acb` | REIMPLEMENT | REIMPLEMENTED | `0a5bd4748` | Update deployment.md -> installation.md and sidebar links. (#10662) |  |
 | 70 | `265d39f3` | PICK | PICKED | `2011efb53` | feat(core): improve shell execution service reliability (#10607) |  |
 | 71 | `ead8928c` | PICK | PICKED | `afb2fe645` | Deflake test. (#10932) |  |
-| 72 | `cd919346` | PICK | NO_OP |  | Clean up integration test warnings. (#10931) | Minor env pattern cleanup |
+| 72 | `cd919346` | PICK | PICKED | `507de4365` | Clean up integration test warnings. (#10931) | Reimplemented env bracket notation |
 | 73 | `09ef33ec` | SKIP | SKIP |  | fix(cli): prioritize configured auth over env vars in non-interactive mode (#10935) |  |
 | 74 | `5dc7059b` | REIMPLEMENT | REIMPLEMENTED | `5c1d219ea` | Refactor: Introduce InteractiveRun class (#10947) |  |
 | 75 | `907e51ac` | SKIP | SKIP |  | Code guide command (#10940) |  |
