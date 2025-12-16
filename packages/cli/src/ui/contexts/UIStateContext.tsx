@@ -145,7 +145,7 @@ export interface UIState {
   pendingHistoryItemRef: React.RefObject<DOMElement | null>;
 
   // Slash commands
-  slashCommands: readonly SlashCommand[];
+  slashCommands: readonly SlashCommand[] | undefined;
   commandContext: CommandContext;
 
   // IDE prompt

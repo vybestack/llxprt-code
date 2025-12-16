@@ -83,7 +83,9 @@ export const useSlashCommandProcessor = (
   isConfigInitialized: boolean,
 ) => {
   const session = useSessionStats();
-  const [commands, setCommands] = useState<readonly SlashCommand[]>([]);
+  const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
+    undefined,
+  );
   const [reloadTrigger, setReloadTrigger] = useState(0);
 
   const reloadCommands = useCallback(() => {
@@ -346,6 +348,9 @@ export const useSlashCommandProcessor = (
       oneTimeShellAllowlist?: Set<string>,
       overwriteConfirmed?: boolean,
     ): Promise<SlashCommandProcessorResult | false> => {
+      if (!commands) {
+        return false;
+      }
       if (typeof rawQuery !== 'string') {
         return false;
       }

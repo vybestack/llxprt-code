@@ -47,7 +47,7 @@ export const Composer = ({ config, settings: _settings }: ComposerProps) => {
       userMessages={inputHistory}
       onClearScreen={uiActions.handleClearScreen}
       config={config}
-      slashCommands={slashCommands}
+      slashCommands={slashCommands || []}
       commandContext={commandContext}
       shellModeActive={shellModeActive}
       setShellModeActive={uiActions.setShellModeActive}

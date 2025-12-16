@@ -1294,7 +1294,8 @@ export const AppContainer = (props: AppContainerProps) => {
     (streamingState === StreamingState.Idle ||
       streamingState === StreamingState.Responding) &&
     !initError &&
-    !isProcessing;
+    !isProcessing &&
+    !!slashCommands;
 
   useEffect(() => {
     if (selectionLogger.enabled) {
