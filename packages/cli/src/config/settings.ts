@@ -759,10 +759,7 @@ export function loadSettings(
   );
 }
 
-function deepMergeWithComments(
-  target: unknown,
-  source: unknown,
-): unknown {
+function deepMergeWithComments(target: unknown, source: unknown): unknown {
   if (
     typeof target !== 'object' ||
     target === null ||

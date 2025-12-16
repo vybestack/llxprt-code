@@ -11,7 +11,6 @@ import yargs from 'yargs/yargs';
 import { hideBin } from 'yargs/helpers';
 import process from 'node:process';
 import { mcpCommand } from '../commands/mcp.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 import {
   Config,
   loadServerHierarchicalMemory,
@@ -24,7 +23,6 @@ import {
   TelemetryTarget,
   FileFilteringOptions,
   ProfileManager,
-  type Profile,
   ShellTool,
   EditTool,
   WriteFileTool,
@@ -33,6 +31,8 @@ import {
   DebugLogger,
   createPolicyEngineConfig,
   SHELL_TOOL_NAMES,
+  type GeminiCLIExtension,
+  type Profile,
 } from '@vybestack/llxprt-code-core';
 import { extensionsCommand } from '../commands/extensions.js';
 import { Settings } from './settings.js';
@@ -566,7 +566,9 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     sandboxImage: result.sandboxImage as string | undefined,
     debug: result.debug as boolean | undefined,
     prompt:
-      (result.prompt as string | undefined) || queryFromPromptWords || undefined,
+      (result.prompt as string | undefined) ||
+      queryFromPromptWords ||
+      undefined,
     promptInteractive: result.promptInteractive as string | undefined,
     allFiles: result.allFiles as boolean | undefined,
     showMemoryUsage: result.showMemoryUsage as boolean | undefined,
@@ -1033,8 +1035,7 @@ export async function loadCliConfig(
 
   // Fix: If promptWords are provided (and non-empty), always use non-interactive mode
   const hasPromptWords =
-    argv.promptWords &&
-    argv.promptWords.some((word) => word.trim() !== '');
+    argv.promptWords && argv.promptWords.some((word) => word.trim() !== '');
   const interactive =
     !!argv.promptInteractive ||
     (process.stdin.isTTY && !hasPromptWords && !argv.prompt);
