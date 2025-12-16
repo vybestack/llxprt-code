@@ -613,12 +613,7 @@ export class TestRig {
     // Clean up test directory
     if (this.testDir && !env.KEEP_OUTPUT) {
       try {
-        if (process.platform === 'win32') {
-          // On Windows, use fs.rmSync which handles permissions better
-          fs.rmSync(this.testDir, { recursive: true, force: true });
-        } else {
-          execSync(`rm -rf ${this.testDir}`);
-        }
+        fs.rmSync(this.testDir, { recursive: true, force: true });
       } catch (error) {
         // Ignore cleanup errors
         if (env.VERBOSE === 'true') {
