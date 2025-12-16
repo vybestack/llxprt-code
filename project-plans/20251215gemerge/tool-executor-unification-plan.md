@@ -122,7 +122,22 @@ rg -n "normalizeToolName\\(" packages/core/src/core/coreToolScheduler.ts
 rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
 ```
 
-### Phase 1 (RECOMMENDED): Extract Shared Module (`toolGovernance.ts`)
+### Locked Decisions (do not revisit during implementation)
+
+1. **Unification is the goal.** All non-interactive tool execution routes through `CoreToolScheduler`. `nonInteractiveToolExecutor.ts` becomes a thin wrapper (no direct tool invocation).
+2. **Return type change is allowed/required.** `executeToolCall(...)` returns a `CompletedToolCall` (upstream shape from `9e8c7676`), not a bare `ToolCallResponseInfo`.
+3. **Non-interactive approvals are forced to YOLO.** The scheduler config used for non-interactive execution MUST return `ApprovalMode.YOLO` so `shouldConfirmExecute()` short-circuits and the scheduler never publishes confirmation requests.
+4. **Non-interactive policy is enforced.** The scheduler config used for non-interactive execution MUST use a `PolicyEngine` with `nonInteractive: true` so `ASK_USER` becomes `DENY` deterministically.
+5. **Emoji filtering happens before scheduling (non-interactive only).**
+   - Apply the same emoji-filtering semantics currently implemented in `packages/core/src/core/nonInteractiveToolExecutor.ts`.
+   - Replace `ToolCallRequestInfo.args` with the filtered args before scheduling so history + telemetry reflect the executed args.
+   - Preserve exact-match fields: never filter `old_string`, never filter file paths.
+6. **Emoji system reminders are preserved.** When filtering produces `systemFeedback` (warn mode), append it to the *function response output string* (do not add extra parts).
+7. **Atomic tool call/response pairing stays intact.** Keep the invariant restored by `9696e92d0` (tool call part immediately followed by its response parts).
+8. **No double telemetry logging.** Once Phase 3 is complete, rely on scheduler-emitted `ToolCallEvent` telemetry (do not also call `logToolCall` from the non-interactive wrapper).
+9. **No new backward-compat shims.** Do not add new tool aliases or legacy settings beyond the already-supported `disabled-tools` key.
+
+### Phase 1 (MANDATORY): Extract Shared Module (`toolGovernance.ts`)
 
 **Goal:** Single source of truth for tool governance logic.
 
@@ -147,7 +162,7 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
 - Existing `packages/core/src/core/coreToolScheduler.test.ts` passes
 - Existing `packages/core/src/core/nonInteractiveToolExecutor.test.ts` passes
 
-### Phase 2 (OPTIONAL, but prerequisite for any full unification): Parameterize tool context `interactiveMode`
+### Phase 2 (MANDATORY): Parameterize tool context `interactiveMode`
 
 **Goal:** Allow `CoreToolScheduler` to set `ContextAwareTool.context.interactiveMode` correctly when used outside interactive UI flows.
 
@@ -160,37 +175,48 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
 - Existing scheduler tests still pass (default remains `true`)
 - New test for `toolContextInteractiveMode: false` passes
 
-### Phase 3 (DEFERRED / High risk): Full Executor Unification (route non-interactive through CoreToolScheduler)
+### Phase 3 (MANDATORY): Full Executor Unification (route non-interactive through CoreToolScheduler)
 
 **Goal:** Reduce duplication by making `nonInteractiveToolExecutor.ts` a thin wrapper around `CoreToolScheduler` *without* changing LLxprt semantics.
 
 **Prerequisites (MANDATORY):**
 1. Phase 1 is complete (shared governance module).
 2. Phase 2 is complete (scheduler can set `interactiveMode: false`).
-3. Decision recorded for each item below (no "TBD"):
-   - Emoji filtering: where it runs and how to avoid double filtering.
-   - Tool-call history: whether to record original args or filtered args in `functionCall` parts.
-   - Confirmation handling: how to handle `PolicyDecision.ASK_USER` and `shouldConfirmExecute()` in non-interactive mode.
+3. All "Locked Decisions" above are implemented as written (no deviations).
 
 **Implementation outline (do not deviate):**
-1. Update non-interactive call sites to provide a full scheduler-capable `Config`:
-   - `packages/core/src/core/subagent.ts`: pass `this.createSchedulerConfig({ interactive: false })` into the non-interactive executor wrapper.
-   - `packages/cli/src/nonInteractiveCli.ts`: already has a full `Config`.
-2. Add a scheduler option to avoid user-confirmation waits in non-interactive mode:
-   - MUST guarantee the scheduler never publishes confirmation requests or enters `awaiting_approval` for non-interactive execution.
+1. Rewrite `packages/core/src/core/nonInteractiveToolExecutor.ts`:
+   - Signature: `executeToolCall(config: Config, toolCallRequest: ToolCallRequestInfo, abortSignal: AbortSignal): Promise<CompletedToolCall>`
+   - Behavior:
+     - Do NOT re-implement tool governance checks here. `CoreToolScheduler.schedule(...)` already enforces governance (and after Phase 1 it uses the shared module).
+     - Apply emoji filtering to `toolCallRequest.args` (Locked Decision #5).
+     - Build a scheduler config wrapper that forces:
+       - `getApprovalMode(): ApprovalMode.YOLO` (Locked Decision #3)
+       - `getPolicyEngine(): PolicyEngine(nonInteractive: true)` (Locked Decision #4)
+       - Ensure the wrapper provides at least: `getToolRegistry`, `getSessionId`, `getTelemetryLogPromptsEnabled`, `getEphemeralSettings`, `getExcludeTools`, `getAllowedTools`, `getApprovalMode`, `getMessageBus`, `getPolicyEngine`.
+     - Instantiate `CoreToolScheduler` with:
+       - `toolContextInteractiveMode: false`
+       - `onAllToolCallsComplete` resolves the first completed call
+     - Schedule the (filtered) request and return the `CompletedToolCall`.
+     - After completion, if emoji filtering produced `systemFeedback`, mutate the returned call's `response.responseParts` to append the reminder to the function response output string (Locked Decision #6).
+2. Update consumers to the new return type:
+   - `packages/core/src/core/subagent.ts` non-interactive path: use `(await executeToolCall(...)).response` or `call.response.responseParts`.
+   - `packages/cli/src/nonInteractiveCli.ts`: same update.
+   - `packages/core/src/agents/executor.ts`: same update.
+   - Update mocks in `packages/core/src/core/subagent.test.ts` accordingly.
 3. Keep buffered parallel execution untouched (interactive path).
 4. Resolve via `onAllToolCallsComplete`; do NOT add or rely on any `getCompletedCalls()` API.
 
-### Phase 4 (OPTIONAL): Update Consumers (only if Phase 3 is implemented)
+### Phase 4 (MANDATORY): Tests and Verification for Unification
 
-**Files:**
-- `packages/cli/src/nonInteractiveCli.ts`
-- `packages/core/src/core/subagent.ts`
+**Required test updates (minimum set):**
+- `packages/core/src/core/nonInteractiveToolExecutor.test.ts` (expects `CompletedToolCall` now)
+- `packages/core/src/core/subagent.test.ts` (mocks + assertions)
+- `packages/cli/src/nonInteractiveCli.test.ts` (if it asserts tool call recording/shape)
+- `packages/core/src/agents/executor.test.ts` (if it asserts tool response shape)
 
-**Changes:**
-- Update return type handling
-- Ensure tool governance applied correctly
-- Preserve streaming/live output behavior
+**New focused test (required):**
+- Add a scheduler unit test proving `toolContextInteractiveMode: false` reaches a context-aware tool that branches on `interactiveMode`.
 
 ## Constraints (MUST Preserve)
 
@@ -232,19 +258,12 @@ rg -n "interactiveMode: true" packages/core/src/core/coreToolScheduler.ts
 
 - Phase 1 (Governance): 2-4 hours
 - Phase 2 (Tool context interactiveMode): 1-2 hours
-- Phase 3 (Full unification): 8-16+ hours (depends on emoji/approval/args decisions)
-- Phase 4 (Update consumers): 1-2 hours
+- Phase 3 (Full unification): 4-8 hours
+- Phase 4 (Tests + verification): 2-6 hours
 - Testing: 4-8 hours
 
-**Total (Phase 1+2 only): 7-14 hours**  
-**Total (Full unification): 16-28+ hours**
+**Total (Full unification): 13-28 hours**
 
 ## Decision
 
-This is a significant architectural change. Options:
-
-1. **Full Unification** - Implement all phases, achieve upstream parity
-2. **Partial Unification** - Extract shared modules only (governance), keep separate executors
-3. **Defer** - Document divergence, continue with separate paths
-
-Recommendation: **Partial Unification** (Option 2) as first step, then evaluate full unification.
+Implement Phases 1-4 in order. Do not ship a "partial" result where non-interactive execution remains on a separate executor.
