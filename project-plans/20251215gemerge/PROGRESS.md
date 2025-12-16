@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 16 |
+| **Last Completed** | Batch 17 |
 | **In Progress** | — |
-| **Next Up** | Batch 17 |
-| **Progress** | 16/52 (31%) |
+| **Next Up** | Batch 18 |
+| **Progress** | 17/52 (33%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -129,7 +129,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Record Location: NOTES.md ## Batch 16
   - Note: NO-OP - file doesn't exist in LLxprt
 
-- [ ] Batch 17 — QUICK — REIMPLEMENT — `0b6c0200` — feat(core): Failed Response Retry via Extra Prompt (#10828)
+- [x] Batch 17 — QUICK — REIMPLEMENT — `0b6c0200` — feat(core): Failed Response Retry via Extra Prompt (#10828)
   - Prerequisites: Batch 16 record exists
   - Record Location: NOTES.md ## Batch 17
 

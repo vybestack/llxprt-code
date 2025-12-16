@@ -1446,3 +1446,66 @@ The interactive file system test infrastructure is not present in LLxprt.
 FEATURE VERIFIED: N/A (NO-OP)
 
 ---
+
+## Batch 17 — REIMPLEMENT — 0b6c0200
+
+### Selection Record
+Batch: 17
+Type: REIMPLEMENT
+Upstream SHA: 0b6c0200 - feat(core): Failed Response Retry via Extra Prompt (#10828)
+Subject: Add InvalidStream retry with "Please continue" prompt
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 16)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (0cf4c39ae)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Cherry-pick Command: git cherry-pick 0b6c0200
+Conflicts: YES (5 files)
+  - config.ts: Added continueOnFailedApiCall option
+  - client.ts: Added InvalidStream retry logic with "System: Please continue"
+  - client.test.ts: Added tests for retry behavior
+  - turn.ts: InvalidStream already existed from Batch 08, removed duplicates
+  - turn.test.ts: Combined imports
+Branding Substitutions Applied: YES (preserved @vybestack/llxprt-code-core)
+Files Modified:
+  - packages/cli/src/ui/hooks/useGeminiStream.ts
+  - packages/core/src/config/config.ts
+  - packages/core/src/config/config.test.ts
+  - packages/core/src/core/client.ts
+  - packages/core/src/core/client.test.ts
+  - packages/core/src/core/turn.ts
+  - packages/core/src/core/turn.test.ts
+LLXPRT Commit SHA: a939e3282
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-16T02:48:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+### Feature Landing Verification
+Upstream Commit: 0b6c0200
+Feature: Failed Response Retry via Extra Prompt
+
+```bash
+$ grep -n "continueOnFailedApiCall" packages/core/src/config/config.ts | head -3
+305:  continueOnFailedApiCall?: boolean;
+406:  private readonly continueOnFailedApiCall: boolean;
+513:    this.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
+
+$ grep -n "System: Please continue" packages/core/src/core/client.ts
+641:          const nextRequest = [{ text: 'System: Please continue.' }];
+```
+
+FEATURE VERIFIED: YES
+
+---
