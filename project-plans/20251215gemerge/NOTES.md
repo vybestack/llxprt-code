@@ -1163,3 +1163,53 @@ $ grep -n "useMemo" packages/cli/src/ui/AppContainer.tsx | head -2
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 12 — REIMPLEMENT — bd6bba8d
+
+### Selection Record
+Batch: 12
+Type: REIMPLEMENT
+Upstream SHA: bd6bba8d - fix(doc) - Update doc for deflake command (#10829)
+Subject: Fix deflake command syntax in docs
+Playbook: N/A (simple docs fix)
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 11)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (4891eb03a)
+  - Special dependencies: Batch 03 (deflake.js) - PRESENT
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Status: COMPLETED
+Implementation Summary:
+  - Fixed deflake command syntax in dev-docs/integration-tests.md
+  - Added extra `--` to correctly pass test-name-pattern to vitest
+  - LLxprt uses dev-docs/ instead of docs/ location
+Files Modified:
+  - dev-docs/integration-tests.md
+LLXPRT Commit SHA: f88ca127d
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-16T02:19:00Z
+
+Results:
+  - test: PASS (165 test files)
+  - lint: PASS (0 warnings)
+  - typecheck: PASS
+  - build: PASS
+  - bundle: PASS
+  - synthetic: PASS (haiku generated)
+
+### Feature Landing Verification
+Upstream Commit: bd6bba8d
+Feature: Deflake command syntax fix
+
+```bash
+$ grep -n "-- -- --test-name-pattern" dev-docs/integration-tests.md
+42:npm run deflake -- --runs=5 --command="npm run test:e2e -- -- --test-name-pattern '<your-new-test-name>'"
+```
+
+FEATURE VERIFIED: YES
+
+---
