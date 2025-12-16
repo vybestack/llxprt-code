@@ -1935,3 +1935,53 @@ $ grep -n "getLineCountCommand" integration-tests/run_shell_command.test.ts | he
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 24 — REIMPLEMENT — 849cd1f9
+
+### Selection Record
+Batch: 24
+Type: REIMPLEMENT
+Upstream SHA: 849cd1f9 - Docs: Fix Flutter extension link in docs/changelogs/index.md (#10797)
+Subject: Fix Flutter extension link in changelogs
+Playbook: project-plans/20251215gemerge/849cd1f9-plan.md
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 23)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (abba675f4)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Playbook Followed: project-plans/20251215gemerge/849cd1f9-plan.md
+Status: SKIPPED (NO-OP)
+Reason: LLxprt docs have no Flutter references
+
+```bash
+$ grep -r "Flutter" docs/
+No Flutter references found
+```
+
+LLxprt uses docs/release-notes/ instead of docs/changelogs/
+Files Modified: NONE
+LLXPRT Commit SHA: N/A (NO-OP)
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-16T04:25:00Z
+
+Results:
+  - test: PASS (7100+ tests)
+  - lint: PASS (0 warnings)
+  - typecheck: PASS
+  - build: PASS
+  - bundle: PASS
+  - synthetic: PASS (haiku generated)
+
+### Feature Landing Verification
+Upstream Commit: 849cd1f9
+Feature: Flutter extension link fix
+
+LLxprt Status: NO-OP - No Flutter references in LLxprt documentation
+FEATURE VERIFIED: N/A (NO-OP)
+
+---

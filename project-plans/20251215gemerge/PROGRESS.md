@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 23 |
+| **Last Completed** | Batch 24 |
 | **In Progress** | — |
-| **Next Up** | Batch 24 |
-| **Progress** | 23/52 (44%) |
+| **Next Up** | Batch 25 |
+| **Progress** | 24/52 (46%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -158,9 +158,10 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 22 record exists
   - Record Location: NOTES.md ## Batch 23
 
-- [ ] Batch 24 — FULL — REIMPLEMENT — `849cd1f9` — Docs: Fix Flutter extension link in docs/changelogs/index.md (#10797)
+- [x] Batch 24 — FULL — REIMPLEMENT — `849cd1f9` — Docs: Fix Flutter extension link in docs/changelogs/index.md (#10797)
   - Prerequisites: Batch 23 record exists
   - Record Location: NOTES.md ## Batch 24
+  - Note: NO-OP - No Flutter references in LLxprt docs
 
 - [ ] Batch 25 — QUICK — REIMPLEMENT — `32db4ff6` — Disable flakey tests. (#10914)
   - Prerequisites: Batch 24 record exists
