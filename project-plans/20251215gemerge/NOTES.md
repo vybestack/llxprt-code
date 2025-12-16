@@ -598,3 +598,131 @@ $ grep -n "comment-json" packages/cli/package.json
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 04 — PICK — f2852056, 76b1deec, 118aade8
+
+### Selection Record
+Batch: 04
+Type: PICK (3 commits)
+Upstream SHA(s):
+  - f2852056 - feat: prevent ansi codes in extension MCP Servers (#10748)
+  - 76b1deec - fix(core): refresh file contents in smart edit (#10084)
+  - 118aade8 - citations documentation (#10742)
+Subject: ANSI sanitization, smart edit refresh, citations docs
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 03)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (c048a7116)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Command: git cherry-pick f2852056 76b1deec 118aade8
+Conflicts: Minor (branding)
+Branding Substitutions Applied: YES
+  - LLXPRT.md kept instead of gemini.md in extension consent
+  - "When the AI model finds" instead of "When Gemini finds" in docs
+Files Modified:
+  - packages/cli/src/config/extension.ts (ANSI sanitization)
+  - packages/cli/src/config/extension.test.ts
+  - packages/core/src/tools/smart-edit.ts (file refresh)
+  - packages/core/src/tools/smart-edit.test.ts
+  - packages/core/src/utils/llm-edit-fixer.ts
+  - docs/core/index.md (citations)
+LLXPRT Commit SHAs:
+  - 947de9c54 - ANSI codes in extension MCP Servers
+  - 8a9b759f4 - Smart edit file refresh
+  - 24d7d047e - Citations documentation
+
+### Remediation Record
+Failures Received: 7 tests failing
+  - config.test.ts: 6 failures (positional prompt arguments)
+  - remove.test.ts: 1 failure (comment preservation)
+
+Root Cause Analysis:
+1. config.test.ts: CliArgs interface needed `query` property, parseArguments needed to populate argv.prompt and argv.query from positional words
+2. remove.test.ts: Test expected wrong behavior (removed server's comment should be removed)
+3. config.loadMemory.test.ts: Missing `query: undefined` in mock CliArgs
+
+Fixes Applied:
+- packages/cli/src/config/config.ts: Added query to CliArgs, populate from positional args
+- packages/cli/src/config/settings.ts: Use comment-json for preserving comments
+- packages/cli/src/commands/mcp/remove.test.ts: Fixed test expectation
+- packages/cli/src/config/config.loadMemory.test.ts: Added query to mock
+
+Fix Commit SHA: eb32bbbe3
+
+### Verification Record
+Type: FULL
+Timestamp: 2025-12-15T21:15:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (2 warnings, 0 errors)
+  - test: PASS
+  - build: PASS
+  - synthetic: PASS
+
+COMMAND OUTPUT (typecheck):
+```bash
+$ npm run typecheck
+> @vybestack/llxprt-code-core@0.7.0 typecheck - PASS
+> @vybestack/llxprt-code@0.7.0 typecheck - PASS
+> @vybestack/llxprt-code-a2a-server@0.6.1 typecheck - PASS
+> @vybestack/llxprt-code-test-utils@0.7.0 typecheck - PASS
+```
+
+COMMAND OUTPUT (lint):
+```bash
+$ npm run lint
+✖ 2 problems (0 errors, 2 warnings)
+```
+
+COMMAND OUTPUT (test):
+```bash
+$ npm run test
+(core) Test Files 284 passed | 7 skipped
+       Tests 4706 passed | 77 skipped
+(cli) Test Files 165 passed | 1 skipped
+      Tests 2372 passed | 19 skipped
+(a2a-server) Tests 21 passed
+(vscode) Tests 32 passed | 1 skipped
+```
+
+COMMAND OUTPUT (build):
+```bash
+$ npm run build
+Successfully copied files. (all packages)
+```
+
+COMMAND OUTPUT (synthetic):
+```bash
+$ node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
+Green text glows on screen,
+Terminal life pulses with light,
+Code flows like a stream.
+```
+
+### Feature Landing Verification
+Upstream Commits: f2852056, 76b1deec, 118aade8
+Features:
+  1. ANSI code sanitization in extension MCP consent
+  2. Smart edit file content refresh
+  3. Citations documentation
+
+LLXPRT Evidence:
+```bash
+$ grep -n "stripAnsi" packages/cli/src/config/extension.ts
+3:import stripAnsi from 'strip-ansi';
+
+$ grep -n "refreshedCurrentContent" packages/core/src/tools/smart-edit.ts
+193:      const refreshedCurrentContent = await readFile(filePath, 'utf-8');
+
+$ grep -n "Citations" docs/core/index.md
+119:## Citations
+```
+
+FEATURE VERIFIED: YES
+
+---

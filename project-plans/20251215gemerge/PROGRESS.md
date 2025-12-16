@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 03 |
+| **Last Completed** | Batch 04 |
 | **In Progress** | — |
-| **Next Up** | Batch 04 |
-| **Progress** | 3/52 (6%) |
+| **Next Up** | Batch 05 |
+| **Progress** | 4/52 (8%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -75,7 +75,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 02 record exists
   - Record Location: NOTES.md ## Batch 03
 
-- [ ] Batch 04 — FULL — PICK — `f2852056, 76b1deec, 118aade8` — feat: prevent ansi codes in extension MCP Servers (#10748) / fix(core): refresh file contents in smart edit given newer edits from user/external process (#10084) / citations documentation (#10742)
+- [x] Batch 04 — FULL — PICK — `f2852056, 76b1deec, 118aade8` — feat: prevent ansi codes in extension MCP Servers (#10748) / fix(core): refresh file contents in smart edit given newer edits from user/external process (#10084) / citations documentation (#10742)
   - Prerequisites: Batch 03 record exists
   - Record Location: NOTES.md ## Batch 04
 
