@@ -291,7 +291,6 @@ export class CodexOAuthProvider implements OAuthProvider {
    */
   private async performDeviceAuth(): Promise<void> {
     this.logger.debug(() => '[DEVICE-FLOW] Starting device authorization flow');
-    this.logger.debug(() => `[DEVICE-FLOW] Call stack: ${new Error().stack}`);
 
     try {
       // Request device code from OpenAI
@@ -391,7 +390,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       if (addItem) {
         addItem(successMessage, Date.now());
       } else {
-        console.log('Successfully authenticated with Codex!');
+        process.stdout.write('Successfully authenticated with Codex!\\n');
       }
     } catch (error) {
       this.logger.debug(
