@@ -1119,9 +1119,27 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
     toolCallRequest: ToolCallRequestInfo,
     abortSignal?: AbortSignal,
   ): Promise<CompletedToolCall> {
+    const startTime = Date.now();
+
     // IMPORTANT: Preserve agentId - it must flow through to the response
     const agentId = toolCallRequest.agentId ?? DEFAULT_AGENT_ID;
     toolCallRequest.agentId = agentId;
+
+    // Always use an internal AbortController so we can deterministically abort/cancel
+    // in "impossible" states (e.g. awaiting_approval) even if the caller did not provide
+    // a mutable AbortSignal.
+    const internalAbortController = new AbortController();
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        internalAbortController.abort();
+      } else {
+        abortSignal.addEventListener(
+          'abort',
+          () => internalAbortController.abort(),
+          { once: true },
+        );
+      }
+    }
 
     // 1. Apply emoji filtering before scheduling (emoji ownership: wrapper applies it)
     const filter = getOrCreateFilter(config);
@@ -1137,7 +1155,8 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
       return createErrorCompletedToolCall(
         toolCallRequest,
         e instanceof Error ? e : new Error(String(e)),
-        ToolErrorType.INVALID_TOOL_PARAMS
+        ToolErrorType.INVALID_TOOL_PARAMS,
+        Date.now() - startTime,
       );
     }
 
@@ -1188,7 +1207,7 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
 
     try {
       // 5. Schedule the (filtered) tool call
-      const effectiveSignal = abortSignal ?? new AbortController().signal;
+      const effectiveSignal = internalAbortController.signal;
       await scheduler.schedule([filteredRequest], effectiveSignal);
 
       // 6. Wait for either completion OR a forbidden awaiting_approval state.
@@ -1204,12 +1223,17 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
       ]);
 
       if (raceResult.kind === 'awaiting') {
+        // Cleanup requirement: do not return while the scheduler still holds a live awaiting_approval call.
+        // Abort signal interrupts any in-flight tool execution; cancelAll clears awaiting_approval state.
+        internalAbortController.abort();
+        scheduler.cancelAll();
         return createErrorCompletedToolCall(
           toolCallRequest,
           new Error(
             'Non-interactive tool execution reached awaiting_approval; treat as policy denial (no user interaction is possible).',
           ),
           ToolErrorType.POLICY_VIOLATION,
+          Date.now() - startTime,
         );
       }
 
@@ -1238,10 +1262,15 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
       return createErrorCompletedToolCall(
         toolCallRequest,
         e instanceof Error ? e : new Error(String(e)),
-        ToolErrorType.UNHANDLED_EXCEPTION
+        ToolErrorType.UNHANDLED_EXCEPTION,
+        Date.now() - startTime,
       );
     } finally {
-      // 9. Always dispose scheduler
+      // 9. Cleanup
+      // If we aborted (caller abort OR internal abort), force scheduler state to terminal to avoid leaks.
+      if (internalAbortController.signal.aborted) {
+        scheduler.cancelAll();
+      }
       scheduler.dispose();
     }
   }
@@ -1253,6 +1282,7 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
     request: ToolCallRequestInfo,
     error: Error,
     errorType: ToolErrorType,
+    durationMs: number,
   ): CompletedToolCall {
     return {
       status: 'error',
@@ -1280,7 +1310,7 @@ Current behavior appends systemFeedback whenever emoji filtering produced it, re
           },
         ],
       },
-      durationMs: 0,
+      durationMs,
     };
   }
   ```
@@ -1374,6 +1404,7 @@ This is acceptable because callers already check `response.error` before using o
 - [ ] All `executeToolCall` tests pass
 - [ ] No race conditions in completion handling (Promise-based)
 - [ ] Scheduler resources always cleaned up (dispose in finally)
+- [ ] Early-exit cleanup: awaiting_approval / abort triggers `internalAbortController.abort()` + `scheduler.cancelAll()` before dispose
 - [ ] ASK_USER policy decisions become DENY
 - [ ] Missing policy engine = DENY (fail-safe)
 - [ ] Error responses include systemFeedback when applicable
@@ -1567,6 +1598,103 @@ Comprehensive test coverage validating the unified execution path.
 ### 4.1 Test Subagent Tasks
 
 **File to create:** `packages/core/src/core/unifiedToolExecution.test.ts`
+
+- [ ] **Test scaffolding (copy/paste first)**
+  ```typescript
+  import { describe, it, expect, vi, beforeEach } from 'vitest';
+  import { executeToolCall, type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
+  import type { ToolRegistry, ToolCallRequestInfo, ToolCallResponseInfo } from '../index.js';
+  import { ApprovalMode } from '../config/config.js';
+  import { PolicyEngine } from '../policy/policy-engine.js';
+  import { PolicyDecision } from '../policy/types.js';
+  import { MessageBus } from '../confirmation-bus/message-bus.js';
+  import { MockTool } from '../test-utils/tools.js';
+
+  let mockToolRegistry: ToolRegistry;
+  let mockTool: MockTool;
+  let abortController: AbortController;
+  let signal: AbortSignal;
+  let request: ToolCallRequestInfo;
+  let config: ToolExecutionConfig;
+
+  function createAllowSpecificToolPolicyEngine(toolName: string): PolicyEngine {
+    return new PolicyEngine({
+      rules: [{ toolName, decision: PolicyDecision.ALLOW, priority: 2.5 }],
+      defaultDecision: PolicyDecision.ASK_USER,
+      nonInteractive: false,
+    });
+  }
+
+  function createMockConfigWithPolicyEngine(
+    policyEngine: PolicyEngine,
+    options?: {
+      ephemerals?: Record<string, unknown>;
+      approvalMode?: ApprovalMode;
+      allowedTools?: string[] | undefined;
+    },
+  ): ToolExecutionConfig {
+    const ephemerals = options?.ephemerals ?? {};
+    const messageBus = new MessageBus(policyEngine, false);
+    return {
+      getToolRegistry: () => mockToolRegistry,
+      getSessionId: () => 'test-session-id',
+      getTelemetryLogPromptsEnabled: () => false,
+      getExcludeTools: () => [],
+      getEphemeralSettings: () => ephemerals,
+      getEphemeralSetting: (key: string) => ephemerals[key],
+      getPolicyEngine: () => policyEngine,
+      getMessageBus: () => messageBus,
+      getApprovalMode: () => options?.approvalMode ?? ApprovalMode.DEFAULT,
+      getAllowedTools: () => options?.allowedTools,
+    };
+  }
+
+  function createMockConfig(options?: {
+    ephemerals?: Record<string, unknown>;
+    approvalMode?: ApprovalMode;
+    allowedTools?: string[] | undefined;
+  }): ToolExecutionConfig {
+    const policyEngine = createAllowSpecificToolPolicyEngine('testTool');
+    return createMockConfigWithPolicyEngine(policyEngine, options);
+  }
+
+  function getFullResponseText(response: ToolCallResponseInfo): string {
+    const chunks: string[] = [];
+    for (const part of response.responseParts ?? []) {
+      const payload = part.functionResponse?.response as
+        | { output?: unknown; error?: unknown }
+        | undefined;
+      if (payload) {
+        if (typeof payload.output === 'string') chunks.push(payload.output);
+        if (typeof payload.error === 'string') chunks.push(payload.error);
+      }
+      if (typeof part.text === 'string') chunks.push(part.text);
+    }
+    return chunks.join('\n');
+  }
+
+  beforeEach(() => {
+    mockTool = new MockTool('testTool');
+    mockToolRegistry = {
+      getTool: vi.fn(),
+      getAllToolNames: vi.fn().mockReturnValue(['testTool']),
+      getAllTools: vi.fn().mockReturnValue([]),
+    } as unknown as ToolRegistry;
+
+    abortController = new AbortController();
+    signal = abortController.signal;
+
+    request = {
+      callId: 'call1',
+      name: 'testTool',
+      args: { param1: 'value1' },
+      isClientInitiated: false,
+      prompt_id: 'prompt-id-1',
+    };
+
+    config = createMockConfig();
+  });
+  ```
 
 - [ ] **Test 1: Non-interactive determinism test**
   ```typescript
