@@ -737,6 +737,37 @@ export class TestRig {
     );
   }
 
+  async expectToolCallSuccess(
+    toolNames: string | string[],
+    timeout?: number,
+  ): Promise<void> {
+    if (!timeout) {
+      timeout = getDefaultTimeout();
+    }
+
+    const names = Array.isArray(toolNames) ? toolNames : [toolNames];
+
+    await this.waitForTelemetryReady();
+
+    const found = await poll(
+      () => {
+        const toolLogs = this.readToolLogs();
+        return toolLogs.some(
+          (log) =>
+            names.includes(log.toolRequest.name) &&
+            log.toolRequest.success === true,
+        );
+      },
+      timeout,
+      100,
+    );
+
+    expect(
+      found,
+      `Expected successful tool call for: ${names.join(', ')}`,
+    ).toBe(true);
+  }
+
   _parseToolLogsFromStdout(stdout: string) {
     const logs: {
       timestamp: number;
