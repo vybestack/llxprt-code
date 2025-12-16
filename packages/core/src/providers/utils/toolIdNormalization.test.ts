@@ -17,6 +17,10 @@
 /**
  * Unit tests for toolIdNormalization utility
  * @issue https://github.com/vybestack/llxprt-code/issues/825
+ *
+ * Note: All tool IDs in IContent are stored in history format (hist_tool_XXX) after
+ * being normalized by each provider's normalizeToHistoryToolId() method. This utility
+ * converts from history format to OpenAI's required call_XXX format.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -25,13 +29,26 @@ import { normalizeToOpenAIToolId } from './toolIdNormalization.js';
 describe('normalizeToOpenAIToolId', () => {
   describe('OpenAI format (call_XXX)', () => {
     it('should preserve call_XXX format unchanged', () => {
-      expect(normalizeToOpenAIToolId('call_abc123')).toBe('call_abc123');
+      const result = normalizeToOpenAIToolId('call_abc123def456');
+      expect(result).toBe('call_abc123def456');
+    });
+
+    it('should preserve call_XXX format with underscores', () => {
+      const result = normalizeToOpenAIToolId('call_abc_123_def');
+      expect(result).toBe('call_abc_123_def');
     });
 
     it('should preserve complex call_XXX IDs', () => {
       expect(normalizeToOpenAIToolId('call_mEwqq4nEsxpmHnqnkChAG7KS')).toBe(
         'call_mEwqq4nEsxpmHnqnkChAG7KS',
       );
+    });
+
+    it('should sanitize call_XXX with special characters', () => {
+      const result = normalizeToOpenAIToolId('call_abc-123.def');
+      expect(result).toMatch(/^call_/);
+      expect(result).not.toContain('-');
+      expect(result).not.toContain('.');
     });
 
     it('should sanitize call_XXX IDs with invalid characters', () => {
@@ -41,58 +58,48 @@ describe('normalizeToOpenAIToolId', () => {
     });
   });
 
-  describe('History format (hist_tool_XXX)', () => {
+  describe('History format (hist_tool_XXX) - canonical storage format', () => {
     it('should convert hist_tool_XXX to call_XXX format', () => {
       const result = normalizeToOpenAIToolId('hist_tool_abc123def456');
       expect(result).toBe('call_abc123def456');
     });
 
-    it('should handle hist_tool IDs with hyphens', () => {
-      const result = normalizeToOpenAIToolId('hist_tool_abc-123-def-456');
-      expect(result).toMatch(/^call_/);
-      expect(result).not.toContain('-');
-      expect(result).toBe('call_abc123def456');
+    it('should handle hist_tool IDs with underscores', () => {
+      const result = normalizeToOpenAIToolId('hist_tool_abc_123_def');
+      expect(result).toBe('call_abc_123_def');
     });
 
-    it('should handle the exact ID format from issue #825', () => {
-      const result = normalizeToOpenAIToolId(
-        'hist_tool_mEwqq4nEsxpmHnqnkChAG7KS',
-      );
+    it('should handle real-world hist_tool IDs', () => {
+      const result = normalizeToOpenAIToolId('hist_tool_mEwqq4nEsxpmHnqnkChAG7KS');
       expect(result).toBe('call_mEwqq4nEsxpmHnqnkChAG7KS');
     });
 
-    it('should generate new ID for empty suffix', () => {
+    it('should handle hist_tool IDs from cancelled operations', () => {
+      expect(normalizeToOpenAIToolId('hist_tool_cancelledXYZ789')).toBe(
+        'call_cancelledXYZ789',
+      );
+    });
+
+    it('should sanitize hist_tool IDs with special characters', () => {
+      const result = normalizeToOpenAIToolId('hist_tool_abc-123-def');
+      expect(result).toMatch(/^call_/);
+      expect(result).not.toContain('-');
+    });
+
+    it('should generate deterministic ID for empty suffix', () => {
       const result = normalizeToOpenAIToolId('hist_tool_');
       expect(result).toMatch(/^call_/);
       expect(result.length).toBeGreaterThan('call_'.length);
     });
 
-    it('should generate new ID for suffix with only invalid chars', () => {
+    it('should generate deterministic ID for suffix with only invalid chars', () => {
       const result = normalizeToOpenAIToolId('hist_tool_---');
       expect(result).toMatch(/^call_/);
       expect(result.length).toBeGreaterThan('call_'.length);
     });
   });
 
-  describe('Anthropic format (toolu_XXX)', () => {
-    it('should convert toolu_XXX to call_XXX format', () => {
-      const result = normalizeToOpenAIToolId('toolu_abc123def456');
-      expect(result).toBe('call_abc123def456');
-    });
-
-    it('should handle toolu IDs with underscores', () => {
-      const result = normalizeToOpenAIToolId('toolu_abc_123_def');
-      expect(result).toBe('call_abc_123_def');
-    });
-
-    it('should generate new ID for empty suffix', () => {
-      const result = normalizeToOpenAIToolId('toolu_');
-      expect(result).toMatch(/^call_/);
-      expect(result.length).toBeGreaterThan('call_'.length);
-    });
-  });
-
-  describe('Unknown formats', () => {
+  describe('Unknown formats (should not occur in practice)', () => {
     it('should prefix unknown format with call_', () => {
       const result = normalizeToOpenAIToolId('unknown_abc123');
       expect(result).toBe('call_unknown_abc123');
@@ -110,7 +117,7 @@ describe('normalizeToOpenAIToolId', () => {
     });
   });
 
-  describe('Consistency', () => {
+  describe('Consistency and Determinism', () => {
     it('should produce consistent results for the same input', () => {
       const id = 'hist_tool_cancelledXYZ789';
       const result1 = normalizeToOpenAIToolId(id);
@@ -131,10 +138,8 @@ describe('normalizeToOpenAIToolId', () => {
         '',
         '!!!@@@###',
         'hist_tool_',
-        'toolu_',
         'call_',
         'hist_tool_abc123',
-        'toolu_xyz789',
         'random_id',
       ];
 
@@ -149,7 +154,7 @@ describe('normalizeToOpenAIToolId', () => {
 
     it('should generate consistent fallback IDs for edge cases across multiple calls', () => {
       // These edge cases require fallback ID generation
-      const edgeCases = ['', 'hist_tool_', 'toolu_', '!@#$%'];
+      const edgeCases = ['', 'hist_tool_', '!@#$%'];
 
       for (const input of edgeCases) {
         const results = new Set<string>();

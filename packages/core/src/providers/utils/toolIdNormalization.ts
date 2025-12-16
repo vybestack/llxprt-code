@@ -17,12 +17,15 @@
 import crypto from 'node:crypto';
 
 /**
- * Normalize tool IDs from various formats to OpenAI format
- * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
+ * Normalize tool IDs from history format to OpenAI format.
+ *
+ * All tool IDs in IContent are stored in history format (hist_tool_XXX) after being
+ * normalized by each provider's normalizeToHistoryToolId() method. This function
+ * converts from history format to OpenAI's required call_XXX format.
  *
  * @issue https://github.com/vybestack/llxprt-code/issues/825
  * This function fixes the 400 error "No tool call found for function call output with call_id"
- * that occurs when tool IDs are in non-OpenAI formats (like hist_tool_XXX from cancelled tools).
+ * that occurs when tool IDs are in hist_tool_XXX format (from cancelled tools or previous turns).
  *
  * IMPORTANT: This function is deterministic - the same input always produces the same output.
  * For edge cases where the ID has no valid characters after sanitization, we generate a
@@ -43,26 +46,21 @@ export function normalizeToOpenAIToolId(id: string): string {
     return sanitized;
   };
 
-  const normalizeWithPrefix = (prefix: string): string => {
-    const suffix = id.substring(prefix.length);
+  // Already in OpenAI format - just sanitize
+  if (id.startsWith('call_')) {
+    return sanitize(id);
+  }
+
+  // History format (the canonical storage format) - convert to OpenAI format
+  if (id.startsWith('hist_tool_')) {
+    const suffix = id.substring('hist_tool_'.length);
     const sanitizedSuffix = suffix.replace(/[^a-zA-Z0-9_]/g, '');
     if (sanitizedSuffix.length === 0) {
       return generateDeterministicFallbackId(id);
     }
     return 'call_' + sanitizedSuffix;
-  };
-
-  if (id.startsWith('call_')) {
-    return sanitize(id);
   }
 
-  if (id.startsWith('hist_tool_')) {
-    return normalizeWithPrefix('hist_tool_');
-  }
-
-  if (id.startsWith('toolu_')) {
-    return normalizeWithPrefix('toolu_');
-  }
-
+  // Unknown format - prefix with call_ and sanitize
   return sanitize('call_' + id);
 }

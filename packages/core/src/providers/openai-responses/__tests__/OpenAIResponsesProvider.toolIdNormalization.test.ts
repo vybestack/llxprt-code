@@ -36,10 +36,9 @@ describe('Tool ID Normalization for OpenAI Responses API (Issue #825)', () => {
       expect(result).not.toContain('hist_tool_');
     });
 
-    it('should normalize toolu_XXX format (Anthropic) to call_XXX format', () => {
-      const result = normalizeToOpenAIToolId('toolu_abc123def456');
+    it('should handle unknown format IDs by prefixing with call_', () => {
+      const result = normalizeToOpenAIToolId('unknown_abc123def456');
       expect(result).toMatch(/^call_/);
-      expect(result).not.toContain('toolu_');
     });
 
     it('should preserve call_XXX format IDs unchanged', () => {
@@ -148,7 +147,8 @@ describe('Tool ID Normalization for OpenAI Responses API (Issue #825)', () => {
       expect(functionCallItem?.call_id).toBe(functionCallOutputItem?.call_id);
     });
 
-    it('should normalize toolu_ IDs in function_call and function_call_output items', () => {
+    it('should normalize unknown format IDs in function_call and function_call_output items', () => {
+      // In practice, all IDs should be hist_tool_ format, but test unknown format handling
       const content: IContent[] = [
         {
           speaker: 'human',
@@ -159,7 +159,7 @@ describe('Tool ID Normalization for OpenAI Responses API (Issue #825)', () => {
           blocks: [
             {
               type: 'tool_call',
-              id: 'toolu_xyz789',
+              id: 'unknown_xyz789',
               name: 'write_file',
               parameters: { path: '/test.txt', content: 'hello' },
             },
@@ -170,7 +170,7 @@ describe('Tool ID Normalization for OpenAI Responses API (Issue #825)', () => {
           blocks: [
             {
               type: 'tool_response',
-              callId: 'toolu_xyz789',
+              callId: 'unknown_xyz789',
               result: 'File created successfully',
             },
           ],
@@ -196,7 +196,6 @@ describe('Tool ID Normalization for OpenAI Responses API (Issue #825)', () => {
       ) as { type: string; call_id: string } | undefined;
 
       expect(functionCallItem?.call_id).toMatch(/^call_/);
-      expect(functionCallItem?.call_id).not.toContain('toolu_');
       expect(functionCallOutputItem?.call_id).toMatch(/^call_/);
       expect(functionCallItem?.call_id).toBe(functionCallOutputItem?.call_id);
     });
