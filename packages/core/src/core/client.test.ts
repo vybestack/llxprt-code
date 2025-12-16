@@ -889,7 +889,9 @@ describe('Gemini Client (client.ts)', () => {
     });
 
     it('should return NOOP if history is too short to compress', async () => {
-      mockGetHistory.mockReturnValue([{ role: 'user', parts: [{ text: 'hi' }] }]);
+      mockGetHistory.mockReturnValue([
+        { role: 'user', parts: [{ text: 'hi' }] },
+      ]);
       vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(50);
 
       const result = await client.tryCompressChat('prompt-id-noop', false);

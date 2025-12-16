@@ -7,7 +7,7 @@
 import { renderWithProviders } from '../../test-utils/render.js';
 import { waitFor, act } from '@testing-library/react';
 import { vi } from 'vitest';
-import { FolderTrustDialog, FolderTrustChoice } from './FolderTrustDialog.js';
+import { FolderTrustDialog } from './FolderTrustDialog.js';
 
 const mockedExit = vi.hoisted(() => vi.fn());
 const mockedCwd = vi.hoisted(() => vi.fn());
