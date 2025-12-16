@@ -354,7 +354,12 @@ export class TestRig {
   run(
     promptOrOptions:
       | string
-      | { prompt?: string; stdin?: string; stdinDoesNotEnd?: boolean },
+      | {
+          prompt?: string;
+          stdin?: string;
+          stdinDoesNotEnd?: boolean;
+          yolo?: boolean;
+        },
     ...args: string[]
   ): Promise<string> {
     // Add provider and model flags from environment - FAIL FAST if not configured
@@ -390,12 +395,16 @@ export class TestRig {
       );
     }
 
+    // Determine yolo mode: default true unless explicitly set to false
+    const yolo =
+      typeof promptOrOptions === 'string' || promptOrOptions.yolo !== false;
+
     // Build command args array directly instead of parsing a string
     // This avoids Windows-specific command line parsing issues
     const commandArgs = [
       'node',
       this.bundlePath,
-      '--yolo',
+      ...(yolo ? ['--yolo'] : []),
       '--ide-mode',
       'disable',
       '--provider',
@@ -692,7 +701,11 @@ export class TestRig {
     );
   }
 
-  async waitForToolCall(toolName: string, timeout?: number) {
+  async waitForToolCall(
+    toolName: string,
+    timeout?: number,
+    matchArgs?: (args: string) => boolean,
+  ) {
     // Use environment-specific timeout
     if (!timeout) {
       timeout = getDefaultTimeout();
@@ -704,7 +717,11 @@ export class TestRig {
     return poll(
       () => {
         const toolLogs = this.readToolLogs();
-        return toolLogs.some((log) => log.toolRequest.name === toolName);
+        return toolLogs.some(
+          (log) =>
+            log.toolRequest.name === toolName &&
+            (matchArgs?.call(this, log.toolRequest.args) ?? true),
+        );
       },
       timeout,
       100,
