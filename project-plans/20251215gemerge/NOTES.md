@@ -1592,3 +1592,76 @@ $ grep -n "getIsWorkspaceTrusted" packages/core/src/settings/settings.test.ts | 
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 19 — REIMPLEMENT — c82c2c2b
+
+### Selection Record
+Batch: 19
+Type: REIMPLEMENT
+Upstream SHA: c82c2c2b - chore: add a2a server bin (#10592)
+Subject: Add bin entry to a2a-server package.json, refactor isMainModule detection
+Playbook: project-plans/20251215gemerge/c82c2c2b-plan.md
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 18)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (74c6fdb01)
+  - Special dependencies: Batch 02 (8ac2c684) bundles a2a-server - COMPLETE
+Ready to Execute: YES
+
+### Execution Record (REIMPLEMENT)
+Playbook Followed: project-plans/20251215gemerge/c82c2c2b-plan.md
+Status: COMPLETED
+Implementation Summary:
+  - Updated package.json main field from dist/server.js to dist/index.js
+  - Added bin entry "llxprt-code-a2a-server" pointing to dist/a2a-server.mjs
+  - Added #!/usr/bin/env node shebang to server.ts
+  - Changed isMainModule detection from path.resolve() to path.basename()
+  - Moved uncaughtException handler inside if(isMainModule) block
+Files Modified:
+  - packages/a2a-server/package.json
+  - packages/a2a-server/src/http/server.ts
+LLXPRT Commit SHA: (pending)
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-16T03:20:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+```bash
+$ npm run typecheck
+> @vybestack/llxprt-code-core@0.7.0 typecheck
+> @vybestack/llxprt-code@0.7.0 typecheck
+> @vybestack/llxprt-code-a2a-server@0.6.1 typecheck
+> @vybestack/llxprt-code-test-utils@0.7.0 typecheck
+
+$ npm run lint:ci
+> eslint . --ext .ts,.tsx --max-warnings 0 && eslint integration-tests --max-warnings 0
+```
+
+### Feature Landing Verification
+Upstream Commit: c82c2c2b
+Feature: A2A Server bin entry and isMainModule refactor
+
+```bash
+$ grep -A2 '"bin"' packages/a2a-server/package.json
+  "bin": {
+    "llxprt-code-a2a-server": "dist/a2a-server.mjs"
+  },
+
+$ grep -n "path.basename" packages/a2a-server/src/http/server.ts
+16:  path.basename(process.argv[1]) ===
+17:  path.basename(url.fileURLToPath(import.meta.url));
+
+$ head -1 packages/a2a-server/src/http/server.ts
+#!/usr/bin/env node
+```
+
+FEATURE VERIFIED: YES
+
+---

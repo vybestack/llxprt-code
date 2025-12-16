@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 18 |
+| **Last Completed** | Batch 19 |
 | **In Progress** | — |
-| **Next Up** | Batch 19 |
-| **Progress** | 18/52 (35%) |
+| **Next Up** | Batch 20 |
+| **Progress** | 19/52 (37%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -137,7 +137,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 17 record exists
   - Record Location: NOTES.md ## Batch 18
 
-- [ ] Batch 19 — QUICK — REIMPLEMENT — `c82c2c2b` — chore: add a2a server bin (#10592)
+- [x] Batch 19 — QUICK — REIMPLEMENT — `c82c2c2b` — chore: add a2a server bin (#10592)
   - Prerequisites: Batch 18 record exists, Batch 02 (`8ac2c684`) bundles a2a-server
   - Record Location: NOTES.md ## Batch 19
 
