@@ -1213,3 +1213,60 @@ $ grep -n "-- -- --test-name-pattern" dev-docs/integration-tests.md
 FEATURE VERIFIED: YES
 
 ---
+
+## Batch 13 — PICK — 433ca84c, 6d84d4dc, a8379d1f
+
+### Selection Record
+Batch: 13
+Type: PICK
+Upstream SHAs:
+  - 433ca84c - fix(tests): log actual output in validateModelOutput on failure (#10843)
+  - 6d84d4dc - Fix prompt to make it a bit more deterministic (#10848)
+  - a8379d1f - fix(tests): enable and update prompt for MCP add tool test (#10850)
+Subject: Integration test improvements
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES (Batch 12)
+  - Previous batch verification: PASS
+  - Previous batch pushed: YES (2a6624610)
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record (PICK)
+Cherry-pick Commands: git cherry-pick 433ca84c 6d84d4dc a8379d1f
+Conflicts: 1 (a8379d1f)
+  - simple-mcp-server.test.ts: Updated prompt for MCP add tool test
+Branding Substitutions Applied: N/A (test infrastructure)
+Files Modified:
+  - integration-tests/test-helper.ts
+  - integration-tests/run_shell_command.test.ts
+  - integration-tests/simple-mcp-server.test.ts
+LLXPRT Commit SHAs: 5474639b7, 16fc60dcc, b85747c62
+
+### Verification Record
+Type: QUICK
+Timestamp: 2025-12-16T02:22:00Z
+
+Results:
+  - typecheck: PASS
+  - lint: PASS (0 warnings)
+  - test: SKIPPED (QUICK batch)
+  - build: SKIPPED (QUICK batch)
+  - synthetic: SKIPPED (QUICK batch)
+
+### Feature Landing Verification
+Upstream Commits: 433ca84c, 6d84d4dc, a8379d1f
+Features: Test logging, deterministic prompts, MCP test enable
+
+```bash
+$ grep -n "console.log" integration-tests/test-helper.ts | tail -2
+53:    console.log(`Expected patterns: ${expectedOutput.join(', ')}`);
+54:    console.log(`Actual output: ${output}`);
+
+$ grep -n "calculate 5+10" integration-tests/simple-mcp-server.test.ts
+199:        'Use the \`add\` tool to calculate 5+10 and output only the resulting number.',
+```
+
+FEATURE VERIFIED: YES
+
+---

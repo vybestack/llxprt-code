@@ -8,10 +8,10 @@ Use this checklist to track what's done vs remaining during execution.
 
 | Field | Value |
 |-------|-------|
-| **Last Completed** | Batch 12 |
+| **Last Completed** | Batch 13 |
 | **In Progress** | — |
-| **Next Up** | Batch 13 |
-| **Progress** | 12/52 (23%) |
+| **Next Up** | Batch 14 |
+| **Progress** | 13/52 (25%) |
 | **Last Updated** | 2025-12-15 |
 
 ---
@@ -112,7 +112,7 @@ Each completed batch MUST have the following in `NOTES.md`:
   - Prerequisites: Batch 11 record exists, Batch 03 (`603ec2b2`) adds `scripts/deflake.js`
   - Record Location: NOTES.md ## Batch 12
 
-- [ ] Batch 13 — QUICK — PICK — `433ca84c, 6d84d4dc, a8379d1f` — fix(tests): log actual output in validateModelOutput on failure (#10843) / Fix prompt to make it a bit more deterministic (#10848) / fix(tests): enable and update prompt for MCP add tool test (#10850)
+- [x] Batch 13 — QUICK — PICK — `433ca84c, 6d84d4dc, a8379d1f` — fix(tests): log actual output in validateModelOutput on failure (#10843) / Fix prompt to make it a bit more deterministic (#10848) / fix(tests): enable and update prompt for MCP add tool test (#10850)
   - Prerequisites: Batch 12 record exists
   - Record Location: NOTES.md ## Batch 13
 
