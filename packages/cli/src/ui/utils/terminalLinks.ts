@@ -12,7 +12,8 @@
  * intentionally use BEL for compatibility.
  */
 
-const ESC = '\x1b';
+import { ESC } from './input.js';
+
 const BEL = '\x07';
 
 export function createOsc8Link(label: string, url: string): string {
