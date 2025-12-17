@@ -30,6 +30,7 @@ describe('VirtualizedList scrollTop', () => {
       );
     });
 
+    expect(listRef.current).not.toBeNull();
     expect(listRef.current.getScrollState().scrollTop).toBe(0);
   });
 });

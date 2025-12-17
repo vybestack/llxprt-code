@@ -18,6 +18,8 @@ import { OverflowProvider } from './contexts/OverflowContext.js';
 import { AppDispatchProvider } from './contexts/AppDispatchContext.js';
 import { ScrollProvider } from './contexts/ScrollProvider.js';
 import { useKittyKeyboardProtocol } from './hooks/useKittyKeyboardProtocol.js';
+import { inkRenderOptions } from './inkRenderOptions.js';
+import { isMouseEventsEnabled } from './mouseEventsEnabled.js';
 import { appReducer, initialAppState } from './reducers/appReducer.js';
 import { AppContainer } from './AppContainer.js';
 
@@ -45,9 +47,11 @@ interface AppProps {
  */
 export const AppWrapper = (props: AppProps) => {
   const kittyProtocolStatus = useKittyKeyboardProtocol();
-  const mouseEventsEnabled =
-    props.settings.merged.ui?.useAlternateBuffer === true &&
-    !props.config.getScreenReader();
+  const renderOptions = inkRenderOptions(props.config, props.settings);
+  const mouseEventsEnabled = isMouseEventsEnabled(
+    renderOptions,
+    props.settings,
+  );
 
   return (
     <KeypressProvider

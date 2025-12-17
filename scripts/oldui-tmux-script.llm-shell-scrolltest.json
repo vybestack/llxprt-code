@@ -73,9 +73,11 @@
     {
       "type": "expectCount",
       "scope": "scrollback",
-      "regex": "^\\\\s*│\\\\s*SCROLLTEST LINE 0001\\\\b",
+      "regex": "^\\s*│\\s*SCROLLTEST LINE 0001\\b",
       "regexFlags": "um",
       "equals": 1
-    }
+    },
+    { "type": "line", "text": "/quit", "submitKeys": ["Escape", "Enter"] },
+    { "type": "waitForExit", "timeoutMs": 30000 }
   ]
 }

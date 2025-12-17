@@ -238,6 +238,9 @@ function formatMatcher(matcher) {
 
 function countMatches(text, matcher) {
   if (matcher.kind === 'contains') {
+    if (matcher.value.length === 0) {
+      return 0;
+    }
     let count = 0;
     let idx = 0;
     while (true) {

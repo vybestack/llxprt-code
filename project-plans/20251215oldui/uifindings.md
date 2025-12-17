@@ -113,8 +113,8 @@ Scripts:
   - `scripts/oldui-tmux-script.llm-tool-scrollback-realistic.gemini.json`
 
 Behavior observed (current old UI):
- - LLXPRT script passes with `deltaDuringCopyMode == 0`.
- - Gemini CLI script passes with `deltaDuringCopyMode == 0`.
+- LLXPRT script passes with `deltaDuringCopyMode == 0`.
+- Gemini CLI script passes with `deltaDuringCopyMode == 0`.
 
 Important nuance:
 - In alternate-buffer mode, tool output may not remain in terminal scrollback after `/quit`; capture/metrics are taken while the output is still visible during-run.
