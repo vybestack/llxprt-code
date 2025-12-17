@@ -116,17 +116,17 @@ After cherry-picking, you may encounter:
 **IMPORTANT**: Always run these checks in order (from the repo root):
 
 ```bash
-# 1. Format
-npm run format
-
-# 2. Lint
+# 1. Lint
 npm run lint
 
-# 3. Typecheck
+# 2. Typecheck
 npm run typecheck
 
-# 4. Tests
+# 3. Tests
 npm run test
+
+# 4. Format (if this changes files, rerun steps 1–3, then format again)
+npm run format
 
 # 5. Build
 npm run build
@@ -134,6 +134,10 @@ npm run build
 # 6. Synthetic smoke-run
 node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
 ```
+
+If you get noisy “working tree modified” warnings during long runs, it’s OK to
+run `npm run format` earlier as a convenience. Just rerun it after your final
+code changes (and rerun lint/typecheck/test if formatting changed files).
 
 ### 5a. Batch Verification Phase (When Cherry-picking Multiple Commits)
 
@@ -145,10 +149,10 @@ When cherry-picking multiple commits, **verify after each batch of 5 commits**:
 2. Run full verification suite:
    ```bash
    # Full verification in order
-   npm run format
    npm run lint
    npm run typecheck
    npm run test
+   npm run format # if this changes files, rerun lint/typecheck/test, then format again
    npm run build
    node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
    git add -A  # Stage formatted changes if any
