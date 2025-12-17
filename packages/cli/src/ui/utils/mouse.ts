@@ -49,14 +49,35 @@ const DISABLE_MOUSE_EVENTS = ['\x1b[?1000l', '\x1b[?1002l', '\x1b[?1006l'].join(
 
 const MAX_SGR_SEQUENCE_LENGTH = 50;
 
+let mouseEventsActive = false;
+
 export function enableMouseEvents(stdout: NodeJS.WriteStream = process.stdout) {
   stdout.write(ENABLE_MOUSE_EVENTS);
+  mouseEventsActive = true;
 }
 
 export function disableMouseEvents(
   stdout: NodeJS.WriteStream = process.stdout,
 ) {
   stdout.write(DISABLE_MOUSE_EVENTS);
+  mouseEventsActive = false;
+}
+
+export function isMouseEventsActive(): boolean {
+  return mouseEventsActive;
+}
+
+export function setMouseEventsActive(
+  active: boolean,
+  stdout: NodeJS.WriteStream = process.stdout,
+): boolean {
+  if (active) {
+    enableMouseEvents(stdout);
+    return true;
+  }
+
+  disableMouseEvents(stdout);
+  return false;
 }
 
 export function getMouseEventName(
