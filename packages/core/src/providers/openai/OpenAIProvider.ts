@@ -310,7 +310,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       clientOptions.defaultHeaders = headers;
     }
 
-
     if (baseURL && baseURL.trim() !== '') {
       clientOptions.baseURL = baseURL;
     }
@@ -711,7 +710,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Apply invocation/provider header overrides at client construction time.
     // Some OpenAI-compatible gateways (e.g., Kimi For Coding) enforce allowlisting
     // based on User-Agent, which must be sent as a real HTTP header.
-    const invocationHeadersRaw = options.invocation.getEphemeral('custom-headers');
+    const invocationHeadersRaw =
+      options.invocation.getEphemeral('custom-headers');
     const invocationHeaders =
       invocationHeadersRaw && typeof invocationHeadersRaw === 'object'
         ? (invocationHeadersRaw as Record<string, string>)
@@ -723,7 +723,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       invocationHeaders || invocationUserAgent
         ? {
             ...(invocationHeaders ?? {}),
-            ...(typeof invocationUserAgent === 'string' && invocationUserAgent.trim()
+            ...(typeof invocationUserAgent === 'string' &&
+            invocationUserAgent.trim()
               ? { 'User-Agent': invocationUserAgent.trim() }
               : {}),
           }
@@ -1914,7 +1915,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Merge invocation ephemerals (CLI /set, alias ephemerals) into custom headers.
     // BaseProvider#getCustomHeaders() reads from providerConfig ephemerals; for stateless
     // calls we also need to respect options.invocation.ephemerals.
-    const invocationHeadersRaw = options.invocation.getEphemeral('custom-headers');
+    const invocationHeadersRaw =
+      options.invocation.getEphemeral('custom-headers');
     const invocationHeaders =
       invocationHeadersRaw && typeof invocationHeadersRaw === 'object'
         ? (invocationHeadersRaw as Record<string, string>)
@@ -1927,7 +1929,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         ? {
             ...(customHeaders ?? {}),
             ...(invocationHeaders ?? {}),
-            ...(typeof invocationUserAgent === 'string' && invocationUserAgent.trim()
+            ...(typeof invocationUserAgent === 'string' &&
+            invocationUserAgent.trim()
               ? { 'User-Agent': invocationUserAgent.trim() }
               : {}),
           }

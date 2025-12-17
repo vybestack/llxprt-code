@@ -1117,7 +1117,6 @@ export async function loadCliConfig(
       `Provider selection: argv=${argv.provider}, profile=${profileProvider}, env=${process.env.LLXPRT_DEFAULT_PROVIDER}, final=${finalProvider}`,
   );
 
-
   // If provider is a known alias with defaultModel, use it as a fallback when no model is otherwise specified.
   // This prevents `model.missing` during Config construction for non-gemini providers.
   const aliasDefaultModel = (() => {
@@ -1134,7 +1133,6 @@ export async function loadCliConfig(
     }
   })();
 
-
   const finalModel: string =
     argv.model ||
     profileModel ||
@@ -1142,7 +1140,9 @@ export async function loadCliConfig(
     process.env.LLXPRT_DEFAULT_MODEL ||
     process.env.GEMINI_MODEL ||
     // If no model specified and provider is gemini, use the Gemini default
-    (finalProvider === 'gemini' ? DEFAULT_GEMINI_MODEL : aliasDefaultModel || '');
+    (finalProvider === 'gemini'
+      ? DEFAULT_GEMINI_MODEL
+      : aliasDefaultModel || '');
 
   // Ensure SettingsService reflects the selected model so Config#getModel picks it up
   if (finalModel && finalModel.trim() !== '') {

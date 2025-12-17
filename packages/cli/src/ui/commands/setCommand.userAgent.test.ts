@@ -40,7 +40,7 @@ describe('setCommand user-agent ephemeral', () => {
       type: 'message',
       messageType: 'info',
       content:
-        "Ephemeral setting 'user-agent' set to \"RooCode/1.0\" (session only, use /profile save to persist)",
+        'Ephemeral setting \'user-agent\' set to "RooCode/1.0" (session only, use /profile save to persist)',
     });
   });
 });
