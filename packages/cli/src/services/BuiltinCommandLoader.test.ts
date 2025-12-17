@@ -145,6 +145,15 @@ describe('BuiltinCommandLoader', () => {
     const mcpCmd = commands.find((c) => c.name === 'mcp');
     expect(mcpCmd).toBeDefined();
   });
+
+  it('loads the mouse command', async () => {
+    const loader = new BuiltinCommandLoader(mockConfig);
+    const commands = await loader.loadCommands(new AbortController().signal);
+
+    const mouseCmd = commands.find((c) => c.name === 'mouse');
+    expect(mouseCmd).toBeDefined();
+    expect(mouseCmd?.kind).toBe(CommandKind.BUILT_IN);
+  });
 });
 
 describe('BuiltinCommandLoader profile', () => {
