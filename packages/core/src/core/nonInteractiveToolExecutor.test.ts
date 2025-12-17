@@ -710,7 +710,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         {
           ...request,
           name: 'write_file',
-          args: { content: 'Has content \u{1F600}' },
+          args: { content: 'Has content 😀' },
         },
         abortController.signal,
       );
@@ -734,7 +734,7 @@ describe('executeToolCall response structure (Phase 3b.1)', () => {
         {
           ...request,
           name: 'write_file',
-          args: { content: 'Content here \u{1F600}' },
+          args: { content: 'Content here 😀' },
         },
         abortController.signal,
       );
