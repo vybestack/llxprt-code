@@ -690,6 +690,31 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Local endpoints (localhost, private IPs) are allowed without authentication
    * to support local AI servers like Ollama.
    */
+  private mergeInvocationHeaders(
+    options: NormalizedGenerateChatOptions,
+    baseHeaders?: Record<string, string>,
+  ): Record<string, string> | undefined {
+    const invocationHeadersRaw =
+      options.invocation.getEphemeral('custom-headers');
+    const invocationHeaders =
+      invocationHeadersRaw && typeof invocationHeadersRaw === 'object'
+        ? (invocationHeadersRaw as Record<string, string>)
+        : undefined;
+
+    const invocationUserAgent = options.invocation.getEphemeral('user-agent');
+
+    return baseHeaders || invocationHeaders || invocationUserAgent
+      ? {
+          ...(baseHeaders ?? {}),
+          ...(invocationHeaders ?? {}),
+          ...(typeof invocationUserAgent === 'string' &&
+          invocationUserAgent.trim()
+            ? { 'User-Agent': invocationUserAgent.trim() }
+            : {}),
+        }
+      : undefined;
+  }
+
   protected async getClient(
     options: NormalizedGenerateChatOptions,
   ): Promise<OpenAI> {
@@ -710,25 +735,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Apply invocation/provider header overrides at client construction time.
     // Some OpenAI-compatible gateways (e.g., Kimi For Coding) enforce allowlisting
     // based on User-Agent, which must be sent as a real HTTP header.
-    const invocationHeadersRaw =
-      options.invocation.getEphemeral('custom-headers');
-    const invocationHeaders =
-      invocationHeadersRaw && typeof invocationHeadersRaw === 'object'
-        ? (invocationHeadersRaw as Record<string, string>)
-        : undefined;
-
-    const invocationUserAgent = options.invocation.getEphemeral('user-agent');
-
-    const headers =
-      invocationHeaders || invocationUserAgent
-        ? {
-            ...(invocationHeaders ?? {}),
-            ...(typeof invocationUserAgent === 'string' &&
-            invocationUserAgent.trim()
-              ? { 'User-Agent': invocationUserAgent.trim() }
-              : {}),
-          }
-        : undefined;
+    const headers = this.mergeInvocationHeaders(options);
 
     return this.instantiateClient(authToken, baseURL, agents, headers);
   }
@@ -1915,31 +1922,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Merge invocation ephemerals (CLI /set, alias ephemerals) into custom headers.
     // BaseProvider#getCustomHeaders() reads from providerConfig ephemerals; for stateless
     // calls we also need to respect options.invocation.ephemerals.
-    const invocationHeadersRaw =
-      options.invocation.getEphemeral('custom-headers');
-    const invocationHeaders =
-      invocationHeadersRaw && typeof invocationHeadersRaw === 'object'
-        ? (invocationHeadersRaw as Record<string, string>)
-        : undefined;
-
-    const invocationUserAgent = options.invocation.getEphemeral('user-agent');
-
-    const mergedHeaders: Record<string, string> | undefined =
-      customHeaders || invocationHeaders || invocationUserAgent
-        ? {
-            ...(customHeaders ?? {}),
-            ...(invocationHeaders ?? {}),
-            ...(typeof invocationUserAgent === 'string' &&
-            invocationUserAgent.trim()
-              ? { 'User-Agent': invocationUserAgent.trim() }
-              : {}),
-          }
-        : undefined;
+    const mergedHeaders = this.mergeInvocationHeaders(options, customHeaders);
 
     if (logger.enabled && mergedHeaders) {
-      logger.debug(() => `[OpenAIProvider] Applying custom headers`, {
-        headerKeys: Object.keys(mergedHeaders),
-      });
+      logger.debug(
+        () =>
+          `[OpenAIProvider] Applying merged request headers (custom + invocation + user-agent)`,
+        {
+          headerKeys: Object.keys(mergedHeaders),
+        },
+      );
     }
 
     if (logger.enabled) {
