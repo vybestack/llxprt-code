@@ -240,7 +240,10 @@ export class TestRig {
     // The container mounts the test directory at the same path as the host
     const telemetryPath = join(this.testDir, 'telemetry.log'); // Always use test directory for telemetry
 
-    const settingsOverrides = (options.settings ?? {}) as Record<string, unknown>;
+    const settingsOverrides = (options.settings ?? {}) as Record<
+      string,
+      unknown
+    >;
     const { ui: uiOverridesRaw, ...settingsOverridesWithoutUi } =
       settingsOverrides;
     const uiOverrides =
