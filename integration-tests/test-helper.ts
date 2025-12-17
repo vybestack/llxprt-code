@@ -240,11 +240,23 @@ export class TestRig {
     // The container mounts the test directory at the same path as the host
     const telemetryPath = join(this.testDir, 'telemetry.log'); // Always use test directory for telemetry
 
+    const settingsOverrides = (options.settings ?? {}) as Record<string, unknown>;
+    const uiOverridesRaw = settingsOverrides['ui'];
+    const uiOverrides =
+      uiOverridesRaw && typeof uiOverridesRaw === 'object'
+        ? (uiOverridesRaw as Record<string, unknown>)
+        : undefined;
+    const { ui: _uiIgnored, ...settingsOverridesWithoutUi } = settingsOverrides;
+
     const settings = {
       general: {
         // Nightly releases sometimes becomes out of sync with local code and
         // triggers auto-update, which causes tests to fail.
         disableAutoUpdate: true,
+      },
+      ui: {
+        theme: 'Green Screen',
+        ...uiOverrides,
       },
       telemetry: {
         enabled: true,
@@ -276,7 +288,7 @@ export class TestRig {
           selectedType: 'provider',
         },
       },
-      ...options.settings, // Allow tests to override/add settings
+      ...settingsOverridesWithoutUi, // Allow tests to override/add settings
     };
     writeFileSync(
       join(llxprtDir, 'settings.json'),
@@ -605,7 +617,16 @@ export class TestRig {
 
           resolve(result);
         } else {
-          reject(new Error(`Process exited with code ${code}:\n${stderr}`));
+          const trimmedStdout = stdout.trimEnd();
+          const trimmedStderr = stderr.trimEnd();
+          let message = `Process exited with code ${code}.`;
+          if (trimmedStdout) {
+            message += `\n\nStdOut:\n${trimmedStdout}`;
+          }
+          if (trimmedStderr) {
+            message += `\n\nStdErr:\n${trimmedStderr}`;
+          }
+          reject(new Error(message));
         }
       });
     });
