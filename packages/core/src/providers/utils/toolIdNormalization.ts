@@ -56,10 +56,6 @@ export function normalizeToOpenAIToolId(id: string): string {
   // - double-prefixed: "call_call3or3..." or "call_call_3or3..."
   // Normalize these to canonical "call_<suffix>".
   if (id.startsWith('call')) {
-    if (id.startsWith('call_')) {
-      return sanitize(id);
-    }
-
     let suffix = id.substring('call'.length);
     if (suffix.startsWith('_')) suffix = suffix.substring(1);
     if (suffix.startsWith('call_')) suffix = suffix.substring('call_'.length);

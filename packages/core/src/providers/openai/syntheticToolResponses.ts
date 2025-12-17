@@ -169,6 +169,7 @@ export class SyntheticToolResponseHandler {
         if (block.type === 'tool_response') {
           const tr = block as ToolResponseBlock;
           const callId = tr.callId;
+          if (!callId) return tr;
           if (callId.startsWith('hist_tool_')) return tr;
 
           if (callId.startsWith('call_')) {

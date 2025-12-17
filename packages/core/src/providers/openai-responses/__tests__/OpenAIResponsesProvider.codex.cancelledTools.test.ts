@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 
@@ -50,6 +50,16 @@ function buildProviderWithOAuth() {
   );
 }
 
+let originalFetch: typeof globalThis.fetch;
+
+beforeEach(() => {
+  originalFetch = globalThis.fetch;
+});
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
 describe('OpenAIResponsesProvider Codex Mode - cancelled tool calls', () => {
   it('should synthesize tool responses for cancelled tool calls so next request stays valid', async () => {
     const provider = buildProviderWithOAuth();
@@ -76,8 +86,7 @@ describe('OpenAIResponsesProvider Codex Mode - cancelled tool calls', () => {
       return new Response('', { status: 200 });
     });
 
-    // @ts-expect-error - override global fetch for test
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
 
     const options = buildCodexOptions({
       contents: [

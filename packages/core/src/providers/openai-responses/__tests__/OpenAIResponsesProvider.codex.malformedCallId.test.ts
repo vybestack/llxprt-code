@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OpenAIResponsesProvider } from '../OpenAIResponsesProvider.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 
@@ -50,6 +50,16 @@ function buildCodexOptions(overrides?: Partial<NormalizedGenerateChatOptions>) {
   return { ...base, ...(overrides ?? {}) } as NormalizedGenerateChatOptions;
 }
 
+let originalFetch: typeof globalThis.fetch;
+
+beforeEach(() => {
+  originalFetch = globalThis.fetch;
+});
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
 describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
   it('should not emit function_call_output for malformed call ids that cannot match a function_call', async () => {
     const provider = buildProviderWithOAuth();
@@ -91,8 +101,7 @@ describe('OpenAIResponsesProvider Codex Mode - malformed call ids', () => {
       return new Response('', { status: 200 });
     });
 
-    // @ts-expect-error - override global fetch for test
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
 
     // Simulate a corrupted/malformed history item where the tool_response has a
     // callId missing the underscore (matches the reported failure mode).
