@@ -535,7 +535,7 @@ export const SETTINGS_SCHEMA = {
         label: 'Enable Mouse Events',
         category: 'UI',
         requiresRestart: true,
-        default: false,
+        default: true,
         description:
           'Enable mouse event tracking for in-app scrolling. Disables terminal text selection and clickable links while active.',
         showInDialog: true,
