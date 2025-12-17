@@ -28,10 +28,10 @@ const getRateLimitErrorMessageGoogleProQuotaFree = (
   currentModel: string = DEFAULT_GEMINI_MODEL,
   fallbackModel: string = DEFAULT_GEMINI_FLASH_MODEL,
 ) =>
-  `\nYou have reached your daily ${currentModel} quota limit. You will be switched to the ${fallbackModel} model for the rest of this session. To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist, or use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nYou have reached your daily ${currentModel} quota limit. You will be switched to the ${fallbackModel} model for the rest of this session. For more information about authentication and quota limits, see https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md, or use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
 
 const getRateLimitErrorMessageGoogleGenericQuotaFree = () =>
-  `\nYou have reached your daily quota limit. To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist, or use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+  `\nYou have reached your daily quota limit. For more information about authentication and quota limits, see https://github.com/vybestack/llxprt-code/blob/main/docs/getting-started.md, or use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
 
 // Legacy/Standard Tier message functions
 const getRateLimitErrorMessageGooglePaid = (

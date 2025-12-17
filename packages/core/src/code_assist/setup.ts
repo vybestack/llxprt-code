@@ -18,7 +18,7 @@ import { DebugLogger } from '../debug/index.js';
 export class ProjectIdRequiredError extends Error {
   constructor() {
     super(
-      'This account requires setting the GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_PROJECT_ID env var. See https://goo.gle/gemini-cli-auth-docs#workspace-gca',
+      'This account requires setting the GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_PROJECT_ID env var. See https://github.com/vybestack/llxprt-code/blob/main/docs/authentication.md',
     );
   }
 }

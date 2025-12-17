@@ -30,6 +30,7 @@ import {
   type ToolCallBlock,
   type ToolResponseBlock,
 } from '../../services/history/IContent.js';
+import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
@@ -51,6 +52,11 @@ import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from '../openai/openaiRequestParams.js';
 import { CodexOAuthTokenSchema } from '../../auth/types.js';
 import type { OAuthManager } from '../../auth/precedence.js';
+import {
+  retryWithBackoff,
+  getErrorStatus,
+  isNetworkTransientError,
+} from '../../utils/retry.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -108,6 +114,32 @@ export class OpenAIResponsesProvider extends BaseProvider {
    */
   private isCodexMode(baseURL: string | undefined): boolean {
     return baseURL?.includes('chatgpt.com/backend-api/codex') ?? false;
+  }
+
+  /**
+   * @plan PLAN-20251215-issue813
+   * @requirement REQ-RETRY-001: OpenAIResponsesProvider must use retryWithBackoff for all fetch calls
+   *
+   * Determines if an error should trigger a retry.
+   * - 429 (rate limit) errors are retried
+   * - 5xx server errors are retried
+   * - 400 (bad request) errors are NOT retried
+   * - Network transient errors are retried
+   */
+  private shouldRetryOnError(error: Error | unknown): boolean {
+    // Check for status using helper (handles error shapes from fetch)
+    const status = getErrorStatus(error);
+    if (status !== undefined) {
+      if (status === 400) return false;
+      return status === 429 || (status >= 500 && status < 600);
+    }
+
+    // Check for network transient errors
+    if (isNetworkTransientError(error)) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -172,13 +204,20 @@ export class OpenAIResponsesProvider extends BaseProvider {
     }
 
     try {
+      // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
       // Fetch models from the API
-      const response = await fetch(`${baseURL}/models`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
+      const response = await retryWithBackoff(
+        () =>
+          fetch(`${baseURL}/models`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+            },
+          }),
+        {
+          shouldRetryOnError: this.shouldRetryOnError.bind(this),
         },
-      });
+      );
 
       if (response.ok) {
         const data = (await response.json()) as { data: Array<{ id: string }> };
@@ -418,11 +457,12 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     for (const c of content) {
       if (c.speaker === 'human') {
-        const textBlock = c.blocks.find((b) => b.type === 'text') as
-          | TextBlock
-          | undefined;
-        if (textBlock?.text) {
-          input.push({ role: 'user', content: textBlock.text });
+        const textBlocks = c.blocks.filter(
+          (b): b is TextBlock => b.type === 'text',
+        );
+        const text = textBlocks.map((b) => b.text).join('\n');
+        if (text) {
+          input.push({ role: 'user', content: text });
         }
       } else if (c.speaker === 'ai') {
         const textBlocks = c.blocks.filter(
@@ -443,10 +483,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
         }
 
         // Add function_call items for each tool call (Responses API format)
+        // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
         for (const toolCall of toolCallBlocks) {
           input.push({
             type: 'function_call',
-            call_id: toolCall.id,
+            call_id: normalizeToOpenAIToolId(toolCall.id),
             name: toolCall.name,
             arguments: JSON.stringify(toolCall.parameters),
           });
@@ -457,6 +498,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock[];
 
+        // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
         for (const toolResponseBlock of toolResponseBlocks) {
           const result =
             typeof toolResponseBlock.result === 'string'
@@ -464,7 +506,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
               : JSON.stringify(toolResponseBlock.result);
           input.push({
             type: 'function_call_output',
-            call_id: toolResponseBlock.callId,
+            call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
             output: result,
           });
         }
@@ -611,11 +653,18 @@ export class OpenAIResponsesProvider extends BaseProvider {
       );
     }
 
-    const response = await fetch(responsesURL, {
-      method: 'POST',
-      headers,
-      body: bodyBlob,
-    });
+    // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
+    const response = await retryWithBackoff(
+      () =>
+        fetch(responsesURL, {
+          method: 'POST',
+          headers,
+          body: bodyBlob,
+        }),
+      {
+        shouldRetryOnError: this.shouldRetryOnError.bind(this),
+      },
+    );
 
     if (!response.ok) {
       const errorBody = await response.text();

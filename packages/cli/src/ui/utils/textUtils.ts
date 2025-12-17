@@ -90,24 +90,55 @@ export function stripUnsafeCharacters(str: string): string {
 }
 
 // String width caching for performance optimization
+//
+// NOTE: This cache must be bounded. Long-running sessions can produce an
+// unbounded stream of unique strings (especially during streaming rendering),
+// which would otherwise retain memory indefinitely.
+export const MAX_STRING_WIDTH_CACHE_ENTRIES = 2048;
 const stringWidthCache = new Map<string, number>();
 
+export const getStringWidthCacheSize = (): number => stringWidthCache.size;
+
+function touchCacheKey(key: string, value: number): void {
+  // Map preserves insertion order; delete+set moves key to the end.
+  stringWidthCache.delete(key);
+  stringWidthCache.set(key, value);
+}
+
+function ensureCacheCapacity(): void {
+  while (stringWidthCache.size > MAX_STRING_WIDTH_CACHE_ENTRIES) {
+    const oldestKey = stringWidthCache.keys().next().value as
+      | string
+      | undefined;
+    if (oldestKey === undefined) {
+      return;
+    }
+    stringWidthCache.delete(oldestKey);
+  }
+}
+
 /**
- * Cached version of stringWidth function for better performance
- * Follows Ink's approach with unlimited cache (no eviction)
+ * Cached version of stringWidth function for better performance.
+ *
+ * This is intentionally bounded to prevent memory leaks in long-running
+ * interactive sessions.
  */
 export const getCachedStringWidth = (str: string): number => {
-  // ASCII printable chars have width 1
+  // ASCII printable chars have width 1 and are extremely common. Avoid caching
+  // them entirely to keep the cache focused on expensive cases.
   if (/^[\x20-\x7E]*$/.test(str)) {
     return str.length;
   }
 
-  if (stringWidthCache.has(str)) {
-    return stringWidthCache.get(str)!;
+  const cached = stringWidthCache.get(str);
+  if (cached !== undefined) {
+    touchCacheKey(str, cached);
+    return cached;
   }
 
   const width = stringWidth(str);
   stringWidthCache.set(str, width);
+  ensureCacheCapacity();
 
   return width;
 };

@@ -56,7 +56,10 @@ on:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    # Pin to ubuntu-22.04 due to sharp/libspng compatibility issues on Ubuntu 24.04
+    # See: https://github.com/lovell/sharp/issues/4351
+    # Can revert to ubuntu-latest once sharp fixes Ubuntu 24.04 support
+    runs-on: ubuntu-22.04
     environment:
       name: production-release
       url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.RELEASE_TAG }}
@@ -174,6 +177,7 @@ jobs:
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
           LLXPRT_AUTH_TYPE: none
           LLXPRT_TEST_PROFILE: synthetic
+          LLXPRT_SKIP_IMAGE_HARNESS: 'true' # Avoid libspng flake on Linux runners (issue #816)
 
       - name: Build Bundle for Integration Tests
         run: npm run bundle

@@ -123,7 +123,7 @@ export function EditorSettingsDialog({
       width="100%"
     >
       <Box flexDirection="column" width="45%" paddingRight={2}>
-        <Text bold={focusedSection === 'editor'}>
+        <Text bold={focusedSection === 'editor'} color={Colors.Foreground}>
           {focusedSection === 'editor' ? '> ' : '  '}Select Editor{' '}
           <Text color={Colors.Gray}>{otherScopeModifiedMessage}</Text>
         </Text>
@@ -141,7 +141,7 @@ export function EditorSettingsDialog({
         />
 
         <Box marginTop={1} flexDirection="column">
-          <Text bold={focusedSection === 'scope'}>
+          <Text bold={focusedSection === 'scope'} color={Colors.Foreground}>
             {focusedSection === 'scope' ? '> ' : '  '}Apply To
           </Text>
           <RadioButtonSelect
@@ -160,7 +160,9 @@ export function EditorSettingsDialog({
       </Box>
 
       <Box flexDirection="column" width="55%" paddingLeft={2}>
-        <Text bold>Editor Preference</Text>
+        <Text bold color={Colors.Foreground}>
+          Editor Preference
+        </Text>
         <Box flexDirection="column" gap={1} marginTop={1}>
           <Text color={Colors.Gray}>
             These editors are currently supported. Please note that some editors

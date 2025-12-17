@@ -417,6 +417,12 @@ jobs:
           VITEST_TEST_TIMEOUT: 15000
         run: 'npm run test'
 
+      - name: 'Run script harness tests (macOS)'
+        if: matrix.os == 'macos-latest'
+        env:
+          CI: true
+        run: npm run test:scripts
+
       - name: 'Run UI tests (vitest with happy-dom)'
         env:
           CI: true

@@ -9,13 +9,13 @@ import fs from 'fs';
 import os from 'os';
 import pathMod from 'path';
 import { useState, useCallback, useEffect, useMemo, useReducer } from 'react';
-import stringWidth from 'string-width';
 import { unescapePath } from '@vybestack/llxprt-code-core';
 import {
   toCodePoints,
   cpLen,
   cpSlice,
   stripUnsafeCharacters,
+  getCachedStringWidth,
 } from '../../utils/textUtils.js';
 import { handleVimAction, VimAction } from './vim-buffer-actions.js';
 
@@ -669,7 +669,7 @@ function calculateVisualLayout(
         // Iterate through code points to build the current visual line (chunk)
         for (let i = currentPosInLogLine; i < codePointsInLogLine.length; i++) {
           const char = codePointsInLogLine[i];
-          const charVisualWidth = stringWidth(char);
+          const charVisualWidth = getCachedStringWidth(char);
 
           if (currentChunkVisualWidth + charVisualWidth > viewportWidth) {
             // Character would exceed viewport width
