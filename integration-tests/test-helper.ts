@@ -241,12 +241,12 @@ export class TestRig {
     const telemetryPath = join(this.testDir, 'telemetry.log'); // Always use test directory for telemetry
 
     const settingsOverrides = (options.settings ?? {}) as Record<string, unknown>;
-    const uiOverridesRaw = settingsOverrides['ui'];
+    const { ui: uiOverridesRaw, ...settingsOverridesWithoutUi } =
+      settingsOverrides;
     const uiOverrides =
       uiOverridesRaw && typeof uiOverridesRaw === 'object'
         ? (uiOverridesRaw as Record<string, unknown>)
         : undefined;
-    const { ui: _uiIgnored, ...settingsOverridesWithoutUi } = settingsOverrides;
 
     const settings = {
       general: {
