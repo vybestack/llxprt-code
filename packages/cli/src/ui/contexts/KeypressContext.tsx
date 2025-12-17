@@ -490,6 +490,24 @@ export function KeypressProvider({
           };
         }
 
+        // Ctrl+Backslash is a common "quit" control char (FS / \x1c) in many terminals.
+        // When Kitty keyboard protocol is enabled it may arrive as CSI-u with keyCode=92,
+        // so normalize it to a backslash key with ctrl=true for downstream bindings.
+        if (ctrl && keyCode === '\\'.charCodeAt(0)) {
+          return {
+            key: {
+              name: '\\',
+              ctrl: true,
+              meta: alt,
+              shift,
+              paste: false,
+              sequence: buffer.slice(0, m[0].length),
+              kittyProtocol: true,
+            },
+            length: m[0].length,
+          };
+        }
+
         // Ctrl+letters and Alt+letters
         if (ctrl || alt) {
           let letter: string | undefined;

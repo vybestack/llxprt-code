@@ -377,6 +377,30 @@ describe('KeypressContext - Kitty Protocol', () => {
     });
   });
 
+  describe('Ctrl+Backslash handling', () => {
+    it('should normalize Ctrl+Backslash from CSI-u sequences', async () => {
+      const keyHandler = vi.fn();
+      const { result } = renderHook(() => useKeypressContext(), { wrapper });
+      act(() => result.current.subscribe(keyHandler));
+
+      // Backslash keycode is 92. Modifier 5 is Ctrl.
+      act(() => {
+        stdin.sendKittySequence(`\x1b[92;5u`);
+      });
+
+      await waitFor(() => {
+        expect(keyHandler).toHaveBeenCalledWith(
+          expect.objectContaining({
+            name: '\\',
+            kittyProtocol: true,
+            ctrl: true,
+            meta: false,
+          }),
+        );
+      });
+    });
+  });
+
   describe('paste mode', () => {
     it('should handle multiline paste as a single event', async () => {
       const keyHandler = vi.fn();
