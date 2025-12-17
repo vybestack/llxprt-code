@@ -1220,12 +1220,14 @@ export class GeminiProvider extends BaseProvider {
         | 'low'
         | 'medium'
         | 'high'
+        | 'xhigh'
         | undefined) ??
       (reasoningObj?.effort as
         | 'minimal'
         | 'low'
         | 'medium'
         | 'high'
+        | 'xhigh'
         | undefined);
     void reasoningEffort; // Mark as intentionally unused (reserved for future effort-to-thinkingLevel mapping)
     const reasoningMaxTokens =
