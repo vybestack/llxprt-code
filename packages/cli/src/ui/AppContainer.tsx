@@ -99,6 +99,7 @@ import { useStaticHistoryRefresh } from './hooks/useStaticHistoryRefresh.js';
 import { useTodoContext } from './contexts/TodoContext.js';
 import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
 import { useFlickerDetector } from './hooks/useFlickerDetector.js';
+import { useMouseSelection } from './hooks/useMouseSelection.js';
 import { isWorkspaceTrusted } from '../config/trustedFolders.js';
 import { globalOAuthUI } from '../auth/global-oauth-ui.js';
 import { UIStateProvider, type UIState } from './contexts/UIStateContext.js';
@@ -1237,7 +1238,7 @@ export const AppContainer = (props: AppContainerProps) => {
           {
             type: MessageType.INFO,
             text: nextActive
-              ? 'Mouse events enabled (in-app wheel scrolling on; terminal selection/copy may be limited).'
+              ? 'Mouse events enabled (wheel scrolling + in-app selection/copy on).'
               : 'Mouse events disabled (terminal selection/copy on; in-app wheel scrolling off).',
           },
           Date.now(),
@@ -1372,6 +1373,8 @@ export const AppContainer = (props: AppContainerProps) => {
   const mainControlsRef = useRef<DOMElement>(null);
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
+
+  useMouseSelection({ enabled: true, rootRef: rootUiRef });
 
   useLayoutEffect(() => {
     if (mainControlsRef.current) {

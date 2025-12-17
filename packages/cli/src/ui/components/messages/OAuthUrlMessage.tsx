@@ -54,8 +54,9 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
         </Box>
         <Box>
           <Text color={Colors.Comment} dimColor wrap="wrap">
-            Tip: if selection/copy isn’t working, run /mouse off (or press
-            Ctrl+\) to disable mouse tracking.
+            Tip: when mouse scrolling is enabled, drag to select and it will be
+            copied to your clipboard. For terminal selection, run /mouse off
+            (Ctrl+\).
           </Text>
         </Box>
       </Box>
