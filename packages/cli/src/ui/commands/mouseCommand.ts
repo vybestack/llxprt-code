@@ -24,7 +24,7 @@ function parseMouseCommandMode(args: string): MouseCommandMode | null {
 export const mouseCommand: SlashCommand = {
   name: 'mouse',
   description:
-    'Toggle mouse event tracking (enables in-app wheel scrolling; may interfere with terminal selection/copy)',
+    'Toggle mouse event tracking (enables in-app wheel scrolling and in-app selection/copy)',
   kind: CommandKind.BUILT_IN,
 
   action: async (_context, args): Promise<MessageActionReturn> => {
@@ -47,7 +47,7 @@ export const mouseCommand: SlashCommand = {
       type: 'message',
       messageType: 'info',
       content: nextActive
-        ? 'Mouse events enabled (in-app wheel scrolling on; terminal selection/copy may be limited).'
+        ? 'Mouse events enabled (wheel scrolling + in-app selection/copy on).'
         : 'Mouse events disabled (terminal selection/copy on; in-app wheel scrolling off).',
     };
   },
