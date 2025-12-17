@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -25,36 +25,87 @@ export const IMAGE_EXTENSIONS = [
   '.heif',
 ];
 
+/** Matches strings that start with a path prefix (/, ~, ., Windows drive letter, or UNC path) */
+const PATH_PREFIX_PATTERN = /^([/~.]|[a-zA-Z]:|\\\\)/;
+
 /**
- * Checks if the system clipboard contains an image (macOS only for now)
+ * Spawn a command and return stdout/stderr
+ */
+async function spawnAsync(
+  command: string,
+  args: string[],
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args);
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    proc.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        reject(new Error(`Command failed with exit code ${code}`));
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Checks if the system clipboard contains an image (macOS and Windows)
  * @returns true if clipboard contains an image
  */
 export async function clipboardHasImage(): Promise<boolean> {
+  if (process.platform === 'win32') {
+    try {
+      const { stdout } = await spawnAsync('powershell', [
+        '-NoProfile',
+        '-Command',
+        'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::ContainsImage()',
+      ]);
+      return stdout.trim() === 'True';
+    } catch (error) {
+      // Silent fail on Windows clipboard check
+      return false;
+    }
+  }
+
   if (process.platform !== 'darwin') {
     return false;
   }
 
   try {
     // Use osascript to check clipboard type
-    const { stdout } = await execAsync(
-      `osascript -e 'clipboard info' 2>/dev/null | grep -qE "«class PNGf»|TIFF picture|JPEG picture|GIF picture|«class JPEG»|«class TIFF»" && echo "true" || echo "false"`,
-      { shell: '/bin/bash' },
-    );
-    return stdout.trim() === 'true';
-  } catch {
+    const { stdout } = await spawnAsync('osascript', ['-e', 'clipboard info']);
+    const imageRegex =
+      /«class PNGf»|TIFF picture|JPEG picture|GIF picture|«class JPEG»|«class TIFF»/;
+    return imageRegex.test(stdout);
+  } catch (error) {
+    // Silent fail on macOS clipboard check
     return false;
   }
 }
 
 /**
- * Saves the image from clipboard to a temporary file (macOS only for now)
+ * Saves the image from clipboard to a temporary file (macOS and Windows)
  * @param targetDir The target directory to create temp files within
  * @returns The path to the saved image file, or null if no image or error
  */
 export async function saveClipboardImage(
   targetDir?: string,
 ): Promise<string | null> {
-  if (process.platform !== 'darwin') {
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
     return null;
   }
 
@@ -67,6 +118,40 @@ export async function saveClipboardImage(
 
     // Generate a unique filename with timestamp
     const timestamp = new Date().getTime();
+
+    if (process.platform === 'win32') {
+      const tempFilePath = path.join(tempDir, `clipboard-${timestamp}.png`);
+      // The path is used directly in the PowerShell script.
+      const psPath = tempFilePath.replace(/'/g, "''");
+
+      const script = `
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        if ([System.Windows.Forms.Clipboard]::ContainsImage()) {
+          $image = [System.Windows.Forms.Clipboard]::GetImage()
+          $image.Save('${psPath}', [System.Drawing.Imaging.ImageFormat]::Png)
+          Write-Output "success"
+        }
+      `;
+
+      const { stdout } = await spawnAsync('powershell', [
+        '-NoProfile',
+        '-Command',
+        script,
+      ]);
+
+      if (stdout.trim() === 'success') {
+        try {
+          const stats = await fs.stat(tempFilePath);
+          if (stats.size > 0) {
+            return tempFilePath;
+          }
+        } catch {
+          // File doesn't exist
+        }
+      }
+      return null;
+    }
 
     // AppleScript clipboard classes to try, in order of preference.
     // macOS converts clipboard images to these formats (WEBP/HEIC/HEIF not supported by osascript).
@@ -195,9 +280,6 @@ export function splitEscapedPaths(text: string): string[] {
 
   return paths;
 }
-
-/** Matches strings that start with a path prefix (/, ~, ., Windows drive letter, or UNC path) */
-const PATH_PREFIX_PATTERN = /^([/~.]|[a-zA-Z]:|\\)/;
 
 /**
  * Processes pasted text containing file paths, adding @ prefix to valid paths.
