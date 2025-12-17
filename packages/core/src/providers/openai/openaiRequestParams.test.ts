@@ -30,4 +30,25 @@ describe('filterOpenAIRequestParams', () => {
       user: 'tester',
     });
   });
+
+  it('drops internal reasoning settings nested under reasoning', () => {
+    const filtered = filterOpenAIRequestParams({
+      temperature: 0.7,
+      reasoning: {
+        effort: 'xhigh',
+        enabled: true,
+        includeInContext: true,
+        includeInResponse: false,
+        format: 'field',
+        stripFromContext: 'none',
+      },
+    });
+
+    expect(filtered).toEqual({
+      temperature: 0.7,
+      reasoning: {
+        effort: 'xhigh',
+      },
+    });
+  });
 });

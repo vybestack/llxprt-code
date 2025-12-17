@@ -99,12 +99,13 @@ export function createAgentRuntimeContext(
           | 'all'
           | 'allButLast'
           | 'none') ?? EPHEMERAL_DEFAULTS.reasoning.stripFromContext,
-      effort: (): 'minimal' | 'low' | 'medium' | 'high' | undefined =>
+      effort: (): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined =>
         options.settings['reasoning.effort'] as
           | 'minimal'
           | 'low'
           | 'medium'
           | 'high'
+          | 'xhigh'
           | undefined,
       maxTokens: (): number | undefined =>
         typeof options.settings['reasoning.maxTokens'] === 'number'

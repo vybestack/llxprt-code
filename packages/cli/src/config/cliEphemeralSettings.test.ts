@@ -61,6 +61,14 @@ describe('applyCliSetArguments', () => {
     expect(target.getValue('authOnly')).toBe(false);
   });
 
+  it('accepts reasoning.effort=xhigh', () => {
+    const target = new TestTarget();
+
+    applyCliSetArguments(target, ['reasoning.effort=xhigh']);
+
+    expect(target.getValue('reasoning.effort')).toBe('xhigh');
+  });
+
   it('collects model parameter entries and returns them separately', () => {
     const target = new TestTarget();
 

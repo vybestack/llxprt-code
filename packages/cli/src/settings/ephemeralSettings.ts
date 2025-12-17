@@ -71,7 +71,7 @@ export const ephemeralSettingHelp: Record<string, string> = {
   'reasoning.stripFromContext':
     'Remove thinking blocks from context before sending back to model (all/allButLast/none, default: none)',
   'reasoning.effort':
-    'How much the model should think before responding (minimal/low/medium/high, default: undefined)',
+    'How much the model should think before responding (minimal/low/medium/high/xhigh, default: undefined)',
   'reasoning.maxTokens':
     'Maximum token budget the model can use for reasoning (positive integer, default: undefined)',
   'enable-tool-prompts':
@@ -399,7 +399,7 @@ export function parseEphemeralSettingValue(
   }
 
   if (key === 'reasoning.effort') {
-    const validModes = ['minimal', 'low', 'medium', 'high'];
+    const validModes = ['minimal', 'low', 'medium', 'high', 'xhigh'];
     if (
       typeof parsedValue !== 'string' ||
       !validModes.includes(parsedValue.toLowerCase())

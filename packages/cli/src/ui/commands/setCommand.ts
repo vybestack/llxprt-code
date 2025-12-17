@@ -284,13 +284,14 @@ const directSettingSpecs: SettingLiteralSpec[] = [
   },
   {
     value: 'reasoning.effort',
-    hint: 'minimal, low, medium, or high',
+    hint: 'minimal, low, medium, high, or xhigh',
     description: 'How much the AI should think before responding',
     options: [
       { value: 'minimal', description: 'Quick responses, less deliberation' },
       { value: 'low', description: 'Light thinking for simple tasks' },
       { value: 'medium', description: 'Balanced thinking for most tasks' },
       { value: 'high', description: 'Deep thinking for complex problems' },
+      { value: 'xhigh', description: 'Maximum thinking for hardest problems' },
     ],
   },
   {
