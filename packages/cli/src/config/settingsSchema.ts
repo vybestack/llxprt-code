@@ -510,6 +510,36 @@ export const SETTINGS_SCHEMA = {
         description: 'Hide the footer from the UI',
         showInDialog: true,
       },
+      useAlternateBuffer: {
+        type: 'boolean',
+        label: 'Use Alternate Screen Buffer',
+        category: 'UI',
+        requiresRestart: true,
+        default: true,
+        description:
+          'Use an alternate screen buffer for the UI, preserving shell history.',
+        showInDialog: true,
+      },
+      incrementalRendering: {
+        type: 'boolean',
+        label: 'Incremental Rendering',
+        category: 'UI',
+        requiresRestart: true,
+        default: true,
+        description:
+          'Enable incremental rendering for the UI. Only supported when useAlternateBuffer is enabled.',
+        showInDialog: true,
+      },
+      enableMouseEvents: {
+        type: 'boolean',
+        label: 'Enable Mouse Events',
+        category: 'UI',
+        requiresRestart: true,
+        default: true,
+        description:
+          'Enable mouse event tracking for in-app scrolling. Disables terminal text selection and clickable links while active.',
+        showInDialog: true,
+      },
       showMemoryUsage: {
         type: 'boolean',
         label: 'Show Memory Usage',

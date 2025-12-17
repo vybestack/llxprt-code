@@ -541,8 +541,10 @@ describe('Git Statistics Tracking', () => {
       const endTime = process.hrtime.bigint();
       const durationMs = Number(endTime - startTime) / 1_000_000;
 
-      // Should complete very quickly since no actual processing occurs
-      expect(durationMs).toBeLessThan(10); // Less than 10ms for 100 calls
+      // Should complete quickly since no actual processing occurs.
+      // This is still an async method (Promise/microtask overhead), and CI/load
+      // variance makes ultra-tight wall-clock bounds flaky.
+      expect(durationMs).toBeLessThan(200); // Less than 200ms for 100 calls
     });
 
     it('should scale reasonably with file size', async () => {

@@ -1,0 +1,202 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 35,
+    "historyLimit": 50000,
+    "scrollbackLines": 6000,
+    "initialWaitMs": 6000
+  },
+  "yolo": true,
+  "startCommand": [
+    "node",
+    "scripts/start.js",
+    "--profile-load",
+    "synthetic",
+    "--yolo",
+    "-i",
+    "Do NOT use any tools. Output exactly 60 lines. Each line must be of the form: `LINE NN: sample text` where NN is 01 through 60. The final 3 lines must be exactly: `LINE 58: sample text`, `LINE 59: sample text`, `LINE 60: sample text`. Do not output anything else."
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "LINE 60: sample text",
+      "timeoutMs": 90000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 90000
+    },
+    { "type": "capture", "label": "at-bottom", "scope": "screen" },
+
+    {
+      "type": "line",
+      "text": "\u001b[<64;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<64;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<64;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<64;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<64;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<64;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<64;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<64;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<64;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<64;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+
+    { "type": "wait", "ms": 300 },
+    { "type": "capture", "label": "after-wheel-up", "scope": "screen" },
+    {
+      "type": "expectCount",
+      "scope": "screen",
+      "regex": "LINE\\s+\\d\\d: sample text",
+      "atLeast": 5
+    },
+
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+    {
+      "type": "line",
+      "text": "\u001b[<65;10;5M",
+      "submitKeys": [],
+      "postTypeMs": 0
+    },
+
+    { "type": "wait", "ms": 300 },
+    { "type": "capture", "label": "after-wheel-down", "scope": "screen" },
+    { "type": "expect", "scope": "screen", "contains": "LINE 60: sample text" },
+
+    { "type": "line", "text": "/quit", "submitKeys": ["Escape", "Enter"] },
+    { "type": "waitForExit", "timeoutMs": 30000 }
+  ]
+}

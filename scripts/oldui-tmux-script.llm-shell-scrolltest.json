@@ -1,0 +1,83 @@
+{
+  "tmux": {
+    "cols": 100,
+    "rows": 20,
+    "historyLimit": 50000,
+    "scrollbackLines": 20000,
+    "initialWaitMs": 6000
+  },
+  "startCommand": ["node", "scripts/start.js"],
+  "yolo": false,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "line",
+      "text": "/profile load synthetic",
+      "submitKeys": ["Escape", "Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Profile 'synthetic' loaded",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "line",
+      "text": "Use the run_shell_command tool (NOT shell mode) to run: node scripts/oldui-scrollback-load.js --total 60 --interval-ms 250. Do not explain.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Yes, allow once",
+      "timeoutMs": 120000
+    },
+    { "type": "capture", "label": "confirm-shell", "scope": "screen" },
+    { "type": "approveTool", "choice": "once", "timeoutMs": 60000 },
+    { "type": "wait", "ms": 800 },
+    { "type": "key", "key": "C-s" },
+
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "SCROLLTEST LINE 0010",
+      "timeoutMs": 60000
+    },
+    { "type": "copyMode", "enter": true },
+    { "type": "copyMode", "pageUp": 5 },
+    { "type": "historySample", "label": "copyMode-start" },
+    { "type": "wait", "ms": 10000 },
+    { "type": "historySample", "label": "copyMode-end" },
+    { "type": "capture", "label": "while-scrolled-up", "scope": "screen" },
+    { "type": "copyMode", "exit": true },
+
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "SCROLLTEST LINE 0060",
+      "timeoutMs": 60000
+    },
+    { "type": "capture", "label": "after-scrolltest", "scope": "scrollback" },
+
+    {
+      "type": "expectCount",
+      "scope": "scrollback",
+      "regex": "^\\s*│\\s*SCROLLTEST LINE 0001\\b",
+      "regexFlags": "um",
+      "equals": 1
+    },
+    { "type": "line", "text": "/quit", "submitKeys": ["Escape", "Enter"] },
+    { "type": "waitForExit", "timeoutMs": 30000 }
+  ]
+}

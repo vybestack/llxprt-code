@@ -69,6 +69,8 @@ export interface InputPromptProps {
   shellModeActive: boolean;
   setShellModeActive: (value: boolean) => void;
   onEscapePromptChange?: (showPrompt: boolean) => void;
+  onSuggestionsVisibilityChange?: (visible: boolean) => void;
+  suggestionsPosition?: 'above' | 'below';
   vimHandleInput?: (key: Key) => boolean;
   approvalMode?: ApprovalMode;
   popAllMessages?: (callback: (messages: string) => void) => void;
@@ -118,6 +120,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   shellModeActive,
   setShellModeActive,
   onEscapePromptChange,
+  onSuggestionsVisibilityChange,
+  suggestionsPosition = 'below',
   vimHandleInput,
 }) => {
   const [justNavigatedHistory, setJustNavigatedHistory] = useState(false);
@@ -162,6 +166,16 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   const resetCompletionState = completion.resetCompletionState;
   const resetReverseSearchCompletionState =
     reverseSearchCompletion.resetCompletionState;
+
+  useEffect(() => {
+    onSuggestionsVisibilityChange?.(
+      completion.showSuggestions || reverseSearchActive,
+    );
+  }, [
+    completion.showSuggestions,
+    reverseSearchActive,
+    onSuggestionsVisibilityChange,
+  ]);
 
   const keypressRefreshRef = useRef<() => void>(() => {});
 
@@ -814,8 +828,39 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   const { inlineGhost, additionalLines } = getGhostTextLines();
 
+  const completionSuggestionsNode = completion.showSuggestions ? (
+    <Box paddingRight={2}>
+      <SuggestionsDisplay
+        suggestions={completion.suggestions}
+        activeIndex={completion.activeSuggestionIndex}
+        isLoading={completion.isLoadingSuggestions}
+        width={suggestionsWidth}
+        scrollOffset={completion.visibleStartIndex}
+        userInput={buffer.text}
+        activeHint={completion.activeHint}
+      />
+    </Box>
+  ) : null;
+
+  const reverseSearchSuggestionsNode = reverseSearchActive ? (
+    <Box paddingRight={2}>
+      <SuggestionsDisplay
+        suggestions={reverseSearchCompletion.suggestions}
+        activeIndex={reverseSearchCompletion.activeSuggestionIndex}
+        isLoading={reverseSearchCompletion.isLoadingSuggestions}
+        width={suggestionsWidth}
+        scrollOffset={reverseSearchCompletion.visibleStartIndex}
+        userInput={buffer.text}
+      />
+    </Box>
+  ) : null;
+
+  const suggestionsNode =
+    completionSuggestionsNode ?? reverseSearchSuggestionsNode;
+
   return (
     <>
+      {suggestionsPosition === 'above' && suggestionsNode}
       <Box
         borderStyle="round"
         borderColor={
@@ -996,31 +1041,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           )}
         </Box>
       </Box>
-      {completion.showSuggestions && (
-        <Box paddingRight={2}>
-          <SuggestionsDisplay
-            suggestions={completion.suggestions}
-            activeIndex={completion.activeSuggestionIndex}
-            isLoading={completion.isLoadingSuggestions}
-            width={suggestionsWidth}
-            scrollOffset={completion.visibleStartIndex}
-            userInput={buffer.text}
-            activeHint={completion.activeHint}
-          />
-        </Box>
-      )}
-      {reverseSearchActive && (
-        <Box paddingRight={2}>
-          <SuggestionsDisplay
-            suggestions={reverseSearchCompletion.suggestions}
-            activeIndex={reverseSearchCompletion.activeSuggestionIndex}
-            isLoading={reverseSearchCompletion.isLoadingSuggestions}
-            width={suggestionsWidth}
-            scrollOffset={reverseSearchCompletion.visibleStartIndex}
-            userInput={buffer.text}
-          />
-        </Box>
-      )}
+      {suggestionsPosition === 'below' && suggestionsNode}
     </>
   );
 };
