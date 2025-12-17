@@ -48,6 +48,7 @@ import {
 import * as fs from 'fs'; // fs will be mocked separately
 import stripJsonComments from 'strip-json-comments'; // Will be mocked separately
 import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
+import { disableExtension } from './extension.js';
 
 // These imports will get the versions from the vi.mock('./settings.js', ...) factory.
 import {
@@ -2352,6 +2353,17 @@ describe('Settings Loading and Merging', () => {
   });
 
   // TODO: needsMigration and migrateDeprecatedSettings functions not yet implemented
+  const needsMigration = (_settings: unknown) => {
+    throw new Error('needsMigration is not implemented');
+  };
+
+  const migrateDeprecatedSettings = (
+    _loadedSettings: ReturnType<typeof loadSettings>,
+    _workspaceDir: string,
+  ) => {
+    throw new Error('migrateDeprecatedSettings is not implemented');
+  };
+
   describe.skip('needsMigration', () => {
     it('should return false for an empty object', () => {
       expect(needsMigration({})).toBe(false);
@@ -2432,10 +2444,7 @@ describe('Settings Loading and Merging', () => {
       mockDisableExtension = vi.mocked(disableExtension);
 
       (mockFsExistsSync as Mock).mockReturnValue(true);
-      vi.mocked(isWorkspaceTrusted).mockReturnValue({
-        isTrusted: true,
-        source: undefined,
-      });
+      vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
     });
 
     afterEach(() => {

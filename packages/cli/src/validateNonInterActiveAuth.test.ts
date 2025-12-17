@@ -18,9 +18,7 @@ describe('validateNonInterActiveAuth', () => {
   let originalEnvGcp: string | undefined;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   let processExitSpy: ReturnType<typeof vi.spyOn>;
-  let refreshAuthMock: jest.MockedFunction<
-    (authType: AuthType) => Promise<unknown>
-  >;
+  let refreshAuthMock: ReturnType<(typeof vi)['fn']>;
 
   beforeEach(() => {
     originalEnvGeminiApiKey = process.env.GEMINI_API_KEY;

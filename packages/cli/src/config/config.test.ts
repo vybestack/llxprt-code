@@ -1356,10 +1356,7 @@ describe('Approval mode tool exclusion logic', () => {
 
   beforeEach(() => {
     process.stdin.isTTY = false; // Ensure non-interactive mode
-    vi.mocked(isWorkspaceTrusted).mockReturnValue({
-      isTrusted: true,
-      source: undefined,
-    });
+    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
@@ -3173,13 +3170,9 @@ describe('parseArguments with positional prompt', () => {
     expect(argv.promptWords).toEqual(['positional', 'prompt']);
   });
 
-  it('should have correct positional argument description', async () => {
-    // Test that the positional argument has the expected description
-    const yargsInstance = await import('./config.js');
-    // This test verifies that the positional 'query' argument is properly configured
-    // with the description: "Positional prompt. Defaults to one-shot; use -i/--prompt-interactive for interactive."
+  it('should correctly parse positional query argument', async () => {
     process.argv = ['node', 'script.js', 'test', 'query'];
-    const argv = await yargsInstance.parseArguments({} as Settings);
+    const argv = await parseArguments({} as Settings);
     expect(argv.query).toBe('test query');
   });
 

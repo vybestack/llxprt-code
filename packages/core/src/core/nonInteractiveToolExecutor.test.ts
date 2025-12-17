@@ -242,7 +242,7 @@ describe('executeToolCall', () => {
     expect(response.callId).toBe('call5');
     expect(response.error).toBeInstanceOf(Error);
     expect(response.error?.message).toBe('Something went very wrong');
-    expect(response.errorType).toBeUndefined();
+    expect(response.errorType).toBe(ToolErrorType.UNHANDLED_EXCEPTION);
     expect(response.resultDisplay).toBe('Something went very wrong');
 
     const functionResponsePart = response.responseParts.find(

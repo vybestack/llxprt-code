@@ -1089,7 +1089,7 @@ describe('Server Config (config.ts)', () => {
   });
 
   describe('ContinueOnFailedApiCall Configuration', () => {
-    it('should default continueOnFailedApiCall to false when not provided', () => {
+    it('should default continueOnFailedApiCall to true when not provided', () => {
       const config = new Config(baseParams);
       expect(config.getContinueOnFailedApiCall()).toBe(true);
     });

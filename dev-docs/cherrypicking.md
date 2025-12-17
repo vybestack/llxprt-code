@@ -21,7 +21,7 @@ git fetch upstream
 
 # Create a new branch from main
 git checkout main
-git checkout -b YYYYMMDDgemerge  # e.g., 20251215gemerge
+git checkout -b YYYYMMDDgmerge  # e.g., 20251215gmerge
 ```
 
 ### 2. Identify Commits to Cherry-pick
@@ -213,7 +213,7 @@ Instead:
 ### 8. Push the Branch
 
 ```bash
-git push origin YYYYMMDD-gmerge
+git push origin YYYYMMDDgmerge  # e.g., 20251215gmerge
 ```
 
 ### 9. Create Pull Request

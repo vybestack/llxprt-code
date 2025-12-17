@@ -40,6 +40,26 @@ export function parsePrompt(text: string): {
   const validUrls: string[] = [];
   const errors: string[] = [];
 
+  const stripTrailingPunctuation = (input: string): string => {
+    let endIndex = input.length;
+    while (endIndex > 0) {
+      const lastChar = input[endIndex - 1];
+      if (
+        lastChar === '.' ||
+        lastChar === ',' ||
+        lastChar === ';' ||
+        lastChar === ':' ||
+        lastChar === '!' ||
+        lastChar === '?'
+      ) {
+        endIndex--;
+        continue;
+      }
+      break;
+    }
+    return input.slice(0, endIndex);
+  };
+
   for (const token of tokens) {
     if (!token) continue;
 
@@ -47,7 +67,7 @@ export function parsePrompt(text: string): {
     if (token.includes('://')) {
       // Strip common trailing punctuation (period, comma, semicolon, colon, etc.)
       // This handles natural language like "Check https://example.com."
-      const cleaned = token.replace(/[.,;:!?]+$/, '');
+      const cleaned = stripTrailingPunctuation(token);
 
       try {
         // Validate with new URL()

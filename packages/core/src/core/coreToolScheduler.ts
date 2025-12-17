@@ -1336,7 +1336,10 @@ export class CoreToolScheduler {
     executionIndex: number,
   ): void {
     const errorResult: ToolResult = {
-      error,
+      error: {
+        message: error.message,
+        type: ToolErrorType.UNHANDLED_EXCEPTION,
+      },
       llmContent: error.message,
       returnDisplay: error.message,
     };

@@ -277,7 +277,7 @@ describe('Todo Continuation Integration Tests', () => {
         signal: expect.any(AbortSignal),
         prompt_id: 'test-prompt-id',
         turns: undefined,
-        originalModel: undefined,
+        isInvalidStreamRetry: undefined,
       });
 
       // Restore original method

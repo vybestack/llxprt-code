@@ -236,7 +236,6 @@ describe('Turn', () => {
 
       const events = [];
       for await (const event of turn.run(
-        'test-model',
         reqParts,
         new AbortController().signal,
       )) {

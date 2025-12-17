@@ -64,7 +64,7 @@ You can use the [`/memory` command](../cli/commands.md) to `show`, `add`, and `r
 
 ## Citations
 
-When the AI model finds it is reciting text from a source it appends the citation to the output. It is enabled by default but can be disabled with the ui.showCitations setting.
+When the AI model finds it is reciting text from a source it appends the citation to the output. It is disabled by default but can be enabled with the ui.showCitations setting.
 
 - When proposing an edit the citations display before giving the user the option to accept.
 - Citations are always shown at the end of the model's turn.
