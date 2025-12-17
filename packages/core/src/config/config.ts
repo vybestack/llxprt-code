@@ -52,6 +52,7 @@ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
+import { OutputFormat } from '../utils/output-format.js';
 import {
   // TELEMETRY: Re-enabled for local file logging only
   initializeTelemetry,
@@ -291,6 +292,7 @@ export interface ConfigParameters {
   sandbox?: SandboxConfig;
   targetDir: string;
   debugMode: boolean;
+  outputFormat?: OutputFormat;
   question?: string;
   fullContext?: boolean;
   coreTools?: string[];
@@ -373,6 +375,7 @@ export class Config {
   private readonly targetDir: string;
   private workspaceContext: WorkspaceContext;
   private readonly debugMode: boolean;
+  private readonly outputFormat: OutputFormat;
   private readonly question: string | undefined;
   private readonly fullContext: boolean;
   private readonly coreTools: string[] | undefined;
@@ -568,6 +571,7 @@ export class Config {
       params.includeDirectories ?? [],
     );
     this.debugMode = params.debugMode;
+    this.outputFormat = params.outputFormat ?? OutputFormat.TEXT;
     this.question = params.question;
     this.fullContext = params.fullContext ?? false;
     this.coreTools = params.coreTools;
@@ -959,6 +963,10 @@ export class Config {
 
   getDebugMode(): boolean {
     return this.debugMode;
+  }
+
+  getOutputFormat(): OutputFormat {
+    return this.outputFormat;
   }
   getQuestion(): string | undefined {
     return this.question;

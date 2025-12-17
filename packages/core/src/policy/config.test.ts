@@ -152,6 +152,36 @@ describe('policy config', () => {
         const toolNames = rules.map((r) => r.toolName);
         expect(toolNames).toEqual(['glob', 'grep', 'ls', 'read_file']);
       });
+
+      it('normalizes ShellTool alias to run_shell_command', () => {
+        const config = createMockConfig({
+          allowedTools: ['ShellTool'],
+        });
+        const rules = migrateLegacyApprovalMode(config);
+
+        expect(rules).toHaveLength(1);
+        expect(rules[0]?.toolName).toBe('run_shell_command');
+      });
+
+      it('normalizes ShellTool subcommand syntax to run_shell_command', () => {
+        const config = createMockConfig({
+          allowedTools: ['ShellTool(wc)'],
+        });
+        const rules = migrateLegacyApprovalMode(config);
+
+        expect(rules).toHaveLength(1);
+        expect(rules[0]?.toolName).toBe('run_shell_command');
+      });
+
+      it('normalizes run_shell_command subcommand syntax to run_shell_command', () => {
+        const config = createMockConfig({
+          allowedTools: ['run_shell_command(wc)'],
+        });
+        const rules = migrateLegacyApprovalMode(config);
+
+        expect(rules).toHaveLength(1);
+        expect(rules[0]?.toolName).toBe('run_shell_command');
+      });
     });
 
     describe('combined scenarios', () => {

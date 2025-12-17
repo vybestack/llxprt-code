@@ -21,6 +21,7 @@ import {
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   FileDiscoveryService,
   TelemetryTarget,
+  OutputFormat,
   FileFilteringOptions,
   ProfileManager,
   ShellTool,
@@ -116,6 +117,7 @@ export interface CliArgs {
   debug: boolean | undefined;
   prompt: string | undefined;
   promptInteractive: string | undefined;
+  outputFormat: string | undefined;
   allFiles: boolean | undefined;
   showMemoryUsage: boolean | undefined;
   yolo: boolean | undefined;
@@ -176,6 +178,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           type: 'string',
           description:
             'Execute the provided prompt and continue in interactive mode',
+        })
+        .option('output-format', {
+          type: 'string',
+          choices: [OutputFormat.TEXT, OutputFormat.JSON],
+          description: 'Output format for non-interactive mode (text or json).',
         })
         .option('sandbox', {
           alias: 's',
@@ -570,6 +577,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       queryFromPromptWords ||
       undefined,
     promptInteractive: result.promptInteractive as string | undefined,
+    outputFormat: result.outputFormat as string | undefined,
     allFiles: result.allFiles as boolean | undefined,
     showMemoryUsage: result.showMemoryUsage as boolean | undefined,
     yolo: result.yolo as boolean | undefined,
@@ -1172,6 +1180,11 @@ export async function loadCliConfig(
     getUserPolicyPath: () => resolvedPolicyPath,
   });
 
+  const outputFormat =
+    argv.outputFormat === OutputFormat.JSON
+      ? OutputFormat.JSON
+      : OutputFormat.TEXT;
+
   const config = new Config({
     sessionId,
     embeddingModel: undefined, // No embedding model configured for llxprt-code
@@ -1180,6 +1193,7 @@ export async function loadCliConfig(
     includeDirectories,
     loadMemoryFromIncludeDirectories: resolvedLoadMemoryFromIncludeDirectories,
     debugMode,
+    outputFormat,
     question,
     fullContext: argv.allFiles || false,
     coreTools: effectiveSettings.coreTools || undefined,

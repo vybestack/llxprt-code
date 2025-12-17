@@ -192,6 +192,8 @@ export class ShellExecutionService {
         let isStreamingRawContent = true;
         const MAX_SNIFF_SIZE = 4096;
         let sniffedBytes = 0;
+        let sniffBuffer = Buffer.alloc(0);
+        let totalBytesReceived = 0;
 
         const handleOutput = (data: Buffer, stream: 'stdout' | 'stderr') => {
           if (!stdoutDecoder || !stderrDecoder) {
@@ -205,15 +207,23 @@ export class ShellExecutionService {
             }
           }
 
+          totalBytesReceived += data.length;
           outputChunks.push(data);
 
           if (isStreamingRawContent && sniffedBytes < MAX_SNIFF_SIZE) {
-            const sniffBuffer = Buffer.concat(outputChunks.slice(0, 20));
-            sniffedBytes = sniffBuffer.length;
+            const remaining = MAX_SNIFF_SIZE - sniffedBytes;
+            if (remaining > 0) {
+              const slice = data.subarray(0, remaining);
+              sniffBuffer =
+                sniffBuffer.length === 0
+                  ? Buffer.from(slice)
+                  : Buffer.concat([sniffBuffer, slice]);
+              sniffedBytes = sniffBuffer.length;
 
-            if (isBinary(sniffBuffer)) {
-              isStreamingRawContent = false;
-              onOutputEvent({ type: 'binary_detected' });
+              if (isBinary(sniffBuffer)) {
+                isStreamingRawContent = false;
+                onOutputEvent({ type: 'binary_detected' });
+              }
             }
           }
 
@@ -246,13 +256,9 @@ export class ShellExecutionService {
           if (isStreamingRawContent) {
             onOutputEvent({ type: 'data', chunk: strippedChunk });
           } else {
-            const totalBytes = outputChunks.reduce(
-              (sum, chunk) => sum + chunk.length,
-              0,
-            );
             onOutputEvent({
               type: 'binary_progress',
-              bytesReceived: totalBytes,
+              bytesReceived: totalBytesReceived,
             });
           }
         };
@@ -412,6 +418,8 @@ export class ShellExecutionService {
         let isStreamingRawContent = true;
         const MAX_SNIFF_SIZE = 4096;
         let sniffedBytes = 0;
+        let sniffBuffer = Buffer.alloc(0);
+        let totalBytesReceived = 0;
 
         const handleOutput = (data: Buffer) => {
           processingChain = processingChain.then(
@@ -426,15 +434,23 @@ export class ShellExecutionService {
                   }
                 }
 
+                totalBytesReceived += data.length;
                 outputChunks.push(data);
 
                 if (isStreamingRawContent && sniffedBytes < MAX_SNIFF_SIZE) {
-                  const sniffBuffer = Buffer.concat(outputChunks.slice(0, 20));
-                  sniffedBytes = sniffBuffer.length;
+                  const remaining = MAX_SNIFF_SIZE - sniffedBytes;
+                  if (remaining > 0) {
+                    const slice = data.subarray(0, remaining);
+                    sniffBuffer =
+                      sniffBuffer.length === 0
+                        ? Buffer.from(slice)
+                        : Buffer.concat([sniffBuffer, slice]);
+                    sniffedBytes = sniffBuffer.length;
 
-                  if (isBinary(sniffBuffer)) {
-                    isStreamingRawContent = false;
-                    onOutputEvent({ type: 'binary_detected' });
+                    if (isBinary(sniffBuffer)) {
+                      isStreamingRawContent = false;
+                      onOutputEvent({ type: 'binary_detected' });
+                    }
                   }
                 }
 
@@ -448,13 +464,9 @@ export class ShellExecutionService {
                     resolve();
                   });
                 } else {
-                  const totalBytes = outputChunks.reduce(
-                    (sum, chunk) => sum + chunk.length,
-                    0,
-                  );
                   onOutputEvent({
                     type: 'binary_progress',
-                    bytesReceived: totalBytes,
+                    bytesReceived: totalBytesReceived,
                   });
                   resolve();
                 }

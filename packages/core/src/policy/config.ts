@@ -18,6 +18,25 @@ import {
 import { loadDefaultPolicies, loadPolicyFromToml } from './toml-loader.js';
 import { ApprovalMode } from '../config/config.js';
 
+function normalizeAllowedToolNameForPolicy(tool: string): string {
+  const trimmed = tool.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  const baseName =
+    trimmed.endsWith(')') && trimmed.includes('(')
+      ? trimmed.slice(0, trimmed.indexOf('('))
+      : trimmed;
+
+  // Treat legacy ShellTool alias as the canonical tool name.
+  if (baseName === 'ShellTool') {
+    return 'run_shell_command';
+  }
+
+  return baseName;
+}
+
 /**
  * Minimal Config interface for policy creation
  * Avoids circular dependency by only requiring the methods we need
@@ -76,9 +95,15 @@ export function migrateLegacyApprovalMode(
 
   // Map --allowed-tools
   const allowedTools = config.getAllowedTools() ?? [];
+  const seenToolNames = new Set<string>();
   for (const tool of allowedTools) {
+    const normalizedToolName = normalizeAllowedToolNameForPolicy(tool);
+    if (!normalizedToolName || seenToolNames.has(normalizedToolName)) {
+      continue;
+    }
+    seenToolNames.add(normalizedToolName);
     rules.push({
-      toolName: tool,
+      toolName: normalizedToolName,
       decision: PolicyDecision.ALLOW,
       priority: 2.3,
     });

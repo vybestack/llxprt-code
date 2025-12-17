@@ -106,8 +106,9 @@ export function applyReplacement(
   // Fall back to strict matching (original behavior)
   // Use a more precise replacement that only replaces the expected number of occurrences
   if (expectedReplacements === 1) {
-    // For single replacement, use replace() instead of replaceAll()
-    return currentContent.replace(oldString, newString);
+    // For single replacement, use replace() instead of replaceAll().
+    // Use a replacer function so `$` in `newString` is treated literally.
+    return currentContent.replace(oldString, () => newString);
   } else {
     // For multiple replacements, we need to count and limit replacements
     let result = currentContent;
