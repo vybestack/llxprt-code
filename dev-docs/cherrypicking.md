@@ -32,8 +32,13 @@ git log --oneline upstream/main ^HEAD
 # Check how many commits behind we are
 git rev-list --count HEAD..upstream/main
 
-# See the last merge point with upstream
-git log --oneline --merges --grep="Merge upstream" -1
+# Prefer tag-to-tag ranges when upstream has releases/tags
+git fetch upstream --tags
+git log --oneline --reverse v0.9.0..v0.10.0
+
+# Historical note: older syncs used marker merge commits. We no longer create
+# marker-only merges; use tracking docs and commit messages instead.
+git log --oneline --grep="Merge upstream gemini-cli" -n 5
 ```
 
 ### 3. Cherry-pick Relevant Commits
@@ -108,20 +113,26 @@ After cherry-picking, you may encounter:
 
 ### 5. Run Quality Checks
 
-**IMPORTANT**: Always run these checks in order:
+**IMPORTANT**: Always run these checks in order (from the repo root):
 
 ```bash
-# 1. Run lint first
+# 1. Format
+npm run format
+
+# 2. Lint
 npm run lint
 
-# 2. Run build to catch TypeScript errors
+# 3. Typecheck
+npm run typecheck
+
+# 4. Tests
+npm run test
+
+# 5. Build
 npm run build
 
-# 3. Run tests
-npm test
-
-# 4. Run format AFTER everything passes
-npm run format
+# 6. Synthetic smoke-run
+node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
 ```
 
 ### 5a. Batch Verification Phase (When Cherry-picking Multiple Commits)
@@ -134,10 +145,12 @@ When cherry-picking multiple commits, **verify after each batch of 5 commits**:
 2. Run full verification suite:
    ```bash
    # Full verification in order
-   npm run lint
-   npm run build
-   npm test
    npm run format
+   npm run lint
+   npm run typecheck
+   npm run test
+   npm run build
+   node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
    git add -A  # Stage formatted changes if any
    ```
 3. Verify commits were actually applied:
@@ -172,24 +185,18 @@ git commit -m "fix: resolve conflicts and test failures from cherry-picks
 - <preserved llxprt features>"
 ```
 
-### 7. Create Empty Merge Commit
+### 7. Record the Sync Range (No Marker Merge Commits)
 
-To maintain parity with upstream's merge structure:
+We no longer create marker-only merge commits (e.g. `git merge -s ours`) as a
+“sync point”. These create synthetic ancestry and can hide intentional SKIP /
+REIMPLEMENT decisions.
 
-```bash
-# Create an empty merge commit using -s ours strategy
-# IMPORTANT: Merge the specific commit hash, NOT upstream/main
-git merge -s ours --no-ff <last-cherry-picked-commit-hash> -m "Merge upstream gemini-cli up to commit <hash>
+Instead:
 
-This is an empty merge commit to maintain parity with upstream structure.
-All changes have already been cherry-picked:
-- <list of cherry-picked features>
-
-Maintains llxprt's multi-provider support, branding, and authentication
-differences while staying in sync with upstream improvements."
-```
-
-**Critical**: Always merge the specific commit hash (e.g., `c795168e`), never merge `upstream/main`. This prevents bringing in all upstream commits again.
+- Keep a tracking table (PICK/SKIP/REIMPLEMENT) for the upstream range.
+- Ensure reimplementation commits include the upstream SHA in the message.
+- If you want a git-level marker, prefer an annotated tag on the final commit
+  (optional, only if your release workflow uses tags).
 
 ### 8. Push the Branch
 
@@ -231,6 +238,23 @@ import { Config } from '@google/gemini-cli-core';
 import { Config } from '@vybestack/llxprt-code-core';
 ```
 
+### Tool Name and Policy Divergence
+
+LLxprt tool names diverge from upstream in several places. When cherry-picking
+tool/scheduler/policy changes, verify the actual tool names used in LLxprt
+(search for `static readonly Name` in `packages/core/src/tools/`) and keep the
+default policies in sync (`packages/core/src/policy/policies/*.toml`).
+
+Common examples:
+
+| Upstream     | LLxprt                                  |
+| ------------ | --------------------------------------- |
+| `ls`         | `list_directory`                        |
+| `grep`       | `search_file_content`                   |
+| `edit`       | `replace`                               |
+| `web_search` | `google_web_search` / `exa_web_search`  |
+| `web_fetch`  | `google_web_fetch` / `direct_web_fetch` |
+
 ### Error Structure Changes
 
 LLxprt may use different error structures:
@@ -253,15 +277,13 @@ LLxprt may use different error structures:
 6. **IDE features are important** - llxprt has full IDE integration, don't skip IDE-related commits
 7. **Git history is the source of truth** - Use git commands to check sync status, not manual logs
 
-## Merge Strategy
+## Sync Tracking (No Marker Merge Commits)
 
-The `-s ours` merge strategy creates a merge commit without actually merging any content. This is used because:
+We track upstream parity via:
 
-1. We've already cherry-picked all desired changes
-2. We want to maintain the same merge structure as upstream
-3. It prevents accidental overwrites of llxprt customizations
-4. It clearly marks our sync point with upstream
+1. The cherry-pick/reimplementation commits themselves (with upstream SHAs in
+   commit messages where applicable).
+2. A tracking document for the chosen upstream range (so SKIPs are explicit).
 
-**Critical Detail**: When creating the merge commit, always specify the exact commit hash (not `upstream/main`). This ensures we only create a merge marker to that specific commit, not to the entire upstream branch.
-
-This approach ensures we stay up-to-date with upstream improvements while maintaining llxprt's unique identity and features.
+This avoids “fake” history from marker-only merges while keeping the repository
+auditable and reviewable.
