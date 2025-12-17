@@ -19,6 +19,8 @@
  * This provider exclusively uses the OpenAI /responses endpoint
  * for models that support it (o1, o3, etc.)
  */
+import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
+
 // @plan:PLAN-20251023-STATELESS-HARDENING.P08
 // @requirement:REQ-SP4-002/REQ-SP4-003
 // Removed ConversationCache and peekActiveProviderRuntime dependencies to enforce stateless operation
@@ -395,6 +397,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
   ): AsyncIterableIterator<IContent> {
     const { contents: content, tools } = options;
 
+    // Ensure OpenAI/Codex history is API-compliant:
+    // every assistant tool_call must have a corresponding tool_response.
+    // Cancelled tools can leave orphaned tool_call blocks which cause the next
+    // request to 400 ("No tool call found for function call output...").
+    const patchedContent =
+      SyntheticToolResponseHandler.patchMessageHistory(content);
+
     // Use getAuthTokenForPrompt() to trigger OAuth if needed
     const apiKey =
       (await this.getAuthTokenForPrompt()) ??
@@ -455,7 +464,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       });
     }
 
-    for (const c of content) {
+    for (const c of patchedContent) {
       if (c.speaker === 'human') {
         const textBlocks = c.blocks.filter(
           (b): b is TextBlock => b.type === 'text',
@@ -504,9 +513,37 @@ export class OpenAIResponsesProvider extends BaseProvider {
             typeof toolResponseBlock.result === 'string'
               ? toolResponseBlock.result
               : JSON.stringify(toolResponseBlock.result);
+
+          const outputCallId = normalizeToOpenAIToolId(
+            toolResponseBlock.callId,
+          );
+
+          // Defensive guard: Codex /responses requires every function_call_output
+          // to reference a function_call call_id that exists in the request history.
+          // If history is corrupted (e.g. cancellation injects a mismatched callId),
+          // drop the orphaned output rather than sending an invalid request.
+          const hasMatchingCall = patchedContent.some(
+            (msg) =>
+              msg.speaker === 'ai' &&
+              msg.blocks.some(
+                (b) =>
+                  b.type === 'tool_call' &&
+                  normalizeToOpenAIToolId((b as ToolCallBlock).id) ===
+                    outputCallId,
+              ),
+          );
+
+          if (!hasMatchingCall) {
+            this.logger.debug(
+              () =>
+                `Dropping orphan function_call_output with call_id=${outputCallId} (no matching tool_call in history)`,
+            );
+            continue;
+          }
+
           input.push({
             type: 'function_call_output',
-            call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
+            call_id: outputCallId,
             output: result,
           });
         }
