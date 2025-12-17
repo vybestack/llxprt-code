@@ -1867,4 +1867,98 @@ describe('Kitty Sequence Parsing', () => {
       removeListenerSpy.mockRestore();
     });
   });
+
+  describe('Mouse sequence filtering', () => {
+    it('should ignore SGR mouse sequences', async () => {
+      const keyHandler = vi.fn();
+
+      const { result } = renderHook(() => useKeypressContext(), {
+        wrapper: ({ children }) => (
+          <KeypressProvider kittyProtocolEnabled mouseEventsEnabled>
+            {children}
+          </KeypressProvider>
+        ),
+      });
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      act(() => {
+        stdin.sendKittySequence('\x1b[<0;10;20M');
+      });
+
+      expect(keyHandler).not.toHaveBeenCalled();
+    });
+
+    it('should ignore X11 mouse sequences', async () => {
+      const keyHandler = vi.fn();
+
+      const { result } = renderHook(() => useKeypressContext(), {
+        wrapper: ({ children }) => (
+          <KeypressProvider kittyProtocolEnabled mouseEventsEnabled>
+            {children}
+          </KeypressProvider>
+        ),
+      });
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      act(() => {
+        stdin.sendKittySequence('\x1b[M !!');
+      });
+
+      expect(keyHandler).not.toHaveBeenCalled();
+    });
+
+    it('should not ignore SGR mouse sequences when mouseEventsEnabled is false', async () => {
+      const keyHandler = vi.fn();
+
+      const { result } = renderHook(() => useKeypressContext(), {
+        wrapper: ({ children }) => (
+          <KeypressProvider kittyProtocolEnabled mouseEventsEnabled={false}>
+            {children}
+          </KeypressProvider>
+        ),
+      });
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      act(() => {
+        stdin.pressKey({ sequence: '\x1b[<0;10;20M' });
+      });
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sequence: '\x1b[<0;10;20M',
+        }),
+      );
+    });
+
+    it('should not ignore X11 mouse sequences when mouseEventsEnabled is false', async () => {
+      const keyHandler = vi.fn();
+
+      const { result } = renderHook(() => useKeypressContext(), {
+        wrapper: ({ children }) => (
+          <KeypressProvider kittyProtocolEnabled mouseEventsEnabled={false}>
+            {children}
+          </KeypressProvider>
+        ),
+      });
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      act(() => {
+        stdin.pressKey({ sequence: '\x1b[M !!' });
+      });
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sequence: '\x1b[M !!',
+        }),
+      );
+    });
+  });
 });

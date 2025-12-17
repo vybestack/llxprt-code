@@ -62,7 +62,7 @@ import {
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
-import { useKeypress } from './useKeypress.js';
+import { useKeypress, type Key } from './useKeypress.js';
 
 const SYSTEM_NOTICE_EVENT = 'system_notice' as const;
 
@@ -427,14 +427,21 @@ export const useGeminiStream = (
     cancelAllToolCalls,
   ]);
 
-  useKeypress(
-    (key) => {
-      if (key.name === 'escape') {
-        cancelOngoingRequest();
-      }
-    },
-    { isActive: streamingState === StreamingState.Responding },
-  );
+  const cancelOngoingRequestRef = useRef(cancelOngoingRequest);
+  cancelOngoingRequestRef.current = cancelOngoingRequest;
+
+  const handleEscapeKeypress = useCallback((key: Key) => {
+    const isEscape =
+      key.name === 'escape' ||
+      key.sequence === '\u001b[27u' ||
+      key.sequence === '\u001b';
+    if (!isEscape) {
+      return;
+    }
+    cancelOngoingRequestRef.current();
+  }, []);
+
+  useKeypress(handleEscapeKeypress, { isActive: true });
 
   const scheduleNextQueuedSubmission = useCallback(() => {
     if (queuedSubmissionsRef.current.length === 0) {

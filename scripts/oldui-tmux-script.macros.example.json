@@ -1,0 +1,50 @@
+{
+  "tmux": {
+    "cols": 100,
+    "rows": 24,
+    "historyLimit": 50000,
+    "scrollbackLines": 5000,
+    "initialWaitMs": 6000
+  },
+  "yolo": false,
+  "macros": {
+    "submit": [
+      { "type": "line", "text": "${text}", "submitKeys": ["Escape", "Enter"] }
+    ],
+    "snapshot": [{ "type": "capture", "label": "${label}", "scope": "screen" }]
+  },
+  "steps": [
+    {
+      "type": "macro",
+      "name": "submit",
+      "args": { "text": "/profile load synthetic" }
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Profile 'synthetic' loaded",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "macro",
+      "name": "snapshot",
+      "args": { "label": "after-profile" }
+    },
+
+    {
+      "type": "macro",
+      "name": "submit",
+      "args": { "text": "write me a haiku" }
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "✦",
+      "timeoutMs": 30000
+    },
+    { "type": "macro", "name": "snapshot", "args": { "label": "after-haiku" } },
+
+    { "type": "macro", "name": "submit", "args": { "text": "/quit" } },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}

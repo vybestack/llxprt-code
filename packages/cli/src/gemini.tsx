@@ -92,12 +92,15 @@ import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
+import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import { computeWindowTitle } from './utils/windowTitle.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';
+import { inkRenderOptions } from './ui/inkRenderOptions.js';
+import { isMouseEventsEnabled } from './ui/mouseEventsEnabled.js';
 import {
   setCliRuntimeContext,
   switchActiveProvider,
@@ -216,6 +219,15 @@ export async function startInteractiveUI(
   await detectAndEnableKittyProtocol();
   setWindowTitle(basename(workspaceRoot), settings);
 
+  const renderOptions = inkRenderOptions(config, settings);
+  const mouseEventsEnabled = isMouseEventsEnabled(renderOptions, settings);
+  if (mouseEventsEnabled) {
+    enableMouseEvents();
+    registerCleanup(() => {
+      disableMouseEvents();
+    });
+  }
+
   // Initialize authentication before rendering to ensure geminiClient is available
   if (settings.merged.selectedAuthType) {
     try {
@@ -243,7 +255,7 @@ export async function startInteractiveUI(
         </SettingsContext.Provider>
       </ErrorBoundary>
     </React.StrictMode>,
-    { exitOnCtrlC: false },
+    renderOptions,
   );
 
   checkForUpdates()

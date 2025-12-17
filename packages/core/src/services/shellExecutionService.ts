@@ -438,7 +438,38 @@ export class ShellExecutionService {
 
         const abortHandler = async () => {
           if (ptyProcess.pid && !exited) {
-            ptyProcess.kill('SIGHUP');
+            const pid = ptyProcess.pid;
+            if (isWindows) {
+              cpSpawn('taskkill', ['/pid', pid.toString(), '/f', '/t']);
+              return;
+            }
+
+            try {
+              process.kill(-pid, 'SIGTERM');
+            } catch (_e) {
+              // ignore
+            }
+            try {
+              ptyProcess.kill('SIGTERM');
+            } catch (_e) {
+              // ignore
+            }
+
+            await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+            if (exited) {
+              return;
+            }
+
+            try {
+              process.kill(-pid, 'SIGKILL');
+            } catch (_e) {
+              // ignore
+            }
+            try {
+              ptyProcess.kill('SIGKILL');
+            } catch (_e) {
+              // ignore
+            }
           }
         };
 

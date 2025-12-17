@@ -1,0 +1,85 @@
+{
+  "tmux": {
+    "cols": 100,
+    "rows": 20,
+    "historyLimit": 200000,
+    "scrollbackLines": 50000,
+    "initialWaitMs": 8000
+  },
+  "startCommand": [
+    "node",
+    "scripts/start.js",
+    "--provider",
+    "gemini",
+    "--model",
+    "gemini-2.5-flash-lite"
+  ],
+  "yolo": false,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "line",
+      "text": "Use the run_shell_command tool (NOT shell mode) to run: node scripts/oldui-scrollback-load.js --total 90 --interval-ms 150. Do not explain.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Yes, allow once",
+      "timeoutMs": 120000
+    },
+    { "type": "key", "key": "d" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "--interval-ms 150",
+      "timeoutMs": 10000
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "--total 90"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "--interval-ms 150"
+    },
+    { "type": "capture", "label": "confirm-tool", "scope": "screen" },
+    { "type": "key", "key": "Enter" },
+
+    { "type": "wait", "ms": 600 },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "SCROLLTEST LINE",
+      "timeoutMs": 60000
+    },
+    { "type": "key", "key": "C-s" },
+
+    { "type": "wait", "ms": 1200 },
+    { "type": "copyMode", "enter": true },
+    { "type": "copyMode", "pageUp": 5 },
+    { "type": "historySample", "label": "copyMode-start" },
+    { "type": "wait", "ms": 8000 },
+    { "type": "historySample", "label": "copyMode-end" },
+    { "type": "copyMode", "exit": true },
+    {
+      "type": "expectHistoryDelta",
+      "fromLabel": "copyMode-start",
+      "toLabel": "copyMode-end",
+      "atMost": 0
+    },
+
+    { "type": "capture", "label": "after-copy-mode", "scope": "scrollback" },
+
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 30000 },
+    { "type": "capture", "label": "after-exit", "scope": "scrollback" }
+  ]
+}

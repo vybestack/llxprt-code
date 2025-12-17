@@ -1,0 +1,69 @@
+{
+  "tmux": {
+    "cols": 100,
+    "rows": 24,
+    "historyLimit": 50000,
+    "scrollbackLines": 5000,
+    "initialWaitMs": 6000
+  },
+  "startCommand": ["node", "scripts/start.js"],
+  "yolo": false,
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    { "type": "capture", "label": "start", "scope": "screen" },
+
+    { "type": "line", "text": "/profile load synthetic" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Profile 'synthetic' loaded",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    { "type": "capture", "label": "after-profile", "scope": "screen" },
+
+    { "type": "line", "text": "/", "submitKeys": [], "postTypeMs": 150 },
+    { "type": "wait", "ms": 250 },
+    { "type": "capture", "label": "slash-open", "scope": "screen" },
+
+    { "type": "key", "key": "Down" },
+    { "type": "key", "key": "Down" },
+    { "type": "wait", "ms": 250 },
+    { "type": "capture", "label": "slash-open-after-down", "scope": "screen" },
+
+    { "type": "key", "key": "Escape" },
+    { "type": "wait", "ms": 250 },
+    { "type": "capture", "label": "slash-closed", "scope": "screen" },
+
+    { "type": "expect", "scope": "screen", "contains": "Memory:" },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "~/projects/llxprt-code"
+    },
+    {
+      "type": "expectCount",
+      "scope": "screen",
+      "contains": "Manage conversation checkpoints",
+      "equals": 0
+    },
+
+    { "type": "key", "key": "Escape" },
+    { "type": "wait", "ms": 120 },
+    { "type": "key", "key": "Escape" },
+    { "type": "wait", "ms": 250 },
+
+    { "type": "line", "text": "/quit" },
+    { "type": "waitForExit", "timeoutMs": 30000 }
+  ]
+}

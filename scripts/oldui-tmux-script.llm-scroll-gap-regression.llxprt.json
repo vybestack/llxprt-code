@@ -1,0 +1,57 @@
+{
+  "tmux": {
+    "cols": 140,
+    "rows": 60,
+    "historyLimit": 50000,
+    "scrollbackLines": 4000,
+    "initialWaitMs": 6000
+  },
+  "yolo": true,
+  "startCommand": [
+    "node",
+    "scripts/start.js",
+    "--profile-load",
+    "synthetic",
+    "--yolo",
+    "-i",
+    "Use these tools in order, and no other tools: (1) ReadFolder '.' (2) ReadFile README.md (3) ReadFile package.json (4) ReadFolder packages. After they finish, respond with exactly: DONE."
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "ReadFolder packages",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "✦ DONE",
+      "timeoutMs": 60000
+    },
+    { "type": "wait", "ms": 800 },
+
+    { "type": "capture", "label": "after-done", "scope": "screen" },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Tips for getting started:"
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "Use these tools in order"
+    },
+    { "type": "expect", "scope": "screen", "contains": "ReadFolder ." },
+    { "type": "expect", "scope": "screen", "contains": "✦ DONE" },
+
+    { "type": "key", "key": "PageUp" },
+    { "type": "wait", "ms": 300 },
+    { "type": "key", "key": "PageDown" },
+    { "type": "wait", "ms": 300 },
+    { "type": "capture", "label": "after-scroll", "scope": "screen" },
+
+    { "type": "key", "key": "Escape" },
+    { "type": "wait", "ms": 200 }
+  ]
+}

@@ -13,13 +13,18 @@ import { InputPrompt } from './InputPrompt.js';
 interface ComposerProps {
   config: Config;
   settings: LoadedSettings;
+  onSuggestionsVisibilityChange?: (visible: boolean) => void;
 }
 
 /**
  * The Composer component handles user input in the CLI.
  * It wraps the InputPrompt component and connects it to the UIState and UIActions contexts.
  */
-export const Composer = ({ config, settings: _settings }: ComposerProps) => {
+export const Composer = ({
+  config,
+  settings: _settings,
+  onSuggestionsVisibilityChange,
+}: ComposerProps) => {
   // settings is passed for future use but currently not used
   const uiState = useUIState();
   const uiActions = useUIActions();
@@ -52,6 +57,7 @@ export const Composer = ({ config, settings: _settings }: ComposerProps) => {
       shellModeActive={shellModeActive}
       setShellModeActive={uiActions.setShellModeActive}
       onEscapePromptChange={uiActions.handleEscapePromptChange}
+      onSuggestionsVisibilityChange={onSuggestionsVisibilityChange}
       focus={isFocused}
       vimHandleInput={uiActions.vimHandleInput}
       placeholder={placeholder}
