@@ -184,20 +184,20 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
   describe('OAuth Flow State Handling', () => {
     it('should use server redirectUri instead of constructing own', () => {
       const mockLocalCallback = {
-        redirectUri: 'http://localhost:1455/callback',
+        redirectUri: 'http://localhost:1455/auth/callback',
         waitForCallback: vi.fn(),
         shutdown: vi.fn(),
       };
 
       expect(mockLocalCallback.redirectUri).toBe(
-        'http://localhost:1455/callback',
+        'http://localhost:1455/auth/callback',
       );
-      expect(mockLocalCallback.redirectUri).not.toContain('/auth/callback');
+      expect(mockLocalCallback.redirectUri).toContain('/auth/callback');
     });
 
     it('should pass state parameter to completeAuth', async () => {
       const testCode = 'test_auth_code';
-      const testRedirectUri = 'http://localhost:1455/callback';
+      const testRedirectUri = 'http://localhost:1455/auth/callback';
       const testState = 'test_state_123';
 
       const deviceFlow = (

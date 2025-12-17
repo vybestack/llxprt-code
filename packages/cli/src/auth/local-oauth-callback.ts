@@ -683,7 +683,9 @@ const createCallbackServer = async (
   port: number,
   options: LocalOAuthCallbackOptions,
 ): Promise<LocalOAuthCallbackServer> => {
-  const redirectUri = `http://localhost:${port}/auth/callback`;
+  const callbackPath =
+    options.provider === 'codex' ? '/auth/callback' : '/callback';
+  const redirectUri = `http://localhost:${port}${callbackPath}`;
   const server = http.createServer();
 
   await listen(server, port);
