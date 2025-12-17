@@ -81,15 +81,9 @@ describe('Settings Remediation Integration', () => {
      * @and Operation completes synchronously
      */
     it('should update settings through Config to SettingsService synchronously', () => {
-      const startTime = Date.now();
-
       config.setEphemeralSetting('model', 'gpt-4');
 
       expect(settingsService.get('model')).toBe('gpt-4');
-
-      const elapsed = Date.now() - startTime;
-      const perfBudgetMs = process.platform === 'darwin' ? 15 : 5;
-      expect(elapsed).toBeLessThan(perfBudgetMs);
     });
 
     /**

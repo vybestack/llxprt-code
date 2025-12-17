@@ -25,6 +25,14 @@ export enum Command {
   // Screen control
   CLEAR_SCREEN = 'clearScreen',
 
+  // Scrolling
+  SCROLL_UP = 'scrollUp',
+  SCROLL_DOWN = 'scrollDown',
+  SCROLL_HOME = 'scrollHome',
+  SCROLL_END = 'scrollEnd',
+  PAGE_UP = 'pageUp',
+  PAGE_DOWN = 'pageDown',
+
   // History navigation
   HISTORY_UP = 'historyUp',
   HISTORY_DOWN = 'historyDown',
@@ -113,17 +121,31 @@ export const defaultKeyBindings: KeyBindingConfig = {
   // Screen control
   [Command.CLEAR_SCREEN]: [{ key: 'l', ctrl: true }],
 
+  // Scrolling
+  [Command.SCROLL_UP]: [{ key: 'up', shift: true }],
+  [Command.SCROLL_DOWN]: [{ key: 'down', shift: true }],
+  [Command.SCROLL_HOME]: [{ key: 'home' }],
+  [Command.SCROLL_END]: [{ key: 'end' }],
+  [Command.PAGE_UP]: [{ key: 'pageup' }],
+  [Command.PAGE_DOWN]: [{ key: 'pagedown' }],
+
   // History navigation
   [Command.HISTORY_UP]: [{ key: 'p', ctrl: true, shift: false }],
-  [Command.HISTORY_DOWN]: [{ key: 'n', ctrl: true }],
-  [Command.NAVIGATION_UP]: [{ key: 'up' }],
-  [Command.NAVIGATION_DOWN]: [{ key: 'down' }],
+  [Command.HISTORY_DOWN]: [{ key: 'n', ctrl: true, shift: false }],
+  [Command.NAVIGATION_UP]: [{ key: 'up', shift: false }],
+  [Command.NAVIGATION_DOWN]: [{ key: 'down', shift: false }],
 
   // Auto-completion
   [Command.ACCEPT_SUGGESTION]: [{ key: 'tab' }, { key: 'return', ctrl: false }],
   // Completion navigation (arrow or Ctrl+P/N)
-  [Command.COMPLETION_UP]: [{ key: 'up' }, { key: 'p', ctrl: true }],
-  [Command.COMPLETION_DOWN]: [{ key: 'down' }, { key: 'n', ctrl: true }],
+  [Command.COMPLETION_UP]: [
+    { key: 'up', shift: false },
+    { key: 'p', ctrl: true, shift: false },
+  ],
+  [Command.COMPLETION_DOWN]: [
+    { key: 'down', shift: false },
+    { key: 'n', ctrl: true, shift: false },
+  ],
 
   // Text input
   // Must also exclude shift to allow shift+enter for newline

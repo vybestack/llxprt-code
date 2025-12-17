@@ -183,6 +183,9 @@ describe('SettingsSchema', () => {
       expect(SETTINGS_SCHEMA.ui.properties?.hideTips.showInDialog).toBe(true);
       expect(SETTINGS_SCHEMA.ui.properties?.hideBanner.showInDialog).toBe(true);
       expect(
+        SETTINGS_SCHEMA.ui.properties?.enableMouseEvents.showInDialog,
+      ).toBe(true);
+      expect(
         SETTINGS_SCHEMA.ui.properties?.usageStatisticsEnabled.showInDialog,
       ).toBe(false);
 

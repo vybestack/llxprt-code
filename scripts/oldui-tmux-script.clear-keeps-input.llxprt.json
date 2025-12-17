@@ -1,0 +1,34 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 35,
+    "historyLimit": 50000,
+    "scrollbackLines": 3000,
+    "initialWaitMs": 6000
+  },
+  "yolo": true,
+  "startCommand": [
+    "node",
+    "scripts/start.js",
+    "--profile-load",
+    "synthetic",
+    "--yolo"
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    { "type": "capture", "label": "before-clear", "scope": "screen" },
+
+    { "type": "line", "text": "/clear" },
+    { "type": "wait", "ms": 800 },
+    { "type": "capture", "label": "after-clear", "scope": "screen" },
+    { "type": "expect", "scope": "screen", "contains": "Type your message" },
+
+    { "type": "line", "text": "/quit" },
+    { "type": "waitForExit", "timeoutMs": 30000 }
+  ]
+}

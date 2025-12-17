@@ -351,6 +351,10 @@ export const AppContainer = (props: AppContainerProps) => {
   } | null>(null);
   const keypressRefreshRef = useRef<() => void>(() => {});
 
+  const useAlternateBuffer =
+    settings.merged.ui?.useAlternateBuffer === true &&
+    !config.getScreenReader();
+
   const restoreTerminalStateAfterEditor = useCallback(() => {
     const editorState = externalEditorStateRef.current;
     if (!stdin) {
@@ -382,6 +386,16 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [setRawMode, stdin]);
 
   const refreshStatic = useCallback(() => {
+    if (useAlternateBuffer) {
+      restoreTerminalStateAfterEditor();
+
+      enableBracketedPaste();
+      enableSupportedProtocol();
+      stdout.write(ENABLE_FOCUS_TRACKING);
+      stdout.write(SHOW_CURSOR);
+      return;
+    }
+
     stdout.write(ansiEscapes.clearTerminal);
     setStaticKey((prev) => prev + 1);
 
@@ -392,7 +406,12 @@ export const AppContainer = (props: AppContainerProps) => {
     enableSupportedProtocol();
     stdout.write(ENABLE_FOCUS_TRACKING);
     stdout.write(SHOW_CURSOR);
-  }, [restoreTerminalStateAfterEditor, setStaticKey, stdout]);
+  }, [
+    restoreTerminalStateAfterEditor,
+    setStaticKey,
+    stdout,
+    useAlternateBuffer,
+  ]);
 
   const handleExternalEditorOpen = useCallback(() => {
     if (!stdin) {
@@ -1308,9 +1327,16 @@ export const AppContainer = (props: AppContainerProps) => {
   const handleClearScreen = useCallback(() => {
     clearItems();
     clearConsoleMessagesState();
-    console.clear();
+    if (!useAlternateBuffer) {
+      console.clear();
+    }
     refreshStatic();
-  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
+  }, [
+    clearItems,
+    clearConsoleMessagesState,
+    refreshStatic,
+    useAlternateBuffer,
+  ]);
 
   const handleConfirmationSelect = useCallback(
     (value: boolean) => {
