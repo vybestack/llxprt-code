@@ -47,7 +47,6 @@ jobs:
             echo "${AUTHOR} is not trusted" >>"${GITHUB_STEP_SUMMARY}"
           fi
 
-
       - name: 'Add maintainer:e2e:ok label'
         if: steps.check.outputs.trusted == 'true'
         env:
