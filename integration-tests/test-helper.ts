@@ -476,6 +476,10 @@ export class TestRig {
     }
 
     const node = commandArgs.shift() as string;
+    const isJsonOutput =
+      (commandArgs.includes('--output-format') &&
+        commandArgs[commandArgs.indexOf('--output-format') + 1] === 'json') ||
+      commandArgs.some((arg) => arg.startsWith('--output-format=json'));
 
     // Debug: Log command being executed in CI
     if (env['CI'] === 'true' || env['VERBOSE'] === 'true') {
@@ -595,7 +599,7 @@ export class TestRig {
             result = filteredLines.join('\n');
           }
           // If we have stderr output, include that also
-          if (stderr) {
+          if (stderr && !isJsonOutput) {
             result += `\n\nStdErr:\n${stderr}`;
           }
 
@@ -1112,14 +1116,35 @@ export class TestRig {
     ]);
     const isWindows = os.platform() === 'win32';
 
+    const filteredEnv = Object.entries(process.env).reduce(
+      (acc, [key, value]) => {
+        if (
+          value !== undefined &&
+          key !== 'TERM_PROGRAM' &&
+          key !== 'TERM_PROGRAM_VERSION'
+        ) {
+          acc[key] = value;
+        }
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
+
     const options: pty.IPtyForkOptions = {
       name: 'xterm-color',
       cols: 80,
       rows: 30,
       cwd: this.testDir!,
-      env: Object.fromEntries(
-        Object.entries(process.env).filter(([, v]) => v !== undefined),
-      ) as { [key: string]: string },
+      env: {
+        ...filteredEnv,
+        // Keep interactive tests deterministic:
+        // - Avoid auto-opening theme selection dialog
+        // - Avoid launching browsers during auth flows
+        NO_COLOR: 'true',
+        NO_BROWSER: 'true',
+        LLXPRT_NO_BROWSER_AUTH: 'true',
+        CI: 'true',
+      },
     };
 
     if (isWindows) {

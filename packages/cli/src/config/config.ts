@@ -103,7 +103,21 @@ const buildNormalizedToolSet = (value: unknown): Set<string> => {
 
   for (const entry of entries) {
     if (typeof entry === 'string' && entry.trim().length > 0) {
-      normalized.add(normalizeToolNameForPolicy(entry));
+      const trimmedEntry = entry.trim();
+      const openParenIndex = trimmedEntry.indexOf('(');
+      const baseName =
+        openParenIndex === -1
+          ? trimmedEntry
+          : trimmedEntry.substring(0, openParenIndex).trim();
+
+      const canonicalName =
+        normalizeToolNameForPolicy(baseName) === 'shelltool'
+          ? 'run_shell_command'
+          : baseName;
+      const normalizedName = normalizeToolNameForPolicy(canonicalName);
+      if (normalizedName) {
+        normalized.add(normalizedName);
+      }
     }
   }
 
