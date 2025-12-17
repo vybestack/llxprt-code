@@ -600,7 +600,6 @@ export const useGeminiStream = (
           new UserPromptEvent(trimmedQuery.length, prompt_id, trimmedQuery),
         );
 
-        onDebugMessage(`User query: '${trimmedQuery}'`);
         await logger?.logMessage(MessageSenderType.USER, trimmedQuery);
 
         if (!shellModeActive) {
