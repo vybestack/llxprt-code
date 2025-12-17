@@ -16,6 +16,14 @@ const { Terminal } = pkg;
 
 const SIGKILL_TIMEOUT_MS = 200;
 const MAX_CHILD_PROCESS_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB
+const ANSI_ESCAPE = '\u001b';
+const ANSI_CSI = '\u009b';
+
+function stripAnsiIfPresent(value: string): string {
+  return value.includes(ANSI_ESCAPE) || value.includes(ANSI_CSI)
+    ? stripAnsi(value)
+    : value;
+}
 
 // @ts-expect-error getFullText is not a public API.
 const getFullText = (terminal: Terminal) => {
@@ -229,7 +237,7 @@ export class ShellExecutionService {
 
           const decoder = stream === 'stdout' ? stdoutDecoder : stderrDecoder;
           const decodedChunk = decoder.decode(data, { stream: true });
-          const strippedChunk = stripAnsi(decodedChunk);
+          const strippedChunk = stripAnsiIfPresent(decodedChunk);
 
           if (stream === 'stdout') {
             const { newBuffer, truncated } = this.appendAndTruncate(
@@ -331,13 +339,13 @@ export class ShellExecutionService {
           if (stdoutDecoder) {
             const remaining = stdoutDecoder.decode();
             if (remaining) {
-              stdout += stripAnsi(remaining);
+              stdout += stripAnsiIfPresent(remaining);
             }
           }
           if (stderrDecoder) {
             const remaining = stderrDecoder.decode();
             if (remaining) {
-              stderr += stripAnsi(remaining);
+              stderr += stripAnsiIfPresent(remaining);
             }
           }
 
@@ -459,7 +467,7 @@ export class ShellExecutionService {
                   headlessTerminal.write(decodedChunk, () => {
                     onOutputEvent({
                       type: 'data',
-                      chunk: stripAnsi(decodedChunk),
+                      chunk: stripAnsiIfPresent(decodedChunk),
                     });
                     resolve();
                   });
