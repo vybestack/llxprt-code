@@ -1,0 +1,58 @@
+name: 'Auto-label Trusted Contributors'
+
+on:
+  pull_request_target:
+    types:
+      - 'opened'
+      - 'reopened'
+      - 'synchronize'
+
+permissions:
+  contents: 'read'
+  pull-requests: 'write'
+
+defaults:
+  run:
+    shell: 'bash'
+
+jobs:
+  auto_label:
+    name: 'Auto-label if trusted'
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Checkout base branch (trusted list)'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        with:
+          fetch-depth: 1
+          ref: '${{ github.event.pull_request.base.ref }}'
+
+      - name: 'Check if contributor is trusted'
+        id: 'check'
+        env:
+          AUTHOR: '${{ github.event.pull_request.user.login }}'
+        run: |-
+          set -euo pipefail
+
+          trusted=false
+          if [[ -f '.github/trusted-contributors.txt' ]]; then
+            if grep -Fqx "${AUTHOR}" '.github/trusted-contributors.txt'; then
+              trusted=true
+            fi
+          fi
+
+          echo "trusted=${trusted}" >>"${GITHUB_OUTPUT}"
+          if [[ "${trusted}" == 'true' ]]; then
+            echo "${AUTHOR} is trusted" >>"${GITHUB_STEP_SUMMARY}"
+          else
+            echo "${AUTHOR} is not trusted" >>"${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: 'Add maintainer:e2e:ok label'
+        if: steps.check.outputs.trusted == 'true'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+          PR_NUMBER: '${{ github.event.pull_request.number }}'
+        run: |-
+          set -euo pipefail
+          gh pr edit "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --add-label 'maintainer:e2e:ok'
+          echo "Added maintainer:e2e:ok to PR #${PR_NUMBER}" >>"${GITHUB_STEP_SUMMARY}"

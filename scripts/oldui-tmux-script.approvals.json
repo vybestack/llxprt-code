@@ -1,0 +1,187 @@
+{
+  "tmux": {
+    "cols": 110,
+    "rows": 28,
+    "historyLimit": 50000,
+    "scrollbackLines": 10000,
+    "initialWaitMs": 6000
+  },
+  "yolo": false,
+  "steps": [
+    {
+      "type": "line",
+      "text": "/profile load synthetic",
+      "submitKeys": ["Escape", "Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Profile 'synthetic' loaded",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+    { "type": "capture", "label": "after-profile", "scope": "screen" },
+
+    {
+      "type": "line",
+      "text": "/set modelparam temperature 0",
+      "submitKeys": ["Escape", "Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Model parameter 'temperature' set to 0",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "line",
+      "text": "/tools disable task",
+      "submitKeys": ["Escape", "Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Disabled tool 'Task'.",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 30000
+    },
+
+    {
+      "type": "line",
+      "text": "Use the run_shell_command tool (NOT shell mode): ls -lt docs. Do not run other tools. Do not explain.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Yes, allow once",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "ls -lt docs",
+      "timeoutMs": 0
+    },
+    { "type": "capture", "label": "confirm-ls-docs", "scope": "screen" },
+    {
+      "type": "approveTool",
+      "choice": "once",
+      "timeoutMs": 60000
+    },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "✓  Shell ls -lt docs",
+      "timeoutMs": 60000
+    },
+    { "type": "wait", "ms": 1200 },
+    { "type": "key", "key": "Escape" },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 20000
+    },
+    { "type": "key", "key": "C-c" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    { "type": "capture", "label": "after-ls-docs", "scope": "screen" },
+
+    {
+      "type": "line",
+      "text": "Use the run_shell_command tool (NOT shell mode): ls -lt dev-docs. Do not run other tools. Do not explain.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Yes, allow once",
+      "timeoutMs": 180000
+    },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "contains": "ls -lt dev-docs",
+      "timeoutMs": 0
+    },
+    { "type": "capture", "label": "confirm-ls-dev-docs", "scope": "screen" },
+    {
+      "type": "approveTool",
+      "choice": "once",
+      "timeoutMs": 60000
+    },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "✓  Shell ls -lt dev-docs",
+      "timeoutMs": 60000
+    },
+    { "type": "wait", "ms": 1200 },
+    { "type": "key", "key": "Escape" },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 20000
+    },
+    { "type": "key", "key": "C-c" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    { "type": "capture", "label": "after-ls-dev-docs", "scope": "screen" },
+
+    {
+      "type": "line",
+      "text": "Use the edit tool to change README.md: replace \"Command-line interface for querying and editing codebases, generating applications, and automating development workflows.\" with \"A command-line assistant for querying and editing codebases, generating apps, and automating development workflows.\" Do not run other tools. Do not explain.",
+      "submitKeys": ["Enter"]
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Apply this change?",
+      "timeoutMs": 180000
+    },
+    { "type": "capture", "label": "confirm-edit-readme", "scope": "screen" },
+
+    { "type": "selectToolOption", "regex": "^No\\b", "regexFlags": "u" },
+    {
+      "type": "expect",
+      "scope": "screen",
+      "regex": "●\\s*\\d+\\..*No",
+      "regexFlags": "u",
+      "timeoutMs": 0
+    },
+    { "type": "capture", "label": "reject-selected", "scope": "screen" },
+    { "type": "key", "key": "Enter" },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    { "type": "capture", "label": "after-reject", "scope": "screen" },
+
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}

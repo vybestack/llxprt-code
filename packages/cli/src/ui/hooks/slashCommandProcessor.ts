@@ -87,6 +87,9 @@ export const useSlashCommandProcessor = (
     undefined,
   );
   const [reloadTrigger, setReloadTrigger] = useState(0);
+  const alternateBuffer =
+    settings.merged.ui?.useAlternateBuffer === true &&
+    !config?.getScreenReader();
 
   const reloadCommands = useCallback(() => {
     setReloadTrigger((v) => v + 1);
@@ -250,7 +253,9 @@ export const useSlashCommandProcessor = (
         addItem,
         clear: () => {
           clearItems();
-          console.clear();
+          if (!alternateBuffer) {
+            console.clear();
+          }
           refreshStatic();
         },
         loadHistory,
@@ -275,6 +280,7 @@ export const useSlashCommandProcessor = (
       },
     }),
     [
+      alternateBuffer,
       config,
       settings,
       gitService,

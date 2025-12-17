@@ -1,0 +1,51 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 35,
+    "historyLimit": 50000,
+    "scrollbackLines": 8000,
+    "initialWaitMs": 6000
+  },
+  "yolo": true,
+  "startCommand": [
+    "node",
+    "scripts/start.js",
+    "--profile-load",
+    "synthetic",
+    "--yolo",
+    "-i",
+    "Use these tools in order, and no other tools: (1) ReadFolder '.' (2) ReadFile README.md. After they finish, output exactly 60 lines. Each line must be of the form: `LINE NN: sample text` where NN is 01 through 60. The final 3 lines must be exactly: `LINE 58: sample text`, `LINE 59: sample text`, `LINE 60: sample text`. Do not output anything else."
+  ],
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "ReadFile README.md",
+      "timeoutMs": 90000
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "contains": "LINE 60: sample text",
+      "timeoutMs": 90000
+    },
+    {
+      "type": "waitForNot",
+      "scope": "screen",
+      "contains": "esc to cancel",
+      "timeoutMs": 90000
+    },
+
+    {
+      "type": "capture",
+      "label": "after-tool-and-long-output",
+      "scope": "screen"
+    },
+    { "type": "expect", "scope": "screen", "contains": "LINE 58: sample text" },
+    { "type": "expect", "scope": "screen", "contains": "LINE 59: sample text" },
+    { "type": "expect", "scope": "screen", "contains": "LINE 60: sample text" },
+
+    { "type": "line", "text": "/quit", "submitKeys": ["Escape", "Enter"] },
+    { "type": "waitForExit", "timeoutMs": 30000 }
+  ]
+}

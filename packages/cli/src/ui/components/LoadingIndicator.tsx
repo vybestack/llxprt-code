@@ -34,10 +34,23 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
 
   const primaryText = thought?.subject || currentLoadingPhrase;
 
+  const timerText =
+    streamingState === StreamingState.WaitingForConfirmation
+      ? ''
+      : ` (esc to cancel, ${
+          elapsedTime < 60
+            ? `${elapsedTime}s`
+            : formatDuration(elapsedTime * 1000)
+        })`;
+
+  const lineText = primaryText
+    ? `${primaryText}${timerText}`
+    : timerText.trimStart();
+
   return (
     <Box marginTop={1} paddingLeft={0} flexDirection="column">
       {/* Main loading line */}
-      <Box>
+      <Box width="100%" flexDirection="row">
         <Box marginRight={1}>
           <GeminiRespondingSpinner
             nonRespondingDisplay={
@@ -47,18 +60,21 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
             }
           />
         </Box>
-        {primaryText && (
-          <Text color={Colors.AccentPurple} wrap="truncate-end">
-            {primaryText}
-          </Text>
+        <Box flexGrow={1} flexShrink={1} minWidth={0}>
+          {lineText && (
+            <Text
+              color={Colors.AccentPurple}
+              wrap={timerText ? 'truncate-middle' : 'truncate-end'}
+            >
+              {lineText}
+            </Text>
+          )}
+        </Box>
+        {rightContent && (
+          <Box marginLeft={1} flexShrink={0}>
+            {rightContent}
+          </Box>
         )}
-        <Text color={Colors.Gray}>
-          {streamingState === StreamingState.WaitingForConfirmation
-            ? ''
-            : ` (esc to cancel, ${elapsedTime < 60 ? `${elapsedTime}s` : formatDuration(elapsedTime * 1000)})`}
-        </Text>
-        <Box flexGrow={1}>{/* Spacer */}</Box>
-        {rightContent && <Box>{rightContent}</Box>}
       </Box>
     </Box>
   );

@@ -47,6 +47,7 @@ import {
   SHOW_CURSOR,
 } from '../utils/terminalSequences.js';
 import { enableSupportedProtocol } from '../utils/kittyProtocolDetector.js';
+import { isIncompleteMouseSequence, parseMouseEvent } from '../utils/mouse.js';
 
 const ESC = '\u001B';
 const keypressLogger = new DebugLogger('llxprt:ui:keypress');
@@ -56,6 +57,7 @@ export const DRAG_COMPLETION_TIMEOUT_MS = 100; // Broadcast full path after 100m
 export const KITTY_SEQUENCE_TIMEOUT_MS = 50; // Flush incomplete kitty sequences after 50ms
 export const SINGLE_QUOTE = "'";
 export const DOUBLE_QUOTE = '"';
+const MAX_MOUSE_BUFFER_SIZE = 4096;
 
 const ALT_KEY_CHARACTER_MAP: Record<string, string> = {
   '\u00E5': 'a',
@@ -219,11 +221,13 @@ export function KeypressProvider({
   kittyProtocolEnabled,
   config,
   debugKeystrokeLogging,
+  mouseEventsEnabled,
 }: {
   children: React.ReactNode;
   kittyProtocolEnabled: boolean;
   config?: Config;
   debugKeystrokeLogging?: boolean;
+  mouseEventsEnabled?: boolean;
 }) {
   const { stdin, setRawMode } = useStdin();
   const subscribers = useRef<Set<KeypressHandler>>(new Set()).current;
@@ -271,6 +275,7 @@ export function KeypressProvider({
     let usePassthrough = false;
     const nodeMajorVersion = parseInt(process.versions.node.split('.')[0], 10);
     if (
+      mouseEventsEnabled ||
       nodeMajorVersion < 20 ||
       process.env['PASTE_WORKAROUND'] === '1' ||
       process.env['PASTE_WORKAROUND'] === 'true'
@@ -284,6 +289,7 @@ export function KeypressProvider({
     let kittySequenceTimeout: NodeJS.Timeout | null = null;
     let backslashTimeout: NodeJS.Timeout | null = null;
     let waitingForEnterAfterBackslash = false;
+    let mouseSequenceBuffer = '';
 
     // Check if a buffer could potentially be a valid kitty sequence or its prefix
     const couldBeKittySequence = (buffer: string): boolean => {
@@ -893,6 +899,10 @@ export function KeypressProvider({
     };
 
     const handleKeypress = (_: unknown, key: Key) => {
+      if (mouseEventsEnabled && parseMouseEvent(key.sequence)) {
+        return;
+      }
+
       if (
         key &&
         keypressLogger.enabled &&
@@ -964,13 +974,57 @@ export function KeypressProvider({
             }`,
         );
       }
+
+      if (mouseSequenceBuffer.length > MAX_MOUSE_BUFFER_SIZE) {
+        mouseSequenceBuffer = mouseSequenceBuffer.slice(-MAX_MOUSE_BUFFER_SIZE);
+      }
+
+      const stripMouseSequences = (chunk: Buffer): Buffer => {
+        const input = mouseSequenceBuffer + chunk.toString('utf8');
+        mouseSequenceBuffer = '';
+
+        let output = '';
+        let i = 0;
+        while (i < input.length) {
+          if (input[i] !== ESC) {
+            output += input[i];
+            i += 1;
+            continue;
+          }
+
+          const slice = input.slice(i);
+          const parsed = parseMouseEvent(slice);
+          if (parsed) {
+            i += parsed.length;
+            continue;
+          }
+
+          if (isIncompleteMouseSequence(slice)) {
+            mouseSequenceBuffer = slice;
+            break;
+          }
+
+          output += input[i];
+          i += 1;
+        }
+
+        return Buffer.from(output, 'utf8');
+      };
+
+      const filteredData = mouseEventsEnabled
+        ? stripMouseSequences(data)
+        : data;
+      if (filteredData.length === 0) {
+        return;
+      }
+
       const pasteModePrefixBuffer = Buffer.from(PASTE_MODE_PREFIX);
       const pasteModeSuffixBuffer = Buffer.from(PASTE_MODE_SUFFIX);
 
       let pos = 0;
-      while (pos < data.length) {
-        const prefixPos = data.indexOf(pasteModePrefixBuffer, pos);
-        const suffixPos = data.indexOf(pasteModeSuffixBuffer, pos);
+      while (pos < filteredData.length) {
+        const prefixPos = filteredData.indexOf(pasteModePrefixBuffer, pos);
+        const suffixPos = filteredData.indexOf(pasteModeSuffixBuffer, pos);
         const isPrefixNext =
           prefixPos !== -1 && (suffixPos === -1 || prefixPos < suffixPos);
         const isSuffixNext =
@@ -988,11 +1042,11 @@ export function KeypressProvider({
         }
 
         if (nextMarkerPos === -1) {
-          keypressStream.write(data.slice(pos));
+          keypressStream.write(filteredData.slice(pos));
           return;
         }
 
-        const nextData = data.slice(pos, nextMarkerPos);
+        const nextData = filteredData.slice(pos, nextMarkerPos);
         if (nextData.length > 0) {
           keypressStream.write(nextData);
         }
@@ -1133,6 +1187,7 @@ export function KeypressProvider({
     stdin,
     setRawMode,
     kittyProtocolEnabled,
+    mouseEventsEnabled,
     config,
     subscribers,
     debugKeystrokeLogging,
