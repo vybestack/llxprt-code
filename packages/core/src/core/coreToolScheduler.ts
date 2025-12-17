@@ -1199,7 +1199,14 @@ export class CoreToolScheduler {
     request: ToolCallRequestInfo,
   ): PolicyContext {
     if (invocation instanceof BaseToolInvocation) {
-      return invocation.getPolicyContext();
+      const context = invocation.getPolicyContext();
+      if (context.toolName === 'unknown' || !context.toolName) {
+        return {
+          ...context,
+          toolName: request.name,
+        };
+      }
+      return context;
     }
     return {
       toolName: request.name,

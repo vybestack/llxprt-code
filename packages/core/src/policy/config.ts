@@ -56,9 +56,15 @@ export function migrateLegacyApprovalMode(
       priority: 1.999,
     });
   } else if (approvalMode === ApprovalMode.AUTO_EDIT) {
-    // AUTO_EDIT mode: allow write tools at priority 1.015
-    const writeTools = ['edit', 'smart_edit', 'write_file', 'shell', 'memory'];
-    for (const tool of writeTools) {
+    // AUTO_EDIT mode: allow edit tools at priority 1.015
+    const editTools = [
+      'replace',
+      'smart_edit',
+      'write_file',
+      'insert_at_line',
+      'delete_line_range',
+    ];
+    for (const tool of editTools) {
       rules.push({
         toolName: tool,
         decision: PolicyDecision.ALLOW,

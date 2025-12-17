@@ -61,19 +61,19 @@ describe('policy config', () => {
         });
         const rules = migrateLegacyApprovalMode(config);
 
-        // Should have rules for: edit, smart_edit, write_file, shell, memory
+        // Should have rules for edit tools
         expect(rules.length).toBeGreaterThanOrEqual(5);
 
-        const editRule = rules.find((r) => r.toolName === 'edit');
-        expect(editRule).toEqual({
-          toolName: 'edit',
+        const replaceRule = rules.find((r) => r.toolName === 'replace');
+        expect(replaceRule).toEqual({
+          toolName: 'replace',
           decision: PolicyDecision.ALLOW,
           priority: 1.015,
         });
 
-        const shellRule = rules.find((r) => r.toolName === 'shell');
-        expect(shellRule).toEqual({
-          toolName: 'shell',
+        const smartEditRule = rules.find((r) => r.toolName === 'smart_edit');
+        expect(smartEditRule).toEqual({
+          toolName: 'smart_edit',
           decision: PolicyDecision.ALLOW,
           priority: 1.015,
         });
@@ -86,11 +86,11 @@ describe('policy config', () => {
         const rules = migrateLegacyApprovalMode(config);
 
         const toolNames = rules.map((r) => r.toolName);
-        expect(toolNames).toContain('edit');
+        expect(toolNames).toContain('replace');
         expect(toolNames).toContain('smart_edit');
         expect(toolNames).toContain('write_file');
-        expect(toolNames).toContain('shell');
-        expect(toolNames).toContain('memory');
+        expect(toolNames).toContain('insert_at_line');
+        expect(toolNames).toContain('delete_line_range');
       });
     });
 
@@ -204,7 +204,7 @@ describe('policy config', () => {
         (r) => r.toolName === 'glob' && r.priority === 1.05,
       );
       const hasWriteTools = engineConfig.rules.some(
-        (r) => r.toolName === 'edit' && r.priority === 1.01,
+        (r) => r.toolName === 'replace' && r.priority === 1.01,
       );
 
       expect(hasReadOnlyTools).toBe(true);
@@ -285,7 +285,7 @@ describe('policy config', () => {
       const engine = new PolicyEngine(engineConfig);
 
       // All tools should be allowed due to wildcard rule
-      expect(engine.evaluate('edit', {})).toBe(PolicyDecision.ALLOW);
+      expect(engine.evaluate('replace', {})).toBe(PolicyDecision.ALLOW);
       expect(engine.evaluate('shell', {})).toBe(PolicyDecision.ALLOW);
       expect(engine.evaluate('unknown_tool', {})).toBe(PolicyDecision.ALLOW);
     });
@@ -298,13 +298,17 @@ describe('policy config', () => {
       const engineConfig = await createPolicyEngineConfig(config);
       const engine = new PolicyEngine(engineConfig);
 
-      // Write tools should be allowed
-      expect(engine.evaluate('edit', {})).toBe(PolicyDecision.ALLOW);
-      expect(engine.evaluate('shell', {})).toBe(PolicyDecision.ALLOW);
+      // Edit tools should be allowed
+      expect(engine.evaluate('replace', {})).toBe(PolicyDecision.ALLOW);
 
-      // Read-only tools still allowed by default
+      // Non-edit tools follow default policy stack
+      expect(engine.evaluate('shell', {})).toBe(PolicyDecision.ASK_USER);
+
+      // Read-only tools allowed by default
       expect(engine.evaluate('glob', {})).toBe(PolicyDecision.ALLOW);
-      expect(engine.evaluate('grep', {})).toBe(PolicyDecision.ALLOW);
+      expect(engine.evaluate('search_file_content', {})).toBe(
+        PolicyDecision.ALLOW,
+      );
     });
 
     it('DEFAULT mode uses standard policy stack', async () => {
@@ -317,24 +321,26 @@ describe('policy config', () => {
 
       // Read-only tools allowed by default policies
       expect(engine.evaluate('glob', {})).toBe(PolicyDecision.ALLOW);
-      expect(engine.evaluate('grep', {})).toBe(PolicyDecision.ALLOW);
+      expect(engine.evaluate('search_file_content', {})).toBe(
+        PolicyDecision.ALLOW,
+      );
 
       // Write tools ask user by default policies
-      expect(engine.evaluate('edit', {})).toBe(PolicyDecision.ASK_USER);
+      expect(engine.evaluate('replace', {})).toBe(PolicyDecision.ASK_USER);
       expect(engine.evaluate('shell', {})).toBe(PolicyDecision.ASK_USER);
     });
 
     it('higher priority wins when rules conflict', async () => {
       const config = createMockConfig({
         approvalMode: ApprovalMode.DEFAULT,
-        allowedTools: ['edit'], // priority 2.3 ALLOW
+        allowedTools: ['replace'], // priority 2.3 ALLOW
       });
 
       const engineConfig = await createPolicyEngineConfig(config);
       const engine = new PolicyEngine(engineConfig);
 
-      // edit should be ALLOW (priority 2.3) not ASK_USER (priority 1.01)
-      expect(engine.evaluate('edit', {})).toBe(PolicyDecision.ALLOW);
+      // replace should be ALLOW (priority 2.3) not ASK_USER (priority 1.01)
+      expect(engine.evaluate('replace', {})).toBe(PolicyDecision.ALLOW);
 
       // shell should still be ASK_USER (only default policy applies)
       expect(engine.evaluate('shell', {})).toBe(PolicyDecision.ASK_USER);
@@ -350,7 +356,7 @@ describe('policy config', () => {
       const engine = new PolicyEngine(engineConfig);
 
       // Write tools should be DENY in non-interactive mode
-      expect(engine.evaluate('edit', {})).toBe(PolicyDecision.DENY);
+      expect(engine.evaluate('replace', {})).toBe(PolicyDecision.DENY);
       expect(engine.evaluate('shell', {})).toBe(PolicyDecision.DENY);
 
       // Read-only tools still allowed
@@ -385,17 +391,19 @@ describe('policy config', () => {
       // The engine will use highest priority, but all rules are preserved
       const config = createMockConfig({
         approvalMode: ApprovalMode.AUTO_EDIT,
-        allowedTools: ['edit'], // Same tool, different priority
+        allowedTools: ['replace'], // Same tool, different priority
       });
 
       const engineConfig = await createPolicyEngineConfig(config);
 
       // Should have both:
-      // - edit from write.toml (priority 1.01, ASK_USER)
-      // - edit from AUTO_EDIT (priority 1.015, ALLOW)
-      // - edit from allowed-tools (priority 2.3, ALLOW)
-      const editRules = engineConfig.rules.filter((r) => r.toolName === 'edit');
-      expect(editRules.length).toBeGreaterThanOrEqual(2);
+      // - replace from write.toml (priority 1.01, ASK_USER)
+      // - replace from AUTO_EDIT (priority 1.015, ALLOW)
+      // - replace from allowed-tools (priority 2.3, ALLOW)
+      const replaceRules = engineConfig.rules.filter(
+        (r) => r.toolName === 'replace',
+      );
+      expect(replaceRules.length).toBeGreaterThanOrEqual(3);
     });
   });
 });

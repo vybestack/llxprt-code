@@ -48,7 +48,7 @@ describe('Message Bus Integration Tests', () => {
       expect(readOnlyRule?.decision).toBe(PolicyDecision.ALLOW);
 
       // Verify write tools are present
-      const writeRule = rules.find((r) => r.toolName === 'edit');
+      const writeRule = rules.find((r) => r.toolName === 'replace');
       expect(writeRule).toBeDefined();
       expect(writeRule?.decision).toBe(PolicyDecision.ASK_USER);
     });
@@ -57,7 +57,7 @@ describe('Message Bus Integration Tests', () => {
       const rules = await loadDefaultPolicies();
       const policyEngine = new PolicyEngine({ rules });
 
-      const decision = policyEngine.evaluate('edit', {
+      const decision = policyEngine.evaluate('replace', {
         file_path: '/test/file.ts',
         old_string: 'foo',
         new_string: 'bar',
@@ -70,7 +70,12 @@ describe('Message Bus Integration Tests', () => {
       const rules = await loadDefaultPolicies();
       const policyEngine = new PolicyEngine({ rules });
 
-      const readOnlyTools = ['glob', 'grep', 'read_file', 'ls'];
+      const readOnlyTools = [
+        'glob',
+        'search_file_content',
+        'read_file',
+        'list_directory',
+      ];
 
       for (const toolName of readOnlyTools) {
         const decision = policyEngine.evaluate(toolName, {});
@@ -112,7 +117,7 @@ priority = 2.0
       const path = join(testDir, 'regex.toml');
       const content = `
 [[rule]]
-toolName = "edit"
+toolName = "replace"
 argsPattern = "\\\\.md"
 decision = "allow"
 priority = 1.5
@@ -123,13 +128,13 @@ priority = 1.5
       const policyEngine = new PolicyEngine({ rules });
 
       // Markdown file should be allowed
-      const mdDecision = policyEngine.evaluate('edit', {
+      const mdDecision = policyEngine.evaluate('replace', {
         file_path: 'README.md',
       });
       expect(mdDecision).toBe(PolicyDecision.ALLOW);
 
       // TypeScript file should use default (ASK_USER)
-      const tsDecision = policyEngine.evaluate('edit', {
+      const tsDecision = policyEngine.evaluate('replace', {
         file_path: 'script.ts',
       });
       expect(tsDecision).toBe(PolicyDecision.ASK_USER);
