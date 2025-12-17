@@ -125,7 +125,7 @@ npm run typecheck
 # 3. Tests
 npm run test
 
-# 4. Format (if this changes files, rerun steps 1–3, then format again)
+# 4. Format
 npm run format
 
 # 5. Build
@@ -137,7 +137,7 @@ node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
 
 If you get noisy “working tree modified” warnings during long runs, it’s OK to
 run `npm run format` earlier as a convenience. Just rerun it after your final
-code changes (and rerun lint/typecheck/test if formatting changed files).
+code changes.
 
 ### 5a. Batch Verification Phase (When Cherry-picking Multiple Commits)
 
@@ -152,7 +152,7 @@ When cherry-picking multiple commits, **verify after each batch of 5 commits**:
    npm run lint
    npm run typecheck
    npm run test
-   npm run format # if this changes files, rerun lint/typecheck/test, then format again
+   npm run format
    npm run build
    node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
    git add -A  # Stage formatted changes if any
