@@ -37,7 +37,7 @@ describe('keyMatchers', () => {
     [Command.REFRESH_KEYPRESS]: (key: Key) =>
       key.ctrl && key.shift && key.name === 'r',
     [Command.TOGGLE_MOUSE_EVENTS]: (key: Key) =>
-      key.ctrl && key.sequence === '\x1c',
+      (key.ctrl && key.name === '\\') || key.sequence === '\x1c',
     [Command.DELETE_WORD_BACKWARD]: (key: Key) =>
       (key.ctrl || key.meta) && key.name === 'backspace',
     [Command.CLEAR_SCREEN]: (key: Key) => key.ctrl && key.name === 'l',
@@ -334,11 +334,12 @@ describe('keyMatchers', () => {
     // Debugging/Terminal fixes
     {
       command: Command.TOGGLE_MOUSE_EVENTS,
-      positive: [createKey('', { sequence: '\x1c', ctrl: true })],
-      negative: [
-        createKey('', { sequence: '\x1c' }),
+      positive: [
         createKey('\\', { ctrl: true }),
+        createKey('', { sequence: '\x1c', ctrl: true }),
+        createKey('', { sequence: '\x1c' }),
       ],
+      negative: [createKey('\\'), createKey('r', { ctrl: true })],
     },
   ];
 

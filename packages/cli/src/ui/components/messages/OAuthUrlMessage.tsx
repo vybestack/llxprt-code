@@ -55,7 +55,7 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
         <Box>
           <Text color={Colors.Comment} dimColor wrap="wrap">
             Tip: if selection/copy isn’t working, run /mouse off (or press
-            Ctrl+\\) to disable mouse tracking.
+            Ctrl+\) to disable mouse tracking.
           </Text>
         </Box>
       </Box>

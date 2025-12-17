@@ -193,5 +193,9 @@ export const defaultKeyBindings: KeyBindingConfig = {
 
   // Debugging/Terminal fixes
   [Command.REFRESH_KEYPRESS]: [{ key: 'r', ctrl: true, shift: true }],
-  [Command.TOGGLE_MOUSE_EVENTS]: [{ sequence: '\x1c', ctrl: true }],
+  [Command.TOGGLE_MOUSE_EVENTS]: [
+    // Ctrl+\ (typically FS / \x1c)
+    { key: '\\', ctrl: true },
+    { sequence: '\x1c' },
+  ],
 };
