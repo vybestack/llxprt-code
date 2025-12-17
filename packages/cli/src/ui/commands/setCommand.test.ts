@@ -1,4 +1,4 @@
-/**
+/*
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
@@ -82,7 +82,7 @@ describe('setCommand runtime integration', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter, retries, retrywait, maxTurnsPerPrompt, authOnly, dumponerror, dumpcontext, prompt-caching, include-folder-structure, rate-limit-throttle, rate-limit-throttle-threshold, rate-limit-max-wait, reasoning.enabled, reasoning.includeInContext, reasoning.includeInResponse, reasoning.format, reasoning.stripFromContext, reasoning.effort, reasoning.maxTokens, enable-tool-prompts, tpm_threshold, timeout_ms, circuit_breaker_enabled, circuit_breaker_failure_threshold, circuit_breaker_failure_window_ms, circuit_breaker_recovery_timeout_ms',
+        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, user-agent, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter, retries, retrywait, maxTurnsPerPrompt, authOnly, dumponerror, dumpcontext, prompt-caching, include-folder-structure, rate-limit-throttle, rate-limit-throttle-threshold, rate-limit-max-wait, reasoning.enabled, reasoning.includeInContext, reasoning.includeInResponse, reasoning.format, reasoning.stripFromContext, reasoning.effort, reasoning.maxTokens, enable-tool-prompts, tpm_threshold, timeout_ms, circuit_breaker_enabled, circuit_breaker_failure_threshold, circuit_breaker_failure_window_ms, circuit_breaker_recovery_timeout_ms',
     });
   });
 
@@ -121,29 +121,26 @@ describe('setCommand runtime integration', () => {
   it('requires both key and value for modelparam', async () => {
     const result = await setCommand.action!(context, 'modelparam temperature');
 
+    expect(mockRuntime.setActiveModelParam).not.toHaveBeenCalled();
     expect(result).toEqual({
       type: 'message',
       messageType: 'error',
       content:
         'Usage: /set modelparam <key> <value>\nExample: /set modelparam temperature 0.7',
     });
-    expect(mockRuntime.setActiveModelParam).not.toHaveBeenCalled();
   });
 
   it('surfaces runtime errors from model parameter helper', async () => {
     mockRuntime.setActiveModelParam.mockImplementationOnce(() => {
-      throw new Error('Provider error');
+      throw new Error('boom');
     });
 
-    const result = await setCommand.action!(
-      context,
-      'modelparam max_tokens 4096',
-    );
+    const result = await setCommand.action!(context, 'modelparam foo 1');
 
     expect(result).toEqual({
       type: 'message',
       messageType: 'error',
-      content: 'Failed to set model parameter: Provider error',
+      content: 'Failed to set model parameter: boom',
     });
   });
 
@@ -162,74 +159,64 @@ describe('setCommand runtime integration', () => {
   });
 
   it('clears model parameters via unset modelparam', async () => {
-    const result = await setCommand.action!(
-      context,
-      'unset modelparam temperature',
-    );
+    const result = await setCommand.action!(context, 'unset modelparam foo');
 
-    expect(mockRuntime.clearActiveModelParam).toHaveBeenCalledWith(
-      'temperature',
-    );
+    expect(mockRuntime.clearActiveModelParam).toHaveBeenCalledWith('foo');
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
-      content: "Model parameter 'temperature' cleared",
+      content: "Model parameter 'foo' cleared",
     });
   });
 
   it('requires model parameter name when clearing modelparam', async () => {
     const result = await setCommand.action!(context, 'unset modelparam');
 
+    expect(mockRuntime.clearActiveModelParam).not.toHaveBeenCalled();
     expect(result).toEqual({
       type: 'message',
       messageType: 'error',
       content:
         'Usage: /set unset modelparam <key>\nExample: /set unset modelparam temperature',
     });
-    expect(mockRuntime.clearActiveModelParam).not.toHaveBeenCalled();
   });
 
   it('handles nested custom header removal when header exists', async () => {
     mockRuntime.getEphemeralSettings.mockReturnValueOnce({
-      'custom-headers': {
-        Authorization: 'Bearer token',
-        'X-Test': 'value',
-      },
+      'custom-headers': { 'X-Test': 'value' },
     });
 
     const result = await setCommand.action!(
       context,
-      'unset custom-headers Authorization',
+      'unset custom-headers X-Test',
     );
 
     expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
       'custom-headers',
-      {
-        'X-Test': 'value',
-      },
+      undefined,
     );
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
-      content: "Custom header 'Authorization' cleared",
+      content: "Custom header 'X-Test' cleared",
     });
   });
 
   it('returns informational message when nested custom header missing', async () => {
     mockRuntime.getEphemeralSettings.mockReturnValueOnce({
-      'custom-headers': {},
+      'custom-headers': { 'X-Other': 'value' },
     });
 
     const result = await setCommand.action!(
       context,
-      'unset custom-headers Authorization',
+      'unset custom-headers X-Test',
     );
 
     expect(mockRuntime.setEphemeralSetting).not.toHaveBeenCalled();
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
-      content: "No custom header named 'Authorization' found",
+      content: "No custom header named 'X-Test' found",
     });
   });
 });

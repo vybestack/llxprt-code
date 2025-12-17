@@ -15,6 +15,7 @@ export const ephemeralSettingHelp: Record<string, string> = {
   'tool-format': 'Tool format override for the provider',
   'api-version': 'API version to use',
   'custom-headers': 'Custom HTTP headers as JSON object',
+  'user-agent': 'User-Agent header to send with API requests',
   'stream-options':
     'Stream options for OpenAI API (default: { include_usage: true })',
   streaming:
@@ -360,7 +361,6 @@ export function parseEphemeralSettingValue(
     }
   }
 
-  // Reasoning boolean settings
   if (
     key === 'reasoning.enabled' ||
     key === 'reasoning.includeInContext' ||
@@ -374,7 +374,6 @@ export function parseEphemeralSettingValue(
     }
   }
 
-  // Reasoning format setting
   if (key === 'reasoning.format') {
     const validModes = ['native', 'field'];
     if (
@@ -389,7 +388,6 @@ export function parseEphemeralSettingValue(
     parsedValue = parsedValue.toLowerCase();
   }
 
-  // Reasoning strip policy setting
   if (key === 'reasoning.stripFromContext') {
     const validModes = ['all', 'allButLast', 'none'];
     if (typeof parsedValue !== 'string' || !validModes.includes(parsedValue)) {
@@ -400,7 +398,6 @@ export function parseEphemeralSettingValue(
     }
   }
 
-  // Reasoning effort setting
   if (key === 'reasoning.effort') {
     const validModes = ['minimal', 'low', 'medium', 'high'];
     if (
@@ -415,7 +412,6 @@ export function parseEphemeralSettingValue(
     parsedValue = parsedValue.toLowerCase();
   }
 
-  // Reasoning maxTokens setting
   if (key === 'reasoning.maxTokens') {
     const numValue = parsedValue as number;
     if (
@@ -439,7 +435,6 @@ export function parseEphemeralSettingValue(
     }
   }
 
-  // Load balancer numeric settings (Phase 3, Issue #489)
   if (
     key === 'tpm_threshold' ||
     key === 'timeout_ms' ||
@@ -460,7 +455,6 @@ export function parseEphemeralSettingValue(
     }
   }
 
-  // Load balancer boolean settings (Phase 3, Issue #489)
   if (key === 'circuit_breaker_enabled') {
     if (typeof parsedValue !== 'boolean') {
       return {

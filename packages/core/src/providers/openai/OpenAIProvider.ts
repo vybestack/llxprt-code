@@ -297,11 +297,18 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     authToken: string,
     baseURL?: string,
     agents?: { httpAgent: http.Agent; httpsAgent: https.Agent },
+    headers?: Record<string, string>,
   ): OpenAI {
     const clientOptions: Record<string, unknown> = {
       apiKey: authToken || '',
       maxRetries: 0,
     };
+
+    if (headers && Object.keys(headers).length > 0) {
+      // Ensure headers like User-Agent are applied even if the SDK call-site
+      // headers option is not forwarded by the OpenAI client implementation.
+      clientOptions.defaultHeaders = headers;
+    }
 
     if (baseURL && baseURL.trim() !== '') {
       clientOptions.baseURL = baseURL;
@@ -683,6 +690,31 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Local endpoints (localhost, private IPs) are allowed without authentication
    * to support local AI servers like Ollama.
    */
+  private mergeInvocationHeaders(
+    options: NormalizedGenerateChatOptions,
+    baseHeaders?: Record<string, string>,
+  ): Record<string, string> | undefined {
+    const invocationHeadersRaw =
+      options.invocation.getEphemeral('custom-headers');
+    const invocationHeaders =
+      invocationHeadersRaw && typeof invocationHeadersRaw === 'object'
+        ? (invocationHeadersRaw as Record<string, string>)
+        : undefined;
+
+    const invocationUserAgent = options.invocation.getEphemeral('user-agent');
+
+    return baseHeaders || invocationHeaders || invocationUserAgent
+      ? {
+          ...(baseHeaders ?? {}),
+          ...(invocationHeaders ?? {}),
+          ...(typeof invocationUserAgent === 'string' &&
+          invocationUserAgent.trim()
+            ? { 'User-Agent': invocationUserAgent.trim() }
+            : {}),
+        }
+      : undefined;
+  }
+
   protected async getClient(
     options: NormalizedGenerateChatOptions,
   ): Promise<OpenAI> {
@@ -699,7 +731,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     const agents = this.createHttpAgents(options);
-    return this.instantiateClient(authToken, baseURL, agents);
+
+    // Apply invocation/provider header overrides at client construction time.
+    // Some OpenAI-compatible gateways (e.g., Kimi For Coding) enforce allowlisting
+    // based on User-Agent, which must be sent as a real HTTP header.
+    const headers = this.mergeInvocationHeaders(options);
+
+    return this.instantiateClient(authToken, baseURL, agents, headers);
   }
 
   /**
@@ -1880,10 +1918,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     });
 
     const customHeaders = this.getCustomHeaders();
-    if (logger.enabled && customHeaders) {
-      logger.debug(() => `[OpenAIProvider] Applying custom headers`, {
-        headerKeys: Object.keys(customHeaders),
-      });
+
+    // Merge invocation ephemerals (CLI /set, alias ephemerals) into custom headers.
+    // BaseProvider#getCustomHeaders() reads from providerConfig ephemerals; for stateless
+    // calls we also need to respect options.invocation.ephemerals.
+    const mergedHeaders = this.mergeInvocationHeaders(options, customHeaders);
+
+    if (logger.enabled && mergedHeaders) {
+      logger.debug(
+        () =>
+          `[OpenAIProvider] Applying merged request headers (custom + invocation + user-agent)`,
+        {
+          headerKeys: Object.keys(mergedHeaders),
+        },
+      );
     }
 
     if (logger.enabled) {
@@ -1934,7 +1982,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       const currentClient = failoverClient ?? client;
       return currentClient.chat.completions.create(requestBody, {
         ...(abortSignal ? { signal: abortSignal } : {}),
-        ...(customHeaders ? { headers: customHeaders } : {}),
+        ...(mergedHeaders ? { headers: mergedHeaders } : {}),
       });
     };
 
