@@ -15,6 +15,7 @@ import {
   ensureJsonSafe,
   hasUnicodeReplacements,
 } from '../../utils/unicodeUtils.js';
+import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 
 export interface ResponsesRequestParams {
   messages?: IContent[];
@@ -213,13 +214,14 @@ export function buildResponsesRequest(
       .filter((msg): msg is IContent => msg !== undefined && msg !== null)
       .forEach((msg) => {
         // Extract function calls from AI messages
+        // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
         if (msg.speaker === 'ai') {
           msg.blocks.forEach((block) => {
             if (block.type === 'tool_call') {
               const toolCallBlock = block as ToolCallBlock;
               functionCalls.push({
                 type: 'function_call' as const,
-                call_id: toolCallBlock.id,
+                call_id: normalizeToOpenAIToolId(toolCallBlock.id),
                 name: toolCallBlock.name,
                 arguments: JSON.stringify(toolCallBlock.parameters),
               });
@@ -246,9 +248,10 @@ export function buildResponsesRequest(
                 sanitizedContent = ensureJsonSafe(resultStr);
               }
 
+              // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
               functionCallOutputs.push({
                 type: 'function_call_output' as const,
-                call_id: toolResponseBlock.callId,
+                call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
                 output: sanitizedContent,
               });
             }

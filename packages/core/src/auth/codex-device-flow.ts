@@ -21,6 +21,11 @@ const CODEX_CONFIG = {
   issuer: 'https://auth.openai.com',
   tokenEndpoint: 'https://auth.openai.com/oauth/token',
   authorizationEndpoint: 'https://auth.openai.com/oauth/authorize',
+  deviceAuthUserCodeEndpoint:
+    'https://auth.openai.com/api/accounts/deviceauth/usercode',
+  deviceAuthTokenEndpoint:
+    'https://auth.openai.com/api/accounts/deviceauth/token',
+  deviceAuthCallbackUri: 'https://auth.openai.com/deviceauth/callback',
   scopes: ['openid', 'profile', 'email', 'offline_access'],
   originator: 'codex_cli_rs',
 } as const;
@@ -241,10 +246,12 @@ export class CodexDeviceFlow {
     const data: unknown = await response.json();
     const tokenResponse = CodexTokenResponseSchema.parse(data);
 
-    // Extract account_id from new id_token or throw
+    // Extract account_id from new id_token if available
+    // For refresh flows, OpenAI may not always return a new id_token,
+    // so we allow undefined here (caller should preserve original account_id)
     const accountId = tokenResponse.id_token
       ? this.extractAccountIdFromIdToken(tokenResponse.id_token)
-      : this.throwMissingAccountId();
+      : undefined;
 
     // Use Unix timestamp in SECONDS
     const now = Math.floor(Date.now() / 1000);
@@ -300,11 +307,280 @@ export class CodexDeviceFlow {
    * @throws Error indicating id_token required
    */
   private throwMissingAccountId(): never {
-    throw new Error('id_token required to extract account_id');
+    throw new Error(
+      'Cannot extract account_id: id_token missing from token response',
+    );
   }
 
   /**
-   * Generates PKCE code verifier and challenge
+   * Request a user code for device authorization flow (browserless authentication)
+   * @returns Device code response with user_code and device_auth_id
+   */
+  async requestDeviceCode(): Promise<{
+    device_auth_id: string;
+    user_code: string;
+    interval: number;
+  }> {
+    this.logger.debug(
+      () =>
+        `[DEVICE] Requesting user code from ${CODEX_CONFIG.deviceAuthUserCodeEndpoint}`,
+    );
+    this.logger.debug(
+      () => `[DEVICE] Using client_id: ${CODEX_CONFIG.clientId}`,
+    );
+
+    const response = await globalThis.fetch(
+      CODEX_CONFIG.deviceAuthUserCodeEndpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          client_id: CODEX_CONFIG.clientId,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(
+          'Device code authorization is not enabled for this Codex server',
+        );
+      }
+      const errorText = await response.text();
+      this.logger.debug(
+        () => `[DEVICE] User code request FAILED: ${errorText}`,
+      );
+      throw new Error(
+        `User code request failed: ${response.status} ${errorText}`,
+      );
+    }
+
+    const data: unknown = await response.json();
+    // Log only non-sensitive keys to avoid exposing auth data
+    this.logger.debug(
+      () =>
+        `[DEVICE] User code response keys: ${Object.keys(data as object).join(', ')}`,
+    );
+
+    // Parse the response
+    const UserCodeResponseSchema = z.object({
+      device_auth_id: z.string(),
+      user_code: z.string(),
+      interval: z
+        .union([z.number(), z.string()])
+        .transform((val) =>
+          typeof val === 'string' ? parseInt(val.trim(), 10) : val,
+        )
+        .optional()
+        .default(5),
+    });
+
+    const result = UserCodeResponseSchema.parse(data);
+
+    this.logger.debug(() => `[DEVICE] Received user code: ${result.user_code}`);
+
+    return result;
+  }
+
+  /**
+   * Poll for token using device authorization
+   * @param deviceAuthId Device authorization ID
+   * @param userCode User code from device flow
+   * @param intervalSeconds Polling interval in seconds
+   * @returns Authorization code and PKCE codes for token exchange
+   */
+  async pollForDeviceToken(
+    deviceAuthId: string,
+    userCode: string,
+    intervalSeconds: number = 5,
+  ): Promise<{
+    authorization_code: string;
+    code_verifier: string;
+    code_challenge: string;
+  }> {
+    this.logger.debug(() => '[DEVICE] Starting device token polling');
+
+    const maxWaitMs = 15 * 60 * 1000; // 15 minutes
+    const startTime = Date.now();
+    const intervalMs = intervalSeconds * 1000;
+
+    while (true) {
+      if (Date.now() - startTime >= maxWaitMs) {
+        throw new Error('Device authorization timed out after 15 minutes');
+      }
+
+      this.logger.debug(
+        () =>
+          `[DEVICE] Polling ${CODEX_CONFIG.deviceAuthTokenEndpoint} with device_auth_id=${deviceAuthId}, user_code=${userCode}`,
+      );
+
+      const response = await globalThis.fetch(
+        CODEX_CONFIG.deviceAuthTokenEndpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            device_auth_id: deviceAuthId,
+            user_code: userCode,
+          }),
+        },
+      );
+
+      const responseText = await response.text();
+      // Log status only, not the full response body which may contain sensitive data
+      this.logger.debug(
+        () => `[DEVICE] Poll response status: ${response.status}`,
+      );
+
+      if (response.ok) {
+        let data: unknown;
+        try {
+          data = JSON.parse(responseText);
+        } catch (parseError) {
+          this.logger.debug(
+            () => `[DEVICE] Failed to parse response as JSON: ${parseError}`,
+          );
+          throw new Error(
+            `Failed to parse device token response: ${responseText}`,
+          );
+        }
+
+        // Log only non-sensitive keys to avoid exposing auth data
+        this.logger.debug(
+          () =>
+            `[DEVICE] Token polling successful, keys: ${Object.keys(data as object).join(', ')}`,
+        );
+
+        // Parse the successful response - includes authorization_code for token exchange
+        const CodeSuccessResponseSchema = z.object({
+          authorization_code: z.string(),
+          code_verifier: z.string(),
+          code_challenge: z.string(),
+        });
+
+        return CodeSuccessResponseSchema.parse(data);
+      }
+
+      // 403 or 404 means still waiting for user authorization
+      if (response.status === 403 || response.status === 404) {
+        this.logger.debug(
+          () =>
+            `[DEVICE] User hasn't authorized yet (${response.status}), waiting ${intervalMs}ms...`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        continue;
+      }
+
+      // Any other status is an error
+      this.logger.debug(() => `[DEVICE] Token polling FAILED: ${responseText}`);
+      throw new Error(
+        `Device authorization failed: ${response.status} ${responseText}`,
+      );
+    }
+  }
+
+  /**
+   * Complete device authorization flow by exchanging authorization code for tokens
+   * @param authorizationCode Authorization code from polling response
+   * @param codeVerifier PKCE code verifier from polling response
+   * @param redirectUri OAuth redirect URI
+   * @returns Complete OAuth token with access_token, refresh_token, etc.
+   */
+  async completeDeviceAuth(
+    authorizationCode: string,
+    codeVerifier: string,
+    redirectUri: string,
+  ): Promise<CodexOAuthToken> {
+    this.logger.debug(
+      () => '[DEVICE] Completing device authorization with code exchange',
+    );
+    this.logger.debug(
+      () =>
+        `[DEVICE] authCode=${authorizationCode.substring(0, 15)}..., redirectUri=${redirectUri}`,
+    );
+
+    // For device flow, we have the code_verifier directly from OpenAI's response
+    // instead of looking it up from our PKCE state map
+    this.logger.debug(
+      () =>
+        `[DEVICE] Making token exchange request to ${CODEX_CONFIG.tokenEndpoint}`,
+    );
+
+    const response = await fetch(CODEX_CONFIG.tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: authorizationCode,
+        redirect_uri: redirectUri,
+        client_id: CODEX_CONFIG.clientId,
+        code_verifier: codeVerifier,
+      }).toString(),
+    });
+
+    this.logger.debug(
+      () => `[DEVICE] Token exchange response status: ${response.status}`,
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      this.logger.debug(() => `[DEVICE] Token exchange FAILED: ${errorText}`);
+      throw new Error(`Token exchange failed: ${response.status} ${errorText}`);
+    }
+
+    const data: unknown = await response.json();
+    this.logger.debug(
+      () =>
+        `[DEVICE] Token response received, keys: ${Object.keys(data as object).join(', ')}`,
+    );
+
+    // Validate with Zod schema
+    const tokenResponse = CodexTokenResponseSchema.parse(data);
+    this.logger.debug(
+      () =>
+        `[DEVICE] Token response validated: has_id_token=${!!tokenResponse.id_token}, has_refresh_token=${!!tokenResponse.refresh_token}, expires_in=${tokenResponse.expires_in}`,
+    );
+
+    // Extract account_id from id_token JWT
+    this.logger.debug(() => '[DEVICE] Extracting account_id from id_token...');
+    const accountId = tokenResponse.id_token
+      ? this.extractAccountIdFromIdToken(tokenResponse.id_token)
+      : this.throwMissingAccountId();
+    this.logger.debug(
+      () => `[DEVICE] Extracted account_id: ${accountId.substring(0, 8)}...`,
+    );
+
+    // Build and return the CodexOAuthToken
+    const now = Date.now();
+    const expiresIn = tokenResponse.expires_in ?? 3600; // Default to 1 hour if not provided
+    const tokenType = (tokenResponse.token_type ?? 'Bearer') as
+      | 'Bearer'
+      | 'bearer';
+    const token: CodexOAuthToken = {
+      access_token: tokenResponse.access_token,
+      refresh_token: tokenResponse.refresh_token,
+      id_token: tokenResponse.id_token,
+      token_type: tokenType,
+      expiry: Math.floor(now / 1000) + expiresIn,
+      account_id: accountId,
+    };
+
+    this.logger.debug(
+      () => '[DEVICE] Device authorization completed successfully',
+    );
+
+    return token;
+  }
+
+  /**
+   * Generate PKCE code verifier and challenge
    * @returns Object containing verifier and challenge strings
    */
   private generatePKCE(): { verifier: string; challenge: string } {

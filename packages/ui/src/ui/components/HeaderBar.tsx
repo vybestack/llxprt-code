@@ -1,11 +1,8 @@
 import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import React from 'react';
 import type { ThemeDefinition } from '../../features/theme';
 
-const DEFAULT_LOGO_PATH = fileURLToPath(
-  new URL('../../../llxprt.png', import.meta.url),
-);
 const LOGO_ASPECT_RATIO = 415 / 260;
 
 interface HeaderBarProps {
@@ -13,14 +10,44 @@ interface HeaderBarProps {
   readonly theme: ThemeDefinition;
 }
 
-export function HeaderBar({ text, theme }: HeaderBarProps): React.ReactNode {
+function getPackageRoot(): string | undefined {
+  // Bun: import.meta.dir
+  // Node 20.11+: import.meta.dirname
+  const meta = import.meta as ImportMeta & {
+    readonly dir: string;
+    readonly dirname: string;
+  };
+
+  return meta.dir || meta.dirname;
+}
+
+export function HeaderBar({ text, theme }: HeaderBarProps) {
   const headerHeight = 3;
-  const themeLogoPath = fileURLToPath(
-    new URL(`../../../logos/${theme.slug}.png`, import.meta.url),
-  );
-  const logoPath = existsSync(themeLogoPath)
-    ? themeLogoPath
-    : DEFAULT_LOGO_PATH;
+
+  const packageRoot = getPackageRoot();
+
+  let logoPath: string;
+  try {
+    const root = packageRoot ?? process.cwd();
+
+    // Try theme-specific logo first
+    const themeLogoPath = resolve(
+      root,
+      '..',
+      '..',
+      'logos',
+      `${theme.slug}.png`,
+    );
+    if (existsSync(themeLogoPath)) {
+      logoPath = themeLogoPath;
+    } else {
+      // Fall back to default logo
+      logoPath = resolve(root, '..', '..', 'llxprt.png');
+    }
+  } catch {
+    // Last resort fallback - use relative path for edge cases
+    logoPath = `../../../logos/${theme.slug}.png`;
+  }
 
   return (
     <box

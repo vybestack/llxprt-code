@@ -53,7 +53,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 
 - **`bugCommand`** (object):
   - **Description:** Overrides the default URL for the `/bug` command.
-  - **Default:** `"urlTemplate": "https://github.com/acoliver/llxprt-code/issues/new?template=bug_report.yml&title={title}&info={info}"`
+  - **Default:** `"urlTemplate": "https://github.com/vybestack/llxprt-code/issues/new?template=bug_report.yml&title={title}&info={info}"`
   - **Properties:**
     - **`urlTemplate`** (string): A URL that can contain `{title}` and `{info}` placeholders.
   - **Example:**

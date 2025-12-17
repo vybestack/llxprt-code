@@ -6,9 +6,8 @@
 
 import React, { Fragment, useEffect, useId } from 'react';
 import { Box, Text } from 'ink';
-import stringWidth from 'string-width';
 import { Colors } from '../../colors.js';
-import { toCodePoints } from '../../utils/textUtils.js';
+import { getCachedStringWidth, toCodePoints } from '../../utils/textUtils.js';
 import { useOverflowActions } from '../../contexts/OverflowContext.js';
 
 let enableDebugLog = false;
@@ -395,7 +394,7 @@ function layoutInkElementAsStyledText(
   // First, lay out the non-wrapping segments
   row.noWrapSegments.forEach((segment) => {
     nonWrappingContent.push(segment);
-    noWrappingWidth += stringWidth(segment.text);
+    noWrappingWidth += getCachedStringWidth(segment.text);
   });
 
   if (row.segments.length === 0) {
@@ -450,17 +449,20 @@ function layoutInkElementAsStyledText(
         }
 
         if (text) {
-          const textWidth = stringWidth(text);
+          const textWidth = getCachedStringWidth(text);
 
           // When there's no room for wrapping content, be very conservative
           // For lines after the first line break, show only ellipsis if the text would be truncated
           if (index > 0 && textWidth > 0) {
             // This is content after a line break - just show ellipsis to indicate truncation
             currentLine.push({ text: '…', props: {} });
-            currentLineWidth = stringWidth('…');
+            currentLineWidth = getCachedStringWidth('…');
           } else {
             // This is the first line or a continuation, try to fit what we can
-            const maxContentWidth = Math.max(0, maxWidth - stringWidth('…'));
+            const maxContentWidth = Math.max(
+              0,
+              maxWidth - getCachedStringWidth('…'),
+            );
 
             if (textWidth <= maxContentWidth && currentLineWidth === 0) {
               // Text fits completely on this line
@@ -473,7 +475,7 @@ function layoutInkElementAsStyledText(
               let sliceEndIndex = 0;
 
               for (const char of codePoints) {
-                const charWidth = stringWidth(char);
+                const charWidth = getCachedStringWidth(char);
                 if (truncatedWidth + charWidth > maxContentWidth) {
                   break;
                 }
@@ -486,7 +488,7 @@ function layoutInkElementAsStyledText(
                 currentLine.push({ text: slice, props: segment.props });
               }
               currentLine.push({ text: '…', props: {} });
-              currentLineWidth = truncatedWidth + stringWidth('…');
+              currentLineWidth = truncatedWidth + getCachedStringWidth('…');
             }
           }
         }
@@ -557,7 +559,7 @@ function layoutInkElementAsStyledText(
 
       words.forEach((word) => {
         if (!word) return;
-        const wordWidth = stringWidth(word);
+        const wordWidth = getCachedStringWidth(word);
 
         if (
           wrappingPartWidth + wordWidth > availableWidth &&
@@ -577,7 +579,7 @@ function layoutInkElementAsStyledText(
             let splitIndex = 0;
             let currentSplitWidth = 0;
             for (const char of remainingWordAsCodePoints) {
-              const charWidth = stringWidth(char);
+              const charWidth = getCachedStringWidth(char);
               if (
                 wrappingPartWidth + currentSplitWidth + charWidth >
                 availableWidth
@@ -593,7 +595,7 @@ function layoutInkElementAsStyledText(
                 .slice(0, splitIndex)
                 .join('');
               addToWrappingPart(part, segment.props);
-              wrappingPartWidth += stringWidth(part);
+              wrappingPartWidth += getCachedStringWidth(part);
               remainingWordAsCodePoints =
                 remainingWordAsCodePoints.slice(splitIndex);
             }

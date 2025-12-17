@@ -67,7 +67,9 @@ export const ToolStatsDisplay: React.FC = () => {
         paddingY={1}
         paddingX={2}
       >
-        <Text>No tool calls have been made in this session.</Text>
+        <Text color={Colors.Foreground}>
+          No tool calls have been made in this session.
+        </Text>
       </Box>
     );
   }
@@ -104,23 +106,31 @@ export const ToolStatsDisplay: React.FC = () => {
       width={70}
     >
       <Text bold color={Colors.AccentPurple}>
-        Tool Stats For Nerds
+        Tool Stats
       </Text>
       <Box height={1} />
 
       {/* Header */}
       <Box>
         <Box width={TOOL_NAME_COL_WIDTH}>
-          <Text bold>Tool Name</Text>
+          <Text bold color={Colors.Foreground}>
+            Tool Name
+          </Text>
         </Box>
         <Box width={CALLS_COL_WIDTH} justifyContent="flex-end">
-          <Text bold>Calls</Text>
+          <Text bold color={Colors.Foreground}>
+            Calls
+          </Text>
         </Box>
         <Box width={SUCCESS_RATE_COL_WIDTH} justifyContent="flex-end">
-          <Text bold>Success Rate</Text>
+          <Text bold color={Colors.Foreground}>
+            Success Rate
+          </Text>
         </Box>
         <Box width={AVG_DURATION_COL_WIDTH} justifyContent="flex-end">
-          <Text bold>Avg Duration</Text>
+          <Text bold color={Colors.Foreground}>
+            Avg Duration
+          </Text>
         </Box>
       </Box>
 
@@ -131,6 +141,7 @@ export const ToolStatsDisplay: React.FC = () => {
         borderTop={false}
         borderLeft={false}
         borderRight={false}
+        borderColor={Colors.Gray}
         width="100%"
       />
 
@@ -142,7 +153,9 @@ export const ToolStatsDisplay: React.FC = () => {
       <Box height={1} />
 
       {/* User Decision Summary */}
-      <Text bold>User Decision Summary</Text>
+      <Text bold color={Colors.Foreground}>
+        User Decision Summary
+      </Text>
       <Box>
         <Box
           width={TOOL_NAME_COL_WIDTH + CALLS_COL_WIDTH + SUCCESS_RATE_COL_WIDTH}
@@ -191,6 +204,7 @@ export const ToolStatsDisplay: React.FC = () => {
         borderTop={false}
         borderLeft={false}
         borderRight={false}
+        borderColor={Colors.Gray}
         width="100%"
       />
 
