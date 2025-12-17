@@ -720,6 +720,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       }
 
       if (!response.body) {
+        this.logger.debug(() => 'Response body missing, returning early');
         return;
       }
 

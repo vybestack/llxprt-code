@@ -104,10 +104,10 @@ describe('OpenAIResponsesProvider stream retry behavior', () => {
     }
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(
-      chunks.map((c) =>
-        c.blocks.map((b) => ('text' in b ? b.text : '')).join(''),
-      ),
-    ).toContain('ok');
+    const texts = chunks.map((c) =>
+      c.blocks.map((b) => ('text' in b ? b.text : '')).join(''),
+    );
+    expect(texts).toContain('partial');
+    expect(texts).toContain('ok');
   });
 });
