@@ -244,20 +244,29 @@ import { Config } from '@vybestack/llxprt-code-core';
 
 ### Tool Name and Policy Divergence
 
-LLxprt tool names diverge from upstream in several places. When cherry-picking
-tool/scheduler/policy changes, verify the actual tool names used in LLxprt
-(search for `static readonly Name` in `packages/core/src/tools/`) and keep the
-default policies in sync (`packages/core/src/policy/policies/*.toml`).
+When cherry-picking tool/scheduler/policy changes, verify the actual tool names
+used in LLxprt (search for `static readonly Name` in
+`packages/core/src/tools/`) and keep the default policies in sync
+(`packages/core/src/policy/policies/*.toml`).
 
-Common examples:
+Important nuance: models/providers sometimes emit short aliases for tool names,
+but upstream and LLxprt can still share the same canonical tool name. Treat
+aliases as input normalization, not upstream divergence.
 
-| Upstream     | LLxprt                                  |
-| ------------ | --------------------------------------- |
-| `ls`         | `list_directory`                        |
-| `grep`       | `search_file_content`                   |
-| `edit`       | `replace`                               |
-| `web_search` | `google_web_search` / `exa_web_search`  |
-| `web_fetch`  | `google_web_fetch` / `direct_web_fetch` |
+Common model aliases → canonical tool names (upstream + LLxprt):
+
+| Alias (commonly emitted) | Canonical tool name   |
+| ------------------------ | --------------------- |
+| `ls`                     | `list_directory`      |
+| `grep`                   | `search_file_content` |
+| `edit`                   | `replace`             |
+
+Actual LLxprt tool-name divergence vs upstream (examples):
+
+| Upstream      | LLxprt                                        |
+| ------------- | --------------------------------------------- |
+| `web_fetch`   | `google_web_fetch` / `direct_web_fetch`       |
+| `write_todos` | `todo_write` (and `todo_read` / `todo_pause`) |
 
 ### Error Structure Changes
 
