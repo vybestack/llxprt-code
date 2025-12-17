@@ -62,6 +62,8 @@ import {
 } from '../runtime/runtimeSettings.js';
 import { applyCliSetArguments } from './cliEphemeralSettings.js';
 
+import { loadProviderAliasEntries } from '../providers/providerAliases.js';
+
 const LLXPRT_DIR = '.llxprt';
 
 const logger = new DebugLogger('llxprt:config');
@@ -1121,7 +1123,7 @@ export async function loadCliConfig(
   const aliasDefaultModel = (() => {
     try {
       const entry = loadProviderAliasEntries().find(
-        (candidate) => candidate.alias === finalProvider,
+        (candidate: { alias: string }) => candidate.alias === finalProvider,
       );
       const candidate = entry?.config?.defaultModel;
       return typeof candidate === 'string' && candidate.trim()
