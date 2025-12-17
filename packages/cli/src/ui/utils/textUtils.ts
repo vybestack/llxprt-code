@@ -110,7 +110,7 @@ function ensureCacheCapacity(): void {
     const oldestKey = stringWidthCache.keys().next().value as
       | string
       | undefined;
-    if (!oldestKey) {
+    if (oldestKey === undefined) {
       return;
     }
     stringWidthCache.delete(oldestKey);
