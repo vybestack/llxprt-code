@@ -7,6 +7,7 @@
 import React from 'react';
 import { Text, Box } from 'ink';
 import { Colors, SemanticColors } from '../../colors.js';
+import { createOsc8Link } from '../../utils/terminalLinks.js';
 
 interface OAuthUrlMessageProps {
   text: string;
@@ -24,6 +25,11 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
   const providerMatch = text.match(/authorize with ([^\n:]+)/i);
   const provider = providerMatch ? providerMatch[1] : 'the service';
 
+  const osc8Link = createOsc8Link(
+    `Click here to authorize with ${provider}`,
+    url,
+  );
+
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Box flexDirection="row" marginBottom={1}>
@@ -39,14 +45,7 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
 
       <Box flexDirection="column" paddingLeft={prefixWidth + 1}>
         <Box marginBottom={1}>
-          <Text color={Colors.Comment} dimColor wrap="wrap">
-            Open this URL to authorize:
-          </Text>
-        </Box>
-        <Box marginBottom={1}>
-          <Text color={SemanticColors.text.link} wrap="wrap">
-            {url}
-          </Text>
+          <Text color={SemanticColors.text.link}>{osc8Link}</Text>
         </Box>
         <Box>
           <Text color={Colors.Comment} dimColor wrap="wrap">
@@ -55,8 +54,8 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
         </Box>
         <Box>
           <Text color={Colors.Comment} dimColor wrap="wrap">
-            Tip: run /mouse off to select/copy and click links (then /mouse on
-            to re-enable wheel scrolling).
+            Tip: if selection/copy isn’t working, run /mouse off (or press
+            Ctrl+\\) to disable mouse tracking.
           </Text>
         </Box>
       </Box>

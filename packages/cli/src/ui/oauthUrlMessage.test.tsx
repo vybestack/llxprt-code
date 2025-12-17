@@ -9,7 +9,7 @@ import { render } from '@testing-library/react';
 import { OAuthUrlMessage } from './components/messages/OAuthUrlMessage.js';
 
 describe('OAuthUrlMessage', () => {
-  it('renders a copyable URL without OSC-8 artifacts', () => {
+  it('renders a clickable label and the URL', () => {
     render(
       <OAuthUrlMessage
         text="Please authorize with GitHub to continue"
@@ -18,10 +18,10 @@ describe('OAuthUrlMessage', () => {
     );
 
     const output = document.body.textContent ?? '';
+    expect(output).toContain('Click here to authorize with GitHub');
     expect(output).toContain(
       'https://example.com/oauth/authorize?client_id=test123',
     );
-    expect(output).not.toContain(']8;;');
     expect(output).toContain('/mouse off');
   });
 });

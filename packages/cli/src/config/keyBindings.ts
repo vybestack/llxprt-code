@@ -68,6 +68,7 @@ export enum Command {
 
   // Debugging/Terminal fixes
   REFRESH_KEYPRESS = 'refreshKeypress',
+  TOGGLE_MOUSE_EVENTS = 'toggleMouseEvents',
 }
 
 /**
@@ -192,4 +193,5 @@ export const defaultKeyBindings: KeyBindingConfig = {
 
   // Debugging/Terminal fixes
   [Command.REFRESH_KEYPRESS]: [{ key: 'r', ctrl: true, shift: true }],
+  [Command.TOGGLE_MOUSE_EVENTS]: [{ sequence: '\x1c', ctrl: true }],
 };

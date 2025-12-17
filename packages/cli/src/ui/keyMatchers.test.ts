@@ -36,6 +36,8 @@ describe('keyMatchers', () => {
     [Command.CLEAR_INPUT]: (key: Key) => key.ctrl && key.name === 'c',
     [Command.REFRESH_KEYPRESS]: (key: Key) =>
       key.ctrl && key.shift && key.name === 'r',
+    [Command.TOGGLE_MOUSE_EVENTS]: (key: Key) =>
+      key.ctrl && key.sequence === '\x1c',
     [Command.DELETE_WORD_BACKWARD]: (key: Key) =>
       (key.ctrl || key.meta) && key.name === 'backspace',
     [Command.CLEAR_SCREEN]: (key: Key) => key.ctrl && key.name === 'l',
@@ -327,6 +329,16 @@ describe('keyMatchers', () => {
       command: Command.ACCEPT_SUGGESTION_REVERSE_SEARCH,
       positive: [createKey('tab'), createKey('tab', { ctrl: true })],
       negative: [createKey('return'), createKey('space')],
+    },
+
+    // Debugging/Terminal fixes
+    {
+      command: Command.TOGGLE_MOUSE_EVENTS,
+      positive: [createKey('', { sequence: '\x1c', ctrl: true })],
+      negative: [
+        createKey('', { sequence: '\x1c' }),
+        createKey('\\', { ctrl: true }),
+      ],
     },
   ];
 

@@ -34,6 +34,7 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
+import { isMouseEventsActive, setMouseEventsActive } from './utils/mouse.js';
 import { loadHierarchicalLlxprtMemory } from '../config/config.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
@@ -1229,6 +1230,18 @@ export const AppContainer = (props: AppContainerProps) => {
 
       if (keyMatchers[Command.SHOW_ERROR_DETAILS](key)) {
         setShowErrorDetails((prev) => !prev);
+      } else if (keyMatchers[Command.TOGGLE_MOUSE_EVENTS](key)) {
+        const nextActive = !isMouseEventsActive();
+        setMouseEventsActive(nextActive);
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: nextActive
+              ? 'Mouse events enabled (in-app wheel scrolling on; terminal selection/copy may be limited).'
+              : 'Mouse events disabled (terminal selection/copy on; in-app wheel scrolling off).',
+          },
+          Date.now(),
+        );
       } else if (keyMatchers[Command.TOGGLE_TOOL_DESCRIPTIONS](key)) {
         const newValue = !showToolDescriptions;
         setShowToolDescriptions(newValue);
@@ -1270,6 +1283,7 @@ export const AppContainer = (props: AppContainerProps) => {
       handleSlashCommand,
       isAuthenticating,
       cancelOngoingRequest,
+      addItem,
       settings.merged.debugKeystrokeLogging,
     ],
   );
