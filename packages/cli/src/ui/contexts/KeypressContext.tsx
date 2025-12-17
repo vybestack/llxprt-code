@@ -899,7 +899,7 @@ export function KeypressProvider({
     };
 
     const handleKeypress = (_: unknown, key: Key) => {
-      if (parseMouseEvent(key.sequence)) {
+      if (mouseEventsEnabled && parseMouseEvent(key.sequence)) {
         return;
       }
 
@@ -1011,7 +1011,9 @@ export function KeypressProvider({
         return Buffer.from(output, 'utf8');
       };
 
-      const filteredData = stripMouseSequences(data);
+      const filteredData = mouseEventsEnabled
+        ? stripMouseSequences(data)
+        : data;
       if (filteredData.length === 0) {
         return;
       }

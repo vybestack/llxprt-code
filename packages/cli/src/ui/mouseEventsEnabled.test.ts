@@ -23,6 +23,15 @@ describe('isMouseEventsEnabled', () => {
     ).toBe(false);
   });
 
+  it('returns false when enableMouseEvents is explicitly false', () => {
+    expect(
+      isMouseEventsEnabled(
+        { alternateBuffer: true },
+        { merged: { ui: { enableMouseEvents: false } } },
+      ),
+    ).toBe(false);
+  });
+
   it('returns true when alternate buffer and enableMouseEvents are true', () => {
     expect(
       isMouseEventsEnabled(

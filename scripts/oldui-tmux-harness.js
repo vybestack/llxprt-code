@@ -957,12 +957,18 @@ async function main() {
   await fs.mkdir(outDir, { recursive: true });
 
   const script = options.scriptPath
-    ? JSON.parse(
-        await fs.readFile(
-          path.resolve(process.cwd(), options.scriptPath),
-          'utf8',
-        ),
-      )
+    ? await (async () => {
+        const scriptPath = path.resolve(process.cwd(), options.scriptPath);
+        try {
+          return JSON.parse(await fs.readFile(scriptPath, 'utf8'));
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `Failed to parse script file ${scriptPath}: ${message}`,
+          );
+        }
+      })()
     : null;
 
   if (script?.steps) {

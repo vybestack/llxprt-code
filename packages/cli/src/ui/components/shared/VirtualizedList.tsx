@@ -448,7 +448,7 @@ function VirtualizedList<T>(
       getScrollState: () => ({
         scrollTop: getScrollTop(),
         scrollHeight: totalHeight,
-        innerHeight: containerHeight,
+        innerHeight: scrollableContainerHeight,
       }),
     }),
     [
@@ -460,7 +460,6 @@ function VirtualizedList<T>(
       scrollableContainerHeight,
       getScrollTop,
       setPendingScrollTop,
-      containerHeight,
     ],
   );
 
@@ -491,4 +490,6 @@ const VirtualizedListWithForwardRef = forwardRef(VirtualizedList) as <T>(
 
 export { VirtualizedListWithForwardRef as VirtualizedList };
 
-VirtualizedList.displayName = 'VirtualizedList';
+(
+  VirtualizedListWithForwardRef as unknown as { displayName?: string }
+).displayName = 'VirtualizedList';

@@ -1910,5 +1910,55 @@ describe('Kitty Sequence Parsing', () => {
 
       expect(keyHandler).not.toHaveBeenCalled();
     });
+
+    it('should not ignore SGR mouse sequences when mouseEventsEnabled is false', async () => {
+      const keyHandler = vi.fn();
+
+      const { result } = renderHook(() => useKeypressContext(), {
+        wrapper: ({ children }) => (
+          <KeypressProvider kittyProtocolEnabled mouseEventsEnabled={false}>
+            {children}
+          </KeypressProvider>
+        ),
+      });
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      act(() => {
+        stdin.pressKey({ sequence: '\x1b[<0;10;20M' });
+      });
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sequence: '\x1b[<0;10;20M',
+        }),
+      );
+    });
+
+    it('should not ignore X11 mouse sequences when mouseEventsEnabled is false', async () => {
+      const keyHandler = vi.fn();
+
+      const { result } = renderHook(() => useKeypressContext(), {
+        wrapper: ({ children }) => (
+          <KeypressProvider kittyProtocolEnabled mouseEventsEnabled={false}>
+            {children}
+          </KeypressProvider>
+        ),
+      });
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      act(() => {
+        stdin.pressKey({ sequence: '\x1b[M !!' });
+      });
+
+      expect(keyHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sequence: '\x1b[M !!',
+        }),
+      );
+    });
   });
 });

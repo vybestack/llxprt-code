@@ -47,6 +47,8 @@ const DISABLE_MOUSE_EVENTS = ['\x1b[?1000l', '\x1b[?1002l', '\x1b[?1006l'].join(
   '',
 );
 
+const MAX_SGR_SEQUENCE_LENGTH = 50;
+
 export function enableMouseEvents(stdout: NodeJS.WriteStream = process.stdout) {
   stdout.write(ENABLE_MOUSE_EVENTS);
 }
@@ -224,7 +226,7 @@ export function isIncompleteMouseSequence(buffer: string): boolean {
   }
 
   if (buffer.startsWith(SGR_EVENT_PREFIX)) {
-    return !/[mM]/.test(buffer) && buffer.length < 50;
+    return !/[mM]/.test(buffer) && buffer.length < MAX_SGR_SEQUENCE_LENGTH;
   }
 
   return true;
