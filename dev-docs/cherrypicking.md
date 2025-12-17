@@ -2,6 +2,9 @@
 
 This guide documents the process for cherry-picking changes from the upstream gemini-cli repository while maintaining llxprt's multi-provider architecture and customizations.
 
+For the full end-to-end workflow (commit inventory → PICK/SKIP/REIMPLEMENT tables → batch plan → progress tracking),
+see `dev-docs/cherrypicking-runbook.md`. This document focuses on criteria, non-negotiables, and the verification checklist.
+
 ## Overview
 
 LLxprt Code is a fork of gemini-cli that adds multi-provider support (OpenAI, Anthropic, etc.) along with other enhancements. We regularly cherry-pick improvements from upstream while preserving our unique features.
@@ -18,7 +21,7 @@ git fetch upstream
 
 # Create a new branch from main
 git checkout main
-git checkout -b YYYYMMDD-gmerge  # e.g., 20250801-gmerge
+git checkout -b YYYYMMDDgemerge  # e.g., 20251215gemerge
 ```
 
 ### 2. Identify Commits to Cherry-pick
@@ -141,12 +144,17 @@ code changes.
 
 ### 5a. Batch Verification Phase (When Cherry-picking Multiple Commits)
 
-When cherry-picking multiple commits, **verify after each batch of 5 commits**:
+When cherry-picking multiple commits, **verify after every batch**, and run the full suite every **2nd** batch.
 
 **Verification Process**:
 
-1. After cherry-picking 5 commits (or fewer if it's the last batch)
-2. Run full verification suite:
+1. After completing a batch (often 5 PICK commits, or 1 REIMPLEMENT)
+2. Run quick verification:
+   ```bash
+   npm run lint
+   npm run typecheck
+   ```
+3. After every 2nd batch (Batch 2, 4, 6, …), run full verification suite:
    ```bash
    # Full verification in order
    npm run lint
@@ -157,14 +165,14 @@ When cherry-picking multiple commits, **verify after each batch of 5 commits**:
    node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
    git add -A  # Stage formatted changes if any
    ```
-3. Verify commits were actually applied:
+4. Verify commits were actually applied:
    ```bash
    # Check that all expected commits are present
    git log --oneline -10  # Review recent commits
    git diff HEAD~5..HEAD --stat  # Check changes in last 5 commits
    ```
-4. Fix any issues before proceeding to next batch
-5. Create a fix commit if needed:
+5. Fix any issues before proceeding to next batch
+6. Create a fix commit if needed:
    ```bash
    git add -A
    git commit -m "fix: resolve issues from batch N cherry-picks"
