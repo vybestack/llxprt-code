@@ -10,6 +10,7 @@ import {
   clearStringWidthCache,
   getCachedStringWidth,
   getStringWidthCacheSize,
+  MAX_STRING_WIDTH_CACHE_ENTRIES,
 } from './textUtils.js';
 
 describe('textUtils string width cache', () => {
@@ -22,7 +23,9 @@ describe('textUtils string width cache', () => {
       getCachedStringWidth(`é${i}`);
     }
 
-    expect(getStringWidthCacheSize()).toBeLessThanOrEqual(2048);
+    expect(getStringWidthCacheSize()).toBeLessThanOrEqual(
+      MAX_STRING_WIDTH_CACHE_ENTRIES,
+    );
   });
 
   it('does not cache plain ASCII strings (fast path)', () => {

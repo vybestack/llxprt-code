@@ -94,7 +94,7 @@ export function stripUnsafeCharacters(str: string): string {
 // NOTE: This cache must be bounded. Long-running sessions can produce an
 // unbounded stream of unique strings (especially during streaming rendering),
 // which would otherwise retain memory indefinitely.
-const MAX_STRING_WIDTH_CACHE_ENTRIES = 2048;
+export const MAX_STRING_WIDTH_CACHE_ENTRIES = 2048;
 const stringWidthCache = new Map<string, number>();
 
 export const getStringWidthCacheSize = (): number => stringWidthCache.size;
