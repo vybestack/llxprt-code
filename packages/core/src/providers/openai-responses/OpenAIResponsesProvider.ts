@@ -690,30 +690,59 @@ export class OpenAIResponsesProvider extends BaseProvider {
       );
     }
 
-    // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
-    const response = await retryWithBackoff(
-      () =>
-        fetch(responsesURL, {
-          method: 'POST',
-          headers,
-          body: bodyBlob,
-        }),
-      {
-        shouldRetryOnError: this.shouldRetryOnError.bind(this),
-      },
-    );
+    // @plan PLAN-20251215-issue868: Retry responses streaming end-to-end
+    // Retry must encompass both the initial fetch and the subsequent stream
+    // consumption, because transient network failures can occur mid-stream.
+    const maxStreamingAttempts = 2;
+    let streamingAttempt = 0;
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      this.logger.debug(
-        () => `API error ${response.status}: ${errorBody.substring(0, 500)}`,
+    while (streamingAttempt < maxStreamingAttempts) {
+      streamingAttempt++;
+
+      const response = await retryWithBackoff(
+        () =>
+          fetch(responsesURL, {
+            method: 'POST',
+            headers,
+            body: bodyBlob,
+          }),
+        {
+          shouldRetryOnError: this.shouldRetryOnError.bind(this),
+        },
       );
-      throw parseErrorResponse(response.status, errorBody, this.name);
-    }
 
-    if (response.body) {
-      for await (const message of parseResponsesStream(response.body)) {
-        yield message;
+      if (!response.ok) {
+        const errorBody = await response.text();
+        this.logger.debug(
+          () => `API error ${response.status}: ${errorBody.substring(0, 500)}`,
+        );
+        throw parseErrorResponse(response.status, errorBody, this.name);
+      }
+
+      if (!response.body) {
+        this.logger.debug(() => 'Response body missing, returning early');
+        return;
+      }
+
+      try {
+        for await (const message of parseResponsesStream(response.body)) {
+          yield message;
+        }
+        return;
+      } catch (error) {
+        const canRetryStream = this.shouldRetryOnError(error);
+        this.logger.debug(
+          () =>
+            `Responses stream error on attempt ${streamingAttempt}/${maxStreamingAttempts}: ${String(error)}`,
+        );
+
+        if (!canRetryStream || streamingAttempt >= maxStreamingAttempts) {
+          throw error;
+        }
+
+        // Retry by restarting the request from the beginning.
+        // NOTE: This can re-yield partial content from a previous attempt.
+        continue;
       }
     }
   }
