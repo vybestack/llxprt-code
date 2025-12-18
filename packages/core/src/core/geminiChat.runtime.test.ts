@@ -169,4 +169,90 @@ describe('GeminiChat runtime context', () => {
     expect(Array.isArray(contents)).toBe(true);
     expect(contents?.length).toBeGreaterThan(0);
   });
+
+  it('does not mutate ProviderManager active provider when runtimeState.provider differs', async () => {
+    const openaiCalls: GenerateChatOptions[] = [];
+    const anthropicCalls: GenerateChatOptions[] = [];
+
+    const openaiProvider: IProvider = {
+      name: 'openai',
+      isDefault: true,
+      getModels: vi.fn(async () => []),
+      getDefaultModel: () => 'openai-model',
+      generateChatCompletion: vi.fn(async function* (
+        options: GenerateChatOptions,
+      ) {
+        openaiCalls.push(options);
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'openai' }],
+        };
+      }),
+      getServerTools: () => [],
+      invokeServerTool: vi.fn(),
+      getAuthToken: vi.fn(async () => 'openai-auth-token'),
+    };
+
+    const anthropicProvider: IProvider = {
+      name: 'anthropic',
+      getModels: vi.fn(async () => []),
+      getDefaultModel: () => 'claude-test',
+      generateChatCompletion: vi.fn(async function* (
+        options: GenerateChatOptions,
+      ) {
+        anthropicCalls.push(options);
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'anthropic' }],
+        };
+      }),
+      getServerTools: () => [],
+      invokeServerTool: vi.fn(),
+      getAuthToken: vi.fn(async () => 'anthropic-auth-token'),
+    };
+
+    manager.registerProvider(openaiProvider);
+    manager.registerProvider(anthropicProvider);
+    settingsService.set('activeProvider', 'openai');
+
+    const runtimeState = createAgentRuntimeState({
+      runtimeId: 'runtime-test',
+      provider: 'anthropic',
+      model: 'claude-test',
+      authType: AuthType.USE_NONE,
+      sessionId: config.getSessionId(),
+    });
+
+    const historyService = new HistoryService();
+    const view = createAgentRuntimeContext({
+      state: runtimeState,
+      history: historyService,
+      settings: {
+        compressionThreshold: 0.8,
+        contextLimit: 128000,
+        preserveThreshold: 0.2,
+        telemetry: {
+          enabled: true,
+          target: null,
+        },
+      },
+      provider: createProviderAdapterFromManager(config.getProviderManager()),
+      telemetry: createTelemetryAdapterFromConfig(config),
+      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      providerRuntime: { ...providerRuntime },
+    });
+
+    const chat = new GeminiChat(
+      view,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
+
+    await chat.sendMessage({ message: 'Hello there!' }, 'prompt-123');
+
+    expect(openaiCalls).toHaveLength(0);
+    expect(anthropicCalls).toHaveLength(1);
+    expect(settingsService.get('activeProvider')).toBe('openai');
+  });
 });
