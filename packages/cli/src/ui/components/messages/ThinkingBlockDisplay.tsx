@@ -56,7 +56,7 @@ export const ThinkingBlockDisplay: React.FC<ThinkingBlockDisplayProps> = ({
 
   return (
     <Box flexDirection="column" marginTop={0} marginBottom={1} paddingX={1}>
-      <Text italic color={Colors.Comment} dimColor>
+      <Text italic color={Colors.DimComment}>
         {block.thought}
       </Text>
     </Box>

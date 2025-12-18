@@ -24,6 +24,7 @@ const atomOneDarkColors: ColorsTheme = {
   DiffRemovedBackground: '#562B2F',
   DiffRemovedForeground: 'white',
   Comment: '#5c6370',
+  DimComment: '#424854',
   Gray: '#5c6370',
   GradientColors: ['#61aeee', '#98c379'],
 };

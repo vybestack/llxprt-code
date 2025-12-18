@@ -8,7 +8,7 @@ import { type ColorsTheme, Theme } from './theme.js';
 
 const greenScreenColors: ColorsTheme = {
   type: 'dark',
-  Background: '#1d2a1d',
+  Background: '#000000',
   Foreground: '#6a9955',
   LightBlue: '#6a9955',
   AccentBlue: '#6a9955',
@@ -24,6 +24,7 @@ const greenScreenColors: ColorsTheme = {
   DiffRemovedBackground: '#6a9955',
   DiffRemovedForeground: '#000000',
   Comment: '#6a9955',
+  DimComment: '#4a7035',
   Gray: '#6a9955',
   GradientColors: ['#00ff00', '#6a9955'],
 };

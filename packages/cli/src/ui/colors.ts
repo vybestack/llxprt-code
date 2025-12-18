@@ -66,6 +66,9 @@ export const Colors: ColorsTheme = {
   get Comment() {
     return themeManager.getActiveTheme().colors.Comment;
   },
+  get DimComment() {
+    return themeManager.getActiveTheme().colors.DimComment;
+  },
   get Gray() {
     return themeManager.getActiveTheme().colors.Gray;
   },

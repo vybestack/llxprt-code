@@ -27,6 +27,7 @@ describe('validateCustomTheme', () => {
     DiffAdded: '#00FF00',
     DiffRemoved: '#FF0000',
     Comment: '#808080',
+    DimComment: '#606060',
     Gray: '#808080',
   };
 
