@@ -152,8 +152,6 @@ export function usePromptCompletion({
         )
       ) {
         console.error('prompt completion error:', error);
-        // Clear the last requested text to allow retry only on real errors
-        lastRequestedTextRef.current = '';
       }
       clearGhostText();
     } finally {
