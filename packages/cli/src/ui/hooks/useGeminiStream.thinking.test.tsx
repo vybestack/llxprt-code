@@ -28,7 +28,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { FinishReason } from '@google/genai';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
-import { MessageType, HistoryItemGemini } from '../types.js';
+import { MessageType, HistoryItemGemini, StreamingState } from '../types.js';
 import { LoadedSettings } from '../../config/settings.js';
 
 const inkMock = vi.hoisted(() => {
@@ -620,6 +620,78 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
     expect(historyItem.thinkingBlocks!.length).toBeGreaterThan(0);
   });
 
+  describe('Submission queue (regression #862)', () => {
+    it('drains queued prompts sequentially when multiple are queued', async () => {
+      const streamResolvers: Array<() => void> = [];
+      mockSendMessageStream.mockImplementation(() =>
+        (async function* () {
+          await new Promise<void>((resolve) => {
+            streamResolvers.push(resolve);
+          });
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: FinishReason.STOP },
+          } as any;
+        })(),
+      );
+
+      const { result } = renderTestHook();
+
+      act(() => {
+        void result.current.submitQuery('first prompt');
+      });
+
+      await waitFor(() =>
+        expect(result.current.streamingState).toBe(StreamingState.Responding),
+      );
+
+      act(() => {
+        void result.current.submitQuery('second prompt');
+        void result.current.submitQuery('third prompt');
+      });
+
+      // While the first prompt is still responding, subsequent prompts should
+      // only be enqueued.
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+
+      await waitFor(() => expect(streamResolvers.length).toBeGreaterThan(0));
+
+      act(() => {
+        streamResolvers[0]?.();
+      });
+
+      await waitFor(() =>
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(2),
+      );
+      await waitFor(() => expect(streamResolvers.length).toBeGreaterThan(1));
+
+      // Regression: we previously scheduled the next queued submission twice
+      // (on stream finish + in submitQuery finally), which could submit the same
+      // queued prompt multiple times.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
+      expect(streamResolvers).toHaveLength(2);
+
+      act(() => {
+        streamResolvers[1]?.();
+      });
+
+      await waitFor(() =>
+        expect(mockSendMessageStream).toHaveBeenCalledTimes(3),
+      );
+      await waitFor(() => expect(streamResolvers.length).toBeGreaterThan(2));
+
+      act(() => {
+        streamResolvers[2]?.();
+      });
+
+      await waitFor(() =>
+        expect(result.current.streamingState).toBe(StreamingState.Idle),
+      );
+    });
+  });
+
   it('should include thinkingBlocks when reasoning.includeInResponse is false (storage test)', async () => {
     // Mock settings with reasoning.includeInResponse = false
     const settingsWithoutReasoning: LoadedSettings = {
@@ -664,6 +736,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
         () => {},
         () => Promise.resolve(),
         false,
+
         () => {},
         () => {},
         () => {},
