@@ -535,6 +535,7 @@ export async function applyProfileWithGuards(
   // When switchActiveProvider calls getModels(), AuthResolver will find
   // the auth-key in SettingsService (set in Step 2)
   // CRITICAL: Preserve the auth and base-url ephemerals we just set
+  // Also preserve reasoning settings so they survive provider switches (fixes #890)
   const providerSwitch = await switchActiveProvider(targetProviderName, {
     autoOAuth: false,
     preserveEphemerals: [
@@ -543,6 +544,11 @@ export async function applyProfileWithGuards(
       'base-url',
       'GOOGLE_CLOUD_PROJECT',
       'GOOGLE_CLOUD_LOCATION',
+      // Reasoning/thinking settings - fixes #890
+      'reasoning.enabled',
+      'reasoning.budgetTokens',
+      'reasoning.stripFromContext',
+      'reasoning.includeInContext',
     ],
   });
   const infoMessages = providerSwitch.infoMessages.filter(
