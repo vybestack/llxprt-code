@@ -405,7 +405,12 @@ Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
     );
   }
 
-  async logout(): Promise<void> {
+  async refreshToken(_currentToken: OAuthToken): Promise<OAuthToken | null> {
+    await this.ensureInitialized();
+    return null;
+  }
+
+  async logout(_token?: OAuthToken): Promise<void> {
     await this.ensureInitialized();
 
     // NO ERROR SUPPRESSION - let it fail loudly

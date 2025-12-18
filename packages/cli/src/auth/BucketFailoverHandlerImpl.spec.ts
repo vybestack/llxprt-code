@@ -70,7 +70,7 @@ describe('BucketFailoverHandlerImpl', () => {
       name: 'anthropic',
       initiateAuth: vi.fn(async () => undefined),
       getToken: vi.fn(async () => null),
-      refreshIfNeeded: vi.fn(async () => null),
+      refreshToken: vi.fn(async () => null),
     };
 
     oauthManager.registerProvider(provider);

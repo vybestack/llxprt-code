@@ -17,7 +17,7 @@ describe('submitOAuthCode', () => {
       submitAuthCode: vi.fn(),
       initiateAuth: vi.fn(),
       getToken: vi.fn(),
-      refreshIfNeeded: vi.fn(),
+      refreshToken: vi.fn(),
     };
   }
 
@@ -125,7 +125,7 @@ describe('submitOAuthCode', () => {
       name: 'limited',
       initiateAuth: vi.fn(),
       getToken: vi.fn(),
-      refreshIfNeeded: vi.fn(),
+      refreshToken: vi.fn(),
     };
     const oauthManager = {
       getProvider: vi.fn(() => providerWithoutSubmit),

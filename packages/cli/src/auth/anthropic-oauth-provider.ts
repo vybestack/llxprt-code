@@ -479,56 +479,79 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     return currentToken;
   }
 
+  async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
+    await this.ensureInitialized();
+
+    if (
+      currentToken.refresh_token &&
+      currentToken.refresh_token.trim().length > 0 &&
+      currentToken.refresh_token.length < 1000
+    ) {
+      try {
+        const refreshedToken = await this.deviceFlow.refreshToken(
+          currentToken.refresh_token,
+        );
+
+        return {
+          ...currentToken,
+          ...refreshedToken,
+          refresh_token:
+            refreshedToken.refresh_token ?? currentToken.refresh_token,
+        };
+      } catch (error) {
+        const refreshError =
+          error instanceof OAuthError
+            ? error
+            : OAuthErrorFactory.authorizationExpired(this.name, {
+                originalError:
+                  error instanceof Error ? error.message : String(error),
+                operation: 'refreshToken',
+              });
+
+        this.logger.debug(
+          () =>
+            `Token refresh failed: ${JSON.stringify(refreshError.toLogEntry())}`,
+        );
+
+        return null;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * @plan PLAN-20250823-AUTHFIXES.P08
    * @requirement REQ-002.1
    * @pseudocode lines 100-112
    */
-  async logout(): Promise<void> {
+  async logout(token?: OAuthToken): Promise<void> {
     await this.ensureInitialized();
 
     // NO ERROR SUPPRESSION - let it fail loudly
-    if (this._tokenStore) {
-      // @pseudocode lines 102-108: Try to revoke token with provider
-      let token: OAuthToken | null = null;
+    if (token) {
       try {
-        token = await this._tokenStore.getToken('anthropic');
-      } catch (error) {
-        this.logger.debug(
-          () => `Could not retrieve token during logout: ${error}`,
-        );
-      }
-
-      if (token) {
-        try {
-          // Check if revokeToken method exists before calling
-          if (
-            'revokeToken' in this.deviceFlow &&
-            typeof this.deviceFlow.revokeToken === 'function'
-          ) {
-            await (
-              this.deviceFlow as unknown as {
-                revokeToken: (token: string) => Promise<void>;
-              }
-            ).revokeToken(token.access_token);
-          } else {
-            // Method not implemented yet - this is not a critical failure
-            this.logger.debug(
-              () =>
-                'Token revocation not supported: revokeToken method not implemented',
-            );
-          }
-        } catch (error) {
-          // @pseudocode lines 106-108: Log revocation failures but continue
+        if (
+          'revokeToken' in this.deviceFlow &&
+          typeof this.deviceFlow.revokeToken === 'function'
+        ) {
+          await (
+            this.deviceFlow as unknown as {
+              revokeToken: (token: string) => Promise<void>;
+            }
+          ).revokeToken(token.access_token);
+        } else {
           this.logger.debug(
             () =>
-              `Token revocation failed (continuing with local cleanup): ${error}`,
+              'Token revocation not supported: revokeToken method not implemented',
           );
         }
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `Token revocation failed (continuing with local cleanup): ${error}`,
+        );
       }
-
-      // @pseudocode line 111: Remove token from storage - THIS MUST SUCCEED
-      await this._tokenStore.removeToken('anthropic');
     }
 
     // @pseudocode line 112: Log successful logout

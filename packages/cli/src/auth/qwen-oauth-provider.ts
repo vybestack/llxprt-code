@@ -392,18 +392,56 @@ export class QwenOAuthProvider implements OAuthProvider {
     return currentToken;
   }
 
+  async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
+    await this.ensureInitialized();
+
+    if (!currentToken.refresh_token) {
+      return null;
+    }
+
+    try {
+      // Skip actual refresh in test environment to avoid network calls
+      if (process.env.NODE_ENV === 'test') {
+        throw new Error('Simulated refresh failure in test environment');
+      }
+
+      const refreshedToken = await this.deviceFlow.refreshToken(
+        currentToken.refresh_token,
+      );
+
+      return {
+        ...currentToken,
+        ...refreshedToken,
+        refresh_token:
+          refreshedToken.refresh_token ?? currentToken.refresh_token,
+      };
+    } catch (error) {
+      const refreshError =
+        error instanceof OAuthError
+          ? error
+          : OAuthErrorFactory.authorizationExpired(this.name, {
+              originalError:
+                error instanceof Error ? error.message : String(error),
+              operation: 'refreshToken',
+            });
+
+      console.debug('Token refresh failed:', refreshError.toLogEntry());
+      return null;
+    }
+  }
+
   /**
    * @plan PLAN-20250823-AUTHFIXES.P05
    * @requirement REQ-001.1
    * @pseudocode lines 87-89
    */
-  async logout(): Promise<void> {
+  async logout(_token?: OAuthToken): Promise<void> {
     await this.ensureInitialized();
 
     return this.errorHandler.handleGracefully(
       async () => {
         // Line 88: AWAIT this.tokenStore.removeToken('qwen')
-        if (this.tokenStore) {
+        if (this.tokenStore && !_token) {
           try {
             await this.tokenStore.removeToken('qwen');
           } catch (error) {
@@ -418,7 +456,9 @@ export class QwenOAuthProvider implements OAuthProvider {
         }
 
         // Line 89: PRINT "Successfully logged out from Qwen"
-        console.log('Successfully logged out from Qwen');
+        if (!_token) {
+          console.log('Successfully logged out from Qwen');
+        }
       },
       undefined, // Always complete logout even if some steps fail
       this.name,

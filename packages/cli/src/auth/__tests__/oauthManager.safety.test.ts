@@ -20,7 +20,7 @@ function createProvider(name: string): OAuthProvider {
       /* no-op for tests */
     },
     getToken: async () => null,
-    refreshIfNeeded: async () => null,
+    refreshToken: async () => null,
   };
 }
 
@@ -32,7 +32,7 @@ function createLoggingWrapper(
     name: overrideName ?? provider.name,
     initiateAuth: provider.initiateAuth.bind(provider),
     getToken: provider.getToken.bind(provider),
-    refreshIfNeeded: provider.refreshIfNeeded.bind(provider),
+    refreshToken: provider.refreshToken.bind(provider),
     get wrappedProvider() {
       return provider;
     },

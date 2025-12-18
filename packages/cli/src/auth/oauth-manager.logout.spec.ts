@@ -82,7 +82,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       name: 'qwen',
       initiateAuth: vi.fn(async () => undefined),
       getToken: vi.fn(async () => null),
-      refreshIfNeeded: vi.fn(async () => null),
+      refreshToken: vi.fn(async () => null),
       logout: vi.fn().mockResolvedValue(undefined),
       clearState: vi.fn(),
       clearAuthCache: vi.fn(),
@@ -117,7 +117,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       name: 'qwen',
       initiateAuth: vi.fn(async () => undefined),
       getToken: vi.fn(async () => null),
-      refreshIfNeeded: vi.fn(async () => null),
+      refreshToken: vi.fn(async () => null),
       logout: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -149,7 +149,7 @@ describe('OAuthManager.logout runtime cache handling', () => {
       name: 'qwen',
       initiateAuth: vi.fn(async () => undefined),
       getToken: vi.fn(async () => null),
-      refreshIfNeeded: vi.fn(async () => null),
+      refreshToken: vi.fn(async () => null),
       logout: vi.fn().mockResolvedValue(undefined),
     };
 

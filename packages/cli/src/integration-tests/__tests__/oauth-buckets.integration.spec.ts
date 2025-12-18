@@ -56,8 +56,8 @@ function createMockProvider(name: string): OAuthProvider {
     async getToken(): Promise<OAuthToken | null> {
       return createMockToken('default');
     },
-    async refreshIfNeeded(): Promise<OAuthToken | null> {
-      return createMockToken('default');
+    async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
+      return createMockToken(`refreshed-${currentToken.access_token}`);
     },
   };
 }
