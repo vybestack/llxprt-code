@@ -75,6 +75,38 @@ describe('setCommand runtime integration', () => {
     });
   });
 
+  it('sets streaming with boolean true value', async () => {
+    // Issue #884: /set streaming true should work without error
+    const result = await setCommand.action!(context, 'streaming true');
+
+    expect(result).toEqual({
+      type: 'message',
+      messageType: 'info',
+      content: `Ephemeral setting 'streaming' set to "enabled" (session only, use /profile save to persist)`,
+    });
+    // setEphemeralSetting is called via the runtime helper, not directly on config
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'streaming',
+      'enabled',
+    );
+  });
+
+  it('sets streaming with boolean false value', async () => {
+    // Issue #884: /set streaming false should work without error
+    const result = await setCommand.action!(context, 'streaming false');
+
+    expect(result).toEqual({
+      type: 'message',
+      messageType: 'info',
+      content: `Ephemeral setting 'streaming' set to "disabled" (session only, use /profile save to persist)`,
+    });
+    // setEphemeralSetting is called via the runtime helper, not directly on config
+    expect(mockRuntime.setEphemeralSetting).toHaveBeenCalledWith(
+      'streaming',
+      'disabled',
+    );
+  });
+
   it('rejects invalid ephemeral keys', async () => {
     const result = await setCommand.action!(context, 'invalid-key value');
 
