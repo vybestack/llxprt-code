@@ -59,10 +59,7 @@ import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from './openaiRequestParams.js';
 import { ensureJsonSafe } from '../../utils/unicodeUtils.js';
 import { ToolCallPipeline } from './ToolCallPipeline.js';
-import {
-  buildToolResponsePayload,
-  EMPTY_TOOL_RESULT_PLACEHOLDER,
-} from '../utils/toolResponsePayload.js';
+import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import {
   filterThinkingForContext,
@@ -77,11 +74,8 @@ import {
 import type { DumpMode } from '../utils/dumpContext.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
 
-const MAX_TOOL_RESPONSE_CHARS = 1024;
 const MAX_TOOL_RESPONSE_RETRY_CHARS = 512;
 const TOOL_ARGS_PREVIEW_LENGTH = 500;
-type ToolReplayMode = 'native' | 'textual';
-const TEXTUAL_TOOL_REPLAY_MODELS = new Set(['openrouter/polaris-alpha']);
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
@@ -1079,46 +1073,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return JSON.stringify({ value: parameters });
   }
 
-  private determineToolReplayMode(model?: string): ToolReplayMode {
-    if (!model) {
-      return 'native';
-    }
-    const normalized = model.toLowerCase();
-    if (TEXTUAL_TOOL_REPLAY_MODELS.has(normalized)) {
-      return 'textual';
-    }
-    return 'native';
-  }
-
-  private describeToolCallForText(block: ToolCallBlock): string {
-    const normalizedArgs = this.normalizeToolCallArguments(block.parameters);
-    const preview =
-      normalizedArgs.length > MAX_TOOL_RESPONSE_CHARS
-        ? `${normalizedArgs.slice(0, MAX_TOOL_RESPONSE_CHARS)}… [truncated ${normalizedArgs.length - MAX_TOOL_RESPONSE_CHARS} chars]`
-        : normalizedArgs;
-    const callId = block.id ? ` ${this.normalizeToOpenAIToolId(block.id)}` : '';
-    return `[TOOL CALL${callId ? ` ${callId}` : ''}] ${block.name ?? 'unknown_tool'} args=${preview}`;
-  }
-
-  private describeToolResponseForText(
-    block: ToolResponseBlock,
-    config?: Config,
-  ): string {
-    const payload = buildToolResponsePayload(block, config);
-    const header = `[TOOL RESULT] ${payload.toolName ?? block.toolName ?? 'unknown_tool'} (${payload.status ?? 'unknown'})`;
-    const bodyParts: string[] = [];
-    if (payload.error) {
-      bodyParts.push(`error: ${payload.error}`);
-    }
-    if (payload.result && payload.result !== EMPTY_TOOL_RESULT_PLACEHOLDER) {
-      bodyParts.push(payload.result);
-    }
-    if (payload.limitMessage) {
-      bodyParts.push(payload.limitMessage);
-    }
-    return bodyParts.length > 0 ? `${header}\n${bodyParts.join('\n')}` : header;
-  }
-
   private buildToolResponseContent(
     block: ToolResponseBlock,
     config?: Config,
@@ -1195,118 +1149,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
     });
     return modified;
-  }
-
-  /**
-   * Convert IContent array to OpenAI ChatCompletionMessageParam array
-   */
-  private convertToOpenAIMessages(
-    contents: IContent[],
-    mode: ToolReplayMode = 'native',
-    config?: Config,
-  ): OpenAI.Chat.ChatCompletionMessageParam[] {
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-
-    for (const content of contents) {
-      if (content.speaker === 'human') {
-        // Convert human messages to user messages
-        const textBlocks = content.blocks.filter(
-          (b) => b.type === 'text',
-        ) as TextBlock[];
-        const text = textBlocks.map((b) => b.text).join('\n');
-        if (text) {
-          messages.push({
-            role: 'user',
-            content: text,
-          });
-        }
-      } else if (content.speaker === 'ai') {
-        // Convert AI messages
-        const textBlocks = content.blocks.filter(
-          (b) => b.type === 'text',
-        ) as TextBlock[];
-        const text = textBlocks.map((b) => b.text).join('\n');
-        const toolCalls = content.blocks.filter(
-          (b) => b.type === 'tool_call',
-        ) as ToolCallBlock[];
-
-        if (toolCalls.length > 0) {
-          if (mode === 'textual') {
-            const segments: string[] = [];
-            if (text) {
-              segments.push(text);
-            }
-            for (const tc of toolCalls) {
-              segments.push(this.describeToolCallForText(tc));
-            }
-            const combined = segments.join('\n\n').trim();
-            if (combined) {
-              messages.push({
-                role: 'assistant',
-                content: combined,
-              });
-            }
-          } else {
-            // Assistant message with tool calls
-            // CRITICAL for Mistral API compatibility (#760):
-            // When tool_calls are present, we must NOT include a content property at all
-            // (not even null). Mistral's OpenAI-compatible API requires this.
-            // See: https://docs.mistral.ai/capabilities/function_calling
-            messages.push({
-              role: 'assistant',
-              tool_calls: toolCalls.map((tc) => ({
-                id: this.normalizeToOpenAIToolId(tc.id),
-                type: 'function' as const,
-                function: {
-                  name: tc.name,
-                  arguments: this.normalizeToolCallArguments(tc.parameters),
-                },
-              })),
-            });
-          }
-        } else if (textBlocks.length > 0) {
-          // Plain assistant message
-          messages.push({
-            role: 'assistant',
-            content: text,
-          });
-        }
-      } else if (content.speaker === 'tool') {
-        // Convert tool responses
-        const toolResponses = content.blocks.filter(
-          (b) => b.type === 'tool_response',
-        ) as ToolResponseBlock[];
-        if (mode === 'textual') {
-          const segments = toolResponses
-            .map((tr) => this.describeToolResponseForText(tr, config))
-            .filter(Boolean);
-          if (segments.length > 0) {
-            messages.push({
-              role: 'user',
-              content: segments.join('\n\n'),
-            });
-          }
-        } else {
-          for (const tr of toolResponses) {
-            // CRITICAL for Mistral API compatibility (#760):
-            // Tool messages must include a name field matching the function name.
-            // See: https://docs.mistral.ai/capabilities/function_calling
-            // Note: The OpenAI SDK types don't include name, but Mistral requires it.
-            // We use a type assertion to add this required field.
-            messages.push({
-              role: 'tool',
-              content: this.buildToolResponseContent(tr, config),
-              tool_call_id: this.normalizeToOpenAIToolId(tr.callId),
-              name: tr.toolName,
-            } as OpenAI.Chat.ChatCompletionToolMessageParam);
-          }
-        }
-      }
-    }
-
-    // Validate tool message sequence to prevent API errors
-    // This ensures each tool message has a corresponding tool_calls in previous message
-    return this.validateToolMessageSequence(messages);
   }
 
   /**
@@ -1646,7 +1488,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   ): AsyncGenerator<IContent, void, unknown> {
     const { contents, tools, metadata } = options;
     const model = options.resolved.model || this.getDefaultModel();
-    const toolReplayMode = this.determineToolReplayMode(model);
     const abortSignal = metadata?.abortSignal as AbortSignal | undefined;
     const ephemeralSettings = options.invocation?.ephemerals ?? {};
 
@@ -1682,20 +1523,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Convert IContent to OpenAI messages format
     // Use buildMessagesWithReasoning for reasoning-aware message building
     // Pass detectedFormat so that Kimi K2 tool IDs are generated correctly
-    const messages =
-      toolReplayMode === 'native'
-        ? this.buildMessagesWithReasoning(contents, options, detectedFormat)
-        : this.convertToOpenAIMessages(
-            contents,
-            toolReplayMode,
-            options.config ?? options.runtime?.config ?? this.globalConfig,
-          );
-    if (logger.enabled && toolReplayMode !== 'native') {
-      logger.debug(
-        () =>
-          `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
-      );
-    }
+    const messages = this.buildMessagesWithReasoning(
+      contents,
+      options,
+      detectedFormat,
+    );
 
     // Convert Gemini format tools to OpenAI format using the schema converter
     // This ensures required fields are always present in tool schemas
@@ -3242,9 +3074,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       });
     }
 
-    // Determine tool replay mode for model compatibility (e.g., polaris-alpha)
-    const toolReplayMode = this.determineToolReplayMode(model);
-
     // Detect the tool format to use BEFORE building messages
     // This is needed so that Kimi K2 tool IDs can be generated in the correct format
     const detectedFormat = this.detectToolFormat();
@@ -3263,22 +3092,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Convert IContent to OpenAI messages format
     // Use buildMessagesWithReasoning for reasoning-aware message building
     // Pass detectedFormat so that Kimi K2 tool IDs are generated correctly
-    const messages =
-      toolReplayMode === 'native'
-        ? this.buildMessagesWithReasoning(contents, options, detectedFormat)
-        : this.convertToOpenAIMessages(
-            contents,
-            toolReplayMode,
-            options.config ?? options.runtime?.config ?? this.globalConfig,
-          );
-
-    // Log tool replay mode usage for debugging
-    if (logger.enabled && toolReplayMode !== 'native') {
-      logger.debug(
-        () =>
-          `[OpenAIProvider] Using textual tool replay mode for model '${model}'`,
-      );
-    }
+    const messages = this.buildMessagesWithReasoning(
+      contents,
+      options,
+      detectedFormat,
+    );
 
     // Convert Gemini format tools to OpenAI format using the schema converter
     // This ensures required fields are always present in tool schemas

@@ -20,6 +20,8 @@ import type {
   ToolCallBlock,
   ToolResponseBlock,
 } from '../../services/history/IContent.js';
+import type { Config } from '../../config/config.js';
+import { limitOutputTokens } from '../../utils/toolOutputLimiter.js';
 import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 
 export type ResponsesInputItem =
@@ -35,6 +37,7 @@ export type ResponsesInputItem =
 export function buildResponsesInputFromContent(
   content: IContent[],
   systemPrompt?: string,
+  config?: Config,
 ): ResponsesInputItem[] {
   const input: ResponsesInputItem[] = [];
 
@@ -85,14 +88,26 @@ export function buildResponsesInputFromContent(
       ) as ToolResponseBlock[];
 
       for (const toolResponseBlock of toolResponseBlocks) {
-        const result =
+        const rawResult =
           typeof toolResponseBlock.result === 'string'
             ? toolResponseBlock.result
             : JSON.stringify(toolResponseBlock.result);
+
+        const limited =
+          config === undefined
+            ? { content: rawResult, wasTruncated: false }
+            : limitOutputTokens(
+                rawResult,
+                config,
+                toolResponseBlock.toolName ?? 'tool_response',
+              );
+
+        const candidate = limited.content || limited.message || '';
+
         input.push({
           type: 'function_call_output',
           call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
-          output: result,
+          output: candidate,
         });
       }
     }
