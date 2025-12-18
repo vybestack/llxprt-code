@@ -228,17 +228,21 @@ export function useReactToolScheduler(
       const {
         schedulerConfig,
         onAllToolCallsComplete,
-        outputUpdateHandler,
+        outputUpdateHandler: _outputUpdateHandler,
         onToolCallsUpdate,
       } = args;
+      // Note: _outputUpdateHandler is intentionally not called - see comment below
 
       const schedulerId = Symbol('subagent-scheduler');
 
       return new CoreToolScheduler({
         config: schedulerConfig,
+        // Only update the local UI state - don't call outputUpdateHandler as well,
+        // since that would cause duplicate output (the subagent's outputUpdateHandler
+        // calls onMessage which goes to task.updateOutput, creating a second display).
+        // The local updateToolCallOutput handles the UI rendering for subagent tools.
         outputUpdateHandler: (toolCallId, chunk) => {
           updateToolCallOutput(schedulerId, toolCallId, chunk);
-          outputUpdateHandler(toolCallId, chunk);
         },
         onToolCallsUpdate: (calls) => {
           replaceToolCallsForScheduler(schedulerId, calls);

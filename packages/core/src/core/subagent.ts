@@ -1507,8 +1507,19 @@ export class SubAgentScope {
         );
       }
 
+      // Only display resultDisplay for tools that don't stream live output.
+      // Tools with canUpdateOutput=true already streamed their output via outputUpdateHandler,
+      // so displaying resultDisplay here would cause duplicate output (fixes #898).
+      const toolCanUpdateOutput =
+        call.status === 'success' && call.tool?.canUpdateOutput === true;
+
       const display = call.response?.resultDisplay;
-      if (typeof display === 'string' && this.onMessage && display.trim()) {
+      if (
+        typeof display === 'string' &&
+        this.onMessage &&
+        display.trim() &&
+        !toolCanUpdateOutput
+      ) {
         this.onMessage(display);
       }
     }
