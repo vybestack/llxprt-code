@@ -74,7 +74,6 @@ import {
 import type { DumpMode } from '../utils/dumpContext.js';
 import { extractCacheMetrics } from '../utils/cacheMetricsExtractor.js';
 
-const MAX_TOOL_RESPONSE_RETRY_CHARS = 512;
 const TOOL_ARGS_PREVIEW_LENGTH = 500;
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
@@ -1882,11 +1881,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           if (
             !compressedOnce &&
             this.shouldCompressToolMessages(error, logger) &&
-            this.compressToolMessages(
-              requestBody.messages,
-              MAX_TOOL_RESPONSE_RETRY_CHARS,
-              logger,
-            )
+            this.compressToolMessages(requestBody.messages, 512, logger)
           ) {
             compressedOnce = true;
             logger.warn(
@@ -3393,11 +3388,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           if (
             !compressedOnce &&
             this.shouldCompressToolMessages(error, logger) &&
-            this.compressToolMessages(
-              requestBody.messages,
-              MAX_TOOL_RESPONSE_RETRY_CHARS,
-              logger,
-            )
+            this.compressToolMessages(requestBody.messages, 512, logger)
           ) {
             compressedOnce = true;
             logger.warn(
@@ -3525,11 +3516,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           if (
             !compressedOnce &&
             this.shouldCompressToolMessages(error, logger) &&
-            this.compressToolMessages(
-              requestBody.messages,
-              MAX_TOOL_RESPONSE_RETRY_CHARS,
-              logger,
-            )
+            this.compressToolMessages(requestBody.messages, 512, logger)
           ) {
             compressedOnce = true;
             logger.warn(
