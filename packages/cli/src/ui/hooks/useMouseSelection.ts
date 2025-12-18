@@ -257,10 +257,16 @@ export function useMouseSelection({
 
   const copySelectionToClipboard = useCallback(async () => {
     if (!selection || selection.rangeCount === 0) return;
+    // Issue #885: Snapshot the text immediately before any async operations
+    // to prevent race conditions where selection changes during copy
     const text = selection.toString();
     if (text.length === 0) return;
 
+    // Call onCopiedText with the snapshotted text
     onCopiedText?.(text);
+
+    // Issue #885: copyTextToClipboard now returns a result indicating success/failure
+    // This allows callers to handle failures appropriately if needed
     await copyTextToClipboard(text, stdout);
   }, [onCopiedText, selection, stdout]);
 

@@ -10,7 +10,6 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import { EmojiFilterMode } from '@vybestack/llxprt-code-core';
 import type {
   CommandArgumentSchema,
   LiteralArgument,
@@ -18,7 +17,10 @@ import type {
   ValueArgument,
 } from './schema/types.js';
 import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { ephemeralSettingHelp } from '../../settings/ephemeralSettings.js';
+import {
+  ephemeralSettingHelp,
+  parseEphemeralSettingValue,
+} from '../../settings/ephemeralSettings.js';
 import {
   filterStrings,
   filterCompletions,
@@ -757,287 +759,17 @@ export const setCommand: SlashCommand = {
 
     const value = parts.slice(1).join(' '); // Join remaining parts as value
 
-    // List of valid ephemeral settings from the specification
-    const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
-
-    // Check if it's a valid ephemeral key
-    if (!validEphemeralKeys.includes(key)) {
+    // Use parseEphemeralSettingValue for validation - single source of truth
+    // This eliminates duplicate validation and handles type coercion correctly
+    const parseResult = parseEphemeralSettingValue(key, value);
+    if (!parseResult.success) {
       return {
         type: 'message',
         messageType: 'error',
-        content: `Invalid setting key: ${key}. Valid keys are: ${validEphemeralKeys.join(', ')}`,
+        content: parseResult.message,
       };
     }
-
-    // Parse the value
-    let parsedValue = parseValue(value);
-
-    // Validate specific settings
-    if (key === 'compression-threshold') {
-      const numValue = parsedValue as number;
-      if (typeof numValue !== 'number' || numValue <= 0 || numValue > 1) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `compression-threshold must be a decimal between 0 and 1 (e.g., 0.7 for 70%)`,
-        };
-      }
-    }
-
-    if (key === 'context-limit') {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        numValue <= 0 ||
-        !Number.isInteger(numValue)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `context-limit must be a positive integer (e.g., 100000)`,
-        };
-      }
-    }
-
-    // Validate socket configuration settings
-    if (key === 'socket-timeout') {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        numValue <= 0 ||
-        !Number.isInteger(numValue)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `socket-timeout must be a positive integer in milliseconds (e.g., 60000)`,
-        };
-      }
-    }
-
-    if (key === 'socket-keepalive' || key === 'socket-nodelay') {
-      if (typeof parsedValue !== 'boolean') {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be either 'true' or 'false'`,
-        };
-      }
-    }
-
-    // Validate tool output settings
-    if (
-      key === 'tool-output-max-items' ||
-      key === 'tool-output-max-tokens' ||
-      key === 'tool-output-item-size-limit' ||
-      key === 'max-prompt-tokens'
-    ) {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        numValue <= 0 ||
-        !Number.isInteger(numValue)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be a positive integer`,
-        };
-      }
-    }
-
-    // Validate maxTurnsPerPrompt
-    if (key === 'maxTurnsPerPrompt') {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        !Number.isInteger(numValue) ||
-        (numValue !== -1 && numValue <= 0)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be a positive integer or -1 for unlimited`,
-        };
-      }
-    }
-
-    if (key === 'tool-output-truncate-mode') {
-      const validModes = ['warn', 'truncate', 'sample'];
-      if (!validModes.includes(parsedValue as string)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be one of: ${validModes.join(', ')}`,
-        };
-      }
-    }
-
-    // Validate emojifilter mode
-    if (key === 'emojifilter') {
-      const validModes: EmojiFilterMode[] = [
-        'allowed',
-        'auto',
-        'warn',
-        'error',
-      ];
-      const normalizedValue = (
-        parsedValue as string
-      ).toLowerCase() as EmojiFilterMode;
-      if (!validModes.includes(normalizedValue)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Invalid emoji filter mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
-        };
-      }
-      // Override the parsed value with normalized lowercase version
-      parsedValue = normalizedValue;
-    }
-
-    // Validate shell-replacement setting
-    if (key === 'shell-replacement') {
-      if (typeof parsedValue !== 'boolean') {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `shell-replacement must be either 'true' or 'false'`,
-        };
-      }
-    }
-
-    // Validate streaming mode
-    if (key === 'streaming') {
-      const validModes = ['enabled', 'disabled'];
-      const normalizedValue = (parsedValue as string).toLowerCase();
-      if (!validModes.includes(normalizedValue)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Invalid streaming mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
-        };
-      }
-      // Override the parsed value with normalized lowercase version
-      parsedValue = normalizedValue;
-    }
-
-    // Validate prompt-caching mode
-    if (key === 'prompt-caching') {
-      const validModes = ['off', '5m', '1h'];
-      if (
-        typeof parsedValue === 'string' &&
-        validModes.includes(parsedValue.toLowerCase())
-      ) {
-        parsedValue = parsedValue.toLowerCase();
-      } else {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Invalid ${key} mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
-        };
-      }
-    }
-
-    // Validate authOnly setting
-    if (key === 'authOnly') {
-      if (typeof parsedValue !== 'boolean') {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `authOnly must be either 'true' or 'false'`,
-        };
-      }
-    }
-
-    // Validate dumponerror mode
-    if (key === 'dumponerror') {
-      const validModes = ['enabled', 'disabled'];
-      if (typeof parsedValue === 'boolean') {
-        parsedValue = parsedValue ? 'enabled' : 'disabled';
-      } else if (
-        typeof parsedValue === 'string' &&
-        validModes.includes(parsedValue.toLowerCase())
-      ) {
-        parsedValue = parsedValue.toLowerCase();
-      } else if (
-        typeof parsedValue === 'string' &&
-        ['true', 'false'].includes(parsedValue.toLowerCase())
-      ) {
-        parsedValue =
-          parsedValue.toLowerCase() === 'true' ? 'enabled' : 'disabled';
-      } else {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Invalid ${key} mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
-        };
-      }
-    }
-
-    // Validate retries setting
-    if (key === 'retries') {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        numValue < 0 ||
-        !Number.isInteger(numValue)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be a non-negative integer (e.g., 3)`,
-        };
-      }
-    }
-
-    // Validate retrywait setting
-    if (key === 'retrywait') {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        numValue <= 0 ||
-        !Number.isInteger(numValue)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be a positive integer in milliseconds (e.g., 1000)`,
-        };
-      }
-    }
-
-    // Validate load balancer numeric settings (Phase 3, Issue #489)
-    if (
-      key === 'tpm_threshold' ||
-      key === 'timeout_ms' ||
-      key === 'circuit_breaker_failure_threshold' ||
-      key === 'circuit_breaker_failure_window_ms' ||
-      key === 'circuit_breaker_recovery_timeout_ms'
-    ) {
-      const numValue = parsedValue as number;
-      if (
-        typeof numValue !== 'number' ||
-        numValue <= 0 ||
-        !Number.isInteger(numValue)
-      ) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be a positive integer`,
-        };
-      }
-    }
-
-    // Validate load balancer boolean settings (Phase 3, Issue #489)
-    if (key === 'circuit_breaker_enabled') {
-      if (typeof parsedValue !== 'boolean') {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `${key} must be either 'true' or 'false'`,
-        };
-      }
-    }
+    const parsedValue = parseResult.value;
 
     // Get the config to apply settings
     const config = context.services.config;
