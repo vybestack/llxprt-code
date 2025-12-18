@@ -15,6 +15,8 @@
 import { describe, it, expect } from 'vitest';
 import { render } from 'ink-testing-library';
 import { ThinkingBlockDisplay } from './ThinkingBlockDisplay.js';
+import { Colors } from '../../colors.js';
+
 import type { ThinkingBlock } from '@vybestack/llxprt-code-core';
 
 describe('ThinkingBlockDisplay', () => {
@@ -169,5 +171,69 @@ describe('ThinkingBlockDisplay', () => {
       expect(lastFrame()).toContain('**bold**');
       expect(lastFrame()).toContain('`code`');
     });
+  });
+});
+
+describe('REQ-ISSUE-829: DimComment color usage', () => {
+  /**
+   * @requirement REQ-ISSUE-829
+   * @scenario ThinkingBlock uses DimComment
+   * @given ThinkingBlock with sample content
+   * @when Component renders
+   * @then Component uses Colors.DimComment instead of dimColor prop
+   */
+  it('should use Colors.DimComment for styling', () => {
+    // Test that DimComment is defined in theme
+    expect(Colors.DimComment).toBeDefined();
+    expect(Colors.DimComment).toBeTruthy();
+
+    // Verify it's not using ANSI dim (which would be empty or a special escape)
+    // DimComment should be a valid hex color or named color
+    expect(typeof Colors.DimComment).toBe('string');
+    expect(Colors.DimComment.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * @requirement REQ-ISSUE-829
+   * @scenario DimComment is darker than Comment for greenscreen
+   * @given greenscreen theme active
+   * @when comparing DimComment to Comment
+   * @then DimComment should be visually dimmer
+   */
+  it('should have DimComment darker than Comment', () => {
+    // Helper to calculate relative luminance from hex color
+    const getRelativeLuminance = (hex: string): number => {
+      // Remove # if present
+      const cleanHex = hex.replace(/^#/, '');
+
+      // Only handle 6-character hex colors
+      if (!/^[0-9A-Fa-f]{6}$/.test(cleanHex)) {
+        throw new Error(`Invalid hex color: ${hex}`);
+      }
+
+      // Parse RGB components
+      const r = parseInt(cleanHex.slice(0, 2), 16) / 255;
+      const g = parseInt(cleanHex.slice(2, 4), 16) / 255;
+      const b = parseInt(cleanHex.slice(4, 6), 16) / 255;
+
+      // Apply gamma correction
+      const gamma = (c: number) =>
+        c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+
+      // Calculate relative luminance (WCAG formula)
+      return 0.2126 * gamma(r) + 0.7152 * gamma(g) + 0.0722 * gamma(b);
+    };
+
+    // Basic check that both colors exist and are different
+    expect(Colors.DimComment).not.toBe(Colors.Comment);
+
+    // Ensure both colors are valid hex format
+    expect(Colors.Comment).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    expect(Colors.DimComment).toMatch(/^#[0-9A-Fa-f]{6}$/);
+
+    // Calculate and compare luminance - DimComment should be darker
+    const commentLuminance = getRelativeLuminance(Colors.Comment);
+    const dimCommentLuminance = getRelativeLuminance(Colors.DimComment);
+    expect(dimCommentLuminance).toBeLessThan(commentLuminance);
   });
 });

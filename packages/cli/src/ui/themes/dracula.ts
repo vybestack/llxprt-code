@@ -24,6 +24,7 @@ const draculaColors: ColorsTheme = {
   DiffRemovedBackground: '#6e1818',
   DiffRemovedForeground: 'white',
   Comment: '#6272a4',
+  DimComment: '#4a5478',
   Gray: '#6272a4',
   GradientColors: ['#ff79c6', '#8be9fd'],
 };

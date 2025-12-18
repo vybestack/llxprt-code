@@ -20,6 +20,7 @@ const googleCodeColors: ColorsTheme = {
   DiffAdded: '#C6EAD8',
   DiffRemoved: '#FEDEDE',
   Comment: '#5f6368',
+  DimComment: '#444c50',
   Gray: lightTheme.Gray,
   GradientColors: ['#066', '#606'],
 };

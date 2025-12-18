@@ -26,6 +26,7 @@ describe('semantic-resolver', () => {
         DiffAdded: '#28350B',
         DiffRemoved: '#430000',
         Comment: '#6C7086',
+        DimComment: '#505564',
         Gray: '#6C7086',
       };
 
@@ -77,6 +78,7 @@ describe('semantic-resolver', () => {
         DiffAdded: '#C6EAD8',
         DiffRemoved: '#FFCCCC',
         Comment: '#008000',
+        DimComment: '#006000',
         Gray: '#97a0b0',
       };
 
@@ -128,6 +130,7 @@ describe('semantic-resolver', () => {
         DiffAdded: 'green',
         DiffRemoved: 'red',
         Comment: 'gray',
+        DimComment: '#5a5a5a',
         Gray: 'gray',
       };
 
@@ -179,6 +182,7 @@ describe('semantic-resolver', () => {
         DiffAdded: '#264653',
         DiffRemoved: '#E76F51',
         Comment: '#6C757D',
+        DimComment: '#50555d',
         Gray: '#6C757D',
       };
 
@@ -230,6 +234,7 @@ describe('semantic-resolver', () => {
         DiffAdded: '#A6E3A1', // Using AccentGreen as fallback
         DiffRemoved: '#430000',
         Comment: '#6C7086',
+        DimComment: '#505564',
         Gray: '#6C7086',
       };
 
@@ -254,6 +259,7 @@ describe('semantic-resolver', () => {
         DiffAdded: '#28350B',
         DiffRemoved: '#F38BA8', // Using AccentRed as fallback
         Comment: '#6C7086',
+        DimComment: '#505564',
         Gray: '#6C7086',
       };
 
