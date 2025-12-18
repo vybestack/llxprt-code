@@ -392,6 +392,53 @@ describe('profileApplication helpers', () => {
     expect(configStub.getEphemeralSetting('context-limit')).toBe(200000);
   });
 
+  it('preserves reasoning settings when switching providers with reasoning-enabled profile - fixes issue #890', async () => {
+    // This test verifies that when applyProfileWithGuards calls switchActiveProvider,
+    // the reasoning.* keys are included in the preserveEphemerals list so they
+    // survive the provider switch.
+
+    providerManagerStub.available = ['anthropic'];
+    providerManagerStub.providerLookup = new Map([
+      ['anthropic', { name: 'anthropic' }],
+    ]);
+
+    // Track what preserveEphemerals are passed to switchActiveProvider
+    let capturedPreserveEphemerals: string[] = [];
+    switchActiveProviderMock.mockImplementation(
+      async (
+        providerName: string,
+        options?: { preserveEphemerals?: string[] },
+      ) => {
+        capturedPreserveEphemerals = options?.preserveEphemerals ?? [];
+        providerManagerStub.activeProviderName = providerName;
+        return {
+          infoMessages: [],
+          changed: true,
+          authType: 'key',
+        };
+      },
+    );
+
+    const profile: Profile = {
+      version: 1,
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-20250514',
+      modelParams: {},
+      ephemeralSettings: {},
+    };
+
+    await applyProfileWithGuards(profile, {
+      profileName: 'opusthinking',
+    });
+
+    // Verify that reasoning.* keys are included in preserveEphemerals
+    // This is the fix for issue #890
+    expect(capturedPreserveEphemerals).toContain('reasoning.enabled');
+    expect(capturedPreserveEphemerals).toContain('reasoning.budgetTokens');
+    expect(capturedPreserveEphemerals).toContain('reasoning.stripFromContext');
+    expect(capturedPreserveEphemerals).toContain('reasoning.includeInContext');
+  });
+
   it('reports the actual profile model instead of the provider default in info messages', async () => {
     const profile: Profile = {
       version: 1,

@@ -205,7 +205,6 @@ describe('Runtime Provider Switching Integration', () => {
     expect(config.getEphemeralSetting('base-url')).toBeUndefined();
   });
 });
-
 function createMockProvider(name: string): IProvider & {
   apiKey?: string;
   baseUrl?: string;
