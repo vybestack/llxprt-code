@@ -254,6 +254,7 @@ import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 export interface AgentRuntimeProviderAdapter {
   getActiveProvider(): IProvider;
   setActiveProvider(name: string): void;
+  getProviderByName?(name: string): IProvider | undefined;
 }
 
 /**

@@ -422,6 +422,21 @@ export class ProviderManager implements IProviderManager {
     const providerSettings =
       settingsService.getProviderSettings(targetProvider);
     const providerInstance = this.providers.get(targetProvider);
+    const configSettingsService =
+      typeof (config as unknown as { getSettingsService?: () => unknown })
+        .getSettingsService === 'function'
+        ? (
+            config as unknown as { getSettingsService: () => unknown }
+          ).getSettingsService()
+        : undefined;
+    const configMatchesSettingsService =
+      !configSettingsService || configSettingsService === settingsService;
+    const activeProviderRaw = settingsService.get('activeProvider');
+    const activeProviderName =
+      typeof activeProviderRaw === 'string' ? activeProviderRaw.trim() : '';
+    const shouldApplyGlobalEphemerals =
+      configMatchesSettingsService &&
+      (!activeProviderName || activeProviderName === targetProvider);
     // Debug: Log incoming authToken before normalization
     logger.debug(() => {
       const token = rawOptions.resolved?.authToken;
@@ -432,11 +447,10 @@ export class ProviderManager implements IProviderManager {
     const resolved = {
       model:
         rawOptions.resolved?.model ??
-        config.getModel?.() ??
         (providerSettings.model as string | undefined) ??
-        (providerInstance
-          ? this.getStoredModelName(providerInstance)
-          : undefined),
+        (shouldApplyGlobalEphemerals ? config.getModel?.() : undefined) ??
+        providerInstance?.getDefaultModel?.() ??
+        undefined,
       baseURL:
         rawOptions.resolved?.baseURL ??
         (providerSettings.baseURL as string | undefined) ??
@@ -461,6 +475,7 @@ export class ProviderManager implements IProviderManager {
     });
 
     if (
+      shouldApplyGlobalEphemerals &&
       effectiveConfig &&
       typeof (
         effectiveConfig as Config & {
@@ -492,7 +507,7 @@ export class ProviderManager implements IProviderManager {
       }
     }
 
-    if (!resolved.baseURL) {
+    if (!resolved.baseURL && shouldApplyGlobalEphemerals) {
       const configBaseUrl =
         typeof config.getEphemeralSetting === 'function'
           ? (config.getEphemeralSetting('base-url') as string | undefined)

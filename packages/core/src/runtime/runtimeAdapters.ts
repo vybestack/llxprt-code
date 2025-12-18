@@ -6,6 +6,7 @@
 
 import type { ProviderManager } from '../providers/ProviderManager.js';
 import type { IProviderManager } from '../providers/IProviderManager.js';
+import type { IProvider } from '../providers/IProvider.js';
 import type { Config } from '../config/config.js';
 import type { ToolRegistry } from '../tools/tool-registry.js';
 import {
@@ -42,12 +43,27 @@ export function createProviderAdapterFromManager(
           'AgentRuntimeContext provider adapter requires a ProviderManager instance.',
         );
       },
+      getProviderByName: () => {
+        throw new Error(
+          'AgentRuntimeContext provider adapter requires a ProviderManager instance.',
+        );
+      },
     };
   }
 
   return {
     getActiveProvider: () => manager.getActiveProvider(),
     setActiveProvider: (name: string) => manager.setActiveProvider(name),
+    getProviderByName:
+      typeof (manager as unknown as { getProviderByName?: unknown })
+        .getProviderByName === 'function'
+        ? (name: string) =>
+            (
+              manager as unknown as {
+                getProviderByName: (providerName: string) => unknown;
+              }
+            ).getProviderByName(name) as IProvider | undefined
+        : undefined,
   };
 }
 

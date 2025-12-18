@@ -690,37 +690,7 @@ export class GeminiChat {
 
     // DO NOT add user content to history yet - use send-then-commit pattern
 
-    // Get the active provider
-    // @plan PLAN-20251028-STATELESS6.P10
-    // @requirement REQ-STAT6-002.2
-    // @pseudocode agent-runtime-context.md line 87 (step 006.4)
-    let provider = this.getActiveProvider();
-    if (!provider) {
-      throw new Error('No active provider configured');
-    }
-
-    // Step 006.4: Replace providerManager access with view.provider adapter
-    const desiredProviderName = this.runtimeState.provider;
-    if (desiredProviderName && provider.name !== desiredProviderName) {
-      const previousProviderName = provider.name;
-      try {
-        this.runtimeContext.provider.setActiveProvider(desiredProviderName);
-        const updatedProvider =
-          this.runtimeContext.provider.getActiveProvider();
-        if (updatedProvider) {
-          provider = updatedProvider;
-        }
-        this.logger.debug(
-          () =>
-            `[GeminiChat] enforced provider switch to '${desiredProviderName}' (previous '${previousProviderName}')`,
-        );
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `[GeminiChat] provider switch skipped (read-only context): ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
+    const provider = this.resolveProviderForRuntime('sendMessage');
 
     const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
@@ -1325,33 +1295,7 @@ export class GeminiChat {
     pendingTokens: number,
     userContent: Content | Content[],
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    // Get the active provider
-    let provider = this.getActiveProvider();
-    if (!provider) {
-      throw new Error('No active provider configured');
-    }
-
-    // @plan PLAN-20251028-STATELESS6.P10
-    // @requirement REQ-STAT6-002.2
-    // @pseudocode agent-runtime-context.md line 87 (step 006.4)
-    const desiredProviderName = this.runtimeState.provider;
-    // Step 006.4: Replace providerManager access with view.provider adapter
-    if (desiredProviderName && provider.name !== desiredProviderName) {
-      const previousProviderName = provider.name;
-      try {
-        this.runtimeContext.provider.setActiveProvider(desiredProviderName);
-        provider = this.runtimeContext.provider.getActiveProvider();
-        this.logger.debug(
-          () =>
-            `[GeminiChat] enforced provider switch (stream path) to '${desiredProviderName}' (previous '${previousProviderName}')`,
-        );
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `[GeminiChat] provider switch skipped (stream path, read-only context): ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
+    const provider = this.resolveProviderForRuntime('stream');
 
     const activeAuthType = this.runtimeState.authType;
     const providerBaseUrl = this.resolveProviderBaseUrl(provider);
@@ -2003,31 +1947,7 @@ export class GeminiChat {
     historyToCompress: IContent[],
     _prompt_id: string,
   ): Promise<string> {
-    let provider = this.getActiveProvider();
-    if (!provider) {
-      throw new Error('No active provider configured');
-    }
-
-    // @plan PLAN-20251028-STATELESS6.P10
-    // @requirement REQ-STAT6-002.2
-    // @pseudocode agent-runtime-context.md line 87 (step 006.4)
-    const desiredProviderName = this.runtimeState.provider;
-    // Step 006.4: Replace providerManager access with view.provider adapter
-    if (desiredProviderName && provider.name !== desiredProviderName) {
-      try {
-        this.runtimeContext.provider.setActiveProvider(desiredProviderName);
-        provider = this.runtimeContext.provider.getActiveProvider();
-        this.logger.debug(
-          () =>
-            `[GeminiChat] enforced provider switch (compression) to '${desiredProviderName}'`,
-        );
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `[GeminiChat] provider switch skipped (compression, read-only context): ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
+    const provider = this.resolveProviderForRuntime('compression');
 
     if (!this.providerSupportsIContent(provider)) {
       throw new Error('Provider does not support compression');
@@ -2664,6 +2584,65 @@ export class GeminiChat {
       // No active provider set or read-only context
       return undefined;
     }
+  }
+
+  private resolveProviderForRuntime(contextLabel: string): IProvider {
+    // @plan PLAN-20251028-STATELESS6.P10
+    // @requirement REQ-STAT6-002.2
+    // @pseudocode agent-runtime-context.md line 87 (step 006.4)
+    const desiredProviderName = this.runtimeState.provider?.trim();
+    const adapter = this.runtimeContext.provider;
+
+    if (desiredProviderName) {
+      try {
+        const candidate =
+          typeof adapter.getProviderByName === 'function'
+            ? adapter.getProviderByName(desiredProviderName)
+            : undefined;
+        if (candidate) {
+          const active = this.getActiveProvider();
+          if (active && active.name !== desiredProviderName) {
+            this.logger.debug(
+              () =>
+                `[GeminiChat] selected provider '${desiredProviderName}' via getProviderByName (active remains '${active.name}') [${contextLabel}]`,
+            );
+          }
+          return candidate;
+        }
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `[GeminiChat] provider lookup skipped (${contextLabel}): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    let provider = this.getActiveProvider();
+    if (!provider) {
+      throw new Error('No active provider configured');
+    }
+
+    if (desiredProviderName && provider.name !== desiredProviderName) {
+      const previousProviderName = provider.name;
+      try {
+        adapter.setActiveProvider(desiredProviderName);
+        const updatedProvider = adapter.getActiveProvider();
+        if (updatedProvider) {
+          provider = updatedProvider;
+        }
+        this.logger.debug(
+          () =>
+            `[GeminiChat] enforced provider switch to '${desiredProviderName}' (previous '${previousProviderName}') [${contextLabel}]`,
+        );
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `[GeminiChat] provider switch skipped (${contextLabel}, read-only context): ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
+    return provider;
   }
 
   /**
