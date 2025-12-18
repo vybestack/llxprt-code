@@ -37,6 +37,7 @@ export interface ScrollableEntry {
 interface ScrollContextType {
   register: (entry: ScrollableEntry) => void;
   unregister: (id: string) => void;
+  getScrollables: () => readonly ScrollableEntry[];
 }
 
 const ScrollContext = createContext<ScrollContextType | null>(null);
@@ -99,6 +100,11 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     scrollablesRef.current = scrollables;
   }, [scrollables]);
+
+  const getScrollables = useCallback(
+    () => Array.from(scrollablesRef.current.values()),
+    [],
+  );
 
   const pendingScrollsRef = useRef(new Map<string, number>());
   const flushScheduledRef = useRef(false);
@@ -338,8 +344,8 @@ export const ScrollProvider: React.FC<{ children: React.ReactNode }> = ({
   );
 
   const contextValue = useMemo(
-    () => ({ register, unregister }),
-    [register, unregister],
+    () => ({ register, unregister, getScrollables }),
+    [register, unregister, getScrollables],
   );
 
   return (
@@ -359,10 +365,7 @@ export const useScrollable = (
   entry: Omit<ScrollableEntry, 'id'>,
   isActive: boolean,
 ) => {
-  const context = useContext(ScrollContext);
-  if (!context) {
-    throw new Error('useScrollable must be used within a ScrollProvider');
-  }
+  const context = useScrollProvider();
 
   const [id] = useState(() => `scrollable-${nextId++}`);
 
@@ -377,3 +380,11 @@ export const useScrollable = (
     };
   }, [context, entry, id, isActive]);
 };
+
+export function useScrollProvider(): ScrollContextType {
+  const context = useContext(ScrollContext);
+  if (!context) {
+    throw new Error('useScrollProvider must be used within a ScrollProvider');
+  }
+  return context;
+}
