@@ -336,7 +336,11 @@ ${authUrl}`,
   const waitForAuthCode = (global as Record<string, unknown>)
     .__oauth_wait_for_code as (() => Promise<string>) | undefined;
 
-  if (typeof waitForAuthCode === 'function') {
+  // Track whether the UI hook was available - if so, we must NOT fall back to readline
+  // Issue #878: Falling back to readline when the Ink UI is active corrupts the terminal
+  const uiHookAvailable = typeof waitForAuthCode === 'function';
+
+  if (uiHookAvailable) {
     const globalObj = global as Record<string, unknown>;
     const previousProvider = globalObj.__oauth_provider;
     globalObj.__oauth_provider = 'gemini';
@@ -366,9 +370,18 @@ ${authUrl}`,
         delete globalObj.__oauth_provider;
       }
     }
+
+    // Issue #878: If the UI hook was available but returned empty/falsy code,
+    // throw an error instead of falling back to readline (which would corrupt the terminal)
+    if (!code) {
+      throw new FatalAuthenticationError(
+        'Authorization code was not provided. Please try again.',
+      );
+    }
   }
 
-  if (!code) {
+  // Only fall back to readline if NO UI hook was available (non-interactive mode)
+  if (!code && !uiHookAvailable) {
     code = await new Promise<string>((resolve) => {
       const rl = readline.createInterface({
         input: process.stdin,
