@@ -752,13 +752,13 @@ export async function main() {
 
       const sandboxArgs = injectStdinIntoArgs(process.argv, stdinData);
 
-      await start_sandbox(
+      const exitCode = await start_sandbox(
         sandboxConfig,
         sandboxMemoryArgs,
         partialConfig,
         sandboxArgs,
       );
-      process.exit(0);
+      process.exit(exitCode);
     }
     // Note: Non-sandbox memory relaunch is now handled at the top of main()
   }

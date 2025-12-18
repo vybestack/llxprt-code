@@ -34,7 +34,7 @@ vi.mock('./utils/cleanup.js', () => ({
 }));
 
 vi.mock('./utils/sandbox.js', () => ({
-  start_sandbox: vi.fn(),
+  start_sandbox: vi.fn(() => Promise.resolve(0)),
 }));
 
 vi.mock('ink', () => ({

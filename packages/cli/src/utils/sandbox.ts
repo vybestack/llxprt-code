@@ -194,7 +194,27 @@ export async function start_sandbox(
   nodeArgs: string[] = [],
   cliConfig?: Config,
   cliArgs: string[] = [],
-) {
+): Promise<number> {
+  const normalizeExitCode = (
+    code: number | null,
+    signal: NodeJS.Signals | null,
+  ): number => {
+    if (typeof code === 'number') {
+      return code;
+    }
+
+    // Best-effort conventional mappings for common termination signals.
+    // Node restricts exit codes to 0-255.
+    if (signal === 'SIGINT') {
+      return 130;
+    }
+    if (signal === 'SIGTERM') {
+      return 143;
+    }
+
+    return 1;
+  };
+
   const patcher = new ConsolePatcher({
     debugMode: cliConfig?.getDebugMode() || !!process.env.DEBUG,
     stderr: true,
@@ -348,8 +368,11 @@ export async function start_sandbox(
       sandboxProcess = spawn(config.command, args, {
         stdio: 'inherit',
       });
-      await new Promise((resolve) => sandboxProcess?.on('close', resolve));
-      return;
+      return await new Promise<number>((resolve) => {
+        sandboxProcess?.on('close', (code, signal) => {
+          resolve(normalizeExitCode(code, signal));
+        });
+      });
     }
 
     console.error(`hopping into sandbox (command: ${config.command}) ...`);
@@ -805,14 +828,15 @@ export async function start_sandbox(
       console.error('Sandbox process error:', err);
     });
 
-    await new Promise<void>((resolve) => {
+    return await new Promise<number>((resolve) => {
       sandboxProcess?.on('close', (code, signal) => {
-        if (code !== 0) {
+        const exitCode = normalizeExitCode(code, signal);
+        if (exitCode !== 0) {
           console.log(
             `Sandbox process exited with code: ${code}, signal: ${signal}`,
           );
         }
-        resolve();
+        resolve(exitCode);
       });
     });
   } catch (error) {
