@@ -20,6 +20,7 @@ import {
   ApiError,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
+import { flushRuntimeAuthScope } from '../auth/precedence.js';
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import {
@@ -1416,6 +1417,13 @@ export class GeminiChat {
         this.logger.debug(() => 'Attempting bucket failover on persistent 429');
         const success = await failoverHandler.tryFailover();
         if (success) {
+          const runtimeId =
+            this.runtimeContext.providerRuntime.runtimeId ??
+            this.runtimeState.runtimeId;
+          if (typeof runtimeId === 'string' && runtimeId.trim() !== '') {
+            flushRuntimeAuthScope(runtimeId);
+          }
+
           this.logger.debug(
             () =>
               `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,

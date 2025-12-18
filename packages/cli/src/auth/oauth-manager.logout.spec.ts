@@ -100,4 +100,66 @@ describe('OAuthManager.logout runtime cache handling', () => {
     flushMockRef.current &&
       expect(flushMockRef.current).toHaveBeenCalledWith('test-runtime');
   });
+
+  it('removes the session bucket token even when provider.logout exists', async () => {
+    const tokenStore: TokenStore = {
+      saveToken: vi.fn(),
+      getToken: vi.fn().mockResolvedValue(null),
+      removeToken: vi.fn().mockResolvedValue(undefined),
+      listProviders: vi.fn().mockResolvedValue([]),
+      listBuckets: vi.fn().mockResolvedValue(['default', 'bucket-a']),
+      getBucketStats: vi.fn().mockResolvedValue(null),
+    };
+
+    const manager = new OAuthManager(tokenStore);
+
+    const provider: OAuthProvider & { logout?: () => Promise<void> } = {
+      name: 'qwen',
+      initiateAuth: vi.fn(async () => undefined),
+      getToken: vi.fn(async () => null),
+      refreshIfNeeded: vi.fn(async () => null),
+      logout: vi.fn().mockResolvedValue(undefined),
+    };
+
+    manager.registerProvider(provider);
+    providerRef.current = provider;
+
+    manager.setSessionBucket('qwen', 'bucket-a');
+
+    await manager.logout('qwen');
+
+    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-a');
+  });
+
+  it('removes bucket tokens when logging out all buckets', async () => {
+    const tokenStore: TokenStore = {
+      saveToken: vi.fn(),
+      getToken: vi.fn().mockResolvedValue(null),
+      removeToken: vi.fn().mockResolvedValue(undefined),
+      listProviders: vi.fn().mockResolvedValue([]),
+      listBuckets: vi
+        .fn()
+        .mockResolvedValue(['default', 'bucket-a', 'bucket-b']),
+      getBucketStats: vi.fn().mockResolvedValue(null),
+    };
+
+    const manager = new OAuthManager(tokenStore);
+
+    const provider: OAuthProvider & { logout?: () => Promise<void> } = {
+      name: 'qwen',
+      initiateAuth: vi.fn(async () => undefined),
+      getToken: vi.fn(async () => null),
+      refreshIfNeeded: vi.fn(async () => null),
+      logout: vi.fn().mockResolvedValue(undefined),
+    };
+
+    manager.registerProvider(provider);
+    providerRef.current = provider;
+
+    await manager.logoutAllBuckets('qwen');
+
+    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'default');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-a');
+    expect(tokenStore.removeToken).toHaveBeenCalledWith('qwen', 'bucket-b');
+  });
 });

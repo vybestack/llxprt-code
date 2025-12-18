@@ -384,15 +384,26 @@ export class OAuthManager {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
-    // Lines 16-26: Call provider logout if exists
+    // Resolve which bucket to act on (explicit bucket > session bucket > default)
+    const bucketToUse =
+      bucket ?? this.sessionBuckets.get(providerName) ?? 'default';
+
+    // Call provider logout if exists (best-effort remote revoke), but ALWAYS clear local token
     if ('logout' in provider && typeof provider.logout === 'function') {
       try {
+        // NOTE: Provider logout implementations are not bucket-aware today.
+        // Local bucket cleanup is handled below via tokenStore.
         await provider.logout();
       } catch (error) {
         logger.warn(`Provider logout failed:`, error);
       }
-    } else {
-      await this.tokenStore.removeToken(providerName, bucket);
+    }
+
+    await this.tokenStore.removeToken(providerName, bucketToUse);
+
+    // If we just logged out the active session bucket, clear the in-memory override.
+    if (this.sessionBuckets.get(providerName) === bucketToUse) {
+      this.clearSessionBucket(providerName);
     }
 
     // CRITICAL FIX: Clear all provider auth caches after logout
@@ -605,12 +616,65 @@ export class OAuthManager {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
+    const explicitBucket = typeof bucket === 'string';
+
     // Determine the bucket to use: explicit bucket parameter or session bucket override
     let bucketToUse: string | undefined;
-    if (typeof bucket === 'string') {
+    if (explicitBucket) {
       bucketToUse = bucket;
     } else if (this.sessionBuckets.has(providerName)) {
       bucketToUse = this.sessionBuckets.get(providerName);
+    }
+
+    // If no explicit/session bucket is set, fall back to the first bucket in the active profile.
+    // This enables multi-bucket profiles to work without requiring an explicit /auth <provider> switch.
+    let profileBuckets: string[] = [];
+    let failoverHandler:
+      | {
+          getBuckets: () => string[];
+          getCurrentBucket: () => string | undefined;
+          isEnabled: () => boolean;
+        }
+      | undefined;
+
+    if (!explicitBucket) {
+      profileBuckets = await this.getProfileBuckets(providerName);
+
+      const config = this.getConfig?.();
+      if (config && profileBuckets.length > 1) {
+        failoverHandler = config.getBucketFailoverHandler?.();
+
+        const existingBuckets = failoverHandler?.getBuckets?.() ?? [];
+        const sameBuckets =
+          existingBuckets.length === profileBuckets.length &&
+          existingBuckets.every(
+            (value, index) => value === profileBuckets[index],
+          );
+
+        if (!failoverHandler || !sameBuckets) {
+          const handler = new BucketFailoverHandlerImpl(
+            profileBuckets,
+            providerName,
+            this,
+          );
+          config.setBucketFailoverHandler(handler);
+          failoverHandler = handler;
+        }
+      }
+    }
+
+    if (!bucketToUse) {
+      const handlerBucket = failoverHandler?.getCurrentBucket?.();
+      if (typeof handlerBucket === 'string' && handlerBucket.trim() !== '') {
+        bucketToUse = handlerBucket;
+      } else if (profileBuckets.length > 0) {
+        bucketToUse = profileBuckets[0];
+      }
+
+      // Establish a default session bucket for the duration of this CLI session.
+      if (bucketToUse && !this.sessionBuckets.has(providerName)) {
+        this.sessionBuckets.set(providerName, bucketToUse);
+      }
     }
 
     try {
