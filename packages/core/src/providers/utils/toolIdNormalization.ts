@@ -51,6 +51,20 @@ export function normalizeToOpenAIToolId(id: string): string {
     return sanitize(id);
   }
 
+  // Some systems can produce tool call ids that are malformed:
+  // - missing underscore: "call3or3..."
+  // - double-prefixed: "call_call3or3..." or "call_call_3or3..."
+  // Normalize these to canonical "call_<suffix>".
+  if (id.startsWith('call')) {
+    let suffix = id.substring('call'.length);
+    if (suffix.startsWith('_')) suffix = suffix.substring(1);
+    if (suffix.startsWith('call_')) suffix = suffix.substring('call_'.length);
+    if (suffix.startsWith('call')) suffix = suffix.substring('call'.length);
+    if (suffix.startsWith('_')) suffix = suffix.substring(1);
+
+    return sanitize('call_' + suffix);
+  }
+
   // History format (the canonical storage format) - convert to OpenAI format
   if (id.startsWith('hist_tool_')) {
     const suffix = id.substring('hist_tool_'.length);

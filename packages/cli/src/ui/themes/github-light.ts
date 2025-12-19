@@ -20,6 +20,7 @@ const githubLightColors: ColorsTheme = {
   DiffAdded: '#C6EAD8',
   DiffRemoved: '#FFCCCC',
   Comment: '#998',
+  DimComment: '#777777',
   Gray: '#999',
   GradientColors: ['#458', '#008080'],
 };

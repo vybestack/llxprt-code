@@ -34,6 +34,7 @@ import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
 import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
+import { isMouseEventsActive, setMouseEventsActive } from './utils/mouse.js';
 import { loadHierarchicalLlxprtMemory } from '../config/config.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
@@ -98,6 +99,7 @@ import { useStaticHistoryRefresh } from './hooks/useStaticHistoryRefresh.js';
 import { useTodoContext } from './contexts/TodoContext.js';
 import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
 import { useFlickerDetector } from './hooks/useFlickerDetector.js';
+import { useMouseSelection } from './hooks/useMouseSelection.js';
 import { isWorkspaceTrusted } from '../config/trustedFolders.js';
 import { globalOAuthUI } from '../auth/global-oauth-ui.js';
 import { UIStateProvider, type UIState } from './contexts/UIStateContext.js';
@@ -1230,6 +1232,18 @@ export const AppContainer = (props: AppContainerProps) => {
 
       if (keyMatchers[Command.SHOW_ERROR_DETAILS](key)) {
         setShowErrorDetails((prev) => !prev);
+      } else if (keyMatchers[Command.TOGGLE_MOUSE_EVENTS](key)) {
+        const nextActive = !isMouseEventsActive();
+        setMouseEventsActive(nextActive);
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: nextActive
+              ? 'Mouse events enabled (wheel scrolling + in-app selection/copy on).'
+              : 'Mouse events disabled (terminal selection/copy on; in-app wheel scrolling off).',
+          },
+          Date.now(),
+        );
       } else if (keyMatchers[Command.TOGGLE_TOOL_DESCRIPTIONS](key)) {
         const newValue = !showToolDescriptions;
         setShowToolDescriptions(newValue);
@@ -1271,6 +1285,7 @@ export const AppContainer = (props: AppContainerProps) => {
       handleSlashCommand,
       isAuthenticating,
       cancelOngoingRequest,
+      addItem,
       settings.merged.debugKeystrokeLogging,
     ],
   );
@@ -1360,6 +1375,8 @@ export const AppContainer = (props: AppContainerProps) => {
   const mainControlsRef = useRef<DOMElement>(null);
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
+
+  useMouseSelection({ enabled: true, rootRef: rootUiRef });
 
   useLayoutEffect(() => {
     if (mainControlsRef.current) {

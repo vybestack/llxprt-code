@@ -106,6 +106,7 @@ describe('semantic tokens system', () => {
         DiffAdded: '#2ECC71',
         DiffRemoved: '#E74C3C',
         Comment: '#7F8C8D',
+        DimComment: '#5f6a6b',
         Gray: '#95A5A6',
       };
 
@@ -138,6 +139,7 @@ describe('semantic tokens system', () => {
         DiffAdded: '#27AE60', // Using AccentGreen as fallback
         DiffRemoved: '#E74C3C', // Using AccentRed as fallback
         Comment: '#7F8C8D',
+        DimComment: '#5f6a6b',
         Gray: '#95A5A6',
       };
 
@@ -343,6 +345,7 @@ describe('semantic tokens system', () => {
         DiffAdded: '#27AE60', // Using AccentGreen as fallback
         DiffRemoved: '#E74C3C', // Using AccentRed as fallback
         Comment: '#7F8C8D',
+        DimComment: '#5f6a6b',
         Gray: '#95A5A6',
       };
 

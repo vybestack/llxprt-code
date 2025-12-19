@@ -29,16 +29,11 @@ body:
     id: info
     attributes:
       label: Client information
-      description: Please paste the full text from the `/about` command run from LLxprt Code. Also include which platform (macOS, Windows, Linux).
-      value: |
-        <details>
-
-        ```console
-        $ llxprt /about
-        # paste output here
-        ```
-
-        </details>
+      description: |
+        Run the `/about` command in LLxprt Code and paste the complete output below.
+        Also include your platform (macOS/Windows/Linux).
+      placeholder: |
+        Paste the output from `/about` here...
     validations:
       required: true
 

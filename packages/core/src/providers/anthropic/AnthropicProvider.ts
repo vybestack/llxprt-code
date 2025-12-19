@@ -24,7 +24,10 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
-import { type OAuthManager } from '../../auth/precedence.js';
+import {
+  flushRuntimeAuthScope,
+  type OAuthManager,
+} from '../../auth/precedence.js';
 import {
   type IContent,
   type ContentBlock,
@@ -1587,6 +1590,18 @@ export class AnthropicProvider extends BaseProvider {
         logger.debug(() => 'Attempting bucket failover on persistent 429');
         const success = await failoverHandler.tryFailover();
         if (success) {
+          // Clear runtime-scoped auth cache so subsequent auth resolution can pick up the new bucket.
+          if (typeof options.runtime?.runtimeId === 'string') {
+            flushRuntimeAuthScope(options.runtime.runtimeId);
+          }
+
+          // Force re-resolution of the auth token after bucket failover.
+          // BaseProvider caches the resolved token in options.resolved.authToken for the duration
+          // of a call; we must refresh it so the rebuilt client uses the new bucket credentials.
+          options.resolved.authToken = '';
+          const refreshedAuthToken = await this.getAuthTokenForPrompt();
+          options.resolved.authToken = refreshedAuthToken;
+
           // Rebuild client with fresh credentials from new bucket
           const { client: newClient } = await this.buildProviderClient(
             options,

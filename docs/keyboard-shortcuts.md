@@ -15,6 +15,7 @@ This document lists the available keyboard shortcuts in LLxprt Code.
 | `Ctrl+T` | Toggle the display of tool descriptions.                                                                              |
 | `Ctrl+Q` | Toggle the Todo dialog visibility.                                                                                    |
 | `Ctrl+Y` | Toggle auto-approval (YOLO mode) for all tool calls.                                                                  |
+| `Ctrl+\` | Toggle mouse tracking (in-app wheel scrolling vs terminal selection/copy).                                            |
 
 ## Input Prompt
 

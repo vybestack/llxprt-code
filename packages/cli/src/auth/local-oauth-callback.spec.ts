@@ -41,6 +41,49 @@ describe('startLocalOAuthCallback', () => {
       timeoutMs: 500,
     });
 
+    expect(server.redirectUri).toBe(`http://localhost:${port}/callback`);
+
+    const callbackPromise = server.waitForCallback();
+    const url = new URL(server.redirectUri);
+
+    await new Promise<void>((resolve, reject) => {
+      const request = http.request(
+        {
+          method: 'GET',
+          hostname: url.hostname,
+          port: Number(url.port),
+          path: `${url.pathname}?code=auth-code-456&state=state-123`,
+        },
+        (response) => {
+          response.resume();
+          response.on('end', resolve);
+        },
+      );
+      request.on('error', reject);
+      request.end();
+    });
+
+    const result = await callbackPromise;
+
+    await server.shutdown();
+
+    expect(result).toEqual({
+      code: 'auth-code-456',
+      state: 'state-123',
+    });
+  });
+
+  it('uses /auth/callback redirectUri for Codex', async () => {
+    const port = await findAvailablePort();
+    const server = await startLocalOAuthCallback({
+      state: 'state-123',
+      portRange: [port, port],
+      timeoutMs: 500,
+      provider: 'codex',
+    });
+
+    expect(server.redirectUri).toBe(`http://localhost:${port}/auth/callback`);
+
     const callbackPromise = server.waitForCallback();
     const url = new URL(server.redirectUri);
 

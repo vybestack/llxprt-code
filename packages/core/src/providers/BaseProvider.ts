@@ -1144,7 +1144,12 @@ export abstract class BaseProvider implements IProvider {
   }
 
   /**
-   * Get custom headers from provider configuration and ephemeral settings
+   * Get custom headers from provider configuration and ephemeral settings.
+   *
+   * This merges:
+   * - Provider config `customHeaders`
+   * - Ephemeral `custom-headers`
+   * - Ephemeral `user-agent` (mapped into a `User-Agent` header)
    */
   protected getCustomHeaders(): Record<string, string> | undefined {
     const baseHeaders =
@@ -1161,10 +1166,19 @@ export abstract class BaseProvider implements IProvider {
             | undefined)
         : undefined;
 
-    const combined = {
+    const userAgent =
+      ephemeralSettings && typeof ephemeralSettings === 'object'
+        ? (ephemeralSettings['user-agent'] as string | undefined)
+        : undefined;
+
+    const combined: Record<string, string> = {
       ...(baseHeaders ?? {}),
       ...(ephemeralValue ?? {}),
     };
+
+    if (typeof userAgent === 'string' && userAgent.trim()) {
+      combined['User-Agent'] = userAgent.trim();
+    }
 
     return Object.keys(combined).length > 0 ? combined : undefined;
   }

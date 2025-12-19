@@ -7,6 +7,7 @@
 import React from 'react';
 import { Text, Box } from 'ink';
 import { Colors, SemanticColors } from '../../colors.js';
+import { createOsc8Link } from '../../utils/terminalLinks.js';
 
 interface OAuthUrlMessageProps {
   text: string;
@@ -24,8 +25,10 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
   const providerMatch = text.match(/authorize with ([^\n:]+)/i);
   const provider = providerMatch ? providerMatch[1] : 'the service';
 
-  // Create OSC 8 hyperlink with friendly short text that won't wrap
-  const osc8Link = `\u001b]8;;${url}\u001b\\Click here to authorize with ${provider}\u001b]8;;\u001b\\`;
+  const osc8Link = createOsc8Link(
+    `Click here to authorize with ${provider}`,
+    url,
+  );
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -47,6 +50,13 @@ export const OAuthUrlMessage: React.FC<OAuthUrlMessageProps> = ({
         <Box>
           <Text color={Colors.Comment} dimColor wrap="wrap">
             Or copy this URL: {url}
+          </Text>
+        </Box>
+        <Box>
+          <Text color={Colors.Comment} dimColor wrap="wrap">
+            Tip: when mouse scrolling is enabled, drag to select and it will be
+            copied to your clipboard. For terminal selection, run /mouse off
+            (Ctrl+\).
           </Text>
         </Box>
       </Box>

@@ -38,6 +38,28 @@ class HarnessProvider extends BaseProvider {
   }
 }
 
+class NamedHarnessProvider extends BaseProvider {
+  constructor(name: string, config: Config, settingsService: SettingsService) {
+    super({ name }, undefined, config, settingsService);
+  }
+
+  async getModels(): Promise<never[]> {
+    return [];
+  }
+
+  getDefaultModel(): string {
+    return `${this.name}-default-model`;
+  }
+
+  protected supportsOAuth(): boolean {
+    return true;
+  }
+
+  protected generateChatCompletionWithOptions(): AsyncIterableIterator<never> {
+    return (async function* () {})();
+  }
+}
+
 const prompt = {
   speaker: 'human' as const,
   blocks: [] as unknown[],
@@ -322,6 +344,179 @@ describe('ProviderManager.normalizeRuntimeInputs', () => {
     expect(normalized.resolved?.baseURL).toBe(
       'https://config-fallback.example.com',
     );
+  });
+
+  it('does not leak config base-url when runtime settings service differs', () => {
+    const foregroundSettings = new SettingsService();
+    const subagentSettings = new SettingsService();
+    subagentSettings.set('activeProvider', 'anthropic');
+    subagentSettings.setProviderSetting('anthropic', 'model', 'claude-test');
+
+    const config = createRuntimeConfigStub(foregroundSettings, {
+      getSettingsService: () => foregroundSettings,
+      getEphemeralSetting: (key: string) =>
+        key === 'base-url'
+          ? 'https://leaked-foreground.example.com/openai/v1'
+          : undefined,
+    }) as Config;
+
+    const manager = new ProviderManager({
+      settingsService: subagentSettings,
+      config,
+    });
+
+    manager.registerProvider(
+      new NamedHarnessProvider('anthropic', config, subagentSettings),
+    );
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: subagentSettings,
+        config,
+        runtime: {
+          runtimeId: 'runtime-mismatched-settings',
+          settingsService: subagentSettings,
+          config,
+        },
+      },
+      'anthropic',
+    );
+
+    expect(normalized.resolved?.baseURL).toBeUndefined();
+  });
+
+  it('does not leak config auth-key when runtime settings service differs', () => {
+    const foregroundSettings = new SettingsService();
+    const subagentSettings = new SettingsService();
+    subagentSettings.set('activeProvider', 'anthropic');
+    subagentSettings.setProviderSetting('anthropic', 'model', 'claude-test');
+
+    const config = createRuntimeConfigStub(foregroundSettings, {
+      getSettingsService: () => foregroundSettings,
+      getEphemeralSetting: (key: string) =>
+        key === 'auth-key' ? 'leaked-foreground-key' : undefined,
+    }) as Config;
+
+    const manager = new ProviderManager({
+      settingsService: subagentSettings,
+      config,
+    });
+
+    manager.registerProvider(
+      new NamedHarnessProvider('anthropic', config, subagentSettings),
+    );
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: subagentSettings,
+        config,
+        runtime: {
+          runtimeId: 'runtime-mismatched-settings',
+          settingsService: subagentSettings,
+          config,
+        },
+      },
+      'anthropic',
+    );
+
+    expect(normalized.resolved?.authToken).toBeUndefined();
+  });
+
+  it('does not apply active provider base-url to other providers', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', 'openai');
+    settingsService.setProviderSetting('anthropic', 'model', 'claude-test');
+
+    const config = createRuntimeConfigStub(settingsService, {
+      getEphemeralSetting: (key: string) =>
+        key === 'base-url' ? 'https://openai.example.com/openai/v1' : undefined,
+    }) as Config;
+
+    const manager = new ProviderManager({ settingsService, config });
+    manager.registerProvider(
+      new NamedHarnessProvider('anthropic', config, settingsService),
+    );
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: settingsService,
+        config,
+        runtime: {
+          runtimeId: 'runtime-cross-provider-baseurl',
+          settingsService,
+          config,
+        },
+      },
+      'anthropic',
+    );
+
+    expect(normalized.resolved?.baseURL).toBeUndefined();
+  });
+
+  it('does not apply active provider auth-key to other providers', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', 'openai');
+    settingsService.setProviderSetting('anthropic', 'model', 'claude-test');
+
+    const config = createRuntimeConfigStub(settingsService, {
+      getEphemeralSetting: (key: string) =>
+        key === 'auth-key' ? 'leaked-foreground-key' : undefined,
+    }) as Config;
+
+    const manager = new ProviderManager({ settingsService, config });
+    manager.registerProvider(
+      new NamedHarnessProvider('anthropic', config, settingsService),
+    );
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: settingsService,
+        config,
+        runtime: {
+          runtimeId: 'runtime-cross-provider-authkey',
+          settingsService,
+          config,
+        },
+      },
+      'anthropic',
+    );
+
+    expect(normalized.resolved?.authToken).toBeUndefined();
+  });
+
+  it('prefers provider-scoped model over config.getModel when invoking another provider', () => {
+    const settingsService = new SettingsService();
+    settingsService.set('activeProvider', 'openai');
+    settingsService.setProviderSetting('anthropic', 'model', 'claude-test');
+
+    const config = createRuntimeConfigStub(settingsService, {
+      getModel: () => 'foreground-model',
+    }) as Config;
+
+    const manager = new ProviderManager({ settingsService, config });
+    manager.registerProvider(
+      new NamedHarnessProvider('anthropic', config, settingsService),
+    );
+
+    const normalized = manager.normalizeRuntimeInputs(
+      {
+        contents: [prompt],
+        settings: settingsService,
+        config,
+        runtime: {
+          runtimeId: 'runtime-model-precedence',
+          settingsService,
+          config,
+        },
+      },
+      'anthropic',
+    );
+
+    expect(normalized.resolved?.model).toBe('claude-test');
   });
 
   it('derives base-url from provider configuration when settings and config lack it', () => {

@@ -20,6 +20,7 @@ const xcodeColors: ColorsTheme = {
   DiffAdded: '#C6EAD8',
   DiffRemoved: '#FEDEDE',
   Comment: '#007400',
+  DimComment: '#005500',
   Gray: '#c0c0c0',
   GradientColors: ['#1c00cf', '#007400'],
 };

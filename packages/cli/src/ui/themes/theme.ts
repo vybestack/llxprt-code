@@ -47,6 +47,7 @@ export interface ColorsTheme {
   DiffRemovedBackground?: string;
   DiffRemovedForeground?: string;
   Comment: string;
+  DimComment: string;
   Gray: string;
   GradientColors?: string[];
 }
@@ -70,6 +71,7 @@ export const lightTheme: ColorsTheme = {
   DiffAdded: '#C6EAD8',
   DiffRemoved: '#FFCCCC',
   Comment: '#008000',
+  DimComment: '#006000',
   Gray: '#97a0b0',
   GradientColors: ['#4796E4', '#847ACE', '#C3677F'],
 };
@@ -88,6 +90,7 @@ export const darkTheme: ColorsTheme = {
   DiffAdded: '#28350B',
   DiffRemoved: '#430000',
   Comment: '#6C7086',
+  DimComment: '#4A4D5E',
   Gray: '#6C7086',
   GradientColors: ['#4796E4', '#847ACE', '#C3677F'],
 };
@@ -106,6 +109,7 @@ export const ansiTheme: ColorsTheme = {
   DiffAdded: 'green',
   DiffRemoved: 'red',
   Comment: 'gray',
+  DimComment: '#5a5a5a',
   Gray: 'gray',
 };
 

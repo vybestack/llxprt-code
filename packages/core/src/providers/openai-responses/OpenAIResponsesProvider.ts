@@ -19,6 +19,8 @@
  * This provider exclusively uses the OpenAI /responses endpoint
  * for models that support it (o1, o3, etc.)
  */
+import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
+
 // @plan:PLAN-20251023-STATELESS-HARDENING.P08
 // @requirement:REQ-SP4-002/REQ-SP4-003
 // Removed ConversationCache and peekActiveProviderRuntime dependencies to enforce stateless operation
@@ -30,6 +32,10 @@ import {
   type ToolCallBlock,
   type ToolResponseBlock,
 } from '../../services/history/IContent.js';
+import {
+  limitOutputTokens,
+  type ToolOutputSettingsProvider,
+} from '../../utils/toolOutputLimiter.js';
 import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
@@ -395,6 +401,13 @@ export class OpenAIResponsesProvider extends BaseProvider {
   ): AsyncIterableIterator<IContent> {
     const { contents: content, tools } = options;
 
+    // Ensure OpenAI/Codex history is API-compliant:
+    // every assistant tool_call must have a corresponding tool_response.
+    // Cancelled tools can leave orphaned tool_call blocks which cause the next
+    // request to 400 ("No tool call found for function call output...").
+    const patchedContent =
+      SyntheticToolResponseHandler.patchMessageHistory(content);
+
     // Use getAuthTokenForPrompt() to trigger OAuth if needed
     const apiKey =
       (await this.getAuthTokenForPrompt()) ??
@@ -455,7 +468,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       });
     }
 
-    for (const c of content) {
+    for (const c of patchedContent) {
       if (c.speaker === 'human') {
         const textBlocks = c.blocks.filter(
           (b): b is TextBlock => b.type === 'text',
@@ -500,14 +513,58 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
         // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825
         for (const toolResponseBlock of toolResponseBlocks) {
-          const result =
+          const rawResult =
             typeof toolResponseBlock.result === 'string'
               ? toolResponseBlock.result
               : JSON.stringify(toolResponseBlock.result);
+
+          const outputLimiterConfig =
+            options.config ??
+            options.runtime?.config ??
+            this.globalConfig ??
+            ({
+              getEphemeralSettings: () => ({}),
+            } satisfies ToolOutputSettingsProvider);
+
+          const limited = limitOutputTokens(
+            rawResult,
+            outputLimiterConfig,
+            toolResponseBlock.toolName ?? 'tool_response',
+          );
+
+          const candidate = limited.content || limited.message || '';
+
+          const outputCallId = normalizeToOpenAIToolId(
+            toolResponseBlock.callId,
+          );
+
+          // Defensive guard: Codex /responses requires every function_call_output
+          // to reference a function_call call_id that exists in the request history.
+          // If history is corrupted (e.g. cancellation injects a mismatched callId),
+          // drop the orphaned output rather than sending an invalid request.
+          const hasMatchingCall = patchedContent.some(
+            (msg) =>
+              msg.speaker === 'ai' &&
+              msg.blocks.some(
+                (b) =>
+                  b.type === 'tool_call' &&
+                  normalizeToOpenAIToolId((b as ToolCallBlock).id) ===
+                    outputCallId,
+              ),
+          );
+
+          if (!hasMatchingCall) {
+            this.logger.debug(
+              () =>
+                `Dropping orphan function_call_output with call_id=${outputCallId} (no matching tool_call in history)`,
+            );
+            continue;
+          }
+
           input.push({
             type: 'function_call_output',
-            call_id: normalizeToOpenAIToolId(toolResponseBlock.callId),
-            output: result,
+            call_id: outputCallId,
+            output: candidate,
           });
         }
       }
@@ -653,30 +710,59 @@ export class OpenAIResponsesProvider extends BaseProvider {
       );
     }
 
-    // @plan PLAN-20251215-issue813: Wrap with retryWithBackoff for 429/5xx handling
-    const response = await retryWithBackoff(
-      () =>
-        fetch(responsesURL, {
-          method: 'POST',
-          headers,
-          body: bodyBlob,
-        }),
-      {
-        shouldRetryOnError: this.shouldRetryOnError.bind(this),
-      },
-    );
+    // @plan PLAN-20251215-issue868: Retry responses streaming end-to-end
+    // Retry must encompass both the initial fetch and the subsequent stream
+    // consumption, because transient network failures can occur mid-stream.
+    const maxStreamingAttempts = 2;
+    let streamingAttempt = 0;
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      this.logger.debug(
-        () => `API error ${response.status}: ${errorBody.substring(0, 500)}`,
+    while (streamingAttempt < maxStreamingAttempts) {
+      streamingAttempt++;
+
+      const response = await retryWithBackoff(
+        () =>
+          fetch(responsesURL, {
+            method: 'POST',
+            headers,
+            body: bodyBlob,
+          }),
+        {
+          shouldRetryOnError: this.shouldRetryOnError.bind(this),
+        },
       );
-      throw parseErrorResponse(response.status, errorBody, this.name);
-    }
 
-    if (response.body) {
-      for await (const message of parseResponsesStream(response.body)) {
-        yield message;
+      if (!response.ok) {
+        const errorBody = await response.text();
+        this.logger.debug(
+          () => `API error ${response.status}: ${errorBody.substring(0, 500)}`,
+        );
+        throw parseErrorResponse(response.status, errorBody, this.name);
+      }
+
+      if (!response.body) {
+        this.logger.debug(() => 'Response body missing, returning early');
+        return;
+      }
+
+      try {
+        for await (const message of parseResponsesStream(response.body)) {
+          yield message;
+        }
+        return;
+      } catch (error) {
+        const canRetryStream = this.shouldRetryOnError(error);
+        this.logger.debug(
+          () =>
+            `Responses stream error on attempt ${streamingAttempt}/${maxStreamingAttempts}: ${String(error)}`,
+        );
+
+        if (!canRetryStream || streamingAttempt >= maxStreamingAttempts) {
+          throw error;
+        }
+
+        // Retry by restarting the request from the beginning.
+        // NOTE: This can re-yield partial content from a previous attempt.
+        continue;
       }
     }
   }

@@ -8,6 +8,8 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   disableMouseEvents,
   enableMouseEvents,
+  isMouseEventsActive,
+  setMouseEventsActive,
   isIncompleteMouseSequence,
   parseMouseEvent,
   parseSGRMouseEvent,
@@ -22,6 +24,26 @@ describe('mouse utils', () => {
       enableMouseEvents(stdout);
       disableMouseEvents(stdout);
       expect(stdout.write).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('mouse event tracking state', () => {
+    it('tracks whether mouse events are active', () => {
+      const stdout = { write: vi.fn() } as unknown as NodeJS.WriteStream;
+      disableMouseEvents(stdout);
+      expect(isMouseEventsActive()).toBe(false);
+
+      enableMouseEvents(stdout);
+      expect(isMouseEventsActive()).toBe(true);
+    });
+
+    it('can toggle mouse events using setMouseEventsActive', () => {
+      const stdout = { write: vi.fn() } as unknown as NodeJS.WriteStream;
+      setMouseEventsActive(false, stdout);
+      expect(isMouseEventsActive()).toBe(false);
+
+      setMouseEventsActive(true, stdout);
+      expect(isMouseEventsActive()).toBe(true);
     });
   });
 

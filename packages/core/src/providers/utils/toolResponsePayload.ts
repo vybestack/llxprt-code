@@ -24,9 +24,6 @@ export interface ToolResponsePayload {
 
 export const EMPTY_TOOL_RESULT_PLACEHOLDER = '[no tool result]';
 
-const MAX_TOOL_RESPONSE_CHARS = 1024;
-const MAX_TOOL_RESPONSE_TEXT_CHARS = 512;
-
 function coerceToString(value: unknown): string {
   if (typeof value === 'string') {
     return value;
@@ -42,61 +39,19 @@ function coerceToString(value: unknown): string {
   }
 }
 
-function sanitizeResultString(result: string): {
-  text: string;
-  truncated: boolean;
-  originalLength: number;
-} {
-  const sanitized = hasUnicodeReplacements(result)
-    ? ensureJsonSafe(result)
-    : result;
-
-  if (sanitized.length <= MAX_TOOL_RESPONSE_CHARS) {
-    return {
-      text: sanitized,
-      truncated: false,
-      originalLength: sanitized.length,
-    };
-  }
-
-  const truncatedText = `${sanitized.slice(
-    0,
-    MAX_TOOL_RESPONSE_CHARS,
-  )}… [truncated ${sanitized.length - MAX_TOOL_RESPONSE_CHARS} chars]`;
-
-  return {
-    text: truncatedText,
-    truncated: true,
-    originalLength: sanitized.length,
-  };
+function sanitizeUnicode(result: string): string {
+  return hasUnicodeReplacements(result) ? ensureJsonSafe(result) : result;
 }
 
-function limitToolResponseText(text: string): {
+function formatToolResultValue(text: string): {
   value: string;
-  truncated: boolean;
   originalLength: number;
 } {
-  let limited = text;
-  let truncated = false;
-  const originalLength = text.length;
-
-  const lines = limited.split('\n');
-  if (lines.length > 1) {
-    limited = `${lines[0]}\n[+${lines.length - 1} more lines omitted]`;
-    truncated = true;
-  }
-
-  if (limited.length > MAX_TOOL_RESPONSE_TEXT_CHARS) {
-    limited = `${limited.slice(0, MAX_TOOL_RESPONSE_TEXT_CHARS)}… [truncated ${limited.length - MAX_TOOL_RESPONSE_TEXT_CHARS} chars]`;
-    truncated = true;
-  }
-
-  return { value: limited, truncated, originalLength };
+  return { value: text, originalLength: text.length };
 }
 
 function formatToolResult(result: unknown): {
   value?: string;
-  truncated?: boolean;
   originalLength?: number;
   raw?: string;
 } {
@@ -104,8 +59,8 @@ function formatToolResult(result: unknown): {
     return {};
   }
   if (typeof result === 'string') {
-    const limited = limitToolResponseText(result);
-    return { ...limited, raw: result };
+    const formatted = formatToolResultValue(result);
+    return { ...formatted, raw: result };
   }
   try {
     const serialized = JSON.stringify(result);
@@ -133,12 +88,14 @@ function limitToolPayload(
     };
   }
 
+  const originalLength = serializedResult.length;
+
   if (!config) {
-    const normalized = sanitizeResultString(serializedResult);
+    const sanitized = sanitizeUnicode(serializedResult);
     return {
-      text: normalized.text,
-      truncated: normalized.truncated,
-      originalLength: normalized.originalLength,
+      text: sanitized,
+      truncated: false,
+      originalLength,
     };
   }
 
@@ -149,11 +106,11 @@ function limitToolPayload(
   );
   const candidate =
     limited.content || limited.message || EMPTY_TOOL_RESULT_PLACEHOLDER;
-  const normalized = sanitizeResultString(candidate);
+  const sanitized = sanitizeUnicode(candidate);
   return {
-    text: normalized.text,
-    truncated: limited.wasTruncated || normalized.truncated,
-    originalLength: normalized.originalLength,
+    text: sanitized,
+    truncated: limited.wasTruncated,
+    originalLength,
     limitMessage: limited.wasTruncated ? limited.message : undefined,
   };
 }
@@ -181,10 +138,6 @@ export function buildToolResponsePayload(
     if (limited.limitMessage) {
       payload.limitMessage = limited.limitMessage;
     }
-  }
-  if (formatted.truncated) {
-    payload.truncated = true;
-    payload.originalLength = formatted.originalLength ?? payload.originalLength;
   }
 
   if (block.error) {

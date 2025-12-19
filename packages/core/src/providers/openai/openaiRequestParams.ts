@@ -50,6 +50,38 @@ function normalizeOpenAIParamKey(key: string): string {
   return key.replace(/-/g, '_');
 }
 
+const OPENAI_REASONING_INTERNAL_KEYS = new Set<string>([
+  'enabled',
+  'includeInContext',
+  'includeInResponse',
+  'format',
+  'stripFromContext',
+]);
+
+function stripInternalReasoningKeys(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, nestedValue] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    if (
+      nestedValue === undefined ||
+      nestedValue === null ||
+      OPENAI_REASONING_INTERNAL_KEYS.has(key)
+    ) {
+      continue;
+    }
+    sanitized[key] = nestedValue;
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+}
+
 export function filterOpenAIRequestParams(
   source: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> | undefined {
@@ -66,6 +98,16 @@ export function filterOpenAIRequestParams(
     if (!OPENAI_ALLOWED_PARAM_KEYS.has(normalizedKey)) {
       continue;
     }
+
+    if (normalizedKey === 'reasoning') {
+      const sanitized = stripInternalReasoningKeys(value);
+      if (!sanitized) {
+        continue;
+      }
+      filtered[normalizedKey] = sanitized;
+      continue;
+    }
+
     filtered[normalizedKey] = value;
   }
 

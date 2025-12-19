@@ -24,6 +24,7 @@ const ansiLightColors: ColorsTheme = {
   DiffRemovedBackground: '#FFE5E5',
   DiffRemovedForeground: 'black',
   Comment: 'gray',
+  DimComment: '#666666',
   Gray: 'gray',
   GradientColors: ['blue', 'green'],
 };

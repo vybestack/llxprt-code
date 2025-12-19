@@ -1138,9 +1138,6 @@ export const useGeminiStream = (
         }
       } finally {
         setIsResponding(false);
-        if (!turnCancelledRef.current) {
-          scheduleNextQueuedSubmission();
-        }
       }
     },
     [

@@ -43,7 +43,7 @@ export interface ReadonlySettingsSnapshot {
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.5 */
   'reasoning.stripFromContext'?: 'all' | 'allButLast' | 'none';
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.6 */
-  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high';
+  'reasoning.effort'?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006.7 */
   'reasoning.maxTokens'?: number;
 }
@@ -192,7 +192,7 @@ export interface AgentRuntimeContext {
       includeInResponse(): boolean;
       format(): 'native' | 'field';
       stripFromContext(): 'all' | 'allButLast' | 'none';
-      effort(): 'minimal' | 'low' | 'medium' | 'high' | undefined;
+      effort(): 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | undefined;
       maxTokens(): number | undefined;
     };
   };
@@ -254,6 +254,7 @@ import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 export interface AgentRuntimeProviderAdapter {
   getActiveProvider(): IProvider;
   setActiveProvider(name: string): void;
+  getProviderByName?(name: string): IProvider | undefined;
 }
 
 /**

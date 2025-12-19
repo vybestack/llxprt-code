@@ -130,12 +130,74 @@ export class SyntheticToolResponseHandler {
    * @returns Patched message history with synthetic responses added
    */
   static patchMessageHistory(messages: IContent[]): IContent[] {
+    // Defensive: normalize any malformed call IDs in history so downstream
+    // providers always see canonical hist_tool_* IDs.
+    //
+    // We have seen cases where a cancellation path injects a tool response with
+    // callId like "call_..." (or other non-hist IDs). If that callId isn't
+    // normalized consistently with the corresponding tool_call.id, the next
+    // /responses request can 400 because a function_call_output references a
+    // call_id that has no matching function_call.
+    //
+    // Since IContent canonical storage is hist_tool_*, normalize both tool_call
+    // and tool_response IDs to hist_tool_* up-front.
+    const normalizedMessages: IContent[] = messages.map((msg) => ({
+      ...msg,
+      blocks: msg.blocks.map((block) => {
+        if (block.type === 'tool_call') {
+          const tc = block as ToolCallBlock;
+          const id = tc.id;
+          if (!id) return tc;
+          if (id.startsWith('hist_tool_')) return tc;
+
+          if (id.startsWith('call_')) {
+            return {
+              ...tc,
+              id: `hist_tool_${id.substring('call_'.length)}`,
+            } as ToolCallBlock;
+          }
+
+          if (id.startsWith('toolu_')) {
+            return {
+              ...tc,
+              id: `hist_tool_${id.substring('toolu_'.length)}`,
+            } as ToolCallBlock;
+          }
+
+          return { ...tc, id: `hist_tool_${id}` } as ToolCallBlock;
+        }
+        if (block.type === 'tool_response') {
+          const tr = block as ToolResponseBlock;
+          const callId = tr.callId;
+          if (!callId) return tr;
+          if (callId.startsWith('hist_tool_')) return tr;
+
+          if (callId.startsWith('call_')) {
+            return {
+              ...tr,
+              callId: `hist_tool_${callId.substring('call_'.length)}`,
+            } as ToolResponseBlock;
+          }
+          if (callId.startsWith('toolu_')) {
+            return {
+              ...tr,
+              callId: `hist_tool_${callId.substring('toolu_'.length)}`,
+            } as ToolResponseBlock;
+          }
+
+          return { ...tr, callId: `hist_tool_${callId}` } as ToolResponseBlock;
+        }
+        return block;
+      }),
+    }));
+
     logger.debug(
-      () => `patchMessageHistory called with ${messages.length} messages`,
+      () =>
+        `patchMessageHistory called with ${normalizedMessages.length} messages`,
     );
     logger.debug(
       () =>
-        `Message speakers: ${messages
+        `Message speakers: ${normalizedMessages
           .map((m) => {
             const toolCalls = m.blocks.filter(
               (b) => b.type === 'tool_call',
@@ -148,12 +210,13 @@ export class SyntheticToolResponseHandler {
           .join(', ')}`,
     );
 
-    // First identify missing tool responses from original messages
-    const missingToolIds = this.identifyMissingToolResponses(messages);
+    // First identify missing tool responses from normalized messages
+    const missingToolIds =
+      this.identifyMissingToolResponses(normalizedMessages);
     logger.debug(() => `Missing tool IDs: ${JSON.stringify(missingToolIds)}`);
 
     // Always create a deep copy to avoid mutation issues with immutable objects
-    const deepCopyMessages: IContent[] = messages.map((msg) => ({
+    const deepCopyMessages: IContent[] = normalizedMessages.map((msg) => ({
       speaker: msg.speaker,
       blocks: msg.blocks.map((block) => {
         // Deep copy each block

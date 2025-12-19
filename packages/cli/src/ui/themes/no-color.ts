@@ -20,6 +20,7 @@ const noColorColorsTheme: ColorsTheme = {
   DiffAdded: '',
   DiffRemoved: '',
   Comment: '',
+  DimComment: '',
   Gray: '',
 };
 

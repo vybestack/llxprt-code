@@ -20,6 +20,7 @@ const ayuDarkColors: ColorsTheme = {
   DiffAdded: '#293022',
   DiffRemoved: '#3D1215',
   Comment: '#646A71',
+  DimComment: '#4a4e55',
   Gray: '#3D4149',
   GradientColors: ['#FFB454', '#F26D78'],
 };

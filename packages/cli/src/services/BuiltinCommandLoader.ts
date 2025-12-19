@@ -27,6 +27,7 @@ import { memoryCommand } from '../ui/commands/memoryCommand.js';
 import { privacyCommand } from '../ui/commands/privacyCommand.js';
 import { loggingCommand } from '../ui/commands/loggingCommand.js';
 import { uiprofileCommand } from '../ui/commands/uiprofileCommand.js';
+import { mouseCommand } from '../ui/commands/mouseCommand.js';
 import { quitCommand } from '../ui/commands/quitCommand.js';
 import { restoreCommand } from '../ui/commands/restoreCommand.js';
 import { statsCommand } from '../ui/commands/statsCommand.js';
@@ -99,6 +100,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       memoryCommand,
       privacyCommand,
       loggingCommand,
+      mouseCommand,
       ...(isDevelopment ? [uiprofileCommand] : []),
       quitCommand,
       restoreCommand(this.config),
