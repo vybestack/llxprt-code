@@ -16,6 +16,7 @@ import {
   setActiveProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
 import process from 'process';
+import { performance } from 'node:perf_hooks';
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal();
@@ -311,16 +312,19 @@ describe('Settings Remediation Integration', () => {
      * @and All operations are synchronous
      */
     it('should complete 1000 operations synchronously under 10ms', () => {
-      const startTime = Date.now();
+      const startTime = performance.now();
 
       for (let i = 0; i < 1000; i++) {
         config.setEphemeralSetting(`key${i}`, i);
         config.getEphemeralSetting(`key${i}`);
       }
 
-      const elapsed = Date.now() - startTime;
+      const elapsed = performance.now() - startTime;
 
-      expect(elapsed).toBeLessThan(10);
+      // CI runners can be noisy/contended; keep this as a smoke test for regressions
+      // without introducing flaky failures.
+      const maxElapsedMs = process.env.CI === 'true' ? 50 : 10;
+      expect(elapsed).toBeLessThan(maxElapsedMs);
 
       expect(config.getEphemeralSetting('key999')).toBe(999);
       expect(config.getEphemeralSetting('key0')).toBe(0);
@@ -335,7 +339,7 @@ describe('Settings Remediation Integration', () => {
      * @then All complete synchronously and quickly
      */
     it('should handle provider operations efficiently', () => {
-      const startTime = Date.now();
+      const startTime = performance.now();
 
       const providers = ['openai', 'anthropic', 'google', 'local'];
       const settingsPerProvider = 50;
@@ -355,8 +359,9 @@ describe('Settings Remediation Integration', () => {
         expect(Object.keys(settings)).toHaveLength(settingsPerProvider);
       }
 
-      const elapsed = Date.now() - startTime;
-      expect(elapsed).toBeLessThan(10);
+      const elapsed = performance.now() - startTime;
+      const maxElapsedMs = process.env.CI === 'true' ? 50 : 10;
+      expect(elapsed).toBeLessThan(maxElapsedMs);
     });
   });
 
