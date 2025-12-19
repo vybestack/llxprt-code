@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | — |
-| **In Progress** | Batch 01 |
+| **Last Completed** | Batch 01 |
+| **In Progress** | Batch 02 |
 | **Next Up** | Batch 02 |
-| **Progress** | 0/49 (0%) |
+| **Progress** | 1/49 (2%) |
 | **Last Updated** | 2025-12-23 |
 
 ## Preflight
@@ -15,11 +15,11 @@ Use this checklist to track batch execution progress.
 - [x] Branch exists: `git checkout -b 20251219gemerge`
 - [x] Upstream remote + tags fetched: `git fetch upstream --tags`
 - [x] Clean worktree before Batch 01: `git status --porcelain` is empty
-- [ ] File existence pre-check run (see PLAN.md)
+- [x] File existence pre-check run (see PLAN.md)
 
 ## Batch Checklist
 
-- [V] Batch 01 — QUICK — REIMPLEMENT — `b8df8b2a` — feat(core): wire up UI for ASK_USER policy decisions in message bus (#10630)
+- [x] Batch 01 — QUICK — REIMPLEMENT — `b8df8b2a` — feat(core): wire up UI for ASK_USER policy decisions in message bus (#10630)
 - [ ] Batch 02 — FULL — PICK — `4f17eae5, d38ab079, 2e6d69c9, 47f69317, 8c1656bf` — feat(cli): Prevent queuing of slash and shell commands (#11094) / Update shell tool call colors for confirmed actions (#11126) / Fix --allowed-tools in non-interactive mode to do substring matching for parity with interactive mode. (#10944) / Add support for output-format stream-jsonflag for headless mode (#10883) / Don't always fall back on a git clone when installing extensions (#11229)
 - [ ] Batch 03 — QUICK — PICK — `cfaa95a2` — feat(cli): Add nargs to yargs options (#11132)
 - [ ] Batch 04 — FULL — REIMPLEMENT — `130f0a02` — chore(subagents): Remove legacy subagent code (#11175)
