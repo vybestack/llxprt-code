@@ -247,6 +247,7 @@ describe('MCPOAuthProvider', () => {
       delete configWithoutAuth.tokenUrl;
 
       const mockResourceMetadata = {
+        resource: 'https://api.example.com/',
         authorization_servers: ['https://discovered.auth.com'],
       };
 
@@ -502,7 +503,7 @@ describe('MCPOAuthProvider', () => {
       delete configWithoutClientAndAuthorizationUrl.authorizationUrl;
 
       const mockResourceMetadata: OAuthProtectedResourceMetadata = {
-        resource: 'https://api.example.com',
+        resource: 'https://api.example.com/',
         authorization_servers: ['https://auth.example.com'],
       };
 
@@ -1166,6 +1167,7 @@ describe('MCPOAuthProvider', () => {
       delete configWithUserScopes.tokenUrl;
 
       const mockResourceMetadata = {
+        resource: 'https://api.example.com/',
         authorization_servers: ['https://discovered.auth.com'],
       };
 
@@ -1253,6 +1255,7 @@ describe('MCPOAuthProvider', () => {
       delete configWithoutScopes.tokenUrl;
 
       const mockResourceMetadata = {
+        resource: 'https://api.example.com/',
         authorization_servers: ['https://discovered.auth.com'],
       };
 

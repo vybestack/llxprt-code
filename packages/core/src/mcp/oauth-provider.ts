@@ -15,7 +15,7 @@ import {
   MCPOAuthTokenStorage,
 } from './oauth-token-storage.js';
 import { getErrorMessage } from '../utils/errors.js';
-import { OAuthUtils } from './oauth-utils.js';
+import { OAuthUtils, ResourceMismatchError } from './oauth-utils.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
 const debugLogger = new DebugLogger('llxprt:mcp:oauth');
@@ -739,6 +739,7 @@ export class MCPOAuthProvider {
             const discoveredConfig =
               await OAuthUtils.discoverOAuthFromWWWAuthenticate(
                 wwwAuthenticate,
+                mcpServerUrl,
               );
             if (discoveredConfig) {
               // Merge discovered config with existing config, preserving clientId and clientSecret
@@ -755,7 +756,12 @@ export class MCPOAuthProvider {
           }
         }
       } catch (error) {
-        console.debug(
+        // Re-throw security validation errors
+        if (error instanceof ResourceMismatchError) {
+          throw error;
+        }
+
+        debugLogger.debug(
           `Failed to check endpoint for authentication requirements: ${getErrorMessage(error)}`,
         );
       }
