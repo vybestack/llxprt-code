@@ -63,7 +63,13 @@ export const Composer = ({
       onSuggestionsVisibilityChange={onSuggestionsVisibilityChange}
       focus={isFocused}
       vimHandleInput={uiActions.vimHandleInput}
-      placeholder={placeholder}
+      placeholder={
+        vimModeEnabled
+          ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
+          : shellModeActive
+            ? '  Type your shell command'
+            : placeholder || '  Type your message or @path/to/file'
+      }
       approvalMode={showAutoAcceptIndicator}
       vimModeEnabled={vimModeEnabled}
       setQueueErrorMessage={uiActions.setQueueErrorMessage}
