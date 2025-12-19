@@ -20,6 +20,9 @@ import { join } from 'node:path';
 import { beforeAll, describe, it } from 'vitest';
 import { TestRig } from './test-helper.js';
 
+// Windows CI runners are unreliable for node-pty interactive tests (winpty agent "File not found").
+const skipOnWindowsCi = process.platform === 'win32' && process.env.CI === 'true';
+
 // Create a minimal MCP server that doesn't require external dependencies
 // This implements the MCP protocol directly using Node.js built-ins
 const serverScript = `#!/usr/bin/env node
@@ -153,7 +156,7 @@ rpc.on('tools/list', async () => {
 });
 `;
 
-describe('mcp server with cyclic tool schema is detected', () => {
+describe.skipIf(skipOnWindowsCi)('mcp server with cyclic tool schema is detected', () => {
   const rig = new TestRig();
 
   beforeAll(async () => {
