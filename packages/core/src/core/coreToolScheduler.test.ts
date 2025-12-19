@@ -31,7 +31,7 @@ import {
 } from '../index.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { MockModifiableTool } from '../test-utils/tools.js';
-import { Part, PartListUnion } from '@google/genai';
+import { Part, PartListUnion, type Content } from '@google/genai';
 import type { ContextAwareTool, ToolContext } from '../tools/tool-context.js';
 import { PolicyDecision } from '../policy/types.js';
 import {
@@ -39,6 +39,8 @@ import {
   type ToolConfirmationResponse,
 } from '../confirmation-bus/types.js';
 import { ToolErrorType } from '../tools/tool-error.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import { ContentConverters } from '../services/history/ContentConverters.js';
 
 // Test constants for tool output truncation
 const DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD = 30000;
@@ -1264,6 +1266,36 @@ describe('CoreToolScheduler edit cancellation', () => {
       '--- test.txt\n+++ test.txt\n@@ -1,1 +1,1 @@\n-old content\n+new content',
     );
     expect(cancelledCall.response.resultDisplay.fileName).toBe('test.txt');
+
+    // Regression (Issue #864): ensure cancellation responseParts can be persisted
+    // into provider-visible history as a paired tool_call + tool_response.
+    const historyService = new HistoryService();
+    const combinedContent: Content = {
+      role: 'user',
+      parts: cancelledCall.response.responseParts as Part[],
+    };
+
+    historyService.add(
+      ContentConverters.toIContent(
+        combinedContent,
+        historyService.getIdGeneratorCallback(),
+      ),
+    );
+
+    const curated = historyService.getCuratedForProvider();
+    expect(curated).toHaveLength(2);
+    expect(curated[0].speaker).toBe('ai');
+    expect(curated[0].blocks[0]).toMatchObject({
+      type: 'tool_call',
+      id: 'hist_tool_1',
+      name: 'mockEditTool',
+    });
+    expect(curated[1].speaker).toBe('tool');
+    expect(curated[1].blocks[0]).toMatchObject({
+      type: 'tool_response',
+      callId: 'hist_tool_1',
+      toolName: 'mockEditTool',
+    });
   });
 });
 

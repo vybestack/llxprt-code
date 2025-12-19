@@ -94,6 +94,46 @@ describe('ContentConverters - Tool ID Normalization', () => {
       expect(toolCall.id).toBe('hist_tool_abc123xyz');
     });
 
+    it('should normalize malformed OpenAI call ids missing underscore consistently', () => {
+      const canonicalId = 'call_3or3EL9f1eJ6fimZIHmJRVG2';
+      const malformedId = 'call3or3EL9f1eJ6fimZIHmJRVG2';
+
+      const geminiContent: Content = {
+        role: 'user',
+        parts: [
+          {
+            functionCall: {
+              name: 'run_shell_command',
+              args: { command: 'echo hi' },
+              id: canonicalId,
+            },
+          },
+          {
+            functionResponse: {
+              name: 'run_shell_command',
+              response: { output: 'cancelled' },
+              id: malformedId,
+            },
+          },
+        ],
+      };
+
+      const iContent = ContentConverters.toIContent(geminiContent);
+      const toolCall = iContent.blocks.find((b) => b.type === 'tool_call') as
+        | ToolCallBlock
+        | undefined;
+      const toolResponse = iContent.blocks.find(
+        (b) => b.type === 'tool_response',
+      ) as ToolResponseBlock | undefined;
+
+      expect(toolCall).toBeDefined();
+      expect(toolResponse).toBeDefined();
+
+      // Both IDs should normalize to the same canonical history ID suffix.
+      expect(toolCall?.id).toBe('hist_tool_3or3EL9f1eJ6fimZIHmJRVG2');
+      expect(toolResponse?.callId).toBe(toolCall?.id);
+    });
+
     it('should ALWAYS normalize tool response IDs to history format - ignore provider IDs', () => {
       // CRITICAL BUG FIX TEST: Tool response referencing an OpenAI tool call
       // The fix requires ALWAYS normalizing response IDs too

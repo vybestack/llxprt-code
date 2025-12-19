@@ -745,39 +745,203 @@ export class HistoryService
    * Find unmatched tool calls (tool calls without responses)
    */
   findUnmatchedToolCalls(): ToolCallBlock[] {
-    // With atomic tool call/response implementation, orphans are impossible by design
-    // Always return empty array since orphans cannot exist
-    this.logger.debug(
-      'No unmatched tool calls - atomic implementation prevents orphans',
-    );
-    return [];
+    const respondedCallIds = new Set<string>();
+
+    for (const content of this.history) {
+      if (!content.blocks) continue;
+      for (const block of content.blocks) {
+        if (block.type === 'tool_response') {
+          const response = block as ToolResponseBlock;
+          if (response.callId) {
+            respondedCallIds.add(response.callId);
+          }
+        }
+      }
+    }
+
+    const unmatched: ToolCallBlock[] = [];
+    const seenToolCallIds = new Set<string>();
+
+    for (const content of this.history) {
+      if (!content.blocks) continue;
+      for (const block of content.blocks) {
+        if (block.type !== 'tool_call') continue;
+
+        const toolCall = block as ToolCallBlock;
+        if (!toolCall.id) continue;
+        if (seenToolCallIds.has(toolCall.id)) continue;
+        seenToolCallIds.add(toolCall.id);
+
+        if (!respondedCallIds.has(toolCall.id)) {
+          unmatched.push(toolCall);
+        }
+      }
+    }
+
+    this.logger.debug('Unmatched tool calls detected:', {
+      unmatchedCount: unmatched.length,
+      unmatchedIds: unmatched.map((c) => c.id),
+    });
+
+    return unmatched;
   }
 
   /**
    * Validate and fix the history to ensure proper tool call/response pairing
    */
   validateAndFix(): void {
-    // With atomic tool call/response implementation, the history is always valid by design
-    // No fixing needed since orphans cannot exist
-    this.logger.debug(
-      'History validation skipped - atomic implementation ensures validity',
-    );
+    const respondedCallIds = new Set<string>();
+    for (const content of this.history) {
+      if (!content.blocks) continue;
+      for (const block of content.blocks) {
+        if (block.type === 'tool_response') {
+          const response = block as ToolResponseBlock;
+          if (response.callId) {
+            respondedCallIds.add(response.callId);
+          }
+        }
+      }
+    }
+
+    let insertedCount = 0;
+
+    for (let i = 0; i < this.history.length; i++) {
+      const content = this.history[i];
+      if (content.speaker !== 'ai' || !content.blocks) continue;
+
+      const toolCalls = content.blocks.filter(
+        (b): b is ToolCallBlock => b.type === 'tool_call',
+      );
+
+      if (toolCalls.length === 0) continue;
+
+      const missing = toolCalls.filter(
+        (tc) => tc.id && !respondedCallIds.has(tc.id),
+      );
+
+      if (missing.length === 0) continue;
+
+      const syntheticToolMessage: IContent = {
+        speaker: 'tool',
+        blocks: missing.map(
+          (tc): ToolResponseBlock => ({
+            type: 'tool_response',
+            callId: tc.id,
+            toolName: tc.name || 'unknown_tool',
+            result: null,
+            error: 'Tool call interrupted or cancelled',
+            isComplete: true,
+          }),
+        ),
+        metadata: {
+          synthetic: true,
+          reason: 'orphaned_tool_call',
+        },
+      };
+
+      // Insert immediately after the assistant message so providers that
+      // require strict tool-response adjacency remain valid.
+      this.history.splice(i + 1, 0, syntheticToolMessage);
+      insertedCount += 1;
+
+      for (const tc of missing) {
+        respondedCallIds.add(tc.id);
+      }
+
+      // Keep token counts consistent with the stored history.
+      void this.updateTokenCount(syntheticToolMessage);
+
+      // Skip over the inserted message.
+      i += 1;
+    }
+
+    this.logger.debug('History validation complete:', {
+      insertedSyntheticToolMessages: insertedCount,
+      historyLength: this.history.length,
+    });
   }
 
   /**
    * Get curated history with circular references removed for providers.
    * This ensures the history can be safely serialized and sent to providers.
    */
-  getCuratedForProvider(): IContent[] {
+  getCuratedForProvider(tailContents: IContent[] = []): IContent[] {
     // Get the curated history
     const curated = this.getCurated();
+    const combined =
+      tailContents.length > 0 ? [...curated, ...tailContents] : curated;
+
+    // Defensive: if a tool-speaker message accidentally contains tool_call
+    // blocks (e.g., cancellation history recorded as a single "user" Content
+    // containing both functionCall + functionResponse parts), split them into
+    // provider-compliant turns.
+    const split = this.splitToolCallsOutOfToolMessages(combined);
 
     // Ensure every tool response has a corresponding tool call for provider payloads
-    const normalized = this.ensureToolCallContinuity(curated);
+    const normalized = this.ensureToolCallContinuity(split);
+
+    // Ensure every tool call has some corresponding tool response in provider
+    // payloads, even if the tool execution was interrupted or cancelled.
+    const completed = this.ensureToolResponseCompleteness(normalized);
+
+    // Providers like OpenAI Chat and Anthropic require strict tool adjacency:
+    // tool results must appear directly after the assistant tool call message.
+    // Corrupted histories can contain duplicate or out-of-order tool results,
+    // which will 400 on provider switching. Normalize ordering and drop dupes.
+    const ordered = this.ensureToolResponseAdjacency(completed);
 
     // Deep clone to avoid circular references in tool call parameters
     // We need a clean copy that can be serialized
-    return this.deepCloneWithoutCircularRefs(normalized);
+    return this.deepCloneWithoutCircularRefs(ordered);
+  }
+
+  /**
+   * Providers expect tool calls to come from the assistant and tool results to
+   * come from the tool role. If history corruption produces a single "tool"
+   * message that contains both tool_call and tool_response blocks, split the
+   * tool_call blocks into a separate assistant message directly before the tool
+   * message.
+   */
+  private splitToolCallsOutOfToolMessages(contents: IContent[]): IContent[] {
+    const result: IContent[] = [];
+
+    for (const content of contents) {
+      if (content.speaker !== 'tool' || !content.blocks?.length) {
+        result.push(content);
+        continue;
+      }
+
+      const toolCalls = content.blocks.filter(
+        (b): b is ToolCallBlock => b.type === 'tool_call',
+      );
+
+      if (toolCalls.length === 0) {
+        result.push(content);
+        continue;
+      }
+
+      const remainingBlocks = content.blocks.filter(
+        (b) => b.type !== 'tool_call',
+      );
+
+      result.push({
+        speaker: 'ai',
+        blocks: toolCalls,
+        metadata: {
+          synthetic: true,
+          reason: 'extracted_tool_call_from_tool_message',
+        },
+      });
+
+      if (remainingBlocks.length > 0) {
+        result.push({
+          ...content,
+          blocks: remainingBlocks,
+        });
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -844,6 +1008,231 @@ export class HistoryService
   }
 
   /**
+   * Ensure every tool_call has a corresponding tool_response.
+   *
+   * Provider transcripts with orphaned tool calls can hard-fail strict APIs
+   * (e.g., Anthropic requires tool_result blocks immediately after tool_use).
+   * For provider-visible payloads, synthesize a minimal "cancelled" tool result
+   * so the transcript remains structurally valid.
+   *
+   * This is intentionally non-mutating: it does not modify the stored history,
+   * only the provider-facing view.
+   */
+  private ensureToolResponseCompleteness(contents: IContent[]): IContent[] {
+    const respondedCallIds = new Set<string>();
+
+    for (const content of contents) {
+      if (!content.blocks?.length) continue;
+      for (const block of content.blocks) {
+        if (block.type !== 'tool_response') continue;
+        const callId = (block as ToolResponseBlock).callId;
+        if (callId) {
+          respondedCallIds.add(callId);
+        }
+      }
+    }
+
+    const hasLaterNonToolMessageByIndex = new Array<boolean>(
+      contents.length,
+    ).fill(false);
+    let seenNonToolAfter = false;
+    for (let i = contents.length - 1; i >= 0; i--) {
+      hasLaterNonToolMessageByIndex[i] = seenNonToolAfter;
+      if (contents[i]?.speaker !== 'tool') {
+        seenNonToolAfter = true;
+      }
+    }
+
+    const result: IContent[] = [];
+
+    for (let i = 0; i < contents.length; i++) {
+      const content = contents[i];
+      result.push(content);
+
+      if (content.speaker !== 'ai' || !content.blocks?.length) continue;
+
+      const toolCalls = content.blocks.filter(
+        (b): b is ToolCallBlock => b.type === 'tool_call',
+      );
+      if (toolCalls.length === 0) continue;
+
+      const missing = toolCalls.filter(
+        (tc) => tc.id && !respondedCallIds.has(tc.id),
+      );
+      if (missing.length === 0) continue;
+
+      // If the conversation hasn't advanced past this tool call yet (e.g., tool
+      // execution is still in-flight), do not synthesize tool responses. This
+      // preserves the "pending tool call" state for callers like the UI while
+      // still allowing us to fix truly orphaned tool calls for provider payloads.
+      if (!hasLaterNonToolMessageByIndex[i]) continue;
+
+      result.push({
+        speaker: 'tool',
+        blocks: missing.map(
+          (tc): ToolResponseBlock => ({
+            type: 'tool_response',
+            callId: tc.id,
+            toolName: tc.name || 'unknown_tool',
+            result: null,
+            error: 'Tool call interrupted or cancelled',
+            isComplete: true,
+          }),
+        ),
+        metadata: {
+          synthetic: true,
+          reason: 'orphaned_tool_call',
+        },
+      });
+
+      for (const tc of missing) {
+        respondedCallIds.add(tc.id);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Ensure tool responses appear immediately after the assistant message that
+   * introduced their tool calls, and drop duplicate/out-of-order tool responses.
+   *
+   * Some providers strictly validate tool adjacency (e.g., OpenAI Chat tool
+   * messages must follow an assistant tool_calls message; Anthropic tool_results
+   * must correspond to tool_use blocks in the previous assistant message).
+   */
+  private ensureToolResponseAdjacency(contents: IContent[]): IContent[] {
+    const toolCallIndexById = new Map<string, number>();
+
+    for (let i = 0; i < contents.length; i++) {
+      const content = contents[i];
+      if (!content.blocks?.length) continue;
+      for (const block of content.blocks) {
+        if (block.type !== 'tool_call') continue;
+        const id = (block as ToolCallBlock).id;
+        if (id && !toolCallIndexById.has(id)) {
+          toolCallIndexById.set(id, i);
+        }
+      }
+    }
+
+    const responsesByToolCallIndex = new Map<number, ToolResponseBlock[]>();
+    const keptResponseByCallId = new Map<
+      string,
+      {
+        toolCallIndex: number;
+        responseIndex: number;
+        response: ToolResponseBlock;
+      }
+    >();
+
+    const scoreResponse = (response: ToolResponseBlock): number => {
+      let score = 0;
+      if (response.isComplete) score += 2;
+      if (response.error) score -= 1;
+      if (response.result !== undefined && response.result !== null) score += 1;
+      return score;
+    };
+
+    const strippedContents: Array<IContent | null> = contents.map((content) => {
+      if (!content.blocks?.length) return content;
+
+      const toolResponseBlocks = content.blocks.filter(
+        (b): b is ToolResponseBlock => b.type === 'tool_response',
+      );
+
+      if (toolResponseBlocks.length === 0) {
+        return content;
+      }
+
+      for (const toolResponse of toolResponseBlocks) {
+        const callId = toolResponse.callId;
+        if (!callId) continue;
+
+        const toolCallIndex = toolCallIndexById.get(callId);
+        if (toolCallIndex === undefined) {
+          // Should be rare after ensureToolCallContinuity. Keep the response in
+          // place (do not strip) to avoid silently losing tool output.
+          this.logger.warn('Tool response missing matching tool call', {
+            callId,
+            toolName: toolResponse.toolName,
+          });
+          continue;
+        }
+
+        const existing = keptResponseByCallId.get(callId);
+        if (existing) {
+          const existingScore = scoreResponse(existing.response);
+          const newScore = scoreResponse(toolResponse);
+          if (newScore > existingScore) {
+            const list = responsesByToolCallIndex.get(existing.toolCallIndex);
+            if (list) {
+              list[existing.responseIndex] = toolResponse;
+              keptResponseByCallId.set(callId, {
+                toolCallIndex: existing.toolCallIndex,
+                responseIndex: existing.responseIndex,
+                response: toolResponse,
+              });
+            }
+          }
+          continue;
+        }
+
+        const list = responsesByToolCallIndex.get(toolCallIndex) ?? [];
+        list.push(toolResponse);
+        responsesByToolCallIndex.set(toolCallIndex, list);
+        keptResponseByCallId.set(callId, {
+          toolCallIndex,
+          responseIndex: list.length - 1,
+          response: toolResponse,
+        });
+      }
+
+      const remainingBlocks = content.blocks.filter(
+        (b) => b.type !== 'tool_response',
+      );
+
+      // After stripping, drop tool-speaker messages entirely; providers will
+      // receive the consolidated tool results inserted after tool_call messages.
+      if (content.speaker === 'tool') {
+        return null;
+      }
+
+      if (remainingBlocks.length === 0) {
+        return null;
+      }
+
+      return {
+        ...content,
+        blocks: remainingBlocks,
+      };
+    });
+
+    const result: IContent[] = [];
+
+    for (let i = 0; i < strippedContents.length; i++) {
+      const content = strippedContents[i];
+      if (content) {
+        result.push(content);
+      }
+
+      const responses = responsesByToolCallIndex.get(i);
+      if (responses && responses.length > 0) {
+        result.push({
+          speaker: 'tool',
+          blocks: responses,
+          metadata: {
+            synthetic: true,
+            reason: 'reordered_tool_responses',
+          },
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Deep clone content array, removing circular references
    */
   private deepCloneWithoutCircularRefs(contents: IContent[]): IContent[] {
@@ -870,6 +1259,7 @@ export class HistoryService
               toolName: toolResponse.toolName,
               result: this.sanitizeParams(toolResponse.result),
               error: toolResponse.error,
+              isComplete: toolResponse.isComplete,
             } as ToolResponseBlock;
           } else {
             // Other blocks should be safe to clone

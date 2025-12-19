@@ -648,6 +648,19 @@ export class GeminiChat {
     return this.historyService;
   }
 
+  /**
+   * Wait until any in-flight send/stream has completed and history has been committed.
+   * This is used by provider switching to avoid capturing partial turns.
+   */
+  async waitForIdle(): Promise<void> {
+    try {
+      await this.sendPromise;
+    } catch {
+      // If a previous send failed, sendPromise can reject; callers that just need
+      // a "best effort" flush should not fail provider switching.
+    }
+  }
+
   getToolsView(): ToolRegistryView {
     return this.runtimeContext.tools;
   }
@@ -719,11 +732,9 @@ export class GeminiChat {
       );
     }
 
-    // Get curated history WITHOUT the new user message
-    const currentHistory = this.historyService.getCuratedForProvider();
-
-    // Build request with history + new message(s)
-    const iContents = [...currentHistory, ...userIContents];
+    // Build a provider-safe request transcript that includes the new message(s)
+    // without committing them to history yet.
+    const iContents = this.historyService.getCuratedForProvider(userIContents);
 
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-004.1
@@ -1333,20 +1344,21 @@ export class GeminiChat {
         const userIContents = userContent.map((content) =>
           ContentConverters.toIContent(content, idGen, matcher),
         );
-        // Get curated history WITHOUT the new user message (since we haven't added it yet)
-        const currentHistory = this.historyService.getCuratedForProvider();
-        // Build request with history + new messages (but don't commit to history yet)
-        requestContents = [...currentHistory, ...userIContents];
+        // Build a provider-safe request transcript that includes the new message(s)
+        // without committing them to history yet.
+        requestContents =
+          this.historyService.getCuratedForProvider(userIContents);
       } else {
         const userIContent = ContentConverters.toIContent(
           userContent,
           idGen,
           matcher,
         );
-        // Get curated history WITHOUT the new user message (since we haven't added it yet)
-        const currentHistory = this.historyService.getCuratedForProvider();
-        // Build request with history + new message (but don't commit to history yet)
-        requestContents = [...currentHistory, userIContent];
+        // Build a provider-safe request transcript that includes the new message
+        // without committing it to history yet.
+        requestContents = this.historyService.getCuratedForProvider([
+          userIContent,
+        ]);
       }
 
       // DEBUG: Check for malformed entries
@@ -2165,16 +2177,22 @@ export class GeminiChat {
       .join('')
       .trim();
 
+    const isToolContinuationInput = Array.isArray(userInput)
+      ? userInput.some(isFunctionResponse)
+      : isFunctionResponse(userInput);
+
     // Enhanced stream validation logic: A stream is considered successful if:
     // 1. There's a tool call (tool calls can end without explicit finish reasons), OR
     // 2. There's a finish reason AND we have non-empty response text, OR
     // 3. We detected text content during streaming (hasTextResponse = true)
     //
-    // We throw an error only when there's no tool call AND:
+    // We throw an error only when there's no tool call AND we're not in a
+    // tool-result continuation AND:
     // - No finish reason AND no text response during streaming, OR
     // - Empty response text after consolidation (e.g., only thoughts with no actual content)
     if (
       !hasToolCall &&
+      !isToolContinuationInput &&
       ((!hasFinishReason && !hasTextResponse) || !responseText)
     ) {
       if (!hasFinishReason && !hasTextResponse) {

@@ -117,9 +117,23 @@ describe('OpenAIVercelProvider', () => {
 
   describe('Model Listing (REQ-OAV-004)', () => {
     it('should return an array from getModels', async () => {
+      // Avoid accidental live network calls to the default OpenAI base URL in
+      // unit tests. If fetch hangs, Vitest will time out and fail this test.
+      const originalFetch: typeof fetch | undefined = global.fetch;
+      const fetchMock = vi.fn().mockRejectedValue(new Error('network'));
+      vi.stubGlobal('fetch', fetchMock);
+
       const provider = new OpenAIVercelProvider('test-api-key');
       const models = await provider.getModels();
       expect(Array.isArray(models)).toBe(true);
+
+      vi.restoreAllMocks();
+      if (originalFetch) {
+        global.fetch = originalFetch;
+      } else {
+        // @ts-expect-error test cleanup
+        delete global.fetch;
+      }
     });
 
     describe('remote model fetch', () => {

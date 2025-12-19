@@ -16,7 +16,12 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HistoryService } from './HistoryService.js';
-import { IContent, ContentFactory, ToolResponseBlock } from './IContent.js';
+import {
+  IContent,
+  ContentFactory,
+  ToolCallBlock,
+  ToolResponseBlock,
+} from './IContent.js';
 import { ContentConverters } from './ContentConverters.js';
 
 describe('HistoryService - Behavioral Tests', () => {
@@ -487,26 +492,125 @@ describe('HistoryService - Behavioral Tests', () => {
       service.add({
         speaker: 'ai',
         blocks: [
-          { type: 'tool_call', id: 'orphan1', name: 'tool1', parameters: {} },
+          {
+            type: 'tool_call',
+            id: 'hist_tool_orphan1',
+            name: 'tool1',
+            parameters: {},
+          },
         ],
       });
 
       // Add another user message (tool response is missing)
       service.add(ContentFactory.createUserMessage('Next question'));
 
-      // In current atomic implementation, unmatched tool calls cannot exist by design
       const unmatched = service.findUnmatchedToolCalls();
-      expect(unmatched).toHaveLength(0); // Always empty in atomic implementation
+      expect(unmatched).toHaveLength(1);
+      expect(unmatched[0]?.id).toBe('hist_tool_orphan1');
 
-      // Validate and fix does nothing in atomic implementation
       service.validateAndFix();
 
-      // History remains as is - no synthetic responses added in atomic design
+      // History should now include a synthetic tool response to keep pairing intact.
       const history = service.getAll();
-      expect(history).toHaveLength(2); // AI call, user message (no synthetic response)
+      expect(history).toHaveLength(3);
 
-      // No synthetic response is added in the current atomic implementation
-      // The history only contains the AI message and user message
+      const toolMessage = history.find((c) => c.speaker === 'tool');
+      expect(toolMessage).toBeDefined();
+      expect(
+        toolMessage?.blocks.some(
+          (b) =>
+            b.type === 'tool_response' &&
+            (b as ToolResponseBlock).callId === 'hist_tool_orphan1',
+        ),
+      ).toBe(true);
+    });
+
+    it('should synthesize tool responses for provider payloads without mutating stored history', () => {
+      service.add(ContentFactory.createUserMessage('Question'));
+      service.add({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'hist_tool_orphan1',
+            name: 'tool1',
+            parameters: {},
+          },
+        ],
+      });
+      service.add(ContentFactory.createUserMessage('Next question'));
+
+      // Stored history remains unchanged.
+      expect(service.getAll()).toHaveLength(3);
+
+      const curated = service.getCuratedForProvider();
+      const toolCallIndex = curated.findIndex(
+        (c) =>
+          c.speaker === 'ai' &&
+          c.blocks.some(
+            (b) =>
+              b.type === 'tool_call' &&
+              (b as ToolCallBlock).id === 'hist_tool_orphan1',
+          ),
+      );
+      expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+      expect(curated[toolCallIndex + 1]?.speaker).toBe('tool');
+      expect(
+        curated[toolCallIndex + 1]?.blocks.some(
+          (b) =>
+            b.type === 'tool_response' &&
+            (b as ToolResponseBlock).callId === 'hist_tool_orphan1',
+        ),
+      ).toBe(true);
+
+      // Still no mutation after reading provider view.
+      expect(service.getAll()).toHaveLength(3);
+    });
+
+    it('should synthesize tool responses when a new user message is provided as tail contents', () => {
+      service.add(ContentFactory.createUserMessage('Question'));
+      service.add({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'hist_tool_orphan_tail',
+            name: 'tool1',
+            parameters: {},
+          },
+        ],
+      });
+
+      // Stored history remains unchanged (tool call is still pending).
+      expect(service.getAll()).toHaveLength(2);
+
+      const tail = [ContentFactory.createUserMessage('Next question')];
+      const curated = service.getCuratedForProvider(tail);
+
+      const toolCallIndex = curated.findIndex(
+        (c) =>
+          c.speaker === 'ai' &&
+          c.blocks.some(
+            (b) =>
+              b.type === 'tool_call' &&
+              (b as ToolCallBlock).id === 'hist_tool_orphan_tail',
+          ),
+      );
+      expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+      expect(curated[toolCallIndex + 1]?.speaker).toBe('tool');
+      expect(
+        curated[toolCallIndex + 1]?.blocks.some(
+          (b) =>
+            b.type === 'tool_response' &&
+            (b as ToolResponseBlock).callId === 'hist_tool_orphan_tail',
+        ),
+      ).toBe(true);
+
+      // Tail user message should still be present (provider-safe transcript includes it).
+      expect(curated.some((c) => c.speaker === 'human')).toBe(true);
+
+      // Still no mutation after reading provider view.
+      expect(service.getAll()).toHaveLength(2);
     });
   });
 
@@ -660,6 +764,52 @@ describe('HistoryService - Behavioral Tests', () => {
   });
 
   describe('Orphan tool responses handling', () => {
+    it('should split tool_call blocks out of tool speaker entries in curated provider history', () => {
+      const combined = ContentConverters.toIContent(
+        {
+          role: 'user',
+          parts: [
+            {
+              functionCall: {
+                id: 'call_cancel_123',
+                name: 'run_shell_command',
+                args: { command: 'echo hi' },
+              },
+            },
+            {
+              functionResponse: {
+                id: 'call_cancel_123',
+                name: 'run_shell_command',
+                response: { error: '[Operation Cancelled] Reason: user' },
+              },
+            },
+          ],
+        },
+        service.getIdGeneratorCallback(),
+      );
+
+      // This shape can occur when a cancelled tool interaction is recorded as a
+      // single user Content containing both functionCall and functionResponse parts.
+      service.add(combined);
+
+      const curated = service.getCuratedForProvider();
+
+      expect(curated).toHaveLength(2);
+      expect(curated[0]?.speaker).toBe('ai');
+      expect(curated[0]?.blocks[0]).toMatchObject({
+        type: 'tool_call',
+        id: 'hist_tool_cancel_123',
+        name: 'run_shell_command',
+      });
+
+      expect(curated[1]?.speaker).toBe('tool');
+      expect(curated[1]?.blocks[0]).toMatchObject({
+        type: 'tool_response',
+        callId: 'hist_tool_cancel_123',
+        toolName: 'run_shell_command',
+      });
+    });
+
     it('should synthesize missing tool_call entries so tool responses survive compression', () => {
       const orphanCallId = 'hist_tool_orphan';
 
@@ -730,6 +880,134 @@ describe('HistoryService - Behavioral Tests', () => {
             content.metadata?.reason === 'reconstructed_tool_call',
         ),
       ).toBe(false);
+    });
+
+    it('should drop duplicate late tool_responses to keep provider tool adjacency valid', () => {
+      const callId = 'hist_tool_dupe';
+
+      service.add(ContentFactory.createUserMessage('Please list files.'));
+      service.add({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: callId,
+            name: 'run_shell_command',
+            parameters: { command: 'ls' },
+          },
+        ],
+      });
+      service.add(
+        ContentFactory.createToolResponse(callId, 'run_shell_command', {
+          output: 'file.txt',
+        }),
+      );
+      service.add(
+        ContentFactory.createAIMessage([{ type: 'text', text: 'file.txt' }]),
+      );
+
+      // Corrupted history: the same tool result is written again after the
+      // assistant has already continued with normal text.
+      service.add(
+        ContentFactory.createToolResponse(callId, 'run_shell_command', {
+          output: 'file.txt',
+        }),
+      );
+
+      const curated = service.getCuratedForProvider();
+
+      const toolResponsesForCallId = curated
+        .flatMap((content) => content.blocks)
+        .filter(
+          (block): block is ToolResponseBlock =>
+            block.type === 'tool_response' &&
+            (block as ToolResponseBlock).callId === callId,
+        );
+      expect(toolResponsesForCallId).toHaveLength(1);
+
+      const toolCallIndex = curated.findIndex(
+        (content) =>
+          content.speaker === 'ai' &&
+          content.blocks.some(
+            (block) =>
+              block.type === 'tool_call' &&
+              (block as ToolCallBlock).id === callId,
+          ),
+      );
+      expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+
+      const toolResultMessage = curated[toolCallIndex + 1];
+      expect(toolResultMessage?.speaker).toBe('tool');
+      expect(
+        toolResultMessage?.blocks.some(
+          (block) =>
+            block.type === 'tool_response' &&
+            (block as ToolResponseBlock).callId === callId,
+        ),
+      ).toBe(true);
+    });
+
+    it('should relocate out-of-order tool_responses to immediately follow their tool_call', () => {
+      const callId = 'hist_tool_out_of_order';
+
+      service.add(ContentFactory.createUserMessage('Please list files.'));
+      service.add({
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: callId,
+            name: 'run_shell_command',
+            parameters: { command: 'ls' },
+          },
+        ],
+      });
+
+      // Corrupted ordering: assistant continues before the tool result is recorded.
+      service.add(
+        ContentFactory.createAIMessage([
+          { type: 'text', text: '...waiting for tool...' },
+        ]),
+      );
+      service.add(
+        ContentFactory.createToolResponse(callId, 'run_shell_command', {
+          output: 'file.txt',
+        }),
+      );
+
+      const curated = service.getCuratedForProvider();
+
+      const toolCallIndex = curated.findIndex(
+        (content) =>
+          content.speaker === 'ai' &&
+          content.blocks.some(
+            (block) =>
+              block.type === 'tool_call' &&
+              (block as ToolCallBlock).id === callId,
+          ),
+      );
+      expect(toolCallIndex).toBeGreaterThanOrEqual(0);
+
+      const toolResultMessage = curated[toolCallIndex + 1];
+      expect(toolResultMessage?.speaker).toBe('tool');
+      expect(
+        toolResultMessage?.blocks.some(
+          (block) =>
+            block.type === 'tool_response' &&
+            (block as ToolResponseBlock).callId === callId,
+        ),
+      ).toBe(true);
+
+      const waitingMessageIndex = curated.findIndex(
+        (content) =>
+          content.speaker === 'ai' &&
+          content.blocks.some(
+            (block) =>
+              block.type === 'text' &&
+              (block as { text?: string }).text === '...waiting for tool...',
+          ),
+      );
+      expect(waitingMessageIndex).toBeGreaterThan(toolCallIndex + 1);
     });
   });
 

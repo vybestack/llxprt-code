@@ -696,7 +696,24 @@ describe('useGeminiStream', () => {
         status: 'cancelled',
         response: {
           callId: '1',
-          responseParts: [{ text: 'cancelled' }],
+          responseParts: [
+            {
+              functionCall: {
+                id: '1',
+                name: 'testTool',
+                args: {},
+              },
+            },
+            {
+              functionResponse: {
+                id: '1',
+                name: 'testTool',
+                response: {
+                  error: '[Operation Cancelled] Reason: user',
+                },
+              },
+            },
+          ],
           errorType: undefined, // FIX: Added missing property
         },
         responseSubmittedToGemini: false,
@@ -749,9 +766,32 @@ describe('useGeminiStream', () => {
 
     await waitFor(() => {
       expect(mockMarkToolsAsSubmitted).toHaveBeenCalledWith(['1']);
-      expect(client.addHistory).toHaveBeenCalledWith({
+      expect(client.addHistory).toHaveBeenCalledTimes(2);
+      expect(client.addHistory).toHaveBeenNthCalledWith(1, {
+        role: 'model',
+        parts: [
+          {
+            functionCall: {
+              id: '1',
+              name: 'testTool',
+              args: {},
+            },
+          },
+        ],
+      });
+      expect(client.addHistory).toHaveBeenNthCalledWith(2, {
         role: 'user',
-        parts: [{ text: 'cancelled' }],
+        parts: [
+          {
+            functionResponse: {
+              id: '1',
+              name: 'testTool',
+              response: {
+                error: '[Operation Cancelled] Reason: user',
+              },
+            },
+          },
+        ],
       });
       // Ensure we do NOT call back to the API
       expect(mockSendMessageStream).not.toHaveBeenCalled();
@@ -780,7 +820,22 @@ describe('useGeminiStream', () => {
       response: {
         callId: 'cancel-1',
         responseParts: [
-          { functionResponse: { name: 'toolA', id: 'cancel-1' } },
+          {
+            functionCall: {
+              name: 'toolA',
+              id: 'cancel-1',
+              args: {},
+            },
+          },
+          {
+            functionResponse: {
+              name: 'toolA',
+              id: 'cancel-1',
+              response: {
+                error: '[Operation Cancelled] Reason: user',
+              },
+            },
+          },
         ],
         resultDisplay: undefined,
         error: undefined,
@@ -809,7 +864,22 @@ describe('useGeminiStream', () => {
       response: {
         callId: 'cancel-2',
         responseParts: [
-          { functionResponse: { name: 'toolB', id: 'cancel-2' } },
+          {
+            functionCall: {
+              name: 'toolB',
+              id: 'cancel-2',
+              args: {},
+            },
+          },
+          {
+            functionResponse: {
+              name: 'toolB',
+              id: 'cancel-2',
+              response: {
+                error: '[Operation Cancelled] Reason: user',
+              },
+            },
+          },
         ],
         resultDisplay: undefined,
         error: undefined,
@@ -864,14 +934,51 @@ describe('useGeminiStream', () => {
       ]);
 
       // Crucially, addHistory should be called only ONCE
-      expect(client.addHistory).toHaveBeenCalledTimes(1);
+      expect(client.addHistory).toHaveBeenCalledTimes(2);
 
-      // And that single call should contain BOTH function responses
-      expect(client.addHistory).toHaveBeenCalledWith({
+      // One assistant message containing both tool calls, and one user message
+      // containing both tool results.
+      expect(client.addHistory).toHaveBeenNthCalledWith(1, {
+        role: 'model',
+        parts: [
+          {
+            functionCall: {
+              name: 'toolA',
+              id: 'cancel-1',
+              args: {},
+            },
+          },
+          {
+            functionCall: {
+              name: 'toolB',
+              id: 'cancel-2',
+              args: {},
+            },
+          },
+        ],
+      });
+
+      expect(client.addHistory).toHaveBeenNthCalledWith(2, {
         role: 'user',
         parts: [
-          ...(cancelledToolCall1.response.responseParts as Part[]),
-          ...(cancelledToolCall2.response.responseParts as Part[]),
+          {
+            functionResponse: {
+              name: 'toolA',
+              id: 'cancel-1',
+              response: {
+                error: '[Operation Cancelled] Reason: user',
+              },
+            },
+          },
+          {
+            functionResponse: {
+              name: 'toolB',
+              id: 'cancel-2',
+              response: {
+                error: '[Operation Cancelled] Reason: user',
+              },
+            },
+          },
         ],
       });
 

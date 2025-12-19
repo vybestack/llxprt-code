@@ -588,7 +588,14 @@ export class GeminiClient {
 
     // If chat is initialized, get its current history
     if (this.hasChatInitialized()) {
-      return this.getChat().getHistory();
+      const chat = this.getChat() as unknown as {
+        waitForIdle?: () => Promise<void>;
+        getHistory: () => Content[];
+      };
+      if (typeof chat.waitForIdle === 'function') {
+        await chat.waitForIdle();
+      }
+      return chat.getHistory();
     }
 
     // No history available
@@ -762,6 +769,7 @@ export class GeminiClient {
     // CRITICAL: Reuse stored HistoryService if available to preserve UI conversation display
     // This is essential for maintaining conversation history across provider switches
     let historyService: HistoryService;
+    const reusedHistoryService = Boolean(this._storedHistoryService);
     if (this._storedHistoryService) {
       this.logger.debug(
         'Reusing stored HistoryService to preserve UI conversation',
@@ -775,7 +783,7 @@ export class GeminiClient {
     }
 
     // Add extraHistory if provided
-    if (extraHistory && extraHistory.length > 0) {
+    if (!reusedHistoryService && extraHistory && extraHistory.length > 0) {
       // @plan PLAN-20251027-STATELESS5.P10
       // @requirement REQ-STAT5-003.1
       const currentModel = this.runtimeState.model;

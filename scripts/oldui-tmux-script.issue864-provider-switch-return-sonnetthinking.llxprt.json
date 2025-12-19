@@ -1,0 +1,366 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 40,
+    "historyLimit": 100000,
+    "scrollbackLines": 20000,
+    "initialWaitMs": 6000
+  },
+  "yolo": false,
+  "macros": {
+    "slash": [
+      { "type": "line", "text": "${cmd}", "submitKeys": [] },
+      { "type": "key", "key": "Enter" },
+      { "type": "wait", "ms": 250 },
+      { "type": "key", "key": "Enter" },
+      { "type": "wait", "ms": 250 },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "regex": "${waitForRegex}",
+        "regexFlags": "u",
+        "timeoutMs": "${timeoutMs}"
+      },
+      {
+        "type": "expectCount",
+        "scope": "scrollback",
+        "contains": "[API Error",
+        "equals": 0
+      },
+      {
+        "type": "expectCount",
+        "scope": "scrollback",
+        "contains": "Failed to switch provider",
+        "equals": 0
+      },
+      { "type": "capture", "label": "${label}", "scope": "screen" }
+    ],
+    "runShellToolLsLt": [
+      {
+        "type": "line",
+        "text": "Use the run_shell_command tool (NOT shell mode) NOW to run exactly: ls -lt ${path}. The path argument is REQUIRED; do not omit it and do not run bare `ls -lt`. Even if you think the directory may not exist or the command may fail, run it anyway. Reply with only the tool call. Do not run other tools. Do not explain. Do nothing else.",
+        "submitKeys": ["Enter"]
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "Shell ls -lt",
+        "timeoutMs": "${confirmTimeoutMs}"
+      },
+      {
+        "type": "expect",
+        "scope": "screen",
+        "contains": "ls -lt ${path}"
+      },
+      { "type": "capture", "label": "confirm-${label}", "scope": "screen" },
+      { "type": "approveTool", "choice": "once", "timeoutMs": 60000 },
+      {
+        "type": "waitForNot",
+        "scope": "screen",
+        "contains": "Allow execution of:",
+        "timeoutMs": 20000
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "${expectContains}",
+        "timeoutMs": "${runTimeoutMs}"
+      },
+      {
+        "type": "expectCount",
+        "scope": "screen",
+        "contains": "[API Error",
+        "equals": 0
+      },
+      {
+        "type": "expectCount",
+        "scope": "scrollback",
+        "contains": "[API Error",
+        "equals": 0
+      },
+      { "type": "capture", "label": "after-${label}", "scope": "screen" },
+      { "type": "capture", "label": "after-${label}", "scope": "scrollback" },
+      {
+        "type": "waitForNot",
+        "scope": "screen",
+        "contains": "esc to cancel",
+        "timeoutMs": 180000
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "Type your message",
+        "timeoutMs": 60000
+      }
+    ],
+    "runShellToolLsLtWithDone": [
+      {
+        "type": "line",
+        "text": "Use the run_shell_command tool (NOT shell mode) NOW to run exactly: ls -lt ${path}. The path argument is REQUIRED; do not omit it and do not run bare `ls -lt`. Even if you think the directory may not exist or the command may fail, run it anyway. Reply with only the tool call. After the tool returns, reply with exactly: DONE (and nothing else). Do not run other tools. Do not explain.",
+        "submitKeys": ["Enter"]
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "Shell ls -lt",
+        "timeoutMs": "${confirmTimeoutMs}"
+      },
+      {
+        "type": "expect",
+        "scope": "screen",
+        "contains": "ls -lt ${path}"
+      },
+      { "type": "capture", "label": "confirm-${label}", "scope": "screen" },
+      { "type": "approveTool", "choice": "once", "timeoutMs": 60000 },
+      {
+        "type": "waitForNot",
+        "scope": "screen",
+        "contains": "Allow execution of:",
+        "timeoutMs": 20000
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "${expectContains}",
+        "timeoutMs": "${runTimeoutMs}"
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "DONE",
+        "timeoutMs": "${runTimeoutMs}"
+      },
+      {
+        "type": "expectCount",
+        "scope": "screen",
+        "contains": "[API Error",
+        "equals": 0
+      },
+      {
+        "type": "expectCount",
+        "scope": "scrollback",
+        "contains": "[API Error",
+        "equals": 0
+      },
+      { "type": "capture", "label": "after-${label}", "scope": "screen" },
+      { "type": "capture", "label": "after-${label}", "scope": "scrollback" },
+      {
+        "type": "waitForNot",
+        "scope": "screen",
+        "contains": "esc to cancel",
+        "timeoutMs": 180000
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "Type your message",
+        "timeoutMs": 60000
+      }
+    ],
+    "askNoTools": [
+      {
+        "type": "line",
+        "text": "${text}",
+        "submitKeys": ["Enter"]
+      },
+      {
+        "type": "waitForNot",
+        "scope": "screen",
+        "contains": "esc to cancel",
+        "timeoutMs": "${runTimeoutMs}"
+      },
+      {
+        "type": "waitFor",
+        "scope": "screen",
+        "contains": "Type your message",
+        "timeoutMs": 60000
+      },
+      {
+        "type": "expectCount",
+        "scope": "screen",
+        "contains": "[API Error",
+        "equals": 0
+      },
+      {
+        "type": "expectCount",
+        "scope": "scrollback",
+        "contains": "[API Error",
+        "equals": 0
+      },
+      { "type": "capture", "label": "after-${label}", "scope": "screen" },
+      { "type": "capture", "label": "after-${label}", "scope": "scrollback" }
+    ]
+  },
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    { "type": "capture", "label": "initial", "scope": "screen" },
+
+    {
+      "type": "macro",
+      "name": "slash",
+      "args": {
+        "cmd": "/provider codex",
+        "waitForRegex": "(Switched from .* to codex|Already using provider: codex)",
+        "timeoutMs": 60000,
+        "label": "provider-codex"
+      }
+    },
+    {
+      "type": "macro",
+      "name": "slash",
+      "args": {
+        "cmd": "/set reasoning.effort low",
+        "waitForRegex": "Ephemeral setting 'reasoning\\.effort' set to \"low\"",
+        "timeoutMs": 60000,
+        "label": "codex-reasoning-effort-low"
+      }
+    },
+    {
+      "type": "macro",
+      "name": "slash",
+      "args": {
+        "cmd": "/model gpt-5.1-codex-mini",
+        "waitForRegex": "to gpt-5\\.1-codex-mini",
+        "timeoutMs": 60000,
+        "label": "codex-model-gpt-5-1-codex-mini"
+      }
+    },
+    {
+      "type": "macro",
+      "name": "runShellToolLsLt",
+      "args": {
+        "path": "docs",
+        "label": "codex-ls-docs",
+        "confirmTimeoutMs": 300000,
+        "runTimeoutMs": 300000,
+        "expectContains": "Uninstall.md"
+      }
+    },
+
+    {
+      "type": "macro",
+      "name": "slash",
+      "args": {
+        "cmd": "/profile load sonnetthinking",
+        "waitForRegex": "Profile 'sonnetthinking' loaded",
+        "timeoutMs": 300000,
+        "label": "profile-sonnetthinking-1"
+      }
+    },
+    {
+      "type": "macro",
+      "name": "runShellToolLsLt",
+      "args": {
+        "path": "dev-docs",
+        "label": "sonnet-ls-dev-docs",
+        "confirmTimeoutMs": 300000,
+        "runTimeoutMs": 300000,
+        "expectContains": "CEREBRAS_FIX_SUMMARY.md"
+      }
+    },
+
+    {
+      "type": "macro",
+      "name": "slash",
+      "args": {
+        "cmd": "/provider qwen",
+        "waitForRegex": "(Switched from .* to qwen|Already using provider: qwen)",
+        "timeoutMs": 300000,
+        "label": "provider-qwen"
+      }
+    },
+    {
+      "type": "macro",
+      "name": "runShellToolLsLt",
+      "args": {
+        "path": "packages",
+        "label": "qwen-ls-packages",
+        "confirmTimeoutMs": 300000,
+        "runTimeoutMs": 300000,
+        "expectContains": "vscode-ide-companion"
+      }
+    },
+
+    {
+      "type": "macro",
+      "name": "slash",
+      "args": {
+        "cmd": "/provider qwenvercel",
+        "waitForRegex": "(Switched from .* to qwenvercel|Already using provider: qwenvercel)",
+        "timeoutMs": 300000,
+        "label": "provider-qwenvercel"
+      }
+    },
+    {
+      "type": "macro",
+      "name": "runShellToolLsLt",
+      "args": {
+        "path": "packages/ui",
+        "label": "qwenvercel-ls-packages-ui",
+        "confirmTimeoutMs": 300000,
+        "runTimeoutMs": 300000,
+        "expectContains": "key-events.log"
+      }
+    },
+
+    {
+      "type": "macro",
+      "name": "slash",
+      "args": {
+        "cmd": "/provider gemini",
+        "waitForRegex": "(Switched from .* to gemini|Already using provider: gemini)",
+        "timeoutMs": 300000,
+        "label": "provider-gemini"
+      }
+    },
+    {
+      "type": "macro",
+      "name": "slash",
+      "args": {
+        "cmd": "/model gemini-2.5-flash",
+        "waitForRegex": "to gemini-2\\.5-flash",
+        "timeoutMs": 60000,
+        "label": "gemini-model-gemini-2-5-flash"
+      }
+    },
+    {
+      "type": "macro",
+      "name": "runShellToolLsLtWithDone",
+      "args": {
+        "path": "project-plans",
+        "label": "gemini-ls-project-plans",
+        "confirmTimeoutMs": 300000,
+        "runTimeoutMs": 300000,
+        "expectContains": "20251218issue864"
+      }
+    },
+
+    {
+      "type": "macro",
+      "name": "slash",
+      "args": {
+        "cmd": "/profile load sonnetthinking",
+        "waitForRegex": "Profile 'sonnetthinking' loaded",
+        "timeoutMs": 300000,
+        "label": "profile-sonnetthinking-2"
+      }
+    },
+    {
+      "type": "macro",
+      "name": "askNoTools",
+      "args": {
+        "label": "sonnetthinking-first-human-message",
+        "runTimeoutMs": 300000,
+        "text": "what was the first thing i said in this session (not that the system said or whatever but first human message)"
+      }
+    },
+
+    { "type": "line", "text": "/quit", "submitKeys": ["Enter"] },
+    { "type": "waitForExit", "timeoutMs": 15000 }
+  ]
+}
