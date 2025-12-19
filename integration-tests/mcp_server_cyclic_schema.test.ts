@@ -151,12 +151,6 @@ rpc.on('tools/list', async () => {
     }]
   };
 });
-
-// Send initialization notification
-rpc.send({
-  jsonrpc: '2.0',
-  method: 'initialized'
-});
 `;
 
 describe('mcp server with cyclic tool schema is detected', () => {
@@ -189,9 +183,26 @@ describe('mcp server with cyclic tool schema is detected', () => {
   it('mcp tool list should include tool with cyclic tool schema', async () => {
     const run = await rig.runInteractive();
 
-    await run.type('/mcp list');
-    await run.type('\r'); // Submit command with Enter key
+    try {
+      // MCP discovery can be slow in sandbox/docker and on Windows. Retry `/mcp list`
+      // until the tool appears (or we time out).
+      const deadline = Date.now() + 120_000;
+      while (Date.now() < deadline) {
+        await run.type('/mcp list');
+        await run.type('\r'); // Submit command with Enter key
 
-    await run.expectText('tool_with_cyclic_schema');
+        try {
+          await run.expectText('tool_with_cyclic_schema', 2000);
+          return;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        }
+      }
+
+      // Final assertion with a longer timeout so failures show a clear error.
+      await run.expectText('tool_with_cyclic_schema', 10_000);
+    } finally {
+      await run.kill();
+    }
   });
 });
