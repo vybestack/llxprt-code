@@ -142,6 +142,17 @@ export async function getCorrectedFileContent(
 
   // Use the proposed content directly without correction
   correctedContent = proposedContent;
+  // Preserve trailing newline when overwriting an existing file.
+  // This avoids unintentionally deleting the final newline when models provide
+  // content without one.
+  const preserveTrailingNewline = fileExists && originalContent.endsWith('\n');
+  if (
+    preserveTrailingNewline &&
+    correctedContent.length > 0 &&
+    !correctedContent.endsWith('\n')
+  ) {
+    correctedContent = `${correctedContent}\n`;
+  }
   return { originalContent, correctedContent, fileExists };
 }
 

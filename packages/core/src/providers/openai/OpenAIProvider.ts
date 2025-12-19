@@ -39,7 +39,10 @@ import {
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
-import { type OAuthManager } from '../../auth/precedence.js';
+import {
+  flushRuntimeAuthScope,
+  type OAuthManager,
+} from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
@@ -83,6 +86,53 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   private getLogger(): DebugLogger {
     return new DebugLogger('llxprt:provider:openai');
+  }
+
+  private async handleBucketFailoverOnPersistent429(
+    options: NormalizedGenerateChatOptions,
+    logger: DebugLogger,
+  ): Promise<{ result: boolean | null; client?: OpenAI }> {
+    const failoverHandler = options.runtime?.config?.getBucketFailoverHandler();
+
+    if (!failoverHandler || !failoverHandler.isEnabled()) {
+      return { result: null };
+    }
+
+    logger.debug(() => 'Attempting bucket failover on persistent 429');
+    const success = await failoverHandler.tryFailover();
+    if (!success) {
+      logger.debug(() => 'Bucket failover failed - no more buckets available');
+      return { result: false };
+    }
+
+    const previousAuthToken = options.resolved.authToken;
+
+    try {
+      // Clear runtime-scoped auth cache so subsequent auth resolution can pick up the new bucket.
+      if (typeof options.runtime?.runtimeId === 'string') {
+        flushRuntimeAuthScope(options.runtime.runtimeId);
+      }
+
+      // Force re-resolution of the auth token after bucket failover.
+      options.resolved.authToken = '';
+      const refreshedAuthToken = await this.getAuthTokenForPrompt();
+      options.resolved.authToken = refreshedAuthToken;
+
+      // Rebuild client with fresh credentials from new bucket
+      const client = await this.getClient(options);
+      logger.debug(
+        () =>
+          `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
+      );
+      return { result: true, client };
+    } catch (error) {
+      options.resolved.authToken = previousAuthToken;
+      logger.debug(
+        () =>
+          `Bucket failover auth refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return { result: false };
+    }
   }
 
   /**
@@ -1782,30 +1832,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Bucket failover callback for 429 errors
     // @plan PLAN-20251213issue686 Bucket failover integration for OpenAIProvider
     const onPersistent429Callback = async (): Promise<boolean | null> => {
-      // Try to get the bucket failover handler from runtime context config
-      const failoverHandler =
-        options.runtime?.config?.getBucketFailoverHandler();
-
-      if (failoverHandler && failoverHandler.isEnabled()) {
-        logger.debug(() => 'Attempting bucket failover on persistent 429');
-        const success = await failoverHandler.tryFailover();
-        if (success) {
-          // Rebuild client with fresh credentials from new bucket
-          failoverClient = await this.getClient(options);
-          logger.debug(
-            () =>
-              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
-          );
-          return true; // Signal retry with new bucket
-        }
-        logger.debug(
-          () => 'Bucket failover failed - no more buckets available',
-        );
-        return false; // No more buckets, stop retrying
+      const { result, client } = await this.handleBucketFailoverOnPersistent429(
+        options,
+        logger,
+      );
+      if (client) {
+        failoverClient = client;
       }
-
-      // No bucket failover configured
-      return null;
+      return result;
     };
 
     // Use failover client if bucket failover happened, otherwise use original client
@@ -3293,30 +3327,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Bucket failover callback for 429 errors - tools mode
     // @plan PLAN-20251213issue686 Bucket failover integration for OpenAIProvider
     const onPersistent429CallbackTools = async (): Promise<boolean | null> => {
-      // Try to get the bucket failover handler from runtime context config
-      const failoverHandler =
-        options.runtime?.config?.getBucketFailoverHandler();
-
-      if (failoverHandler && failoverHandler.isEnabled()) {
-        logger.debug(() => 'Attempting bucket failover on persistent 429');
-        const success = await failoverHandler.tryFailover();
-        if (success) {
-          // Rebuild client with fresh credentials from new bucket
-          failoverClientTools = await this.getClient(options);
-          logger.debug(
-            () =>
-              `Bucket failover successful, new bucket: ${failoverHandler.getCurrentBucket()}`,
-          );
-          return true; // Signal retry with new bucket
-        }
-        logger.debug(
-          () => 'Bucket failover failed - no more buckets available',
-        );
-        return false; // No more buckets, stop retrying
+      const { result, client } = await this.handleBucketFailoverOnPersistent429(
+        options,
+        logger,
+      );
+      if (client) {
+        failoverClientTools = client;
       }
-
-      // No bucket failover configured
-      return null;
+      return result;
     };
 
     if (streamingEnabled) {

@@ -106,6 +106,10 @@ const DEFAULT_EXTENSION_AUTO_UPDATE = {
  * The canonical schema for all settings.
  * The structure of this object defines the structure of the `Settings` type.
  * `as const` is crucial for TypeScript to infer the most specific types possible.
+ *
+ * IMPORTANT: When adding a new setting with `showInDialog: true`, ensure it is
+ * also documented in docs/cli/configuration.md with a complete description,
+ * type, default value, and example.
  */
 export const SETTINGS_SCHEMA = {
   accessibility: {
@@ -702,6 +706,34 @@ export const SETTINGS_SCHEMA = {
         description: 'Show the todo panel in the UI.',
         showInDialog: true,
       },
+      useFullWidth: {
+        type: 'boolean',
+        label: 'Use Full Width',
+        category: 'UI',
+        requiresRestart: false,
+        default: false,
+        description: 'Use the entire width of the terminal for output.',
+        showInDialog: true,
+      },
+      disableLoadingPhrases: {
+        type: 'boolean',
+        label: 'Disable Loading Phrases',
+        category: 'UI',
+        requiresRestart: true,
+        default: false,
+        description: 'Disable loading phrases for accessibility.',
+        showInDialog: true,
+      },
+      screenReader: {
+        type: 'boolean',
+        label: 'Screen Reader Mode',
+        category: 'UI',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Render output in plain-text to be more screen reader accessible.',
+        showInDialog: true,
+      },
     },
   },
 
@@ -978,7 +1010,7 @@ export const SETTINGS_SCHEMA = {
     label: 'Use Smart Edit',
     category: 'Advanced',
     requiresRestart: false,
-    default: false,
+    default: true,
     description: 'Enable the smart-edit tool instead of the replace tool.',
     showInDialog: false,
   },

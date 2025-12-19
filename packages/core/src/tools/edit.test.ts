@@ -167,6 +167,12 @@ describe('EditTool', () => {
         'hello world',
       );
     });
+
+    it('should preserve trailing newline when currentContent ends with one', () => {
+      expect(
+        applyReplacement('line\n', 'line\n', 'line # updated', false),
+      ).toBe('line # updated\n');
+    });
   });
 
   describe('validateToolParams', () => {

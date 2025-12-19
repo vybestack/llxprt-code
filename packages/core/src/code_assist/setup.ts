@@ -18,7 +18,7 @@ import { DebugLogger } from '../debug/index.js';
 export class ProjectIdRequiredError extends Error {
   constructor() {
     super(
-      'This account requires setting the GOOGLE_CLOUD_PROJECT env var. See https://github.com/vybestack/llxprt-code/blob/main/docs/authentication.md',
+      'This account requires setting the GOOGLE_CLOUD_PROJECT or GOOGLE_CLOUD_PROJECT_ID env var. See https://github.com/vybestack/llxprt-code/blob/main/docs/authentication.md',
     );
   }
 }
@@ -40,7 +40,10 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
     () =>
       `setupUser: starting setup, GOOGLE_CLOUD_PROJECT=${process.env.GOOGLE_CLOUD_PROJECT || 'undefined'}`,
   );
-  const projectId = process.env.GOOGLE_CLOUD_PROJECT || undefined;
+  const projectId =
+    process.env['GOOGLE_CLOUD_PROJECT'] ||
+    process.env['GOOGLE_CLOUD_PROJECT_ID'] ||
+    undefined;
   // PRIVACY FIX: sessionId parameter removed from CodeAssistServer constructor
   const caServer = new CodeAssistServer(client, projectId, {}, undefined);
   const coreClientMetadata: ClientMetadata = {

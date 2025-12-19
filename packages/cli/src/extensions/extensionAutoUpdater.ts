@@ -6,7 +6,7 @@
 
 import { ExtensionUpdateState } from '../ui/state/extensions.js';
 import { checkForExtensionUpdate } from '../config/extensions/github.js';
-import { type Extension, loadUserExtensions } from '../config/extension.js';
+import { loadUserExtensions } from '../config/extension.js';
 import {
   updateExtension,
   type ExtensionUpdateInfo,
@@ -138,7 +138,7 @@ interface ExtensionAutoUpdaterOptions {
   workspaceDir?: string;
   notify?: (message: string, level: 'info' | 'warn' | 'error') => void;
   stateStore?: ExtensionAutoUpdateStateStore;
-  extensionLoader?: () => Promise<Extension[]>;
+  extensionLoader?: () => Promise<GeminiCLIExtension[]>;
   updateExecutor?: (
     extension: GeminiCLIExtension,
     cwd: string,
@@ -164,7 +164,7 @@ export class ExtensionAutoUpdater {
   private readonly workspaceDir: string;
   private readonly notify?: ExtensionAutoUpdaterOptions['notify'];
   private readonly stateStore: ExtensionAutoUpdateStateStore;
-  private readonly extensionLoader: () => Promise<Extension[]>;
+  private readonly extensionLoader: () => Promise<GeminiCLIExtension[]>;
   private readonly updateExecutor: (
     extension: GeminiCLIExtension,
     cwd: string,
@@ -186,8 +186,7 @@ export class ExtensionAutoUpdater {
     this.notify = options.notify;
     this.stateStore = options.stateStore ?? createFileStateStore();
     this.extensionLoader =
-      options.extensionLoader ??
-      (async () => loadUserExtensions(this.workspaceDir));
+      options.extensionLoader ?? (async () => loadUserExtensions());
     this.updateExecutor =
       options.updateExecutor ??
       ((extension, cwd, currentState, setExtensionUpdateState) =>
@@ -247,7 +246,7 @@ export class ExtensionAutoUpdater {
         this.extensionLoader(),
       ]);
       const extensionsByName = new Map(
-        extensions.map((extension) => [extension.config.name, extension]),
+        extensions.map((extension) => [extension.name, extension]),
       );
 
       await this.applyPendingInstalls(state, extensionsByName);
@@ -279,7 +278,7 @@ export class ExtensionAutoUpdater {
 
   private async applyPendingInstalls(
     state: ExtensionUpdateStateFile,
-    extensionsByName: Map<string, Extension>,
+    extensionsByName: Map<string, GeminiCLIExtension>,
   ): Promise<void> {
     for (const [name, entry] of Object.entries(state)) {
       if (!entry.pendingInstall) {
@@ -298,22 +297,19 @@ export class ExtensionAutoUpdater {
   }
 
   private async processExtension(
-    extension: Extension,
+    extension: GeminiCLIExtension,
     state: ExtensionUpdateStateFile,
   ): Promise<void> {
     if (!extension.installMetadata) {
       return;
     }
 
-    const settings = this.getEffectiveSettingsForExtension(
-      extension.config.name,
-    );
+    const settings = this.getEffectiveSettingsForExtension(extension.name);
     if (!settings.enabled) {
       return;
     }
 
-    const entry =
-      state[extension.config.name] ?? (state[extension.config.name] = {});
+    const entry = state[extension.name] ?? (state[extension.name] = {});
     const now = this.now();
     const intervalMs = settings.checkIntervalHours * HOUR_IN_MS;
     if (entry.lastCheck && now - entry.lastCheck < intervalMs) {
@@ -325,11 +321,12 @@ export class ExtensionAutoUpdater {
     try {
       // Convert Extension to GeminiCLIExtension for the updateChecker
       const geminiExtension: GeminiCLIExtension = {
-        name: extension.config.name,
-        version: extension.config.version,
+        name: extension.name,
+        version: extension.version,
         isActive: true,
         path: extension.path,
         installMetadata: extension.installMetadata,
+        contextFiles: extension.contextFiles || [],
       };
 
       // Call the update checker which will update entry.state via callback
@@ -356,14 +353,14 @@ export class ExtensionAutoUpdater {
       entry.state = ExtensionUpdateState.ERROR;
       this.notifyWithLevel(
         'error',
-        `Failed to check extension "${extension.config.name}" for updates: ${entry.lastError}`,
+        `Failed to check extension "${extension.name}" for updates: ${entry.lastError}`,
         settings.notificationLevel,
       );
     }
   }
 
   private async handleUpdateAvailable(
-    extension: Extension,
+    extension: GeminiCLIExtension,
     entry: ExtensionUpdateHistoryEntry,
     settings: EffectivePerExtensionSettings,
   ): Promise<void> {
@@ -375,7 +372,7 @@ export class ExtensionAutoUpdater {
         entry.pendingInstall = true;
         this.notifyWithLevel(
           'info',
-          `Extension "${extension.config.name}" update queued; it will install on the next restart.`,
+          `Extension "${extension.name}" update queued; it will install on the next restart.`,
           settings.notificationLevel,
         );
         break;
@@ -383,7 +380,7 @@ export class ExtensionAutoUpdater {
       default:
         this.notifyWithLevel(
           'info',
-          `Update available for extension "${extension.config.name}". Run "llxprt extensions update ${extension.config.name}" to install.`,
+          `Update available for extension "${extension.name}". Run "llxprt extensions update ${extension.name}" to install.`,
           settings.notificationLevel,
         );
         break;
@@ -391,7 +388,7 @@ export class ExtensionAutoUpdater {
   }
 
   private async performUpdate(
-    extension: Extension,
+    extension: GeminiCLIExtension,
     entry: ExtensionUpdateHistoryEntry,
     settings: EffectivePerExtensionSettings,
   ): Promise<void> {
@@ -400,11 +397,12 @@ export class ExtensionAutoUpdater {
 
       // Convert Extension to GeminiCLIExtension for the updateExecutor
       const geminiExtension: GeminiCLIExtension = {
-        name: extension.config.name,
-        version: extension.config.version,
+        name: extension.name,
+        version: extension.version,
         isActive: true,
         path: extension.path,
         installMetadata: extension.installMetadata,
+        contextFiles: extension.contextFiles || [],
       };
 
       const info = await this.updateExecutor(
@@ -436,7 +434,7 @@ export class ExtensionAutoUpdater {
       entry.state = ExtensionUpdateState.ERROR;
       this.notifyWithLevel(
         'error',
-        `Failed to update extension "${extension.config.name}": ${entry.lastError}`,
+        `Failed to update extension "${extension.name}": ${entry.lastError}`,
         settings.notificationLevel,
       );
     }

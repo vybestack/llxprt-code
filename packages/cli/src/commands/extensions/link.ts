@@ -6,7 +6,7 @@
 
 import type { CommandModule } from 'yargs';
 import {
-  installExtension,
+  installOrUpdateExtension,
   requestConsentNonInteractive,
   type ExtensionInstallMetadata,
 } from '../../config/extension.js';
@@ -23,7 +23,7 @@ export async function handleLink(args: InstallArgs) {
       source: args.path,
       type: 'link',
     };
-    const extensionName = await installExtension(
+    const extensionName = await installOrUpdateExtension(
       installMetadata,
       requestConsentNonInteractive,
     );

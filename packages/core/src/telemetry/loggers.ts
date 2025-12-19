@@ -140,7 +140,7 @@ export function logToolCall(
   event: ToolCallEvent,
 ): void {
   if (process.env.VERBOSE === 'true') {
-    console.log(`[TELEMETRY] logToolCall: ${event.function_name}`);
+    console.error(`[TELEMETRY] logToolCall: ${event.function_name}`);
   }
 
   const uiEvent = {
@@ -151,7 +151,7 @@ export function logToolCall(
   uiTelemetryService.addEvent(uiEvent);
   if (!isTelemetrySdkInitialized()) {
     if (process.env.VERBOSE === 'true') {
-      console.log(`[TELEMETRY] SDK not initialized, skipping log`);
+      console.error(`[TELEMETRY] SDK not initialized, skipping log`);
     }
     return;
   }

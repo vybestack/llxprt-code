@@ -12,6 +12,7 @@ vi.mock('node:child_process', async (importOriginal) => {
   return {
     ...actual,
     execSync: vi.fn(),
+    spawnSync: vi.fn(() => ({ status: 0 })),
   };
 });
 vi.mock('fs');
@@ -111,9 +112,31 @@ describe('ide-installer', () => {
           platform: 'linux',
         });
         await installer.install();
-        expect(child_process.execSync).toHaveBeenCalledWith(
-          '"code" --install-extension vybestack.llxprt-code-vscode-ide-companion --force',
-          { stdio: 'pipe' },
+        expect(child_process.spawnSync).toHaveBeenCalledWith(
+          'code',
+          [
+            '--install-extension',
+            'vybestack.llxprt-code-vscode-ide-companion',
+            '--force',
+          ],
+          { stdio: 'pipe', shell: false },
+        );
+      });
+
+      it('installs the extension using code cli on windows', async () => {
+        const { installer } = setup({
+          platform: 'win32',
+          execSync: () => 'C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd',
+        });
+        await installer.install();
+        expect(child_process.spawnSync).toHaveBeenCalledWith(
+          'C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd',
+          [
+            '--install-extension',
+            'vybestack.llxprt-code-vscode-ide-companion',
+            '--force',
+          ],
+          { stdio: 'pipe', shell: true },
         );
       });
 

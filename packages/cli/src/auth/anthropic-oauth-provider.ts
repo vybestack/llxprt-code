@@ -424,13 +424,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         currentToken.refresh_token.length < 1000
       ) {
         try {
-          // @pseudocode lines 84-86: Refresh the token with immediate timeout for testing
-          const refreshedToken = await Promise.race([
-            this.deviceFlow.refreshToken(currentToken.refresh_token),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Refresh timeout')), 1),
-            ),
-          ]);
+          // @pseudocode lines 84-86: Refresh the token
+          const refreshedToken = await this.deviceFlow.refreshToken(
+            currentToken.refresh_token,
+          );
 
           try {
             await this._tokenStore.saveToken('anthropic', refreshedToken);

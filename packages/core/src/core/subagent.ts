@@ -12,7 +12,12 @@
 import { reportError } from '../utils/errorReporting.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { Config, ApprovalMode } from '../config/config.js';
-import { type ToolCallRequestInfo, GeminiEventType, Turn } from './turn.js';
+import {
+  type ToolCallRequestInfo,
+  type ToolCallResponseInfo,
+  GeminiEventType,
+  Turn,
+} from './turn.js';
 import {
   executeToolCall,
   type ToolExecutionConfig,
@@ -1204,7 +1209,7 @@ export class SubAgentScope {
           `Subagent ${this.subagentId} executing tool '${requestInfo.name}' with args=${JSON.stringify(requestInfo.args)}`,
       );
 
-      let toolResponse;
+      let toolResponse: ToolCallResponseInfo;
 
       // Handle scope-local tools first.
       if (functionCall.name === 'self_emitvalue') {
@@ -1223,11 +1228,12 @@ export class SubAgentScope {
       } else {
         // @plan PLAN-20251028-STATELESS6.P08
         // @requirement REQ-STAT6-001.1
-        toolResponse = await executeToolCall(
-          this.toolExecutorContext,
+        const completed = await executeToolCall(
+          this.createSchedulerConfig({ interactive: false }),
           requestInfo,
           abortController.signal,
         );
+        toolResponse = completed.response;
       }
 
       if (toolResponse.error) {
@@ -1293,6 +1299,11 @@ export class SubAgentScope {
           })
         : () => this.config.getEphemeralSettings();
 
+    const getEphemeralSetting = (key: string): unknown => {
+      const settings = getEphemeralSettings();
+      return settings[key];
+    };
+
     const getExcludeTools =
       typeof this.toolExecutorContext.getExcludeTools === 'function'
         ? () => this.toolExecutorContext.getExcludeTools()
@@ -1318,6 +1329,7 @@ export class SubAgentScope {
       getToolRegistry: () => this.toolExecutorContext.getToolRegistry(),
       getSessionId: () => this.toolExecutorContext.getSessionId(),
       getEphemeralSettings,
+      getEphemeralSetting,
       getExcludeTools,
       getTelemetryLogPromptsEnabled,
       getAllowedTools: () => allowedTools,

@@ -118,6 +118,7 @@ import {
   DISABLE_FOCUS_TRACKING,
   SHOW_CURSOR,
 } from './utils/terminalSequences.js';
+import { calculateMainAreaWidth } from './utils/ui-sizing.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
@@ -514,7 +515,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const {
     showWorkspaceMigrationDialog,
-    workspaceExtensions,
+    workspaceGeminiCLIExtensions,
     onWorkspaceMigrationDialogOpen,
     onWorkspaceMigrationDialogClose,
   } = useWorkspaceMigration(settings);
@@ -622,7 +623,7 @@ export const AppContainer = (props: AppContainerProps) => {
     useSettingsCommand();
 
   const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
-    useFolderTrust(settings, config);
+    useFolderTrust(settings, config, addItem);
 
   const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
   useEffect(() => {
@@ -1327,7 +1328,8 @@ export const AppContainer = (props: AppContainerProps) => {
     (streamingState === StreamingState.Idle ||
       streamingState === StreamingState.Responding) &&
     !initError &&
-    !isProcessing;
+    !isProcessing &&
+    !!slashCommands;
 
   useEffect(() => {
     if (selectionLogger.enabled) {
@@ -1495,7 +1497,7 @@ export const AppContainer = (props: AppContainerProps) => {
     geminiClient,
   ]);
 
-  const mainAreaWidth = Math.floor(terminalWidth * 0.9);
+  const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
 
   // Detect PowerShell for file reference syntax tip
   const isPowerShell =
@@ -1557,13 +1559,13 @@ export const AppContainer = (props: AppContainerProps) => {
     toolsDialogAction,
     toolsDialogTools,
     toolsDialogDisabledTools,
-    workspaceExtensions,
+    workspaceGeminiCLIExtensions,
     loggingDialogData,
 
     // Confirmation requests
     shellConfirmationRequest,
     confirmationRequest,
-    confirmUpdateExtensionRequests,
+    confirmUpdateGeminiCLIExtensionRequests: confirmUpdateExtensionRequests,
 
     // Exit/warning states
     ctrlCPressedOnce,
@@ -1645,112 +1647,170 @@ export const AppContainer = (props: AppContainerProps) => {
     availableTerminalHeight,
   };
 
-  // Build UIActions object
-  const uiActions: UIActions = {
-    // History actions
-    addItem,
-    clearItems,
-    loadHistory,
-    refreshStatic,
+  // Build UIActions object - memoized to avoid unnecessary re-renders (upstream optimization)
+  const uiActions: UIActions = useMemo(
+    () => ({
+      // History actions
+      addItem,
+      clearItems,
+      loadHistory,
+      refreshStatic,
 
-    // Input actions
-    handleUserInputSubmit,
-    handleClearScreen,
+      // Input actions
+      handleUserInputSubmit,
+      handleClearScreen,
 
-    // Theme dialog
-    openThemeDialog,
-    handleThemeSelect,
-    handleThemeHighlight,
+      // Theme dialog
+      openThemeDialog,
+      handleThemeSelect,
+      handleThemeHighlight,
 
-    // Settings dialog
-    openSettingsDialog,
-    closeSettingsDialog,
-    handleSettingsRestart,
+      // Settings dialog
+      openSettingsDialog,
+      closeSettingsDialog,
+      handleSettingsRestart,
 
-    // Auth dialog
-    openAuthDialog,
-    handleAuthSelect,
-    cancelAuthentication,
-    handleAuthTimeout,
+      // Auth dialog
+      openAuthDialog,
+      handleAuthSelect,
+      cancelAuthentication,
+      handleAuthTimeout,
 
-    // Editor dialog
-    openEditorDialog,
-    handleEditorSelect,
-    exitEditorDialog,
+      // Editor dialog
+      openEditorDialog,
+      handleEditorSelect,
+      exitEditorDialog,
 
-    // Provider dialog
-    openProviderDialog,
-    handleProviderSelect,
-    exitProviderDialog,
+      // Provider dialog
+      openProviderDialog,
+      handleProviderSelect,
+      exitProviderDialog,
 
-    // Provider model dialog
-    openProviderModelDialog,
-    handleProviderModelChange,
-    exitProviderModelDialog,
+      // Provider model dialog
+      openProviderModelDialog,
+      handleProviderModelChange,
+      exitProviderModelDialog,
 
-    // Load profile dialog
-    openLoadProfileDialog,
-    handleProfileSelect,
-    exitLoadProfileDialog,
+      // Load profile dialog
+      openLoadProfileDialog,
+      handleProfileSelect,
+      exitLoadProfileDialog,
 
-    // Tools dialog
-    openToolsDialog,
-    handleToolsSelect,
-    exitToolsDialog,
+      // Tools dialog
+      openToolsDialog,
+      handleToolsSelect,
+      exitToolsDialog,
 
-    // Folder trust dialog
-    handleFolderTrustSelect,
+      // Folder trust dialog
+      handleFolderTrustSelect,
 
-    // Permissions dialog
-    openPermissionsDialog,
-    closePermissionsDialog,
+      // Permissions dialog
+      openPermissionsDialog,
+      closePermissionsDialog,
 
-    // Logging dialog
-    openLoggingDialog,
-    closeLoggingDialog,
+      // Logging dialog
+      openLoggingDialog,
+      closeLoggingDialog,
 
-    // Workspace migration dialog
-    onWorkspaceMigrationDialogOpen,
-    onWorkspaceMigrationDialogClose,
+      // Workspace migration dialog
+      onWorkspaceMigrationDialogOpen,
+      onWorkspaceMigrationDialogClose,
 
-    // Privacy notice
-    openPrivacyNotice,
-    handlePrivacyNoticeExit,
+      // Privacy notice
+      openPrivacyNotice,
+      handlePrivacyNoticeExit,
 
-    // OAuth code dialog
-    handleOAuthCodeDialogClose,
-    handleOAuthCodeSubmit,
+      // OAuth code dialog
+      handleOAuthCodeDialogClose,
+      handleOAuthCodeSubmit,
 
-    // Confirmation handlers
-    handleConfirmationSelect,
+      // Confirmation handlers
+      handleConfirmationSelect,
 
-    // IDE prompt
-    handleIdePromptComplete,
+      // IDE prompt
+      handleIdePromptComplete,
 
-    // Vim
-    vimHandleInput,
-    toggleVimEnabled,
+      // Vim
+      vimHandleInput,
+      toggleVimEnabled,
 
-    // Slash commands
-    handleSlashCommand,
+      // Slash commands
+      handleSlashCommand,
 
-    // Memory
-    performMemoryRefresh,
+      // Memory
+      performMemoryRefresh,
 
-    // Display toggles
-    setShowErrorDetails,
-    setShowToolDescriptions,
-    setConstrainHeight,
+      // Display toggles
+      setShowErrorDetails,
+      setShowToolDescriptions,
+      setConstrainHeight,
 
-    // Shell mode
-    setShellModeActive,
+      // Shell mode
+      setShellModeActive,
 
-    // Escape prompt
-    handleEscapePromptChange,
+      // Escape prompt
+      handleEscapePromptChange,
 
-    // Cancel ongoing request
-    cancelOngoingRequest,
-  };
+      // Cancel ongoing request
+      cancelOngoingRequest,
+    }),
+    [
+      addItem,
+      clearItems,
+      loadHistory,
+      refreshStatic,
+      handleUserInputSubmit,
+      handleClearScreen,
+      openThemeDialog,
+      handleThemeSelect,
+      handleThemeHighlight,
+      openSettingsDialog,
+      closeSettingsDialog,
+      handleSettingsRestart,
+      openAuthDialog,
+      handleAuthSelect,
+      cancelAuthentication,
+      handleAuthTimeout,
+      openEditorDialog,
+      handleEditorSelect,
+      exitEditorDialog,
+      openProviderDialog,
+      handleProviderSelect,
+      exitProviderDialog,
+      openProviderModelDialog,
+      handleProviderModelChange,
+      exitProviderModelDialog,
+      openLoadProfileDialog,
+      handleProfileSelect,
+      exitLoadProfileDialog,
+      openToolsDialog,
+      handleToolsSelect,
+      exitToolsDialog,
+      handleFolderTrustSelect,
+      openPermissionsDialog,
+      closePermissionsDialog,
+      openLoggingDialog,
+      closeLoggingDialog,
+      onWorkspaceMigrationDialogOpen,
+      onWorkspaceMigrationDialogClose,
+      openPrivacyNotice,
+      handlePrivacyNoticeExit,
+      handleOAuthCodeDialogClose,
+      handleOAuthCodeSubmit,
+      handleConfirmationSelect,
+      handleIdePromptComplete,
+      vimHandleInput,
+      toggleVimEnabled,
+      handleSlashCommand,
+      performMemoryRefresh,
+      setShowErrorDetails,
+      setShowToolDescriptions,
+      setConstrainHeight,
+      setShellModeActive,
+      handleEscapePromptChange,
+      cancelOngoingRequest,
+    ],
+  );
 
   return (
     <UIStateProvider value={uiState}>

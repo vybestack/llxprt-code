@@ -15,10 +15,11 @@ import {
   createProviderRuntimeContext,
   setActiveProviderRuntimeContext,
   clearActiveProviderRuntimeContext,
+  type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
 import { loadCliConfig, parseArguments, type CliArgs } from './config.js';
 import type { Settings } from './settings.js';
-import { ExtensionStorage, type Extension } from './extension.js';
+import { ExtensionStorage } from './extension.js';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
@@ -979,33 +980,30 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
   it('should pass extension context file paths to loadServerHierarchicalMemory', async () => {
     process.argv = ['node', 'script.js'];
     const settings: Settings = {};
-    const extensions: Extension[] = [
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-        },
+        name: 'ext1',
+        version: '1.0.0',
         contextFiles: ['/path/to/ext1/GEMINI.md'],
+        isActive: true,
       },
       {
         path: '/path/to/ext2',
-        config: {
-          name: 'ext2',
-          version: '1.0.0',
-        },
+        name: 'ext2',
+        version: '1.0.0',
         contextFiles: [],
+        isActive: true,
       },
       {
         path: '/path/to/ext3',
-        config: {
-          name: 'ext3',
-          version: '1.0.0',
-        },
+        name: 'ext3',
+        version: '1.0.0',
         contextFiles: [
           '/path/to/ext3/context1.md',
           '/path/to/ext3/context2.md',
         ],
+        isActive: true,
       },
     ];
     const argv = await parseArguments({} as Settings);
@@ -1084,19 +1082,18 @@ describe('mergeMcpServers', () => {
         },
       },
     };
-    const extensions: Extension[] = [
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          mcpServers: {
-            'ext1-server': {
-              url: 'http://localhost:8081',
-            },
+        name: 'ext1',
+        version: '1.0.0',
+        mcpServers: {
+          'ext1-server': {
+            url: 'http://localhost:8081',
           },
         },
         contextFiles: [],
+        isActive: true,
       },
     ];
     const originalSettings = JSON.parse(JSON.stringify(settings));
@@ -1132,24 +1129,22 @@ describe('mergeExcludeTools', () => {
 
   it('should merge excludeTools from settings and extensions', async () => {
     const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
-    const extensions: Extension[] = [
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          excludeTools: ['tool3', 'tool4'],
-        },
+        name: 'ext1',
+        version: '1.0.0',
+        excludeTools: ['tool3', 'tool4'],
         contextFiles: [],
+        isActive: true,
       },
       {
         path: '/path/to/ext2',
-        config: {
-          name: 'ext2',
-          version: '1.0.0',
-          excludeTools: ['tool5'],
-        },
+        name: 'ext2',
+        version: '1.0.0',
+        excludeTools: ['tool5'],
         contextFiles: [],
+        isActive: true,
       },
     ];
     process.argv = ['node', 'script.js'];
@@ -1172,15 +1167,14 @@ describe('mergeExcludeTools', () => {
 
   it('should handle overlapping excludeTools between settings and extensions', async () => {
     const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
-    const extensions: Extension[] = [
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          excludeTools: ['tool2', 'tool3'],
-        },
+        name: 'ext1',
+        version: '1.0.0',
+        excludeTools: ['tool2', 'tool3'],
         contextFiles: [],
+        isActive: true,
       },
     ];
     process.argv = ['node', 'script.js'];
@@ -1203,24 +1197,22 @@ describe('mergeExcludeTools', () => {
 
   it('should handle overlapping excludeTools between extensions', async () => {
     const settings: Settings = { excludeTools: ['tool1'] };
-    const extensions: Extension[] = [
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          excludeTools: ['tool2', 'tool3'],
-        },
+        name: 'ext1',
+        version: '1.0.0',
+        excludeTools: ['tool2', 'tool3'],
         contextFiles: [],
+        isActive: true,
       },
       {
         path: '/path/to/ext2',
-        config: {
-          name: 'ext2',
-          version: '1.0.0',
-          excludeTools: ['tool3', 'tool4'],
-        },
+        name: 'ext2',
+        version: '1.0.0',
+        excludeTools: ['tool3', 'tool4'],
         contextFiles: [],
+        isActive: true,
       },
     ];
     process.argv = ['node', 'script.js'];
@@ -1244,7 +1236,7 @@ describe('mergeExcludeTools', () => {
   it('should return an empty array when no excludeTools are specified and it is interactive', async () => {
     process.stdin.isTTY = true;
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
@@ -1263,7 +1255,7 @@ describe('mergeExcludeTools', () => {
   it('should return default excludes when no excludeTools are specified and it is not interactive', async () => {
     process.stdin.isTTY = false;
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
     process.argv = ['node', 'script.js', '-p', 'test'];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
@@ -1283,7 +1275,7 @@ describe('mergeExcludeTools', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
     const config = await loadCliConfig(
       settings,
       extensions,
@@ -1302,15 +1294,14 @@ describe('mergeExcludeTools', () => {
 
   it('should handle extensions with excludeTools but no settings', async () => {
     const settings: Settings = {};
-    const extensions: Extension[] = [
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          excludeTools: ['tool1', 'tool2'],
-        },
+        name: 'ext1',
+        version: '1.0.0',
+        excludeTools: ['tool1', 'tool2'],
         contextFiles: [],
+        isActive: true,
       },
     ];
     process.argv = ['node', 'script.js'];
@@ -1333,15 +1324,14 @@ describe('mergeExcludeTools', () => {
 
   it('should not modify the original settings object', async () => {
     const settings: Settings = { excludeTools: ['tool1'] };
-    const extensions: Extension[] = [
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          excludeTools: ['tool2'],
-        },
+        name: 'ext1',
+        version: '1.0.0',
+        excludeTools: ['tool2'],
         contextFiles: [],
+        isActive: true,
       },
     ];
     const originalSettings = JSON.parse(JSON.stringify(settings));
@@ -1379,7 +1369,7 @@ describe('Approval mode tool exclusion logic', () => {
     process.argv = ['node', 'script.js', '-p', 'test'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1409,7 +1399,7 @@ describe('Approval mode tool exclusion logic', () => {
     ];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1439,7 +1429,7 @@ describe('Approval mode tool exclusion logic', () => {
     ];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1469,7 +1459,7 @@ describe('Approval mode tool exclusion logic', () => {
     ];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1492,7 +1482,7 @@ describe('Approval mode tool exclusion logic', () => {
     process.argv = ['node', 'script.js', '--yolo', '-p', 'test'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1526,7 +1516,7 @@ describe('Approval mode tool exclusion logic', () => {
       process.argv = testCase.args;
       const argv = await parseArguments({} as Settings);
       const settings: Settings = {};
-      const extensions: Extension[] = [];
+      const extensions: GeminiCLIExtension[] = [];
 
       const config = await loadCliConfig(
         settings,
@@ -1557,7 +1547,7 @@ describe('Approval mode tool exclusion logic', () => {
     ];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = { excludeTools: ['custom_tool'] };
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1587,7 +1577,7 @@ describe('Approval mode tool exclusion logic', () => {
     };
 
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
     await expect(
       loadCliConfig(
         settings,
@@ -1873,16 +1863,20 @@ describe('loadCliConfig extensions', () => {
     clearActiveProviderRuntimeContext();
   });
 
-  const mockExtensions: Extension[] = [
+  const mockExtensions: GeminiCLIExtension[] = [
     {
       path: '/path/to/ext1',
-      config: { name: 'ext1', version: '1.0.0' },
+      name: 'ext1',
+      version: '1.0.0',
       contextFiles: ['/path/to/ext1.md'],
+      isActive: true,
     },
     {
       path: '/path/to/ext2',
-      config: { name: 'ext2', version: '1.0.0' },
+      name: 'ext2',
+      version: '1.0.0',
       contextFiles: ['/path/to/ext2.md'],
+      isActive: true,
     },
   ];
 
@@ -2392,7 +2386,10 @@ describe('loadCliConfig tool exclusions', () => {
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    vi.mocked(isWorkspaceTrusted).mockReturnValue({
+      isTrusted: true,
+      source: undefined,
+    });
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
@@ -2682,6 +2679,121 @@ describe('loadCliConfig interactive', () => {
     expect(config.isInteractive()).toBe(false);
   });
 
+  it('should not be interactive if positional prompt words are provided with extensions flag', async () => {
+    process.stdin.isTTY = true;
+    process.argv = ['node', 'script.js', '-e', 'none', 'hello'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      {},
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.isInteractive()).toBe(false);
+    expect(argv.query).toBe('hello');
+    expect(argv.extensions).toEqual(['none']);
+  });
+
+  it('should handle multiple positional words correctly', async () => {
+    process.stdin.isTTY = true;
+    process.argv = ['node', 'script.js', 'hello world how are you'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      {},
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.isInteractive()).toBe(false);
+    expect(argv.query).toBe('hello world how are you');
+    expect(argv.prompt).toBe('hello world how are you');
+  });
+
+  it('should handle multiple positional words with flags', async () => {
+    process.stdin.isTTY = true;
+    process.argv = [
+      'node',
+      'script.js',
+      '--model',
+      'gemini-1.5-pro',
+      'write',
+      'a',
+      'function',
+      'to',
+      'sort',
+      'array',
+    ];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      {},
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.isInteractive()).toBe(false);
+    expect(argv.query).toBe('write a function to sort array');
+    expect(argv.model).toBe('gemini-1.5-pro');
+  });
+
+  it('should handle empty positional arguments', async () => {
+    process.stdin.isTTY = true;
+    process.argv = ['node', 'script.js', ''];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      {},
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.isInteractive()).toBe(true);
+    expect(argv.query).toBeUndefined();
+  });
+
+  it('should handle extensions flag with positional arguments correctly', async () => {
+    process.stdin.isTTY = true;
+    process.argv = [
+      'node',
+      'script.js',
+      '-e',
+      'none',
+      'hello',
+      'world',
+      'how',
+      'are',
+      'you',
+    ];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      {},
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.isInteractive()).toBe(false);
+    expect(argv.query).toBe('hello world how are you');
+    expect(argv.extensions).toEqual(['none']);
+  });
+
   it('should be interactive if no positional prompt words are provided with flags', async () => {
     process.stdin.isTTY = true;
     process.argv = ['node', 'script.js', '--model', 'gemini-1.5-pro'];
@@ -2708,7 +2820,10 @@ describe('loadCliConfig approval mode', () => {
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js']; // Reset argv for each test
-    vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    vi.mocked(isWorkspaceTrusted).mockReturnValue({
+      isTrusted: true,
+      source: undefined,
+    });
     setActiveProviderRuntimeContext(createProviderRuntimeContext());
   });
 
@@ -3055,9 +3170,281 @@ describe('parseArguments with positional prompt', () => {
     expect(argv.promptWords).toEqual(['positional', 'prompt']);
   });
 
+  it('should correctly parse positional query argument', async () => {
+    process.argv = ['node', 'script.js', 'test', 'query'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.query).toBe('test query');
+  });
+
   it('should correctly parse a prompt from the --prompt flag', async () => {
     process.argv = ['node', 'script.js', '--prompt', 'test prompt'];
     const argv = await parseArguments({} as Settings);
     expect(argv.prompt).toBe('test prompt');
+  });
+});
+
+// TODO: These tests need provider runtime setup (activateIsolatedRuntimeContext)
+describe.skip('Telemetry configuration via environment variables', () => {
+  it('should prioritize GEMINI_TELEMETRY_ENABLED over settings', async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_ENABLED', 'true');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = { telemetry: { enabled: false } };
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryEnabled()).toBe(true);
+  });
+
+  it('should prioritize GEMINI_TELEMETRY_TARGET over settings', async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_TARGET', 'gcp');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {
+      telemetry: { target: ServerConfig.TelemetryTarget.LOCAL },
+    };
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryTarget()).toBe('gcp');
+  });
+
+  it('should throw when GEMINI_TELEMETRY_TARGET is invalid', async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_TARGET', 'bogus');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {
+      telemetry: { target: ServerConfig.TelemetryTarget.GCP },
+    };
+    await expect(
+      loadCliConfig(
+        settings,
+        [],
+        new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+          argv.extensions,
+        ),
+        'test-session',
+        argv,
+      ),
+    ).rejects.toThrow(
+      /Invalid telemetry configuration: .*Invalid telemetry target/i,
+    );
+    vi.unstubAllEnvs();
+  });
+
+  it('should prioritize GEMINI_TELEMETRY_OTLP_ENDPOINT over settings and default env var', async () => {
+    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://default.env.com');
+    vi.stubEnv('GEMINI_TELEMETRY_OTLP_ENDPOINT', 'http://gemini.env.com');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {
+      telemetry: { otlpEndpoint: 'http://settings.com' },
+    };
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryOtlpEndpoint()).toBe('http://gemini.env.com');
+  });
+
+  it('should prioritize GEMINI_TELEMETRY_OTLP_PROTOCOL over settings', async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_OTLP_PROTOCOL', 'http');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = { telemetry: { otlpProtocol: 'grpc' } };
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryOtlpProtocol()).toBe('http');
+  });
+
+  it('should prioritize GEMINI_TELEMETRY_LOG_PROMPTS over settings', async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_LOG_PROMPTS', 'false');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = { telemetry: { logPrompts: true } };
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryLogPromptsEnabled()).toBe(false);
+  });
+
+  it('should prioritize GEMINI_TELEMETRY_OUTFILE over settings', async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_OUTFILE', '/gemini/env/telemetry.log');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {
+      telemetry: { outfile: '/settings/telemetry.log' },
+    };
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryOutfile()).toBe('/gemini/env/telemetry.log');
+  });
+
+  it('should prioritize GEMINI_TELEMETRY_USE_COLLECTOR over settings', async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_USE_COLLECTOR', 'true');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = { telemetry: { useCollector: false } };
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryUseCollector()).toBe(true);
+  });
+
+  it('should use settings value when GEMINI_TELEMETRY_ENABLED is not set', async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_ENABLED', undefined);
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = { telemetry: { enabled: true } };
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryEnabled()).toBe(true);
+  });
+
+  it('should use settings value when GEMINI_TELEMETRY_TARGET is not set', async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_TARGET', undefined);
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const settings: Settings = {
+      telemetry: { target: ServerConfig.TelemetryTarget.LOCAL },
+    };
+    const config = await loadCliConfig(
+      settings,
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryTarget()).toBe('local');
+  });
+
+  it("should treat GEMINI_TELEMETRY_ENABLED='1' as true", async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_ENABLED', '1');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      {},
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryEnabled()).toBe(true);
+  });
+
+  it("should treat GEMINI_TELEMETRY_ENABLED='0' as false", async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_ENABLED', '0');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      { telemetry: { enabled: true } },
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryEnabled()).toBe(false);
+  });
+
+  it("should treat GEMINI_TELEMETRY_LOG_PROMPTS='1' as true", async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_LOG_PROMPTS', '1');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      {},
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryLogPromptsEnabled()).toBe(true);
+  });
+
+  it("should treat GEMINI_TELEMETRY_LOG_PROMPTS='false' as false", async () => {
+    vi.stubEnv('GEMINI_TELEMETRY_LOG_PROMPTS', 'false');
+    process.argv = ['node', 'script.js'];
+    const argv = await parseArguments({} as Settings);
+    const config = await loadCliConfig(
+      { telemetry: { logPrompts: true } },
+      [],
+      new ExtensionEnablementManager(
+        ExtensionStorage.getUserExtensionsDir(),
+        argv.extensions,
+      ),
+      'test-session',
+      argv,
+    );
+    expect(config.getTelemetryLogPromptsEnabled()).toBe(false);
   });
 });

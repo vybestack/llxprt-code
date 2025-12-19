@@ -66,7 +66,7 @@ export const DialogManager = ({
   if (uiState.showWorkspaceMigrationDialog) {
     return (
       <WorkspaceMigrationDialog
-        workspaceExtensions={uiState.workspaceExtensions}
+        workspaceExtensions={uiState.workspaceGeminiCLIExtensions}
         onOpen={uiActions.onWorkspaceMigrationDialogOpen}
         onClose={uiActions.onWorkspaceMigrationDialogClose}
       />
@@ -120,8 +120,8 @@ export const DialogManager = ({
       />
     );
   }
-  if (uiState.confirmUpdateExtensionRequests.length > 0) {
-    const request = uiState.confirmUpdateExtensionRequests[0];
+  if (uiState.confirmUpdateGeminiCLIExtensionRequests.length > 0) {
+    const request = uiState.confirmUpdateGeminiCLIExtensionRequests[0];
     return (
       <ConsentPrompt
         prompt={request.prompt}

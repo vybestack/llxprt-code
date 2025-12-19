@@ -15,6 +15,8 @@ import {
   FatalInputError,
   FatalTurnLimitedError,
   EmojiFilter,
+  OutputFormat,
+  uiTelemetryService,
   type EmojiFilterMode,
   type ServerGeminiThoughtEvent,
 } from '@vybestack/llxprt-code-core';
@@ -32,9 +34,15 @@ export async function runNonInteractive(
   input: string,
   prompt_id: string,
 ): Promise<void> {
+  const outputFormat =
+    typeof config.getOutputFormat === 'function'
+      ? config.getOutputFormat()
+      : OutputFormat.TEXT;
+  const jsonOutput = outputFormat === OutputFormat.JSON;
+
   const consolePatcher = new ConsolePatcher({
-    stderr: true,
-    debugMode: config.getDebugMode(),
+    stderr: !jsonOutput,
+    debugMode: jsonOutput ? false : config.getDebugMode(),
   });
 
   try {
@@ -101,6 +109,8 @@ export async function runNonInteractive(
 
     let currentMessages: Content[] = [{ role: 'user', parts: query }];
 
+    let jsonResponseText = '';
+
     let turnCount = 0;
     while (true) {
       turnCount++;
@@ -129,6 +139,9 @@ export async function runNonInteractive(
         if (event.type === GeminiEventType.Thought) {
           // Output thinking/reasoning content with <think> tags
           // Check if reasoning.includeInResponse is enabled
+          if (jsonOutput) {
+            continue;
+          }
           const includeThinking =
             typeof config.getEphemeralSetting === 'function'
               ? (config.getEphemeralSetting('reasoning.includeInResponse') ??
@@ -158,9 +171,11 @@ export async function runNonInteractive(
 
             if (filterResult.blocked) {
               // In error mode: output error message and continue
-              process.stderr.write(
-                '[Error: Response blocked due to emoji detection]\n',
-              );
+              if (!jsonOutput) {
+                process.stderr.write(
+                  '[Error: Response blocked due to emoji detection]\n',
+                );
+              }
               continue;
             }
 
@@ -171,11 +186,19 @@ export async function runNonInteractive(
 
             // Output system feedback if needed
             if (filterResult.systemFeedback) {
-              process.stderr.write(`Warning: ${filterResult.systemFeedback}\n`);
+              if (!jsonOutput) {
+                process.stderr.write(
+                  `Warning: ${filterResult.systemFeedback}\n`,
+                );
+              }
             }
           }
 
-          process.stdout.write(outputValue);
+          if (jsonOutput) {
+            jsonResponseText += outputValue;
+          } else {
+            process.stdout.write(outputValue);
+          }
         } else if (event.type === GeminiEventType.ToolCallRequest) {
           const toolCallRequest = event.value;
           const normalizedRequest: ToolCallRequestInfo = {
@@ -188,7 +211,11 @@ export async function runNonInteractive(
 
       const remainingBuffered = emojiFilter?.flushBuffer?.();
       if (remainingBuffered) {
-        process.stdout.write(remainingBuffered);
+        if (jsonOutput) {
+          jsonResponseText += remainingBuffered;
+        } else {
+          process.stdout.write(remainingBuffered);
+        }
       }
 
       if (functionCalls.length > 0) {
@@ -232,16 +259,19 @@ export async function runNonInteractive(
             agentId: requestFromModel.agentId ?? 'primary',
           };
 
-          const toolResponse = await executeToolCall(
+          const completed = await executeToolCall(
             config,
             requestInfo,
             abortController.signal,
           );
+          const toolResponse = completed.response;
 
           if (toolResponse.error) {
-            console.error(
-              `Error executing tool ${requestFromModel.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
-            );
+            if (!jsonOutput) {
+              console.error(
+                `Error executing tool ${requestFromModel.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
+              );
+            }
           }
 
           if (toolResponse.responseParts) {
@@ -250,17 +280,31 @@ export async function runNonInteractive(
         }
         currentMessages = [{ role: 'user', parts: toolResponseParts }];
       } else {
-        process.stdout.write('\n'); // Ensure a final newline
+        if (jsonOutput) {
+          const payload = JSON.stringify(
+            {
+              response: jsonResponseText.trimEnd(),
+              stats: uiTelemetryService.getMetrics(),
+            },
+            null,
+            2,
+          );
+          process.stdout.write(`${payload}\n`);
+        } else {
+          process.stdout.write('\n'); // Ensure a final newline
+        }
         return;
       }
     }
   } catch (error) {
-    console.error(
-      parseAndFormatApiError(
-        error,
-        config.getContentGeneratorConfig()?.authType,
-      ),
-    );
+    if (!jsonOutput) {
+      console.error(
+        parseAndFormatApiError(
+          error,
+          config.getContentGeneratorConfig()?.authType,
+        ),
+      );
+    }
     throw error;
   } finally {
     consolePatcher.cleanup();

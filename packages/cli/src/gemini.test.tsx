@@ -32,13 +32,25 @@ class MockProcessExitError extends Error {
 }
 
 // Mock dependencies
-vi.mock('./config/settings.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./config/settings.js')>();
-  return {
-    ...actual,
-    loadSettings: vi.fn(),
-  };
-});
+vi.mock('./config/settings.js', () => ({
+  loadSettings: vi.fn().mockReturnValue({
+    merged: {
+      advanced: {},
+      security: { auth: {} },
+      ui: {},
+    },
+    setValue: vi.fn(),
+    forScope: () => ({ settings: {}, originalSettings: {}, path: '' }),
+    errors: [],
+  }),
+  migrateDeprecatedSettings: vi.fn(),
+  SettingScope: {
+    User: 'user',
+    Workspace: 'workspace',
+    System: 'system',
+    SystemDefaults: 'system-defaults',
+  },
+}));
 
 vi.mock('./config/config.js', () => ({
   loadCliConfig: vi.fn().mockResolvedValue({
@@ -83,7 +95,7 @@ vi.mock('./utils/events.js', async (importOriginal) => {
 
 vi.mock('./utils/sandbox.js', () => ({
   sandbox_command: vi.fn(() => ''), // Default to no sandbox command
-  start_sandbox: vi.fn(() => Promise.resolve()), // Mock as an async function that resolves
+  start_sandbox: vi.fn(() => Promise.resolve(0)), // Mock as an async function that resolves
 }));
 
 // Mock bootstrap utilities for deferred init tests

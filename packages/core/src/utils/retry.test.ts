@@ -390,6 +390,30 @@ describe('retryWithBackoff', () => {
       expect(mockFn).toHaveBeenCalledTimes(2);
     });
 
+    it('should retry on "fetch failed sending request" error', async () => {
+      let attempts = 0;
+      const mockFn = vi.fn(async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw new Error(
+            'exception TypeError: fetch failed sending request body',
+          );
+        }
+        return 'success';
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 10,
+      });
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toBe('success');
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+
     it('should not retry on non-transient errors', async () => {
       const mockFn = vi.fn(async () => {
         throw new Error('Some non-transient error');

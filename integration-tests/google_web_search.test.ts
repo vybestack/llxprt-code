@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
+import { GOOGLE_WEB_SEARCH_TOOL } from '../packages/core/src/tools/tool-names.js';
 
 // Skip web search tests in CI or when auth type is none (requires OAuth)
 const skipInCI =
@@ -34,7 +35,7 @@ describe('google_web_search', () => {
       throw error; // Re-throw if not a network error
     }
 
-    const foundToolCall = await rig.waitForToolCall('google_web_search');
+    const foundToolCall = await rig.waitForToolCall(GOOGLE_WEB_SEARCH_TOOL);
 
     // Add debugging information
     if (!foundToolCall) {
@@ -43,7 +44,8 @@ describe('google_web_search', () => {
       // Check if the tool call failed due to network issues
       const failedSearchCalls = allTools.filter(
         (t) =>
-          t.toolRequest.name === 'google_web_search' && !t.toolRequest.success,
+          t.toolRequest.name === GOOGLE_WEB_SEARCH_TOOL &&
+          !t.toolRequest.success,
       );
       if (failedSearchCalls.length > 0) {
         console.warn(
@@ -73,7 +75,7 @@ describe('google_web_search', () => {
     if (!hasExpectedContent) {
       const searchCalls = rig
         .readToolLogs()
-        .filter((t) => t.toolRequest.name === 'google_web_search');
+        .filter((t) => t.toolRequest.name === GOOGLE_WEB_SEARCH_TOOL);
       if (searchCalls.length > 0) {
         console.warn(
           'Search queries used:',

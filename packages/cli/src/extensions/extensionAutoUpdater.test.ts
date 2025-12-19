@@ -12,21 +12,20 @@ import {
   type ExtensionUpdateHistoryEntry,
 } from './extensionAutoUpdater.js';
 import { ExtensionUpdateState } from '../ui/state/extensions.js';
-import type { Extension } from '../config/extension.js';
+import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
 
-function createExtension(name: string): Extension {
+function createExtension(name: string): GeminiCLIExtension {
   return {
-    config: {
-      name,
-      version: '1.0.0',
-    },
+    name,
+    version: '1.0.0',
     path: `/tmp/${name}`,
     contextFiles: [],
     installMetadata: {
       source: `https://example.com/${name}.git`,
       type: 'git',
     },
-  } as Extension;
+    isActive: true,
+  };
 }
 
 function createMemoryStateStore(
@@ -79,7 +78,7 @@ describe('ExtensionAutoUpdater', () => {
       setUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
     });
     const updateExecutor = vi.fn(async () => ({
-      name: extension.config.name,
+      name: extension.name,
       originalVersion: '1.0.0',
       updatedVersion: '1.0.1',
     }));
@@ -120,7 +119,7 @@ describe('ExtensionAutoUpdater', () => {
       }
     });
     const updateExecutor = vi.fn(async () => ({
-      name: extension.config.name,
+      name: extension.name,
       originalVersion: '1.0.0',
       updatedVersion: '1.0.1',
     }));

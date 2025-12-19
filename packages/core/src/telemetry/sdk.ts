@@ -46,7 +46,7 @@ export function initializeTelemetry(config: Config): void {
   if (telemetryInitialized || !config.getTelemetryEnabled()) {
     // Only output verbose logs when telemetry is enabled to avoid stdout spam
     if (process.env.VERBOSE === 'true' && config.getTelemetryEnabled()) {
-      console.log(
+      console.error(
         `[TELEMETRY] Skipping initialization: initialized=${telemetryInitialized}, enabled=${config.getTelemetryEnabled()}`,
       );
     }
@@ -54,7 +54,7 @@ export function initializeTelemetry(config: Config): void {
   }
 
   if (process.env.VERBOSE === 'true') {
-    console.log(
+    console.error(
       `[TELEMETRY] Initializing with outfile: ${config.getTelemetryOutfile()}`,
     );
   }

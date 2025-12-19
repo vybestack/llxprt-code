@@ -11,8 +11,7 @@ import {
 } from '../../ui/state/extensions.js';
 import {
   copyExtension,
-  installExtension,
-  uninstallExtension,
+  installOrUpdateExtension,
   loadExtension,
   loadInstallMetadata,
   ExtensionStorage,
@@ -70,8 +69,7 @@ export async function updateExtension(
       extensionDir: extension.path,
       workspaceDir: cwd,
     });
-    await uninstallExtension(extension.name, cwd);
-    await installExtension(
+    await installOrUpdateExtension(
       installMetadata,
       requestConsent,
       cwd,
@@ -90,7 +88,7 @@ export async function updateExtension(
       });
       throw new Error('Updated extension not found after installation.');
     }
-    const updatedVersion = updatedExtension.config.version;
+    const updatedVersion = updatedExtension.version;
     dispatchExtensionStateUpdate({
       type: 'SET_STATE',
       payload: {

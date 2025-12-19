@@ -57,6 +57,7 @@ import {
   type ToolOutputSettingsProvider,
 } from '../utils/toolOutputLimiter.js';
 import { DebugLogger } from '../debug/index.js';
+import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
 
 const toolSchedulerLogger = new DebugLogger('llxprt:core:tool-scheduler');
 
@@ -380,6 +381,7 @@ interface CoreToolSchedulerOptions {
   getPreferredEditor: () => EditorType | undefined;
   onEditorClose: () => void;
   onEditorOpen?: () => void;
+  toolContextInteractiveMode?: boolean;
 }
 
 export class CoreToolScheduler {
@@ -398,6 +400,18 @@ export class CoreToolScheduler {
   private messageBusUnsubscribe?: () => void;
   private pendingConfirmations: Map<string, string> = new Map();
   private staleCorrelationIds: Map<string, NodeJS.Timeout> = new Map();
+  private pendingResults: Map<
+    string,
+    {
+      result: ToolResult;
+      callId: string;
+      toolName: string;
+      scheduledCall: ScheduledToolCall;
+      executionIndex: number;
+    }
+  > = new Map();
+  private nextPublishIndex = 0;
+  private readonly toolContextInteractiveMode: boolean;
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -408,6 +422,8 @@ export class CoreToolScheduler {
     this.getPreferredEditor = options.getPreferredEditor;
     this.onEditorClose = options.onEditorClose;
     this.onEditorOpen = options.onEditorOpen;
+    this.toolContextInteractiveMode =
+      options.toolContextInteractiveMode ?? true;
 
     const messageBus = this.config.getMessageBus();
     this.messageBusUnsubscribe = messageBus.subscribe<ToolConfirmationResponse>(
@@ -707,7 +723,7 @@ export class CoreToolScheduler {
         contextAwareTool.context = {
           sessionId: this.config.getSessionId(),
           agentId: call.request.agentId ?? DEFAULT_AGENT_ID,
-          interactiveMode: true, // We're in interactive mode when using CoreToolScheduler
+          interactiveMode: this.toolContextInteractiveMode,
         };
       }
 
@@ -883,7 +899,7 @@ export class CoreToolScheduler {
             contextAwareTool.context = {
               sessionId: this.config.getSessionId(),
               agentId: reqInfo.agentId ?? DEFAULT_AGENT_ID,
-              interactiveMode: true, // We're in interactive mode when using CoreToolScheduler
+              interactiveMode: this.toolContextInteractiveMode,
             };
           }
 
@@ -1183,7 +1199,14 @@ export class CoreToolScheduler {
     request: ToolCallRequestInfo,
   ): PolicyContext {
     if (invocation instanceof BaseToolInvocation) {
-      return invocation.getPolicyContext();
+      const context = invocation.getPolicyContext();
+      if (context.toolName === 'unknown' || !context.toolName) {
+        return {
+          ...context,
+          toolName: request.name,
+        };
+      }
+      return context;
     }
     return {
       toolName: request.name,
@@ -1290,6 +1313,138 @@ export class CoreToolScheduler {
     });
   }
 
+  private bufferResult(
+    callId: string,
+    toolName: string,
+    result: ToolResult,
+    scheduledCall: ScheduledToolCall,
+    executionIndex: number,
+  ): void {
+    this.pendingResults.set(callId, {
+      result,
+      callId,
+      toolName,
+      scheduledCall,
+      executionIndex,
+    });
+  }
+
+  private bufferError(
+    callId: string,
+    error: Error,
+    scheduledCall: ScheduledToolCall,
+    executionIndex: number,
+  ): void {
+    const errorResult: ToolResult = {
+      error: {
+        message: error.message,
+        type: ToolErrorType.UNHANDLED_EXCEPTION,
+      },
+      llmContent: error.message,
+      returnDisplay: error.message,
+    };
+    this.pendingResults.set(callId, {
+      result: errorResult,
+      callId,
+      toolName: scheduledCall.request.name,
+      scheduledCall,
+      executionIndex,
+    });
+  }
+
+  private async publishBufferedResults(signal: AbortSignal): Promise<void> {
+    const callsInOrder = this.toolCalls.filter(
+      (call) => call.status === 'scheduled' || call.status === 'executing',
+    );
+
+    // Publish results in original request order
+    while (this.nextPublishIndex < callsInOrder.length) {
+      const expectedCall = callsInOrder[this.nextPublishIndex];
+      const buffered = this.pendingResults.get(expectedCall.request.callId);
+
+      if (!buffered) {
+        // Next result not ready yet, stop publishing
+        break;
+      }
+
+      // Publish this result
+      await this.publishResult(buffered, signal);
+
+      // Remove from buffer
+      this.pendingResults.delete(buffered.callId);
+      this.nextPublishIndex++;
+    }
+
+    // Check if all tools completed
+    if (
+      this.nextPublishIndex === callsInOrder.length &&
+      callsInOrder.length > 0
+    ) {
+      // Reset for next batch
+      this.nextPublishIndex = 0;
+      this.pendingResults.clear();
+    }
+  }
+
+  private async publishResult(
+    buffered: {
+      result: ToolResult;
+      callId: string;
+      toolName: string;
+      scheduledCall: ScheduledToolCall;
+    },
+    _signal: AbortSignal,
+  ): Promise<void> {
+    const { result, callId, toolName, scheduledCall } = buffered;
+
+    if (result.error === undefined) {
+      // Success case
+      const response = convertToFunctionResponse(
+        toolName,
+        callId,
+        result.llmContent,
+        this.config,
+      );
+      const metadataAgentId = extractAgentIdFromMetadata(
+        result.metadata as Record<string, unknown> | undefined,
+      );
+
+      const responseParts = [
+        // First, the tool call
+        {
+          functionCall: {
+            id: callId,
+            name: toolName,
+            args: scheduledCall.request.args,
+          },
+        },
+        // Then, spread the response(s)
+        ...response,
+      ] as Part[];
+
+      const successResponse: ToolCallResponseInfo = {
+        callId,
+        responseParts,
+        resultDisplay: result.returnDisplay,
+        error: undefined,
+        errorType: undefined,
+        agentId:
+          metadataAgentId ?? scheduledCall.request.agentId ?? DEFAULT_AGENT_ID,
+      };
+
+      this.setStatusInternal(callId, 'success', successResponse);
+    } else {
+      // Error case
+      const error = new Error(result.error.message);
+      const errorResponse = createErrorResponse(
+        scheduledCall.request,
+        error,
+        result.error.type,
+      );
+      this.setStatusInternal(callId, 'error', errorResponse);
+    }
+  }
+
   private attemptExecutionOfScheduledCalls(signal: AbortSignal): void {
     const allCallsFinalOrScheduled = this.toolCalls.every(
       (call) =>
@@ -1304,12 +1459,21 @@ export class CoreToolScheduler {
         (call) => call.status === 'scheduled',
       );
 
+      // Assign execution indices for ordered publishing
+      const executionIndices = new Map<string, number>();
+      callsToExecute.forEach((call, index) => {
+        executionIndices.set(call.request.callId, index);
+      });
+
+      // Execute all tools in parallel (PRESERVE EXISTING PATTERN)
       callsToExecute.forEach((toolCall) => {
         if (toolCall.status !== 'scheduled') return;
 
         const scheduledCall = toolCall;
         const { callId, name: toolName } = scheduledCall.request;
         const invocation = scheduledCall.invocation;
+        const executionIndex = executionIndices.get(callId)!;
+
         this.setStatusInternal(callId, 'executing');
 
         const liveOutputCallback =
@@ -1339,54 +1503,19 @@ export class CoreToolScheduler {
               return;
             }
 
-            if (toolResult.error === undefined) {
-              const response = convertToFunctionResponse(
-                toolName,
-                callId,
-                toolResult.llmContent,
-                this.config,
-              );
-              const metadataAgentId = extractAgentIdFromMetadata(
-                toolResult.metadata as Record<string, unknown> | undefined,
-              );
-              // Return BOTH the tool call and response as an array
-              // This ensures they're always paired and added to history atomically
-              const responseParts = [
-                // First, the tool call
-                {
-                  functionCall: {
-                    id: callId,
-                    name: toolName,
-                    args: scheduledCall.request.args,
-                  },
-                },
-                // Then, spread the response(s) since convertToFunctionResponse returns Part[]
-                ...response,
-              ] as Part[];
-              const successResponse: ToolCallResponseInfo = {
-                callId,
-                responseParts,
-                resultDisplay: toolResult.returnDisplay,
-                error: undefined,
-                errorType: undefined,
-                agentId:
-                  metadataAgentId ??
-                  scheduledCall.request.agentId ??
-                  DEFAULT_AGENT_ID,
-              };
-              this.setStatusInternal(callId, 'success', successResponse);
-            } else {
-              // It is a failure
-              const error = new Error(toolResult.error.message);
-              const errorResponse = createErrorResponse(
-                scheduledCall.request,
-                error,
-                toolResult.error.type,
-              );
-              this.setStatusInternal(callId, 'error', errorResponse);
-            }
+            // Buffer the result instead of publishing immediately
+            this.bufferResult(
+              callId,
+              toolName,
+              toolResult,
+              scheduledCall,
+              executionIndex,
+            );
+
+            // Try to publish buffered results in order
+            await this.publishBufferedResults(signal);
           })
-          .catch((executionError: Error) => {
+          .catch(async (executionError: Error) => {
             if (signal.aborted) {
               this.setStatusInternal(
                 callId,
@@ -1394,17 +1523,13 @@ export class CoreToolScheduler {
                 'User cancelled tool execution.',
               );
             } else {
-              this.setStatusInternal(
+              this.bufferError(
                 callId,
-                'error',
-                createErrorResponse(
-                  scheduledCall.request,
-                  executionError instanceof Error
-                    ? executionError
-                    : new Error(String(executionError)),
-                  ToolErrorType.UNHANDLED_EXCEPTION,
-                ),
+                executionError,
+                scheduledCall,
+                executionIndex,
               );
+              await this.publishBufferedResults(signal);
             }
           });
       });
@@ -1482,9 +1607,9 @@ export class CoreToolScheduler {
           this.setStatusInternal(pendingTool.request.callId, 'scheduled');
         }
       } catch (error) {
-        console.error(
-          `Error checking confirmation for tool ${pendingTool.request.callId}:`,
-          error,
+        toolSchedulerLogger.debug(
+          () =>
+            `Error checking confirmation for tool ${pendingTool.request.callId}: ${error}`,
         );
       }
     }
@@ -1566,50 +1691,4 @@ export class CoreToolScheduler {
     this.notifyToolCallsUpdate();
     this.checkAndNotifyCompletion();
   }
-}
-
-import { normalizeToolName } from '../tools/toolNameUtils.js';
-
-function buildToolGovernance(config: Config): {
-  allowed: Set<string>;
-  disabled: Set<string>;
-  excluded: Set<string>;
-} {
-  const ephemerals = config.getEphemeralSettings?.() ?? {};
-  const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
-    ? (ephemerals['tools.allowed'] as string[])
-    : [];
-  const disabledRaw = Array.isArray(ephemerals['tools.disabled'])
-    ? (ephemerals['tools.disabled'] as string[])
-    : Array.isArray(ephemerals['disabled-tools'])
-      ? (ephemerals['disabled-tools'] as string[])
-      : [];
-  const excludedRaw = config.getExcludeTools?.() ?? [];
-
-  return {
-    allowed: new Set(allowedRaw.map((tool) => normalizeToolName(tool) || tool)),
-    disabled: new Set(
-      disabledRaw.map((tool) => normalizeToolName(tool) || tool),
-    ),
-    excluded: new Set(
-      excludedRaw.map((tool) => normalizeToolName(tool) || tool),
-    ),
-  };
-}
-
-function isToolBlocked(
-  toolName: string,
-  governance: ReturnType<typeof buildToolGovernance>,
-): boolean {
-  const canonical = normalizeToolName(toolName) || toolName;
-  if (governance.excluded.has(canonical)) {
-    return true;
-  }
-  if (governance.disabled.has(canonical)) {
-    return true;
-  }
-  if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
-    return true;
-  }
-  return false;
 }

@@ -22,8 +22,8 @@ import type {
   ThoughtSummary,
   IdeInfo,
   Config,
+  GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
-import type { Extension } from '../../config/extension.js';
 import type { SlashCommand, CommandContext } from '../commands/types.js';
 import type { ShellConfirmationRequest } from '../components/ShellConfirmationDialog.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -81,7 +81,7 @@ export interface UIState {
   toolsDialogAction: 'enable' | 'disable';
   toolsDialogTools: AnyDeclarativeTool[];
   toolsDialogDisabledTools: string[];
-  workspaceExtensions: Extension[];
+  workspaceGeminiCLIExtensions: GeminiCLIExtension[];
   loggingDialogData: { entries: unknown[] };
 
   // Confirmation requests
@@ -90,7 +90,7 @@ export interface UIState {
     prompt: React.ReactNode;
     onConfirm: (value: boolean) => void;
   } | null;
-  confirmUpdateExtensionRequests: ConfirmationRequest[];
+  confirmUpdateGeminiCLIExtensionRequests: ConfirmationRequest[];
 
   // Exit/warning states
   ctrlCPressedOnce: boolean;
@@ -145,7 +145,7 @@ export interface UIState {
   pendingHistoryItemRef: React.RefObject<DOMElement | null>;
 
   // Slash commands
-  slashCommands: readonly SlashCommand[];
+  slashCommands: readonly SlashCommand[] | undefined;
   commandContext: CommandContext;
 
   // IDE prompt
