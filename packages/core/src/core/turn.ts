@@ -70,6 +70,7 @@ export enum GeminiEventType {
   Retry = 'retry',
   SystemNotice = 'system_notice',
   InvalidStream = 'invalid_stream',
+  ContextWindowWillOverflow = 'context_window_will_overflow',
 }
 
 export type ServerGeminiRetryEvent = {
@@ -78,6 +79,14 @@ export type ServerGeminiRetryEvent = {
 
 export type ServerGeminiInvalidStreamEvent = {
   type: GeminiEventType.InvalidStream;
+};
+
+export type ServerGeminiContextWindowWillOverflowEvent = {
+  type: GeminiEventType.ContextWindowWillOverflow;
+  value: {
+    estimatedRequestTokenCount: number;
+    remainingTokenCount: number;
+  };
 };
 
 export interface StructuredError {
@@ -224,7 +233,8 @@ export type ServerGeminiStreamEvent =
   | ServerGeminiLoopDetectedEvent
   | ServerGeminiCitationEvent
   | ServerGeminiRetryEvent
-  | ServerGeminiInvalidStreamEvent;
+  | ServerGeminiInvalidStreamEvent
+  | ServerGeminiContextWindowWillOverflowEvent;
 
 // A turn manages the agentic loop turn within the server context.
 export class Turn {

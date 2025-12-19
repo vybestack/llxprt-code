@@ -26,12 +26,8 @@ describe('stdin context', () => {
     ).toBeTruthy();
 
     const lastRequest = rig.readLastApiRequest();
-    expect(
-      lastRequest,
-      'API request must be logged to telemetry',
-    ).not.toBeNull();
-
-    const historyString = lastRequest.attributes.request_text;
+    expect(lastRequest?.attributes?.request_text).toBeDefined();
+    const historyString = lastRequest!.attributes!.request_text;
 
     // TODO: This test currently fails in sandbox mode (Docker/Podman) because
     // stdin content is not properly forwarded to the container when used

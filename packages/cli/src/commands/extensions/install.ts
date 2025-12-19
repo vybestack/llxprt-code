@@ -6,7 +6,7 @@
 
 import type { CommandModule } from 'yargs';
 import {
-  installExtension,
+  installOrUpdateExtension,
   requestConsentNonInteractive,
 } from '../../config/extension.js';
 import type { ExtensionInstallMetadata } from '@vybestack/llxprt-code-core';
@@ -96,7 +96,7 @@ export async function handleInstall(args: InstallArgs) {
       throw new Error('Either --source or --path must be provided.');
     }
 
-    const name = await installExtension(
+    const name = await installOrUpdateExtension(
       installMetadata,
       requestConsentNonInteractive,
     );

@@ -14,6 +14,7 @@ import {
   ServerGeminiErrorEvent as ErrorEvent,
   ServerGeminiChatCompressedEvent,
   ServerGeminiFinishedEvent,
+  ServerGeminiContextWindowWillOverflowEvent,
   getErrorMessage,
   isNodeError,
   MessageSenderType,
@@ -33,6 +34,7 @@ import {
   type EmojiFilterMode,
   DEFAULT_AGENT_ID,
   type ThinkingBlock,
+  tokenLimit,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -875,6 +877,33 @@ export const useGeminiStream = (
     [addItem, config],
   );
 
+  const handleContextWindowWillOverflowEvent = useCallback(
+    (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
+      onCancelSubmit();
+
+      const limit = tokenLimit(config.getModel());
+
+      const isLessThan75Percent =
+        limit > 0 && remainingTokenCount < limit * 0.75;
+
+      let text = `Sending this message (${estimatedRequestTokenCount} tokens) might exceed the remaining context window limit (${remainingTokenCount} tokens).`;
+
+      if (isLessThan75Percent) {
+        text +=
+          ' Please try reducing the size of your message or use the `/compress` command to compress the chat history.';
+      }
+
+      addItem(
+        {
+          type: 'info',
+          text,
+        },
+        Date.now(),
+      );
+    },
+    [addItem, onCancelSubmit, config],
+  );
+
   const handleLoopDetectedEvent = useCallback(() => {
     addItem(
       {
@@ -946,6 +975,14 @@ export const useGeminiStream = (
           case ServerGeminiEventType.MaxSessionTurns:
             handleMaxSessionTurnsEvent();
             break;
+          case ServerGeminiEventType.ContextWindowWillOverflow:
+            handleContextWindowWillOverflowEvent(
+              (event as ServerGeminiContextWindowWillOverflowEvent).value
+                .estimatedRequestTokenCount,
+              (event as ServerGeminiContextWindowWillOverflowEvent).value
+                .remainingTokenCount,
+            );
+            break;
           case ServerGeminiEventType.Finished:
             handleFinishedEvent(
               event as ServerGeminiFinishedEvent,
@@ -967,6 +1004,7 @@ export const useGeminiStream = (
             );
             break;
           case ServerGeminiEventType.Retry:
+          case ServerGeminiEventType.InvalidStream:
             // Will add the missing logic later
             break;
           default:
@@ -986,6 +1024,7 @@ export const useGeminiStream = (
       handleChatCompressionEvent,
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
+      handleContextWindowWillOverflowEvent,
       handleCitationEvent,
     ],
   );

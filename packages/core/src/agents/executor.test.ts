@@ -32,6 +32,7 @@ import type { Config } from '../config/config.js';
 import { MockTool } from '../test-utils/mock-tool.js';
 import { getDirectoryContextString } from '../utils/environmentContext.js';
 import { z } from 'zod';
+import type { ToolErrorType } from '../index.js';
 
 const { mockSendMessageStream, mockExecuteToolCall } = vi.hoisted(() => ({
   mockSendMessageStream: vi.fn(),
@@ -102,6 +103,35 @@ const mockModelResponse = (
     })(),
   );
 };
+
+function createCompletedToolCallResponse(params: {
+  callId: string;
+  name: string;
+  responseParts?: Part[];
+  resultDisplay?: unknown;
+  error?: Error;
+  errorType?: ToolErrorType;
+}) {
+  return {
+    status: params.error ? ('error' as const) : ('success' as const),
+    request: {
+      callId: params.callId,
+      name: params.name,
+      args: {},
+      isClientInitiated: true,
+      prompt_id: 'mock-prompt',
+      agentId: 'primary',
+    },
+    response: {
+      callId: params.callId,
+      responseParts: params.responseParts ?? [],
+      resultDisplay: params.resultDisplay,
+      error: params.error,
+      errorType: params.errorType,
+      agentId: 'primary',
+    },
+  };
+}
 
 /**
  * Helper to extract the message parameters sent to sendMessageStream.
@@ -246,20 +276,23 @@ describe('AgentExecutor', () => {
         [{ name: LSTool.Name, args: { path: '.' }, id: 'call1' }],
         'T1: Listing',
       );
-      mockExecuteToolCall.mockResolvedValueOnce({
-        callId: 'call1',
-        resultDisplay: 'file1.txt',
-        responseParts: [
-          {
-            functionResponse: {
-              name: LSTool.Name,
-              response: { result: 'file1.txt' },
-              id: 'call1',
+      mockExecuteToolCall.mockResolvedValueOnce(
+        createCompletedToolCallResponse({
+          callId: 'call1',
+          name: LSTool.Name,
+          resultDisplay: 'file1.txt',
+          responseParts: [
+            {
+              functionResponse: {
+                name: LSTool.Name,
+                response: { result: 'file1.txt' },
+                id: 'call1',
+              },
             },
-          },
-        ],
-        error: undefined,
-      });
+          ],
+          error: undefined,
+        }),
+      );
 
       // Turn 2: Model calls complete_task with required output
       mockModelResponse(
@@ -351,15 +384,22 @@ describe('AgentExecutor', () => {
       mockModelResponse([
         { name: LSTool.Name, args: { path: '.' }, id: 'call1' },
       ]);
-      mockExecuteToolCall.mockResolvedValueOnce({
-        callId: 'call1',
-        resultDisplay: 'ok',
-        responseParts: [
-          {
-            functionResponse: { name: LSTool.Name, response: {}, id: 'call1' },
-          },
-        ],
-      });
+      mockExecuteToolCall.mockResolvedValueOnce(
+        createCompletedToolCallResponse({
+          callId: 'call1',
+          name: LSTool.Name,
+          resultDisplay: 'ok',
+          responseParts: [
+            {
+              functionResponse: {
+                name: LSTool.Name,
+                response: {},
+                id: 'call1',
+              },
+            },
+          ],
+        }),
+      );
 
       mockModelResponse(
         [{ name: TASK_COMPLETE_TOOL_NAME, args: {}, id: 'call2' }],
@@ -404,15 +444,22 @@ describe('AgentExecutor', () => {
       mockModelResponse([
         { name: LSTool.Name, args: { path: '.' }, id: 'call1' },
       ]);
-      mockExecuteToolCall.mockResolvedValueOnce({
-        callId: 'call1',
-        resultDisplay: 'ok',
-        responseParts: [
-          {
-            functionResponse: { name: LSTool.Name, response: {}, id: 'call1' },
-          },
-        ],
-      });
+      mockExecuteToolCall.mockResolvedValueOnce(
+        createCompletedToolCallResponse({
+          callId: 'call1',
+          name: LSTool.Name,
+          resultDisplay: 'ok',
+          responseParts: [
+            {
+              functionResponse: {
+                name: LSTool.Name,
+                response: {},
+                id: 'call1',
+              },
+            },
+          ],
+        }),
+      );
 
       mockModelResponse([], 'I think I am done.');
 
@@ -567,8 +614,9 @@ describe('AgentExecutor', () => {
         callsStarted++;
         if (callsStarted === 2) resolveCalls();
         await vi.advanceTimersByTimeAsync(100);
-        return {
+        return createCompletedToolCallResponse({
           callId: reqInfo.callId,
+          name: reqInfo.name,
           resultDisplay: 'ok',
           responseParts: [
             {
@@ -579,7 +627,7 @@ describe('AgentExecutor', () => {
               },
             },
           ],
-        };
+        });
       });
 
       // Turn 2: Completion
@@ -694,13 +742,16 @@ describe('AgentExecutor', () => {
   describe('run (Termination Conditions)', () => {
     const mockWorkResponse = (id: string) => {
       mockModelResponse([{ name: LSTool.Name, args: { path: '.' }, id }]);
-      mockExecuteToolCall.mockResolvedValueOnce({
-        callId: id,
-        resultDisplay: 'ok',
-        responseParts: [
-          { functionResponse: { name: LSTool.Name, response: {}, id } },
-        ],
-      });
+      mockExecuteToolCall.mockResolvedValueOnce(
+        createCompletedToolCallResponse({
+          callId: id,
+          name: LSTool.Name,
+          resultDisplay: 'ok',
+          responseParts: [
+            { functionResponse: { name: LSTool.Name, response: {}, id } },
+          ],
+        }),
+      );
     };
 
     it('should terminate when max_turns is reached', async () => {
@@ -730,11 +781,12 @@ describe('AgentExecutor', () => {
       // Long running tool
       mockExecuteToolCall.mockImplementationOnce(async () => {
         await vi.advanceTimersByTimeAsync(61 * 1000);
-        return {
+        return createCompletedToolCallResponse({
           callId: 't1',
+          name: LSTool.Name,
           resultDisplay: 'ok',
           responseParts: [],
-        };
+        });
       });
 
       const output = await executor.run({ goal: 'Timeout test' }, signal);

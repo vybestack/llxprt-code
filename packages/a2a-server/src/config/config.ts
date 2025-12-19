@@ -20,16 +20,16 @@ import {
   LLXPRT_CONFIG_DIR as GEMINI_CONFIG_DIR,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   DEFAULT_GEMINI_MODEL,
+  type GeminiCLIExtension,
 } from '@vybestack/llxprt-code-core';
 
 import { logger } from '../utils/logger.js';
 import type { Settings } from './settings.js';
-import type { Extension } from './extension.js';
 import { type AgentSettings, CoderAgentEvent } from '../types.js';
 
 export async function loadConfig(
   settings: Settings,
-  extensions: Extension[],
+  extensions: GeminiCLIExtension[],
   taskId: string,
 ): Promise<Config> {
   const mcpServers = mergeMcpServers(settings, extensions);
@@ -116,20 +116,21 @@ export async function loadConfig(
   return config;
 }
 
-export function mergeMcpServers(settings: Settings, extensions: Extension[]) {
+export function mergeMcpServers(
+  settings: Settings,
+  extensions: GeminiCLIExtension[],
+) {
   const mcpServers = { ...(settings.mcpServers || {}) };
   for (const extension of extensions) {
-    Object.entries(extension.config.mcpServers || {}).forEach(
-      ([key, server]) => {
-        if (mcpServers[key]) {
-          console.warn(
-            `Skipping extension MCP config for server with key "${key}" as it already exists.`,
-          );
-          return;
-        }
-        mcpServers[key] = server;
-      },
-    );
+    Object.entries(extension.mcpServers || {}).forEach(([key, server]) => {
+      if (mcpServers[key]) {
+        console.warn(
+          `Skipping extension MCP config for server with key "${key}" as it already exists.`,
+        );
+        return;
+      }
+      mcpServers[key] = server;
+    });
   }
   return mcpServers;
 }

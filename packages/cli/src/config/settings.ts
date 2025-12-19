@@ -16,6 +16,7 @@ import {
   Storage,
 } from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
+import * as commentJson from 'comment-json';
 import { DefaultLight } from '../ui/themes/default-light.js';
 import { DefaultDark } from '../ui/themes/default.js';
 import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
@@ -758,6 +759,49 @@ export function loadSettings(
   );
 }
 
+function deepMergeWithComments(target: unknown, source: unknown): unknown {
+  if (
+    typeof target !== 'object' ||
+    target === null ||
+    typeof source !== 'object' ||
+    source === null
+  ) {
+    return source;
+  }
+
+  if (Array.isArray(source)) {
+    return source;
+  }
+
+  const result = target as Record<string, unknown>;
+  const sourceObj = source as Record<string, unknown>;
+
+  // Add or update keys from source
+  Object.keys(sourceObj).forEach((key) => {
+    if (
+      typeof result[key] === 'object' &&
+      result[key] !== null &&
+      !Array.isArray(result[key]) &&
+      typeof sourceObj[key] === 'object' &&
+      sourceObj[key] !== null &&
+      !Array.isArray(sourceObj[key])
+    ) {
+      result[key] = deepMergeWithComments(result[key], sourceObj[key]);
+    } else {
+      result[key] = sourceObj[key];
+    }
+  });
+
+  // Remove keys that are not in source
+  Object.keys(result).forEach((key) => {
+    if (!(key in sourceObj)) {
+      delete result[key];
+    }
+  });
+
+  return result;
+}
+
 export function saveSettings(settingsFile: SettingsFile): void {
   try {
     // Ensure the directory exists
@@ -766,11 +810,29 @@ export function saveSettings(settingsFile: SettingsFile): void {
       fs.mkdirSync(dirPath, { recursive: true });
     }
 
-    fs.writeFileSync(
-      settingsFile.path,
-      JSON.stringify(settingsFile.settings, null, 2),
-      'utf-8',
-    );
+    // Read the original file to preserve comments
+    let outputContent: string;
+    if (fs.existsSync(settingsFile.path)) {
+      const originalContent = fs.readFileSync(settingsFile.path, 'utf-8');
+      try {
+        // Parse with comments preserved
+        const parsedWithComments = commentJson.parse(originalContent);
+        // Deep merge to preserve comments at all levels
+        const merged = deepMergeWithComments(
+          parsedWithComments,
+          settingsFile.settings,
+        );
+        outputContent = commentJson.stringify(merged, null, 2);
+      } catch {
+        // If parsing with comments fails, fall back to regular JSON
+        outputContent = JSON.stringify(settingsFile.settings, null, 2);
+      }
+    } else {
+      // New file, no comments to preserve
+      outputContent = JSON.stringify(settingsFile.settings, null, 2);
+    }
+
+    fs.writeFileSync(settingsFile.path, outputContent, 'utf-8');
   } catch (error) {
     console.error('Error saving user settings file:', error);
   }

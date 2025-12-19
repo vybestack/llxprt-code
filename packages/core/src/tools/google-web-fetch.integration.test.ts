@@ -417,11 +417,11 @@ describe('GoogleWebFetchTool Integration Tests', () => {
       });
       const result = await invocation.execute(mockAbortSignal);
 
-      expect(result.llmContent).toContain(
-        'Error: Error during fallback fetch for http://localhost:3000: Network error',
+      expect(result.llmContent).toMatch(
+        /Error: Error during fallback fetch for http:\/\/localhost:3000\/?: Network error/,
       );
-      expect(result.returnDisplay).toContain(
-        'Error: Error during fallback fetch',
+      expect(result.returnDisplay).toMatch(
+        /Error: Error during fallback fetch for http:\/\/localhost:3000\/?: Network error/,
       );
     });
   });

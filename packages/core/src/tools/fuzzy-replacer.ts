@@ -545,7 +545,7 @@ export function fuzzyReplace(
         : newString;
 
       if (replaceAll) {
-        const result = content.replaceAll(search, finalReplacement);
+        const result = content.replaceAll(search, () => finalReplacement);
         const occurrences = content.split(search).length - 1;
         return { result, occurrences };
       }

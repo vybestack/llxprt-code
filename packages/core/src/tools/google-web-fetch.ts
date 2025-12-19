@@ -22,14 +22,73 @@ import { fetchWithTimeout, isPrivateIp } from '../utils/fetch.js';
 import { convert } from 'html-to-text';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import type { GenerateContentResponse, UrlMetadata } from '@google/genai';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
+const logger = new DebugLogger('llxprt:tools:web-fetch');
 const URL_FETCH_TIMEOUT_MS = 10000;
 const MAX_CONTENT_LENGTH = 100000;
 
-// Helper function to extract URLs from a string
-function extractUrls(text: string): string[] {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  return text.match(urlRegex) || [];
+/**
+ * Parses a prompt to extract valid URLs and identify malformed ones.
+ * Strips common trailing punctuation from tokens before URL validation.
+ */
+export function parsePrompt(text: string): {
+  validUrls: string[];
+  errors: string[];
+} {
+  const tokens = text.split(/\s+/);
+  const validUrls: string[] = [];
+  const errors: string[] = [];
+
+  const stripTrailingPunctuation = (input: string): string => {
+    let endIndex = input.length;
+    while (endIndex > 0) {
+      const lastChar = input[endIndex - 1];
+      if (
+        lastChar === '.' ||
+        lastChar === ',' ||
+        lastChar === ';' ||
+        lastChar === ':' ||
+        lastChar === '!' ||
+        lastChar === '?'
+      ) {
+        endIndex--;
+        continue;
+      }
+      break;
+    }
+    return input.slice(0, endIndex);
+  };
+
+  for (const token of tokens) {
+    if (!token) continue;
+
+    // Heuristic to check if the token appears to contain URL-like chars.
+    if (token.includes('://')) {
+      // Strip common trailing punctuation (period, comma, semicolon, colon, etc.)
+      // This handles natural language like "Check https://example.com."
+      const cleaned = stripTrailingPunctuation(token);
+
+      try {
+        // Validate with new URL()
+        const url = new URL(cleaned);
+
+        // Allowlist protocols
+        if (['http:', 'https:'].includes(url.protocol)) {
+          validUrls.push(url.href);
+        } else {
+          errors.push(
+            `Unsupported protocol in URL: "${cleaned}". Only http and https are supported.`,
+          );
+        }
+      } catch (_) {
+        // new URL() threw, so it's malformed according to WHATWG standard
+        errors.push(`Malformed URL detected: "${cleaned}".`);
+      }
+    }
+  }
+
+  return { validUrls, errors };
 }
 
 // Interfaces for grounding metadata (similar to web-search.ts)
@@ -80,7 +139,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
   }
 
   private async executeFallback(_signal: AbortSignal): Promise<ToolResult> {
-    const urls = extractUrls(this.params.prompt);
+    const { validUrls: urls } = parsePrompt(this.params.prompt);
     // For now, we only support one URL for fallback
     let url = urls[0];
 
@@ -154,7 +213,8 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
 
     // Perform GitHub URL conversion here to differentiate between user-provided
     // URL and the actual URL to be fetched.
-    const urls = extractUrls(this.params.prompt).map((url) => {
+    const { validUrls } = parsePrompt(this.params.prompt);
+    const urls = validUrls.map((url) => {
       try {
         const urlObj = new URL(url);
         if (urlObj.hostname === 'github.com' && url.includes('/blob/')) {
@@ -184,7 +244,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
 
   async execute(signal: AbortSignal): Promise<ToolResult> {
     const userPrompt = this.params.prompt;
-    const urls = extractUrls(userPrompt);
+    const { validUrls: urls } = parsePrompt(userPrompt);
     const url = urls[0];
     const isPrivate = isPrivateIp(url);
 
@@ -250,11 +310,8 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
         { signal },
       );
 
-      console.debug(
-        `[WebFetchTool] Full response for prompt "${userPrompt.substring(
-          0,
-          50,
-        )}...":`,
+      logger.log(
+        `Full response for prompt "${userPrompt.substring(0, 50)}...":`,
         JSON.stringify(response, null, 2),
       );
 
@@ -349,8 +406,8 @@ ${sourceListFormatted.join('\n')}`;
 
       const llmContent = responseText;
 
-      console.debug(
-        `[WebFetchTool] Formatted tool response for prompt "${userPrompt}:\n\n":`,
+      logger.log(
+        `Formatted tool response for prompt "${userPrompt}:\n\n":`,
         llmContent,
       );
 
@@ -360,7 +417,7 @@ ${sourceListFormatted.join('\n')}`;
       };
     } catch (error: unknown) {
       const errorMessage = `Error during web fetch: ${getErrorMessage(error)}`;
-      console.error(errorMessage, error);
+      logger.error(errorMessage, error);
       return {
         llmContent: `Error: ${errorMessage}`,
         returnDisplay: `Error: ${errorMessage}`,
@@ -418,12 +475,17 @@ export class GoogleWebFetchTool extends BaseDeclarativeTool<
     if (!params.prompt || params.prompt.trim() === '') {
       return "The 'prompt' parameter cannot be empty and must contain URL(s) and instructions.";
     }
-    if (
-      !params.prompt.includes('http://') &&
-      !params.prompt.includes('https://')
-    ) {
+
+    const { validUrls, errors } = parsePrompt(params.prompt);
+
+    if (errors.length > 0) {
+      return `Error(s) in prompt URLs:\n- ${errors.join('\n- ')}`;
+    }
+
+    if (validUrls.length === 0) {
       return "The 'prompt' must contain at least one valid URL (starting with http:// or https://).";
     }
+
     return null;
   }
 

@@ -248,11 +248,11 @@ describe('Todo Continuation Integration Tests', () => {
         signal: AbortSignal,
         prompt_id: string,
         turns?: number,
-        originalModel?: string,
+        isInvalidStreamRetry?: boolean,
       ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
         capturedMessage =
           typeof request === 'string' ? request : JSON.stringify(request);
-        capturedOptions = { signal, prompt_id, turns, originalModel };
+        capturedOptions = { signal, prompt_id, turns, isInvalidStreamRetry };
         // Yield a mock stream event
         yield {
           type: 'content',
@@ -277,7 +277,7 @@ describe('Todo Continuation Integration Tests', () => {
         signal: expect.any(AbortSignal),
         prompt_id: 'test-prompt-id',
         turns: undefined,
-        originalModel: undefined,
+        isInvalidStreamRetry: undefined,
       });
 
       // Restore original method

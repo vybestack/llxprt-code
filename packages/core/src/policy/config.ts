@@ -17,6 +17,28 @@ import {
 } from './types.js';
 import { loadDefaultPolicies, loadPolicyFromToml } from './toml-loader.js';
 import { ApprovalMode } from '../config/config.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const logger = new DebugLogger('llxprt:policy:config');
+
+function normalizeAllowedToolNameForPolicy(tool: string): string {
+  const trimmed = tool.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  const baseName =
+    trimmed.endsWith(')') && trimmed.includes('(')
+      ? trimmed.slice(0, trimmed.indexOf('('))
+      : trimmed;
+
+  // Treat legacy ShellTool alias as the canonical tool name.
+  if (baseName === 'ShellTool') {
+    return 'run_shell_command';
+  }
+
+  return baseName;
+}
 
 /**
  * Minimal Config interface for policy creation
@@ -56,9 +78,15 @@ export function migrateLegacyApprovalMode(
       priority: 1.999,
     });
   } else if (approvalMode === ApprovalMode.AUTO_EDIT) {
-    // AUTO_EDIT mode: allow write tools at priority 1.015
-    const writeTools = ['edit', 'smart_edit', 'write_file', 'shell', 'memory'];
-    for (const tool of writeTools) {
+    // AUTO_EDIT mode: allow edit tools at priority 1.015
+    const editTools = [
+      'replace',
+      'smart_edit',
+      'write_file',
+      'insert_at_line',
+      'delete_line_range',
+    ];
+    for (const tool of editTools) {
       rules.push({
         toolName: tool,
         decision: PolicyDecision.ALLOW,
@@ -70,9 +98,15 @@ export function migrateLegacyApprovalMode(
 
   // Map --allowed-tools
   const allowedTools = config.getAllowedTools() ?? [];
+  const seenToolNames = new Set<string>();
   for (const tool of allowedTools) {
+    const normalizedToolName = normalizeAllowedToolNameForPolicy(tool);
+    if (!normalizedToolName || seenToolNames.has(normalizedToolName)) {
+      continue;
+    }
+    seenToolNames.add(normalizedToolName);
     rules.push({
-      toolName: tool,
+      toolName: normalizedToolName,
       decision: PolicyDecision.ALLOW,
       priority: 2.3,
     });
@@ -117,7 +151,13 @@ export async function createPolicyEngineConfig(
       rules.push(...userRules);
     } catch (error) {
       // Log warning but don't fail - user policies are optional
-      console.warn(`Failed to load user policy from ${userPolicyPath}:`, error);
+      logger.warn(
+        () =>
+          `Failed to load user policy from ${userPolicyPath}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        error,
+      );
     }
   }
 

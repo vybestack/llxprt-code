@@ -5,8 +5,9 @@
  */
 
 import { Box, Text } from 'ink';
-import React from 'react';
+import React, { useState } from 'react';
 import { Colors } from '../colors.js';
+import { theme } from '../semantic-colors.js';
 import {
   RadioButtonSelect,
   RadioSelectItem,
@@ -30,10 +31,15 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
   onSelect,
   isRestarting,
 }) => {
+  const [exiting, setExiting] = useState(false);
+
   useKeypress(
     (key) => {
       if (key.name === 'escape') {
-        onSelect(FolderTrustChoice.DO_NOT_TRUST);
+        setExiting(true);
+        setTimeout(() => {
+          process.exit(1);
+        }, 100);
       }
     },
     { isActive: !isRestarting },
@@ -63,9 +69,9 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
       key: `Trust parent folder (${parentFolder})`,
     },
     {
-      label: "Don't trust (esc)",
+      label: "Don't trust",
       value: FolderTrustChoice.DO_NOT_TRUST,
-      key: "Don't trust (esc)",
+      key: "Don't trust",
     },
   ];
 
@@ -99,6 +105,14 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
           <Text color={Colors.AccentYellow}>
             To see changes, llxprt must be restarted. Press r to exit and apply
             changes now.
+          </Text>
+        </Box>
+      )}
+      {exiting && (
+        <Box marginLeft={1} marginTop={1}>
+          <Text color={theme.status.warning}>
+            A folder trust level must be selected to continue. Exiting since
+            escape was pressed.
           </Text>
         </Box>
       )}

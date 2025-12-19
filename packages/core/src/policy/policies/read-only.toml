@@ -8,12 +8,12 @@ decision = "allow"
 priority = 1.05
 
 [[rule]]
-toolName = "grep"
+toolName = "search_file_content"
 decision = "allow"
 priority = 1.05
 
 [[rule]]
-toolName = "ls"
+toolName = "list_directory"
 decision = "allow"
 priority = 1.05
 
@@ -28,12 +28,17 @@ decision = "allow"
 priority = 1.05
 
 [[rule]]
-toolName = "ripgrep"
+toolName = "read_line_range"
 decision = "allow"
 priority = 1.05
 
 [[rule]]
-toolName = "web_search"
+toolName = "google_web_search"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "exa_web_search"
 decision = "allow"
 priority = 1.05
 
@@ -43,26 +48,21 @@ decision = "allow"
 priority = 1.05
 
 [[rule]]
-toolName = "write_todos"
+toolName = "todo_read"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "todo_write"
+decision = "allow"
+priority = 1.05
+
+[[rule]]
+toolName = "todo_pause"
 decision = "allow"
 priority = 1.05
 
 [[rule]]
 toolName = "list_subagents"
-decision = "allow"
-priority = 1.05
-
-[[rule]]
-toolName = "notebook_edit"
-decision = "allow"
-priority = 1.05
-
-[[rule]]
-toolName = "slash_command"
-decision = "allow"
-priority = 1.05
-
-[[rule]]
-toolName = "skill"
 decision = "allow"
 priority = 1.05
