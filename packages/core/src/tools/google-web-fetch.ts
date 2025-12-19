@@ -417,7 +417,7 @@ ${sourceListFormatted.join('\n')}`;
       };
     } catch (error: unknown) {
       const errorMessage = `Error during web fetch: ${getErrorMessage(error)}`;
-      console.error(errorMessage, error);
+      logger.error(errorMessage, error);
       return {
         llmContent: `Error: ${errorMessage}`,
         returnDisplay: `Error: ${errorMessage}`,

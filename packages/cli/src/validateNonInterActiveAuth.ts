@@ -46,7 +46,20 @@ function getEnforcedAuthTypeFromSettings(
   }
 
   const trimmed = raw.trim();
-  return trimmed.length > 0 ? (trimmed as AuthType) : undefined;
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  const validAuthTypes = new Set<string>(Object.values(AuthType));
+  if (!validAuthTypes.has(trimmed)) {
+    throw new Error(
+      `Invalid security.auth.enforcedType: "${trimmed}". Valid values: ${Array.from(
+        validAuthTypes,
+      ).join(', ')}`,
+    );
+  }
+
+  return trimmed as AuthType;
 }
 
 function getCurrentGoogleAuthTypeFromEnv(): AuthType | undefined {
@@ -83,7 +96,16 @@ export async function validateNonInteractiveAuth(
   nonInteractiveConfig: Config,
   settings?: LoadedSettings,
 ) {
-  const enforcedAuthType = getEnforcedAuthTypeFromSettings(settings);
+  let enforcedAuthType: AuthType | undefined;
+  try {
+    enforcedAuthType = getEnforcedAuthTypeFromSettings(settings);
+  } catch (error) {
+    reportNonInteractiveAuthError(
+      nonInteractiveConfig,
+      error instanceof Error ? error.message : String(error),
+    );
+    process.exit(1);
+  }
   if (enforcedAuthType) {
     const currentAuthType = getCurrentGoogleAuthTypeFromEnv();
     if (currentAuthType && enforcedAuthType !== currentAuthType) {

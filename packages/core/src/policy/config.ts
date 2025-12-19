@@ -17,6 +17,9 @@ import {
 } from './types.js';
 import { loadDefaultPolicies, loadPolicyFromToml } from './toml-loader.js';
 import { ApprovalMode } from '../config/config.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
+
+const logger = new DebugLogger('llxprt:policy:config');
 
 function normalizeAllowedToolNameForPolicy(tool: string): string {
   const trimmed = tool.trim();
@@ -148,7 +151,13 @@ export async function createPolicyEngineConfig(
       rules.push(...userRules);
     } catch (error) {
       // Log warning but don't fail - user policies are optional
-      console.warn(`Failed to load user policy from ${userPolicyPath}:`, error);
+      logger.warn(
+        () =>
+          `Failed to load user policy from ${userPolicyPath}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        error,
+      );
     }
   }
 
