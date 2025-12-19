@@ -67,6 +67,8 @@ import {
   getOauthClient,
   setGitStatsService,
   FatalConfigError,
+  JsonFormatter,
+  OutputFormat,
   uiTelemetryService,
   // IDE connection logging removed - telemetry disabled in llxprt
   SettingsService,
@@ -423,8 +425,15 @@ export async function main() {
   }
 
   const consolePatcher = new ConsolePatcher({
-    stderr: true,
-    debugMode: config.getDebugMode(),
+    stderr: !(
+      config.getOutputFormat?.() === OutputFormat.JSON &&
+      !config.isInteractive()
+    ),
+    debugMode:
+      config.getOutputFormat?.() === OutputFormat.JSON &&
+      !config.isInteractive()
+        ? false
+        : config.getDebugMode(),
   });
   consolePatcher.patch();
   registerCleanup(consolePatcher.cleanup);
@@ -743,13 +752,13 @@ export async function main() {
 
       const sandboxArgs = injectStdinIntoArgs(process.argv, stdinData);
 
-      await start_sandbox(
+      const exitCode = await start_sandbox(
         sandboxConfig,
         sandboxMemoryArgs,
         partialConfig,
         sandboxArgs,
       );
-      process.exit(0);
+      process.exit(exitCode);
     }
     // Note: Non-sandbox memory relaunch is now handled at the top of main()
   }
@@ -768,7 +777,7 @@ export async function main() {
   if (config.getListExtensions()) {
     console.log('Installed extensions:');
     for (const extension of extensions) {
-      console.log(`- ${extension.config.name}`);
+      console.log(`- ${extension.name}`);
     }
     process.exit(0);
   }
@@ -976,14 +985,22 @@ export async function main() {
     settings.merged.selectedAuthType,
     settings.merged.useExternalAuth,
     config,
+    settings,
   );
 
   try {
     await runNonInteractive(nonInteractiveConfig, settings, input, prompt_id);
   } catch (error) {
-    const printableError =
-      error instanceof Error ? (error.stack ?? error.message) : String(error);
-    console.error(`Non-interactive run failed: ${printableError}`);
+    if (nonInteractiveConfig.getOutputFormat() === OutputFormat.JSON) {
+      const formatter = new JsonFormatter();
+      const normalizedError =
+        error instanceof Error ? error : new Error(String(error));
+      process.stderr.write(`${formatter.formatError(normalizedError, 1)}\n`);
+    } else {
+      const printableError =
+        error instanceof Error ? (error.stack ?? error.message) : String(error);
+      console.error(`Non-interactive run failed: ${printableError}`);
+    }
     // Call cleanup before process.exit, which causes cleanup to not run
     await runExitCleanup();
     // Non-interactive mode should exit with error code 1 for API errors

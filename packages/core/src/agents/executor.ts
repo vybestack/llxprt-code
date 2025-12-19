@@ -584,11 +584,12 @@ export class AgentExecutor<TOutput extends z.ZodTypeAny> {
 
       // Create a promise for the tool execution
       const executionPromise = (async () => {
-        const toolResponse = await executeToolCall(
+        const completed = await executeToolCall(
           this.runtimeContext,
           requestInfo,
           signal,
         );
+        const toolResponse = completed.response;
 
         if (toolResponse.error) {
           this.emitActivity('ERROR', {

@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { type Config } from '@vybestack/llxprt-code-core';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { type Config, DebugLogger } from '@vybestack/llxprt-code-core';
 import { LoadedSettings, Settings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {
@@ -13,9 +13,18 @@ import {
   TrustLevel,
   isWorkspaceTrusted,
 } from '../../config/trustedFolders.js';
+import { type HistoryItemWithoutId, MessageType } from '../types.js';
 import * as process from 'process';
 
-export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
+const debug = new DebugLogger('llxprt:ui:useFolderTrust');
+
+type AddItemFn = (item: HistoryItemWithoutId, timestamp: number) => number;
+
+export const useFolderTrust = (
+  settings: LoadedSettings,
+  config: Config,
+  addItem?: AddItemFn,
+) => {
   const [isTrusted, setIsTrusted] = useState<boolean | undefined>(
     config.isTrustedFolder(),
   );
@@ -23,6 +32,7 @@ export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
     config.isTrustedFolder() === undefined,
   );
   const [isRestarting, setIsRestarting] = useState(false);
+  const startupMessageSent = useRef(false);
 
   // Folder trust feature flag removed - now using settings directly
   const { folderTrust } = settings.merged;
@@ -34,7 +44,24 @@ export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
     if (trusted === undefined) {
       setIsFolderTrustDialogOpen(true);
     }
-  }, [folderTrust]);
+
+    // Show a message about permissions command when folder is untrusted
+    if (trusted === false && !startupMessageSent.current) {
+      debug.log(
+        'Folder is untrusted - displaying permissions command hint on startup',
+      );
+      if (addItem) {
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: 'This folder is not trusted. Some features may be disabled. Use the `/permissions` command to change the trust level.',
+          },
+          Date.now(),
+        );
+      }
+      startupMessageSent.current = true;
+    }
+  }, [folderTrust, addItem]);
 
   const handleFolderTrustSelect = useCallback(
     (choice: FolderTrustChoice) => {

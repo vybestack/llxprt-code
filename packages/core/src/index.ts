@@ -49,6 +49,7 @@ export * from './code_assist/types.js';
 export * from './utils/paths.js';
 export * from './utils/schemaValidator.js';
 export * from './utils/errors.js';
+export * from './utils/output-format.js';
 export * from './utils/getFolderStructure.js';
 export * from './utils/memoryDiscovery.js';
 export * from './utils/gitIgnoreParser.js';
@@ -116,6 +117,7 @@ export * from './tools/tools.js';
 export * from './tools/tool-error.js';
 export * from './tools/tool-registry.js';
 export * from './tools/tool-context.js';
+export * from './tools/tool-names.js';
 
 // Export prompt logic
 export * from './prompts/mcp-prompts.js';

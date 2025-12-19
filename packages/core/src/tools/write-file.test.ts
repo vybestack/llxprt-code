@@ -365,6 +365,30 @@ describe('WriteFileTool', () => {
       );
     });
 
+    it('should preserve trailing newline when overwriting an existing file', async () => {
+      const filePath = path.join(rootDir, 'execute_existing_file_newline.txt');
+      const initialContent = 'Initial content for execute.\n';
+      const proposedContent = 'Proposed overwrite without newline.';
+      fs.writeFileSync(filePath, initialContent, 'utf8');
+
+      const params = { file_path: filePath, content: proposedContent };
+      const invocation = tool.build(params);
+
+      const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
+      if (
+        typeof confirmDetails === 'object' &&
+        'onConfirm' in confirmDetails &&
+        confirmDetails.onConfirm
+      ) {
+        await confirmDetails.onConfirm(ToolConfirmationOutcome.ProceedOnce);
+      }
+
+      await invocation.execute(abortSignal);
+
+      const writtenContent = await fsService.readTextFile(filePath);
+      expect(writtenContent).toBe(`${proposedContent}\n`);
+    });
+
     it('should create directory if it does not exist', async () => {
       const dirPath = path.join(rootDir, 'new_dir_for_write');
       const filePath = path.join(dirPath, 'file_in_new_dir.txt');

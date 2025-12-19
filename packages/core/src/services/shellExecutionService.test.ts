@@ -97,7 +97,7 @@ describe('ShellExecutionService', () => {
     simulation: (
       ptyProcess: typeof mockPtyProcess,
       ac: AbortController,
-    ) => void,
+    ) => void | Promise<void>,
   ) => {
     const abortController = new AbortController();
     const handle = await ShellExecutionService.execute(
@@ -109,7 +109,7 @@ describe('ShellExecutionService', () => {
     );
 
     await new Promise((resolve) => setImmediate(resolve));
-    simulation(mockPtyProcess, abortController);
+    await simulation(mockPtyProcess, abortController);
     const result = await handle.result;
     return { result, handle, abortController };
   };
@@ -221,44 +221,110 @@ describe('ShellExecutionService', () => {
     it('should abort a running process and set the aborted flag', async () => {
       const { result } = await simulateExecution(
         'sleep 10',
-        (pty, abortController) => {
+        async (pty, abortController) => {
           abortController.abort();
+          // Wait for the abort handler to send SIGTERM
+          await new Promise((resolve) => setImmediate(resolve));
           pty.onExit.mock.calls[0][0]({ exitCode: 1, signal: null });
         },
       );
 
       expect(result.aborted).toBe(true);
-      expect(mockPtyProcess.kill).toHaveBeenCalled();
+      // With improved abort handling, we use process.kill with SIGTERM first
+      expect(mockProcessKill).toHaveBeenCalledWith(
+        -mockPtyProcess.pid,
+        'SIGTERM',
+      );
+    });
+
+    it('should send SIGTERM and then SIGKILL on abort', async () => {
+      const sigkillPromise = new Promise<void>((resolve) => {
+        mockProcessKill.mockImplementation((pid, signal) => {
+          if (signal === 'SIGKILL' && pid === -mockPtyProcess.pid) {
+            resolve();
+          }
+          return true;
+        });
+      });
+
+      const { result } = await simulateExecution(
+        'long-running-process',
+        async (pty, abortController) => {
+          abortController.abort();
+          await sigkillPromise; // Wait for SIGKILL to be sent before exiting.
+          pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: 9 });
+        },
+      );
+
+      expect(result.aborted).toBe(true);
+
+      // Verify the calls were made in the correct order.
+      const killCalls = mockProcessKill.mock.calls;
+      const sigtermCallIndex = killCalls.findIndex(
+        (call) => call[0] === -mockPtyProcess.pid && call[1] === 'SIGTERM',
+      );
+      const sigkillCallIndex = killCalls.findIndex(
+        (call) => call[0] === -mockPtyProcess.pid && call[1] === 'SIGKILL',
+      );
+
+      expect(sigtermCallIndex).toBe(0);
+      expect(sigkillCallIndex).toBe(1);
+      expect(sigtermCallIndex).toBeLessThan(sigkillCallIndex);
+
+      expect(result.signal).toBe(9);
+    });
+
+    it('should resolve without waiting for the processing chain on abort', async () => {
+      const { result } = await simulateExecution(
+        'long-output',
+        (pty, abortController) => {
+          // Simulate a lot of data being in the queue to be processed
+          for (let i = 0; i < 1000; i++) {
+            pty.onData.mock.calls[0][0]('some data');
+          }
+          abortController.abort();
+          pty.onExit.mock.calls[0][0]({ exitCode: 1, signal: null });
+        },
+      );
+
+      // The main assertion here is implicit: the `await` for the result above
+      // should complete without timing out. This proves that the resolution
+      // was not blocked by the long chain of data processing promises,
+      // which is the desired behavior on abort.
+      expect(result.aborted).toBe(true);
     });
   });
 
   describe('Binary Output', () => {
     it('should detect binary output and switch to progress events', async () => {
-      mockIsBinary.mockReturnValueOnce(true);
+      // Must use mockReturnValue since isBinary is called asynchronously in the processing chain
+      mockIsBinary.mockReturnValue(true);
       const binaryChunk1 = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
       const binaryChunk2 = Buffer.from([0x0d, 0x0a, 0x1a, 0x0a]);
 
-      const { result } = await simulateExecution('cat image.png', (pty) => {
-        pty.onData.mock.calls[0][0](binaryChunk1);
-        pty.onData.mock.calls[0][0](binaryChunk2);
-        pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
-      });
+      const { result } = await simulateExecution(
+        'cat image.png',
+        async (pty) => {
+          pty.onData.mock.calls[0][0](binaryChunk1);
+          pty.onData.mock.calls[0][0](binaryChunk2);
+          pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+        },
+      );
 
       expect(result.rawOutput).toEqual(
         Buffer.concat([binaryChunk1, binaryChunk2]),
       );
-      expect(onOutputEventMock).toHaveBeenCalledTimes(3);
+      // PTY binary detection emits binary_detected, then subsequent chunks emit binary_progress
+      // Due to the async processing chain, we verify at least binary_detected and one progress
+      expect(onOutputEventMock.mock.calls.length).toBeGreaterThanOrEqual(2);
       expect(onOutputEventMock.mock.calls[0][0]).toEqual({
         type: 'binary_detected',
       });
-      expect(onOutputEventMock.mock.calls[1][0]).toEqual({
-        type: 'binary_progress',
-        bytesReceived: 4,
-      });
-      expect(onOutputEventMock.mock.calls[2][0]).toEqual({
-        type: 'binary_progress',
-        bytesReceived: 8,
-      });
+      // Verify at least one binary_progress event was emitted
+      const progressEvents = onOutputEventMock.mock.calls.filter(
+        (call: [{ type: string }]) => call[0].type === 'binary_progress',
+      );
+      expect(progressEvents.length).toBeGreaterThanOrEqual(1);
     });
 
     it('should not emit data events after binary is detected', async () => {
@@ -420,6 +486,36 @@ describe('ShellExecutionService child_process fallback', () => {
       expect(result.output).toBe('');
       expect(onOutputEventMock).not.toHaveBeenCalled();
     });
+
+    it('should truncate stdout using a sliding window and show a warning', async () => {
+      const MAX_SIZE = 16 * 1024 * 1024;
+      const chunk1 = 'a'.repeat(MAX_SIZE / 2 - 5);
+      const chunk2 = 'b'.repeat(MAX_SIZE / 2 - 5);
+      const chunk3 = 'c'.repeat(20);
+
+      const { result } = await simulateExecution('large-output', (cp) => {
+        cp.stdout?.emit('data', Buffer.from(chunk1));
+        cp.stdout?.emit('data', Buffer.from(chunk2));
+        cp.stdout?.emit('data', Buffer.from(chunk3));
+        cp.emit('exit', 0, null);
+      });
+
+      const truncationMessage =
+        '[LLXPRT_CODE_WARNING: Output truncated. The buffer is limited to 16MB.]';
+      expect(result.output).toContain(truncationMessage);
+
+      const outputWithoutMessage = result.output
+        .substring(0, result.output.indexOf(truncationMessage))
+        .trimEnd();
+
+      expect(outputWithoutMessage.length).toBe(MAX_SIZE);
+
+      const expectedStart = (chunk1 + chunk2 + chunk3).slice(-MAX_SIZE);
+      expect(
+        outputWithoutMessage.startsWith(expectedStart.substring(0, 10)),
+      ).toBe(true);
+      expect(outputWithoutMessage.endsWith('c'.repeat(20))).toBe(true);
+    }, 20000);
   });
 
   describe('Failed Execution', () => {

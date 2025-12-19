@@ -13,6 +13,8 @@ import { EOL } from 'node:os';
 import fs from 'node:fs';
 import * as pty from '@lydell/node-pty';
 import * as os from 'node:os';
+import stripAnsi from 'strip-ansi';
+import { expect } from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +23,39 @@ function sanitizeTestName(name: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '-')
     .replace(/-+/g, '-');
+}
+
+// Get timeout based on environment
+function getDefaultTimeout() {
+  if (env['CI']) return 60000; // 1 minute in CI
+  if (env['LLXPRT_SANDBOX']) return 30000; // 30s in containers
+  return 15000; // 15s locally
+}
+
+export async function poll(
+  predicate: () => boolean,
+  timeout: number,
+  interval: number,
+): Promise<boolean> {
+  const startTime = Date.now();
+  let attempts = 0;
+  while (Date.now() - startTime < timeout) {
+    attempts++;
+    const result = predicate();
+    if (env['VERBOSE'] === 'true' && attempts % 5 === 0) {
+      console.log(
+        `Poll attempt ${attempts}: ${result ? 'success' : 'waiting...'}`,
+      );
+    }
+    if (result) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+  if (env['VERBOSE'] === 'true') {
+    console.log(`Poll timed out after ${attempts} attempts`);
+  }
+  return false;
 }
 
 // Helper to create detailed error messages
@@ -103,8 +138,10 @@ export function validateModelOutput(
       console.warn(
         'The tool was called successfully, which is the main requirement.',
       );
+      console.warn('Expected content:', expectedContent);
+      console.warn('Actual output:', result);
       return false;
-    } else if (process.env.VERBOSE === 'true') {
+    } else if (env['VERBOSE'] === 'true') {
       console.log(`${testName}: Model output validated successfully.`);
     }
     return true;
@@ -113,11 +150,72 @@ export function validateModelOutput(
   return true;
 }
 
+export class InteractiveRun {
+  ptyProcess: pty.IPty;
+  public output = '';
+
+  constructor(ptyProcess: pty.IPty) {
+    this.ptyProcess = ptyProcess;
+    ptyProcess.onData((data) => {
+      this.output += data;
+      if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
+        process.stdout.write(data);
+      }
+    });
+  }
+
+  // Note: Named expectText (not waitForText) to match upstream final state
+  // This incorporates commit a73b8145 which renames waitFor* → expect*
+  async expectText(text: string, timeout?: number) {
+    if (!timeout) {
+      timeout = getDefaultTimeout();
+    }
+    const found = await poll(
+      () => stripAnsi(this.output).toLowerCase().includes(text.toLowerCase()),
+      timeout,
+      200,
+    );
+    expect(found, `Did not find expected text: "${text}"`).toBe(true);
+  }
+
+  // Simulates typing a string one character at a time to avoid paste detection.
+  async type(text: string) {
+    const delay = 5;
+    for (const char of text) {
+      this.ptyProcess.write(char);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  async kill() {
+    this.ptyProcess.kill();
+  }
+
+  // Note: Named expectExit (not waitForExit) to match upstream final state
+  // This incorporates commit a73b8145 which renames waitFor* → expect*
+  expectExit(): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () =>
+          reject(
+            new Error(`Test timed out: process did not exit within a minute.`),
+          ),
+        60000,
+      );
+      this.ptyProcess.onExit(({ exitCode }) => {
+        clearTimeout(timer);
+        resolve(exitCode);
+      });
+    });
+  }
+}
+
 export class TestRig {
   bundlePath: string;
   testDir: string | null;
   testName?: string;
   _lastRunStdout?: string;
+  _interactiveOutput: string = '';
 
   constructor() {
     this.bundlePath = join(__dirname, '..', 'bundle/llxprt.js');
@@ -126,20 +224,13 @@ export class TestRig {
     // Bundle path is set
   }
 
-  // Get timeout based on environment
-  getDefaultTimeout() {
-    if (env.CI) return 60000; // 1 minute in CI
-    if (env.LLXPRT_SANDBOX) return 30000; // 30s in containers
-    return 15000; // 15s locally
-  }
-
   setup(
     testName: string,
     options: { settings?: Record<string, unknown> } = {},
   ) {
     this.testName = testName;
     const sanitizedName = sanitizeTestName(testName);
-    this.testDir = join(env.INTEGRATION_TEST_FILE_DIR!, sanitizedName);
+    this.testDir = join(env['INTEGRATION_TEST_FILE_DIR']!, sanitizedName);
     mkdirSync(this.testDir, { recursive: true });
 
     // Create a settings file to point the CLI to the local collector
@@ -149,7 +240,27 @@ export class TestRig {
     // The container mounts the test directory at the same path as the host
     const telemetryPath = join(this.testDir, 'telemetry.log'); // Always use test directory for telemetry
 
+    const settingsOverrides = (options.settings ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const { ui: uiOverridesRaw, ...settingsOverridesWithoutUi } =
+      settingsOverrides;
+    const uiOverrides =
+      uiOverridesRaw && typeof uiOverridesRaw === 'object'
+        ? (uiOverridesRaw as Record<string, unknown>)
+        : undefined;
+
     const settings = {
+      general: {
+        // Nightly releases sometimes becomes out of sync with local code and
+        // triggers auto-update, which causes tests to fail.
+        disableAutoUpdate: true,
+      },
+      ui: {
+        theme: 'Green Screen',
+        ...uiOverrides,
+      },
       telemetry: {
         enabled: true,
         target: 'local',
@@ -170,46 +281,53 @@ export class TestRig {
               'defaults',
             ),
       },
-      sandbox: env.LLXPRT_SANDBOX !== 'false' ? env.LLXPRT_SANDBOX : false,
+      sandbox:
+        env['LLXPRT_SANDBOX'] !== 'false' ? env['LLXPRT_SANDBOX'] : false,
       selectedAuthType: 'provider', // Use provider-based auth (API keys)
-      provider: env.LLXPRT_DEFAULT_PROVIDER, // No default - must be set explicitly
+      provider: env['LLXPRT_DEFAULT_PROVIDER'], // No default - must be set explicitly
       debug: true, // Enable debug logging
-      ...options.settings, // Allow tests to override/add settings
+      security: {
+        auth: {
+          selectedType: 'provider',
+        },
+      },
+      ...settingsOverridesWithoutUi, // Allow tests to override/add settings
     };
     writeFileSync(
       join(llxprtDir, 'settings.json'),
       JSON.stringify(settings, null, 2),
     );
 
-    const profileName = env.LLXPRT_TEST_PROFILE?.trim();
+    const profileName = env['LLXPRT_TEST_PROFILE']?.trim();
     if (profileName) {
       const profilesDir = join(llxprtDir, 'profiles');
       mkdirSync(profilesDir, { recursive: true });
 
       const profileProvider =
-        env.LLXPRT_DEFAULT_PROVIDER && env.LLXPRT_DEFAULT_PROVIDER.trim().length
-          ? env.LLXPRT_DEFAULT_PROVIDER
+        env['LLXPRT_DEFAULT_PROVIDER'] &&
+        env['LLXPRT_DEFAULT_PROVIDER'].trim().length
+          ? env['LLXPRT_DEFAULT_PROVIDER']
           : 'openai';
       const profileModel =
-        env.LLXPRT_DEFAULT_MODEL && env.LLXPRT_DEFAULT_MODEL.trim().length
-          ? env.LLXPRT_DEFAULT_MODEL
+        env['LLXPRT_DEFAULT_MODEL'] && env['LLXPRT_DEFAULT_MODEL'].trim().length
+          ? env['LLXPRT_DEFAULT_MODEL']
           : 'gpt-4o-mini';
 
       const ephemeralEntries: Array<[string, unknown]> = [];
-      if (env.OPENAI_BASE_URL && env.OPENAI_BASE_URL.trim().length > 0) {
-        ephemeralEntries.push(['base-url', env.OPENAI_BASE_URL]);
+      if (env['OPENAI_BASE_URL'] && env['OPENAI_BASE_URL'].trim().length > 0) {
+        ephemeralEntries.push(['base-url', env['OPENAI_BASE_URL']]);
       }
-      if (env.OPENAI_API_KEY && env.OPENAI_API_KEY.trim().length > 0) {
-        ephemeralEntries.push(['auth-key', env.OPENAI_API_KEY]);
+      if (env['OPENAI_API_KEY'] && env['OPENAI_API_KEY'].trim().length > 0) {
+        ephemeralEntries.push(['auth-key', env['OPENAI_API_KEY']]);
       }
-      if (env.LLXPRT_TEST_PROFILE_KEYFILE) {
+      if (env['LLXPRT_TEST_PROFILE_KEYFILE']) {
         ephemeralEntries.push([
           'auth-keyfile',
-          env.LLXPRT_TEST_PROFILE_KEYFILE,
+          env['LLXPRT_TEST_PROFILE_KEYFILE'],
         ]);
       }
-      if (env.LLXPRT_CONTEXT_LIMIT) {
-        const parsedLimit = Number(env.LLXPRT_CONTEXT_LIMIT);
+      if (env['LLXPRT_CONTEXT_LIMIT']) {
+        const parsedLimit = Number(env['LLXPRT_CONTEXT_LIMIT']);
         if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
           ephemeralEntries.push(['context-limit', parsedLimit]);
         }
@@ -253,17 +371,22 @@ export class TestRig {
   run(
     promptOrOptions:
       | string
-      | { prompt?: string; stdin?: string; stdinDoesNotEnd?: boolean },
+      | {
+          prompt?: string;
+          stdin?: string;
+          stdinDoesNotEnd?: boolean;
+          yolo?: boolean;
+        },
     ...args: string[]
   ): Promise<string> {
     // Add provider and model flags from environment - FAIL FAST if not configured
-    const provider = env.LLXPRT_DEFAULT_PROVIDER;
-    const model = env.LLXPRT_DEFAULT_MODEL;
-    const baseUrl = env.OPENAI_BASE_URL;
-    const apiKey = env.OPENAI_API_KEY;
+    const provider = env['LLXPRT_DEFAULT_PROVIDER'];
+    const model = env['LLXPRT_DEFAULT_MODEL'];
+    const baseUrl = env['OPENAI_BASE_URL'];
+    const apiKey = env['OPENAI_API_KEY'];
 
     // Debug: Log environment variables in CI
-    if (env.CI === 'true' || env.VERBOSE === 'true') {
+    if (env['CI'] === 'true' || env['VERBOSE'] === 'true') {
       console.log('[TestRig] Environment variables:', {
         provider,
         model,
@@ -289,12 +412,16 @@ export class TestRig {
       );
     }
 
+    // Determine yolo mode: default true unless explicitly set to false
+    const yolo =
+      typeof promptOrOptions === 'string' || promptOrOptions.yolo !== false;
+
     // Build command args array directly instead of parsing a string
     // This avoids Windows-specific command line parsing issues
     const commandArgs = [
       'node',
       this.bundlePath,
-      '--yolo',
+      ...(yolo ? ['--yolo'] : []),
       '--ide-mode',
       'disable',
       '--provider',
@@ -359,14 +486,18 @@ export class TestRig {
     // Add any additional args
     commandArgs.push(...args);
 
-    if (env.LLXPRT_TEST_PROFILE?.trim()) {
-      commandArgs.push('--profile-load', env.LLXPRT_TEST_PROFILE.trim());
+    if (env['LLXPRT_TEST_PROFILE']?.trim()) {
+      commandArgs.push('--profile-load', env['LLXPRT_TEST_PROFILE'].trim());
     }
 
     const node = commandArgs.shift() as string;
+    const isJsonOutput =
+      (commandArgs.includes('--output-format') &&
+        commandArgs[commandArgs.indexOf('--output-format') + 1] === 'json') ||
+      commandArgs.some((arg) => arg.startsWith('--output-format=json'));
 
     // Debug: Log command being executed in CI
-    if (env.CI === 'true' || env.VERBOSE === 'true') {
+    if (env['CI'] === 'true' || env['VERBOSE'] === 'true') {
       console.log('[TestRig] Spawning command:', {
         node,
         args: commandArgs,
@@ -398,14 +529,14 @@ export class TestRig {
 
     child.stdout!.on('data', (data: Buffer) => {
       stdout += data;
-      if (env.KEEP_OUTPUT === 'true' || env.VERBOSE === 'true') {
+      if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
         process.stdout.write(data);
       }
     });
 
     child.stderr!.on('data', (data: Buffer) => {
       stderr += data;
-      if (env.KEEP_OUTPUT === 'true' || env.VERBOSE === 'true') {
+      if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
         process.stderr.write(data);
       }
     });
@@ -448,7 +579,7 @@ export class TestRig {
           // Filter out telemetry output when running with Podman
           // Podman seems to output telemetry to stdout even when writing to file
           let result = stdout;
-          if (env.LLXPRT_SANDBOX === 'podman') {
+          if (env['LLXPRT_SANDBOX'] === 'podman') {
             // Remove telemetry JSON objects from output
             // They are multi-line JSON objects that start with { and contain telemetry fields
             const lines = result.split(EOL);
@@ -483,13 +614,22 @@ export class TestRig {
             result = filteredLines.join('\n');
           }
           // If we have stderr output, include that also
-          if (stderr) {
+          if (stderr && !isJsonOutput) {
             result += `\n\nStdErr:\n${stderr}`;
           }
 
           resolve(result);
         } else {
-          reject(new Error(`Process exited with code ${code}:\n${stderr}`));
+          const trimmedStdout = stdout.trimEnd();
+          const trimmedStderr = stderr.trimEnd();
+          let message = `Process exited with code ${code}.`;
+          if (trimmedStdout) {
+            message += `\n\nStdOut:\n${trimmedStdout}`;
+          }
+          if (trimmedStderr) {
+            message += `\n\nStdErr:\n${trimmedStderr}`;
+          }
+          reject(new Error(message));
         }
       });
     });
@@ -500,7 +640,7 @@ export class TestRig {
   readFile(fileName: string) {
     const filePath = join(this.testDir!, fileName);
     const content = readFileSync(filePath, 'utf-8');
-    if (env.KEEP_OUTPUT === 'true' || env.VERBOSE === 'true') {
+    if (env['KEEP_OUTPUT'] === 'true' || env['VERBOSE'] === 'true') {
       console.log(`--- FILE: ${filePath} ---`);
       console.log(content);
       console.log(`--- END FILE: ${filePath} ---`);
@@ -510,17 +650,12 @@ export class TestRig {
 
   async cleanup() {
     // Clean up test directory
-    if (this.testDir && !env.KEEP_OUTPUT) {
+    if (this.testDir && !env['KEEP_OUTPUT']) {
       try {
-        if (process.platform === 'win32') {
-          // On Windows, use fs.rmSync which handles permissions better
-          fs.rmSync(this.testDir, { recursive: true, force: true });
-        } else {
-          execSync(`rm -rf ${this.testDir}`);
-        }
+        fs.rmSync(this.testDir, { recursive: true, force: true });
       } catch (error) {
         // Ignore cleanup errors
-        if (env.VERBOSE === 'true') {
+        if (env['VERBOSE'] === 'true') {
           console.warn('Cleanup warning:', (error as Error).message);
         }
       }
@@ -534,7 +669,7 @@ export class TestRig {
     if (!logFilePath) return;
 
     // Wait for telemetry file to exist and have content
-    await this.poll(
+    await poll(
       () => {
         if (!fs.existsSync(logFilePath)) return false;
         try {
@@ -552,12 +687,12 @@ export class TestRig {
 
   async waitForTelemetryEvent(eventName: string, timeout?: number) {
     if (!timeout) {
-      timeout = this.getDefaultTimeout();
+      timeout = getDefaultTimeout();
     }
 
     await this.waitForTelemetryReady();
 
-    return this.poll(
+    return poll(
       () => {
         const logFilePath = join(this.testDir!, 'telemetry.log');
 
@@ -596,19 +731,27 @@ export class TestRig {
     );
   }
 
-  async waitForToolCall(toolName: string, timeout?: number) {
+  async waitForToolCall(
+    toolName: string,
+    timeout?: number,
+    matchArgs?: (args: string) => boolean,
+  ) {
     // Use environment-specific timeout
     if (!timeout) {
-      timeout = this.getDefaultTimeout();
+      timeout = getDefaultTimeout();
     }
 
     // Wait for telemetry to be ready before polling for tool calls
     await this.waitForTelemetryReady();
 
-    return this.poll(
+    return poll(
       () => {
         const toolLogs = this.readToolLogs();
-        return toolLogs.some((log) => log.toolRequest.name === toolName);
+        return toolLogs.some(
+          (log) =>
+            log.toolRequest.name === toolName &&
+            (matchArgs?.call(this, log.toolRequest.args) ?? true),
+        );
       },
       timeout,
       100,
@@ -618,13 +761,13 @@ export class TestRig {
   async waitForAnyToolCall(toolNames: string[], timeout?: number) {
     // Use environment-specific timeout
     if (!timeout) {
-      timeout = this.getDefaultTimeout();
+      timeout = getDefaultTimeout();
     }
 
     // Wait for telemetry to be ready before polling for tool calls
     await this.waitForTelemetryReady();
 
-    return this.poll(
+    return poll(
       () => {
         const toolLogs = this.readToolLogs();
         return toolNames.some((name) =>
@@ -636,30 +779,35 @@ export class TestRig {
     );
   }
 
-  async poll(
-    predicate: () => boolean,
-    timeout: number,
-    interval: number,
-  ): Promise<boolean> {
-    const startTime = Date.now();
-    let attempts = 0;
-    while (Date.now() - startTime < timeout) {
-      attempts++;
-      const result = predicate();
-      if (env.VERBOSE === 'true' && attempts % 5 === 0) {
-        console.log(
-          `Poll attempt ${attempts}: ${result ? 'success' : 'waiting...'}`,
+  async expectToolCallSuccess(
+    toolNames: string | string[],
+    timeout?: number,
+  ): Promise<void> {
+    if (!timeout) {
+      timeout = getDefaultTimeout();
+    }
+
+    const names = Array.isArray(toolNames) ? toolNames : [toolNames];
+
+    await this.waitForTelemetryReady();
+
+    const found = await poll(
+      () => {
+        const toolLogs = this.readToolLogs();
+        return toolLogs.some(
+          (log) =>
+            names.includes(log.toolRequest.name) &&
+            log.toolRequest.success === true,
         );
-      }
-      if (result) {
-        return true;
-      }
-      await new Promise((resolve) => setTimeout(resolve, interval));
-    }
-    if (env.VERBOSE === 'true') {
-      console.log(`Poll timed out after ${attempts} attempts`);
-    }
-    return false;
+      },
+      timeout,
+      100,
+    );
+
+    expect(
+      found,
+      `Expected successful tool call for: ${names.join(', ')}`,
+    ).toBe(true);
   }
 
   _parseToolLogsFromStdout(stdout: string) {
@@ -825,7 +973,7 @@ export class TestRig {
   readToolLogs() {
     // For Podman, first check if telemetry file exists and has content
     // If not, fall back to parsing from stdout
-    if (env.LLXPRT_SANDBOX === 'podman') {
+    if (env['LLXPRT_SANDBOX'] === 'podman') {
       // Try reading from file first
       const logFilePath = join(this.testDir!, 'telemetry.log');
 
@@ -856,7 +1004,7 @@ export class TestRig {
 
     if (!logFilePath) {
       // Don't warn in CI/test environments, it's expected
-      if (process.env.VERBOSE === 'true') {
+      if (process.env['VERBOSE'] === 'true') {
         console.warn(`TELEMETRY_LOG_FILE environment variable not set`);
       }
       return [];
@@ -910,7 +1058,7 @@ export class TestRig {
         }
       } catch (e) {
         // Skip objects that aren't valid JSON
-        if (env.VERBOSE === 'true') {
+        if (env['VERBOSE'] === 'true') {
           console.error('Failed to parse telemetry object:', e);
         }
       }
@@ -961,21 +1109,66 @@ export class TestRig {
     return lastApiRequest;
   }
 
-  runInteractive(...args: string[]): {
-    ptyProcess: pty.IPty;
-    promise: Promise<{ exitCode: number; signal?: number; output: string }>;
+  private _getCommandAndArgs(extraInitialArgs: string[] = []): {
+    command: string;
+    initialArgs: string[];
   } {
-    const commandArgs = [this.bundlePath, '--yolo', ...args];
+    const command = 'node';
+    const initialArgs = [this.bundlePath, ...extraInitialArgs];
+    return { command, initialArgs };
+  }
+
+  async waitForText(text: string, timeout?: number) {
+    if (!timeout) {
+      timeout = getDefaultTimeout();
+    }
+    const found = await poll(
+      () =>
+        stripAnsi(this._interactiveOutput)
+          .toLowerCase()
+          .includes(text.toLowerCase()),
+      timeout,
+      200,
+    );
+    expect(found, `Did not find expected text: "${text}"`).toBe(true);
+  }
+
+  async runInteractive(...args: string[]): Promise<InteractiveRun> {
+    const { command, initialArgs } = this._getCommandAndArgs([
+      '--yolo',
+      ...args,
+    ]);
     const isWindows = os.platform() === 'win32';
+
+    const filteredEnv = Object.entries(process.env).reduce(
+      (acc, [key, value]) => {
+        if (
+          value !== undefined &&
+          key !== 'TERM_PROGRAM' &&
+          key !== 'TERM_PROGRAM_VERSION'
+        ) {
+          acc[key] = value;
+        }
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
 
     const options: pty.IPtyForkOptions = {
       name: 'xterm-color',
       cols: 80,
       rows: 30,
       cwd: this.testDir!,
-      env: Object.fromEntries(
-        Object.entries(process.env).filter(([, v]) => v !== undefined),
-      ) as { [key: string]: string },
+      env: {
+        ...filteredEnv,
+        // Keep interactive tests deterministic:
+        // - Avoid auto-opening theme selection dialog
+        // - Avoid launching browsers during auth flows
+        NO_COLOR: 'true',
+        NO_BROWSER: 'true',
+        LLXPRT_NO_BROWSER_AUTH: 'true',
+        CI: 'true',
+      },
     };
 
     if (isWindows) {
@@ -983,26 +1176,11 @@ export class TestRig {
       options.shell = process.env.COMSPEC || 'cmd.exe';
     }
 
-    const ptyProcess = pty.spawn('node', commandArgs, options);
+    const ptyProcess = pty.spawn(command, initialArgs, options);
 
-    let output = '';
-    ptyProcess.onData((data) => {
-      output += data;
-      if (env.KEEP_OUTPUT === 'true' || env.VERBOSE === 'true') {
-        process.stdout.write(data);
-      }
-    });
-
-    const promise = new Promise<{
-      exitCode: number;
-      signal?: number;
-      output: string;
-    }>((resolve) => {
-      ptyProcess.onExit(({ exitCode, signal }) => {
-        resolve({ exitCode, signal, output });
-      });
-    });
-
-    return { ptyProcess, promise };
+    const run = new InteractiveRun(ptyProcess);
+    // Wait for the app to be ready (input prompt rendered).
+    await run.expectText('Type your message', 30000);
+    return run;
   }
 }

@@ -390,12 +390,14 @@ decision = "deny"
       const readOnlyTools = rules.filter((r) => r.priority === 1.05);
       expect(readOnlyTools.length).toBeGreaterThan(0);
       expect(readOnlyTools.some((r) => r.toolName === 'glob')).toBe(true);
-      expect(readOnlyTools.some((r) => r.toolName === 'grep')).toBe(true);
+      expect(
+        readOnlyTools.some((r) => r.toolName === 'search_file_content'),
+      ).toBe(true);
 
       // Check for some expected write tools
       const writeTools = rules.filter((r) => r.priority === 1.01);
       expect(writeTools.length).toBeGreaterThan(0);
-      expect(writeTools.some((r) => r.toolName === 'edit')).toBe(true);
+      expect(writeTools.some((r) => r.toolName === 'replace')).toBe(true);
       expect(writeTools.some((r) => r.toolName === 'shell')).toBe(true);
     });
 

@@ -6,7 +6,7 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { Buffer } from 'node:buffer';
-import { HistoryItem } from '../types.js';
+import type { HistoryItem } from '../types.js';
 import { ConversationContext } from '../../utils/ConversationContext.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
@@ -135,13 +135,16 @@ export function useHistory(
     ConversationContext.startNewConversation();
   }, []);
 
-  return {
-    history,
-    addItem,
-    updateItem,
-    clearItems,
-    loadHistory,
-  };
+  return useMemo(
+    () => ({
+      history,
+      addItem,
+      updateItem,
+      clearItems,
+      loadHistory,
+    }),
+    [history, addItem, updateItem, clearItems, loadHistory],
+  );
 }
 
 function normalizeHistoryLimits(options?: UseHistoryOptions): HistoryLimits {

@@ -15,6 +15,15 @@ import stripAnsi from 'strip-ansi';
 const { Terminal } = pkg;
 
 const SIGKILL_TIMEOUT_MS = 200;
+const MAX_CHILD_PROCESS_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB
+const ANSI_ESCAPE = '\u001b';
+const ANSI_CSI = '\u009b';
+
+function stripAnsiIfPresent(value: string): string {
+  return value.includes(ANSI_ESCAPE) || value.includes(ANSI_CSI)
+    ? stripAnsi(value)
+    : value;
+}
 
 // @ts-expect-error getFullText is not a public API.
 const getFullText = (terminal: Terminal) => {
@@ -120,6 +129,36 @@ export class ShellExecutionService {
     );
   }
 
+  private static appendAndTruncate(
+    currentBuffer: string,
+    chunk: string,
+    maxSize: number,
+  ): { newBuffer: string; truncated: boolean } {
+    const chunkLength = chunk.length;
+    const currentLength = currentBuffer.length;
+    const newTotalLength = currentLength + chunkLength;
+
+    if (newTotalLength <= maxSize) {
+      return { newBuffer: currentBuffer + chunk, truncated: false };
+    }
+
+    // Truncation is needed.
+    if (chunkLength >= maxSize) {
+      // The new chunk is larger than or equal to the max buffer size.
+      // The new buffer will be the tail of the new chunk.
+      return {
+        newBuffer: chunk.substring(chunkLength - maxSize),
+        truncated: true,
+      };
+    }
+
+    // The combined buffer exceeds the max size, but the new chunk is smaller than it.
+    // We need to truncate the current buffer from the beginning to make space.
+    const charsToTrim = newTotalLength - maxSize;
+    const truncatedBuffer = currentBuffer.substring(charsToTrim);
+    return { newBuffer: truncatedBuffer + chunk, truncated: true };
+  }
+
   private static childProcessFallback(
     commandToExecute: string,
     cwd: string,
@@ -152,6 +191,8 @@ export class ShellExecutionService {
 
         let stdout = '';
         let stderr = '';
+        let stdoutTruncated = false;
+        let stderrTruncated = false;
         const outputChunks: Buffer[] = [];
         let error: Error | null = null;
         let exited = false;
@@ -159,6 +200,8 @@ export class ShellExecutionService {
         let isStreamingRawContent = true;
         const MAX_SNIFF_SIZE = 4096;
         let sniffedBytes = 0;
+        let sniffBuffer = Buffer.alloc(0);
+        let totalBytesReceived = 0;
 
         const handleOutput = (data: Buffer, stream: 'stdout' | 'stderr') => {
           if (!stdoutDecoder || !stderrDecoder) {
@@ -172,38 +215,58 @@ export class ShellExecutionService {
             }
           }
 
+          totalBytesReceived += data.length;
           outputChunks.push(data);
 
           if (isStreamingRawContent && sniffedBytes < MAX_SNIFF_SIZE) {
-            const sniffBuffer = Buffer.concat(outputChunks.slice(0, 20));
-            sniffedBytes = sniffBuffer.length;
+            const remaining = MAX_SNIFF_SIZE - sniffedBytes;
+            if (remaining > 0) {
+              const slice = data.subarray(0, remaining);
+              sniffBuffer =
+                sniffBuffer.length === 0
+                  ? Buffer.from(slice)
+                  : Buffer.concat([sniffBuffer, slice]);
+              sniffedBytes = sniffBuffer.length;
 
-            if (isBinary(sniffBuffer)) {
-              isStreamingRawContent = false;
-              onOutputEvent({ type: 'binary_detected' });
+              if (isBinary(sniffBuffer)) {
+                isStreamingRawContent = false;
+                onOutputEvent({ type: 'binary_detected' });
+              }
             }
           }
 
           const decoder = stream === 'stdout' ? stdoutDecoder : stderrDecoder;
           const decodedChunk = decoder.decode(data, { stream: true });
-          const strippedChunk = stripAnsi(decodedChunk);
+          const strippedChunk = stripAnsiIfPresent(decodedChunk);
 
           if (stream === 'stdout') {
-            stdout += strippedChunk;
+            const { newBuffer, truncated } = this.appendAndTruncate(
+              stdout,
+              strippedChunk,
+              MAX_CHILD_PROCESS_BUFFER_SIZE,
+            );
+            stdout = newBuffer;
+            if (truncated) {
+              stdoutTruncated = true;
+            }
           } else {
-            stderr += strippedChunk;
+            const { newBuffer, truncated } = this.appendAndTruncate(
+              stderr,
+              strippedChunk,
+              MAX_CHILD_PROCESS_BUFFER_SIZE,
+            );
+            stderr = newBuffer;
+            if (truncated) {
+              stderrTruncated = true;
+            }
           }
 
           if (isStreamingRawContent) {
             onOutputEvent({ type: 'data', chunk: strippedChunk });
           } else {
-            const totalBytes = outputChunks.reduce(
-              (sum, chunk) => sum + chunk.length,
-              0,
-            );
             onOutputEvent({
               type: 'binary_progress',
-              bytesReceived: totalBytes,
+              bytesReceived: totalBytesReceived,
             });
           }
         };
@@ -215,8 +278,15 @@ export class ShellExecutionService {
           const { finalBuffer } = cleanup();
           // Ensure we don't add an extra newline if stdout already ends with one.
           const separator = stdout.endsWith('\n') ? '' : '\n';
-          const combinedOutput =
+          let combinedOutput =
             stdout + (stderr ? (stdout ? separator : '') + stderr : '');
+
+          if (stdoutTruncated || stderrTruncated) {
+            const truncationMessage = `\n[LLXPRT_CODE_WARNING: Output truncated. The buffer is limited to ${
+              MAX_CHILD_PROCESS_BUFFER_SIZE / (1024 * 1024)
+            }MB.]`;
+            combinedOutput += truncationMessage;
+          }
 
           resolve({
             rawOutput: finalBuffer,
@@ -269,13 +339,13 @@ export class ShellExecutionService {
           if (stdoutDecoder) {
             const remaining = stdoutDecoder.decode();
             if (remaining) {
-              stdout += stripAnsi(remaining);
+              stdout += stripAnsiIfPresent(remaining);
             }
           }
           if (stderrDecoder) {
             const remaining = stderrDecoder.decode();
             if (remaining) {
-              stderr += stripAnsi(remaining);
+              stderr += stripAnsiIfPresent(remaining);
             }
           }
 
@@ -356,6 +426,8 @@ export class ShellExecutionService {
         let isStreamingRawContent = true;
         const MAX_SNIFF_SIZE = 4096;
         let sniffedBytes = 0;
+        let sniffBuffer = Buffer.alloc(0);
+        let totalBytesReceived = 0;
 
         const handleOutput = (data: Buffer) => {
           processingChain = processingChain.then(
@@ -370,15 +442,23 @@ export class ShellExecutionService {
                   }
                 }
 
+                totalBytesReceived += data.length;
                 outputChunks.push(data);
 
                 if (isStreamingRawContent && sniffedBytes < MAX_SNIFF_SIZE) {
-                  const sniffBuffer = Buffer.concat(outputChunks.slice(0, 20));
-                  sniffedBytes = sniffBuffer.length;
+                  const remaining = MAX_SNIFF_SIZE - sniffedBytes;
+                  if (remaining > 0) {
+                    const slice = data.subarray(0, remaining);
+                    sniffBuffer =
+                      sniffBuffer.length === 0
+                        ? Buffer.from(slice)
+                        : Buffer.concat([sniffBuffer, slice]);
+                    sniffedBytes = sniffBuffer.length;
 
-                  if (isBinary(sniffBuffer)) {
-                    isStreamingRawContent = false;
-                    onOutputEvent({ type: 'binary_detected' });
+                    if (isBinary(sniffBuffer)) {
+                      isStreamingRawContent = false;
+                      onOutputEvent({ type: 'binary_detected' });
+                    }
                   }
                 }
 
@@ -387,18 +467,14 @@ export class ShellExecutionService {
                   headlessTerminal.write(decodedChunk, () => {
                     onOutputEvent({
                       type: 'data',
-                      chunk: stripAnsi(decodedChunk),
+                      chunk: stripAnsiIfPresent(decodedChunk),
                     });
                     resolve();
                   });
                 } else {
-                  const totalBytes = outputChunks.reduce(
-                    (sum, chunk) => sum + chunk.length,
-                    0,
-                  );
                   onOutputEvent({
                     type: 'binary_progress',
-                    bytesReceived: totalBytes,
+                    bytesReceived: totalBytesReceived,
                   });
                   resolve();
                 }
@@ -416,7 +492,7 @@ export class ShellExecutionService {
             exited = true;
             abortSignal.removeEventListener('abort', abortHandler);
 
-            processingChain.then(() => {
+            const finalize = () => {
               const finalBuffer = Buffer.concat(outputChunks);
 
               const fullOutput = getFullText(headlessTerminal);
@@ -432,6 +508,26 @@ export class ShellExecutionService {
                 pid: ptyProcess.pid,
                 executionMethod: ptyInfo?.name ?? 'node-pty',
               });
+            };
+
+            if (abortSignal.aborted) {
+              finalize();
+              return;
+            }
+
+            const processingComplete = processingChain.then(() => 'processed');
+            const abortFired = new Promise<'aborted'>((res) => {
+              if (abortSignal.aborted) {
+                res('aborted');
+                return;
+              }
+              abortSignal.addEventListener('abort', () => res('aborted'), {
+                once: true,
+              });
+            });
+
+            Promise.race([processingComplete, abortFired]).then(() => {
+              finalize();
             });
           },
         );

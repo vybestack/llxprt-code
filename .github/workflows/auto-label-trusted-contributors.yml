@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: 'read'
+  issues: 'write'
   pull-requests: 'write'
 
 defaults:
@@ -54,5 +55,10 @@ jobs:
           PR_NUMBER: '${{ github.event.pull_request.number }}'
         run: |-
           set -euo pipefail
+          gh label create 'maintainer:e2e:ok' \
+            --repo "${GITHUB_REPOSITORY}" \
+            --color '0E8A16' \
+            --description 'Trusted contributor; maintainer-approved E2E run' \
+            --force
           gh pr edit "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --add-label 'maintainer:e2e:ok'
           echo "Added maintainer:e2e:ok to PR #${PR_NUMBER}" >>"${GITHUB_STEP_SUMMARY}"

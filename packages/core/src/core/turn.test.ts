@@ -14,7 +14,11 @@ import {
 } from './turn.js';
 import { GenerateContentResponse, Part, Content } from '@google/genai';
 import { reportError } from '../utils/errorReporting.js';
-import { GeminiChat, StreamEventType } from './geminiChat.js';
+import {
+  GeminiChat,
+  InvalidStreamError,
+  StreamEventType,
+} from './geminiChat.js';
 
 const mockSendMessageStream = vi.fn();
 const mockGetHistory = vi.fn();
@@ -220,6 +224,27 @@ describe('Turn', () => {
         { type: GeminiEventType.UserCancelled },
       ]);
       expect(turn.getDebugResponses().length).toBe(1);
+    });
+
+    it('should yield InvalidStream event if sendMessageStream throws InvalidStreamError', async () => {
+      const error = new InvalidStreamError(
+        'Test invalid stream',
+        'NO_FINISH_REASON',
+      );
+      mockSendMessageStream.mockRejectedValue(error);
+      const reqParts: Part[] = [{ text: 'Trigger invalid stream' }];
+
+      const events = [];
+      for await (const event of turn.run(
+        reqParts,
+        new AbortController().signal,
+      )) {
+        events.push(event);
+      }
+
+      expect(events).toEqual([{ type: GeminiEventType.InvalidStream }]);
+      expect(turn.getDebugResponses().length).toBe(0);
+      expect(reportError).not.toHaveBeenCalled(); // Should not report as error
     });
 
     it('should yield Error event and report if sendMessageStream throws', async () => {

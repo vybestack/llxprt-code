@@ -2,6 +2,9 @@
 
 This guide documents the process for cherry-picking changes from the upstream gemini-cli repository while maintaining llxprt's multi-provider architecture and customizations.
 
+For the full end-to-end workflow (commit inventory → PICK/SKIP/REIMPLEMENT tables → batch plan → progress tracking),
+see `dev-docs/cherrypicking-runbook.md`. This document focuses on criteria, non-negotiables, and the verification checklist.
+
 ## Overview
 
 LLxprt Code is a fork of gemini-cli that adds multi-provider support (OpenAI, Anthropic, etc.) along with other enhancements. We regularly cherry-pick improvements from upstream while preserving our unique features.
@@ -18,7 +21,7 @@ git fetch upstream
 
 # Create a new branch from main
 git checkout main
-git checkout -b YYYYMMDD-gmerge  # e.g., 20250801-gmerge
+git checkout -b YYYYMMDDgmerge  # e.g., 20251215gmerge
 ```
 
 ### 2. Identify Commits to Cherry-pick
@@ -32,8 +35,13 @@ git log --oneline upstream/main ^HEAD
 # Check how many commits behind we are
 git rev-list --count HEAD..upstream/main
 
-# See the last merge point with upstream
-git log --oneline --merges --grep="Merge upstream" -1
+# Prefer tag-to-tag ranges when upstream has releases/tags
+git fetch upstream --tags
+git log --oneline --reverse v0.9.0..v0.10.0
+
+# Historical note: older syncs used marker merge commits. We no longer create
+# marker-only merges; use tracking docs and commit messages instead.
+git log --oneline --grep="Merge upstream gemini-cli" -n 5
 ```
 
 ### 3. Cherry-pick Relevant Commits
@@ -108,46 +116,63 @@ After cherry-picking, you may encounter:
 
 ### 5. Run Quality Checks
 
-**IMPORTANT**: Always run these checks in order:
+**IMPORTANT**: Always run these checks in order (from the repo root):
 
 ```bash
-# 1. Run lint first
+# 1. Lint
 npm run lint
 
-# 2. Run build to catch TypeScript errors
+# 2. Typecheck
+npm run typecheck
+
+# 3. Tests
+npm run test
+
+# 4. Format
+npm run format
+
+# 5. Build
 npm run build
 
-# 3. Run tests
-npm test
-
-# 4. Run format AFTER everything passes
-npm run format
+# 6. Synthetic smoke-run
+node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
 ```
+
+If you get noisy “working tree modified” warnings during long runs, it’s OK to
+run `npm run format` earlier as a convenience. Just rerun it after your final
+code changes.
 
 ### 5a. Batch Verification Phase (When Cherry-picking Multiple Commits)
 
-When cherry-picking multiple commits, **verify after each batch of 5 commits**:
+When cherry-picking multiple commits, **verify after every batch**, and run the full suite every **2nd** batch.
 
 **Verification Process**:
 
-1. After cherry-picking 5 commits (or fewer if it's the last batch)
-2. Run full verification suite:
+1. After completing a batch (often 5 PICK commits, or 1 REIMPLEMENT)
+2. Run quick verification:
+   ```bash
+   npm run lint
+   npm run typecheck
+   ```
+3. After every 2nd batch (Batch 2, 4, 6, …), run full verification suite:
    ```bash
    # Full verification in order
    npm run lint
-   npm run build
-   npm test
+   npm run typecheck
+   npm run test
    npm run format
+   npm run build
+   node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
    git add -A  # Stage formatted changes if any
    ```
-3. Verify commits were actually applied:
+4. Verify commits were actually applied:
    ```bash
    # Check that all expected commits are present
    git log --oneline -10  # Review recent commits
    git diff HEAD~5..HEAD --stat  # Check changes in last 5 commits
    ```
-4. Fix any issues before proceeding to next batch
-5. Create a fix commit if needed:
+5. Fix any issues before proceeding to next batch
+6. Create a fix commit if needed:
    ```bash
    git add -A
    git commit -m "fix: resolve issues from batch N cherry-picks"
@@ -172,29 +197,23 @@ git commit -m "fix: resolve conflicts and test failures from cherry-picks
 - <preserved llxprt features>"
 ```
 
-### 7. Create Empty Merge Commit
+### 7. Record the Sync Range (No Marker Merge Commits)
 
-To maintain parity with upstream's merge structure:
+We no longer create marker-only merge commits (e.g. `git merge -s ours`) as a
+“sync point”. These create synthetic ancestry and can hide intentional SKIP /
+REIMPLEMENT decisions.
 
-```bash
-# Create an empty merge commit using -s ours strategy
-# IMPORTANT: Merge the specific commit hash, NOT upstream/main
-git merge -s ours --no-ff <last-cherry-picked-commit-hash> -m "Merge upstream gemini-cli up to commit <hash>
+Instead:
 
-This is an empty merge commit to maintain parity with upstream structure.
-All changes have already been cherry-picked:
-- <list of cherry-picked features>
-
-Maintains llxprt's multi-provider support, branding, and authentication
-differences while staying in sync with upstream improvements."
-```
-
-**Critical**: Always merge the specific commit hash (e.g., `c795168e`), never merge `upstream/main`. This prevents bringing in all upstream commits again.
+- Keep a tracking table (PICK/SKIP/REIMPLEMENT) for the upstream range.
+- Ensure reimplementation commits include the upstream SHA in the message.
+- If you want a git-level marker, prefer an annotated tag on the final commit
+  (optional, only if your release workflow uses tags).
 
 ### 8. Push the Branch
 
 ```bash
-git push origin YYYYMMDD-gmerge
+git push origin YYYYMMDDgmerge  # e.g., 20251215gmerge
 ```
 
 ### 9. Create Pull Request
@@ -231,6 +250,32 @@ import { Config } from '@google/gemini-cli-core';
 import { Config } from '@vybestack/llxprt-code-core';
 ```
 
+### Tool Name and Policy Divergence
+
+When cherry-picking tool/scheduler/policy changes, verify the actual tool names
+used in LLxprt (search for `static readonly Name` in
+`packages/core/src/tools/`) and keep the default policies in sync
+(`packages/core/src/policy/policies/*.toml`).
+
+Important nuance: models/providers sometimes emit short aliases for tool names,
+but upstream and LLxprt can still share the same canonical tool name. Treat
+aliases as input normalization, not upstream divergence.
+
+Common model aliases → canonical tool names (upstream + LLxprt):
+
+| Alias (commonly emitted) | Canonical tool name   |
+| ------------------------ | --------------------- |
+| `ls`                     | `list_directory`      |
+| `grep`                   | `search_file_content` |
+| `edit`                   | `replace`             |
+
+Actual LLxprt tool-name divergence vs upstream (examples):
+
+| Upstream      | LLxprt                                        |
+| ------------- | --------------------------------------------- |
+| `web_fetch`   | `google_web_fetch` / `direct_web_fetch`       |
+| `write_todos` | `todo_write` (and `todo_read` / `todo_pause`) |
+
 ### Error Structure Changes
 
 LLxprt may use different error structures:
@@ -253,15 +298,13 @@ LLxprt may use different error structures:
 6. **IDE features are important** - llxprt has full IDE integration, don't skip IDE-related commits
 7. **Git history is the source of truth** - Use git commands to check sync status, not manual logs
 
-## Merge Strategy
+## Sync Tracking (No Marker Merge Commits)
 
-The `-s ours` merge strategy creates a merge commit without actually merging any content. This is used because:
+We track upstream parity via:
 
-1. We've already cherry-picked all desired changes
-2. We want to maintain the same merge structure as upstream
-3. It prevents accidental overwrites of llxprt customizations
-4. It clearly marks our sync point with upstream
+1. The cherry-pick/reimplementation commits themselves (with upstream SHAs in
+   commit messages where applicable).
+2. A tracking document for the chosen upstream range (so SKIPs are explicit).
 
-**Critical Detail**: When creating the merge commit, always specify the exact commit hash (not `upstream/main`). This ensures we only create a merge marker to that specific commit, not to the entire upstream branch.
-
-This approach ensures we stay up-to-date with upstream improvements while maintaining llxprt's unique identity and features.
+This avoids “fake” history from marker-only merges while keeping the repository
+auditable and reviewable.

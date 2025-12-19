@@ -194,10 +194,6 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
   - **Description:** Show citations for generated text in the chat.
   - **Default:** `false`
 
-- **`ui.accessibility.disableLoadingPhrases`** (boolean):
-  - **Description:** Disable loading phrases for accessibility.
-  - **Default:** `false`
-
 - **`ui.customWittyPhrases`** (array of strings):
   - **Description:** A list of custom phrases to display during loading states. When provided, the CLI will cycle through these phrases instead of the default ones.
   - **Default:** `[]`
@@ -587,6 +583,68 @@ The following settings remain at the top level of the `settings.json` file.
       "disableLoadingPhrases": true
     }
     ```
+
+#### Additional Dialog Settings
+
+The following settings are available in the `/settings` dialog:
+
+- **`disableAutoUpdate`** (boolean):
+  - **Description:** Disable automatic updates of LLxprt Code. When enabled, you will need to manually update the application.
+  - **Default:** `false`
+
+- **`enablePromptCompletion`** (boolean):
+  - **Description:** Enable AI-powered prompt completion suggestions while typing. Provides intelligent autocomplete based on context and command history.
+  - **Default:** `false`
+
+- **`enableFuzzyFiltering`** (boolean):
+  - **Description:** Enable fuzzy filtering for command menu completions. When enabled, you can type partial characters (e.g., "prd" to match "production"). When disabled, only exact prefix matches are shown.
+  - **Default:** `true`
+
+- **`tools.useRipgrep`** (boolean):
+  - **Description:** Use ripgrep for file content search instead of the fallback implementation. Provides significantly faster search performance on large codebases.
+  - **Default:** `false`
+
+- **`tools.enableToolOutputTruncation`** (boolean):
+  - **Description:** Enable truncation of large tool outputs to prevent overwhelming the context window.
+  - **Default:** `true`
+
+- **`tools.truncateToolOutputThreshold`** (number):
+  - **Description:** Truncate tool output if it exceeds this many characters. Set to `-1` to disable truncation.
+  - **Default:** `30000`
+
+- **`ui.showStatusInTitle`** (boolean):
+  - **Description:** Show LLxprt status and AI thoughts in the terminal window title. Useful for monitoring progress when the terminal is in the background.
+  - **Default:** `false`
+
+- **`ui.hideContextSummary`** (boolean):
+  - **Description:** Hide the context summary (LLXPRT.md files, MCP servers) displayed above the input prompt.
+  - **Default:** `false`
+
+- **`ui.footer.hideCWD`** (boolean):
+  - **Description:** Hide the current working directory path in the footer.
+  - **Default:** `false`
+
+- **`ui.footer.hideSandboxStatus`** (boolean):
+  - **Description:** Hide the sandbox status indicator in the footer.
+  - **Default:** `false`
+
+- **`ui.footer.hideModelInfo`** (boolean):
+  - **Description:** Hide the model name and context usage information in the footer.
+  - **Default:** `false`
+
+- **`ui.wittyPhraseStyle`** (enum):
+  - **Description:** Choose which collection of witty phrases to display during loading operations.
+  - **Default:** `"default"`
+  - **Options:** `"default"`, `"llxprt"`, `"gemini-cli"`, `"whimsical"`, `"custom"`
+
+- **`ui.showTodoPanel`** (boolean):
+  - **Description:** Show the todo panel in the UI for tracking AI-generated task lists.
+  - **Default:** `true`
+
+- **`debugKeystrokeLogging`** (boolean):
+  - **Description:** Enable debug logging of keystrokes to the console. Useful for troubleshooting input issues or developing custom keybindings.
+  - **Default:** `false`
+  - **Warning:** This will log all keystrokes including potentially sensitive input. Only enable for debugging purposes.
 
 ### Example `settings.json`:
 

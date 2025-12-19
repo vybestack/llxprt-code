@@ -5,8 +5,8 @@
  */
 
 // Unset NO_COLOR environment variable to ensure consistent theme behavior between local and CI test runs
-if (process.env.NO_COLOR !== undefined) {
-  delete process.env.NO_COLOR;
+if (process.env['NO_COLOR'] !== undefined) {
+  delete process.env['NO_COLOR'];
 }
 
 import {
@@ -74,23 +74,23 @@ export async function setup() {
     console.error('Error cleaning up old test runs:', e);
   }
 
-  process.env.INTEGRATION_TEST_FILE_DIR = runDir;
+  process.env['INTEGRATION_TEST_FILE_DIR'] = runDir;
   // Don't set LLXPRT_CODE_INTEGRATION_TEST anymore - we use --ide-mode disable instead
-  process.env.TELEMETRY_LOG_FILE = join(runDir, 'telemetry.log');
+  process.env['TELEMETRY_LOG_FILE'] = join(runDir, 'telemetry.log');
   // Ensure IDE detection doesn't trigger during tests
-  delete process.env.TERM_PROGRAM;
+  delete process.env['TERM_PROGRAM'];
 
-  if (process.env.KEEP_OUTPUT) {
+  if (process.env['KEEP_OUTPUT']) {
     console.log(`Keeping output for test run in: ${runDir}`);
   }
-  process.env.VERBOSE = process.env.VERBOSE ?? 'false';
+  process.env['VERBOSE'] = process.env['VERBOSE'] ?? 'false';
 
   console.log(`\nIntegration test output directory: ${runDir}`);
 }
 
 export async function teardown() {
   // Cleanup the test run directory unless KEEP_OUTPUT is set
-  if (process.env.KEEP_OUTPUT !== 'true' && runDir) {
+  if (process.env['KEEP_OUTPUT'] !== 'true' && runDir) {
     await rm(runDir, { recursive: true, force: true });
   }
 

@@ -13,10 +13,10 @@ import { MessageType } from '../types.js';
 import { LoadedSettings } from '../../config/settings.js';
 import {
   getErrorMessage,
-  loadServerHierarchicalMemory,
   type FileDiscoveryService,
   type LoadServerHierarchicalMemoryResponse,
 } from '@vybestack/llxprt-code-core';
+import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const original =
@@ -27,11 +27,19 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
       if (error instanceof Error) return error.message;
       return String(error);
     }),
-    loadServerHierarchicalMemory: vi.fn(),
   };
 });
 
-const mockLoadServerHierarchicalMemory = loadServerHierarchicalMemory as Mock;
+vi.mock('../../config/config.js', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('../../config/config.js')>();
+  return {
+    ...original,
+    loadHierarchicalLlxprtMemory: vi.fn(),
+  };
+});
+
+const mockLoadHierarchicalLlxprtMemory = loadHierarchicalLlxprtMemory as Mock;
 
 describe('memoryCommand', () => {
   let mockContext: CommandContext;
@@ -308,7 +316,7 @@ describe('memoryCommand', () => {
           ignore: [],
           include: [],
         }),
-        getFolderTrust: () => false,
+        isTrustedFolder: () => false,
       };
 
       mockContext = createMockCommandContext({
@@ -317,11 +325,17 @@ describe('memoryCommand', () => {
           settings: {
             merged: {
               memoryDiscoveryMaxDirs: 1000,
+              context: {
+                importFormat: 'tree',
+              },
             },
           } as LoadedSettings,
         },
+        ui: {
+          setGeminiMdFileCount: vi.fn(),
+        },
       });
-      mockLoadServerHierarchicalMemory.mockClear();
+      mockLoadHierarchicalLlxprtMemory.mockClear();
     });
 
     it('should display success message when memory is refreshed with content', async () => {
@@ -332,7 +346,7 @@ describe('memoryCommand', () => {
         fileCount: 2,
         filePaths: ['/path/one/GEMINI.md', '/path/two/GEMINI.md'],
       };
-      mockLoadServerHierarchicalMemory.mockResolvedValue(refreshResult);
+      mockLoadHierarchicalLlxprtMemory.mockResolvedValue(refreshResult);
 
       await refreshCommand.action(mockContext, '');
 
@@ -344,7 +358,7 @@ describe('memoryCommand', () => {
         expect.any(Number),
       );
 
-      expect(loadServerHierarchicalMemory).toHaveBeenCalledOnce();
+      expect(mockLoadHierarchicalLlxprtMemory).toHaveBeenCalledOnce();
       expect(mockSetUserMemory).toHaveBeenCalledWith(
         refreshResult.memoryContent,
       );
@@ -353,6 +367,9 @@ describe('memoryCommand', () => {
       );
       expect(mockSetLlxprtMdFilePaths).toHaveBeenCalledWith(
         refreshResult.filePaths,
+      );
+      expect(mockContext.ui.setGeminiMdFileCount).toHaveBeenCalledWith(
+        refreshResult.fileCount,
       );
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
@@ -368,11 +385,11 @@ describe('memoryCommand', () => {
       if (!refreshCommand.action) throw new Error('Command has no action');
 
       const refreshResult = { memoryContent: '', fileCount: 0, filePaths: [] };
-      mockLoadServerHierarchicalMemory.mockResolvedValue(refreshResult);
+      mockLoadHierarchicalLlxprtMemory.mockResolvedValue(refreshResult);
 
       await refreshCommand.action(mockContext, '');
 
-      expect(loadServerHierarchicalMemory).toHaveBeenCalledOnce();
+      expect(mockLoadHierarchicalLlxprtMemory).toHaveBeenCalledOnce();
       expect(mockSetUserMemory).toHaveBeenCalledWith('');
       expect(mockSetLlxprtMdFileCount).toHaveBeenCalledWith(0);
       expect(mockSetLlxprtMdFilePaths).toHaveBeenCalledWith([]);
@@ -390,11 +407,11 @@ describe('memoryCommand', () => {
       if (!refreshCommand.action) throw new Error('Command has no action');
 
       const error = new Error('Failed to read memory files.');
-      mockLoadServerHierarchicalMemory.mockRejectedValue(error);
+      mockLoadHierarchicalLlxprtMemory.mockRejectedValue(error);
 
       await refreshCommand.action(mockContext, '');
 
-      expect(loadServerHierarchicalMemory).toHaveBeenCalledOnce();
+      expect(mockLoadHierarchicalLlxprtMemory).toHaveBeenCalledOnce();
       expect(mockSetUserMemory).not.toHaveBeenCalled();
       expect(mockSetLlxprtMdFileCount).not.toHaveBeenCalled();
       expect(mockSetLlxprtMdFilePaths).not.toHaveBeenCalled();
@@ -429,7 +446,7 @@ describe('memoryCommand', () => {
         expect.any(Number),
       );
 
-      expect(loadServerHierarchicalMemory).not.toHaveBeenCalled();
+      expect(mockLoadHierarchicalLlxprtMemory).not.toHaveBeenCalled();
     });
   });
 

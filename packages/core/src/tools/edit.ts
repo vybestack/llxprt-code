@@ -73,6 +73,8 @@ export function applyReplacement(
     // Should not happen if not a new file, but defensively return empty or newString if oldString is also empty
     return oldString === '' ? newString : '';
   }
+
+  const preserveTrailingNewline = currentContent.endsWith('\n');
   // If oldString is empty and it's not a new file, do not modify the content.
   if (oldString === '' && !isNewFile) {
     return currentContent;
@@ -97,7 +99,15 @@ export function applyReplacement(
   if (fuzzyResult) {
     // Verify the number of replacements matches expectations
     if (fuzzyResult.occurrences === expectedReplacements) {
-      return fuzzyResult.result;
+      const result = fuzzyResult.result;
+      if (
+        preserveTrailingNewline &&
+        result.length > 0 &&
+        !result.endsWith('\n')
+      ) {
+        return `${result}\n`;
+      }
+      return result;
     }
     // If fuzzy matching found a different number of occurrences,
     // fall through to the strict matching below which will properly report the error
@@ -106,8 +116,17 @@ export function applyReplacement(
   // Fall back to strict matching (original behavior)
   // Use a more precise replacement that only replaces the expected number of occurrences
   if (expectedReplacements === 1) {
-    // For single replacement, use replace() instead of replaceAll()
-    return currentContent.replace(oldString, newString);
+    // For single replacement, use replace() instead of replaceAll().
+    // Use a replacer function so `$` in `newString` is treated literally.
+    const result = currentContent.replace(oldString, () => newString);
+    if (
+      preserveTrailingNewline &&
+      result.length > 0 &&
+      !result.endsWith('\n')
+    ) {
+      return `${result}\n`;
+    }
+    return result;
   } else {
     // For multiple replacements, we need to count and limit replacements
     let result = currentContent;
@@ -131,6 +150,13 @@ export function applyReplacement(
       searchIndex = foundIndex + newString.length;
     }
 
+    if (
+      preserveTrailingNewline &&
+      result.length > 0 &&
+      !result.endsWith('\n')
+    ) {
+      return `${result}\n`;
+    }
     return result;
   }
 }

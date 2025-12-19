@@ -13,6 +13,8 @@ describe('detectIde', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    // Clear Cursor-specific environment variables that might interfere with tests
+    delete process.env['CURSOR_TRACE_ID'];
   });
 
   it('should return undefined if TERM_PROGRAM is not vscode', () => {
@@ -41,24 +43,28 @@ describe('detectIde', () => {
   it('should detect Codespaces', () => {
     vi.stubEnv('TERM_PROGRAM', 'vscode');
     vi.stubEnv('CODESPACES', 'true');
+    vi.stubEnv('CURSOR_TRACE_ID', '');
     expect(detectIde(ideProcessInfo)).toBe(IDE_DEFINITIONS.codespaces);
   });
 
   it('should detect Cloud Shell via EDITOR_IN_CLOUD_SHELL', () => {
     vi.stubEnv('TERM_PROGRAM', 'vscode');
     vi.stubEnv('EDITOR_IN_CLOUD_SHELL', 'true');
+    vi.stubEnv('CURSOR_TRACE_ID', '');
     expect(detectIde(ideProcessInfo)).toBe(IDE_DEFINITIONS.cloudshell);
   });
 
   it('should detect Cloud Shell via CLOUD_SHELL', () => {
     vi.stubEnv('TERM_PROGRAM', 'vscode');
     vi.stubEnv('CLOUD_SHELL', 'true');
+    vi.stubEnv('CURSOR_TRACE_ID', '');
     expect(detectIde(ideProcessInfo)).toBe(IDE_DEFINITIONS.cloudshell);
   });
 
   it('should detect Trae', () => {
     vi.stubEnv('TERM_PROGRAM', 'vscode');
     vi.stubEnv('TERM_PRODUCT', 'Trae');
+    vi.stubEnv('CURSOR_TRACE_ID', '');
     expect(detectIde(ideProcessInfo)).toBe(IDE_DEFINITIONS.trae);
   });
 
@@ -71,18 +77,21 @@ describe('detectIde', () => {
   it('should detect Firebase Studio via MONOSPACE_ENV', () => {
     vi.stubEnv('TERM_PROGRAM', 'vscode');
     vi.stubEnv('MONOSPACE_ENV', 'true');
+    vi.stubEnv('CURSOR_TRACE_ID', '');
     expect(detectIde(ideProcessInfo)).toBe(IDE_DEFINITIONS.firebasestudio);
   });
 
   it('should detect VSCode when no other IDE is detected and command includes "code"', () => {
     vi.stubEnv('TERM_PROGRAM', 'vscode');
     vi.stubEnv('MONOSPACE_ENV', '');
+    vi.stubEnv('CURSOR_TRACE_ID', '');
     expect(detectIde(ideProcessInfo)).toBe(IDE_DEFINITIONS.vscode);
   });
 
   it('should detect VSCodeFork when no other IDE is detected and command does not include "code"', () => {
     vi.stubEnv('TERM_PROGRAM', 'vscode');
     vi.stubEnv('MONOSPACE_ENV', '');
+    vi.stubEnv('CURSOR_TRACE_ID', '');
     expect(detectIde(ideProcessInfoNoCode)).toBe(IDE_DEFINITIONS.vscodefork);
   });
 
@@ -111,6 +120,7 @@ describe('detectIde with ideInfoFromFile', () => {
   it('should fall back to env detection if name is missing', () => {
     const ideInfoFromFile = { displayName: 'Custom IDE' };
     vi.stubEnv('TERM_PROGRAM', 'vscode');
+    vi.stubEnv('CURSOR_TRACE_ID', '');
     expect(detectIde(ideProcessInfo, ideInfoFromFile)).toBe(
       IDE_DEFINITIONS.vscode,
     );
@@ -119,6 +129,7 @@ describe('detectIde with ideInfoFromFile', () => {
   it('should fall back to env detection if displayName is missing', () => {
     const ideInfoFromFile = { name: 'custom-ide' };
     vi.stubEnv('TERM_PROGRAM', 'vscode');
+    vi.stubEnv('CURSOR_TRACE_ID', '');
     expect(detectIde(ideProcessInfo, ideInfoFromFile)).toBe(
       IDE_DEFINITIONS.vscode,
     );

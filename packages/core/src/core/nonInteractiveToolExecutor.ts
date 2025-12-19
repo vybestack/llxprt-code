@@ -5,74 +5,27 @@
  */
 
 import {
-  type FileDiff,
-  logToolCall,
   type ToolCallRequestInfo,
   type ToolCallResponseInfo,
   ToolErrorType,
-  type ToolResult,
   DEFAULT_AGENT_ID,
 } from '../index.js';
 import { type Part } from '@google/genai';
-import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
-import type { Config } from '../config/config.js';
-import { convertToFunctionResponse } from './coreToolScheduler.js';
-import { ToolCallDecision } from '../telemetry/types.js';
+import { type Config, ApprovalMode } from '../config/config.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { PolicyEngine } from '../policy/policy-engine.js';
+import { PolicyDecision } from '../policy/types.js';
+import {
+  CoreToolScheduler,
+  type CompletedToolCall,
+  type ToolCall,
+} from './coreToolScheduler.js';
 import { EmojiFilter, type FilterResult } from '../filters/EmojiFilter.js';
-import { DebugLogger } from '../debug/index.js';
 
 /**
  * Global emoji filter instance for reuse across tool calls
  */
 let emojiFilter: EmojiFilter | null = null;
-
-const logger = new DebugLogger('llxprt:tool-executor');
-
-function buildToolGovernance(config: ToolExecutionConfig): {
-  allowed: Set<string>;
-  disabled: Set<string>;
-  excluded: Set<string>;
-} {
-  const ephemerals =
-    typeof config.getEphemeralSettings === 'function'
-      ? config.getEphemeralSettings() || {}
-      : {};
-
-  const allowedRaw = Array.isArray(ephemerals['tools.allowed'])
-    ? (ephemerals['tools.allowed'] as string[])
-    : [];
-  const disabledRaw = Array.isArray(ephemerals['tools.disabled'])
-    ? (ephemerals['tools.disabled'] as string[])
-    : Array.isArray(ephemerals['disabled-tools'])
-      ? (ephemerals['disabled-tools'] as string[])
-      : [];
-  const excludedRaw = config.getExcludeTools?.() ?? [];
-
-  const normalize = (name: string) => name.trim().toLowerCase();
-
-  return {
-    allowed: new Set(allowedRaw.map(normalize)),
-    disabled: new Set(disabledRaw.map(normalize)),
-    excluded: new Set(excludedRaw.map(normalize)),
-  };
-}
-
-function isToolBlocked(
-  toolName: string,
-  governance: ReturnType<typeof buildToolGovernance>,
-): boolean {
-  const canonical = toolName.trim().toLowerCase();
-  if (governance.excluded.has(canonical)) {
-    return true;
-  }
-  if (governance.disabled.has(canonical)) {
-    return true;
-  }
-  if (governance.allowed.size > 0 && !governance.allowed.has(canonical)) {
-    return true;
-  }
-  return false;
-}
 
 /**
  * Gets or creates the emoji filter instance based on current configuration
@@ -115,7 +68,8 @@ function filterFileModificationArgs(
   if (
     toolName === 'edit_file' ||
     toolName === 'edit' ||
-    toolName === 'replace'
+    toolName === 'replace' ||
+    toolName === 'replace_all'
   ) {
     const oldString = args?.old_string as string;
     const newString = args?.new_string as string;
@@ -186,354 +140,338 @@ export type ToolExecutionConfig = Pick<
   | 'getExcludeTools'
   | 'getSessionId'
   | 'getTelemetryLogPromptsEnabled'
->;
+> &
+  Partial<
+    Pick<
+      Config,
+      | 'getAllowedTools'
+      | 'getApprovalMode'
+      | 'getMessageBus'
+      | 'getPolicyEngine'
+    >
+  >;
 
 export async function executeToolCall(
   config: ToolExecutionConfig,
   toolCallRequest: ToolCallRequestInfo,
   abortSignal?: AbortSignal,
-): Promise<ToolCallResponseInfo> {
+): Promise<CompletedToolCall> {
+  const startTime = Date.now();
+
   const agentId = toolCallRequest.agentId ?? DEFAULT_AGENT_ID;
   toolCallRequest.agentId = agentId;
-  const toolRegistry = config.getToolRegistry();
-  const governance = buildToolGovernance(config);
-  const startTime = Date.now();
-  const telemetryConfig: Pick<
-    Config,
-    'getSessionId' | 'getTelemetryLogPromptsEnabled'
-  > = {
-    getSessionId: () => config.getSessionId(),
-    getTelemetryLogPromptsEnabled: () => config.getTelemetryLogPromptsEnabled(),
-  };
 
-  if (isToolBlocked(toolCallRequest.name, governance)) {
-    const error = new Error(
-      `Tool "${toolCallRequest.name}" is disabled in the current profile.`,
-    );
-    const durationMs = Date.now() - startTime;
-    logToolCall(telemetryConfig, {
-      'event.name': 'tool_call',
-      'event.timestamp': new Date().toISOString(),
-      function_name: toolCallRequest.name,
-      function_args: toolCallRequest.args,
-      duration_ms: durationMs,
-      success: false,
-      error: error.message,
-      prompt_id: toolCallRequest.prompt_id,
-      tool_type: 'native',
-      agent_id: agentId,
-    });
-    return {
-      callId: toolCallRequest.callId,
-      error,
-      errorType: ToolErrorType.TOOL_DISABLED,
-      resultDisplay: error.message,
-      responseParts: [
-        {
-          functionCall: {
-            id: toolCallRequest.callId,
-            name: toolCallRequest.name,
-            args: toolCallRequest.args,
-          },
-        },
-        {
-          functionResponse: {
-            id: toolCallRequest.callId,
-            name: toolCallRequest.name,
-            response: { error: error.message },
-          },
-        },
-      ],
-      agentId,
-    };
+  const internalAbortController = new AbortController();
+  if (abortSignal) {
+    if (abortSignal.aborted) {
+      internalAbortController.abort();
+    } else {
+      abortSignal.addEventListener(
+        'abort',
+        () => internalAbortController.abort(),
+        { once: true },
+      );
+    }
   }
 
-  const tool = toolRegistry.getTool(toolCallRequest.name);
-  if (!tool) {
-    const error = new Error(
-      `Tool "${toolCallRequest.name}" not found in registry.`,
-    );
-    const durationMs = Date.now() - startTime;
-    logToolCall(telemetryConfig, {
-      'event.name': 'tool_call',
-      'event.timestamp': new Date().toISOString(),
-      function_name: toolCallRequest.name,
-      function_args: toolCallRequest.args,
-      duration_ms: durationMs,
-      success: false,
-      error: error.message,
-      prompt_id: toolCallRequest.prompt_id,
-      tool_type: 'native',
-      agent_id: agentId,
-    });
-    // Ensure the response structure matches what the API expects for an error
-    // Include both tool call and error response
-    return {
-      callId: toolCallRequest.callId,
-      responseParts: [
-        // Tool call
-        {
-          functionCall: {
-            id: toolCallRequest.callId,
-            name: toolCallRequest.name,
-            args: toolCallRequest.args,
-          },
-        },
-        // Error response
-        {
-          functionResponse: {
-            id: toolCallRequest.callId,
-            name: toolCallRequest.name,
-            response: { error: error.message },
-          },
-        },
-      ],
-      resultDisplay: error.message,
-      error,
-      errorType: ToolErrorType.TOOL_NOT_REGISTERED,
-      agentId,
-    };
-  }
+  const filter = getOrCreateFilter(config);
+  let filteredRequest = toolCallRequest;
+  let systemFeedback: string | undefined;
 
   try {
-    // Get emoji filter instance
-    const filter = getOrCreateFilter(config);
-
-    // Check if this is a search tool that should bypass filtering
-    const isSearchTool = [
-      'shell',
-      'bash',
-      'exec',
-      'run_shell_command',
-      'grep',
-      'search_file_content',
-      'glob',
-      'find',
-      'ls',
-      'list_directory',
-      'read_file',
-      'read_many_files',
-    ].includes(toolCallRequest.name);
-
-    let filteredArgs = toolCallRequest.args;
-    let systemFeedback: string | undefined;
-
-    // Search tools need unfiltered access for finding emojis
-    if (!isSearchTool) {
-      // Check if this is a file modification tool
-      const isFileModTool = [
-        'edit_file',
-        'edit',
-        'write_file',
-        'create_file',
-        'replace',
-        'replace_all',
-      ].includes(toolCallRequest.name);
-
-      // Filter tool arguments
-      let filterResult: FilterResult;
-      if (isFileModTool) {
-        filterResult = filterFileModificationArgs(
-          filter,
-          toolCallRequest.name,
-          toolCallRequest.args,
-        );
-      } else {
-        filterResult = filter.filterToolArgs(toolCallRequest.args);
-      }
-
-      // Handle blocking in error mode
-      if (filterResult.blocked) {
-        const durationMs = Date.now() - startTime;
-        logToolCall(telemetryConfig, {
-          'event.name': 'tool_call',
-          'event.timestamp': new Date().toISOString(),
-          function_name: toolCallRequest.name,
-          function_args: toolCallRequest.args,
-          duration_ms: durationMs,
-          success: false,
-          error: filterResult.error,
-          prompt_id: toolCallRequest.prompt_id,
-          tool_type:
-            typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
-              ? 'mcp'
-              : 'native',
-          agent_id: agentId,
-        });
-
-        return {
-          callId: toolCallRequest.callId,
-          responseParts: [
-            // Tool call
-            {
-              functionCall: {
-                id: toolCallRequest.callId,
-                name: toolCallRequest.name,
-                args: toolCallRequest.args,
-              },
-            },
-            // Error response
-            {
-              functionResponse: {
-                id: toolCallRequest.callId,
-                name: toolCallRequest.name,
-                response: { error: filterResult.error },
-              },
-            },
-          ],
-          resultDisplay: filterResult.error || 'Tool execution blocked',
-          error: new Error(filterResult.error || 'Tool execution blocked'),
-          errorType: ToolErrorType.INVALID_TOOL_PARAMS,
-          agentId,
-        };
-      }
-
-      // Use filtered arguments
-      filteredArgs = filterResult.filtered as Record<string, unknown>;
-      systemFeedback = filterResult.systemFeedback;
-    }
-
-    // Directly execute without confirmation or live output handling
-    const effectiveAbortSignal = abortSignal ?? new AbortController().signal;
-    const toolResult: ToolResult = await tool.buildAndExecute(
-      filteredArgs,
-      effectiveAbortSignal,
-      // No live output callback for non-interactive mode
-    );
-
-    const tool_output = toolResult.llmContent;
-
-    const tool_display = toolResult.returnDisplay;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let metadata: { [key: string]: any } = {};
-    if (
-      toolResult.error === undefined &&
-      typeof tool_display === 'object' &&
-      tool_display !== null &&
-      'diffStat' in tool_display
-    ) {
-      const diffStat = (tool_display as FileDiff).diffStat;
-      if (diffStat) {
-        metadata = {
-          ai_added_lines: diffStat.ai_added_lines,
-          ai_removed_lines: diffStat.ai_removed_lines,
-          user_added_lines: diffStat.user_added_lines,
-          user_removed_lines: diffStat.user_removed_lines,
-        };
-      }
-    }
-    const durationMs = Date.now() - startTime;
-    logToolCall(telemetryConfig, {
-      'event.name': 'tool_call',
-      'event.timestamp': new Date().toISOString(),
-      function_name: toolCallRequest.name,
-      function_args: toolCallRequest.args,
-      duration_ms: durationMs,
-      success: toolResult.error === undefined,
-      error:
-        toolResult.error === undefined ? undefined : toolResult.error.message,
-      error_type:
-        toolResult.error === undefined ? undefined : toolResult.error.type,
-      prompt_id: toolCallRequest.prompt_id,
-      metadata,
-      decision: ToolCallDecision.AUTO_ACCEPT,
-      tool_type:
-        typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
-          ? 'mcp'
-          : 'native',
-      agent_id: agentId,
-    });
-
-    // Add system feedback for warn mode if emojis were detected and filtered
-    let finalLlmContent = tool_output;
-    if (systemFeedback) {
-      finalLlmContent = `${tool_output}\n\n<system-reminder>\n${systemFeedback}\n</system-reminder>`;
-    }
-
-    const finalResponse = convertToFunctionResponse(
-      toolCallRequest.name,
-      toolCallRequest.callId,
-      finalLlmContent,
-      config,
-    );
-
-    // Return BOTH the tool call and response as an array
-    // This ensures they're always paired and added to history atomically
-    const responseParts = [
-      // First, the tool call from the model
-      {
-        functionCall: {
-          id: toolCallRequest.callId,
-          name: toolCallRequest.name,
-          args: toolCallRequest.args,
-        },
-      },
-      // Then, spread the tool response(s) since convertToFunctionResponse returns Part[]
-      ...finalResponse,
-    ] as Part[];
-
-    logger.debug(
-      () =>
-        `Returning paired tool call and response for ${toolCallRequest.name} (${toolCallRequest.callId})`,
-    );
-
-    return {
-      callId: toolCallRequest.callId,
-      responseParts,
-      resultDisplay: tool_display,
-      error:
-        toolResult.error === undefined
-          ? undefined
-          : new Error(toolResult.error.message),
-      errorType:
-        toolResult.error === undefined ? undefined : toolResult.error.type,
-      agentId,
-    };
+    const filtered = applyEmojiFiltering(filter, toolCallRequest);
+    filteredRequest = filtered.filteredRequest;
+    systemFeedback = filtered.systemFeedback;
   } catch (e) {
-    const error = e instanceof Error ? e : new Error(String(e));
-    const durationMs = Date.now() - startTime;
-    logToolCall(telemetryConfig, {
-      'event.name': 'tool_call',
-      'event.timestamp': new Date().toISOString(),
-      function_name: toolCallRequest.name,
-      function_args: toolCallRequest.args,
-      duration_ms: durationMs,
-      success: false,
-      error: error.message,
-      error_type: ToolErrorType.UNHANDLED_EXCEPTION,
-      prompt_id: toolCallRequest.prompt_id,
-      decision: ToolCallDecision.AUTO_ACCEPT,
-      tool_type:
-        typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
-          ? 'mcp'
-          : 'native',
-      agent_id: agentId,
+    return createErrorCompletedToolCall(
+      toolCallRequest,
+      e instanceof Error ? e : new Error(String(e)),
+      ToolErrorType.INVALID_TOOL_PARAMS,
+      Date.now() - startTime,
+    );
+  }
+
+  const schedulerConfig = createSchedulerConfigForNonInteractive(config);
+
+  let completionResolver: ((calls: CompletedToolCall[]) => void) | null = null;
+  const completionPromise = new Promise<CompletedToolCall[]>((resolve) => {
+    completionResolver = resolve;
+  });
+
+  let awaitingApprovalResolver: ((call: ToolCall) => void) | null = null;
+  const awaitingApprovalPromise = new Promise<ToolCall>((resolve) => {
+    awaitingApprovalResolver = resolve;
+  });
+
+  const scheduler = new CoreToolScheduler({
+    config: schedulerConfig as unknown as Config,
+    toolContextInteractiveMode: false,
+    getPreferredEditor: () => undefined,
+    onEditorClose: () => {},
+    onAllToolCallsComplete: async (completedToolCalls) => {
+      completionResolver?.(completedToolCalls);
+    },
+    onToolCallsUpdate: (toolCalls) => {
+      try {
+        const awaiting = toolCalls.find(
+          (call) => call.status === 'awaiting_approval',
+        );
+        if (awaiting && awaitingApprovalResolver) {
+          awaitingApprovalResolver(awaiting);
+          awaitingApprovalResolver = null;
+        }
+      } catch {
+        // Callback must be non-throwing.
+      }
+    },
+  });
+
+  try {
+    const effectiveSignal = internalAbortController.signal;
+    await scheduler.schedule([filteredRequest], effectiveSignal);
+
+    const raceResult = await Promise.race([
+      completionPromise.then((calls) => ({ kind: 'complete' as const, calls })),
+      awaitingApprovalPromise.then((call) => ({
+        kind: 'awaiting' as const,
+        call,
+      })),
+    ]);
+
+    if (raceResult.kind === 'awaiting') {
+      internalAbortController.abort();
+      scheduler.cancelAll();
+      return createErrorCompletedToolCall(
+        toolCallRequest,
+        new Error(
+          'Non-interactive tool execution reached awaiting_approval; treat as policy denial (no user interaction is possible).',
+        ),
+        ToolErrorType.POLICY_VIOLATION,
+        Date.now() - startTime,
+      );
+    }
+
+    const completedCalls = raceResult.calls;
+    if (completedCalls.length !== 1) {
+      throw new Error('Non-interactive executor expects exactly one tool call');
+    }
+
+    const completed = completedCalls[0];
+
+    if (systemFeedback) {
+      appendSystemFeedbackToResponse(completed.response, systemFeedback);
+    }
+
+    if (!completed.response.agentId) {
+      completed.response.agentId = agentId;
+    }
+
+    return completed;
+  } catch (e) {
+    return createErrorCompletedToolCall(
+      toolCallRequest,
+      e instanceof Error ? e : new Error(String(e)),
+      ToolErrorType.UNHANDLED_EXCEPTION,
+      Date.now() - startTime,
+    );
+  } finally {
+    if (internalAbortController.signal.aborted) {
+      scheduler.cancelAll();
+    }
+    scheduler.dispose();
+  }
+}
+
+type EmojiFilteringResult = {
+  filteredRequest: ToolCallRequestInfo;
+  systemFeedback?: string;
+};
+
+function applyEmojiFiltering(
+  filter: EmojiFilter,
+  request: ToolCallRequestInfo,
+): EmojiFilteringResult {
+  const isSearchTool = [
+    'shell',
+    'bash',
+    'exec',
+    'run_shell_command',
+    'grep',
+    'search_file_content',
+    'glob',
+    'find',
+    'ls',
+    'list_directory',
+    'read_file',
+    'read_many_files',
+  ].includes(request.name);
+
+  if (isSearchTool) {
+    return { filteredRequest: request };
+  }
+
+  const isFileModTool = [
+    'edit_file',
+    'edit',
+    'write_file',
+    'create_file',
+    'replace',
+    'replace_all',
+  ].includes(request.name);
+
+  const filterResult = isFileModTool
+    ? filterFileModificationArgs(filter, request.name, request.args)
+    : filter.filterToolArgs(request.args);
+
+  if (filterResult.blocked) {
+    throw new Error(filterResult.error || 'Tool execution blocked');
+  }
+
+  const filteredArgs =
+    filterResult.filtered !== null && typeof filterResult.filtered === 'object'
+      ? (filterResult.filtered as Record<string, unknown>)
+      : request.args;
+
+  if (filteredArgs === request.args && !filterResult.systemFeedback) {
+    return { filteredRequest: request };
+  }
+
+  return {
+    filteredRequest: {
+      ...request,
+      args: filteredArgs,
+    },
+    systemFeedback: filterResult.systemFeedback,
+  };
+}
+
+function createNonInteractivePolicyEngine(
+  policyEngine: PolicyEngine | undefined,
+): PolicyEngine {
+  if (!policyEngine) {
+    return new PolicyEngine({
+      rules: [],
+      defaultDecision: PolicyDecision.DENY,
+      nonInteractive: true,
     });
-    return {
-      callId: toolCallRequest.callId,
+  }
+
+  if (policyEngine.isNonInteractive()) {
+    return policyEngine;
+  }
+
+  return new PolicyEngine({
+    rules: [...policyEngine.getRules()],
+    defaultDecision: policyEngine.getDefaultDecision(),
+    nonInteractive: true,
+  });
+}
+
+type SchedulerConfigMethods = Pick<
+  Config,
+  | 'getToolRegistry'
+  | 'getEphemeralSettings'
+  | 'getEphemeralSetting'
+  | 'getExcludeTools'
+  | 'getSessionId'
+  | 'getTelemetryLogPromptsEnabled'
+  | 'getAllowedTools'
+  | 'getApprovalMode'
+  | 'getMessageBus'
+  | 'getPolicyEngine'
+>;
+
+function createSchedulerConfigForNonInteractive(
+  config: ToolExecutionConfig,
+): SchedulerConfigMethods {
+  const policyEngine = createNonInteractivePolicyEngine(
+    config.getPolicyEngine?.(),
+  );
+  const messageBus = config.getMessageBus?.() ?? new MessageBus(policyEngine);
+
+  return {
+    getToolRegistry: () => config.getToolRegistry(),
+    getEphemeralSettings: () => config.getEphemeralSettings(),
+    getEphemeralSetting: (key: string) => config.getEphemeralSetting(key),
+    getExcludeTools: () => config.getExcludeTools(),
+    getSessionId: () => config.getSessionId(),
+    getTelemetryLogPromptsEnabled: () => config.getTelemetryLogPromptsEnabled(),
+    getAllowedTools: () => config.getAllowedTools?.(),
+    getApprovalMode: () => config.getApprovalMode?.() ?? ApprovalMode.DEFAULT,
+    getMessageBus: () => messageBus,
+    getPolicyEngine: () => policyEngine,
+  };
+}
+
+function createErrorCompletedToolCall(
+  request: ToolCallRequestInfo,
+  error: Error,
+  errorType: ToolErrorType,
+  durationMs: number,
+): CompletedToolCall {
+  return {
+    status: 'error',
+    request,
+    response: {
+      callId: request.callId,
+      agentId: request.agentId ?? DEFAULT_AGENT_ID,
+      error,
+      errorType,
+      resultDisplay: error.message,
       responseParts: [
-        // Tool call
         {
           functionCall: {
-            id: toolCallRequest.callId,
-            name: toolCallRequest.name,
-            args: toolCallRequest.args,
+            id: request.callId,
+            name: request.name,
+            args: request.args,
           },
         },
-        // Error response
         {
           functionResponse: {
-            id: toolCallRequest.callId,
-            name: toolCallRequest.name,
+            id: request.callId,
+            name: request.name,
             response: { error: error.message },
           },
         },
-      ],
-      resultDisplay: error.message,
-      error,
-      errorType: ToolErrorType.UNHANDLED_EXCEPTION,
-      agentId,
-    };
+      ] as Part[],
+    },
+    durationMs,
+  };
+}
+
+function appendSystemFeedbackToResponse(
+  response: ToolCallResponseInfo,
+  systemFeedback: string,
+): void {
+  const reminder = `\n\n<system-reminder>\n${systemFeedback}\n</system-reminder>`;
+
+  if (response.error) {
+    response.error = new Error(`${response.error.message}${reminder}`);
+    if (response.resultDisplay) {
+      response.resultDisplay = `${response.resultDisplay}${reminder}`;
+    }
+
+    const functionResponsePart = response.responseParts.find(
+      (part) => part.functionResponse?.response,
+    );
+    const responseObj = functionResponsePart?.functionResponse?.response as
+      | { error?: unknown }
+      | undefined;
+    if (responseObj && typeof responseObj.error === 'string') {
+      responseObj.error = `${responseObj.error}${reminder}`;
+    }
+
+    return;
+  }
+
+  const functionResponsePart = response.responseParts.find(
+    (part) => part.functionResponse?.response,
+  );
+  const responseObj = functionResponsePart?.functionResponse?.response as
+    | { output?: unknown }
+    | undefined;
+
+  if (responseObj && typeof responseObj.output === 'string') {
+    responseObj.output = `${responseObj.output}${reminder}`;
   }
 }

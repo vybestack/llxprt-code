@@ -11,7 +11,6 @@ import yargs from 'yargs/yargs';
 import { hideBin } from 'yargs/helpers';
 import process from 'node:process';
 import { mcpCommand } from '../commands/mcp.js';
-import { extensionsCommand } from '../commands/extensions.js';
 import {
   Config,
   loadServerHierarchicalMemory,
@@ -22,9 +21,9 @@ import {
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   FileDiscoveryService,
   TelemetryTarget,
+  OutputFormat,
   FileFilteringOptions,
   ProfileManager,
-  type Profile,
   ShellTool,
   EditTool,
   WriteFileTool,
@@ -33,10 +32,13 @@ import {
   DebugLogger,
   createPolicyEngineConfig,
   SHELL_TOOL_NAMES,
+  type GeminiCLIExtension,
+  type Profile,
 } from '@vybestack/llxprt-code-core';
+import { extensionsCommand } from '../commands/extensions.js';
 import { Settings } from './settings.js';
 
-import { Extension, annotateActiveExtensions } from './extension.js';
+import { annotateActiveExtensions } from './extension.js';
 import { getCliVersion } from '../utils/version.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
 import * as dotenv from 'dotenv';
@@ -103,7 +105,21 @@ const buildNormalizedToolSet = (value: unknown): Set<string> => {
 
   for (const entry of entries) {
     if (typeof entry === 'string' && entry.trim().length > 0) {
-      normalized.add(normalizeToolNameForPolicy(entry));
+      const trimmedEntry = entry.trim();
+      const openParenIndex = trimmedEntry.indexOf('(');
+      const baseName =
+        openParenIndex === -1
+          ? trimmedEntry
+          : trimmedEntry.substring(0, openParenIndex).trim();
+
+      const canonicalName =
+        normalizeToolNameForPolicy(baseName) === 'shelltool'
+          ? 'run_shell_command'
+          : baseName;
+      const normalizedName = normalizeToolNameForPolicy(canonicalName);
+      if (normalizedName) {
+        normalized.add(normalizedName);
+      }
     }
   }
 
@@ -117,6 +133,7 @@ export interface CliArgs {
   debug: boolean | undefined;
   prompt: string | undefined;
   promptInteractive: string | undefined;
+  outputFormat: string | undefined;
   allFiles: boolean | undefined;
   showMemoryUsage: boolean | undefined;
   yolo: boolean | undefined;
@@ -147,6 +164,7 @@ export interface CliArgs {
   sessionSummary: string | undefined;
   dumponerror: boolean | undefined;
   promptWords: string[] | undefined;
+  query: string | undefined;
   set: string[] | undefined;
 }
 
@@ -176,6 +194,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           type: 'string',
           description:
             'Execute the provided prompt and continue in interactive mode',
+        })
+        .option('output-format', {
+          type: 'string',
+          choices: [OutputFormat.TEXT, OutputFormat.JSON],
+          description: 'Output format for non-interactive mode (text or json).',
         })
         .option('sandbox', {
           alias: 's',
@@ -278,6 +301,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           alias: 'e',
           type: 'array',
           string: true,
+          nargs: 1,
           description:
             'A list of extensions to use. If not provided, all extensions are used.',
           coerce: (extensions: string[]) =>
@@ -553,13 +577,23 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     process.exit(0);
   }
 
+  const promptWords = result.promptWords as string[] | undefined;
+  const promptWordsFiltered =
+    promptWords?.filter((word) => word.trim() !== '') || [];
+  const queryFromPromptWords =
+    promptWordsFiltered.length > 0 ? promptWordsFiltered.join(' ') : undefined;
+
   const cliArgs: CliArgs = {
     model: result.model as string | undefined,
     sandbox: result.sandbox as boolean | string | undefined,
     sandboxImage: result.sandboxImage as string | undefined,
     debug: result.debug as boolean | undefined,
-    prompt: result.prompt as string | undefined,
+    prompt:
+      (result.prompt as string | undefined) ||
+      queryFromPromptWords ||
+      undefined,
     promptInteractive: result.promptInteractive as string | undefined,
+    outputFormat: result.outputFormat as string | undefined,
     allFiles: result.allFiles as boolean | undefined,
     showMemoryUsage: result.showMemoryUsage as boolean | undefined,
     yolo: result.yolo as boolean | undefined,
@@ -591,6 +625,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     dumponerror: result.dumponerror as boolean | undefined,
     allowedTools: result.allowedTools as string[] | undefined,
     promptWords: result.promptWords as string[] | undefined,
+    query: queryFromPromptWords,
     set: result.set as string[] | undefined,
   };
 
@@ -681,7 +716,7 @@ export function isDebugMode(argv: CliArgs): boolean {
 
 export async function loadCliConfig(
   settings: Settings,
-  extensions: Extension[],
+  extensions: GeminiCLIExtension[],
   extensionEnablementManager: ExtensionEnablementManager,
   sessionId: string,
   argv: CliArgs,
@@ -1022,8 +1057,9 @@ export async function loadCliConfig(
     approvalMode = ApprovalMode.DEFAULT;
   }
 
-  // Fix: If promptWords are provided, always use non-interactive mode
-  const hasPromptWords = argv.promptWords && argv.promptWords.length > 0;
+  // Fix: If promptWords are provided (and non-empty), always use non-interactive mode
+  const hasPromptWords =
+    argv.promptWords && argv.promptWords.some((word) => word.trim() !== '');
   const interactive =
     !!argv.promptInteractive ||
     (process.stdin.isTTY && !hasPromptWords && !argv.prompt);
@@ -1175,6 +1211,11 @@ export async function loadCliConfig(
     getUserPolicyPath: () => resolvedPolicyPath,
   });
 
+  const outputFormat =
+    argv.outputFormat === OutputFormat.JSON
+      ? OutputFormat.JSON
+      : OutputFormat.TEXT;
+
   const config = new Config({
     sessionId,
     embeddingModel: undefined, // No embedding model configured for llxprt-code
@@ -1183,6 +1224,7 @@ export async function loadCliConfig(
     includeDirectories,
     loadMemoryFromIncludeDirectories: resolvedLoadMemoryFromIncludeDirectories,
     debugMode,
+    outputFormat,
     question,
     fullContext: argv.allFiles || false,
     coreTools: effectiveSettings.coreTools || undefined,
@@ -1225,7 +1267,7 @@ export async function loadCliConfig(
     usageStatisticsEnabled:
       effectiveSettings.ui?.usageStatisticsEnabled ?? true,
     // Git-aware file filtering settings - fix from upstream: pass fileFiltering correctly
-    fileFiltering: effectiveSettings.fileFiltering,
+    fileFiltering,
     checkpointing:
       argv.checkpointing || effectiveSettings.checkpointing?.enabled,
     dumpOnError: argv.dumponerror || false,
@@ -1244,8 +1286,8 @@ export async function loadCliConfig(
     experimentalZedIntegration: argv.experimentalAcp || false,
     listExtensions: argv.listExtensions || false,
     activeExtensions: activeExtensions.map((e) => ({
-      name: e.config.name,
-      version: e.config.version,
+      name: e.name,
+      version: e.version,
     })),
     provider: finalProvider,
     extensions: allExtensions,
@@ -1634,31 +1676,29 @@ function allowedMcpServers(
   return mcpServers;
 }
 
-function mergeMcpServers(settings: Settings, extensions: Extension[]) {
+function mergeMcpServers(settings: Settings, extensions: GeminiCLIExtension[]) {
   const mcpServers = { ...(settings.mcpServers || {}) };
   for (const extension of extensions) {
-    Object.entries(extension.config.mcpServers || {}).forEach(
-      ([key, server]) => {
-        if (mcpServers[key]) {
-          logger.debug(
-            () =>
-              `WARNING: Skipping extension MCP config for server with key "${key}" as it already exists.`,
-          );
-          return;
-        }
-        mcpServers[key] = {
-          ...server,
-          extensionName: extension.config.name,
-        };
-      },
-    );
+    Object.entries(extension.mcpServers || {}).forEach(([key, server]) => {
+      if (mcpServers[key]) {
+        logger.debug(
+          () =>
+            `WARNING: Skipping extension MCP config for server with key "${key}" as it already exists.`,
+        );
+        return;
+      }
+      mcpServers[key] = {
+        ...server,
+        extensionName: extension.name,
+      };
+    });
   }
   return mcpServers;
 }
 
 function mergeExcludeTools(
   settings: Settings,
-  extensions: Extension[],
+  extensions: GeminiCLIExtension[],
   extraExcludes?: string[] | undefined,
 ): string[] {
   const allExcludeTools = new Set([
@@ -1666,7 +1706,7 @@ function mergeExcludeTools(
     ...(extraExcludes || []),
   ]);
   for (const extension of extensions) {
-    for (const tool of extension.config.excludeTools || []) {
+    for (const tool of extension.excludeTools || []) {
       allExcludeTools.add(tool);
     }
   }

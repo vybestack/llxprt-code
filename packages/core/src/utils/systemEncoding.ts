@@ -12,6 +12,8 @@ import { detect as chardetDetect } from 'chardet';
 // Use undefined to indicate "not yet checked" vs null meaning "checked but failed"
 let cachedSystemEncoding: string | null | undefined = undefined;
 
+const MAX_BUFFER_BYTES_FOR_ENCODING_DETECTION = 64 * 1024;
+
 /**
  * Reset the encoding cache - useful for testing
  */
@@ -154,7 +156,12 @@ export function windowsCodePageToEncoding(cp: number): string | null {
  */
 export function detectEncodingFromBuffer(buffer: Buffer): string | null {
   try {
-    const detected = chardetDetect(buffer);
+    const bufferForDetection =
+      buffer.length > MAX_BUFFER_BYTES_FOR_ENCODING_DETECTION
+        ? buffer.subarray(0, MAX_BUFFER_BYTES_FOR_ENCODING_DETECTION)
+        : buffer;
+
+    const detected = chardetDetect(bufferForDetection);
     if (detected && typeof detected === 'string') {
       return detected.toLowerCase();
     }

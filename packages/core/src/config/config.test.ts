@@ -7,7 +7,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Mock } from 'vitest';
 import type { ConfigParameters, SandboxConfig } from './config.js';
-import { Config, ApprovalMode } from './config.js';
+import {
+  Config,
+  ApprovalMode,
+  DEFAULT_FILE_FILTERING_OPTIONS,
+} from './config.js';
 import * as path from 'node:path';
 import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
 import {
@@ -661,7 +665,9 @@ describe('Server Config (config.ts)', () => {
 
   it('should set default file filtering settings when not provided', () => {
     const config = new Config(baseParams);
-    expect(config.getFileFilteringRespectGitIgnore()).toBe(true);
+    expect(config.getFileFilteringRespectGitIgnore()).toBe(
+      DEFAULT_FILE_FILTERING_OPTIONS.respectGitIgnore,
+    );
   });
 
   it('should set custom file filtering settings when provided', () => {
@@ -1079,6 +1085,31 @@ describe('Server Config (config.ts)', () => {
       };
       const config = new Config(paramsWithUndefinedRipgrep);
       expect(config.getUseRipgrep()).toBe(false);
+    });
+  });
+
+  describe('ContinueOnFailedApiCall Configuration', () => {
+    it('should default continueOnFailedApiCall to true when not provided', () => {
+      const config = new Config(baseParams);
+      expect(config.getContinueOnFailedApiCall()).toBe(true);
+    });
+
+    it('should set continueOnFailedApiCall to true when provided as true', () => {
+      const paramsWithContinueOnFailedApiCall: ConfigParameters = {
+        ...baseParams,
+        continueOnFailedApiCall: true,
+      };
+      const config = new Config(paramsWithContinueOnFailedApiCall);
+      expect(config.getContinueOnFailedApiCall()).toBe(true);
+    });
+
+    it('should set continueOnFailedApiCall to false when explicitly provided as false', () => {
+      const paramsWithContinueOnFailedApiCall: ConfigParameters = {
+        ...baseParams,
+        continueOnFailedApiCall: false,
+      };
+      const config = new Config(paramsWithContinueOnFailedApiCall);
+      expect(config.getContinueOnFailedApiCall()).toBe(false);
     });
   });
 

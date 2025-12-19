@@ -45,6 +45,7 @@ import type {
 } from '../state/extensions.js';
 
 const confirmationLogger = new DebugLogger('llxprt:ui:selection');
+const slashCommandLogger = new DebugLogger('llxprt:ui:slash-commands');
 
 interface SlashCommandProcessorActions {
   openAuthDialog: () => void;
@@ -83,7 +84,9 @@ export const useSlashCommandProcessor = (
   isConfigInitialized: boolean,
 ) => {
   const session = useSessionStats();
-  const [commands, setCommands] = useState<readonly SlashCommand[]>([]);
+  const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
+    undefined,
+  );
   const [reloadTrigger, setReloadTrigger] = useState(0);
   const alternateBuffer =
     settings.merged.ui?.useAlternateBuffer === true &&
@@ -327,19 +330,33 @@ export const useSlashCommandProcessor = (
   useEffect(() => {
     const controller = new AbortController();
     const load = async () => {
-      const loaders = [
-        new McpPromptLoader(config),
-        new BuiltinCommandLoader(config),
-        new FileCommandLoader(config),
-      ];
-      const commandService = await CommandService.create(
-        loaders,
-        controller.signal,
-      );
-      setCommands(commandService.getCommands());
+      try {
+        const loaders = [
+          new McpPromptLoader(config),
+          new BuiltinCommandLoader(config),
+          new FileCommandLoader(config),
+        ];
+        const commandService = await CommandService.create(
+          loaders,
+          controller.signal,
+        );
+        if (controller.signal.aborted) {
+          return;
+        }
+        setCommands(commandService.getCommands());
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        slashCommandLogger.error(
+          () => 'Failed to initialize slash commands',
+          error,
+        );
+        setCommands([]);
+      }
     };
 
-    load();
+    void load();
 
     return () => {
       controller.abort();
@@ -352,6 +369,9 @@ export const useSlashCommandProcessor = (
       oneTimeShellAllowlist?: Set<string>,
       overwriteConfirmed?: boolean,
     ): Promise<SlashCommandProcessorResult | false> => {
+      if (!commands) {
+        return false;
+      }
       if (typeof rawQuery !== 'string') {
         return false;
       }
