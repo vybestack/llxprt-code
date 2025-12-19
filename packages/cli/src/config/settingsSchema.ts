@@ -1189,6 +1189,16 @@ export const SETTINGS_SCHEMA = {
         description: 'Disable YOLO mode, even if enabled by a flag.',
         showInDialog: true,
       },
+      enablePermanentToolApproval: {
+        type: 'boolean',
+        label: 'Allow Permanent Tool Approval',
+        category: 'Security',
+        requiresRestart: false,
+        default: false,
+        description:
+          'Enable the "Allow for all future sessions" option in tool confirmation dialogs.',
+        showInDialog: true,
+      },
       blockGitExtensions: {
         type: 'boolean',
         label: 'Blocks extensions from Git',

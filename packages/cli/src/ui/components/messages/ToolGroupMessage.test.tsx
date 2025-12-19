@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { render } from 'ink-testing-library';
+import {
+  renderWithProviders,
+  createMockSettings,
+} from '../../../test-utils/render.js';
 import { describe, it, expect, vi } from 'vitest';
 import { Text } from 'ink';
 import { ToolGroupMessage } from './ToolGroupMessage.js';
@@ -519,6 +521,58 @@ describe('<ToolGroupMessage />', () => {
       expect(todoWriteCall?.resultDisplay).toBe(
         '✦ Todo list updated (5 tasks).',
       );
+    });
+
+    it('renders confirmation with permanent approval enabled', () => {
+      const toolCalls = [
+        createToolCall({
+          callId: 'tool-1',
+          name: 'confirm-tool',
+          status: ToolCallStatus.Confirming,
+          confirmationDetails: {
+            type: 'info',
+            title: 'Confirm Tool',
+            prompt: 'Do you want to proceed?',
+            onConfirm: vi.fn(),
+          },
+        }),
+      ];
+      const settings = createMockSettings({
+        security: { enablePermanentToolApproval: true },
+      });
+      const { lastFrame, unmount } = renderWithProviders(
+        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        { settings },
+      );
+      expect(lastFrame()).toContain('Allow for all future sessions');
+      expect(lastFrame()).toMatchSnapshot();
+      unmount();
+    });
+
+    it('renders confirmation with permanent approval disabled', () => {
+      const toolCalls = [
+        createToolCall({
+          callId: 'tool-1',
+          name: 'confirm-tool',
+          status: ToolCallStatus.Confirming,
+          confirmationDetails: {
+            type: 'info',
+            title: 'Confirm Tool',
+            prompt: 'Do you want to proceed?',
+            onConfirm: vi.fn(),
+          },
+        }),
+      ];
+      const settings = createMockSettings({
+        security: { enablePermanentToolApproval: false },
+      });
+      const { lastFrame, unmount } = renderWithProviders(
+        <ToolGroupMessage {...baseProps} toolCalls={toolCalls} />,
+        { settings },
+      );
+      expect(lastFrame()).not.toContain('Allow for all future sessions');
+      expect(lastFrame()).toMatchSnapshot();
+      unmount();
     });
   });
 });
