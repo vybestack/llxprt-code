@@ -204,9 +204,21 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
     return `Processing URLs and instructions from prompt: "${displayPrompt}"`;
   }
 
-  override async shouldConfirmExecute(): Promise<
-    ToolCallConfirmationDetails | false
-  > {
+  override async shouldConfirmExecute(
+    abortSignal: AbortSignal,
+  ): Promise<ToolCallConfirmationDetails | false> {
+    // Try policy/message bus first when available.
+    if (this.messageBus) {
+      const decision = await this.getMessageBusDecision(abortSignal);
+      if (decision === 'ALLOW') {
+        return false;
+      }
+      if (decision === 'DENY') {
+        throw new Error('Tool execution denied by policy.');
+      }
+      // if 'ASK_USER', fall through to legacy confirmation UI
+    }
+
     if (this.config.getApprovalMode() === ApprovalMode.AUTO_EDIT) {
       return false;
     }

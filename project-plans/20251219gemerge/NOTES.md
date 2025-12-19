@@ -55,3 +55,91 @@ $ git commit -m "..."
 $ git push
 <output>
 ```
+
+---
+
+## Batch 01 — REIMPLEMENT — b8df8b2a
+
+### Selection Record
+
+```
+Batch: 01
+Type: REIMPLEMENT
+Upstream SHA(s): b8df8b2a
+Subject: feat(core): wire up UI for ASK_USER policy decisions in message bus (#10630)
+Playbook: project-plans/20251219gemerge/b8df8b2a-plan.md
+Prerequisites Checked:
+  - Previous batch record exists: N/A
+  - Previous batch verification: N/A
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+```
+
+### Execution Record
+
+```
+$ git status --short
+ M packages/core/src/confirmation-bus/message-bus.ts
+ M packages/core/src/tools/google-web-fetch.ts
+ M packages/core/src/tools/tools.ts
+```
+
+### Verification Record
+
+```
+$ npm run lint
+> @vybestack/llxprt-code@0.7.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+
+$ npm run typecheck
+> @vybestack/llxprt-code@0.7.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+
+> @vybestack/llxprt-code-core@0.7.0 typecheck
+> tsc --noEmit
+
+
+> @vybestack/llxprt-code@0.7.0 typecheck
+> tsc --noEmit
+
+
+> @vybestack/llxprt-code-a2a-server@0.6.1 typecheck
+> tsc --noEmit
+
+
+> @vybestack/llxprt-code-test-utils@0.7.0 typecheck
+> tsc --noEmit
+```
+
+### Feature Landing Verification
+
+```
+$ git show b8df8b2a --stat
+<upstream reference used for diff inspection; web-fetch applied to google-web-fetch in llxprt>
+
+$ git status --short
+ M packages/core/src/confirmation-bus/message-bus.ts
+ M packages/core/src/tools/google-web-fetch.ts
+ M packages/core/src/tools/tools.ts
+```
+
+### Skeptical Verification
+
+```
+Subagent: codereviewer
+Verdict: CLEAN - No LLxprt invariant violations.
+Notes: No Clearcut telemetry, no tool name changes, no Google-only auth regressions; applied web-fetch logic to google-web-fetch (llxprt divergence).
+```
+
+### Commit/Push Record
+
+```
+$ git status --porcelain
+<output pending>
+$ git commit -m "..."
+<output pending>
+$ git push
+<output pending>
+```

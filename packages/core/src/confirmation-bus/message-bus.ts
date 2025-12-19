@@ -67,6 +67,13 @@ export class MessageBus {
     };
   }
 
+  unsubscribe<T extends MessageBusMessage>(
+    type: MessageBusType,
+    handler: MessageHandler<T>,
+  ): void {
+    this.emitter.off(type, handler as MessageHandler);
+  }
+
   /**
    * Requests confirmation for a tool execution through the policy engine.
    * If policy allows, returns immediately. If policy asks user, publishes confirmation request.
