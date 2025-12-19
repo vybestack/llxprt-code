@@ -21,7 +21,8 @@ import { beforeAll, describe, it } from 'vitest';
 import { TestRig } from './test-helper.js';
 
 // Windows CI runners are unreliable for node-pty interactive tests (winpty agent "File not found").
-const skipOnWindowsCi = process.platform === 'win32' && process.env.CI === 'true';
+const skipOnWindowsCi =
+  process.platform === 'win32' && process.env.CI === 'true';
 
 // Create a minimal MCP server that doesn't require external dependencies
 // This implements the MCP protocol directly using Node.js built-ins
@@ -156,56 +157,59 @@ rpc.on('tools/list', async () => {
 });
 `;
 
-describe.skipIf(skipOnWindowsCi)('mcp server with cyclic tool schema is detected', () => {
-  const rig = new TestRig();
+describe.skipIf(skipOnWindowsCi)(
+  'mcp server with cyclic tool schema is detected',
+  () => {
+    const rig = new TestRig();
 
-  beforeAll(async () => {
-    // Setup test directory with MCP server configuration
-    await rig.setup('cyclic-schema-mcp-server', {
-      settings: {
-        mcpServers: {
-          'cyclic-schema-server': {
-            command: 'node',
-            args: ['mcp-server.cjs'],
+    beforeAll(async () => {
+      // Setup test directory with MCP server configuration
+      await rig.setup('cyclic-schema-mcp-server', {
+        settings: {
+          mcpServers: {
+            'cyclic-schema-server': {
+              command: 'node',
+              args: ['mcp-server.cjs'],
+            },
           },
         },
-      },
+      });
+
+      // Create server script in the test directory
+      const testServerPath = join(rig.testDir!, 'mcp-server.cjs');
+      writeFileSync(testServerPath, serverScript);
+
+      // Make the script executable (though running with 'node' should work anyway)
+      if (process.platform !== 'win32') {
+        const { chmodSync } = await import('node:fs');
+        chmodSync(testServerPath, 0o755);
+      }
     });
 
-    // Create server script in the test directory
-    const testServerPath = join(rig.testDir!, 'mcp-server.cjs');
-    writeFileSync(testServerPath, serverScript);
+    it('mcp tool list should include tool with cyclic tool schema', async () => {
+      const run = await rig.runInteractive();
 
-    // Make the script executable (though running with 'node' should work anyway)
-    if (process.platform !== 'win32') {
-      const { chmodSync } = await import('node:fs');
-      chmodSync(testServerPath, 0o755);
-    }
-  });
+      try {
+        // MCP discovery can be slow in sandbox/docker and on Windows. Retry `/mcp list`
+        // until the tool appears (or we time out).
+        const deadline = Date.now() + 120_000;
+        while (Date.now() < deadline) {
+          await run.type('/mcp list');
+          await run.type('\r'); // Submit command with Enter key
 
-  it('mcp tool list should include tool with cyclic tool schema', async () => {
-    const run = await rig.runInteractive();
-
-    try {
-      // MCP discovery can be slow in sandbox/docker and on Windows. Retry `/mcp list`
-      // until the tool appears (or we time out).
-      const deadline = Date.now() + 120_000;
-      while (Date.now() < deadline) {
-        await run.type('/mcp list');
-        await run.type('\r'); // Submit command with Enter key
-
-        try {
-          await run.expectText('tool_with_cyclic_schema', 2000);
-          return;
-        } catch {
-          await new Promise((resolve) => setTimeout(resolve, 3000));
+          try {
+            await run.expectText('tool_with_cyclic_schema', 2000);
+            return;
+          } catch {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+          }
         }
-      }
 
-      // Final assertion with a longer timeout so failures show a clear error.
-      await run.expectText('tool_with_cyclic_schema', 10_000);
-    } finally {
-      await run.kill();
-    }
-  });
-});
+        // Final assertion with a longer timeout so failures show a clear error.
+        await run.expectText('tool_with_cyclic_schema', 10_000);
+      } finally {
+        await run.kill();
+      }
+    });
+  },
+);
