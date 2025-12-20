@@ -35,12 +35,47 @@ export class ContentConverters {
   ): string | undefined {
     if (!id) return undefined;
     if (id.startsWith('hist_tool_')) return id;
-    if (id.startsWith('call_'))
-      return `hist_tool_${id.substring('call_'.length)}`;
-    if (id.startsWith('toolu_'))
-      return `hist_tool_${id.substring('toolu_'.length)}`;
+
+    let candidate = id;
+    let didStrip = true;
+
+    while (didStrip) {
+      didStrip = false;
+
+      if (candidate.startsWith('call_')) {
+        candidate = candidate.substring('call_'.length);
+        didStrip = true;
+        continue;
+      }
+
+      if (candidate.startsWith('toolu_')) {
+        candidate = candidate.substring('toolu_'.length);
+        didStrip = true;
+        continue;
+      }
+
+      // Some systems can produce malformed OpenAI-style call ids:
+      // - missing underscore: "call3or3..."
+      // - double-prefixed: "call_call3or3..." or "call_call_3or3..."
+      //
+      // When we see a "call" prefix without the underscore, strip it
+      // if the suffix looks like a real OpenAI call id token.
+      if (candidate.startsWith('call') && !candidate.startsWith('call_')) {
+        const suffix = candidate.substring('call'.length);
+        const looksLikeToken =
+          suffix.length >= 8 && /^[a-zA-Z0-9]+$/.test(suffix);
+        if (looksLikeToken) {
+          candidate = suffix;
+          didStrip = true;
+          continue;
+        }
+      }
+    }
+
+    if (!candidate) return undefined;
+
     // Unknown provider format: preserve suffix, add history prefix
-    return `hist_tool_${id}`;
+    return `hist_tool_${candidate}`;
   }
   /**
    * Convert IContent to Gemini Content format

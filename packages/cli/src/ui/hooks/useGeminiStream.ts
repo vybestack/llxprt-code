@@ -1279,10 +1279,45 @@ export const useGeminiStream = (
           const combinedParts = geminiTools.flatMap(
             (toolCall) => toolCall.response.responseParts,
           );
-          geminiClient.addHistory({
-            role: 'user',
-            parts: combinedParts,
-          });
+
+          // IMPORTANT: responseParts for terminal tool calls include BOTH the
+          // original functionCall and the functionResponse. HistoryService is
+          // intentionally "atomic" for tool calls, but providers require tool
+          // calls to originate from the assistant and tool results from the
+          // tool role. Add the pieces to history with correct roles.
+          const functionCalls: Part[] = [];
+          const functionResponses: Part[] = [];
+          const otherParts: Part[] = [];
+
+          for (const part of combinedParts) {
+            if (part && typeof part === 'object' && 'functionCall' in part) {
+              functionCalls.push(part);
+              continue;
+            }
+            if (
+              part &&
+              typeof part === 'object' &&
+              'functionResponse' in part
+            ) {
+              functionResponses.push(part);
+              continue;
+            }
+            otherParts.push(part);
+          }
+
+          if (functionCalls.length > 0) {
+            geminiClient.addHistory({
+              role: 'model',
+              parts: functionCalls,
+            });
+          }
+
+          if (functionResponses.length > 0 || otherParts.length > 0) {
+            geminiClient.addHistory({
+              role: 'user',
+              parts: [...functionResponses, ...otherParts],
+            });
+          }
         }
 
         const callIdsToMarkAsSubmitted = geminiTools.map(
