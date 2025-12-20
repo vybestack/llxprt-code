@@ -114,7 +114,7 @@ These tools auto-approve by default:
 
 These tools require confirmation by default:
 
-- edit, smart_edit, write_file
+- edit, write_file
 - shell, memory, web_fetch
 - mcp_tool
 

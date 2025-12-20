@@ -81,7 +81,6 @@ export function migrateLegacyApprovalMode(
     // AUTO_EDIT mode: allow edit tools at priority 1.015
     const editTools = [
       'replace',
-      'smart_edit',
       'write_file',
       'insert_at_line',
       'delete_line_range',

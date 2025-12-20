@@ -8,11 +8,6 @@ decision = "ask_user"
 priority = 1.01
 
 [[rule]]
-toolName = "smart_edit"
-decision = "ask_user"
-priority = 1.01
-
-[[rule]]
 toolName = "write_file"
 decision = "ask_user"
 priority = 1.01

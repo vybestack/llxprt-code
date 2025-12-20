@@ -21,7 +21,6 @@ import { RipGrepTool } from '../tools/ripGrep.js';
 import { GlobTool } from '../tools/glob.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 import { EditTool } from '../tools/edit.js';
-import { SmartEditTool } from '../tools/smart-edit.js';
 import { ShellTool } from '../tools/shell.js';
 import { WriteFileTool } from '../tools/write-file.js';
 import { GoogleWebFetchTool } from '../tools/google-web-fetch.js';
@@ -353,7 +352,6 @@ export interface ConfigParameters {
   extensionManagement?: boolean;
   enablePromptCompletion?: boolean;
   eventEmitter?: EventEmitter;
-  useSmartEdit?: boolean;
   settingsService?: SettingsService;
   policyEngineConfig?: PolicyEngineConfig;
   truncateToolOutputThreshold?: number;
@@ -514,7 +512,6 @@ export class Config {
   readonly storage: Storage;
   private readonly fileExclusions: FileExclusions;
   private readonly eventEmitter?: EventEmitter;
-  private readonly useSmartEdit: boolean;
   private readonly messageBus: MessageBus;
   private readonly policyEngine: PolicyEngine;
   truncateToolOutputThreshold: number;
@@ -656,7 +653,6 @@ export class Config {
     this.truncateToolOutputLines =
       params.truncateToolOutputLines ?? DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES;
     this.enableToolOutputTruncation = params.enableToolOutputTruncation ?? true;
-    this.useSmartEdit = params.useSmartEdit ?? false;
     this.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
     this.enableShellOutputEfficiency =
       params.enableShellOutputEfficiency ?? true;
@@ -1591,10 +1587,6 @@ export class Config {
     return this.enablePromptCompletion;
   }
 
-  getUseSmartEdit(): boolean {
-    return this.useSmartEdit;
-  }
-
   getNonInteractive(): boolean {
     return !this.interactive;
   }
@@ -1734,11 +1726,7 @@ export class Config {
     }
 
     registerCoreTool(GlobTool, this);
-    if (this.getUseSmartEdit()) {
-      registerCoreTool(SmartEditTool, this);
-    } else {
-      registerCoreTool(EditTool, this);
-    }
+    registerCoreTool(EditTool, this);
     registerCoreTool(WriteFileTool, this);
     registerCoreTool(GoogleWebFetchTool, this);
     registerCoreTool(ReadManyFilesTool, this);

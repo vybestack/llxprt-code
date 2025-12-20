@@ -62,18 +62,11 @@ describe('policy config', () => {
         const rules = migrateLegacyApprovalMode(config);
 
         // Should have rules for edit tools
-        expect(rules.length).toBeGreaterThanOrEqual(5);
+        expect(rules.length).toBeGreaterThanOrEqual(4);
 
         const replaceRule = rules.find((r) => r.toolName === 'replace');
         expect(replaceRule).toEqual({
           toolName: 'replace',
-          decision: PolicyDecision.ALLOW,
-          priority: 1.015,
-        });
-
-        const smartEditRule = rules.find((r) => r.toolName === 'smart_edit');
-        expect(smartEditRule).toEqual({
-          toolName: 'smart_edit',
           decision: PolicyDecision.ALLOW,
           priority: 1.015,
         });
@@ -87,7 +80,6 @@ describe('policy config', () => {
 
         const toolNames = rules.map((r) => r.toolName);
         expect(toolNames).toContain('replace');
-        expect(toolNames).toContain('smart_edit');
         expect(toolNames).toContain('write_file');
         expect(toolNames).toContain('insert_at_line');
         expect(toolNames).toContain('delete_line_range');
@@ -209,11 +201,11 @@ describe('policy config', () => {
         });
         const rules = migrateLegacyApprovalMode(config);
 
-        // 5 AUTO_EDIT tools + 2 allowed tools
-        expect(rules.length).toBeGreaterThanOrEqual(7);
+        // 4 AUTO_EDIT tools + 2 allowed tools
+        expect(rules.length).toBe(6);
 
         const autoEditRules = rules.filter((r) => r.priority === 1.015);
-        expect(autoEditRules.length).toBe(5);
+        expect(autoEditRules.length).toBe(4);
 
         const allowedRules = rules.filter((r) => r.priority === 2.3);
         expect(allowedRules.length).toBe(2);

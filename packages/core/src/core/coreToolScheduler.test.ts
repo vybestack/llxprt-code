@@ -523,7 +523,6 @@ describe('CoreToolScheduler', () => {
         DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
       getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
       getToolRegistry: () => mockToolRegistry,
-      getUseSmartEdit: () => false,
       getUseModelRouter: () => false,
       getGeminiClient: () => null,
       getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),

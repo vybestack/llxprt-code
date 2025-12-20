@@ -65,18 +65,13 @@ priority = 1.01
 
 ### ApprovalMode.AUTO_EDIT
 
-**Legacy behavior:** Auto-approve write tools (edit, smart_edit, write_file, shell, memory)
+**Legacy behavior:** Auto-approve write tools (edit, write_file, shell, memory)
 
 **Policy equivalent:** Allow rules at priority 1.015
 
 ```toml
 [[rule]]
 toolName = "edit"
-decision = "allow"
-priority = 1.015
-
-[[rule]]
-toolName = "smart_edit"
 decision = "allow"
 priority = 1.015
 
@@ -311,11 +306,6 @@ Once satisfied with policy-based configuration, you can remove legacy settings:
 # Auto-approve write tools for development
 [[rule]]
 toolName = "edit"
-decision = "allow"
-priority = 2.5
-
-[[rule]]
-toolName = "smart_edit"
 decision = "allow"
 priority = 2.5
 
