@@ -240,7 +240,12 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           await ClipboardService.copyToClipboard(authUrl);
         } catch (error) {
           // Clipboard copy is non-critical, continue without it
-          console.debug('Failed to copy URL to clipboard:', error);
+          this.logger.debug(
+            () =>
+              `Failed to copy URL to clipboard: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+          );
         }
 
         if (interactive) {

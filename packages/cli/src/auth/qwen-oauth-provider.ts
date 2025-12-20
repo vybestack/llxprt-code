@@ -21,6 +21,7 @@ import {
   OAuthErrorFactory,
   GracefulErrorHandler,
   RetryHandler,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { ClipboardService } from '../services/ClipboardService.js';
 import { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
@@ -46,6 +47,7 @@ export class QwenOAuthProvider implements OAuthProvider {
   private initializationError?: Error;
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
+  private logger: DebugLogger;
   private addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,
@@ -69,6 +71,7 @@ export class QwenOAuthProvider implements OAuthProvider {
     this.tokenStore = tokenStore;
     this.retryHandler = new RetryHandler();
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
+    this.logger = new DebugLogger('llxprt:auth:qwen');
     this.addItem = addItem;
 
     /**
@@ -217,7 +220,12 @@ export class QwenOAuthProvider implements OAuthProvider {
           await ClipboardService.copyToClipboard(authUrl);
         } catch (error) {
           // Clipboard copy is non-critical, continue without it
-          console.debug('Failed to copy URL to clipboard:', error);
+          this.logger.debug(
+            () =>
+              `Failed to copy URL to clipboard: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+          );
         }
 
         // Line 40: IF shouldLaunchBrowser()
@@ -231,7 +239,12 @@ export class QwenOAuthProvider implements OAuthProvider {
           } catch (error) {
             // Line 45: PRINT - browser failure is not critical
             console.log('Failed to open browser automatically.');
-            console.debug('Browser launch error:', error);
+            this.logger.debug(
+              () =>
+                `Browser launch error: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+            );
           }
         }
 
@@ -368,13 +381,23 @@ export class QwenOAuthProvider implements OAuthProvider {
                   operation: 'refreshToken',
                 });
 
-          console.debug('Token refresh failed:', refreshError.toLogEntry());
+          this.logger.debug(
+            () =>
+              `Token refresh failed: ${JSON.stringify(refreshError.toLogEntry())}`,
+          );
 
           // Line 76: AWAIT this.tokenStore.removeToken('qwen')
           try {
             await this.tokenStore?.removeToken('qwen');
           } catch (removeError) {
-            console.debug('Failed to remove invalid token:', removeError);
+            this.logger.debug(
+              () =>
+                `Failed to remove invalid token: ${
+                  removeError instanceof Error
+                    ? removeError.message
+                    : String(removeError)
+                }`,
+            );
           }
 
           // Line 77: RETURN null
@@ -425,7 +448,10 @@ export class QwenOAuthProvider implements OAuthProvider {
               operation: 'refreshToken',
             });
 
-      console.debug('Token refresh failed:', refreshError.toLogEntry());
+      this.logger.debug(
+        () =>
+          `Token refresh failed: ${JSON.stringify(refreshError.toLogEntry())}`,
+      );
       return null;
     }
   }
