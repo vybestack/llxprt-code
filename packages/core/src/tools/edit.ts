@@ -510,9 +510,12 @@ class EditToolInvocation extends BaseToolInvocation<
       newContent: filteredNewContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
+          // No need to publish a policy update as the default policy for
+          // AUTO_EDIT already reflects always approving edit.
           this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
+        } else {
+          await this.publishPolicyUpdate(outcome);
         }
-        await this.publishPolicyUpdate(outcome);
 
         if (ideConfirmation) {
           const result = await ideConfirmation;
