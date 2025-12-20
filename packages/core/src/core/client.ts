@@ -1756,7 +1756,9 @@ export class GeminiClient {
       ? compressedHistoryService.getTotalTokens()
       : 0;
     if (newTokenCount === undefined || newTokenCount === 0) {
-      console.warn('Could not determine compressed history token count.');
+      this.logger.warn(
+        () => 'Could not determine compressed history token count.',
+      );
       this.hasFailedCompressionAttempt = !force && true;
       return {
         originalTokenCount,
@@ -1767,8 +1769,9 @@ export class GeminiClient {
     }
 
     // TODO: Add proper telemetry logging once available
-    console.debug(
-      `Chat compression: ${originalTokenCount} -> ${newTokenCount} tokens`,
+    this.logger.debug(
+      () =>
+        `Chat compression: ${originalTokenCount} -> ${newTokenCount} tokens`,
     );
 
     if (newTokenCount > originalTokenCount) {
