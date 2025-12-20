@@ -98,6 +98,30 @@ function mergeRefreshedToken(
   return merged;
 }
 
+type ProfileManagerCtor =
+  (typeof import('@vybestack/llxprt-code-core'))['ProfileManager'];
+
+let profileManagerCtorPromise: Promise<ProfileManagerCtor> | undefined;
+
+async function getProfileManagerCtor(): Promise<ProfileManagerCtor> {
+  if (!profileManagerCtorPromise) {
+    profileManagerCtorPromise = import('@vybestack/llxprt-code-core')
+      .then((mod) => mod.ProfileManager)
+      .catch((error) => {
+        profileManagerCtorPromise = undefined;
+        throw error;
+      });
+  }
+  return profileManagerCtorPromise;
+}
+
+async function createProfileManager(): Promise<
+  InstanceType<ProfileManagerCtor>
+> {
+  const ProfileManager = await getProfileManagerCtor();
+  return new ProfileManager();
+}
+
 function isLoadBalancerProfileLike(
   profile: unknown,
 ): profile is { type: 'loadbalancer'; profiles: string[] } {
@@ -1096,8 +1120,7 @@ export class OAuthManager {
     }
 
     if (isLoadBalancerProfileLike(profile)) {
-      const { ProfileManager } = await import('@vybestack/llxprt-code-core');
-      const profileManager = new ProfileManager();
+      const profileManager = await createProfileManager();
       const visited = new Set<string>();
 
       const visit = async (profileName: string): Promise<void> => {
@@ -1493,8 +1516,7 @@ export class OAuthManager {
       }
 
       // Load the profile to check for auth.buckets
-      const { ProfileManager } = await import('@vybestack/llxprt-code-core');
-      const profileManager = new ProfileManager();
+      const profileManager = await createProfileManager();
       const profile = await profileManager.loadProfile(currentProfileName);
 
       // Check if profile has auth.buckets for this provider

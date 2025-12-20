@@ -418,11 +418,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     // @pseudocode line 81: Check if token is expired
     if (this.isTokenExpired(currentToken)) {
       // @pseudocode line 82: Check if refresh token exists and is valid
-      if (
-        currentToken.refresh_token &&
-        currentToken.refresh_token.trim().length > 0 &&
-        currentToken.refresh_token.length < 1000
-      ) {
+      if (this.hasValidRefreshToken(currentToken)) {
         try {
           // @pseudocode lines 84-86: Refresh the token
           const refreshedToken = await this.deviceFlow.refreshToken(
@@ -482,11 +478,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
     await this.ensureInitialized();
 
-    if (
-      currentToken.refresh_token &&
-      currentToken.refresh_token.trim().length > 0 &&
-      currentToken.refresh_token.length < 1000
-    ) {
+    if (this.hasValidRefreshToken(currentToken)) {
       try {
         const refreshedToken = await this.deviceFlow.refreshToken(
           currentToken.refresh_token,
@@ -556,6 +548,16 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
     // @pseudocode line 112: Log successful logout
     this.logger.debug(() => 'Logged out of Anthropic Claude');
+  }
+
+  private hasValidRefreshToken(
+    token: OAuthToken,
+  ): token is OAuthToken & { refresh_token: string } {
+    return (
+      typeof token.refresh_token === 'string' &&
+      token.refresh_token.trim().length > 0 &&
+      token.refresh_token.length < 1000
+    );
   }
 
   /**
