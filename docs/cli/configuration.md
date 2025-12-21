@@ -1146,12 +1146,12 @@ Sandboxing is disabled by default, but you can enable it in a few ways:
 - Setting `LLXPRT_SANDBOX` environment variable.
 - Sandbox is enabled when using `--yolo` or `--approval-mode=yolo` by default.
 
-By default, it uses a pre-built `gemini-cli-sandbox` Docker image.
+By default, it uses a pre-built `ghcr.io/vybestack/llxprt-code/sandbox:0.7.0` Docker image.
 
 For project-specific sandboxing needs, you can create a custom Dockerfile at `.llxprt/sandbox.Dockerfile` in your project's root directory. This Dockerfile can be based on the base sandbox image:
 
 ```dockerfile
-FROM gemini-cli-sandbox
+FROM ghcr.io/vybestack/llxprt-code/sandbox:0.7.0
 
 # Add your custom dependencies or configurations here
 # For example:

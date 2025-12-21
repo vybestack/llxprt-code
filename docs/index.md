@@ -22,6 +22,8 @@ This documentation is organized into the following sections:
   - **[Provider Configuration](./cli/providers.md):** Configure and manage LLM providers.
   - **[OpenAI Responses API](./cli/providers-openai-responses.md):** Using OpenAI's enhanced Responses API.
   - **[Local Models](./local-models.md):** Complete guide to using local AI models with LM Studio, Ollama, llama.cpp, and more.
+  - **[Subagents](./subagents.md):** Create and manage subagents tied to profiles.
+
   - **[Prompt Configuration](./prompt-configuration.md):** How to customize AI behavior with prompts.
   - **[Settings and Profiles](./settings-and-profiles.md):** How to manage settings and use profiles.
   - **[Emoji Filter](./EMOJI-FILTER.md):** Control emoji usage in LLM responses.
@@ -33,6 +35,7 @@ This documentation is organized into the following sections:
   - **[IDE Integration](./ide-integration.md):** Connect the CLI to your editor.
   - **[Telemetry](./telemetry.md):** Overview of telemetry in the CLI.
   - **[Telemetry Privacy](./telemetry-privacy.md):** Privacy information for telemetry.
+
 - **Core Details:** Documentation for `packages/core`.
   - **[Core Introduction](./core/index.md):** Overview of the core component.
   - **[Provider runtime context](./core/provider-runtime-context.md):** Manage `ProviderRuntimeContext` lifecycles.

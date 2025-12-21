@@ -164,7 +164,7 @@ describe('Server Config (config.ts)', () => {
   const MODEL = 'gemini-pro';
   const SANDBOX: SandboxConfig = {
     command: 'docker',
-    image: 'gemini-cli-sandbox',
+    image: 'llxprt-code-sandbox',
   };
   const TARGET_DIR = '/path/to/target';
   const DEBUG_MODE = false;

@@ -106,7 +106,11 @@ There are two distinct build processes used, depending on the distribution chann
 
 **Docker sandbox image**
 
-The Docker-based execution method is supported by the `gemini-cli-sandbox` container image. This image is published to a container registry and contains a pre-installed, global version of LLxprt Code.
+The Docker-based execution method is supported by the `llxprt-code-sandbox` container image, published at `ghcr.io/vybestack/llxprt-code/sandbox`. This image contains a pre-installed, global version of LLxprt Code.
+
+```bash
+docker run --rm -it ghcr.io/vybestack/llxprt-code/sandbox:0.7.0
+```
 
 ## Release process
 
