@@ -25,6 +25,12 @@ import { type IModel } from '../IModel.js';
 
 export const CODEX_MODELS: IModel[] = [
   {
+    id: 'gpt-5.2-codex',
+    name: 'gpt-5.2-codex',
+    provider: 'codex',
+    supportedToolFormats: ['openai'],
+  },
+  {
     id: 'gpt-5.1-codex-max',
     name: 'gpt-5.1-codex-max',
     provider: 'codex',
