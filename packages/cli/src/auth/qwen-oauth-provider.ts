@@ -196,9 +196,8 @@ export class QwenOAuthProvider implements OAuthProvider {
           deviceCodeResponse.verification_uri_complete ||
           `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
 
-        // Lines 37-38: PRINT
-        console.log('\nQwen OAuth Authentication');
-        console.log('─'.repeat(40));
+        // Try instance addItem first, fallback to global
+        const addItem = this.addItem || globalOAuthUI.getAddItem();
 
         // Always show OAuth URL in the TUI first, before attempting browser (like Gemini does)
         const historyItem: HistoryItemOAuthURL = {
@@ -206,14 +205,16 @@ export class QwenOAuthProvider implements OAuthProvider {
           text: `Please visit the following URL to authorize with Qwen:\\n${authUrl}`,
           url: authUrl,
         };
-        // Try instance addItem first, fallback to global
-        const addItem = this.addItem || globalOAuthUI.getAddItem();
         if (addItem) {
           addItem(historyItem, Date.now());
-        }
+        } else {
+          // Lines 37-38: PRINT
+          console.log('\nQwen OAuth Authentication');
+          console.log('─'.repeat(40));
 
-        console.log('Please visit the following URL to authorize:');
-        console.log(authUrl);
+          console.log('Please visit the following URL to authorize:');
+          console.log(authUrl);
+        }
 
         // Copy URL to clipboard with error handling
         try {
@@ -231,14 +232,31 @@ export class QwenOAuthProvider implements OAuthProvider {
         // Line 40: IF shouldLaunchBrowser()
         if (shouldLaunchBrowser()) {
           // Line 41: PRINT
-          console.log('Opening browser for authentication...');
+          if (addItem) {
+            addItem(
+              { type: 'info', text: 'Opening browser for authentication...' },
+              Date.now(),
+            );
+          } else {
+            console.log('Opening browser for authentication...');
+          }
 
           // Lines 42-46: TRY
           try {
             await openBrowserSecurely(authUrl);
           } catch (error) {
             // Line 45: PRINT - browser failure is not critical
-            console.log('Failed to open browser automatically.');
+            if (addItem) {
+              addItem(
+                {
+                  type: 'warning',
+                  text: 'Failed to open browser automatically.',
+                },
+                Date.now(),
+              );
+            } else {
+              console.log('Failed to open browser automatically.');
+            }
             this.logger.debug(
               () =>
                 `Browser launch error: ${
@@ -248,9 +266,17 @@ export class QwenOAuthProvider implements OAuthProvider {
           }
         }
 
-        console.log('─'.repeat(40));
-        // Line 52: PRINT
-        console.log('Waiting for authorization...\n');
+        if (addItem) {
+          // Line 52: PRINT
+          addItem(
+            { type: 'info', text: 'Waiting for authorization...' },
+            Date.now(),
+          );
+        } else {
+          console.log('─'.repeat(40));
+          // Line 52: PRINT
+          console.log('Waiting for authorization...\n');
+        }
 
         // Line 54: SET token = AWAIT this.deviceFlow.pollForToken
         const token = await this.deviceFlow.pollForToken(
@@ -273,7 +299,14 @@ export class QwenOAuthProvider implements OAuthProvider {
         }
 
         // Line 56: PRINT
-        console.log('Authentication successful!');
+        if (addItem) {
+          addItem(
+            { type: 'info', text: 'Authentication successful!' },
+            Date.now(),
+          );
+        } else {
+          console.log('Authentication successful!');
+        }
       },
       this.name,
       'initiateAuth',
@@ -461,13 +494,13 @@ export class QwenOAuthProvider implements OAuthProvider {
    * @requirement REQ-001.1
    * @pseudocode lines 87-89
    */
-  async logout(_token?: OAuthToken): Promise<void> {
+  async logout(token?: OAuthToken): Promise<void> {
     await this.ensureInitialized();
 
     return this.errorHandler.handleGracefully(
       async () => {
         // Line 88: AWAIT this.tokenStore.removeToken('qwen')
-        if (this.tokenStore && !_token) {
+        if (this.tokenStore && !token) {
           try {
             await this.tokenStore.removeToken('qwen');
           } catch (error) {
@@ -482,8 +515,16 @@ export class QwenOAuthProvider implements OAuthProvider {
         }
 
         // Line 89: PRINT "Successfully logged out from Qwen"
-        if (!_token) {
-          console.log('Successfully logged out from Qwen');
+        if (!token) {
+          const addItem = this.addItem || globalOAuthUI.getAddItem();
+          if (addItem) {
+            addItem(
+              { type: 'info', text: 'Successfully logged out from Qwen' },
+              Date.now(),
+            );
+          } else {
+            console.log('Successfully logged out from Qwen');
+          }
         }
       },
       undefined, // Always complete logout even if some steps fail

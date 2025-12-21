@@ -528,15 +528,8 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     // NO ERROR SUPPRESSION - let it fail loudly
     if (token) {
       try {
-        if (
-          'revokeToken' in this.deviceFlow &&
-          typeof this.deviceFlow.revokeToken === 'function'
-        ) {
-          await (
-            this.deviceFlow as unknown as {
-              revokeToken: (token: string) => Promise<void>;
-            }
-          ).revokeToken(token.access_token);
+        if (this.deviceFlow.revokeToken) {
+          await this.deviceFlow.revokeToken(token.access_token);
         } else {
           this.logger.debug(
             () =>
