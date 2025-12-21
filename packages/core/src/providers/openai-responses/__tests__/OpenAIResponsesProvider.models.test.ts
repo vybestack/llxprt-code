@@ -59,14 +59,15 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
 
       // Verify all expected Codex models are present (based on codex-rs list_models.rs)
       const modelIds = models.map((m) => m.id);
+      expect(modelIds).toContain('gpt-5.2-codex');
       expect(modelIds).toContain('gpt-5.1-codex-max');
       expect(modelIds).toContain('gpt-5.1-codex');
       expect(modelIds).toContain('gpt-5.1-codex-mini');
       expect(modelIds).toContain('gpt-5.2');
       expect(modelIds).toContain('gpt-5.1');
 
-      // Verify gpt-5.1-codex-max is first (highest priority in codex-rs)
-      expect(models[0].id).toBe('gpt-5.1-codex-max');
+      // Verify gpt-5.2-codex is first (highest priority in codex-rs)
+      expect(models[0].id).toBe('gpt-5.2-codex');
 
       // Verify all models have correct provider and tool format
       for (const model of models) {
@@ -102,6 +103,7 @@ describe('OpenAIResponsesProvider - Codex Model Listing', () => {
 
       // Expected models in priority order (based on codex-rs list_models.rs)
       const expectedModelIds = [
+        'gpt-5.2-codex',
         'gpt-5.1-codex-max',
         'gpt-5.1-codex',
         'gpt-5.1-codex-mini',
