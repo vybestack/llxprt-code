@@ -318,7 +318,6 @@ describe('loadCliConfig memory discovery', () => {
       loadMemoryFromIncludeDirectories: undefined,
       ideMode: undefined,
       screenReader: undefined,
-      useSmartEdit: undefined,
       sessionSummary: undefined,
       dumponerror: undefined,
       promptWords: [],

@@ -160,7 +160,6 @@ export interface CliArgs {
   loadMemoryFromIncludeDirectories: boolean | undefined;
   ideMode: string | undefined;
   screenReader: boolean | undefined;
-  useSmartEdit: boolean | undefined;
   sessionSummary: string | undefined;
   dumponerror: boolean | undefined;
   promptWords: string[] | undefined;
@@ -620,7 +619,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       result.loadMemoryFromIncludeDirectories as boolean | undefined,
     ideMode: result.ideMode as string | undefined,
     screenReader: result.screenReader as boolean | undefined,
-    useSmartEdit: result.useSmartEdit as boolean | undefined,
     sessionSummary: result.sessionSummary as string | undefined,
     dumponerror: result.dumponerror as boolean | undefined,
     allowedTools: result.allowedTools as string[] | undefined,
@@ -1304,7 +1302,6 @@ export async function loadCliConfig(
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
-    useSmartEdit: argv.useSmartEdit ?? effectiveSettings.useSmartEdit,
   });
 
   const enhancedConfig = config;

@@ -20,7 +20,6 @@ export const EXA_WEB_SEARCH_TOOL = 'exa_web_search';
 export const READ_FILE_TOOL = 'read_file';
 export const WRITE_FILE_TOOL = 'write_file';
 export const EDIT_TOOL = 'replace';
-export const SMART_EDIT_TOOL = 'smart_edit';
 export const INSERT_AT_LINE_TOOL = 'insert_at_line';
 export const DELETE_LINE_RANGE_TOOL = 'delete_line_range';
 export const READ_LINE_RANGE_TOOL = 'read_line_range';
@@ -60,7 +59,6 @@ export type ToolName =
   | typeof READ_FILE_TOOL
   | typeof WRITE_FILE_TOOL
   | typeof EDIT_TOOL
-  | typeof SMART_EDIT_TOOL
   | typeof INSERT_AT_LINE_TOOL
   | typeof DELETE_LINE_RANGE_TOOL
   | typeof READ_LINE_RANGE_TOOL
