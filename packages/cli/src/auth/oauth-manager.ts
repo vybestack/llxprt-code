@@ -73,6 +73,111 @@ export function unwrapLoggingProvider<T extends OAuthProvider | undefined>(
   return current as T;
 }
 
+type OAuthTokenWithExtras = OAuthToken & Record<string, unknown>;
+
+function mergeRefreshedToken(
+  currentToken: OAuthTokenWithExtras,
+  refreshedToken: OAuthTokenWithExtras,
+): OAuthTokenWithExtras {
+  const merged: OAuthTokenWithExtras = { ...currentToken, ...refreshedToken };
+
+  for (const key of Object.keys(refreshedToken)) {
+    if (refreshedToken[key] === undefined && currentToken[key] !== undefined) {
+      merged[key] = currentToken[key];
+    }
+  }
+
+  if (
+    (typeof merged.refresh_token !== 'string' || merged.refresh_token === '') &&
+    typeof currentToken.refresh_token === 'string' &&
+    currentToken.refresh_token !== ''
+  ) {
+    merged.refresh_token = currentToken.refresh_token;
+  }
+
+  return merged;
+}
+
+type ProfileManagerCtor =
+  (typeof import('@vybestack/llxprt-code-core'))['ProfileManager'];
+
+let profileManagerCtorPromise: Promise<ProfileManagerCtor> | undefined;
+
+async function getProfileManagerCtor(): Promise<ProfileManagerCtor> {
+  if (!profileManagerCtorPromise) {
+    profileManagerCtorPromise = import('@vybestack/llxprt-code-core')
+      .then((mod) => mod.ProfileManager)
+      .catch((error) => {
+        profileManagerCtorPromise = undefined;
+        throw error;
+      });
+  }
+  return profileManagerCtorPromise;
+}
+
+async function createProfileManager(): Promise<
+  InstanceType<ProfileManagerCtor>
+> {
+  const ProfileManager = await getProfileManagerCtor();
+  return new ProfileManager();
+}
+
+function isLoadBalancerProfileLike(
+  profile: unknown,
+): profile is { type: 'loadbalancer'; profiles: string[] } {
+  return (
+    !!profile &&
+    typeof profile === 'object' &&
+    'type' in profile &&
+    (profile as { type?: unknown }).type === 'loadbalancer' &&
+    'profiles' in profile &&
+    Array.isArray((profile as { profiles?: unknown }).profiles) &&
+    (profile as { profiles: unknown[] }).profiles.every(
+      (name) => typeof name === 'string' && name.trim() !== '',
+    )
+  );
+}
+
+function getOAuthBucketsFromProfile(
+  profile: unknown,
+): { providerName: string; buckets: string[] } | null {
+  if (!profile || typeof profile !== 'object') {
+    return null;
+  }
+
+  const providerName =
+    'provider' in profile && typeof profile.provider === 'string'
+      ? profile.provider
+      : null;
+  if (!providerName || providerName.trim() === '') {
+    return null;
+  }
+
+  const auth = 'auth' in profile ? profile.auth : undefined;
+  if (!auth || typeof auth !== 'object') {
+    return null;
+  }
+
+  if (!('type' in auth) || auth.type !== 'oauth') {
+    return null;
+  }
+
+  const buckets = (() => {
+    if ('buckets' in auth && Array.isArray(auth.buckets)) {
+      const bucketNames = auth.buckets
+        .filter((bucket) => typeof bucket === 'string')
+        .map((bucket) => bucket.trim())
+        .filter((bucket) => bucket !== '');
+      if (bucketNames.length > 0) {
+        return bucketNames;
+      }
+    }
+    return ['default'];
+  })();
+
+  return { providerName: providerName.trim(), buckets };
+}
+
 /**
  * Interface for OAuth provider abstraction
  * Each provider (e.g., Google, Qwen) implements this interface
@@ -94,10 +199,17 @@ export interface OAuthProvider {
   getToken(): Promise<OAuthToken | null>;
 
   /**
-   * Refresh token if it's expired or about to expire
+   * Refresh a specific token (bucket-aware via the passed token).
+   * Implementations must NOT persist; OAuthManager owns persistence.
    * @returns Refreshed token or null if refresh failed
    */
-  refreshIfNeeded(): Promise<OAuthToken | null>;
+  refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null>;
+
+  /**
+   * Optional provider-side logout/revoke for a specific token.
+   * OAuthManager always clears local storage for the selected bucket.
+   */
+  logout?(token?: OAuthToken): Promise<void>;
 }
 
 /**
@@ -113,6 +225,12 @@ export class OAuthManager {
   // Session bucket overrides (in-memory only)
   private sessionBuckets: Map<string, string>;
   private bucketResolutionLocks: Map<string, Promise<void>>;
+  private proactiveRenewals: Map<
+    string,
+    { timer: ReturnType<typeof setTimeout>; expiry: number }
+  >;
+  private proactiveRenewalFailures: Map<string, number>;
+  private proactiveRenewalInFlight: Set<string>;
   // Getter function for message bus (lazy resolution for TUI prompts)
   private getMessageBus?: () => MessageBus | undefined;
   // Getter function for config (lazy resolution for bucket failover handler)
@@ -125,6 +243,9 @@ export class OAuthManager {
     this.inMemoryOAuthState = new Map();
     this.sessionBuckets = new Map();
     this.bucketResolutionLocks = new Map();
+    this.proactiveRenewals = new Map();
+    this.proactiveRenewalFailures = new Map();
+    this.proactiveRenewalInFlight = new Set();
   }
 
   private async withBucketResolutionLock<T>(
@@ -194,8 +315,8 @@ export class OAuthManager {
       throw new Error('Provider must implement getToken method');
     }
 
-    if (typeof provider.refreshIfNeeded !== 'function') {
-      throw new Error('Provider must implement refreshIfNeeded method');
+    if (typeof provider.refreshToken !== 'function') {
+      throw new Error('Provider must implement refreshToken method');
     }
 
     this.providers.set(provider.name, provider);
@@ -416,12 +537,17 @@ export class OAuthManager {
     const bucketToUse =
       bucket ?? this.sessionBuckets.get(providerName) ?? 'default';
 
+    const tokenForLogout = await this.tokenStore.getToken(
+      providerName,
+      bucketToUse,
+    );
+
     // Call provider logout if exists (best-effort remote revoke), but ALWAYS clear local token
     if ('logout' in provider && typeof provider.logout === 'function') {
       try {
-        // NOTE: Provider logout implementations are not bucket-aware today.
-        // Local bucket cleanup is handled below via tokenStore.
-        await provider.logout();
+        if (tokenForLogout) {
+          await provider.logout(tokenForLogout);
+        }
       } catch (error) {
         logger.warn(`Provider logout failed:`, error);
       }
@@ -743,8 +869,12 @@ export class OAuthManager {
             `[FLOW] Token expired or expiring soon for ${providerName}, attempting refresh...`,
         );
         try {
-          const refreshedToken = await provider.refreshIfNeeded();
+          const refreshedToken = await provider.refreshToken(token);
           if (refreshedToken) {
+            const mergedToken = mergeRefreshedToken(
+              token as OAuthTokenWithExtras,
+              refreshedToken as OAuthTokenWithExtras,
+            );
             // 4. Update stored token if refreshed
             logger.debug(
               () =>
@@ -752,10 +882,15 @@ export class OAuthManager {
             );
             await this.tokenStore.saveToken(
               providerName,
-              refreshedToken,
+              mergedToken,
               bucketToUse,
             );
-            return refreshedToken;
+            this.scheduleProactiveRenewal(
+              providerName,
+              bucketToUse,
+              mergedToken,
+            );
+            return mergedToken;
           } else {
             // Refresh failed, return null
             logger.debug(
@@ -775,6 +910,7 @@ export class OAuthManager {
 
       // 5. Return valid token
       logger.debug(() => `[FLOW] Returning valid token for ${providerName}`);
+      this.scheduleProactiveRenewal(providerName, bucketToUse, token);
       return token;
     } catch (error) {
       logger.debug(
@@ -790,6 +926,262 @@ export class OAuthManager {
       }
       // For other errors, return null
       return null;
+    }
+  }
+
+  private normalizeBucket(bucket?: string): string {
+    if (typeof bucket === 'string' && bucket.trim() !== '') {
+      return bucket;
+    }
+    return 'default';
+  }
+
+  private getProactiveRenewalKey(providerName: string, bucket: string): string {
+    return `${providerName}:${bucket}`;
+  }
+
+  private clearProactiveRenewal(key: string): void {
+    const entry = this.proactiveRenewals.get(key);
+    if (entry) {
+      clearTimeout(entry.timer);
+      this.proactiveRenewals.delete(key);
+    }
+    this.proactiveRenewalFailures.delete(key);
+    this.proactiveRenewalInFlight.delete(key);
+  }
+
+  private setProactiveTimer(
+    providerName: string,
+    bucket: string,
+    delayMs: number,
+    expiry: number,
+  ): void {
+    const key = this.getProactiveRenewalKey(providerName, bucket);
+    const existing = this.proactiveRenewals.get(key);
+    if (existing) {
+      clearTimeout(existing.timer);
+    }
+
+    const MAX_DELAY_MS = 2 ** 31 - 1;
+    const safeDelay = Math.min(Math.max(0, delayMs), MAX_DELAY_MS);
+
+    const timer = setTimeout(() => {
+      void this.runProactiveRenewal(providerName, bucket).catch((error) => {
+        logger.debug(
+          () =>
+            `[OAUTH] Proactive renewal error for ${providerName}:${bucket}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+      });
+    }, safeDelay);
+
+    // Don't keep the process alive solely for renewals.
+    if (
+      typeof (timer as unknown as { unref?: () => void }).unref === 'function'
+    ) {
+      (timer as unknown as { unref: () => void }).unref();
+    }
+
+    this.proactiveRenewals.set(key, { timer, expiry });
+  }
+
+  private scheduleProactiveRetry(providerName: string, bucket: string): void {
+    const normalizedBucket = this.normalizeBucket(bucket);
+    const key = this.getProactiveRenewalKey(providerName, normalizedBucket);
+    const failures = (this.proactiveRenewalFailures.get(key) ?? 0) + 1;
+    this.proactiveRenewalFailures.set(key, failures);
+
+    const cappedFailures = Math.min(failures, 10);
+    const baseMs = 30_000;
+    const delayMs = Math.min(baseMs * 2 ** cappedFailures, 30 * 60_000);
+    const jitterMs = Math.floor(Math.random() * 5_000);
+
+    const expiry = this.proactiveRenewals.get(key)?.expiry ?? 0;
+    this.setProactiveTimer(
+      providerName,
+      normalizedBucket,
+      delayMs + jitterMs,
+      expiry,
+    );
+  }
+
+  private scheduleProactiveRenewal(
+    providerName: string,
+    bucket: string | undefined,
+    token: OAuthToken,
+  ): void {
+    if (!this.isOAuthEnabled(providerName)) {
+      return;
+    }
+
+    if (!token.refresh_token || token.refresh_token.trim() === '') {
+      return;
+    }
+
+    const normalizedBucket = this.normalizeBucket(bucket);
+    const key = this.getProactiveRenewalKey(providerName, normalizedBucket);
+
+    const nowSec = Date.now() / 1000;
+    const remainingSec = token.expiry - nowSec;
+    if (remainingSec <= 0) {
+      return;
+    }
+
+    const leadSec = Math.max(300, Math.floor(remainingSec * 0.1));
+    const jitterSec = Math.floor(Math.random() * 30);
+    const refreshAtSec = token.expiry - leadSec - jitterSec;
+    const delayMs = Math.floor(Math.max(0, (refreshAtSec - nowSec) * 1000));
+
+    const existing = this.proactiveRenewals.get(key);
+    if (existing && existing.expiry === token.expiry) {
+      return;
+    }
+
+    this.proactiveRenewalFailures.delete(key);
+    this.setProactiveTimer(
+      providerName,
+      normalizedBucket,
+      delayMs,
+      token.expiry,
+    );
+  }
+
+  private async runProactiveRenewal(
+    providerName: string,
+    bucket: string,
+  ): Promise<void> {
+    const normalizedBucket = this.normalizeBucket(bucket);
+    const key = this.getProactiveRenewalKey(providerName, normalizedBucket);
+
+    if (this.proactiveRenewalInFlight.has(key)) {
+      return;
+    }
+    this.proactiveRenewalInFlight.add(key);
+
+    try {
+      if (!this.isOAuthEnabled(providerName)) {
+        this.clearProactiveRenewal(key);
+        return;
+      }
+
+      const provider = this.providers.get(providerName);
+      if (!provider) {
+        // Provider might not be registered in this runtime; keep the timer but back off.
+        this.scheduleProactiveRetry(providerName, normalizedBucket);
+        return;
+      }
+
+      const currentToken = await this.tokenStore.getToken(
+        providerName,
+        normalizedBucket,
+      );
+      if (!currentToken || !currentToken.refresh_token) {
+        this.clearProactiveRenewal(key);
+        return;
+      }
+
+      const refreshedToken = await provider.refreshToken(currentToken);
+      if (!refreshedToken) {
+        this.scheduleProactiveRetry(providerName, normalizedBucket);
+        return;
+      }
+
+      const mergedToken = mergeRefreshedToken(
+        currentToken as OAuthTokenWithExtras,
+        refreshedToken as OAuthTokenWithExtras,
+      );
+
+      await this.tokenStore.saveToken(
+        providerName,
+        mergedToken,
+        normalizedBucket,
+      );
+      this.proactiveRenewalFailures.delete(key);
+      this.scheduleProactiveRenewal(
+        providerName,
+        normalizedBucket,
+        mergedToken,
+      );
+    } finally {
+      this.proactiveRenewalInFlight.delete(key);
+    }
+  }
+
+  async configureProactiveRenewalsForProfile(profile: unknown): Promise<void> {
+    const desiredKeys = new Set<string>();
+    const targets: Array<{ providerName: string; bucket: string }> = [];
+
+    const direct = getOAuthBucketsFromProfile(profile);
+    if (direct) {
+      for (const bucket of direct.buckets) {
+        targets.push({ providerName: direct.providerName, bucket });
+      }
+    }
+
+    if (isLoadBalancerProfileLike(profile)) {
+      const profileManager = await createProfileManager();
+      const visited = new Set<string>();
+
+      const visit = async (profileName: string): Promise<void> => {
+        if (visited.has(profileName)) {
+          return;
+        }
+        visited.add(profileName);
+
+        let loaded: unknown;
+        try {
+          loaded = await profileManager.loadProfile(profileName);
+        } catch (error) {
+          logger.debug(
+            () =>
+              `[OAUTH] Failed to load profile '${profileName}' for proactive renewals: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+          );
+          return;
+        }
+        const oauth = getOAuthBucketsFromProfile(loaded);
+        if (oauth) {
+          for (const bucket of oauth.buckets) {
+            targets.push({ providerName: oauth.providerName, bucket });
+          }
+        }
+
+        if (isLoadBalancerProfileLike(loaded)) {
+          for (const child of loaded.profiles) {
+            await visit(child);
+          }
+        }
+      };
+
+      for (const name of profile.profiles) {
+        await visit(name);
+      }
+    }
+
+    for (const target of targets) {
+      const bucket = this.normalizeBucket(target.bucket);
+      desiredKeys.add(this.getProactiveRenewalKey(target.providerName, bucket));
+    }
+
+    for (const existingKey of Array.from(this.proactiveRenewals.keys())) {
+      if (!desiredKeys.has(existingKey)) {
+        this.clearProactiveRenewal(existingKey);
+      }
+    }
+
+    for (const target of targets) {
+      if (!this.isOAuthEnabled(target.providerName)) {
+        continue;
+      }
+
+      const bucket = this.normalizeBucket(target.bucket);
+      const token = await this.tokenStore.getToken(target.providerName, bucket);
+      if (!token) {
+        continue;
+      }
+      this.scheduleProactiveRenewal(target.providerName, bucket, token);
     }
   }
 
@@ -1124,8 +1516,7 @@ export class OAuthManager {
       }
 
       // Load the profile to check for auth.buckets
-      const { ProfileManager } = await import('@vybestack/llxprt-code-core');
-      const profileManager = new ProfileManager();
+      const profileManager = await createProfileManager();
       const profile = await profileManager.loadProfile(currentProfileName);
 
       // Check if profile has auth.buckets for this provider

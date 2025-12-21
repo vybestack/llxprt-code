@@ -29,6 +29,7 @@ export class AnthropicDeviceFlow {
   private _codeChallenge?: string;
   private state?: string;
   private redirectUri: string;
+  revokeToken?: (token: string) => Promise<void>;
 
   constructor(config?: Partial<AnthropicFlowConfig>) {
     const defaultConfig: AnthropicFlowConfig = {

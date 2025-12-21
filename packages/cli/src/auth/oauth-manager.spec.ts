@@ -53,7 +53,8 @@ class MockOAuthProvider implements OAuthProvider {
     return this.token;
   }
 
-  async refreshIfNeeded(): Promise<OAuthToken | null> {
+  async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
+    this.token = currentToken;
     const nowInSeconds = Math.floor(Date.now() / 1000);
     if (this.token && this.token.expiry < nowInSeconds + 300) {
       // Refresh if expires in less than 5 minutes (Unix timestamp)

@@ -11,7 +11,11 @@ import {
   openBrowserSecurely,
   shouldLaunchBrowser,
 } from '@vybestack/llxprt-code-core';
-import type { CodexOAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
+import type {
+  CodexOAuthToken,
+  OAuthToken,
+  TokenStore,
+} from '@vybestack/llxprt-code-core';
 import { OAuthProvider } from './oauth-manager.js';
 import { startLocalOAuthCallback } from './local-oauth-callback.js';
 import type { HistoryItemWithoutId, HistoryItemOAuthURL } from '../ui/types.js';
@@ -481,12 +485,59 @@ export class CodexOAuthProvider implements OAuthProvider {
     }
   }
 
+  async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
+    await this.ensureInitialized();
+
+    const refreshToken =
+      typeof currentToken.refresh_token === 'string'
+        ? currentToken.refresh_token
+        : undefined;
+
+    if (!refreshToken) {
+      this.logger.debug(
+        () => 'Token refresh requested but no refresh_token available',
+      );
+      return null;
+    }
+
+    this.logger.debug(() => 'Refreshing token (bucket-aware)');
+    try {
+      const refreshedToken = await this.deviceFlow.refreshToken(refreshToken);
+      const merged: CodexOAuthToken & Record<string, unknown> = {
+        ...(currentToken as CodexOAuthToken & Record<string, unknown>),
+        ...(refreshedToken as CodexOAuthToken & Record<string, unknown>),
+        refresh_token: refreshedToken.refresh_token ?? refreshToken,
+      };
+
+      // Preserve account_id/id_token if refresh response omits them.
+      if (!merged.account_id && 'account_id' in currentToken) {
+        const accountId = (currentToken as { account_id?: string }).account_id;
+        if (accountId) {
+          merged.account_id = accountId;
+        }
+      }
+      if (!merged.id_token && 'id_token' in currentToken) {
+        const idToken = (currentToken as { id_token?: string }).id_token;
+        if (idToken) {
+          merged.id_token = idToken;
+        }
+      }
+
+      return merged;
+    } catch (_error) {
+      this.logger.debug(() => `Token refresh failed`);
+      return null;
+    }
+  }
+
   /**
    * Logout from Codex
    * Only removes from llxprt storage - never touches ~/.codex/
    */
-  async logout(): Promise<void> {
+  async logout(_token?: OAuthToken): Promise<void> {
     this.logger.debug(() => 'Logging out from Codex');
-    await this.tokenStore.removeToken('codex');
+    if (!_token) {
+      await this.tokenStore.removeToken('codex');
+    }
   }
 }

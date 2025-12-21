@@ -1113,6 +1113,20 @@ export async function applyProfileSnapshot(
     settingsService.set('currentProfile', options.profileName ?? null);
   }
 
+  const oauthManager = getCliOAuthManager();
+  if (oauthManager) {
+    void oauthManager
+      .configureProactiveRenewalsForProfile(profile)
+      .catch((error) => {
+        logger.debug(
+          () =>
+            `[cli-runtime] Failed to configure proactive OAuth renewals: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        );
+      });
+  }
+
   return {
     profileName: options.profileName,
     providerName: applicationResult.providerName,
