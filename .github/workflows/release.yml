@@ -325,17 +325,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Ensure sandbox image is public
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api \
-            --method PATCH \
-            -H "Accept: application/vnd.github+json" \
-            /orgs/${{ github.repository_owner }}/packages/container/sandbox/versions \
-            -f visibility=public
-
       - name: Extract sandbox image metadata
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         id: sandbox_meta
@@ -358,6 +347,19 @@ jobs:
           build-args: |
             CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
 
+      - name: Ensure sandbox image is public
+        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SANDBOX_PACKAGE_NAME: ${{ env.SANDBOX_IMAGE_NAME }}
+        run: |
+          gh api \
+            --method PATCH \
+            -H "Accept: application/vnd.github+json" \
+            /orgs/${{ github.repository_owner }}/packages/container/${{ env.SANDBOX_PACKAGE_NAME }} \
+            -f visibility=public
+
+
       - name: Generate Release Notes
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         id: release_notes
@@ -369,6 +371,7 @@ jobs:
           if [ -z "$LAST_STABLE_TAG" ]; then
             # If no stable tag, get the most recent tag
             LAST_STABLE_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
           fi
           if [ -z "$LAST_STABLE_TAG" ]; then
             echo "No previous release tag found, using first commit"
