@@ -359,7 +359,6 @@ jobs:
             /orgs/${{ github.repository_owner }}/packages/container/${{ env.SANDBOX_PACKAGE_NAME }} \
             -f visibility=public
 
-
       - name: Generate Release Notes
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         id: release_notes
