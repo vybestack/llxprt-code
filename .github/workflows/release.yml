@@ -352,6 +352,7 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.sandbox_meta.outputs.tags }}
           labels: ${{ steps.sandbox_meta.outputs.labels }}
           build-args: |
