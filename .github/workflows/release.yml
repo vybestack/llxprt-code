@@ -353,28 +353,6 @@ jobs:
           build-args: |
             CLI_VERSION_ARG=${{ steps.version.outputs.RELEASE_VERSION }}
 
-      - name: Ensure sandbox image is public
-        if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SANDBOX_PACKAGE_NAME: ${{ env.SANDBOX_IMAGE_NAME }}
-        run: |
-          SANDBOX_PACKAGE_NAME_STRIPPED=${SANDBOX_PACKAGE_NAME#${{ github.repository_owner }}/}
-          SANDBOX_PACKAGE_NAME_ESCAPED=${SANDBOX_PACKAGE_NAME_STRIPPED//\//%2F}
-          for attempt in {1..6}; do
-            if gh api \
-              --method PATCH \
-              -H "Accept: application/vnd.github+json" \
-              /orgs/${{ github.repository_owner }}/packages/container/${SANDBOX_PACKAGE_NAME_ESCAPED} \
-              -f visibility=public; then
-              exit 0
-            fi
-            echo "Retry ${attempt}/6: sandbox package not ready yet."
-            sleep 10
-          done
-          echo "Failed to update sandbox package visibility after retries."
-          exit 1
-
       - name: Generate Release Notes
         if: ${{ steps.vars.outputs.should_run_standard_release == 'true' && steps.vars.outputs.is_dry_run == 'false' }}
         id: release_notes
