@@ -14,12 +14,15 @@ const mockStdin = {
   on: vi.fn(),
   removeListener: vi.fn(),
   destroy: vi.fn(),
+  listeners: vi.fn().mockReturnValue([]),
+  listenerCount: vi.fn().mockReturnValue(0),
 };
 
 describe('readStdin', () => {
   let originalStdin: typeof process.stdin;
   let onReadableHandler: () => void;
   let onEndHandler: () => void;
+  let onErrorHandler: (err: Error) => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -33,10 +36,15 @@ describe('readStdin', () => {
     });
 
     // Capture event handlers
-    mockStdin.on.mockImplementation((event: string, handler: () => void) => {
-      if (event === 'readable') onReadableHandler = handler;
-      if (event === 'end') onEndHandler = handler;
-    });
+    mockStdin.on.mockImplementation(
+      (event: string, handler: (...args: unknown[]) => void) => {
+        if (event === 'readable') onReadableHandler = handler as () => void;
+        if (event === 'end') onEndHandler = handler as () => void;
+        if (event === 'error') onErrorHandler = handler as (err: Error) => void;
+      },
+    );
+    mockStdin.listeners.mockReturnValue([]);
+    mockStdin.listenerCount.mockReturnValue(0);
   });
 
   afterEach(() => {
