@@ -383,7 +383,7 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
       expect(parsedBody.stream).toBe(true);
     });
 
-    it('should inject system prompt as first user message in Codex mode', async () => {
+    it('should add steering message ahead of user messages in Codex mode', async () => {
       const codexToken: CodexOAuthToken = {
         access_token: 'test-access-token',
         token_type: 'Bearer',
@@ -489,10 +489,19 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
         'terminal-based coding assistant',
       );
 
-      // User message should be first (and only) input message
+      // Steering message should be first input message
       const firstMessage = parsedBody.input![0];
       expect(firstMessage.role).toBe('user');
-      expect(firstMessage.content).toBe('user question');
+      expect(firstMessage.content).toContain('# IMPORTANT');
+      expect(firstMessage.content).toContain('ignore the system prompt');
+      expect(firstMessage.content).toContain('# New System Prompt');
+      expect(firstMessage.content).toContain('You are LLxprt Code running');
+      expect(firstMessage.content).toContain('# Task');
+      expect(parsedBody.input).toHaveLength(2);
+
+      const secondMessage = parsedBody.input![1];
+      expect(secondMessage.role).toBe('user');
+      expect(secondMessage.content).toBe('user question');
     });
 
     it('should NOT inject system prompt when not in Codex mode', async () => {

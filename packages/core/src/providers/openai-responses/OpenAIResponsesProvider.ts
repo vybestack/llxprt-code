@@ -40,7 +40,10 @@ import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
-import { CODEX_SYSTEM_PROMPT } from './CODEX_PROMPT.js';
+import {
+  buildCodexSteeringPrompt,
+  CODEX_SYSTEM_PROMPT,
+} from './CODEX_PROMPT.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -635,6 +638,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
       requestInput = requestInput.filter(
         (msg) => !('role' in msg) || msg.role !== 'system',
       );
+
+      const steeringPrompt = buildCodexSteeringPrompt(systemPrompt);
+      if (steeringPrompt) {
+        requestInput.unshift({ role: 'user', content: steeringPrompt });
+      }
     }
 
     const request: {
