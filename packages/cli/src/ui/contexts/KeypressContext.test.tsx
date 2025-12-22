@@ -72,7 +72,7 @@ describe('KeypressContext - Kitty Protocol', () => {
     children: React.ReactNode;
     kittyProtocolEnabled?: boolean;
   }) => (
-    <KeypressProvider kittyProtocolEnabled={kittyProtocolEnabled ?? false}>
+    <KeypressProvider kittyProtocolEnabled={kittyProtocolEnabled ?? true}>
       {children}
     </KeypressProvider>
   );

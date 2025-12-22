@@ -364,10 +364,59 @@ export async function start_sandbox(
           `until timeout 0.25 curl -s http://localhost:8877; do sleep 0.25; done`,
         );
       }
+      // Before attaching to an interactive sandbox, ensure the parent process is not
+      // also consuming raw stdin. When running Ink locally and then hopping into the
+      // sandbox, competing readers on the same TTY can manifest as dropped/duplicated
+      // keypresses (e.g. "every other keypress").
+      const stdinWasPaused = process.stdin.isPaused();
+      const stdinHadRawMode =
+        process.stdin.isTTY &&
+        typeof process.stdin.isRaw === 'boolean' &&
+        process.stdin.isRaw;
+
+      if (process.stdin.isTTY) {
+        try {
+          // Best-effort: restore cooked mode before handing the terminal to the sandbox.
+          process.stdin.setRawMode(false);
+        } catch {
+          // ignore
+        }
+        try {
+          process.stdin.pause();
+        } catch {
+          // ignore
+        }
+      }
+
       // spawn child and let it inherit stdio
       sandboxProcess = spawn(config.command, args, {
         stdio: 'inherit',
       });
+
+      // Restore parent stdin mode/state after the sandbox exits.
+      sandboxProcess.on('close', () => {
+        if (!process.stdin.isTTY) {
+          return;
+        }
+
+        if (!stdinWasPaused) {
+          try {
+            process.stdin.resume();
+          } catch {
+            // ignore
+          }
+        }
+
+        // Do not force raw mode on if it was off when we entered.
+        if (stdinHadRawMode) {
+          try {
+            process.stdin.setRawMode(true);
+          } catch {
+            // ignore
+          }
+        }
+      });
+
       return await new Promise<number>((resolve) => {
         sandboxProcess?.on('close', (code, signal) => {
           resolve(normalizeExitCode(code, signal));
@@ -453,10 +502,22 @@ export async function start_sandbox(
     }
 
     // Add a TTY if the parent process is interacting with a terminal.
-    // Note: process.stdin.isTTY can be undefined in some host environments (e.g. certain
-    // wrappers/pty setups on macOS), which can lead to running without -t. For podman/docker
-    // this can degrade interactive input handling.
-    if (process.stdin.isTTY || process.stdout.isTTY) {
+    //
+    // IMPORTANT: On macOS, process.stdin.isTTY/process.stdout.isTTY can be undefined when the
+    // parent process is still effectively running in a terminal (depending on the PTY/wrapper
+    // setup). Running podman/docker with -i but without -t can degrade interactive input
+    // handling (e.g. dropped keypresses in Ink UIs).
+    //
+    // Heuristics (in order):
+    // - If stdin/stdout explicitly report TTY => add -t.
+    // - Else if TERM is set (typical interactive shells) => add -t.
+    // - Else => do not force -t.
+    const hasParentTty =
+      process.stdin.isTTY === true ||
+      process.stdout.isTTY === true ||
+      (typeof process.env.TERM === 'string' && process.env.TERM.length > 0);
+
+    if (hasParentTty) {
       args.push('-t');
     }
 
@@ -822,9 +883,57 @@ export async function start_sandbox(
       );
     }
 
+    // Before attaching to an interactive sandbox, ensure the parent process is not
+    // also consuming raw stdin. When running Ink locally and then hopping into the
+    // sandbox, competing readers on the same TTY can manifest as dropped/duplicated
+    // keypresses (e.g. "every other keypress").
+    const stdinWasPaused = process.stdin.isPaused();
+    const stdinHadRawMode =
+      process.stdin.isTTY &&
+      typeof process.stdin.isRaw === 'boolean' &&
+      process.stdin.isRaw;
+
+    if (process.stdin.isTTY) {
+      try {
+        // Best-effort: restore cooked mode before handing the terminal to the sandbox.
+        process.stdin.setRawMode(false);
+      } catch {
+        // ignore
+      }
+      try {
+        process.stdin.pause();
+      } catch {
+        // ignore
+      }
+    }
+
     // spawn child and let it inherit stdio
     sandboxProcess = spawn(config.command, args, {
       stdio: 'inherit',
+    });
+
+    // Restore parent stdin mode/state after the sandbox exits.
+    sandboxProcess.on('close', () => {
+      if (!process.stdin.isTTY) {
+        return;
+      }
+
+      if (!stdinWasPaused) {
+        try {
+          process.stdin.resume();
+        } catch {
+          // ignore
+        }
+      }
+
+      // Do not force raw mode on if it was off when we entered.
+      if (stdinHadRawMode) {
+        try {
+          process.stdin.setRawMode(true);
+        } catch {
+          // ignore
+        }
+      }
     });
 
     sandboxProcess.on('error', (err) => {

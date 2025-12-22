@@ -1147,6 +1147,14 @@ export function KeypressProvider({
         setRawMode(false);
       }
 
+      // Best-effort restore of terminal modes we enable while running.
+      // If we exit without running these, the user's terminal can be left with
+      // bracketed paste / focus tracking enabled, which makes subsequent shells
+      // print escape sequences for mouse/keys.
+      process.stdout.write(SHOW_CURSOR);
+      process.stdout.write(DISABLE_BRACKETED_PASTE);
+      process.stdout.write(DISABLE_FOCUS_TRACKING);
+
       if (backslashTimeout) {
         clearTimeout(backslashTimeout);
         backslashTimeout = null;

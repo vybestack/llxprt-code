@@ -29,6 +29,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
+# Install bun so --experimental-ui can run inside the sandbox.
+# Use official install script and put bun on PATH for both root and node users.
+ENV BUN_INSTALL=/usr/local/bun
+ENV PATH=$PATH:/usr/local/bun/bin
+RUN curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.5" && \
+  ln -sf /usr/local/bun/bin/bun /usr/local/bin/bun && \
+  bun --version
+
 # set up npm global package folder under /usr/local/share
 # give it to non-root user node, already set up in base image
 RUN mkdir -p /usr/local/share/npm-global \
@@ -49,6 +57,11 @@ RUN npm install -g /tmp/vybestack-llxprt-code-core-*.tgz && \
     npm install -g /tmp/vybestack-llxprt-code-*.tgz && \
     npm cache clean --force && \
     rm -f /tmp/*.tgz
+
+# Install experimental UI package into the sandbox so --experimental-ui works.
+# If it's not available on the registry yet (e.g. nightlies), users can still
+# mount/install it manually.
+RUN npm install -g @vybestack/llxprt-ui && npm cache clean --force
 
 # default entrypoint when none specified
 CMD ["llxprt"]
