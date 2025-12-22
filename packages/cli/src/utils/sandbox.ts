@@ -452,8 +452,11 @@ export async function start_sandbox(
       args.push(...flags);
     }
 
-    // add TTY only if stdin is TTY as well, i.e. for piped input don't init TTY in container
-    if (process.stdin.isTTY) {
+    // Add a TTY if the parent process is interacting with a terminal.
+    // Note: process.stdin.isTTY can be undefined in some host environments (e.g. certain
+    // wrappers/pty setups on macOS), which can lead to running without -t. For podman/docker
+    // this can degrade interactive input handling.
+    if (process.stdin.isTTY || process.stdout.isTTY) {
       args.push('-t');
     }
 
