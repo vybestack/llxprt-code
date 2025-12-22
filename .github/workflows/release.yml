@@ -359,7 +359,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SANDBOX_PACKAGE_NAME: ${{ env.SANDBOX_IMAGE_NAME }}
         run: |
-          SANDBOX_PACKAGE_NAME_ESCAPED=${SANDBOX_PACKAGE_NAME//\//%2F}
+          SANDBOX_PACKAGE_NAME_STRIPPED=${SANDBOX_PACKAGE_NAME#${{ github.repository_owner }}/}
+          SANDBOX_PACKAGE_NAME_ESCAPED=${SANDBOX_PACKAGE_NAME_STRIPPED//\//%2F}
           gh api \
             --method PATCH \
             -H "Accept: application/vnd.github+json" \
