@@ -309,6 +309,29 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
         expect(result.llmContent).toEqual(expectedLlmContent);
       });
 
+      it('should prefix returned lines with virtual line numbers when showLineNumbers is true (non-truncated)', async () => {
+        const filePath = path.join(tempRootDir, 'numbered.txt');
+        const fileContent = ['Line 1', 'Line 2', 'Line 3'].join('\n');
+        await fsp.writeFile(filePath, fileContent, 'utf-8');
+
+        const params: ReadFileToolParams = {
+          absolute_path: filePath,
+          showLineNumbers: true,
+        };
+        const invocation = tool.build(params) as ToolInvocation<
+          ReadFileToolParams,
+          ToolResult
+        >;
+
+        const result = await invocation.execute(abortSignal);
+
+        const expectedLlmContent = ['   1| Line 1', '   2| Line 2', '   3| Line 3'].join(
+          '\n',
+        );
+
+        expect(result.llmContent).toEqual(expectedLlmContent);
+      });
+
       describe('with .llxprtignore', () => {
         beforeEach(async () => {
           await fsp.writeFile(

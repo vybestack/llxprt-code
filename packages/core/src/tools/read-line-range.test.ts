@@ -10,6 +10,8 @@ import os from 'os';
 import fs from 'fs';
 import fsp from 'fs/promises';
 
+const abortSignal = new AbortController().signal;
+
 import { Config } from '../config/config.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
@@ -73,7 +75,7 @@ describe('ReadLineRangeTool', () => {
       ToolResult
     >;
 
-    const result = await invocation.execute();
+    const result = await invocation.execute(abortSignal);
 
     expect(typeof result.llmContent).toBe('string');
     expect(result.llmContent).toContain('--- FILE CONTENT (truncated) ---');
@@ -100,7 +102,7 @@ describe('ReadLineRangeTool', () => {
       ToolResult
     >;
 
-    const result = await invocation.execute();
+    const result = await invocation.execute(abortSignal);
 
     expect(typeof result.llmContent).toBe('string');
     expect(result.llmContent).toContain('--- FILE CONTENT (truncated) ---');

@@ -124,7 +124,7 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
       const numberedContent = this.params.showLineNumbers
         ? formatWithLineNumbers(result.llmContent, this.params.start_line)
         : result.llmContent;
-      llmContent = `\nIMPORTANT: The file content has been truncated.\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_file' tool with 'offset' and 'limit' parameters.\n\n--- FILE CONTENT (truncated) ---\n${numberedContent}`;
+      llmContent = `\nIMPORTANT: The file content has been truncated.\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_line_range' tool with adjusted 'start_line' and 'end_line' parameters.\n\n--- FILE CONTENT (truncated) ---\n${numberedContent}`;
     } else {
       llmContent = this.params.showLineNumbers
         ? formatWithLineNumbers(result.llmContent, this.params.start_line)
