@@ -25,7 +25,9 @@ vi.mock('../../utils/package.js', () => ({
 
 vi.mock('command-exists', () => ({
   default: {
-    sync: vi.fn((command: string) => command === 'docker' || command === 'podman'),
+    sync: vi.fn(
+      (command: string) => command === 'docker' || command === 'podman',
+    ),
   },
 }));
 
@@ -37,9 +39,7 @@ vi.mock('../sandboxProfiles.js', () => ({
     resources: { cpus: 2, memory: '4g', pids: 128 },
     network: 'off',
     sshAgent: 'on',
-    mounts: [
-      { from: '~/.llxprt', to: '/home/node/.llxprt', mode: 'rw' },
-    ],
+    mounts: [{ from: '~/.llxprt', to: '/home/node/.llxprt', mode: 'rw' }],
     env: { SAMPLE_ENV: 'true' },
   })),
 }));

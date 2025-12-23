@@ -84,6 +84,7 @@ Profiles can set engine, image, resources, network, sshAgent, mounts, and env.
 Enable SSH agent passthrough in profiles with `"sshAgent": "auto"` or `"sshAgent": "on"`.
 
 **Notes:**
+
 - Docker: works reliably by mounting `SSH_AUTH_SOCK` into `/ssh-agent`.
 - Podman Linux: uses `:z` relabeling for the socket mount.
 - Podman macOS: launchd sockets often fail inside the VM. Prefer Docker, or use a custom SSH_AUTH_SOCK path under a regular filesystem (e.g. `~/.llxprt/ssh-agent.sock`).

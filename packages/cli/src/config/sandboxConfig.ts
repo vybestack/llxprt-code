@@ -414,7 +414,12 @@ function resolveSandboxImage(
   profile: SandboxProfile | undefined,
   argvImage?: string,
 ): string | undefined {
-  return argvImage ?? profile?.image ?? process.env.LLXPRT_SANDBOX_IMAGE ?? packageImage;
+  return (
+    argvImage ??
+    profile?.image ??
+    process.env.LLXPRT_SANDBOX_IMAGE ??
+    packageImage
+  );
 }
 
 function resolveSandboxProfileName(value?: string): string | undefined {

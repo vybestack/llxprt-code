@@ -216,7 +216,8 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         })
         .option('sandbox-profile-load', {
           type: 'string',
-          description: 'Load a sandbox profile from ~/.llxprt/sandboxes/<name>.json',
+          description:
+            'Load a sandbox profile from ~/.llxprt/sandboxes/<name>.json',
         })
         .option('debug', {
           alias: 'd',
