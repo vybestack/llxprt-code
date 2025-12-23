@@ -9,8 +9,11 @@ import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 import { GOOGLE_WEB_SEARCH_TOOL } from '../packages/core/src/tools/tool-names.js';
 
 // Skip web search tests in CI or when auth type is none (requires OAuth)
+// Also skip when Gemini auth isn't configured, since google_web_search is Gemini-backed.
 const skipInCI =
-  process.env.CI === 'true' || process.env.LLXPRT_AUTH_TYPE === 'none';
+  process.env.CI === 'true' ||
+  process.env.LLXPRT_AUTH_TYPE === 'none' ||
+  (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_API_KEY);
 
 describe('google_web_search', () => {
   it.skipIf(skipInCI)('should be able to search the web', async () => {

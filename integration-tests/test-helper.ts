@@ -473,13 +473,13 @@ export class TestRig {
     };
 
     if (typeof promptOrOptions === 'string') {
-      commandArgs.push('--prompt', promptOrOptions);
+      commandArgs.push(promptOrOptions);
     } else if (
       typeof promptOrOptions === 'object' &&
       promptOrOptions !== null
     ) {
       if (promptOrOptions.prompt) {
-        commandArgs.push('--prompt', promptOrOptions.prompt);
+        commandArgs.push(promptOrOptions.prompt);
       }
       if (promptOrOptions.stdin) {
         execOptions.input = promptOrOptions.stdin;
@@ -489,8 +489,11 @@ export class TestRig {
     // Add any additional args
     commandArgs.push(...args);
 
+    // Ensure profile loading happens before other arguments like --output-format.
+    // Some yargs configs can treat args after positionals differently.
     if (env['LLXPRT_TEST_PROFILE']?.trim()) {
-      commandArgs.push('--profile-load', env['LLXPRT_TEST_PROFILE'].trim());
+      const profileName = env['LLXPRT_TEST_PROFILE'].trim();
+      commandArgs.unshift('--profile-load', profileName);
     }
 
     const node = commandArgs.shift() as string;
