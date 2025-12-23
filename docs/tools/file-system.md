@@ -45,8 +45,10 @@ The LLxprt Code provides a comprehensive suite of tools for interacting with the
     ```
 
     This virtual numbering is not part of the file itself; it is a visual aid for precise navigation and editing.
+
   - For image and PDF files: Returns the file content as a base64-encoded data structure suitable for model consumption.
   - For other binary files: Attempts to identify and skip them, returning a message indicating it's a generic binary file.
+
 - **Output:** (`llmContent`):
   - For text files: The file content, potentially prefixed with a truncation message (e.g., `[File content truncated: showing lines 1-100 of 500 total lines...]\nActual file content...`).
   - For image/PDF files: An object containing `inlineData` with `mimeType` and base64 `data` (e.g., `{ inlineData: { mimeType: 'image/png', data: 'base64encodedstring' } }`).

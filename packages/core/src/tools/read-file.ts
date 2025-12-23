@@ -58,10 +58,7 @@ export interface ReadFileToolParams {
   showLineNumbers?: boolean;
 }
 
-function formatWithLineNumbers(
-  content: string,
-  startLine: number,
-): string {
+function formatWithLineNumbers(content: string, startLine: number): string {
   const lines = content.split('\n');
   const maxLine = startLine + lines.length - 1;
   const width = Math.max(4, String(maxLine).length);

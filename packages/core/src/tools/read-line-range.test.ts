@@ -16,7 +16,10 @@ import { Config } from '../config/config.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
-import { ReadLineRangeTool, ReadLineRangeToolParams } from './read_line_range.js';
+import {
+  ReadLineRangeTool,
+  ReadLineRangeToolParams,
+} from './read_line_range.js';
 import { ToolInvocation, ToolResult } from './tools.js';
 
 describe('ReadLineRangeTool', () => {
@@ -58,9 +61,10 @@ describe('ReadLineRangeTool', () => {
 
   it('should prefix returned lines with virtual line numbers when showLineNumbers is true', async () => {
     const filePath = path.join(tempRootDir, 'paginated.txt');
-    const fileContent = Array.from({ length: 6 }, (_, i) => `Line ${i + 1}`).join(
-      '\n',
-    );
+    const fileContent = Array.from(
+      { length: 6 },
+      (_, i) => `Line ${i + 1}`,
+    ).join('\n');
     await fsp.writeFile(filePath, fileContent, 'utf-8');
 
     const params: ReadLineRangeToolParams = {
@@ -86,9 +90,10 @@ describe('ReadLineRangeTool', () => {
 
   it('should not prefix returned lines when showLineNumbers is false/omitted', async () => {
     const filePath = path.join(tempRootDir, 'paginated.txt');
-    const fileContent = Array.from({ length: 6 }, (_, i) => `Line ${i + 1}`).join(
-      '\n',
-    );
+    const fileContent = Array.from(
+      { length: 6 },
+      (_, i) => `Line ${i + 1}`,
+    ).join('\n');
     await fsp.writeFile(filePath, fileContent, 'utf-8');
 
     const params: ReadLineRangeToolParams = {

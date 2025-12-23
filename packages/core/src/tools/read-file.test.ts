@@ -325,9 +325,11 @@ Action: To read more of the file, you can use the 'offset' and 'limit' parameter
 
         const result = await invocation.execute(abortSignal);
 
-        const expectedLlmContent = ['   1| Line 1', '   2| Line 2', '   3| Line 3'].join(
-          '\n',
-        );
+        const expectedLlmContent = [
+          '   1| Line 1',
+          '   2| Line 2',
+          '   3| Line 3',
+        ].join('\n');
 
         expect(result.llmContent).toEqual(expectedLlmContent);
       });
