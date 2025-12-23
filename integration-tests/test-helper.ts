@@ -384,6 +384,8 @@ export class TestRig {
     const model = env['LLXPRT_DEFAULT_MODEL'];
     const baseUrl = env['OPENAI_BASE_URL'];
     const apiKey = env['OPENAI_API_KEY'];
+    const keyFile =
+      env['OPENAI_API_KEYFILE'] ?? env['LLXPRT_TEST_PROFILE_KEYFILE'];
 
     // Debug: Log environment variables in CI
     if (env['CI'] === 'true' || env['VERBOSE'] === 'true') {
@@ -406,7 +408,7 @@ export class TestRig {
         'LLXPRT_DEFAULT_MODEL environment variable is required but not set',
       );
     }
-    if (!apiKey) {
+    if (!apiKey && !keyFile) {
       throw new Error(
         'OPENAI_API_KEY environment variable is required but not set',
       );
@@ -436,9 +438,10 @@ export class TestRig {
     }
 
     // Add API key if available
-    // Add API key if available
     if (apiKey) {
       commandArgs.push('--key', apiKey);
+    } else if (keyFile) {
+      commandArgs.push('--keyfile', keyFile);
     }
 
     // Filter out TERM_PROGRAM to prevent IDE detection
