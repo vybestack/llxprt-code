@@ -102,12 +102,17 @@ export async function ensureDefaultSandboxProfiles(
   await Promise.all(
     Object.entries(defaults).map(async ([name, profile]) => {
       const profilePath = path.join(profilesDir, `${name}.json`);
+      const payload = JSON.stringify(profile, null, 2);
+
       try {
-        await fs.stat(profilePath);
-        return;
-      } catch {
-        const payload = JSON.stringify(profile, null, 2);
-        await fs.writeFile(profilePath, `${payload}\n`, { mode: 0o644 });
+        await fs.writeFile(profilePath, `${payload}\n`, {
+          mode: 0o644,
+          flag: 'wx',
+        });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+          throw error;
+        }
       }
     }),
   );
