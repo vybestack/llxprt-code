@@ -484,6 +484,18 @@ export class TestRig {
       if (promptOrOptions.stdin) {
         execOptions.input = promptOrOptions.stdin;
       }
+
+      // Only use --prompt in sandboxed *container* runs (docker/podman).
+      // In sandbox:none (`LLXPRT_SANDBOX=false`) we still pass the prompt as a
+      // positional argument; otherwise yargs will reject "--prompt + positional".
+      const sandboxEngine = env['LLXPRT_SANDBOX'];
+      if (
+        (sandboxEngine === 'docker' || sandboxEngine === 'podman') &&
+        promptOrOptions.prompt
+      ) {
+        const lastArg = commandArgs[commandArgs.length - 1];
+        commandArgs.splice(commandArgs.length - 1, 1, '--prompt', lastArg);
+      }
     }
 
     // Add any additional args

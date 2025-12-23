@@ -541,10 +541,11 @@ export async function start_sandbox(
     // - Else if TERM is set (typical interactive shells) => add -t.
     // - Else => do not force -t.
     const hasParentTty =
-      process.stdin.isTTY === true ||
-      process.stdout.isTTY === true ||
-      (typeof process.env.TERM === 'string' && process.env.TERM.length > 0);
+      process.stdin.isTTY === true || process.stdout.isTTY === true;
 
+    // In CI we typically do not have a TTY. Passing `-t` causes docker to emit
+    // "the input device is not a TTY" and fail the sandbox. Keep `-t` for real
+    // interactive terminals only.
     if (hasParentTty) {
       args.push('-t');
     }
