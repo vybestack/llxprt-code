@@ -212,6 +212,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         })
         .option('sandbox-engine', {
           type: 'string',
+          choices: ['auto', 'docker', 'podman', 'sandbox-exec', 'none'],
           description: 'Sandbox engine (auto|docker|podman|sandbox-exec|none).',
         })
         .option('sandbox-profile-load', {

@@ -599,6 +599,10 @@ export async function start_sandbox(
     // mount paths listed in SANDBOX_MOUNTS / LLXPRT_SANDBOX_MOUNTS
     const mountsEnv =
       process.env.LLXPRT_SANDBOX_MOUNTS ?? process.env.SANDBOX_MOUNTS;
+    const mountsEnvName = process.env.LLXPRT_SANDBOX_MOUNTS
+      ? 'LLXPRT_SANDBOX_MOUNTS'
+      : 'SANDBOX_MOUNTS';
+
     if (mountsEnv) {
       for (let mount of mountsEnv.split(',')) {
         if (mount.trim()) {
@@ -610,16 +614,16 @@ export async function start_sandbox(
           // check that from path is absolute
           if (!path.isAbsolute(from)) {
             throw new FatalSandboxError(
-              `Path '${from}' listed in SANDBOX_MOUNTS must be absolute`,
+              `Path '${from}' listed in ${mountsEnvName} must be absolute`,
             );
           }
           // check that from path exists on host
           if (!fs.existsSync(from)) {
             throw new FatalSandboxError(
-              `Missing mount path '${from}' listed in SANDBOX_MOUNTS`,
+              `Missing mount path '${from}' listed in ${mountsEnvName}`,
             );
           }
-          console.error(`SANDBOX_MOUNTS: ${from} -> ${to} (${opts})`);
+          console.error(`${mountsEnvName}: ${from} -> ${to} (${opts})`);
           args.push('--volume', mount);
         }
       }

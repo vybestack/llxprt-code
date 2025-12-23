@@ -111,7 +111,12 @@ function parsePidsLimit(value: number | string): number {
       `Sandbox pids value must be greater than zero, got '${value}'.`,
     );
   }
-  return Math.floor(pidsValue);
+  if (!Number.isInteger(pidsValue)) {
+    throw new FatalSandboxError(
+      `Sandbox pids value must be an integer, got '${value}'.`,
+    );
+  }
+  return pidsValue;
 }
 
 function resolveMountPath(input: string): string {
@@ -446,11 +451,10 @@ export async function loadSandboxConfig(
   const packageJson = await getPackageJson();
   const packageImage = packageJson?.config?.sandboxImageUri;
 
-  await ensureDefaultSandboxProfiles(packageImage);
-
   let sandboxProfile: SandboxProfile | undefined;
   const profileName = resolveSandboxProfileName(argv.sandboxProfileLoad);
   if (profileName) {
+    await ensureDefaultSandboxProfiles(packageImage);
     try {
       sandboxProfile = normalizeSandboxProfile(
         await loadSandboxProfile(normalizeProfileName(profileName)),

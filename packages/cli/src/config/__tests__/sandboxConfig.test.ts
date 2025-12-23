@@ -13,8 +13,7 @@ const baseSettings: Settings = {
 };
 
 vi.mock('../../utils/resolvePath.js', () => ({
-  resolvePath: (value: string) =>
-    value.replace('~', process.env.HOME || '/mock/home/user'),
+  resolvePath: (value: string) => value.replace('~', '/mock/home/user'),
 }));
 
 vi.mock('../../utils/package.js', () => ({
