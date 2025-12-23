@@ -484,28 +484,32 @@ export class TestRig {
       if (promptOrOptions.stdin) {
         execOptions.input = promptOrOptions.stdin;
       }
-
-      // Only use --prompt in sandboxed *container* runs (docker/podman).
-      // In sandbox:none (`LLXPRT_SANDBOX=false`) we still pass the prompt as a
-      // positional argument; otherwise yargs will reject "--prompt + positional".
-      const sandboxEngine = env['LLXPRT_SANDBOX'];
-      if (
-        (sandboxEngine === 'docker' || sandboxEngine === 'podman') &&
-        promptOrOptions.prompt
-      ) {
-        const lastArg = commandArgs[commandArgs.length - 1];
-        commandArgs.splice(commandArgs.length - 1, 1, '--prompt', lastArg);
-      }
     }
 
     // Add any additional args
     commandArgs.push(...args);
 
-    // Ensure profile loading happens before other arguments like --output-format.
-    // Some yargs configs can treat args after positionals differently.
+    // Ensure flags come before the positional prompt.
+    // With yargs `.strict()` + a `[promptWords...]` positional command, any
+    // options that appear after the positional can be treated as "unknown".
+    // This affects `--output-format` and friends.
+    let positionalPrompt: string | undefined;
+    if (
+      commandArgs.length > 0 &&
+      !commandArgs[commandArgs.length - 1].startsWith('-')
+    ) {
+      positionalPrompt = commandArgs.pop();
+    }
+
     if (env['LLXPRT_TEST_PROFILE']?.trim()) {
       const profileName = env['LLXPRT_TEST_PROFILE'].trim();
       commandArgs.unshift('--profile-load', profileName);
+    }
+
+    // Prefer stdin (or a final positional prompt) rather than `--prompt`.
+    // `--prompt` is deprecated and isn't needed for sandbox/non-sandbox parity.
+    if (positionalPrompt) {
+      commandArgs.push(positionalPrompt);
     }
 
     const node = commandArgs.shift() as string;
