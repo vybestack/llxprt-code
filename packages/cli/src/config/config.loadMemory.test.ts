@@ -288,6 +288,8 @@ describe('loadCliConfig memory discovery', () => {
       model: undefined,
       sandbox: undefined,
       sandboxImage: undefined,
+      sandboxEngine: undefined,
+      sandboxProfileLoad: undefined,
       debug: false,
       prompt: undefined,
       promptInteractive: undefined,
