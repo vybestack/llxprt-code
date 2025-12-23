@@ -44,6 +44,24 @@ export interface ReadLineRangeToolParams {
    * The 1-based line number to end reading at (inclusive)
    */
   end_line: number;
+
+  /**
+   * When true, prefixes each returned line with a virtual line number.
+   */
+  showLineNumbers?: boolean;
+}
+
+function formatWithLineNumbers(content: string, startLine: number): string {
+  const lines = content.split('\n');
+  const maxLine = startLine + lines.length - 1;
+  const width = Math.max(4, String(maxLine).length);
+  return lines
+    .map((line, index) => {
+      const lineNo = startLine + index;
+      const padded = String(lineNo).padStart(width, ' ');
+      return `${padded}| ${line}`;
+    })
+    .join('\n');
 }
 
 class ReadLineRangeToolInvocation extends BaseToolInvocation<
@@ -94,12 +112,20 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
     }
 
     let llmContent: PartUnion;
-    if (result.isTruncated) {
+
+    if (typeof result.llmContent !== 'string') {
+      llmContent = result.llmContent;
+    } else if (result.isTruncated) {
       const [start, end] = result.linesShown!;
       const total = result.originalLineCount!;
-      llmContent = `\nIMPORTANT: The file content has been truncated.\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_file' tool with 'offset' and 'limit' parameters.\n\n--- FILE CONTENT (truncated) ---\n${result.llmContent}`;
+      const numberedContent = this.params.showLineNumbers
+        ? formatWithLineNumbers(result.llmContent, this.params.start_line)
+        : result.llmContent;
+      llmContent = `\nIMPORTANT: The file content has been truncated.\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_line_range' tool with adjusted 'start_line' and 'end_line' parameters.\n\n--- FILE CONTENT (truncated) ---\n${numberedContent}`;
     } else {
-      llmContent = result.llmContent || '';
+      llmContent = this.params.showLineNumbers
+        ? formatWithLineNumbers(result.llmContent, this.params.start_line)
+        : result.llmContent;
     }
 
     const lines =
@@ -155,6 +181,11 @@ export class ReadLineRangeTool extends BaseDeclarativeTool<
               'The 1-based line number to end reading at (inclusive). Must be >= start_line.',
             type: 'number',
             minimum: 1,
+          },
+          showLineNumbers: {
+            description:
+              'Optional: When true, prefixes each returned line with its 1-based virtual line number and a separator bar (for example, " 294| const x = 1;"). This numbering is not part of the underlying file; it is only a visual aid. Recommended when you need to precisely understand line numbers in large files for follow-up editing operations.',
+            type: 'boolean',
           },
         },
         required: ['absolute_path', 'start_line', 'end_line'],

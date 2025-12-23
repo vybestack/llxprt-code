@@ -275,6 +275,65 @@ Line 8`;
         );
       });
 
+      it('should prefix returned lines with virtual line numbers when showLineNumbers is true (paginated)', async () => {
+        const filePath = path.join(tempRootDir, 'paginated-numbered.txt');
+        const fileContent = Array.from(
+          { length: 20 },
+          (_, i) => `Line ${i + 1}`,
+        ).join('\n');
+        await fsp.writeFile(filePath, fileContent, 'utf-8');
+
+        const params: ReadFileToolParams = {
+          absolute_path: filePath,
+          offset: 5, // Start from line 6
+          limit: 3,
+          showLineNumbers: true,
+        };
+        const invocation = tool.build(params) as ToolInvocation<
+          ReadFileToolParams,
+          ToolResult
+        >;
+
+        const result = await invocation.execute(abortSignal);
+
+        const expectedLlmContent = `
+IMPORTANT: The file content has been truncated.
+Status: Showing lines 6-8 of 20 total lines.
+Action: To read more of the file, you can use the 'offset' and 'limit' parameters in a subsequent 'read_file' call. For example, to read the next section of the file, use offset: 8.
+
+--- FILE CONTENT (truncated) ---
+   6| Line 6
+   7| Line 7
+   8| Line 8`;
+
+        expect(result.llmContent).toEqual(expectedLlmContent);
+      });
+
+      it('should prefix returned lines with virtual line numbers when showLineNumbers is true (non-truncated)', async () => {
+        const filePath = path.join(tempRootDir, 'numbered.txt');
+        const fileContent = ['Line 1', 'Line 2', 'Line 3'].join('\n');
+        await fsp.writeFile(filePath, fileContent, 'utf-8');
+
+        const params: ReadFileToolParams = {
+          absolute_path: filePath,
+          showLineNumbers: true,
+        };
+        const invocation = tool.build(params) as ToolInvocation<
+          ReadFileToolParams,
+          ToolResult
+        >;
+
+        const result = await invocation.execute(abortSignal);
+
+        const expectedLlmContent = [
+          '   1| Line 1',
+          '   2| Line 2',
+          '   3| Line 3',
+        ].join('\n');
+
+        expect(result.llmContent).toEqual(expectedLlmContent);
+      });
+
       describe('with .llxprtignore', () => {
         beforeEach(async () => {
           await fsp.writeFile(
