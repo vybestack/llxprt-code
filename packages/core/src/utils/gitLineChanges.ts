@@ -33,21 +33,54 @@ export interface GitLineChangeResult {
   warning?: string;
 }
 
-function runGit(args: string[], cwd: string): Promise<string> {
+const DEFAULT_GIT_COMMAND_TIMEOUT_MS = 30_000;
+
+function runGit(
+  args: string[],
+  cwd: string,
+  options?: { timeoutMs?: number },
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, {
       cwd,
       windowsHide: true,
     });
 
+    const timeoutMs = options?.timeoutMs ?? DEFAULT_GIT_COMMAND_TIMEOUT_MS;
+
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
+
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.removeAllListeners();
+      child.stdout.removeAllListeners();
+      child.stderr.removeAllListeners();
+      fn();
+    };
+
+    const timer = setTimeout(() => {
+      try {
+        child.kill();
+      } finally {
+        settle(() =>
+          reject(
+            new Error(
+              `git command timed out after ${timeoutMs}ms: git ${args.join(' ')}`,
+            ),
+          ),
+        );
+      }
+    }, timeoutMs);
 
     child.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
     child.stderr.on('data', (chunk) => stderrChunks.push(chunk));
 
     child.on('error', (err) =>
-      reject(new Error(`Failed to start git: ${err.message}`)),
+      settle(() => reject(new Error(`Failed to start git: ${err.message}`))),
     );
 
     child.on('close', (code) => {
@@ -55,11 +88,11 @@ function runGit(args: string[], cwd: string): Promise<string> {
       const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
 
       if (code === 0) {
-        resolve(stdout);
+        settle(() => resolve(stdout));
         return;
       }
 
-      reject(new Error(stderr || `git exited with code ${code}`));
+      settle(() => reject(new Error(stderr || `git exited with code ${code}`)));
     });
   });
 }
@@ -200,7 +233,11 @@ export async function getGitLineChanges(
           };
         }
 
-        const lineCount = content.split(/\r?\n/).length;
+        const normalizedContent = content.replace(/\r?\n$/, '');
+        const lineCount =
+          normalizedContent === ''
+            ? 0
+            : normalizedContent.split(/\r?\n/).length;
         const markersByLine = new Map<
           number,
           Exclude<GitLineChangeMarker, '░'>
