@@ -34,6 +34,7 @@ The LLxprt Code provides a comprehensive suite of tools for interacting with the
   - `offset` (number, optional): For text files, the 0-based line number to start reading from. Requires `limit` to be set.
   - `limit` (number, optional): For text files, the maximum number of lines to read. If omitted, reads a default maximum (e.g., 2000 lines) or the entire file if feasible.
   - `showLineNumbers` (boolean, optional): When true, prefixes each line of the returned text with a left-padded virtual line number and a separator bar (for example, `294|            occurrences = 0;`). This numbering is not part of the underlying file; it is only a visual aid. Recommended when you need to precisely understand line numbers in large files for subsequent editing operations.
+  - `showGitChanges` (boolean, optional): When true (text files only), prefixes each returned line with a single-character git-change marker column computed relative to `HEAD` (includes staged and unstaged changes). This marker column is virtual and not part of the underlying file content. Includes a legend and, if git status cannot be read, includes a brief warning.
 - **Behavior:**
   - For text files: Returns the content. If `offset` and `limit` are used, returns only that slice of lines. Indicates if content was truncated due to line limits or line length limits.
   - When `showLineNumbers` is true, each text line is returned with a virtual line number prefix, for example:
@@ -45,6 +46,16 @@ The LLxprt Code provides a comprehensive suite of tools for interacting with the
     ```
 
     This virtual numbering is not part of the file itself; it is a visual aid for precise navigation and editing.
+
+  - When `showGitChanges` is true, each text line is returned with a virtual git-change marker prefix, for example:
+
+    ```text
+     ░ 294|            occurrences = 0;
+     M 295|          } else {
+     N 296|            const lineText = lines[replaceLine - 1];
+    ```
+
+    Legend: `░` unchanged, `N` new, `M` modified, `D` deletion after line.
 
   - For image and PDF files: Returns the file content as a base64-encoded data structure suitable for model consumption.
   - For other binary files: Attempts to identify and skip them, returning a message indicating it's a generic binary file.

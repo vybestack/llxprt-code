@@ -25,6 +25,10 @@ import {
   recordFileOperationMetric,
   FileOperation,
 } from '../telemetry/metrics.js';
+import {
+  getGitLineChanges,
+  GitLineChangeMarker,
+} from '../utils/gitLineChanges.js';
 
 /**
  * Parameters for the ReadLineRange tool
@@ -49,6 +53,11 @@ export interface ReadLineRangeToolParams {
    * When true, prefixes each returned line with a virtual line number.
    */
   showLineNumbers?: boolean;
+
+  /**
+   * When true, prefixes each returned text line with a git-change marker column.
+   */
+  showGitChanges?: boolean;
 }
 
 function formatWithLineNumbers(content: string, startLine: number): string {
@@ -62,6 +71,51 @@ function formatWithLineNumbers(content: string, startLine: number): string {
       return `${padded}| ${line}`;
     })
     .join('\n');
+}
+
+function formatWithGitChanges(
+  content: string,
+  startLine: number,
+  markers: Map<number, Exclude<GitLineChangeMarker, '░'>>,
+  deletionAfterLines: Set<number>,
+  showLineNumbers: boolean,
+): string {
+  const lines = content.split('\n');
+  const maxLine = startLine + lines.length - 1;
+  const width = showLineNumbers ? Math.max(4, String(maxLine).length) : 0;
+
+  const formattedLines: string[] = [];
+
+  const hasDeletionBeforeRange =
+    deletionAfterLines.has(startLine - 1) ||
+    deletionAfterLines.has(startLine) ||
+    (startLine === 1 && deletionAfterLines.has(0));
+
+  if (hasDeletionBeforeRange) {
+    if (showLineNumbers) {
+      const padded = ''.padStart(width, ' ');
+      formattedLines.push(`D${padded}|`);
+    } else {
+      formattedLines.push('D');
+    }
+  }
+
+  formattedLines.push(
+    ...lines.map((line, index) => {
+      const lineNo = startLine + index;
+      const baseMarker: GitLineChangeMarker = markers.get(lineNo) ?? '░';
+      const marker = deletionAfterLines.has(lineNo) ? 'D' : baseMarker;
+
+      if (showLineNumbers) {
+        const padded = String(lineNo).padStart(width, ' ');
+        return `${marker}${padded}| ${line}`;
+      }
+
+      return `${marker}${line}`;
+    }),
+  );
+
+  return formattedLines.join('\n');
 }
 
 class ReadLineRangeToolInvocation extends BaseToolInvocation<
@@ -113,19 +167,81 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
 
     let llmContent: PartUnion;
 
+    let gitWarning: string | undefined;
+    let markersByLine:
+      | Map<number, Exclude<GitLineChangeMarker, '░'>>
+      | undefined;
+    let deletionAfterLines: Set<number> | undefined;
+
+    const shouldAnnotateGit =
+      this.params.showGitChanges === true &&
+      typeof result.llmContent === 'string';
+
+    if (shouldAnnotateGit) {
+      const gitResult = await getGitLineChanges(this.params.absolute_path);
+      gitWarning = gitResult.warning;
+      markersByLine = gitResult.markersByLine;
+      deletionAfterLines = gitResult.deletionAfterLines;
+    }
+
     if (typeof result.llmContent !== 'string') {
       llmContent = result.llmContent;
     } else if (result.isTruncated) {
       const [start, end] = result.linesShown!;
       const total = result.originalLineCount!;
-      const numberedContent = this.params.showLineNumbers
-        ? formatWithLineNumbers(result.llmContent, this.params.start_line)
-        : result.llmContent;
-      llmContent = `\nIMPORTANT: The file content has been truncated.\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_line_range' tool with adjusted 'start_line' and 'end_line' parameters.\n\n--- FILE CONTENT (truncated) ---\n${numberedContent}`;
+
+      let formattedContent = result.llmContent;
+      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+        formattedContent = formatWithGitChanges(
+          result.llmContent,
+          this.params.start_line,
+          markersByLine,
+          deletionAfterLines,
+          this.params.showLineNumbers === true,
+        );
+      } else if (this.params.showLineNumbers) {
+        formattedContent = formatWithLineNumbers(
+          result.llmContent,
+          this.params.start_line,
+        );
+      }
+
+      const gitLegend = this.params.showGitChanges
+        ? `\nGit changes legend: ░ unchanged, N new, M modified, D deletion after line.\n`
+        : '';
+      const gitWarningText =
+        this.params.showGitChanges && gitWarning
+          ? `\nNOTE: Failed to read git change status: ${gitWarning}\n`
+          : '';
+
+      llmContent = `\nIMPORTANT: The file content has been truncated.${gitWarningText}${gitLegend}\nStatus: Showing lines ${start}-${end} of ${total} total lines.\nAction: To read more of the file, you can use the 'read_line_range' tool with adjusted 'start_line' and 'end_line' parameters.\n\n--- FILE CONTENT (truncated) ---\n${formattedContent}`;
     } else {
-      llmContent = this.params.showLineNumbers
-        ? formatWithLineNumbers(result.llmContent, this.params.start_line)
-        : result.llmContent;
+      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+        llmContent = formatWithGitChanges(
+          result.llmContent,
+          this.params.start_line,
+          markersByLine,
+          deletionAfterLines,
+          this.params.showLineNumbers === true,
+        );
+      } else {
+        llmContent = this.params.showLineNumbers
+          ? formatWithLineNumbers(result.llmContent, this.params.start_line)
+          : result.llmContent;
+      }
+
+      if (this.params.showGitChanges) {
+        const headerParts: string[] = [];
+        if (gitWarning) {
+          headerParts.push(
+            `NOTE: Failed to read git change status: ${gitWarning}`,
+          );
+        }
+        headerParts.push(
+          'Git changes legend: ░ unchanged, N new, M modified, D deletion after line.',
+        );
+        llmContent = `${headerParts.join('\n')}\n\n${llmContent}`;
+      }
     }
 
     const lines =
@@ -161,7 +277,13 @@ export class ReadLineRangeTool extends BaseDeclarativeTool<
     super(
       ReadLineRangeTool.Name,
       'ReadLineRange',
-      `Reads a specific range of lines from a file. This is very useful for "copying" a function or class after finding its definition. The 'start_line' and 'end_line' parameters are 1-based and inclusive.`,
+      `Reads a specific range of lines from a file. This is very useful for "copying" a function or class after finding its definition. The 'start_line' and 'end_line' parameters are 1-based and inclusive.
+
+Optional: when 'showGitChanges' is true, prefixes each returned text line with a single-character git-change marker column and includes a legend.
+Legend: '░' unchanged, 'N' new, 'M' modified, 'D' deletion after line.
+Column order: git marker first, then (optional) virtual line number column, then line content.
+The git marker column is virtual and not part of the file content.
+If git status cannot be read, the tool will still return file content and include a brief warning.`,
       Kind.Read,
       {
         properties: {
@@ -185,6 +307,11 @@ export class ReadLineRangeTool extends BaseDeclarativeTool<
           showLineNumbers: {
             description:
               'Optional: When true, prefixes each returned line with its 1-based virtual line number and a separator bar (for example, " 294| const x = 1;"). This numbering is not part of the underlying file; it is only a visual aid. Recommended when you need to precisely understand line numbers in large files for follow-up editing operations.',
+            type: 'boolean',
+          },
+          showGitChanges: {
+            description:
+              "Optional: When true (text files only), prefixes each returned line with a single-character git-change marker column computed relative to HEAD (includes both staged and unstaged changes). This marker column is virtual and not part of the file content. Legend: '░' unchanged, 'N' new, 'M' modified, 'D' deletion after line. Column order: git marker first, then (optional) the virtual line number column, then line content. If git status cannot be read, content is still returned and a brief warning is included.",
             type: 'boolean',
           },
         },

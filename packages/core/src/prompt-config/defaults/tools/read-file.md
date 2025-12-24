@@ -2,3 +2,7 @@
 - **Path Construction:** Before using any file system tool (e.g., ${ReadFileTool.Name}' or '${WriteFileTool.Name}'), you must construct the full absolute path for the absolute_path argument. Always combine the absolute path of the project's root directory with the file's path relative to the root. For example, if the project root is /path/to/project/ and the file is foo/bar/baz.txt, the final path you must use is /path/to/project/foo/bar/baz.txt. If the user provides a relative path, you must resolve it against the root directory to create an absolute path.
 - Use '${ReadFileTool.Name}' and '${ReadManyFilesTool.Name}' to understand context and validate any assumptions you may have.
 - Never make assumptions about the contents of files; instead use '${ReadFileTool.Name}' or '${ReadManyFilesTool.Name}' to ensure you aren't making broad assumptions.
+- Optionally, you can set `showGitChanges: true` (text files only) to prefix each returned line with a **single-character** git-change marker column (relative to `HEAD`; includes staged and unstaged changes). This marker column is virtual and not part of the file content.
+  - Legend: `░` unchanged, `N` new, `M` modified, `D` deletion after line.
+  - Column order (when combined with `showLineNumbers: true`): **git marker first**, then the virtual line number column, then line content.
+  - If git status cannot be read, the tool will still return file content and include a brief warning.
