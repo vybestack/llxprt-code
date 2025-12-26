@@ -4,7 +4,7 @@
 
 | Batch | Type | Upstream SHA(s) | Status | LLxprt Commit | Notes |
 |------:|------|-----------------|--------|---------------|-------|
-| PICK-B1 | PICK×5 | `0a216b28`, `b0d5c4c0`, `e9a601c1`, `b6b0727e`, `5f286147` | TODO | | EIO, dynamic policy, MCP type, schema, resources |
+| PICK-B1 | PICK×2 | `0a216b28`, `e9a601c1` | DONE | `77d400cb0`, `1edf8b902`, `df76e9067` | 2/5 picked. b0d5c4c0→REIMPLEMENT, b6b0727e→REIMPLEMENT, 5f286147→SKIP |
 | PICK-B2 | PICK×5 | `873d10df`, `56b05042`, `acecd80a`, `21388a0a`, `0eb84f51` | TODO | | Terse images, typo, IDE, GitService, integration |
 | PICK-B3 | PICK×5 | `de1233b8`, `958284dc`, `764b1959`, `e78c3fe4`, `f0a039f7` | TODO | | Skills 1-5 (branding changes needed) |
 | PICK-B4 | PICK×4 | `bdb349e7`, `d3563e2f`, `2cb33b2f`, `0c541362` | TODO | | Skills 6-9 |

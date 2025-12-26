@@ -1,7 +1,12 @@
 # Cherry-Pick Decisions: v0.23.0 → v0.24.5
 
 **Total commits in range:** 121  
-**Decision counts:** PICK 34 (28%) · SKIP 45 (37%) · REIMPLEMENT 30 (25%) · NO_OP 12 (10%)
+**Decision counts:** PICK 32 (26%) · SKIP 46 (38%) · REIMPLEMENT 31 (26%) · NO_OP 12 (10%)
+
+> **Execution-time reclassifications:**
+> - `b0d5c4c0` (dynamic policy): PICK → REIMPLEMENT — 7 conflict files, policy engine too diverged for cherry-pick
+> - `b6b0727e` (schema non-fatal): PICK → REIMPLEMENT — 7 conflicts in settings.ts + gemini.tsx
+> - `5f286147` (MCP resources limit): PICK → SKIP — McpStatus.tsx component doesn't exist in LLxprt
 
 ---
 
