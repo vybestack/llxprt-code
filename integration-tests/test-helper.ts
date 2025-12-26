@@ -489,16 +489,16 @@ export class TestRig {
     // Add any additional args
     commandArgs.push(...args);
 
-    // Ensure flags come before the positional prompt.
+    // Ensure flags come before any positional prompt.
     // With yargs `.strict()` + a `[promptWords...]` positional command, any
     // options that appear after the positional can be treated as "unknown".
     // This affects `--output-format` and friends.
-    let positionalPrompt: string | undefined;
-    if (
+    const prompts: string[] = [];
+    while (
       commandArgs.length > 0 &&
       !commandArgs[commandArgs.length - 1].startsWith('-')
     ) {
-      positionalPrompt = commandArgs.pop();
+      prompts.unshift(commandArgs.pop() as string);
     }
 
     if (env['LLXPRT_TEST_PROFILE']?.trim()) {
@@ -506,10 +506,10 @@ export class TestRig {
       commandArgs.unshift('--profile-load', profileName);
     }
 
-    // Prefer stdin (or a final positional prompt) rather than `--prompt`.
+    // Prefer stdin (or positional promptWords) rather than `--prompt`.
     // `--prompt` is deprecated and isn't needed for sandbox/non-sandbox parity.
-    if (positionalPrompt) {
-      commandArgs.push(positionalPrompt);
+    if (prompts.length > 0) {
+      commandArgs.push(...prompts);
     }
 
     const node = commandArgs.shift() as string;
