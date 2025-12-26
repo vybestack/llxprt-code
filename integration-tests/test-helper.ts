@@ -410,7 +410,7 @@ export class TestRig {
     }
     if (!apiKey && !keyFile) {
       throw new Error(
-        'OPENAI_API_KEY environment variable is required but not set',
+        'Either OPENAI_API_KEY or OPENAI_API_KEYFILE/LLXPRT_TEST_PROFILE_KEYFILE environment variable is required but not set',
       );
     }
 
