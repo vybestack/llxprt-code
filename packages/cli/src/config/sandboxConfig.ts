@@ -336,7 +336,8 @@ function resolveSandboxEngine(
     return baseCommand;
   }
 
-  return pickFallback();
+  // Don't auto-enable sandbox - require explicit opt-in
+  return '';
 }
 
 function applyProfileEnvironment(
