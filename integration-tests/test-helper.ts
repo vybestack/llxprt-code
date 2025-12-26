@@ -503,7 +503,8 @@ export class TestRig {
 
     if (env['LLXPRT_TEST_PROFILE']?.trim()) {
       const profileName = env['LLXPRT_TEST_PROFILE'].trim();
-      commandArgs.unshift('--profile-load', profileName);
+      // Keep 'node' and bundlePath at the front; insert flags after them.
+      commandArgs.splice(2, 0, '--profile-load', profileName);
     }
 
     // Prefer stdin (or positional promptWords) rather than `--prompt`.
@@ -517,6 +518,7 @@ export class TestRig {
       (commandArgs.includes('--output-format') &&
         commandArgs[commandArgs.indexOf('--output-format') + 1] === 'json') ||
       commandArgs.some((arg) => arg.startsWith('--output-format=json'));
+
 
     // Debug: Log command being executed in CI
     if (env['CI'] === 'true' || env['VERBOSE'] === 'true') {
