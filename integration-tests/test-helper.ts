@@ -519,7 +519,6 @@ export class TestRig {
         commandArgs[commandArgs.indexOf('--output-format') + 1] === 'json') ||
       commandArgs.some((arg) => arg.startsWith('--output-format=json'));
 
-
     // Debug: Log command being executed in CI
     if (env['CI'] === 'true' || env['VERBOSE'] === 'true') {
       console.log('[TestRig] Spawning command:', {
