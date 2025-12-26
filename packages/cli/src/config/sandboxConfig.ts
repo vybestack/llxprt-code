@@ -272,9 +272,12 @@ function getSandboxCommand(
     );
   }
 
-  // look for seatbelt, docker, or podman, in that order
-  // for container-based sandboxing, require sandbox to be enabled explicitly
-  if (os.platform() === 'darwin' && commandExists.sync('sandbox-exec')) {
+  // All sandbox types require explicit opt-in (sandbox === true)
+  if (
+    sandbox === true &&
+    os.platform() === 'darwin' &&
+    commandExists.sync('sandbox-exec')
+  ) {
     return 'sandbox-exec';
   } else if (commandExists.sync('docker') && sandbox === true) {
     return 'docker';
