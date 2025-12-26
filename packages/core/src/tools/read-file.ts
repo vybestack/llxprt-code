@@ -26,6 +26,10 @@ import {
   FileOperation,
 } from '../telemetry/metrics.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
+import {
+  getGitLineChanges,
+  GitLineChangeMarker,
+} from '../utils/gitLineChanges.js';
 
 /**
  * Parameters for the ReadFile tool
@@ -56,6 +60,11 @@ export interface ReadFileToolParams {
    * When true, prefixes each text line with a virtual line number.
    */
   showLineNumbers?: boolean;
+
+  /**
+   * When true, prefixes each text line with a git-change marker column.
+   */
+  showGitChanges?: boolean;
 }
 
 function formatWithLineNumbers(content: string, startLine: number): string {
@@ -69,6 +78,51 @@ function formatWithLineNumbers(content: string, startLine: number): string {
       return `${padded}| ${line}`;
     })
     .join('\n');
+}
+
+function formatWithGitChanges(
+  content: string,
+  startLine: number,
+  markers: Map<number, Exclude<GitLineChangeMarker, '░'>>,
+  deletionAfterLines: Set<number>,
+  showLineNumbers: boolean,
+): string {
+  const lines = content.split('\n');
+  const maxLine = startLine + lines.length - 1;
+  const width = showLineNumbers ? Math.max(4, String(maxLine).length) : 0;
+
+  const formattedLines: string[] = [];
+
+  const hasDeletionBeforeRange =
+    deletionAfterLines.has(startLine - 1) ||
+    deletionAfterLines.has(startLine) ||
+    (startLine === 1 && deletionAfterLines.has(0));
+
+  if (hasDeletionBeforeRange) {
+    if (showLineNumbers) {
+      const padded = ''.padStart(width, ' ');
+      formattedLines.push(`D${padded}|`);
+    } else {
+      formattedLines.push('D');
+    }
+  }
+
+  formattedLines.push(
+    ...lines.map((line, index) => {
+      const lineNo = startLine + index;
+      const baseMarker: GitLineChangeMarker = markers.get(lineNo) ?? '░';
+      const marker = deletionAfterLines.has(lineNo) ? 'D' : baseMarker;
+
+      if (showLineNumbers) {
+        const padded = String(lineNo).padStart(width, ' ');
+        return `${marker}${padded}| ${line}`;
+      }
+
+      return `${marker}${line}`;
+    }),
+  );
+
+  return formattedLines.join('\n');
 }
 
 class ReadFileToolInvocation extends BaseToolInvocation<
@@ -121,6 +175,23 @@ class ReadFileToolInvocation extends BaseToolInvocation<
 
     let llmContent: PartUnion;
 
+    let gitWarning: string | undefined;
+    let markersByLine:
+      | Map<number, Exclude<GitLineChangeMarker, '░'>>
+      | undefined;
+    let deletionAfterLines: Set<number> | undefined;
+
+    const shouldAnnotateGit =
+      this.params.showGitChanges === true &&
+      typeof result.llmContent === 'string';
+
+    if (shouldAnnotateGit) {
+      const gitResult = await getGitLineChanges(this.getFilePath());
+      gitWarning = gitResult.warning;
+      markersByLine = gitResult.markersByLine;
+      deletionAfterLines = gitResult.deletionAfterLines;
+    }
+
     if (typeof result.llmContent !== 'string') {
       llmContent = result.llmContent;
     } else if (result.isTruncated) {
@@ -131,22 +202,68 @@ class ReadFileToolInvocation extends BaseToolInvocation<
         : end;
 
       const startLine = this.params.offset ? this.params.offset + 1 : start;
-      const numberedContent = this.params.showLineNumbers
-        ? formatWithLineNumbers(result.llmContent, startLine)
-        : result.llmContent;
+
+      let formattedContent = result.llmContent;
+      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+        formattedContent = formatWithGitChanges(
+          result.llmContent,
+          startLine,
+          markersByLine,
+          deletionAfterLines,
+          this.params.showLineNumbers === true,
+        );
+      } else if (this.params.showLineNumbers) {
+        formattedContent = formatWithLineNumbers(result.llmContent, startLine);
+      }
+
+      const gitLegend = this.params.showGitChanges
+        ? `
+Git changes legend: ░ unchanged, N new, M modified, D deletion after line.
+`
+        : '';
+      const gitWarningText =
+        this.params.showGitChanges && gitWarning
+          ? `
+NOTE: Failed to read git change status: ${gitWarning}
+`
+          : '';
 
       llmContent = `
-IMPORTANT: The file content has been truncated.
+IMPORTANT: The file content has been truncated.${gitWarningText}${gitLegend}
 Status: Showing lines ${start}-${end} of ${total} total lines.
 Action: To read more of the file, you can use the 'offset' and 'limit' parameters in a subsequent 'read_file' call. For example, to read the next section of the file, use offset: ${nextOffset}.
 
 --- FILE CONTENT (truncated) ---
-${numberedContent}`;
+${formattedContent}`;
     } else {
       const startLine = this.params.offset ? this.params.offset + 1 : 1;
-      llmContent = this.params.showLineNumbers
-        ? formatWithLineNumbers(result.llmContent, startLine)
-        : result.llmContent;
+
+      if (this.params.showGitChanges && markersByLine && deletionAfterLines) {
+        llmContent = formatWithGitChanges(
+          result.llmContent,
+          startLine,
+          markersByLine,
+          deletionAfterLines,
+          this.params.showLineNumbers === true,
+        );
+      } else {
+        llmContent = this.params.showLineNumbers
+          ? formatWithLineNumbers(result.llmContent, startLine)
+          : result.llmContent;
+      }
+
+      if (this.params.showGitChanges) {
+        const headerParts: string[] = [];
+        if (gitWarning) {
+          headerParts.push(
+            `NOTE: Failed to read git change status: ${gitWarning}`,
+          );
+        }
+        headerParts.push(
+          'Git changes legend: ░ unchanged, N new, M modified, D deletion after line.',
+        );
+        llmContent = `${headerParts.join('\n')}\n\n${llmContent}`;
+      }
     }
 
     const lines =
@@ -185,7 +302,13 @@ export class ReadFileTool extends BaseDeclarativeTool<
     super(
       ReadFileTool.Name,
       'ReadFile',
-      `Reads and returns the content of a specified file. If the file is large, the content will be truncated. The tool's response will clearly indicate if truncation has occurred and will provide details on how to read more of the file using the 'offset' and 'limit' parameters. Handles text, images (PNG, JPG, GIF, WEBP, SVG, BMP), and PDF files. For text files, it can read specific line ranges.`,
+      `Reads and returns the content of a specified file. If the file is large, the content will be truncated. The tool's response will clearly indicate if truncation has occurred and will provide details on how to read more of the file using the 'offset' and 'limit' parameters. Handles text, images (PNG, JPG, GIF, WEBP, SVG, BMP), and PDF files. For text files, it can read specific line ranges.
+
+Optional: when 'showGitChanges' is true, prefixes each returned text line with a single-character git-change marker column and includes a legend.
+Legend: '░' unchanged, 'N' new, 'M' modified, 'D' deletion after line.
+Column order: git marker first, then (optional) virtual line number column, then line content.
+The git marker column is virtual and not part of the underlying file content.
+If git status cannot be read, the tool will still return file content and include a brief warning.`,
       Kind.Read,
       {
         properties: {
@@ -212,6 +335,11 @@ export class ReadFileTool extends BaseDeclarativeTool<
           showLineNumbers: {
             description:
               'Optional: When true, prefixes each line of the returned text with a left-padded virtual line number and a separator bar (for example, " 294| const x = 1;"). This numbering is not part of the underlying file; it is only a visual aid. Recommended when you need to precisely understand line numbers in large files for subsequent editing operations.',
+            type: 'boolean',
+          },
+          showGitChanges: {
+            description:
+              "Optional: When true (text files only), prefixes each returned line with a single-character git-change marker column computed relative to HEAD (includes staged and unstaged changes). This marker column is virtual and not part of the file content. Legend: '░' unchanged, 'N' new, 'M' modified, 'D' deletion after line. Column order: git marker first, then (optional) the virtual line number column, then line content. If git status cannot be read, content is still returned and a brief warning is included.",
             type: 'boolean',
           },
         },
