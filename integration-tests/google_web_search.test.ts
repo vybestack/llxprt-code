@@ -9,6 +9,7 @@ import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
 import { GOOGLE_WEB_SEARCH_TOOL } from '../packages/core/src/tools/tool-names.js';
 
 // Skip web search tests in CI or when auth type is none (requires OAuth)
+// We do not run this in CI because it depends on Gemini-backed server tools.
 const skipInCI =
   process.env.CI === 'true' || process.env.LLXPRT_AUTH_TYPE === 'none';
 

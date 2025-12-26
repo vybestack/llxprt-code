@@ -67,6 +67,28 @@ llxprt "run the test suite"
 2. **Environment variable**: `LLXPRT_SANDBOX=true|docker|podman|sandbox-exec`
 3. **Settings file**: `"sandbox": true` in `settings.json`
 
+### Sandbox profiles
+
+Sandbox profiles live in `~/.llxprt/sandboxes/<name>.json` and are created on first run.
+
+```bash
+llxprt --sandbox-profile-load dev
+llxprt --sandbox-engine podman --sandbox-profile-load dev
+llxprt --sandbox-engine none
+```
+
+Profiles can set engine, image, resources, network, sshAgent, mounts, and env.
+
+### SSH agent passthrough
+
+Enable SSH agent passthrough in profiles with `"sshAgent": "auto"` or `"sshAgent": "on"`.
+
+**Notes:**
+
+- Docker: works reliably by mounting `SSH_AUTH_SOCK` into `/ssh-agent`.
+- Podman Linux: uses `:z` relabeling for the socket mount.
+- Podman macOS: launchd sockets often fail inside the VM. Prefer Docker, or use a custom SSH_AUTH_SOCK path under a regular filesystem (e.g. `~/.llxprt/ssh-agent.sock`).
+
 ### macOS Seatbelt profiles
 
 Built-in profiles (set via `SEATBELT_PROFILE` env var):

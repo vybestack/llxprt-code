@@ -26,6 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   lsof \
   socat \
   ca-certificates \
+  openssh-client \
+  git-lfs \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 

@@ -727,26 +727,56 @@ export async function main() {
         stdinData = await readStdinOnce();
       }
 
-      // This function is a copy of the one from sandbox.ts
-      // It is moved here to decouple sandbox.ts from the CLI's argument structure.
+      // Inject stdin data into args for the sandbox.
+      // We prepend stdin to the existing prompt (positional or --prompt flag).
+      // This avoids the "Cannot use both positional and --prompt" conflict.
       const injectStdinIntoArgs = (
         args: string[],
         stdinData?: string,
       ): string[] => {
+        if (!stdinData) {
+          return [...args];
+        }
+
         const finalArgs = [...args];
-        if (stdinData) {
-          const promptIndex = finalArgs.findIndex(
-            (arg) => arg === '--prompt' || arg === '-p',
-          );
-          if (promptIndex > -1 && finalArgs.length > promptIndex + 1) {
-            // If there's a prompt argument, prepend stdin to it
-            finalArgs[promptIndex + 1] =
-              `${stdinData}\n\n${finalArgs[promptIndex + 1]}`;
-          } else {
-            // If there's no prompt argument, add stdin as the prompt
-            finalArgs.push('--prompt', stdinData);
+
+        // Check for --prompt or -p flag first
+        const promptFlagIndex = finalArgs.findIndex(
+          (arg) => arg === '--prompt' || arg === '-p',
+        );
+        if (promptFlagIndex > -1 && finalArgs.length > promptFlagIndex + 1) {
+          // Prepend stdin to the --prompt value
+          finalArgs[promptFlagIndex + 1] =
+            `${stdinData}\n\n${finalArgs[promptFlagIndex + 1]}`;
+          return finalArgs;
+        }
+
+        // Check for positional prompt (args after all flags, not starting with -)
+        // Find the last flag argument, positional prompts come after
+        let lastFlagIndex = -1;
+        for (let i = 2; i < finalArgs.length; i++) {
+          if (finalArgs[i].startsWith('-')) {
+            // Check if this flag takes a value
+            const nextArg = finalArgs[i + 1];
+            if (nextArg && !nextArg.startsWith('-')) {
+              lastFlagIndex = i + 1;
+              i++; // Skip the value
+            } else {
+              lastFlagIndex = i;
+            }
           }
         }
+
+        const positionalStartIndex = lastFlagIndex + 1;
+        if (positionalStartIndex < finalArgs.length) {
+          // There are positional arguments - prepend stdin to the first one
+          finalArgs[positionalStartIndex] =
+            `${stdinData}\n\n${finalArgs[positionalStartIndex]}`;
+          return finalArgs;
+        }
+
+        // No existing prompt - add stdin as a positional argument (not --prompt)
+        finalArgs.push(stdinData);
         return finalArgs;
       };
 

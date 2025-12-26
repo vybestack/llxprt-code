@@ -130,6 +130,8 @@ export interface CliArgs {
   model: string | undefined;
   sandbox: boolean | string | undefined;
   sandboxImage: string | undefined;
+  sandboxEngine: string | undefined;
+  sandboxProfileLoad: string | undefined;
   debug: boolean | undefined;
   prompt: string | undefined;
   promptInteractive: string | undefined;
@@ -208,12 +210,23 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           type: 'string',
           description: 'Sandbox image URI.',
         })
+        .option('sandbox-engine', {
+          type: 'string',
+          choices: ['auto', 'docker', 'podman', 'sandbox-exec', 'none'],
+          description: 'Sandbox engine (auto|docker|podman|sandbox-exec|none).',
+        })
+        .option('sandbox-profile-load', {
+          type: 'string',
+          description:
+            'Load a sandbox profile from ~/.llxprt/sandboxes/<name>.json',
+        })
         .option('debug', {
           alias: 'd',
           type: 'boolean',
           description: 'Run in debug mode?',
           default: false,
         })
+
         .option('all-files', {
           alias: ['a'],
           type: 'boolean',
@@ -586,6 +599,8 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     model: result.model as string | undefined,
     sandbox: result.sandbox as boolean | string | undefined,
     sandboxImage: result.sandboxImage as string | undefined,
+    sandboxEngine: result.sandboxEngine as string | undefined,
+    sandboxProfileLoad: result.sandboxProfileLoad as string | undefined,
     debug: result.debug as boolean | undefined,
     prompt:
       (result.prompt as string | undefined) ||

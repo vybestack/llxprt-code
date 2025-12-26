@@ -501,6 +501,34 @@ export async function start_sandbox(
       args.push(...flags);
     }
 
+    const resourceCpus =
+      process.env.LLXPRT_SANDBOX_CPUS ?? process.env.SANDBOX_CPUS;
+    if (resourceCpus) {
+      args.push('--cpus', resourceCpus);
+    }
+
+    const resourceMemory =
+      process.env.LLXPRT_SANDBOX_MEMORY ?? process.env.SANDBOX_MEMORY;
+    if (resourceMemory) {
+      args.push('--memory', resourceMemory);
+    }
+
+    const resourcePids =
+      process.env.LLXPRT_SANDBOX_PIDS ?? process.env.SANDBOX_PIDS;
+    if (resourcePids) {
+      args.push('--pids-limit', resourcePids);
+    }
+
+    const networkMode =
+      process.env.LLXPRT_SANDBOX_NETWORK ?? process.env.SANDBOX_NETWORK;
+    if (networkMode === 'off') {
+      args.push('--network', 'none');
+    } else if (networkMode === 'proxied') {
+      console.warn(
+        'Sandbox network mode "proxied" is not implemented yet; falling back to default networking.',
+      );
+    }
+
     // Add a TTY if the parent process is interacting with a terminal.
     //
     // IMPORTANT: On macOS, process.stdin.isTTY/process.stdout.isTTY can be undefined when the
@@ -513,10 +541,11 @@ export async function start_sandbox(
     // - Else if TERM is set (typical interactive shells) => add -t.
     // - Else => do not force -t.
     const hasParentTty =
-      process.stdin.isTTY === true ||
-      process.stdout.isTTY === true ||
-      (typeof process.env.TERM === 'string' && process.env.TERM.length > 0);
+      process.stdin.isTTY === true || process.stdout.isTTY === true;
 
+    // In CI we typically do not have a TTY. Passing `-t` causes docker to emit
+    // "the input device is not a TTY" and fail the sandbox. Keep `-t` for real
+    // interactive terminals only.
     if (hasParentTty) {
       args.push('-t');
     }
@@ -568,9 +597,15 @@ export async function start_sandbox(
       }
     }
 
-    // mount paths listed in SANDBOX_MOUNTS
-    if (process.env.SANDBOX_MOUNTS) {
-      for (let mount of process.env.SANDBOX_MOUNTS.split(',')) {
+    // mount paths listed in SANDBOX_MOUNTS / LLXPRT_SANDBOX_MOUNTS
+    const mountsEnv =
+      process.env.LLXPRT_SANDBOX_MOUNTS ?? process.env.SANDBOX_MOUNTS;
+    const mountsEnvName = process.env.LLXPRT_SANDBOX_MOUNTS
+      ? 'LLXPRT_SANDBOX_MOUNTS'
+      : 'SANDBOX_MOUNTS';
+
+    if (mountsEnv) {
+      for (let mount of mountsEnv.split(',')) {
         if (mount.trim()) {
           // parse mount as from:to:opts
           let [from, to, opts] = mount.trim().split(':');
@@ -580,18 +615,51 @@ export async function start_sandbox(
           // check that from path is absolute
           if (!path.isAbsolute(from)) {
             throw new FatalSandboxError(
-              `Path '${from}' listed in SANDBOX_MOUNTS must be absolute`,
+              `Path '${from}' listed in ${mountsEnvName} must be absolute`,
             );
           }
           // check that from path exists on host
           if (!fs.existsSync(from)) {
             throw new FatalSandboxError(
-              `Missing mount path '${from}' listed in SANDBOX_MOUNTS`,
+              `Missing mount path '${from}' listed in ${mountsEnvName}`,
             );
           }
-          console.error(`SANDBOX_MOUNTS: ${from} -> ${to} (${opts})`);
+          console.error(`${mountsEnvName}: ${from} -> ${to} (${opts})`);
           args.push('--volume', mount);
         }
+      }
+    }
+
+    const sshAgentSetting =
+      process.env.LLXPRT_SANDBOX_SSH_AGENT ?? process.env.SANDBOX_SSH_AGENT;
+    const shouldEnableSshAgent =
+      sshAgentSetting === 'on' ||
+      (sshAgentSetting !== 'off' && !!process.env.SSH_AUTH_SOCK);
+
+    if (shouldEnableSshAgent) {
+      const sshAuthSock = process.env.SSH_AUTH_SOCK;
+      if (!sshAuthSock) {
+        console.warn('SSH agent requested but SSH_AUTH_SOCK is not set.');
+      } else if (!fs.existsSync(sshAuthSock)) {
+        console.warn(`SSH_AUTH_SOCK not found at ${sshAuthSock}.`);
+      } else {
+        const containerSocket = '/ssh-agent';
+        let mountSpec = `${sshAuthSock}:${containerSocket}`;
+
+        if (config.command === 'podman' && os.platform() === 'linux') {
+          mountSpec = `${sshAuthSock}:${containerSocket}:z`;
+        }
+
+        if (config.command === 'podman' && os.platform() === 'darwin') {
+          if (sshAuthSock.includes('/private/tmp/com.apple.launchd')) {
+            console.warn(
+              'Podman on macOS may not access launchd SSH sockets reliably. Consider Docker or a custom SSH_AUTH_SOCK path.',
+            );
+          }
+        }
+
+        args.push('--volume', mountSpec);
+        args.push('--env', `SSH_AUTH_SOCK=${containerSocket}`);
       }
     }
 
