@@ -751,24 +751,39 @@ export async function main() {
           return finalArgs;
         }
 
-        // Check for positional prompt (args after all flags, not starting with -)
-        // Find the last flag argument, positional prompts come after
-        let lastFlagIndex = -1;
+        // Find positional arguments (args after all flags).
+        // Flags can be:
+        // - Boolean flags: --debug, --yolo, --sandbox (no value)
+        // - Value flags: --model gpt4, --key xyz (separate value)
+        // - Combined flags: --model=gpt4, --allowed-tools=run_shell_command(ls) (value in same arg)
+        // Positional args are anything after the last flag that doesn't start with '-'.
+
+        // Start scanning from index 2 (after 'node' and script path).
+        // Find the first argument after index 1 that doesn't start with '-'
+        // and isn't a value for a preceding flag.
+        let positionalStartIndex = -1;
         for (let i = 2; i < finalArgs.length; i++) {
-          if (finalArgs[i].startsWith('-')) {
-            // Check if this flag takes a value
+          const arg = finalArgs[i];
+          if (arg.startsWith('-')) {
+            // This is a flag. Check if it's a combined flag (contains '=')
+            if (arg.includes('=')) {
+              // Combined flag like --model=gpt4, no separate value to skip
+              continue;
+            }
+            // Check if next arg is a value for this flag (doesn't start with '-')
             const nextArg = finalArgs[i + 1];
             if (nextArg && !nextArg.startsWith('-')) {
-              lastFlagIndex = i + 1;
-              i++; // Skip the value
-            } else {
-              lastFlagIndex = i;
+              // Skip the value
+              i++;
             }
+          } else {
+            // This is a positional argument
+            positionalStartIndex = i;
+            break;
           }
         }
 
-        const positionalStartIndex = lastFlagIndex + 1;
-        if (positionalStartIndex < finalArgs.length) {
+        if (positionalStartIndex > -1) {
           // There are positional arguments - prepend stdin to the first one
           finalArgs[positionalStartIndex] =
             `${stdinData}\n\n${finalArgs[positionalStartIndex]}`;

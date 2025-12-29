@@ -50,11 +50,12 @@ export function getSandboxProfilesDir(): string {
 export function getDefaultSandboxProfiles(
   image: string | undefined,
 ): Record<string, SandboxProfile> {
-  const defaultImage = image ?? '';
+  // Only include image field if a valid image is provided
+  const imageField = image ? { image } : {};
   return {
     dev: {
       engine: 'auto',
-      image: defaultImage,
+      ...imageField,
       resources: { cpus: 2, memory: '4g', pids: 256 },
       network: 'on',
       sshAgent: 'auto',
@@ -63,7 +64,7 @@ export function getDefaultSandboxProfiles(
     },
     safe: {
       engine: 'auto',
-      image: defaultImage,
+      ...imageField,
       resources: { cpus: 2, memory: '4g', pids: 128 },
       network: 'off',
       sshAgent: 'off',
@@ -72,7 +73,7 @@ export function getDefaultSandboxProfiles(
     },
     tight: {
       engine: 'auto',
-      image: defaultImage,
+      ...imageField,
       resources: { cpus: 1, memory: '2g', pids: 64 },
       network: 'off',
       sshAgent: 'off',
@@ -81,7 +82,7 @@ export function getDefaultSandboxProfiles(
     },
     offline: {
       engine: 'auto',
-      image: defaultImage,
+      ...imageField,
       resources: { cpus: 2, memory: '4g', pids: 128 },
       network: 'off',
       sshAgent: 'off',
