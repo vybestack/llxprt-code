@@ -727,26 +727,71 @@ export async function main() {
         stdinData = await readStdinOnce();
       }
 
-      // This function is a copy of the one from sandbox.ts
-      // It is moved here to decouple sandbox.ts from the CLI's argument structure.
+      // Inject stdin data into args for the sandbox.
+      // We prepend stdin to the existing prompt (positional or --prompt flag).
+      // This avoids the "Cannot use both positional and --prompt" conflict.
       const injectStdinIntoArgs = (
         args: string[],
         stdinData?: string,
       ): string[] => {
+        if (!stdinData) {
+          return [...args];
+        }
+
         const finalArgs = [...args];
-        if (stdinData) {
-          const promptIndex = finalArgs.findIndex(
-            (arg) => arg === '--prompt' || arg === '-p',
-          );
-          if (promptIndex > -1 && finalArgs.length > promptIndex + 1) {
-            // If there's a prompt argument, prepend stdin to it
-            finalArgs[promptIndex + 1] =
-              `${stdinData}\n\n${finalArgs[promptIndex + 1]}`;
+
+        // Check for --prompt or -p flag first
+        const promptFlagIndex = finalArgs.findIndex(
+          (arg) => arg === '--prompt' || arg === '-p',
+        );
+        if (promptFlagIndex > -1 && finalArgs.length > promptFlagIndex + 1) {
+          // Prepend stdin to the --prompt value
+          finalArgs[promptFlagIndex + 1] =
+            `${stdinData}\n\n${finalArgs[promptFlagIndex + 1]}`;
+          return finalArgs;
+        }
+
+        // Find positional arguments (args after all flags).
+        // Flags can be:
+        // - Boolean flags: --debug, --yolo, --sandbox (no value)
+        // - Value flags: --model gpt4, --key xyz (separate value)
+        // - Combined flags: --model=gpt4, --allowed-tools=run_shell_command(ls) (value in same arg)
+        // Positional args are anything after the last flag that doesn't start with '-'.
+
+        // Start scanning from index 2 (after 'node' and script path).
+        // Find the first argument after index 1 that doesn't start with '-'
+        // and isn't a value for a preceding flag.
+        let positionalStartIndex = -1;
+        for (let i = 2; i < finalArgs.length; i++) {
+          const arg = finalArgs[i];
+          if (arg.startsWith('-')) {
+            // This is a flag. Check if it's a combined flag (contains '=')
+            if (arg.includes('=')) {
+              // Combined flag like --model=gpt4, no separate value to skip
+              continue;
+            }
+            // Check if next arg is a value for this flag (doesn't start with '-')
+            const nextArg = finalArgs[i + 1];
+            if (nextArg && !nextArg.startsWith('-')) {
+              // Skip the value
+              i++;
+            }
           } else {
-            // If there's no prompt argument, add stdin as the prompt
-            finalArgs.push('--prompt', stdinData);
+            // This is a positional argument
+            positionalStartIndex = i;
+            break;
           }
         }
+
+        if (positionalStartIndex > -1) {
+          // There are positional arguments - prepend stdin to the first one
+          finalArgs[positionalStartIndex] =
+            `${stdinData}\n\n${finalArgs[positionalStartIndex]}`;
+          return finalArgs;
+        }
+
+        // No existing prompt - add stdin as a positional argument (not --prompt)
+        finalArgs.push(stdinData);
         return finalArgs;
       };
 

@@ -384,6 +384,8 @@ export class TestRig {
     const model = env['LLXPRT_DEFAULT_MODEL'];
     const baseUrl = env['OPENAI_BASE_URL'];
     const apiKey = env['OPENAI_API_KEY'];
+    const keyFile =
+      env['OPENAI_API_KEYFILE'] ?? env['LLXPRT_TEST_PROFILE_KEYFILE'];
 
     // Debug: Log environment variables in CI
     if (env['CI'] === 'true' || env['VERBOSE'] === 'true') {
@@ -406,9 +408,9 @@ export class TestRig {
         'LLXPRT_DEFAULT_MODEL environment variable is required but not set',
       );
     }
-    if (!apiKey) {
+    if (!apiKey && !keyFile) {
       throw new Error(
-        'OPENAI_API_KEY environment variable is required but not set',
+        'Either OPENAI_API_KEY or OPENAI_API_KEYFILE/LLXPRT_TEST_PROFILE_KEYFILE environment variable is required but not set',
       );
     }
 
@@ -436,9 +438,10 @@ export class TestRig {
     }
 
     // Add API key if available
-    // Add API key if available
     if (apiKey) {
       commandArgs.push('--key', apiKey);
+    } else if (keyFile) {
+      commandArgs.push('--keyfile', keyFile);
     }
 
     // Filter out TERM_PROGRAM to prevent IDE detection
@@ -470,13 +473,13 @@ export class TestRig {
     };
 
     if (typeof promptOrOptions === 'string') {
-      commandArgs.push('--prompt', promptOrOptions);
+      commandArgs.push(promptOrOptions);
     } else if (
       typeof promptOrOptions === 'object' &&
       promptOrOptions !== null
     ) {
       if (promptOrOptions.prompt) {
-        commandArgs.push('--prompt', promptOrOptions.prompt);
+        commandArgs.push(promptOrOptions.prompt);
       }
       if (promptOrOptions.stdin) {
         execOptions.input = promptOrOptions.stdin;
@@ -486,8 +489,28 @@ export class TestRig {
     // Add any additional args
     commandArgs.push(...args);
 
+    // Ensure flags come before any positional prompt.
+    // With yargs `.strict()` + a `[promptWords...]` positional command, any
+    // options that appear after the positional can be treated as "unknown".
+    // This affects `--output-format` and friends.
+    const prompts: string[] = [];
+    while (
+      commandArgs.length > 0 &&
+      !commandArgs[commandArgs.length - 1].startsWith('-')
+    ) {
+      prompts.unshift(commandArgs.pop() as string);
+    }
+
     if (env['LLXPRT_TEST_PROFILE']?.trim()) {
-      commandArgs.push('--profile-load', env['LLXPRT_TEST_PROFILE'].trim());
+      const profileName = env['LLXPRT_TEST_PROFILE'].trim();
+      // Keep 'node' and bundlePath at the front; insert flags after them.
+      commandArgs.splice(2, 0, '--profile-load', profileName);
+    }
+
+    // Prefer stdin (or positional promptWords) rather than `--prompt`.
+    // `--prompt` is deprecated and isn't needed for sandbox/non-sandbox parity.
+    if (prompts.length > 0) {
+      commandArgs.push(...prompts);
     }
 
     const node = commandArgs.shift() as string;

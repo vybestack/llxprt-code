@@ -94,10 +94,12 @@ describe('run_shell_command', () => {
     const { tool } = getLineCountCommand();
     const prompt = `use ${tool} to tell me how many lines there are in ${testFile}`;
 
-    // Provide the prompt via stdin to simulate non-interactive mode
+    // Use prompt as positional argument instead of stdin for sandbox compatibility.
+    // When using stdin with yolo: false in sandbox mode, the stdin data cannot be
+    // passed through to the docker container properly.
     const result = await rig.run(
       {
-        stdin: prompt,
+        prompt: prompt,
         yolo: false,
       },
       `--allowed-tools=run_shell_command(${tool})`,
@@ -130,9 +132,10 @@ describe('run_shell_command', () => {
     const { tool } = getLineCountCommand();
     const prompt = `use ${tool} to tell me how many lines there are in ${testFile}`;
 
+    // Use prompt as positional argument instead of stdin for sandbox compatibility.
     const result = await rig.run(
       {
-        stdin: prompt,
+        prompt: prompt,
         yolo: false,
       },
       '--allowed-tools=run_shell_command',
@@ -199,9 +202,10 @@ describe('run_shell_command', () => {
       : `use wc to count how many lines are in /etc/hosts`;
     const { tool } = getLineCountCommand();
 
+    // Use prompt as positional argument instead of stdin for sandbox compatibility.
     const result = await rig.run(
       {
-        stdin: prompt,
+        prompt: prompt,
         yolo: false,
       },
       `--allowed-tools=ShellTool(${tool})`,
@@ -235,9 +239,10 @@ describe('run_shell_command', () => {
       `use both ${tool} and ls to count the number of lines in ` +
       `files in this directory`;
 
+    // Use prompt as positional argument instead of stdin for sandbox compatibility.
     const result = await rig.run(
       {
-        stdin: prompt,
+        prompt: prompt,
         yolo: false,
       },
       `--allowed-tools=run_shell_command(${tool})`,
@@ -272,9 +277,10 @@ describe('run_shell_command', () => {
     const { tool } = getLineCountCommand();
     const prompt = `Please run the command "echo test-allow-all" and show me the output`;
 
+    // Use prompt as positional argument instead of stdin for sandbox compatibility.
     const result = await rig.run(
       {
-        stdin: prompt,
+        prompt: prompt,
         yolo: false,
       },
       `--allowed-tools=run_shell_command(${tool})`,
