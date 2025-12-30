@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-a2a-server",
-  "version": "0.6.1",
+  "version": "0.8.0",
   "description": "LLxprt Code A2A Server",
   "repository": {
     "type": "git",
