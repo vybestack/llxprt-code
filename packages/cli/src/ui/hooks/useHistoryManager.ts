@@ -13,6 +13,10 @@ import {
   DEFAULT_HISTORY_MAX_ITEMS,
 } from '../../constants/historyLimits.js';
 
+// Global counter for generating unique message IDs across all hook instances.
+// This prevents ID collisions when multiple useHistory hooks use the same baseTimestamp.
+let globalMessageIdCounter = 0;
+
 // Type for the updater function passed to updateHistoryItem
 type HistoryItemUpdater = (
   prevItem: HistoryItem,
@@ -49,7 +53,6 @@ export function useHistory(
   options?: UseHistoryOptions,
 ): UseHistoryManagerReturn {
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const messageIdCounterRef = useRef(0);
   const maxItems = options?.maxItems;
   const maxBytes = options?.maxBytes;
   const limits = useMemo(
@@ -63,10 +66,11 @@ export function useHistory(
     setHistory((prev) => trimHistory(prev, limits));
   }, [limits]);
 
-  // Generates a unique message ID based on a timestamp and a counter.
+  // Generates a unique message ID based on a timestamp and a global counter.
+  // Using a global counter ensures uniqueness across all hook instances.
   const getNextMessageId = useCallback((baseTimestamp: number): number => {
-    messageIdCounterRef.current += 1;
-    return baseTimestamp + messageIdCounterRef.current;
+    globalMessageIdCounter += 1;
+    return baseTimestamp * 1000 + globalMessageIdCounter;
   }, []);
 
   const loadHistory = useCallback((newHistory: HistoryItem[]) => {
@@ -128,10 +132,10 @@ export function useHistory(
     [],
   );
 
-  // Clears the entire history state and resets the ID counter.
+  // Clears the entire history state. Note: we do NOT reset the global counter
+  // to ensure IDs remain unique across conversation clears within the same session.
   const clearItems = useCallback(() => {
     setHistory([]);
-    messageIdCounterRef.current = 0;
     ConversationContext.startNewConversation();
   }, []);
 

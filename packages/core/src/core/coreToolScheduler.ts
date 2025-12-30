@@ -412,6 +412,9 @@ export class CoreToolScheduler {
   > = new Map();
   private nextPublishIndex = 0;
   private readonly toolContextInteractiveMode: boolean;
+  // Track the abort signal for each tool call so we can use it when handling
+  // confirmation responses from the message bus
+  private callIdToSignal: Map<string, AbortSignal> = new Map();
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -491,12 +494,14 @@ export class CoreToolScheduler {
           : ToolConfirmationOutcome.Cancel
         : ToolConfirmationOutcome.Cancel);
 
-    const abortController = new AbortController();
+    // Use the original signal stored for this call, or create a new one as fallback
+    const originalSignal = this.callIdToSignal.get(callId);
+    const signal = originalSignal ?? new AbortController().signal;
     void this.handleConfirmationResponse(
       callId,
       waitingToolCall.confirmationDetails.onConfirm,
       derivedOutcome,
-      abortController.signal,
+      signal,
       response.payload,
       true,
     );
@@ -940,6 +945,8 @@ export class CoreToolScheduler {
         }
 
         const { request: reqInfo, invocation } = toolCall;
+        // Store the signal for this call so we can use it later in message bus responses
+        this.callIdToSignal.set(reqInfo.callId, signal);
 
         try {
           if (signal.aborted) {
@@ -1352,37 +1359,51 @@ export class CoreToolScheduler {
     });
   }
 
+  // Reentrancy guard for publishBufferedResults to prevent race conditions
+  // when multiple async tool completions trigger publishing simultaneously
+  private isPublishingBufferedResults = false;
+
   private async publishBufferedResults(signal: AbortSignal): Promise<void> {
-    const callsInOrder = this.toolCalls.filter(
-      (call) => call.status === 'scheduled' || call.status === 'executing',
-    );
+    // Prevent reentrant calls which can cause race conditions
+    if (this.isPublishingBufferedResults) {
+      return;
+    }
+    this.isPublishingBufferedResults = true;
 
-    // Publish results in original request order
-    while (this.nextPublishIndex < callsInOrder.length) {
-      const expectedCall = callsInOrder[this.nextPublishIndex];
-      const buffered = this.pendingResults.get(expectedCall.request.callId);
+    try {
+      const callsInOrder = this.toolCalls.filter(
+        (call) => call.status === 'scheduled' || call.status === 'executing',
+      );
 
-      if (!buffered) {
-        // Next result not ready yet, stop publishing
-        break;
+      // Publish results in original request order
+      while (this.nextPublishIndex < callsInOrder.length) {
+        const expectedCall = callsInOrder[this.nextPublishIndex];
+        const buffered = this.pendingResults.get(expectedCall.request.callId);
+
+        if (!buffered) {
+          // Next result not ready yet, stop publishing
+          break;
+        }
+
+        // Publish this result
+        await this.publishResult(buffered, signal);
+
+        // Remove from buffer
+        this.pendingResults.delete(buffered.callId);
+        this.nextPublishIndex++;
       }
 
-      // Publish this result
-      await this.publishResult(buffered, signal);
-
-      // Remove from buffer
-      this.pendingResults.delete(buffered.callId);
-      this.nextPublishIndex++;
-    }
-
-    // Check if all tools completed
-    if (
-      this.nextPublishIndex === callsInOrder.length &&
-      callsInOrder.length > 0
-    ) {
-      // Reset for next batch
-      this.nextPublishIndex = 0;
-      this.pendingResults.clear();
+      // Check if all tools completed
+      if (
+        this.nextPublishIndex === callsInOrder.length &&
+        callsInOrder.length > 0
+      ) {
+        // Reset for next batch
+        this.nextPublishIndex = 0;
+        this.pendingResults.clear();
+      }
+    } finally {
+      this.isPublishingBufferedResults = false;
     }
   }
 
@@ -1548,7 +1569,9 @@ export class CoreToolScheduler {
       const completedCalls = [...this.toolCalls] as CompletedToolCall[];
       this.toolCalls = [];
 
+      // Clean up signal mappings for completed calls
       for (const call of completedCalls) {
+        this.callIdToSignal.delete(call.request.callId);
         logToolCall(this.config, new ToolCallEvent(call));
       }
 

@@ -70,7 +70,7 @@ Signal: Signal number or \`(none)\` if no signal was received.
 
   async execute(
     params: ToolParams,
-    _signal: AbortSignal,
+    signal: AbortSignal,
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     const callCommand = this.config.getToolCallCommand()!;
@@ -82,55 +82,67 @@ Signal: Signal number or \`(none)\` if no signal was received.
     let stderr = '';
     let error: Error | null = null;
     let code: number | null = null;
-    let signal: NodeJS.Signals | null = null;
+    let exitSignal: NodeJS.Signals | null = null;
 
-    await new Promise<void>((resolve) => {
-      const onStdout = (data: Buffer) => {
-        stdout += data?.toString();
-      };
+    // Handle abort signal to kill the child process
+    const abortHandler = () => {
+      if (!child.killed) {
+        child.kill('SIGTERM');
+      }
+    };
+    signal.addEventListener('abort', abortHandler);
 
-      const onStderr = (data: Buffer) => {
-        stderr += data?.toString();
-      };
+    try {
+      await new Promise<void>((resolve) => {
+        const onStdout = (data: Buffer) => {
+          stdout += data?.toString();
+        };
 
-      const onError = (err: Error) => {
-        error = err;
-      };
+        const onStderr = (data: Buffer) => {
+          stderr += data?.toString();
+        };
 
-      const onClose = (
-        _code: number | null,
-        _signal: NodeJS.Signals | null,
-      ) => {
-        code = _code;
-        signal = _signal;
-        cleanup();
-        resolve();
-      };
+        const onError = (err: Error) => {
+          error = err;
+        };
 
-      const cleanup = () => {
-        child.stdout.removeListener('data', onStdout);
-        child.stderr.removeListener('data', onStderr);
-        child.removeListener('error', onError);
-        child.removeListener('close', onClose);
-        if (child.connected) {
-          child.disconnect();
-        }
-      };
+        const onClose = (
+          _code: number | null,
+          _signal: NodeJS.Signals | null,
+        ) => {
+          code = _code;
+          exitSignal = _signal;
+          cleanup();
+          resolve();
+        };
 
-      child.stdout.on('data', onStdout);
-      child.stderr.on('data', onStderr);
-      child.on('error', onError);
-      child.on('close', onClose);
-    });
+        const cleanup = () => {
+          child.stdout.removeListener('data', onStdout);
+          child.stderr.removeListener('data', onStderr);
+          child.removeListener('error', onError);
+          child.removeListener('close', onClose);
+          if (child.connected) {
+            child.disconnect();
+          }
+        };
+
+        child.stdout.on('data', onStdout);
+        child.stderr.on('data', onStderr);
+        child.on('error', onError);
+        child.on('close', onClose);
+      });
+    } finally {
+      signal.removeEventListener('abort', abortHandler);
+    }
 
     // if there is any error, non-zero exit code, signal, or stderr, return error details instead of stdout
-    if (error || code !== 0 || signal || stderr) {
+    if (error || code !== 0 || exitSignal || stderr) {
       const llmContent = [
         `Stdout: ${stdout || '(empty)'}`,
         `Stderr: ${stderr || '(empty)'}`,
         `Error: ${error ?? '(none)'}`,
         `Exit Code: ${code ?? '(none)'}`,
-        `Signal: ${signal ?? '(none)'}`,
+        `Signal: ${exitSignal ?? '(none)'}`,
       ].join('\n');
       return {
         llmContent,

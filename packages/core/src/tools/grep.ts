@@ -29,6 +29,14 @@ import {
 } from '../utils/toolOutputLimiter.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 
+/**
+ * Checks if a glob pattern contains brace expansion syntax that git grep doesn't support.
+ * Git grep pathspecs don't support shell-style brace expansion like {ts,tsx,js}.
+ */
+function hasBraceExpansion(pattern: string): boolean {
+  return /\{[^}]*,[^}]*\}/.test(pattern);
+}
+
 // --- Interfaces ---
 
 /**
@@ -500,7 +508,10 @@ class GrepToolInvocation extends BaseToolInvocation<
 
     try {
       // --- Strategy 1: git grep ---
-      const isGit = isGitRepository(absolutePath);
+      // Skip git grep if include pattern has brace expansion (e.g., *.{ts,tsx})
+      // because git grep pathspecs don't support shell-style brace expansion.
+      const hasBracePattern = include && hasBraceExpansion(include);
+      const isGit = !hasBracePattern && isGitRepository(absolutePath);
       const gitAvailable = isGit && (await this.isCommandAvailable('git'));
 
       if (gitAvailable) {
