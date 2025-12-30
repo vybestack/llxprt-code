@@ -496,6 +496,12 @@ export class CoreToolScheduler {
 
     // Use the original signal stored for this call, or create a new one as fallback
     const originalSignal = this.callIdToSignal.get(callId);
+    if (!originalSignal && toolSchedulerLogger.enabled) {
+      toolSchedulerLogger.debug(
+        () =>
+          `Using fallback AbortSignal for callId=${callId} (original signal not found in map)`,
+      );
+    }
     const signal = originalSignal ?? new AbortController().signal;
     void this.handleConfirmationResponse(
       callId,
