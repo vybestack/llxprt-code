@@ -494,15 +494,25 @@ export class CoreToolScheduler {
           : ToolConfirmationOutcome.Cancel
         : ToolConfirmationOutcome.Cancel);
 
-    // Use the original signal stored for this call, or create a new one as fallback
+    // Use the original signal stored for this call, or a pre-aborted signal as fallback.
+    // If the original signal is missing, it means the tool call was already completed or
+    // cancelled (cleaned up in publishBufferedResults), so we use an aborted signal to
+    // ensure the confirmation handler doesn't proceed with execution.
     const originalSignal = this.callIdToSignal.get(callId);
-    if (!originalSignal && toolSchedulerLogger.enabled) {
-      toolSchedulerLogger.debug(
-        () =>
-          `Using fallback AbortSignal for callId=${callId} (original signal not found in map)`,
-      );
+    let signal: AbortSignal;
+    if (originalSignal) {
+      signal = originalSignal;
+    } else {
+      if (toolSchedulerLogger.enabled) {
+        toolSchedulerLogger.debug(
+          () =>
+            `Using pre-aborted fallback AbortSignal for callId=${callId} (original signal not found in map)`,
+        );
+      }
+      const abortedController = new AbortController();
+      abortedController.abort();
+      signal = abortedController.signal;
     }
-    const signal = originalSignal ?? new AbortController().signal;
     void this.handleConfirmationResponse(
       callId,
       waitingToolCall.confirmationDetails.onConfirm,
@@ -1368,46 +1378,55 @@ export class CoreToolScheduler {
   // Reentrancy guard for publishBufferedResults to prevent race conditions
   // when multiple async tool completions trigger publishing simultaneously
   private isPublishingBufferedResults = false;
+  // Flag to track if another publish was requested while we were publishing
+  private pendingPublishRequest = false;
 
   private async publishBufferedResults(signal: AbortSignal): Promise<void> {
-    // Prevent reentrant calls which can cause race conditions
+    // If already publishing, mark that we need another pass after current one completes
     if (this.isPublishingBufferedResults) {
+      this.pendingPublishRequest = true;
       return;
     }
     this.isPublishingBufferedResults = true;
+    this.pendingPublishRequest = false;
 
     try {
-      const callsInOrder = this.toolCalls.filter(
-        (call) => call.status === 'scheduled' || call.status === 'executing',
-      );
+      // Loop to handle cases where new results arrive while we're publishing
+      do {
+        this.pendingPublishRequest = false;
 
-      // Publish results in original request order
-      while (this.nextPublishIndex < callsInOrder.length) {
-        const expectedCall = callsInOrder[this.nextPublishIndex];
-        const buffered = this.pendingResults.get(expectedCall.request.callId);
+        const callsInOrder = this.toolCalls.filter(
+          (call) => call.status === 'scheduled' || call.status === 'executing',
+        );
 
-        if (!buffered) {
-          // Next result not ready yet, stop publishing
-          break;
+        // Publish results in original request order
+        while (this.nextPublishIndex < callsInOrder.length) {
+          const expectedCall = callsInOrder[this.nextPublishIndex];
+          const buffered = this.pendingResults.get(expectedCall.request.callId);
+
+          if (!buffered) {
+            // Next result not ready yet, stop publishing
+            break;
+          }
+
+          // Publish this result
+          await this.publishResult(buffered, signal);
+
+          // Remove from buffer
+          this.pendingResults.delete(buffered.callId);
+          this.nextPublishIndex++;
         }
 
-        // Publish this result
-        await this.publishResult(buffered, signal);
-
-        // Remove from buffer
-        this.pendingResults.delete(buffered.callId);
-        this.nextPublishIndex++;
-      }
-
-      // Check if all tools completed
-      if (
-        this.nextPublishIndex === callsInOrder.length &&
-        callsInOrder.length > 0
-      ) {
-        // Reset for next batch
-        this.nextPublishIndex = 0;
-        this.pendingResults.clear();
-      }
+        // Check if all tools completed
+        if (
+          this.nextPublishIndex === callsInOrder.length &&
+          callsInOrder.length > 0
+        ) {
+          // Reset for next batch
+          this.nextPublishIndex = 0;
+          this.pendingResults.clear();
+        }
+      } while (this.pendingPublishRequest);
     } finally {
       this.isPublishingBufferedResults = false;
     }
