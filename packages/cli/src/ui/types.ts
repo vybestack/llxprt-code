@@ -212,6 +212,18 @@ export type HistoryItemToolsList = HistoryItemBase & {
   showDescriptions: boolean;
 };
 
+export interface SkillDefinition {
+  name: string;
+  description: string;
+  disabled?: boolean;
+}
+
+export type HistoryItemSkillsList = HistoryItemBase & {
+  type: 'skills_list';
+  skills: SkillDefinition[];
+  showDescriptions: boolean;
+};
+
 // JSON-friendly types for using as a simple data model showing info about an
 // MCP Server.
 export interface McpServer {
@@ -258,6 +270,7 @@ export type HistoryItemWithoutId =
   | HistoryItemExtensionsList
   | HistoryItemHooksList
   | HistoryItemToolsList
+  | HistoryItemSkillsList
   | HistoryItemMcpStatus
   | HistoryItemChatList
   | HistoryItemProfileChange;
@@ -284,6 +297,7 @@ export enum MessageType {
   GEMINI = 'gemini',
   COMPRESSION = 'compression',
   EXTENSIONS_LIST = 'extensions_list',
+  SKILLS_LIST = 'skills_list',
   CHAT_LIST = 'chat_list',
   HOOKS_LIST = 'hooks_list',
   PROFILE_CHANGE = 'profile_change',

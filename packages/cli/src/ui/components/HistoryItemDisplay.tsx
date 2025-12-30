@@ -33,6 +33,7 @@ import type { SlashCommand } from '../commands/types.js';
 import { ChatList } from './views/ChatList.js';
 import { ExtensionsList } from './views/ExtensionsList.js';
 import { HooksList } from './views/HooksList.js';
+import { SkillsList } from './views/SkillsList.js';
 
 interface HistoryItemDisplayProps {
   item: HistoryItem;
@@ -179,6 +180,12 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
         <Box>
           <Text color="yellow">Tools list view not yet implemented</Text>
         </Box>
+      )}
+      {itemForDisplay.type === 'skills_list' && (
+        <SkillsList
+          skills={itemForDisplay.skills}
+          showDescriptions={itemForDisplay.showDescriptions}
+        />
       )}
       {itemForDisplay.type === 'mcp_status' && (
         <Box>

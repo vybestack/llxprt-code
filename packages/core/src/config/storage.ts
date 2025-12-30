@@ -53,6 +53,10 @@ export class Storage {
     return path.join(Storage.getGlobalLlxprtDir(), 'commands');
   }
 
+  static getUserSkillsDir(): string {
+    return path.join(Storage.getGlobalGeminiDir(), 'skills');
+  }
+
   static getGlobalMemoryFilePath(): string {
     return path.join(Storage.getGlobalLlxprtDir(), 'memory.md');
   }
@@ -120,6 +124,10 @@ export class Storage {
 
   getProjectCommandsDir(): string {
     return path.join(this.getLlxprtDir(), 'commands');
+  }
+
+  getProjectSkillsDir(): string {
+    return path.join(this.getLlxprtDir(), 'skills');
   }
 
   getProjectTempCheckpointsDir(): string {

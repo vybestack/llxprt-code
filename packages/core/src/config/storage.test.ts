@@ -44,7 +44,13 @@ describe('Storage – additional helpers', () => {
     expect(storage.getProjectCommandsDir()).toBe(expected);
   });
 
+  it('getProjectSkillsDir returns project/.llxprt/skills', () => {
+    const expected = path.join(projectRoot, '.llxprt', 'skills');
+    expect(storage.getProjectSkillsDir()).toBe(expected);
+  });
+
   it('getMcpOAuthTokensPath returns ~/.llxprt/mcp-oauth-tokens.json', () => {
+>>>>>>> de1233b8c (Agent Skills: Implement Core Skill Infrastructure & Tiered Discovery (#15698))
     const expected = path.join(
       os.homedir(),
       '.llxprt',

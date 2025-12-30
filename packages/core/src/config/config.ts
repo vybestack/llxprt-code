@@ -133,6 +133,7 @@ import {
   SimpleExtensionLoader,
 } from '../utils/extensionLoader.js';
 import { McpClientManager } from '../tools/mcp-client-manager.js';
+import { SkillManager } from '../services/skillManager.js';
 
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
@@ -500,6 +501,8 @@ export interface ConfigParameters {
     [K in HookEventName]?: HookDefinition[];
   };
   jitContextEnabled?: boolean;
+  skillsSupport?: boolean;
+  disabledSkills?: string[];
 }
 
 export class Config {
@@ -509,6 +512,7 @@ export class Config {
   private blockedMcpServers: Array<{ name: string; extensionName: string }>;
   private promptRegistry!: PromptRegistry;
   private resourceRegistry!: ResourceRegistry;
+  private skillManager!: SkillManager;
   private readonly sessionId: string;
   private adoptedSessionId: string | undefined;
   private readonly settingsService: SettingsService;
@@ -719,6 +723,9 @@ export class Config {
   private hookSystem: HookSystem | undefined;
   private initialized = false;
 
+  private readonly skillsSupport: boolean;
+  private readonly disabledSkills: string[];
+
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
     if (providedSettingsService) {
@@ -841,6 +848,8 @@ export class Config {
     this.model = params.model;
     this.originalModel = params.model;
     this.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
+    this.skillsSupport = params.skillsSupport ?? false;
+    this.disabledSkills = params.disabledSkills ?? [];
     this.maxSessionTurns = params.maxSessionTurns ?? -1;
     this.experimentalZedIntegration =
       params.experimentalZedIntegration ?? false;
@@ -895,6 +904,7 @@ export class Config {
     this.messageBus = new MessageBus(this.policyEngine, this.debugMode);
 
     this.runtimeState = createAgentRuntimeStateFromConfig(this);
+    this.skillManager = new SkillManager();
     this.disableYoloMode = params.disableYoloMode ?? false;
     this.enableHooks = params.enableHooks ?? false;
     this.jitContextEnabled = params.jitContextEnabled ?? true;
@@ -1034,6 +1044,18 @@ export class Config {
         // Service remains undefined, tools will not use it
         this.lspServiceClient = undefined;
       }
+    }
+
+    // Discover skills if enabled
+    if (this.skillsSupport) {
+      await this.getSkillManager().discoverSkills(this.storage);
+      this.getSkillManager().setDisabledSkills(this.disabledSkills);
+    }
+
+    // Initialize hook system if enabled
+    if (this.enableHooks) {
+      this.hookSystem = new HookSystem(this);
+      await this.hookSystem.initialize();
     }
 
     // Create GeminiClient instance immediately without authentication
@@ -1316,6 +1338,10 @@ export class Config {
 
   getPromptRegistry(): PromptRegistry {
     return this.promptRegistry;
+  }
+
+  getSkillManager(): SkillManager {
+    return this.skillManager;
   }
 
   getResourceRegistry(): ResourceRegistry {
@@ -2061,6 +2087,22 @@ export class Config {
       );
     }
     return this.shellReplacement;
+  }
+
+  isInteractiveShellEnabled(): boolean {
+    return (
+      this.interactive &&
+      this.ptyInfo !== 'child_process' &&
+      this.enableInteractiveShell
+    );
+  }
+
+  isSkillsSupportEnabled(): boolean {
+    return this.skillsSupport;
+  }
+
+  isInteractive(): boolean {
+    return this.interactive;
   }
 
   getUseRipgrep(): boolean {

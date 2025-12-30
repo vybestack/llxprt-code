@@ -1423,6 +1423,8 @@ export async function loadCliConfig(
     maxSessionTurns: effectiveSettings.ui?.maxSessionTurns ?? -1,
     experimentalZedIntegration: argv.experimentalAcp || false,
     listExtensions: argv.listExtensions || false,
+    listSessions: argv.listSessions || false,
+    deleteSession: argv.deleteSession,
     activeExtensions: activeExtensions.map((e) => ({
       name: e.name,
       version: e.version,
@@ -1432,6 +1434,8 @@ export async function loadCliConfig(
     enableExtensionReloading:
       effectiveSettings.experimental?.extensionReloading,
     blockedMcpServers,
+    skillsSupport: effectiveSettings.experimental?.skills,
+    disabledSkills: effectiveSettings.skills?.disabled,
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
     ideMode,
