@@ -1380,6 +1380,8 @@ export class CoreToolScheduler {
   private isPublishingBufferedResults = false;
   // Flag to track if another publish was requested while we were publishing
   private pendingPublishRequest = false;
+  // Total number of tools in the current batch (set when execution starts)
+  private currentBatchSize = 0;
 
   private async publishBufferedResults(signal: AbortSignal): Promise<void> {
     // If already publishing, mark that we need another pass after current one completes
@@ -1395,40 +1397,73 @@ export class CoreToolScheduler {
       do {
         this.pendingPublishRequest = false;
 
-        const callsInOrder = this.toolCalls.filter(
-          (call) => call.status === 'scheduled' || call.status === 'executing',
-        );
+        // Publish results in execution order using the stored executionIndex.
+        // We iterate while there are buffered results that match the next expected index.
+        // This approach doesn't rely on filtering toolCalls by status, which changes
+        // as we publish results (status goes from 'executing' to 'success').
+        while (this.nextPublishIndex < this.currentBatchSize) {
+          // Find the buffered result with the next expected executionIndex
+          let nextBuffered:
+            | {
+                result: ToolResult;
+                callId: string;
+                toolName: string;
+                scheduledCall: ScheduledToolCall;
+                executionIndex: number;
+              }
+            | undefined;
 
-        // Publish results in original request order
-        while (this.nextPublishIndex < callsInOrder.length) {
-          const expectedCall = callsInOrder[this.nextPublishIndex];
-          const buffered = this.pendingResults.get(expectedCall.request.callId);
+          for (const buffered of this.pendingResults.values()) {
+            if (buffered.executionIndex === this.nextPublishIndex) {
+              nextBuffered = buffered;
+              break;
+            }
+          }
 
-          if (!buffered) {
-            // Next result not ready yet, stop publishing
+          if (!nextBuffered) {
+            // The result for the next index isn't ready yet, stop publishing
             break;
           }
 
           // Publish this result
-          await this.publishResult(buffered, signal);
+          await this.publishResult(nextBuffered, signal);
 
           // Remove from buffer
-          this.pendingResults.delete(buffered.callId);
+          this.pendingResults.delete(nextBuffered.callId);
           this.nextPublishIndex++;
         }
 
-        // Check if all tools completed
+        // Check if all tools in this batch completed
         if (
-          this.nextPublishIndex === callsInOrder.length &&
-          callsInOrder.length > 0
+          this.nextPublishIndex === this.currentBatchSize &&
+          this.currentBatchSize > 0
         ) {
           // Reset for next batch
           this.nextPublishIndex = 0;
+          this.currentBatchSize = 0;
           this.pendingResults.clear();
         }
       } while (this.pendingPublishRequest);
     } finally {
       this.isPublishingBufferedResults = false;
+
+      // After releasing the lock, check if there are still pending results
+      // that need publishing. This handles the race condition where:
+      // 1. We break out of the while loop waiting for result N
+      // 2. Result N arrives and calls publishBufferedResults
+      // 3. That call sees isPublishingBufferedResults=true, sets pendingPublishRequest=true, and returns
+      // 4. We then check pendingPublishRequest in the do-while, but it was set AFTER we checked
+      // 5. We exit without publishing the remaining buffered results
+      //
+      // By checking pendingResults.size here after releasing the lock, we ensure
+      // any buffered results get published.
+      if (this.pendingResults.size > 0) {
+        // Use setImmediate to avoid deep recursion and allow the event loop to process
+        // other pending tool completions first
+        setImmediate(() => {
+          void this.publishBufferedResults(signal);
+        });
+      }
     }
   }
 
@@ -1504,6 +1539,10 @@ export class CoreToolScheduler {
       const callsToExecute = this.toolCalls.filter(
         (call) => call.status === 'scheduled',
       );
+
+      // Store the batch size for ordered publishing - this is set once at the start
+      // and doesn't change as tools complete, ensuring we know when all are done
+      this.currentBatchSize = callsToExecute.length;
 
       // Assign execution indices for ordered publishing
       const executionIndices = new Map<string, number>();
