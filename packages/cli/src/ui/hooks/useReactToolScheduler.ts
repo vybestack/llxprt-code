@@ -310,7 +310,16 @@ export function useReactToolScheduler(
         ? request.map(ensureAgentId)
         : ensureAgentId(request);
 
-      scheduler.schedule(normalizedRequest, signal);
+      // The scheduler.schedule() returns a Promise that rejects when the abort
+      // signal fires while tool calls are queued. We intentionally catch and
+      // ignore these rejections because:
+      // 1. Cancellation is an expected user action, not an error
+      // 2. The UI state is updated via cancelAllToolCalls() synchronously
+      // 3. Tool results are not needed after cancellation
+      scheduler.schedule(normalizedRequest, signal).catch(() => {
+        // Silently ignore cancellation rejections - this is expected behavior
+        // when the user presses ESC to cancel queued tool calls
+      });
     },
     [scheduler],
   );

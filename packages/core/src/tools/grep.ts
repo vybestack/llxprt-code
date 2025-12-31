@@ -29,6 +29,20 @@ import {
 } from '../utils/toolOutputLimiter.js';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 
+/**
+ * Checks if a glob pattern contains brace expansion syntax that git grep doesn't support.
+ * Git grep pathspecs don't support shell-style brace expansion like {ts,tsx,js}.
+ * Uses indexOf for O(n) complexity instead of regex to avoid ReDoS vulnerability.
+ */
+function hasBraceExpansion(pattern: string): boolean {
+  const braceStart = pattern.indexOf('{');
+  if (braceStart === -1) return false;
+  const braceEnd = pattern.indexOf('}', braceStart);
+  if (braceEnd === -1) return false;
+  const commaPos = pattern.indexOf(',', braceStart);
+  return commaPos !== -1 && commaPos < braceEnd;
+}
+
 // --- Interfaces ---
 
 /**
@@ -500,7 +514,10 @@ class GrepToolInvocation extends BaseToolInvocation<
 
     try {
       // --- Strategy 1: git grep ---
-      const isGit = isGitRepository(absolutePath);
+      // Skip git grep if include pattern has brace expansion (e.g., *.{ts,tsx})
+      // because git grep pathspecs don't support shell-style brace expansion.
+      const hasBracePattern = include && hasBraceExpansion(include);
+      const isGit = !hasBracePattern && isGitRepository(absolutePath);
       const gitAvailable = isGit && (await this.isCommandAvailable('git'));
 
       if (gitAvailable) {
@@ -526,12 +543,23 @@ class GrepToolInvocation extends BaseToolInvocation<
             const stdoutChunks: Buffer[] = [];
             const stderrChunks: Buffer[] = [];
 
+            // Handle abort signal to kill child process
+            const abortHandler = () => {
+              if (!child.killed) {
+                child.kill('SIGTERM');
+              }
+              reject(new Error('git grep aborted'));
+            };
+            options.signal.addEventListener('abort', abortHandler);
+
             child.stdout.on('data', (chunk) => stdoutChunks.push(chunk));
             child.stderr.on('data', (chunk) => stderrChunks.push(chunk));
-            child.on('error', (err) =>
-              reject(new Error(`Failed to start git grep: ${err.message}`)),
-            );
+            child.on('error', (err) => {
+              options.signal.removeEventListener('abort', abortHandler);
+              reject(new Error(`Failed to start git grep: ${err.message}`));
+            });
             child.on('close', (code) => {
+              options.signal.removeEventListener('abort', abortHandler);
               const stdoutData = Buffer.concat(stdoutChunks).toString('utf8');
               const stderrData = Buffer.concat(stderrChunks).toString('utf8');
               if (code === 0) resolve(stdoutData);
@@ -596,6 +624,16 @@ class GrepToolInvocation extends BaseToolInvocation<
             const stdoutChunks: Buffer[] = [];
             const stderrChunks: Buffer[] = [];
 
+            // Handle abort signal to kill child process
+            const abortHandler = () => {
+              if (!child.killed) {
+                child.kill('SIGTERM');
+              }
+              cleanup();
+              reject(new Error('system grep aborted'));
+            };
+            options.signal.addEventListener('abort', abortHandler);
+
             const onData = (chunk: Buffer) => stdoutChunks.push(chunk);
             const onStderr = (chunk: Buffer) => {
               const stderrStr = chunk.toString();
@@ -632,6 +670,7 @@ class GrepToolInvocation extends BaseToolInvocation<
             };
 
             const cleanup = () => {
+              options.signal.removeEventListener('abort', abortHandler);
               child.stdout.removeListener('data', onData);
               child.stderr.removeListener('data', onStderr);
               child.removeListener('error', onError);
