@@ -1316,6 +1316,11 @@ export const AppContainer = (props: AppContainerProps) => {
     if (quittingMessages) {
       // Allow UI to render the quit message briefly before exiting
       const timer = setTimeout(() => {
+        // Note: We don't call runExitCleanup() here because it includes
+        // instance.waitUntilExit() which would deadlock. The cleanup is
+        // triggered by process.exit() which fires SIGTERM/exit handlers.
+        // The mouse events cleanup is registered in gemini.tsx and will
+        // run via the process exit handlers. (fixes #959)
         process.exit(0);
       }, 100); // 100ms delay to show quit screen
 
