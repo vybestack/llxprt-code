@@ -271,6 +271,10 @@ export function KeypressProvider({
       setRawMode(true);
     }
 
+    process.stdout.write(ENABLE_BRACKETED_PASTE);
+    process.stdout.write(ENABLE_FOCUS_TRACKING);
+    enableSupportedProtocol();
+
     const keypressStream = new PassThrough();
     // Always use passthrough mode for reliable bracketed paste handling.
     // This ensures paste markers are always detected via handleRawKeypress.
@@ -1132,13 +1136,14 @@ export function KeypressProvider({
         setRawMode(false);
       }
 
-      // Best-effort restore of terminal modes we enable while running.
-      // If we exit without running these, the user's terminal can be left with
-      // bracketed paste / focus tracking enabled, which makes subsequent shells
-      // print escape sequences for mouse/keys.
-      process.stdout.write(SHOW_CURSOR);
-      process.stdout.write(DISABLE_BRACKETED_PASTE);
-      process.stdout.write(DISABLE_FOCUS_TRACKING);
+      // Only restore terminal modes if we enabled/managed them.
+      // This effect re-runs on refresh; we must not disable bracketed paste
+      // while the app remains active.
+      if (rawManaged) {
+        process.stdout.write(SHOW_CURSOR);
+        process.stdout.write(DISABLE_BRACKETED_PASTE);
+        process.stdout.write(DISABLE_FOCUS_TRACKING);
+      }
 
       if (backslashTimeout) {
         clearTimeout(backslashTimeout);
