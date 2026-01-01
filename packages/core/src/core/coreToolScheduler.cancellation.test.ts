@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { CoreToolScheduler, type ToolCall } from './coreToolScheduler.js';
 import { Config, ApprovalMode, ToolRegistry } from '../index.js';
 import { MockTool } from '../test-utils/mock-tool.js';
@@ -28,7 +28,54 @@ function createMockPolicyEngine() {
   };
 }
 
+function createMockToolRegistry(mockTool: MockTool) {
+  return {
+    getTool: () => mockTool,
+    getFunctionDeclarations: () => [],
+    tools: new Map(),
+    discovery: {},
+    registerTool: () => {},
+    getToolByName: () => mockTool,
+    getToolByDisplayName: () => mockTool,
+    getTools: () => [],
+    discoverTools: async () => {},
+    getAllTools: () => [],
+    getToolsByServer: () => [],
+    getAllToolNames: () => ['mockTool'],
+  } as unknown as ToolRegistry;
+}
+
+function createMockConfig(
+  mockToolRegistry: ToolRegistry,
+  mockPolicyEngine: ReturnType<typeof createMockPolicyEngine>,
+) {
+  return {
+    getSessionId: () => 'test-session-id',
+    getUsageStatisticsEnabled: () => true,
+    getDebugMode: () => false,
+    getApprovalMode: () => ApprovalMode.YOLO,
+    getEphemeralSettings: () => ({}),
+    getAllowedTools: () => [],
+    getContentGeneratorConfig: () => ({
+      model: 'test-model',
+      authType: 'oauth-personal',
+    }),
+    getToolRegistry: () => mockToolRegistry,
+    getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
+    getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
+  } as unknown as Config;
+}
+
 describe('CoreToolScheduler cancellation edge cases', () => {
+  let scheduler: CoreToolScheduler | undefined;
+
+  afterEach(() => {
+    if (scheduler) {
+      scheduler.dispose();
+      scheduler = undefined;
+    }
+  });
+
   /**
    * Issue #1: Cancelled tools don't buffer results, blocking ordered publishing
    *
@@ -70,42 +117,13 @@ describe('CoreToolScheduler cancellation edge cases', () => {
       });
 
     const mockTool = new MockTool({ name: 'mockTool', execute: executeFn });
-    const mockToolRegistry = {
-      getTool: () => mockTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByName: () => mockTool,
-      getToolByDisplayName: () => mockTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-      getAllToolNames: () => ['mockTool'],
-    } as unknown as ToolRegistry;
-
+    const mockToolRegistry = createMockToolRegistry(mockTool);
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
     const mockPolicyEngine = createMockPolicyEngine();
+    const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-        authType: 'oauth-personal',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as Config;
-
-    const scheduler = new CoreToolScheduler({
+    scheduler = new CoreToolScheduler({
       config: mockConfig,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -196,9 +214,6 @@ describe('CoreToolScheduler cancellation edge cases', () => {
    * This verifies that batch state is properly reset after cancellation.
    */
   it('should properly reset batch state after cancelAll and work correctly on next schedule', async () => {
-    // We'll use two separate scheduler instances to avoid any state leakage issues
-    // The key thing we're testing is that cancelAll properly resets internal state
-
     let toolResolve: (() => void) | undefined;
 
     const executeFn = vi.fn().mockImplementation(async () => {
@@ -212,42 +227,13 @@ describe('CoreToolScheduler cancellation edge cases', () => {
     });
 
     const mockTool = new MockTool({ name: 'mockTool', execute: executeFn });
-    const mockToolRegistry = {
-      getTool: () => mockTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByName: () => mockTool,
-      getToolByDisplayName: () => mockTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-      getAllToolNames: () => ['mockTool'],
-    } as unknown as ToolRegistry;
-
+    const mockToolRegistry = createMockToolRegistry(mockTool);
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
     const mockPolicyEngine = createMockPolicyEngine();
+    const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-        authType: 'oauth-personal',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as Config;
-
-    const scheduler = new CoreToolScheduler({
+    scheduler = new CoreToolScheduler({
       config: mockConfig,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -330,42 +316,13 @@ describe('CoreToolScheduler cancellation edge cases', () => {
       });
 
     const mockTool = new MockTool({ name: 'mockTool', execute: executeFn });
-    const mockToolRegistry = {
-      getTool: () => mockTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByName: () => mockTool,
-      getToolByDisplayName: () => mockTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-      getAllToolNames: () => ['mockTool'],
-    } as unknown as ToolRegistry;
-
+    const mockToolRegistry = createMockToolRegistry(mockTool);
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
     const mockPolicyEngine = createMockPolicyEngine();
+    const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-        authType: 'oauth-personal',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-    } as unknown as Config;
-
-    const scheduler = new CoreToolScheduler({
+    scheduler = new CoreToolScheduler({
       config: mockConfig,
       onAllToolCallsComplete,
       onToolCallsUpdate,
