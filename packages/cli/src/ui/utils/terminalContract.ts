@@ -42,7 +42,10 @@ const ENABLE_MOUSE_EVENTS = '\x1b[?1000h\x1b[?1002h\x1b[?1006h';
  * - Show cursor
  */
 export const TERMINAL_CONTRACT_SEQUENCES =
-  ENABLE_MOUSE_EVENTS + ENABLE_BRACKETED_PASTE + ENABLE_FOCUS_TRACKING + SHOW_CURSOR;
+  ENABLE_MOUSE_EVENTS +
+  ENABLE_BRACKETED_PASTE +
+  ENABLE_FOCUS_TRACKING +
+  SHOW_CURSOR;
 
 /**
  * Terminal contract sequences without mouse events.
@@ -117,7 +120,10 @@ export async function drainStdinBuffer(
 
     const onReadable = () => {
       // Read and discard any available data
-      while ((stdin as NodeJS.ReadableStream & { read(): Buffer | null }).read() !== null) {
+      while (
+        (stdin as NodeJS.ReadableStream & { read(): Buffer | null }).read() !==
+        null
+      ) {
         // Intentionally discard the data
       }
     };

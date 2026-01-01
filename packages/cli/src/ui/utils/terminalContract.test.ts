@@ -47,7 +47,9 @@ describe('terminalContract', () => {
     it('writes all terminal contract sequences to stdout', () => {
       applyTerminalContract(mockStdout as unknown as NodeJS.WriteStream);
 
-      expect(mockStdout.write).toHaveBeenCalledWith(TERMINAL_CONTRACT_SEQUENCES);
+      expect(mockStdout.write).toHaveBeenCalledWith(
+        TERMINAL_CONTRACT_SEQUENCES,
+      );
     });
 
     it('does not write mouse sequences when includeMouseEvents is false', () => {

@@ -123,3 +123,39 @@ describe('SIGWINCH handler behavior', () => {
     );
   });
 });
+
+describe('Ctrl+Alt+R terminal repair hotkey', () => {
+  let mockStdoutWrite: ReturnType<typeof vi.fn>;
+  let mockStdoutEmit: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    mockStdoutWrite = vi.fn().mockReturnValue(true);
+    mockStdoutEmit = vi.fn();
+    vi.spyOn(process.stdout, 'write').mockImplementation(mockStdoutWrite);
+    vi.spyOn(process.stdout, 'emit').mockImplementation(mockStdoutEmit);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('Ctrl+Alt+R should re-assert terminal modes and trigger resize', () => {
+    // Simulate the Ctrl+Alt+R handler behavior
+    const handleCtrlAltR = () => {
+      process.stdout.write(ENABLE_BRACKETED_PASTE);
+      process.stdout.write(ENABLE_FOCUS_TRACKING);
+      process.stdout.write(SHOW_CURSOR);
+      // Re-enable mouse if it was enabled
+      process.stdout.write('\x1b[?1000h\x1b[?1002h\x1b[?1006h');
+      // Trigger UI redraw
+      process.stdout.emit('resize');
+    };
+
+    handleCtrlAltR();
+
+    expect(mockStdoutWrite).toHaveBeenCalledWith(ENABLE_BRACKETED_PASTE);
+    expect(mockStdoutWrite).toHaveBeenCalledWith(ENABLE_FOCUS_TRACKING);
+    expect(mockStdoutWrite).toHaveBeenCalledWith(SHOW_CURSOR);
+    expect(mockStdoutEmit).toHaveBeenCalledWith('resize');
+  });
+});

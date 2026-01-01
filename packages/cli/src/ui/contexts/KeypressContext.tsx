@@ -940,6 +940,21 @@ export function KeypressProvider({
       if (handleFocusEvent(key)) return;
       if (handlePasteEvent(key)) return;
 
+      // Handle Ctrl+Alt+R (terminal repair) - re-assert terminal modes
+      // This is useful when terminal modes drift (e.g., after subprocess output)
+      // and the user can't type commands properly. Fixes #847, #916.
+      if (key.name === 'r' && key.ctrl && key.meta && rawManaged) {
+        process.stdout.write(ENABLE_BRACKETED_PASTE);
+        process.stdout.write(ENABLE_FOCUS_TRACKING);
+        process.stdout.write(SHOW_CURSOR);
+        if (isMouseEventsActive()) {
+          enableMouseEvents();
+        }
+        // Emit resize to force UI redraw
+        process.stdout.emit('resize');
+        return;
+      }
+
       // Handle Ctrl+Z (suspend) - must check before other handlers
       if (key.name === 'z' && key.ctrl && !key.meta && rawManaged) {
         // Disable raw mode
