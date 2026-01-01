@@ -432,6 +432,166 @@ describe('KeypressContext - Kitty Protocol', () => {
         }),
       );
     });
+
+    it('should handle paste ending with carriage return without triggering submit', async () => {
+      const keyHandler = vi.fn();
+      // This simulates pasting content that ends with CR (common when copying from terminal history)
+      const CR = String.fromCharCode(13);
+      const pastedText = 'some command' + CR;
+
+      const { result } = renderHook(() => useKeypressContext(), {
+        wrapper,
+      });
+
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      // Simulate a bracketed paste event with content ending in CR
+      act(() => {
+        stdin.sendPaste(pastedText);
+      });
+
+      await waitFor(() => {
+        expect(keyHandler).toHaveBeenCalled();
+      });
+
+      // Should receive exactly ONE event - the paste event
+      // Should NOT receive a separate 'return' key event
+      const calls = keyHandler.mock.calls;
+      expect(calls.length).toBe(1);
+
+      // The single call should be a paste event containing the full text including CR
+      expect(calls[0][0]).toMatchObject({
+        paste: true,
+        sequence: pastedText,
+      });
+
+      // Verify no 'return' key was emitted separately
+      const returnKeyCall = calls.find(
+        (call) => call[0].name === 'return' && !call[0].paste,
+      );
+      expect(returnKeyCall).toBeUndefined();
+    });
+
+    it('should handle paste ending with newline without triggering submit', async () => {
+      const keyHandler = vi.fn();
+      // This simulates pasting content that ends with LF (newline)
+      const LF = String.fromCharCode(10);
+      const pastedText = 'some command' + LF;
+
+      const { result } = renderHook(() => useKeypressContext(), {
+        wrapper,
+      });
+
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      // Simulate a bracketed paste event with content ending in LF
+      act(() => {
+        stdin.sendPaste(pastedText);
+      });
+
+      await waitFor(() => {
+        expect(keyHandler).toHaveBeenCalled();
+      });
+
+      // Should receive exactly ONE event - the paste event
+      const calls = keyHandler.mock.calls;
+      expect(calls.length).toBe(1);
+
+      // The single call should be a paste event containing the full text including LF
+      expect(calls[0][0]).toMatchObject({
+        paste: true,
+        sequence: pastedText,
+      });
+    });
+
+    it('should handle paste with content split across multiple data events', async () => {
+      const keyHandler = vi.fn();
+      const LF = String.fromCharCode(10);
+      const fullText = 'line1' + LF + 'line2' + LF + 'line3';
+      const PASTE_MODE_PREFIX = '\x1b[200~';
+      const PASTE_MODE_SUFFIX = '\x1b[201~';
+
+      const { result } = renderHook(() => useKeypressContext(), {
+        wrapper,
+      });
+
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      // Simulate paste content arriving in chunks (which can happen with large pastes)
+      act(() => {
+        // Send prefix
+        stdin.emit('data', Buffer.from(PASTE_MODE_PREFIX));
+        // Send content in chunks
+        stdin.emit('data', Buffer.from('line1' + LF));
+        stdin.emit('data', Buffer.from('line2' + LF));
+        stdin.emit('data', Buffer.from('line3'));
+        // Send suffix
+        stdin.emit('data', Buffer.from(PASTE_MODE_SUFFIX));
+      });
+
+      await waitFor(() => {
+        expect(keyHandler).toHaveBeenCalled();
+      });
+
+      // Should receive exactly ONE paste event with the combined content
+      const calls = keyHandler.mock.calls;
+      expect(calls.length).toBe(1);
+
+      expect(calls[0][0]).toMatchObject({
+        paste: true,
+        sequence: fullText,
+      });
+    });
+
+    it('should handle paste where suffix arrives in same chunk as trailing CR', async () => {
+      const keyHandler = vi.fn();
+      const textContent = 'pasted content';
+      const CR = String.fromCharCode(13);
+      const PASTE_MODE_PREFIX = '\x1b[200~';
+      const PASTE_MODE_SUFFIX = '\x1b[201~';
+
+      const { result } = renderHook(() => useKeypressContext(), {
+        wrapper,
+      });
+
+      act(() => {
+        result.current.subscribe(keyHandler);
+      });
+
+      // This simulates the exact scenario where a CR and the paste suffix
+      // arrive together, which can cause the CR to be interpreted as Enter
+      act(() => {
+        stdin.emit('data', Buffer.from(PASTE_MODE_PREFIX));
+        stdin.emit('data', Buffer.from(textContent));
+        // The problematic case: CR followed immediately by suffix in same chunk
+        stdin.emit('data', Buffer.from(CR + PASTE_MODE_SUFFIX));
+      });
+
+      await waitFor(() => {
+        expect(keyHandler).toHaveBeenCalled();
+      });
+
+      // Should receive exactly ONE paste event
+      const calls = keyHandler.mock.calls;
+      expect(calls.length).toBe(1);
+
+      expect(calls[0][0]).toMatchObject({
+        paste: true,
+        sequence: textContent + CR,
+      });
+
+      // Verify no separate return key was emitted
+      const returnKeyCall = calls.find(
+        (call) => call[0].name === 'return' && !call[0].paste,
+      );
+      expect(returnKeyCall).toBeUndefined();
+    });
   });
 
   describe('debug keystroke logging', () => {

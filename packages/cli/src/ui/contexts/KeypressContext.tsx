@@ -271,17 +271,14 @@ export function KeypressProvider({
       setRawMode(true);
     }
 
+    process.stdout.write(ENABLE_BRACKETED_PASTE);
+    process.stdout.write(ENABLE_FOCUS_TRACKING);
+    enableSupportedProtocol();
+
     const keypressStream = new PassThrough();
-    let usePassthrough = false;
-    const nodeMajorVersion = parseInt(process.versions.node.split('.')[0], 10);
-    if (
-      mouseEventsEnabled ||
-      nodeMajorVersion < 20 ||
-      process.env['PASTE_WORKAROUND'] === '1' ||
-      process.env['PASTE_WORKAROUND'] === 'true'
-    ) {
-      usePassthrough = true;
-    }
+    // Always use passthrough mode for reliable bracketed paste handling.
+    // This ensures paste markers are always detected via handleRawKeypress.
+    // The direct readline mode on Node 20+ doesn't properly handle paste events.
 
     let isPaste = false;
     let pasteBuffer = Buffer.alloc(0);
@@ -1108,20 +1105,15 @@ export function KeypressProvider({
 
     process.on('SIGCONT', handleSigcont);
 
-    let rl: readline.Interface;
-    if (usePassthrough) {
-      rl = readline.createInterface({
-        input: keypressStream,
-        escapeCodeTimeout: 0,
-      });
-      readline.emitKeypressEvents(keypressStream, rl);
-      keypressStream.on('keypress', handleKeypress);
-      stdin.on('data', handleRawKeypress);
-    } else {
-      rl = readline.createInterface({ input: stdin, escapeCodeTimeout: 0 });
-      readline.emitKeypressEvents(stdin, rl);
-      stdin.on('keypress', handleKeypress);
-    }
+    const rl = readline.createInterface({
+      input: keypressStream,
+      escapeCodeTimeout: 0,
+    });
+    readline.emitKeypressEvents(keypressStream, rl);
+    keypressStream.on('keypress', handleKeypress);
+    stdin.on('data', handleRawKeypress);
+    // Also listen directly on stdin for keypress events (for tests that emit keypress directly)
+    stdin.on('keypress', handleKeypress);
 
     return () => {
       if (keypressLogger.enabled) {
@@ -1130,12 +1122,9 @@ export function KeypressProvider({
             `Cleaning up keypress listeners (generation ${refreshGeneration})`,
         );
       }
-      if (usePassthrough) {
-        keypressStream.removeListener('keypress', handleKeypress);
-        stdin.removeListener('data', handleRawKeypress);
-      } else {
-        stdin.removeListener('keypress', handleKeypress);
-      }
+      keypressStream.removeListener('keypress', handleKeypress);
+      stdin.removeListener('data', handleRawKeypress);
+      stdin.removeListener('keypress', handleKeypress);
 
       rl.close();
 
@@ -1147,13 +1136,14 @@ export function KeypressProvider({
         setRawMode(false);
       }
 
-      // Best-effort restore of terminal modes we enable while running.
-      // If we exit without running these, the user's terminal can be left with
-      // bracketed paste / focus tracking enabled, which makes subsequent shells
-      // print escape sequences for mouse/keys.
-      process.stdout.write(SHOW_CURSOR);
-      process.stdout.write(DISABLE_BRACKETED_PASTE);
-      process.stdout.write(DISABLE_FOCUS_TRACKING);
+      // Only restore terminal modes if we enabled/managed them.
+      // This effect re-runs on refresh; we must not disable bracketed paste
+      // while the app remains active.
+      if (rawManaged) {
+        process.stdout.write(SHOW_CURSOR);
+        process.stdout.write(DISABLE_BRACKETED_PASTE);
+        process.stdout.write(DISABLE_FOCUS_TRACKING);
+      }
 
       if (backslashTimeout) {
         clearTimeout(backslashTimeout);
