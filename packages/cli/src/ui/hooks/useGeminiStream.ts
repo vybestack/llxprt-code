@@ -1175,6 +1175,26 @@ export const useGeminiStream = (
         return;
       }
 
+      // Issue #968: Don't process tool completions or start continuations
+      // if the turn has been cancelled. Mark the tools as submitted to
+      // prevent them from being reprocessed, but don't send to Gemini.
+      if (turnCancelledRef.current) {
+        const callIds = completedToolCallsFromScheduler
+          .filter(
+            (tc): tc is TrackedCompletedToolCall | TrackedCancelledToolCall =>
+              (tc.status === 'success' ||
+                tc.status === 'error' ||
+                tc.status === 'cancelled') &&
+              (tc as TrackedCompletedToolCall | TrackedCancelledToolCall)
+                .response?.responseParts !== undefined,
+          )
+          .map((tc) => tc.request.callId);
+        if (callIds.length > 0) {
+          markToolsAsSubmitted(callIds);
+        }
+        return;
+      }
+
       const completedAndReadyToSubmitTools =
         completedToolCallsFromScheduler.filter(
           (

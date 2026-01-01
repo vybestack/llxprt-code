@@ -1616,6 +1616,39 @@ export class CoreToolScheduler {
               );
               await this.publishBufferedResults(signal);
             }
+          })
+          // Issue #957: Final catch handler to ensure tool always reaches
+          // terminal state even if publishBufferedResults throws. This prevents
+          // tools from getting stuck in 'executing' state and blocking the
+          // scheduler indefinitely.
+          .catch((publishError: Error) => {
+            if (toolSchedulerLogger.enabled) {
+              toolSchedulerLogger.debug(
+                () =>
+                  `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
+              );
+            }
+
+            // Check if the tool is still in a non-terminal state
+            const toolCall = this.toolCalls.find(
+              (tc) => tc.request.callId === callId,
+            );
+            if (
+              toolCall &&
+              toolCall.status !== 'success' &&
+              toolCall.status !== 'error' &&
+              toolCall.status !== 'cancelled'
+            ) {
+              // Force transition to error state to unblock the scheduler
+              const errorResponse = createErrorResponse(
+                scheduledCall.request,
+                new Error(
+                  `Failed to publish tool result: ${publishError.message}`,
+                ),
+                ToolErrorType.UNHANDLED_EXCEPTION,
+              );
+              this.setStatusInternal(callId, 'error', errorResponse);
+            }
           });
       });
     }
