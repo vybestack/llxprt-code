@@ -42,7 +42,7 @@ import {
 } from '../constants/historyLimits.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
-import { registerCleanup } from '../utils/cleanup.js';
+import { registerCleanup, runExitCleanup } from '../utils/cleanup.js';
 import { useHistory } from './hooks/useHistoryManager.js';
 import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
@@ -1315,7 +1315,10 @@ export const AppContainer = (props: AppContainerProps) => {
   useEffect(() => {
     if (quittingMessages) {
       // Allow UI to render the quit message briefly before exiting
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
+        // Run cleanup before exiting to ensure mouse events are disabled,
+        // terminal modes are restored, etc. (fixes #959)
+        await runExitCleanup();
         process.exit(0);
       }, 100); // 100ms delay to show quit screen
 

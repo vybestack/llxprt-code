@@ -47,7 +47,12 @@ import {
   SHOW_CURSOR,
 } from '../utils/terminalSequences.js';
 import { enableSupportedProtocol } from '../utils/kittyProtocolDetector.js';
-import { isIncompleteMouseSequence, parseMouseEvent } from '../utils/mouse.js';
+import {
+  isIncompleteMouseSequence,
+  parseMouseEvent,
+  enableMouseEvents,
+  isMouseEventsActive,
+} from '../utils/mouse.js';
 
 const ESC = '\u001B';
 const keypressLogger = new DebugLogger('llxprt:ui:keypress');
@@ -1085,6 +1090,7 @@ export function KeypressProvider({
     };
 
     // Handle SIGCONT (process resume after tmux reattach or fg)
+    // Fixes #916: TMUX reconnect doesn't redraw UI properly
     const handleSigcont = () => {
       if (!rawManaged) return;
 
@@ -1095,15 +1101,42 @@ export function KeypressProvider({
       // Re-send terminal control sequences
       process.stdout.write(ENABLE_BRACKETED_PASTE);
       process.stdout.write(ENABLE_FOCUS_TRACKING);
+      process.stdout.write(SHOW_CURSOR);
       enableSupportedProtocol();
+
+      // Re-enable mouse events if they were active (fixes #847, #916)
+      if (isMouseEventsActive()) {
+        enableMouseEvents();
+      }
 
       // Trigger a refresh to ensure the UI re-renders with proper prompt state
       // This is necessary because tmux reattach can cause the terminal to lose
       // the current display state, including the prompt text and cursor position
       setRefreshGeneration((prev) => prev + 1);
+
+      // Emit a resize event to force Ink to recalculate layout and redraw
+      // This addresses the issue where the screen doesn't draw until resize (fixes #916)
+      process.stdout.emit('resize');
+    };
+
+    // Handle SIGWINCH (terminal resize)
+    // Some terminals may reset modes on resize, so we proactively re-assert them
+    // This also helps with #847 where mouse modes can drift
+    const handleSigwinch = () => {
+      if (!rawManaged) return;
+
+      // Re-assert terminal modes to prevent drift
+      process.stdout.write(ENABLE_BRACKETED_PASTE);
+      process.stdout.write(ENABLE_FOCUS_TRACKING);
+
+      // Re-enable mouse events if they were active
+      if (isMouseEventsActive()) {
+        enableMouseEvents();
+      }
     };
 
     process.on('SIGCONT', handleSigcont);
+    process.on('SIGWINCH', handleSigwinch);
 
     const rl = readline.createInterface({
       input: keypressStream,
@@ -1128,8 +1161,9 @@ export function KeypressProvider({
 
       rl.close();
 
-      // Remove SIGCONT listener
+      // Remove SIGCONT and SIGWINCH listeners
       process.removeListener('SIGCONT', handleSigcont);
+      process.removeListener('SIGWINCH', handleSigwinch);
 
       // Restore the terminal to its original state.
       if (wasRaw === false) {

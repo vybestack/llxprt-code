@@ -95,6 +95,7 @@ import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { disableMouseEvents, enableMouseEvents } from './ui/utils/mouse.js';
+import { drainStdinBuffer } from './ui/utils/terminalContract.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
@@ -395,6 +396,11 @@ export async function main() {
     !wasRaw &&
     process.stdin.isTTY
   ) {
+    // Drain any garbage ANSI sequences that may be in the stdin buffer
+    // before we start processing input. This addresses #199 where garbage
+    // ANSI on startup can disrupt theme selection on some terminals (e.g., OCI).
+    await drainStdinBuffer(process.stdin, 50);
+
     // Set this as early as possible to avoid spurious characters from
     // input showing up in the output.
     process.stdin.setRawMode(true);

@@ -46,6 +46,7 @@ import { setCommand } from '../ui/commands/setCommand.js';
 import { profileCommand } from '../ui/commands/profileCommand.js';
 import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
+import { terminalRepairCommand } from '../ui/commands/terminalRepairCommand.js';
 import { debugCommand } from '../ui/commands/debugCommands.js';
 import { logoutCommand } from '../ui/commands/logoutCommand.js';
 import { statusCommand } from '../ui/commands/statusCommand.js';
@@ -120,6 +121,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       profileCommand,
       diagnosticsCommand,
       terminalSetupCommand,
+      terminalRepairCommand,
       debugCommand,
       logoutCommand,
       statusCommand,
