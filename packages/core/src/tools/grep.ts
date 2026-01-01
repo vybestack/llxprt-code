@@ -46,6 +46,16 @@ function hasBraceExpansion(pattern: string): boolean {
 // --- Interfaces ---
 
 /**
+ * Default timeout for grep operations in milliseconds (1 minute)
+ */
+const DEFAULT_TIMEOUT_MS = 60_000;
+
+/**
+ * Maximum allowed timeout for grep operations in milliseconds (5 minutes)
+ */
+const MAX_TIMEOUT_MS = 300_000;
+
+/**
  * Parameters for the GrepTool
  */
 export interface GrepToolParams {
@@ -78,6 +88,13 @@ export interface GrepToolParams {
    * Maximum number of matches per file to return (optional)
    */
   max_per_file?: number;
+
+  /**
+   * Timeout in milliseconds (default: 60000ms = 1 minute, max: 300000ms = 5 minutes).
+   * If the operation times out, an error is returned with suggestions to use a
+   * longer timeout or a more specific pattern.
+   */
+  timeout_ms?: number;
 }
 
 /**
@@ -145,6 +162,38 @@ class GrepToolInvocation extends BaseToolInvocation<
   }
 
   async execute(signal: AbortSignal): Promise<ToolResult> {
+    // Set up timeout handling
+    const timeoutMs = Math.min(
+      this.params.timeout_ms ?? DEFAULT_TIMEOUT_MS,
+      MAX_TIMEOUT_MS,
+    );
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
+
+    // Combine user abort with timeout abort
+    const onUserAbort = () => {
+      clearTimeout(timeoutId);
+      timeoutController.abort();
+    };
+    if (signal.aborted) {
+      clearTimeout(timeoutId);
+      timeoutController.abort();
+      // Early return for already-aborted signal
+      return {
+        llmContent: 'Search operation was cancelled by user.',
+        returnDisplay: 'Cancelled',
+        error: {
+          message: 'Search operation was cancelled by user.',
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    } else {
+      signal.addEventListener('abort', onUserAbort);
+    }
+
+    // Use the combined signal for all operations
+    const combinedSignal = timeoutController.signal;
+
     try {
       const workspaceContext = this.config.getWorkspaceContext();
       const searchDirAbs = this.resolveAndValidatePath(this.params.path);
@@ -185,7 +234,7 @@ class GrepToolInvocation extends BaseToolInvocation<
           pattern: this.params.pattern,
           path: searchDir,
           include: this.params.include,
-          signal,
+          signal: combinedSignal,
           maxResults: maxResults - allMatches.length,
           maxFiles: maxFiles - filesWithMatches.size,
           maxPerFile,
@@ -311,6 +360,44 @@ class GrepToolInvocation extends BaseToolInvocation<
         returnDisplay: displayCount,
       };
     } catch (error) {
+      // Check if this was a timeout vs user abort
+      const isAbortError =
+        error instanceof Error &&
+        (error.name === 'AbortError' ||
+          error.message.includes('aborted') ||
+          error.message.includes('This operation was aborted'));
+
+      if (isAbortError) {
+        // Check if it was a timeout (our controller aborted but user's didn't)
+        if (timeoutController.signal.aborted && !signal.aborted) {
+          const timeoutMessage =
+            `Search operation timed out after ${timeoutMs}ms. To resolve this, you can either:
+` +
+            `1. Increase the timeout (max ${MAX_TIMEOUT_MS}ms) by adding timeout_ms parameter
+` +
+            `2. Use a more specific pattern to reduce search scope
+` +
+            `3. Use a narrower path or include filter`;
+          return {
+            llmContent: timeoutMessage,
+            returnDisplay: `Timed out after ${timeoutMs}ms`,
+            error: {
+              message: timeoutMessage,
+              type: ToolErrorType.TIMEOUT,
+            },
+          };
+        }
+        // User cancelled - return cancellation result rather than throwing
+        return {
+          llmContent: 'Search operation was cancelled by user.',
+          returnDisplay: 'Cancelled',
+          error: {
+            message: 'Search operation was cancelled by user.',
+            type: ToolErrorType.EXECUTION_FAILED,
+          },
+        };
+      }
+
       console.error(`Error during GrepLogic execution: ${error}`);
       const errorMessage = getErrorMessage(error);
       return {
@@ -321,6 +408,10 @@ class GrepToolInvocation extends BaseToolInvocation<
           type: ToolErrorType.GREP_EXECUTION_ERROR,
         },
       };
+    } finally {
+      // Clean up timeout
+      clearTimeout(timeoutId);
+      signal.removeEventListener('abort', onUserAbort);
     }
   }
 
@@ -832,6 +923,11 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
           max_per_file: {
             description:
               'Optional: Maximum number of matches per file to return. Defaults to 50.',
+            type: 'number',
+          },
+          timeout_ms: {
+            description:
+              'Optional: Timeout in milliseconds (default: 60000ms = 1 minute, max: 300000ms = 5 minutes). If the operation times out, an error is returned with suggestions.',
             type: 'number',
           },
         },
