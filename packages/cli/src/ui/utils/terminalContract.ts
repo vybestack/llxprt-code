@@ -25,14 +25,7 @@ import {
   ENABLE_FOCUS_TRACKING,
   SHOW_CURSOR,
 } from './terminalSequences.js';
-
-/**
- * Mouse tracking escape sequences.
- * - ?1000h: X11 mouse tracking (basic clicks)
- * - ?1002h: Button-event tracking (drag support)
- * - ?1006h: SGR extended coordinates (for terminals with >223 cols/rows)
- */
-const ENABLE_MOUSE_EVENTS = '\x1b[?1000h\x1b[?1002h\x1b[?1006h';
+import { ENABLE_MOUSE_EVENTS } from './mouse.js';
 
 /**
  * Combined terminal contract sequences including:

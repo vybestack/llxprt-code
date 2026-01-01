@@ -37,7 +37,13 @@ export interface MouseEvent {
 
 export type MouseHandler = (event: MouseEvent) => void | boolean;
 
-const ENABLE_MOUSE_EVENTS = [
+/**
+ * Mouse tracking escape sequences.
+ * - ?1000h: X11 mouse tracking (basic clicks)
+ * - ?1002h: Button-event tracking (drag support)
+ * - ?1006h: SGR extended coordinates (for terminals with >223 cols/rows)
+ */
+export const ENABLE_MOUSE_EVENTS = [
   '\x1b[?1000h', // X11 mouse tracking
   '\x1b[?1002h', // Button-event tracking (drag)
   '\x1b[?1006h', // SGR extended coordinates

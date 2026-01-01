@@ -226,7 +226,10 @@ export async function startInteractiveUI(
   const mouseEventsEnabled = isMouseEventsEnabled(renderOptions, settings);
   if (mouseEventsEnabled) {
     enableMouseEvents();
-    registerCleanup(() => {
+    // Use process.on('exit') instead of registerCleanup because registerCleanup
+    // includes instance.waitUntilExit() which would deadlock on quit.
+    // The 'exit' event fires synchronously during process.exit(). (fixes #959)
+    process.on('exit', () => {
       disableMouseEvents();
     });
   }
