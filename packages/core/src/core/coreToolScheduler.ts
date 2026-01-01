@@ -408,6 +408,7 @@ export class CoreToolScheduler {
       toolName: string;
       scheduledCall: ScheduledToolCall;
       executionIndex: number;
+      isCancelled?: boolean; // If true, skip publishing (already transitioned to cancelled)
     }
   > = new Map();
   private nextPublishIndex = 0;
@@ -1375,6 +1376,34 @@ export class CoreToolScheduler {
     });
   }
 
+  /**
+   * Buffer a cancelled placeholder so ordered publishing can skip past this
+   * index without waiting forever. The tool is already transitioned to
+   * 'cancelled' status before this is called.
+   */
+  private bufferCancelled(
+    callId: string,
+    scheduledCall: ScheduledToolCall,
+    executionIndex: number,
+  ): void {
+    const cancelledResult: ToolResult = {
+      error: {
+        message: 'Tool call cancelled by user.',
+        type: ToolErrorType.EXECUTION_FAILED,
+      },
+      llmContent: 'Tool call cancelled by user.',
+      returnDisplay: 'Cancelled',
+    };
+    this.pendingResults.set(callId, {
+      result: cancelledResult,
+      callId,
+      toolName: scheduledCall.request.name,
+      scheduledCall,
+      executionIndex,
+      isCancelled: true, // Mark so publishBufferedResults can skip publishing
+    });
+  }
+
   // Reentrancy guard for publishBufferedResults to prevent race conditions
   // when multiple async tool completions trigger publishing simultaneously
   private isPublishingBufferedResults = false;
@@ -1410,6 +1439,7 @@ export class CoreToolScheduler {
                 toolName: string;
                 scheduledCall: ScheduledToolCall;
                 executionIndex: number;
+                isCancelled?: boolean;
               }
             | undefined;
 
@@ -1425,8 +1455,12 @@ export class CoreToolScheduler {
             break;
           }
 
-          // Publish this result
-          await this.publishResult(nextBuffered, signal);
+          // Skip publishing for cancelled tools - they're already in terminal state
+          // Just remove from buffer and advance the index
+          if (!nextBuffered.isCancelled) {
+            // Publish this result
+            await this.publishResult(nextBuffered, signal);
+          }
 
           // Remove from buffer
           this.pendingResults.delete(nextBuffered.callId);
@@ -1585,6 +1619,10 @@ export class CoreToolScheduler {
                 'cancelled',
                 'User cancelled tool execution.',
               );
+              // Buffer a cancelled placeholder so ordered publishing can continue
+              // This prevents later tools from getting stuck waiting for this index
+              this.bufferCancelled(callId, scheduledCall, executionIndex);
+              await this.publishBufferedResults(signal);
               return;
             }
 
@@ -1607,6 +1645,9 @@ export class CoreToolScheduler {
                 'cancelled',
                 'User cancelled tool execution.',
               );
+              // Buffer a cancelled placeholder so ordered publishing can continue
+              this.bufferCancelled(callId, scheduledCall, executionIndex);
+              await this.publishBufferedResults(signal);
             } else {
               this.bufferError(
                 callId,
@@ -1615,6 +1656,39 @@ export class CoreToolScheduler {
                 executionIndex,
               );
               await this.publishBufferedResults(signal);
+            }
+          })
+          // Issue #957: Final catch handler to ensure tool always reaches
+          // terminal state even if publishBufferedResults throws. This prevents
+          // tools from getting stuck in 'executing' state and blocking the
+          // scheduler indefinitely.
+          .catch((publishError: Error) => {
+            if (toolSchedulerLogger.enabled) {
+              toolSchedulerLogger.debug(
+                () =>
+                  `Error during tool result publishing for ${toolName} (${callId}): ${publishError.message}`,
+              );
+            }
+
+            // Check if the tool is still in a non-terminal state
+            const toolCall = this.toolCalls.find(
+              (tc) => tc.request.callId === callId,
+            );
+            if (
+              toolCall &&
+              toolCall.status !== 'success' &&
+              toolCall.status !== 'error' &&
+              toolCall.status !== 'cancelled'
+            ) {
+              // Force transition to error state to unblock the scheduler
+              const errorResponse = createErrorResponse(
+                scheduledCall.request,
+                new Error(
+                  `Failed to publish tool result: ${publishError.message}`,
+                ),
+                ToolErrorType.UNHANDLED_EXCEPTION,
+              );
+              this.setStatusInternal(callId, 'error', errorResponse);
             }
           });
       });
@@ -1717,7 +1791,15 @@ export class CoreToolScheduler {
       }
     }
 
-    // 2. Cancel all active tool calls
+    // 2. Reset batch bookkeeping state to prevent stale state issues
+    // if the scheduler is reused after cancellation
+    this.pendingResults.clear();
+    this.nextPublishIndex = 0;
+    this.currentBatchSize = 0;
+    this.isPublishingBufferedResults = false;
+    this.pendingPublishRequest = false;
+
+    // 3. Cancel all active tool calls
     this.toolCalls = this.toolCalls.map((call) => {
       if (
         call.status === 'success' ||
