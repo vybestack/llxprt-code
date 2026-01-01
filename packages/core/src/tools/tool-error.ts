@@ -80,6 +80,9 @@ export enum ToolErrorType {
   // WebFetch-specific Errors (Direct)
   FETCH_ERROR = 'fetch_error',
   INVALID_ARGUMENT = 'invalid_argument',
+
+  // Timeout-specific Errors
+  TIMEOUT = 'timeout',
 }
 
 /**
