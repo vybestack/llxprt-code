@@ -1383,16 +1383,34 @@ export class OAuthManager {
         provider.clearState();
       }
 
+      // Flush all known runtime scopes to ensure cached tokens are invalidated
+      // This fixes Issue #975 where logout didn't invalidate in-memory cached tokens
+      const knownRuntimeIds = [
+        'legacy-singleton',
+        'provider-manager-singleton',
+      ];
       try {
         const runtimeContext = getCliRuntimeContext();
         if (runtimeContext && typeof runtimeContext.runtimeId === 'string') {
-          flushRuntimeAuthScope(runtimeContext.runtimeId);
+          if (!knownRuntimeIds.includes(runtimeContext.runtimeId)) {
+            knownRuntimeIds.push(runtimeContext.runtimeId);
+          }
         }
       } catch (runtimeError) {
         logger.debug(
-          `Skipped runtime auth scope flush for ${providerName}:`,
+          `Could not get CLI runtime context for ${providerName}:`,
           runtimeError,
         );
+      }
+
+      // Flush all known runtime scopes
+      for (const runtimeId of knownRuntimeIds) {
+        try {
+          flushRuntimeAuthScope(runtimeId);
+          logger.debug(`Flushed runtime auth scope: ${runtimeId}`);
+        } catch (flushError) {
+          logger.debug(`Skipped flush for runtime ${runtimeId}:`, flushError);
+        }
       }
 
       logger.debug(`Cleared auth caches for provider: ${providerName}`);
