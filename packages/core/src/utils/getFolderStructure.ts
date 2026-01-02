@@ -14,7 +14,12 @@ import { DEFAULT_FILE_FILTERING_OPTIONS } from '../config/constants.js';
 
 const MAX_ITEMS = 200;
 const TRUNCATION_INDICATOR = '...';
-const DEFAULT_IGNORED_FOLDERS = new Set(['node_modules', '.git', 'dist']);
+const DEFAULT_IGNORED_FOLDERS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  '__pycache__',
+]);
 
 // --- Interfaces ---
 

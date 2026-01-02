@@ -20,6 +20,7 @@ import { GrepTool } from '../tools/grep.js';
 import { RipGrepTool } from '../tools/ripGrep.js';
 import { GlobTool } from '../tools/glob.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
+import { ActivateSkillTool } from '../tools/activate-skill.js';
 import { EditTool } from '../tools/edit.js';
 import { ShellTool } from '../tools/shell.js';
 import { ASTEditTool } from '../tools/ast-edit.js';
@@ -1050,6 +1051,13 @@ export class Config {
     if (this.skillsSupport) {
       await this.getSkillManager().discoverSkills(this.storage);
       this.getSkillManager().setDisabledSkills(this.disabledSkills);
+
+      // Re-register ActivateSkillTool to update its schema with the discovered enabled skill enums
+      if (this.getSkillManager().getSkills().length > 0) {
+        this.getToolRegistry().registerTool(
+          new ActivateSkillTool(this, this.messageBus),
+        );
+      }
     }
 
     // Initialize hook system if enabled
@@ -2450,6 +2458,7 @@ ${trimmed}
     }
 
     registerCoreTool(GlobTool, this);
+    registerCoreTool(ActivateSkillTool, this);
     registerCoreTool(EditTool, this);
     registerCoreTool(ASTEditTool, this);
     registerCoreTool(WriteFileTool, this);
