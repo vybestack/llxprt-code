@@ -82,8 +82,7 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
     });
     expect(firstAuth).toBe(tokenAccountA);
 
-    // Simulate logout - this should invalidate the cache
-    // Currently, BaseProvider.clearAuthCache() is a no-op, so this won't work
+    // Simulate logout - invalidate the cache
     resolver.invalidateCache?.();
 
     // Login with different account - token B
@@ -95,9 +94,7 @@ describe('OAuth Logout Cache Invalidation (Issue #975)', () => {
       includeOAuth: true,
     });
 
-    // Then: Should get the new token, not the cached old one
-    // This test currently FAILS because invalidateCache() doesn't exist
-    // and the resolver returns the cached tokenAccountA instead of tokenAccountB
+    // Then: Should get the new token after cache invalidation
     expect(secondAuth).toBe(tokenAccountB);
   });
 

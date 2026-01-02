@@ -23,6 +23,9 @@ import {
   getActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
+import { DebugLogger } from '../debug/index.js';
+
+const logger = new DebugLogger('llxprt:auth:precedence');
 
 export interface AuthPrecedenceConfig {
   // Constructor/direct API key
@@ -1028,12 +1031,9 @@ export class AuthPrecedenceResolver {
       try {
         flushRuntimeAuthScope(runtimeId);
       } catch (error) {
-        if (process.env.DEBUG) {
-          console.debug(
-            `Failed to flush runtime auth scope ${runtimeId}:`,
-            error,
-          );
-        }
+        logger.debug(
+          () => `Failed to flush runtime auth scope ${runtimeId}: ${error}`,
+        );
       }
     }
   }
