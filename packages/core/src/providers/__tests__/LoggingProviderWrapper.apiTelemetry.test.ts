@@ -292,9 +292,9 @@ describe('LoggingProviderWrapper API Telemetry', () => {
   });
 
   describe('model name in telemetry', () => {
-    it('should use provider default model name when conversation logging is disabled', async () => {
-      // When conversation logging is disabled, the metrics-only path is used
-      // which doesn't have access to resolved model name, so it uses provider default
+    it('should use resolved model name when available (even when conversation logging is disabled)', async () => {
+      // Issue #684: Use the resolved model name for telemetry, not the provider default
+      // This ensures /stats model shows the correct model that was actually used
       const provider = new StubProvider();
       const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
 
@@ -319,8 +319,8 @@ describe('LoggingProviderWrapper API Telemetry', () => {
 
       expect(loggers.logApiResponse).toHaveBeenCalled();
       const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
-      // In the metrics-only path, we use the provider's default model
-      expect(call[1].model).toBe('stub-model');
+      // Use resolved model name for accurate /stats model tracking
+      expect(call[1].model).toBe('custom-model-name');
     });
 
     it('should use provider default model when resolved model is not available', async () => {

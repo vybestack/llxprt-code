@@ -617,8 +617,15 @@ export class LoggingProviderWrapper implements IProvider {
 
     // Always process stream to extract token metrics
     // If logging not enabled, process for metrics only
+    // Resolve the model name for telemetry - use resolved model, not provider default
+    const resolvedModelName =
+      normalizedOptions.resolved?.model || this.wrapped.getDefaultModel();
     if (!activeConfig?.getConversationLoggingEnabled()) {
-      yield* this.processStreamForMetrics(activeConfig, stream);
+      yield* this.processStreamForMetrics(
+        activeConfig,
+        stream,
+        resolvedModelName,
+      );
       return;
     }
 
@@ -679,6 +686,7 @@ export class LoggingProviderWrapper implements IProvider {
   private async *processStreamForMetrics(
     config: Config | undefined,
     stream: AsyncIterableIterator<IContent>,
+    modelName: string,
   ): AsyncIterableIterator<IContent> {
     const startTime = performance.now();
     let latestTokenUsage: UsageStats | undefined;
@@ -712,7 +720,6 @@ export class LoggingProviderWrapper implements IProvider {
 
       // Issue #684: Log API response telemetry for /stats model tracking
       if (config) {
-        const modelName = this.wrapped.getDefaultModel();
         // Create event and set token counts directly since constructor doesn't support raw counts
         const event = new ApiResponseEvent(
           modelName,
@@ -750,7 +757,6 @@ export class LoggingProviderWrapper implements IProvider {
 
       // Issue #684: Log API error telemetry
       if (config) {
-        const modelName = this.wrapped.getDefaultModel();
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         logApiError(
