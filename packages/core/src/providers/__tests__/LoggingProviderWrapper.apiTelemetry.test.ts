@@ -349,5 +349,44 @@ describe('LoggingProviderWrapper API Telemetry', () => {
       const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
       expect(call[1].model).toBe('stub-model');
     });
+
+    it('should use resolved model name when conversation logging is enabled (logResponse path)', async () => {
+      // This test specifically targets the bug where logResponseStream -> logResponse
+      // was using getDefaultModel() instead of the resolved model name.
+      // The fix requires passing resolvedModelName through the logResponseStream call chain.
+      const provider = new StubProvider();
+      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+
+      const settings = new SettingsService();
+      const config = createConfigStub(true); // Logging ENABLED - uses logResponseStream path
+      const runtime = createRuntimeContext(settings, config);
+
+      const iterator = wrapper.generateChatCompletion(
+        createProviderCallOptions({
+          providerName: provider.name,
+          contents: [
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Hello' }],
+            },
+          ],
+          settings,
+          config,
+          runtime,
+          resolved: { model: 'explicitly-requested-model' },
+        }),
+      );
+
+      for await (const _chunk of iterator) {
+        // Consume
+      }
+
+      // logApiResponse should be called with the resolved model name, not the default
+      expect(loggers.logApiResponse).toHaveBeenCalled();
+      const call = vi.mocked(loggers.logApiResponse).mock.calls[0];
+      // Bug: Before fix, this would be 'stub-model' (the default)
+      // After fix: should be 'explicitly-requested-model' (the resolved model)
+      expect(call[1].model).toBe('explicitly-requested-model');
+    });
   });
 });

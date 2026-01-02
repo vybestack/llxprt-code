@@ -630,7 +630,12 @@ export class LoggingProviderWrapper implements IProvider {
     }
 
     // Log the response stream (which also processes metrics)
-    yield* this.logResponseStream(activeConfig, stream, promptId);
+    yield* this.logResponseStream(
+      activeConfig,
+      stream,
+      promptId,
+      resolvedModelName,
+    );
   }
 
   private async logRequest(
@@ -780,6 +785,7 @@ export class LoggingProviderWrapper implements IProvider {
     config: Config,
     stream: AsyncIterableIterator<IContent>,
     promptId: string,
+    modelName: string,
   ): AsyncIterableIterator<IContent> {
     const startTime = performance.now();
     let responseContent = '';
@@ -815,6 +821,7 @@ export class LoggingProviderWrapper implements IProvider {
         false,
         error,
         latestTokenUsage,
+        modelName,
       );
       throw error;
     }
@@ -829,6 +836,7 @@ export class LoggingProviderWrapper implements IProvider {
         true,
         undefined,
         latestTokenUsage,
+        modelName,
       );
     }
   }
@@ -863,6 +871,7 @@ export class LoggingProviderWrapper implements IProvider {
     success: boolean,
     error?: unknown,
     tokenUsage?: UsageStats,
+    modelName?: string,
   ): Promise<void> {
     try {
       const redactedContent = this.redactor
@@ -905,9 +914,9 @@ export class LoggingProviderWrapper implements IProvider {
       );
 
       // Issue #684: Log API response telemetry for /stats model tracking
-      const modelName = this.wrapped.getDefaultModel();
+      const resolvedModelName = modelName ?? this.wrapped.getDefaultModel();
       const apiResponseEvent = new ApiResponseEvent(
-        modelName,
+        resolvedModelName,
         duration,
         promptId,
       );
