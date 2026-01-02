@@ -475,10 +475,21 @@ export abstract class BaseProvider implements IProvider {
   }
 
   /**
-   * Clears the authentication token cache
+   * Clears the authentication token cache.
+   * This ensures that after logout, fresh tokens are fetched on the next
+   * authentication attempt without requiring a provider switch.
+   *
+   * @plan PLAN-20251023-STATELESS-HARDENING
+   * @requirement Issue #975 - OAuth logout cache invalidation
    */
   clearAuthCache(): void {
-    // Legacy no-op retained for compatibility with existing logout flows.
+    // Invalidate cached tokens in the auth resolver
+    if (
+      this.authResolver &&
+      typeof this.authResolver.invalidateCache === 'function'
+    ) {
+      this.authResolver.invalidateCache();
+    }
   }
 
   /**

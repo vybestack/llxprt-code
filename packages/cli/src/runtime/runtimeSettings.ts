@@ -1461,6 +1461,20 @@ function extractProviderBaseUrl(
   return undefined;
 }
 
+/**
+ * Default ephemeral settings to preserve across provider switches.
+ * These are context-related settings that should not be cleared when
+ * switching providers, as they represent user preferences for the session.
+ *
+ * @requirement Issue #974 - Provider switching improperly clears context
+ * @plan PLAN-20251023-STATELESS-HARDENING
+ */
+const DEFAULT_PRESERVE_EPHEMERALS = [
+  'context-limit',
+  'max_tokens',
+  'streaming',
+];
+
 export async function switchActiveProvider(
   providerName: string,
   options: {
@@ -1473,7 +1487,11 @@ export async function switchActiveProvider(
   } = {},
 ): Promise<ProviderSwitchResult> {
   const autoOAuth = options.autoOAuth ?? false;
-  const preserveEphemerals = options.preserveEphemerals ?? [];
+  // Merge default preserved ephemerals with any caller-specified ones
+  const preserveEphemerals = [
+    ...DEFAULT_PRESERVE_EPHEMERALS,
+    ...(options.preserveEphemerals ?? []),
+  ];
   const name = providerName.trim();
   if (!name) {
     throw new Error('Provider name is required.');

@@ -23,6 +23,9 @@ import {
   getActiveProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '../runtime/providerRuntimeContext.js';
+import { DebugLogger } from '../debug/index.js';
+
+const logger = new DebugLogger('llxprt:auth:precedence');
 
 export interface AuthPrecedenceConfig {
   // Constructor/direct API key
@@ -1001,5 +1004,37 @@ export class AuthPrecedenceResolver {
    */
   updateOAuthManager(oauthManager: OAuthManager): void {
     this.oauthManager = oauthManager;
+  }
+
+  /**
+   * Invalidates the cached OAuth tokens for this resolver.
+   * This should be called during logout to ensure fresh tokens are fetched
+   * on the next authentication attempt.
+   *
+   * @plan PLAN-20251023-STATELESS-HARDENING
+   * @requirement Issue #975 - OAuth logout cache invalidation
+   */
+  invalidateCache(): void {
+    // Flush known runtime scopes that may have cached tokens for this provider
+    const knownRuntimeIds = ['legacy-singleton', 'provider-manager-singleton'];
+
+    try {
+      const context = getActiveProviderRuntimeContext();
+      if (context?.runtimeId && !knownRuntimeIds.includes(context.runtimeId)) {
+        knownRuntimeIds.push(context.runtimeId);
+      }
+    } catch {
+      // Context not available, proceed with known IDs
+    }
+
+    for (const runtimeId of knownRuntimeIds) {
+      try {
+        flushRuntimeAuthScope(runtimeId);
+      } catch (error) {
+        logger.debug(
+          () => `Failed to flush runtime auth scope ${runtimeId}: ${error}`,
+        );
+      }
+    }
   }
 }
