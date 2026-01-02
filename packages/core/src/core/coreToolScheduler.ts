@@ -1426,6 +1426,35 @@ export class CoreToolScheduler {
       do {
         this.pendingPublishRequest = false;
 
+        // Issue #987 fix: Handle the race condition where tools complete before
+        // currentBatchSize is set. If we have pending results but currentBatchSize
+        // is 0, recalculate the batch size from the pending results to prevent
+        // an infinite setImmediate loop.
+        if (this.currentBatchSize === 0 && this.pendingResults.size > 0) {
+          // Find the maximum executionIndex to determine batch size
+          let maxIndex = -1;
+          for (const buffered of this.pendingResults.values()) {
+            if (buffered.executionIndex > maxIndex) {
+              maxIndex = buffered.executionIndex;
+            }
+          }
+          // Batch size is maxIndex + 1 (since indices are 0-based)
+          // Sanity check: batch size should not exceed the number of pending results
+          // in case of sparse indices (though this shouldn't happen in practice)
+          const recoveredBatchSize = Math.min(
+            maxIndex + 1,
+            this.pendingResults.size,
+          );
+          this.currentBatchSize =
+            recoveredBatchSize > 0 ? recoveredBatchSize : 1;
+          if (toolSchedulerLogger.enabled) {
+            toolSchedulerLogger.debug(
+              () =>
+                `Recovered batch size from pending results: currentBatchSize=${this.currentBatchSize}, pendingResults.size=${this.pendingResults.size}, maxIndex=${maxIndex}`,
+            );
+          }
+        }
+
         // Publish results in execution order using the stored executionIndex.
         // We iterate while there are buffered results that match the next expected index.
         // This approach doesn't rely on filtering toolCalls by status, which changes
