@@ -25,6 +25,10 @@ interface StatRowProps {
   isSection?: boolean;
 }
 
+/**
+ * StatRow component for displaying a labeled row of values.
+ * Issue #684: Fixed theme violations - all text now uses theme colors.
+ */
 const StatRow: React.FC<StatRowProps> = ({
   title,
   values,
@@ -33,13 +37,16 @@ const StatRow: React.FC<StatRowProps> = ({
 }) => (
   <Box>
     <Box width={METRIC_COL_WIDTH}>
-      <Text bold={isSection} color={isSection ? undefined : Colors.LightBlue}>
+      <Text
+        bold={isSection}
+        color={isSection ? Colors.Foreground : Colors.LightBlue}
+      >
         {isSubtle ? `  ↳ ${title}` : title}
       </Text>
     </Box>
     {values.map((value, index) => (
       <Box width={MODEL_COL_WIDTH} key={index}>
-        <Text>{value}</Text>
+        <Text color={Colors.Foreground}>{value}</Text>
       </Box>
     ))}
   </Box>

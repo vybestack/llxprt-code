@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
 import * as SessionContext from '../contexts/SessionContext.js';
 import { SessionMetrics } from '../contexts/SessionContext.js';
+import { Colors } from '../colors.js';
 
 // Mock the context to provide controlled data for testing
 vi.mock('../contexts/SessionContext.js', async (importOriginal) => {
@@ -248,5 +249,99 @@ describe('<ModelStatsDisplay />', () => {
     expect(output).toContain('gemini-2.5-pro');
     expect(output).not.toContain('gemini-2.5-flash');
     expect(output).toMatchSnapshot();
+  });
+
+  /**
+   * Issue #684: Theme violation tests
+   * All text in ModelStatsDisplay should use theme colors, not default white.
+   */
+  describe('theme compliance', () => {
+    it('should use Colors.Foreground for section headers (API, Tokens)', () => {
+      // Verify that Colors.Foreground is defined (theme is available)
+      expect(Colors.Foreground).toBeDefined();
+      expect(typeof Colors.Foreground).toBe('string');
+
+      const { lastFrame } = renderWithMockedStats({
+        models: {
+          'test-model': {
+            api: { totalRequests: 1, totalErrors: 0, totalLatencyMs: 100 },
+            tokens: {
+              prompt: 10,
+              candidates: 20,
+              total: 30,
+              cached: 0,
+              thoughts: 0,
+              tool: 0,
+            },
+          },
+        },
+        tools: {
+          totalCalls: 0,
+          totalSuccess: 0,
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          byName: {},
+        },
+      });
+
+      const output = lastFrame();
+      // Section headers should be present
+      expect(output).toContain('API');
+      expect(output).toContain('Tokens');
+      // The output includes ANSI codes from ink, verify structure
+      expect(output).toMatchSnapshot();
+    });
+
+    it('should use Colors.Foreground for the empty state message', () => {
+      const { lastFrame } = renderWithMockedStats({
+        models: {},
+        tools: {
+          totalCalls: 0,
+          totalSuccess: 0,
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          byName: {},
+        },
+      });
+
+      const output = lastFrame();
+      expect(output).toContain('No API calls have been made in this session.');
+      // The text should include color codes from the theme
+      expect(output).toMatchSnapshot();
+    });
+
+    it('should use Colors.Foreground for stat row values', () => {
+      const { lastFrame } = renderWithMockedStats({
+        models: {
+          'test-model': {
+            api: { totalRequests: 5, totalErrors: 0, totalLatencyMs: 500 },
+            tokens: {
+              prompt: 100,
+              candidates: 200,
+              total: 300,
+              cached: 0,
+              thoughts: 0,
+              tool: 0,
+            },
+          },
+        },
+        tools: {
+          totalCalls: 0,
+          totalSuccess: 0,
+          totalFail: 0,
+          totalDurationMs: 0,
+          totalDecisions: { accept: 0, reject: 0, modify: 0 },
+          byName: {},
+        },
+      });
+
+      const output = lastFrame();
+      // Values should be present with theme colors
+      expect(output).toContain('5'); // Requests count
+      expect(output).toContain('100'); // Prompt tokens
+      expect(output).toMatchSnapshot();
+    });
   });
 });

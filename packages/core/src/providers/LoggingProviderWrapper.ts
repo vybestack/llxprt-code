@@ -22,12 +22,16 @@ import {
   logConversationResponse,
   logTokenUsage,
   logApiRequest,
+  logApiResponse,
+  logApiError,
 } from '../telemetry/loggers.js';
 import {
   ConversationRequestEvent,
   ConversationResponseEvent,
   TokenUsageEvent,
   ApiRequestEvent,
+  ApiResponseEvent,
+  ApiErrorEvent,
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
 import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
@@ -670,6 +674,7 @@ export class LoggingProviderWrapper implements IProvider {
   /**
    * Process stream to extract token metrics without logging
    * @plan PLAN-20250909-TOKTRACK
+   * @issue #684 - Fixed: Now logs API response telemetry for /stats model
    */
   private async *processStreamForMetrics(
     config: Config | undefined,
@@ -692,11 +697,40 @@ export class LoggingProviderWrapper implements IProvider {
       }
 
       // Process metrics if we have token usage
-      if (latestTokenUsage) {
-        const duration = performance.now() - startTime;
-        const tokenCounts =
-          this.extractTokenCountsFromTokenUsage(latestTokenUsage);
+      const duration = performance.now() - startTime;
+      const tokenCounts = latestTokenUsage
+        ? this.extractTokenCountsFromTokenUsage(latestTokenUsage)
+        : {
+            input_token_count: 0,
+            output_token_count: 0,
+            cached_content_token_count: 0,
+            thoughts_token_count: 0,
+            tool_token_count: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: null,
+          };
 
+      // Issue #684: Log API response telemetry for /stats model tracking
+      if (config) {
+        const modelName = this.wrapped.getDefaultModel();
+        // Create event and set token counts directly since constructor doesn't support raw counts
+        const event = new ApiResponseEvent(
+          modelName,
+          duration,
+          '', // promptId - not available in metrics-only path
+        );
+        event.input_token_count = tokenCounts.input_token_count;
+        event.output_token_count = tokenCounts.output_token_count;
+        event.cached_content_token_count =
+          tokenCounts.cached_content_token_count;
+        event.thoughts_token_count = tokenCounts.thoughts_token_count;
+        event.tool_token_count = tokenCounts.tool_token_count;
+        event.total_token_count =
+          tokenCounts.input_token_count + tokenCounts.output_token_count;
+        logApiResponse(config, event);
+      }
+
+      if (latestTokenUsage) {
         // Accumulate token usage for session tracking
         this.accumulateTokenUsage(tokenCounts, config);
 
@@ -713,6 +747,25 @@ export class LoggingProviderWrapper implements IProvider {
       // Record error in performance tracker
       const duration = performance.now() - startTime;
       this.performanceTracker.recordError(duration, String(error));
+
+      // Issue #684: Log API error telemetry
+      if (config) {
+        const modelName = this.wrapped.getDefaultModel();
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        logApiError(
+          config,
+          new ApiErrorEvent(
+            modelName,
+            errorMessage,
+            duration,
+            '', // promptId
+            undefined, // auth_type
+            'stream_error', // error_type
+            undefined, // status_code
+          ),
+        );
+      }
       throw error;
     }
   }
@@ -844,6 +897,25 @@ export class LoggingProviderWrapper implements IProvider {
           totalTokens,
         ),
       );
+
+      // Issue #684: Log API response telemetry for /stats model tracking
+      const modelName = this.wrapped.getDefaultModel();
+      const apiResponseEvent = new ApiResponseEvent(
+        modelName,
+        duration,
+        promptId,
+      );
+      apiResponseEvent.input_token_count = tokenCounts.input_token_count;
+      apiResponseEvent.output_token_count = tokenCounts.output_token_count;
+      apiResponseEvent.cached_content_token_count =
+        tokenCounts.cached_content_token_count;
+      apiResponseEvent.thoughts_token_count = tokenCounts.thoughts_token_count;
+      apiResponseEvent.tool_token_count = tokenCounts.tool_token_count;
+      apiResponseEvent.total_token_count = totalTokens;
+      if (!success && error) {
+        apiResponseEvent.error = String(error);
+      }
+      logApiResponse(config, apiResponseEvent);
 
       const event = new ConversationResponseEvent(
         this.wrapped.name,
