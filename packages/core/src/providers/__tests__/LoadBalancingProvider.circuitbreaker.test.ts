@@ -14,9 +14,14 @@ import {
   type LoadBalancerSubProfile,
 } from '../LoadBalancingProvider.js';
 import { ProviderManager } from '../ProviderManager.js';
+import { SettingsService } from '../../settings/SettingsService.js';
+import { createRuntimeConfigStub } from '../../test-utils/runtime.js';
+import type { Config } from '../../config/config.js';
 import type { IContent } from '../../services/history/IContent.js';
 
 describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
+  let settingsService: SettingsService;
+  let runtimeConfig: Config;
   let providerManager: ProviderManager;
   let config: LoadBalancingProviderConfig;
   const subProfiles: LoadBalancerSubProfile[] = [
@@ -37,7 +42,12 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
   ];
 
   beforeEach(() => {
-    providerManager = new ProviderManager();
+    settingsService = new SettingsService();
+    runtimeConfig = createRuntimeConfigStub(settingsService);
+    providerManager = new ProviderManager({
+      settingsService,
+      config: runtimeConfig,
+    });
     config = {
       profileName: 'test-lb',
       strategy: 'failover',
