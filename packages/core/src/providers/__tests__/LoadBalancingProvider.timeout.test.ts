@@ -45,7 +45,10 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     vi.useFakeTimers();
     settingsService = new SettingsService();
     runtimeConfig = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config: runtimeConfig });
+    providerManager = new ProviderManager({
+      settingsService,
+      config: runtimeConfig,
+    });
     config = {
       profileName: 'test-lb',
       strategy: 'failover',
