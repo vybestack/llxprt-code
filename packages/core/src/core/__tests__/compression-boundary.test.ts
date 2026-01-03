@@ -21,7 +21,7 @@ function createToolCallAiMessage(callIds: string[]): IContent {
       type: 'tool_call' as const,
       id,
       name: 'some_tool',
-      input: {},
+      parameters: {},
     })),
   };
 }
@@ -33,9 +33,8 @@ function createToolResponseMessage(callId: string): IContent {
       {
         type: 'tool_response' as const,
         callId,
-        name: 'some_tool',
-        output: 'Tool output',
-        isError: false,
+        toolName: 'some_tool',
+        result: 'Tool output',
       },
     ],
   };
@@ -496,6 +495,26 @@ describe('Compression Boundary Logic (Issue #982)', () => {
       expect(!firstInKeepIsAiWithToolCalls || allToolCallsHaveResponses).toBe(
         true,
       );
+    });
+
+    it('should trigger backward search when history ends with consecutive tool responses', () => {
+      historyService.add(createUserMessage('Start'));
+      historyService.add(createAiTextMessage('Beginning'));
+      historyService.add(
+        createToolCallAiMessage(['p1', 'p2', 'p3', 'p4', 'p5']),
+      );
+      for (const id of ['p1', 'p2', 'p3', 'p4', 'p5']) {
+        historyService.add(createToolResponseMessage(id));
+      }
+
+      const chat = new GeminiChat(runtimeContext, mockContentGenerator, {}, []);
+      const result = chat['getCompressionSplit']();
+
+      const aiWithCalls = result.toKeep.find(
+        (c) =>
+          c.speaker === 'ai' && c.blocks.some((b) => b.type === 'tool_call'),
+      );
+      expect(aiWithCalls).toBeDefined();
     });
   });
 });
