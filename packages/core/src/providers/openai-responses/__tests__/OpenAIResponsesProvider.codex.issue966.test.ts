@@ -24,6 +24,7 @@ import { createRuntimeConfigStub } from '../../../test-utils/runtime.js';
 import { createProviderCallOptions } from '../../../test-utils/providerCallOptions.js';
 import type { CodexOAuthToken } from '../../../auth/types.js';
 import type { Config } from '../../../config/config.js';
+import type { OAuthManager } from '../../../auth/precedence.js';
 
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
@@ -64,7 +65,7 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
         undefined,
-        mockOAuthManager as never,
+        mockOAuthManager as unknown as OAuthManager,
       );
 
       const settings = new SettingsService();
@@ -168,7 +169,7 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
         undefined,
-        mockOAuthManager as never,
+        mockOAuthManager as unknown as OAuthManager,
       );
 
       const settings = new SettingsService();
@@ -271,7 +272,7 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
         undefined,
-        mockOAuthManager as never,
+        mockOAuthManager as unknown as OAuthManager,
       );
 
       const settings = new SettingsService();
@@ -384,8 +385,21 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
       );
       expect(syntheticToolOutput).toBeDefined();
 
-      // The output should indicate the files were already loaded
-      expect(syntheticToolOutput?.output).toContain('already_loaded');
+      // The output should contain the actual userMemory content
+      const outputParsed = JSON.parse(syntheticToolOutput?.output ?? '{}') as {
+        content?: string;
+        source_files?: string[];
+        status?: string;
+      };
+      expect(outputParsed.status).toBe('already_loaded');
+      expect(outputParsed.content).toBe(mockUserMemory);
+      expect(outputParsed.source_files).toEqual(mockFilePaths);
+
+      // The synthetic call should claim to read AGENTS.md (regardless of actual source)
+      const argsJson = JSON.parse(syntheticToolCall?.arguments ?? '{}') as {
+        absolute_path?: string;
+      };
+      expect(argsJson.absolute_path).toBe('AGENTS.md');
     });
 
     it('should inject "not found" result when no config file exists', async () => {
@@ -404,7 +418,7 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
         undefined,
-        mockOAuthManager as never,
+        mockOAuthManager as unknown as OAuthManager,
       );
 
       const settings = new SettingsService();
@@ -511,8 +525,23 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
       );
       expect(syntheticToolOutput).toBeDefined();
 
-      // The output should indicate not_found status
-      expect(syntheticToolOutput?.output).toContain('not_found');
+      // The output should indicate not_found status with empty content
+      const outputParsed = JSON.parse(syntheticToolOutput?.output ?? '{}') as {
+        content?: string;
+        error?: string;
+        source_files?: string[];
+        status?: string;
+      };
+      expect(outputParsed.status).toBe('not_found');
+      expect(outputParsed.content).toBe('');
+      expect(outputParsed.source_files).toEqual([]);
+      expect(outputParsed.error).toContain('No instruction files');
+
+      // The synthetic call should claim to read AGENTS.md
+      const argsJson = JSON.parse(syntheticToolCall?.arguments ?? '{}') as {
+        absolute_path?: string;
+      };
+      expect(argsJson.absolute_path).toBe('AGENTS.md');
     });
   });
 });

@@ -505,6 +505,12 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
       expect(syntheticCall).toBeDefined();
       expect(syntheticCall?.name).toBe('read_file');
 
+      // Synthetic call should always target AGENTS.md (what CODEX_SYSTEM_PROMPT tells GPT to read)
+      const argsJson = JSON.parse(
+        (syntheticCall as { arguments?: string })?.arguments ?? '{}',
+      ) as { absolute_path?: string };
+      expect(argsJson.absolute_path).toBe('AGENTS.md');
+
       const syntheticOutput = parsedBody.input?.find(
         (item) =>
           item.type === 'function_call_output' &&

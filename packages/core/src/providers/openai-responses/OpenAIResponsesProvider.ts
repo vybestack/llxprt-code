@@ -41,6 +41,27 @@ import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
 import { CODEX_SYSTEM_PROMPT } from './CODEX_PROMPT.js';
+
+/**
+ * Type guard interface for config objects that support LLXPRT.md file operations.
+ * @issue #966
+ */
+interface ConfigWithLlxprtMethods {
+  getLlxprtMdFilePaths?: () => string[];
+  getLlxprtMdFileCount?: () => number;
+}
+
+/**
+ * Type guard to check if a config object has LLXPRT.md metadata methods.
+ * @issue #966
+ */
+function hasLlxprtMetadata(config: unknown): config is ConfigWithLlxprtMethods {
+  return (
+    typeof config === 'object' &&
+    config !== null &&
+    'getLlxprtMdFilePaths' in config
+  );
+}
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -332,9 +353,16 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   /**
-   * Inject a synthetic tool call/result pair for config file reads (LLXPRT.md/AGENTS.md).
-   * This prevents the model from wasting tool calls re-reading files that were already
-   * loaded and injected into the system prompt via userMemory.
+   * Inject a synthetic tool call/result pair that makes GPT think it already read AGENTS.md.
+   *
+   * The CODEX_SYSTEM_PROMPT instructs GPT to read AGENTS.md for project instructions.
+   * However, the user may have configured LLXPRT.md instead (or both), and sometimes
+   * AGENTS.md is deliberately reserved for a different agent (like Codex itself).
+   *
+   * This method:
+   * 1. Always claims to have read "AGENTS.md" in the synthetic function call
+   * 2. Returns the actual userMemory content (from LLXPRT.md, AGENTS.md, or both)
+   * 3. Prevents GPT from wasting a tool call trying to read AGENTS.md
    *
    * @issue #966
    */
@@ -356,33 +384,31 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     const configRef =
       options.config ?? options.runtime?.config ?? this.globalConfig;
-    const filePaths: string[] =
-      (
-        configRef as { getLlxprtMdFilePaths?: () => string[] }
-      )?.getLlxprtMdFilePaths?.() ?? [];
+    const filePaths: string[] = hasLlxprtMetadata(configRef)
+      ? (configRef.getLlxprtMdFilePaths?.() ?? [])
+      : [];
 
     let output: string;
-    let targetFile: string;
 
-    if (userMemory && userMemory.trim().length > 0 && filePaths.length > 0) {
-      const fileList = filePaths.join(', ');
+    // Always pretend we read AGENTS.md - this is what CODEX_SYSTEM_PROMPT tells GPT to do
+    const targetFile = 'AGENTS.md';
+
+    if (userMemory && userMemory.trim().length > 0) {
+      // Return the ACTUAL userMemory content so GPT sees what was loaded,
+      // while making it think this came from reading AGENTS.md
       output = JSON.stringify({
-        output: `The following instruction files have already been read and their contents are included in the system context: ${fileList}. You do not need to read them again.`,
-        files_loaded: filePaths,
+        content: userMemory,
+        source_files: filePaths,
         status: 'already_loaded',
       });
-      // Use the first loaded file path, prefer LLXPRT.md if present
-      const llxprtFile = filePaths.find((p) => p.includes('LLXPRT.md'));
-      const agentsFile = filePaths.find((p) => p.includes('AGENTS.md'));
-      targetFile = llxprtFile ?? agentsFile ?? filePaths[0];
     } else {
       output = JSON.stringify({
-        output:
+        content: '',
+        error:
           'No instruction files (LLXPRT.md, AGENTS.md) were found in the workspace hierarchy.',
-        files_loaded: [],
+        source_files: [],
         status: 'not_found',
       });
-      targetFile = 'LLXPRT.md';
     }
 
     requestInput.unshift(
