@@ -438,6 +438,8 @@ describe('ShellExecutionService child_process fallback', () => {
       configurable: true,
     });
 
+    mockChildProcess.once = mockChildProcess.on.bind(mockChildProcess);
+
     mockCpSpawn.mockReturnValue(mockChildProcess);
   });
 
@@ -841,6 +843,7 @@ describe('ShellExecutionService execution method selection', () => {
       value: 54321,
       configurable: true,
     });
+    mockChildProcess.once = mockChildProcess.on.bind(mockChildProcess);
     mockCpSpawn.mockReturnValue(mockChildProcess);
   });
 

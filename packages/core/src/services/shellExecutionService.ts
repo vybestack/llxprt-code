@@ -327,12 +327,21 @@ export class ShellExecutionService {
 
         abortSignal.addEventListener('abort', abortHandler, { once: true });
 
-        child.once('exit', (code, signal) => {
-          handleExit(code, signal);
-        });
-        child.once('close', (code, signal) => {
-          handleExit(code, signal);
-        });
+        if (child.once) {
+          child.once('exit', (code, signal) => {
+            handleExit(code, signal);
+          });
+          child.once('close', (code, signal) => {
+            handleExit(code, signal);
+          });
+        } else {
+          child.on('exit', (code, signal) => {
+            handleExit(code, signal);
+          });
+          child.on('close', (code, signal) => {
+            handleExit(code, signal);
+          });
+        }
 
         function cleanup() {
           exited = true;
