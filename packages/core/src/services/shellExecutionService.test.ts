@@ -491,6 +491,16 @@ describe('ShellExecutionService child_process fallback', () => {
       });
     });
 
+    it('should resolve when only the close event fires', async () => {
+      const { result } = await simulateExecution('ls -l', (cp) => {
+        cp.stdout?.emit('data', Buffer.from('file1.txt\n'));
+        cp.emit('close', 0, null);
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.output).toBe('file1.txt');
+    });
+
     it('should strip ANSI codes from output', async () => {
       const { result } = await simulateExecution('ls --color=auto', (cp) => {
         cp.stdout?.emit('data', Buffer.from('a\u001b[31mred\u001b[0mword'));

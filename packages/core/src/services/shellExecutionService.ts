@@ -263,10 +263,16 @@ export class ShellExecutionService {
           }
         };
 
+        let hasResolved = false;
+
         const handleExit = (
           code: number | null,
           signal: NodeJS.Signals | null,
         ) => {
+          if (hasResolved) {
+            return;
+          }
+          hasResolved = true;
           const { finalBuffer } = cleanup();
           // Ensure we don't add an extra newline if stdout already ends with one.
           const separator = stdout.endsWith('\n') ? '' : '\n';
@@ -321,7 +327,10 @@ export class ShellExecutionService {
 
         abortSignal.addEventListener('abort', abortHandler, { once: true });
 
-        child.on('exit', (code, signal) => {
+        child.once('exit', (code, signal) => {
+          handleExit(code, signal);
+        });
+        child.once('close', (code, signal) => {
           handleExit(code, signal);
         });
 
