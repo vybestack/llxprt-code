@@ -515,6 +515,13 @@ export class ShellExecutionService {
               return;
             }
 
+            // Issue #983 fix: Add timeout protection to prevent indefinite hanging
+            // when the xterm headlessTerminal.write() callback never fires.
+            // Fast commands can exit before the processing chain completes,
+            // and if the terminal's internal write queue stalls, the promise
+            // chain never resolves, causing the tool to hang forever.
+            const FINALIZE_TIMEOUT_MS = 500;
+
             const processingComplete = processingChain.then(() => 'processed');
             const abortFired = new Promise<'aborted'>((res) => {
               if (abortSignal.aborted) {
@@ -525,8 +532,11 @@ export class ShellExecutionService {
                 once: true,
               });
             });
+            const timeout = new Promise<'timeout'>((res) =>
+              setTimeout(() => res('timeout'), FINALIZE_TIMEOUT_MS),
+            );
 
-            Promise.race([processingComplete, abortFired]).then(() => {
+            Promise.race([processingComplete, abortFired, timeout]).then(() => {
               finalize();
             });
           },
