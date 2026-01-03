@@ -40,10 +40,7 @@ import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
-import {
-  buildCodexSteeringPrompt,
-  CODEX_SYSTEM_PROMPT,
-} from './CODEX_PROMPT.js';
+import { CODEX_SYSTEM_PROMPT } from './CODEX_PROMPT.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -323,6 +320,84 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
   override clearState(): void {
     super.clearState?.();
+  }
+
+  /**
+   * Generate a unique synthetic call ID to avoid collisions.
+   * @issue #966
+   */
+  private generateSyntheticCallId(): string {
+    const randomSuffix = Math.random().toString(36).substring(2, 10);
+    return `call_synthetic_${randomSuffix}`;
+  }
+
+  /**
+   * Inject a synthetic tool call/result pair for config file reads (LLXPRT.md/AGENTS.md).
+   * This prevents the model from wasting tool calls re-reading files that were already
+   * loaded and injected into the system prompt via userMemory.
+   *
+   * @issue #966
+   */
+  private injectSyntheticConfigFileRead(
+    requestInput: Array<
+      | { role: 'user' | 'assistant' | 'system'; content?: string }
+      | {
+          type: 'function_call';
+          call_id: string;
+          name: string;
+          arguments: string;
+        }
+      | { type: 'function_call_output'; call_id: string; output: string }
+    >,
+    options: NormalizedGenerateChatOptions,
+    userMemory: string | undefined,
+  ): void {
+    const syntheticCallId = this.generateSyntheticCallId();
+
+    const configRef =
+      options.config ?? options.runtime?.config ?? this.globalConfig;
+    const filePaths: string[] =
+      (
+        configRef as { getLlxprtMdFilePaths?: () => string[] }
+      )?.getLlxprtMdFilePaths?.() ?? [];
+
+    let output: string;
+    let targetFile: string;
+
+    if (userMemory && userMemory.trim().length > 0 && filePaths.length > 0) {
+      const fileList = filePaths.join(', ');
+      output = JSON.stringify({
+        output: `The following instruction files have already been read and their contents are included in the system context: ${fileList}. You do not need to read them again.`,
+        files_loaded: filePaths,
+        status: 'already_loaded',
+      });
+      // Use the first loaded file path, prefer LLXPRT.md if present
+      const llxprtFile = filePaths.find((p) => p.includes('LLXPRT.md'));
+      const agentsFile = filePaths.find((p) => p.includes('AGENTS.md'));
+      targetFile = llxprtFile ?? agentsFile ?? filePaths[0];
+    } else {
+      output = JSON.stringify({
+        output:
+          'No instruction files (LLXPRT.md, AGENTS.md) were found in the workspace hierarchy.',
+        files_loaded: [],
+        status: 'not_found',
+      });
+      targetFile = 'LLXPRT.md';
+    }
+
+    requestInput.unshift(
+      {
+        type: 'function_call',
+        call_id: syntheticCallId,
+        name: 'read_file',
+        arguments: JSON.stringify({ absolute_path: targetFile }),
+      },
+      {
+        type: 'function_call_output',
+        call_id: syntheticCallId,
+        output,
+      },
+    );
   }
 
   /**
@@ -639,10 +714,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
         (msg) => !('role' in msg) || msg.role !== 'system',
       );
 
-      const steeringPrompt = buildCodexSteeringPrompt(systemPrompt);
-      if (steeringPrompt) {
-        requestInput.unshift({ role: 'user', content: steeringPrompt });
-      }
+      // @issue #966: Pre-inject synthetic tool call/result for config files (LLXPRT.md/AGENTS.md)
+      // This prevents the model from wasting tool calls re-reading files already injected.
+      // Note: We no longer inject a steering prompt - the system prompt is properly
+      // conveyed via the `instructions` field (see below).
+      this.injectSyntheticConfigFileRead(requestInput, options, userMemory);
     }
 
     const request: {
@@ -666,8 +742,16 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @plan PLAN-20251214-ISSUE160.P05
     // Add Codex-specific request parameters
     if (isCodex) {
-      // Codex API requires the official system prompt in instructions field
-      request.instructions = CODEX_SYSTEM_PROMPT;
+      // @issue #966: Combine CODEX_SYSTEM_PROMPT with user's system prompt (including memory)
+      // Previously we only used CODEX_SYSTEM_PROMPT, losing userMemory context
+      const combinedInstructions = systemPrompt
+        ? `${CODEX_SYSTEM_PROMPT}
+
+# Developer Instructions
+
+${systemPrompt}`
+        : CODEX_SYSTEM_PROMPT;
+      request.instructions = combinedInstructions;
       request.store = false;
       // Codex API (ChatGPT backend) doesn't support max_output_tokens parameter
       // Remove it to prevent 400 errors

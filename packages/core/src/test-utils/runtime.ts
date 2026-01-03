@@ -158,6 +158,8 @@ export function createRuntimeConfigStub(
     setModel: noop,
     getQuotaErrorOccurred: () => false,
     setQuotaErrorOccurred: noop,
+    getLlxprtMdFilePaths: () => [] as string[],
+    getLlxprtMdFileCount: () => 0,
   };
 
   return Object.assign(base, overrides) as unknown as Config;
