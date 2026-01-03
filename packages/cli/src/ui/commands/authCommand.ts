@@ -26,6 +26,10 @@ import {
   type CompleterFn,
 } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
+import {
+  switchActiveProvider,
+  getEphemeralSetting,
+} from '../../runtime/runtimeSettings.js';
 
 const logger = new DebugLogger('llxprt:ui:auth-command');
 
@@ -404,6 +408,7 @@ export class AuthCommandExecutor {
 
   /**
    * Login to a provider with optional bucket parameter
+   * @requirement REQ-001 Auto-switch provider after successful auth
    */
   private async loginWithBucket(
     provider: string,
@@ -414,6 +419,44 @@ export class AuthCommandExecutor {
       await this.oauthManager.authenticate(provider, bucket);
 
       const bucketInfo = bucket ? ` (bucket: ${bucket})` : '';
+
+      // Check if auto-switch is enabled (default: true)
+      const autoSwitchEnabled =
+        getEphemeralSetting('auth.autoSwitchProvider') ?? true;
+
+      if (autoSwitchEnabled) {
+        try {
+          // Attempt to switch to the authenticated provider
+          const switchResult = await switchActiveProvider(provider);
+
+          if (switchResult.changed) {
+            return {
+              type: 'message',
+              messageType: 'info',
+              content: `[OK] Authenticated with ${provider}${bucketInfo} and set as active provider`,
+            };
+          }
+          // Provider was already active, just show auth success
+          return {
+            type: 'message',
+            messageType: 'info',
+            content: `Successfully authenticated ${provider}${bucketInfo}`,
+          };
+        } catch (switchError) {
+          // Log warning but don't fail auth
+          logger.debug(
+            `Auto-switch to ${provider} failed after auth:`,
+            switchError,
+          );
+          return {
+            type: 'message',
+            messageType: 'info',
+            content: `Successfully authenticated ${provider}${bucketInfo} (Note: auto-switch to provider failed, use /provider ${provider} to switch manually)`,
+          };
+        }
+      }
+
+      // Auto-switch disabled, just return auth success
       return {
         type: 'message',
         messageType: 'info',
