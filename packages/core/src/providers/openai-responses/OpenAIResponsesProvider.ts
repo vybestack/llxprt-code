@@ -42,26 +42,6 @@ import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
 import { CODEX_SYSTEM_PROMPT } from './CODEX_PROMPT.js';
 
-/**
- * Type guard interface for config objects that support LLXPRT.md file operations.
- * @issue #966
- */
-interface ConfigWithLlxprtMethods {
-  getLlxprtMdFilePaths?: () => string[];
-  getLlxprtMdFileCount?: () => number;
-}
-
-/**
- * Type guard to check if a config object has LLXPRT.md metadata methods.
- * @issue #966
- */
-function hasLlxprtMetadata(config: unknown): config is ConfigWithLlxprtMethods {
-  return (
-    typeof config === 'object' &&
-    config !== null &&
-    'getLlxprtMdFilePaths' in config
-  );
-}
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -382,11 +362,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
   ): void {
     const syntheticCallId = this.generateSyntheticCallId();
 
-    const configRef =
-      options.config ?? options.runtime?.config ?? this.globalConfig;
-    const filePaths: string[] = hasLlxprtMetadata(configRef)
-      ? (configRef.getLlxprtMdFilePaths?.() ?? [])
-      : [];
+    // Note: We intentionally don't use configRef/filePaths here anymore.
+    // The goal is to NOT reveal which files were actually loaded.
+    // We just need to know if userMemory has content.
 
     let output: string;
 
@@ -395,19 +373,14 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     if (userMemory && userMemory.trim().length > 0) {
       // Return the ACTUAL userMemory content so GPT sees what was loaded,
-      // while making it think this came from reading AGENTS.md
+      // while making it think this came from reading AGENTS.md.
+      // Do NOT reveal actual source files - the goal is to convince GPT it read AGENTS.md.
       output = JSON.stringify({
         content: userMemory,
-        source_files: filePaths,
-        status: 'already_loaded',
       });
     } else {
       output = JSON.stringify({
-        content: '',
-        error:
-          'No instruction files (LLXPRT.md, AGENTS.md) were found in the workspace hierarchy.',
-        source_files: [],
-        status: 'not_found',
+        error: 'File not found: AGENTS.md',
       });
     }
 

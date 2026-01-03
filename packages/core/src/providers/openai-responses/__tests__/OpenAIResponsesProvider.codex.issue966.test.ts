@@ -26,6 +26,11 @@ import type { CodexOAuthToken } from '../../../auth/types.js';
 import type { Config } from '../../../config/config.js';
 import type { OAuthManager } from '../../../auth/precedence.js';
 
+/**
+ * Partial OAuthManager type for testing - only includes methods used by OpenAIResponsesProvider
+ */
+type MockOAuthManager = Pick<OAuthManager, 'getOAuthToken'>;
+
 const originalFetch = global.fetch;
 const mockFetch = vi.fn();
 
@@ -65,7 +70,7 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
         undefined,
-        mockOAuthManager as unknown as OAuthManager,
+        mockOAuthManager as MockOAuthManager as OAuthManager,
       );
 
       const settings = new SettingsService();
@@ -169,7 +174,7 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
         undefined,
-        mockOAuthManager as unknown as OAuthManager,
+        mockOAuthManager as MockOAuthManager as OAuthManager,
       );
 
       const settings = new SettingsService();
@@ -272,7 +277,7 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
         undefined,
-        mockOAuthManager as unknown as OAuthManager,
+        mockOAuthManager as MockOAuthManager as OAuthManager,
       );
 
       const settings = new SettingsService();
@@ -385,15 +390,14 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
       );
       expect(syntheticToolOutput).toBeDefined();
 
-      // The output should contain the actual userMemory content
+      // The output should contain the actual userMemory content (but NOT reveal source files)
       const outputParsed = JSON.parse(syntheticToolOutput?.output ?? '{}') as {
         content?: string;
-        source_files?: string[];
-        status?: string;
       };
-      expect(outputParsed.status).toBe('already_loaded');
       expect(outputParsed.content).toBe(mockUserMemory);
-      expect(outputParsed.source_files).toEqual(mockFilePaths);
+      // Should NOT have source_files or status - keep the deception clean
+      expect(outputParsed).not.toHaveProperty('source_files');
+      expect(outputParsed).not.toHaveProperty('status');
 
       // The synthetic call should claim to read AGENTS.md (regardless of actual source)
       const argsJson = JSON.parse(syntheticToolCall?.arguments ?? '{}') as {
@@ -418,7 +422,7 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
         'test-access-token',
         'https://chatgpt.com/backend-api/codex',
         undefined,
-        mockOAuthManager as unknown as OAuthManager,
+        mockOAuthManager as MockOAuthManager as OAuthManager,
       );
 
       const settings = new SettingsService();
@@ -525,17 +529,15 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
       );
       expect(syntheticToolOutput).toBeDefined();
 
-      // The output should indicate not_found status with empty content
+      // The output should look like a normal file not found error
       const outputParsed = JSON.parse(syntheticToolOutput?.output ?? '{}') as {
-        content?: string;
         error?: string;
-        source_files?: string[];
-        status?: string;
       };
-      expect(outputParsed.status).toBe('not_found');
-      expect(outputParsed.content).toBe('');
-      expect(outputParsed.source_files).toEqual([]);
-      expect(outputParsed.error).toContain('No instruction files');
+      expect(outputParsed.error).toBe('File not found: AGENTS.md');
+      // Should NOT have content, source_files or status
+      expect(outputParsed).not.toHaveProperty('content');
+      expect(outputParsed).not.toHaveProperty('source_files');
+      expect(outputParsed).not.toHaveProperty('status');
 
       // The synthetic call should claim to read AGENTS.md
       const argsJson = JSON.parse(syntheticToolCall?.arguments ?? '{}') as {
