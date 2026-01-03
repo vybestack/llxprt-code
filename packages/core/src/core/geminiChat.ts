@@ -1917,24 +1917,48 @@ export class GeminiChat {
   }
 
   /**
-   * Adjust compression boundary to not split tool call/response pairs
+   * Adjust compression boundary to not split tool call/response pairs.
+   * This method searches for a valid split point that doesn't break
+   * tool call/response pairs. If the initial index lands inside a tool
+   * response sequence, it first tries moving forward, then searches
+   * backward for a valid boundary.
    */
   private adjustForToolCallBoundary(
     history: IContent[],
     index: number,
   ): number {
-    // Don't split tool responses from their calls
+    if (index <= 0 || history.length === 0) {
+      return index;
+    }
+
+    const originalIndex = index;
+
+    index = this.findForwardValidSplitPoint(history, index);
+
+    if (index >= history.length) {
+      this.logger.debug(
+        'Forward adjustment reached end of history, searching backward',
+        { originalIndex, historyLength: history.length },
+      );
+      index = this.findBackwardValidSplitPoint(history, originalIndex);
+    }
+
+    return index;
+  }
+
+  private findForwardValidSplitPoint(
+    history: IContent[],
+    index: number,
+  ): number {
     while (index < history.length && history[index].speaker === 'tool') {
       index++;
     }
 
-    // Check if previous message has unmatched tool calls
-    if (index > 0) {
+    if (index > 0 && index < history.length) {
       const prev = history[index - 1];
       if (prev.speaker === 'ai') {
         const toolCalls = prev.blocks.filter((b) => b.type === 'tool_call');
         if (toolCalls.length > 0) {
-          // Check if there are matching tool responses in the kept portion
           const keptHistory = history.slice(index);
           const hasMatchingResponses = toolCalls.every((call) => {
             const toolCall = call as ToolCallBlock;
@@ -1950,7 +1974,6 @@ export class GeminiChat {
           });
 
           if (!hasMatchingResponses) {
-            // Include the AI message with unmatched calls in the compression
             return index - 1;
           }
         }
@@ -1958,6 +1981,47 @@ export class GeminiChat {
     }
 
     return index;
+  }
+
+  private findBackwardValidSplitPoint(
+    history: IContent[],
+    startIndex: number,
+  ): number {
+    for (let i = startIndex - 1; i >= 0; i--) {
+      const current = history[i];
+
+      if (current.speaker === 'tool') {
+        continue;
+      }
+
+      if (current.speaker === 'ai') {
+        const toolCalls = current.blocks.filter((b) => b.type === 'tool_call');
+        if (toolCalls.length > 0) {
+          const remainingHistory = history.slice(i + 1);
+          const allCallsHaveResponses = toolCalls.every((call) => {
+            const toolCall = call as ToolCallBlock;
+            return remainingHistory.some(
+              (msg) =>
+                msg.speaker === 'tool' &&
+                msg.blocks.some(
+                  (b) =>
+                    b.type === 'tool_response' &&
+                    (b as ToolResponseBlock).callId === toolCall.id,
+                ),
+            );
+          });
+
+          if (allCallsHaveResponses) {
+            return i + 1;
+          }
+          continue;
+        }
+      }
+
+      return i + 1;
+    }
+
+    return startIndex;
   }
 
   /**
