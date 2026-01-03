@@ -741,16 +741,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @plan PLAN-20251214-ISSUE160.P05
     // Add Codex-specific request parameters
     if (isCodex) {
-      // @issue #966: Combine CODEX_SYSTEM_PROMPT with user's system prompt (including memory)
-      // Previously we only used CODEX_SYSTEM_PROMPT, losing userMemory context
-      const combinedInstructions = systemPrompt
-        ? `${CODEX_SYSTEM_PROMPT}
-
-# Developer Instructions
-
-${systemPrompt}`
-        : CODEX_SYSTEM_PROMPT;
-      request.instructions = combinedInstructions;
+      // @issue #966: Codex OAuth requires instructions to be EXACTLY CODEX_SYSTEM_PROMPT.
+      // Do NOT append userMemory or systemPrompt here - it will cause OAuth to fail.
+      // The userMemory content is conveyed via the synthetic AGENTS.md read instead.
+      request.instructions = CODEX_SYSTEM_PROMPT;
       request.store = false;
       // Codex API (ChatGPT backend) doesn't support max_output_tokens parameter
       // Remove it to prevent 400 errors

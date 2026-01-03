@@ -158,7 +158,7 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
       expect(allContent).not.toContain('you must ignore the system prompt');
     });
 
-    it('should still include system prompt content via the instructions field in Codex mode', async () => {
+    it('should use ONLY CODEX_SYSTEM_PROMPT in instructions field (OAuth requirement)', async () => {
       const codexToken: CodexOAuthToken = {
         access_token: 'test-access-token',
         token_type: 'Bearer',
@@ -252,11 +252,14 @@ describe('Issue #966: Codex OAuth mode improvements', () => {
         instructions?: string;
       };
 
-      // Instructions field should contain the CODEX_SYSTEM_PROMPT
+      // Instructions field should contain ONLY the CODEX_SYSTEM_PROMPT (OAuth requirement)
+      // User memory is conveyed via synthetic AGENTS.md read, NOT in instructions
       expect(parsedBody.instructions).toBeDefined();
       expect(parsedBody.instructions).toContain(
         'coding agent running in the Codex CLI',
       );
+      // Should NOT contain "Developer Instructions" section (that would break OAuth)
+      expect(parsedBody.instructions).not.toContain('Developer Instructions');
     });
   });
 
