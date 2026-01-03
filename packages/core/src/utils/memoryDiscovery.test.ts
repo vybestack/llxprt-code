@@ -597,4 +597,97 @@ included directory memory
     expect(parentOccurrences).toBe(1);
     expect(childOccurrences).toBe(1);
   });
+
+  describe('project-scoped memory discovery (issue #985)', () => {
+    it('should discover memory files saved to .llxprt/ subdirectory during upward scan', async () => {
+      const projectLlxprtFile = await createTestFile(
+        path.join(projectRoot, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Project-scoped memory content',
+      );
+
+      const result = await loadServerHierarchicalMemory(
+        cwd,
+        [],
+        false,
+        new FileDiscoveryService(projectRoot),
+        [],
+        DEFAULT_FOLDER_TRUST,
+      );
+
+      expect(result.filePaths).toContain(projectLlxprtFile);
+      expect(result.memoryContent).toContain('Project-scoped memory content');
+    });
+
+    it('should discover memory files in .llxprt/ at multiple directory levels during upward scan', async () => {
+      const projectLlxprtFile = await createTestFile(
+        path.join(projectRoot, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Project root scoped memory',
+      );
+      const cwdLlxprtFile = await createTestFile(
+        path.join(cwd, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'CWD scoped memory',
+      );
+
+      const result = await loadServerHierarchicalMemory(
+        cwd,
+        [],
+        false,
+        new FileDiscoveryService(projectRoot),
+        [],
+        DEFAULT_FOLDER_TRUST,
+      );
+
+      expect(result.filePaths).toContain(projectLlxprtFile);
+      expect(result.filePaths).toContain(cwdLlxprtFile);
+      expect(result.memoryContent).toContain('Project root scoped memory');
+      expect(result.memoryContent).toContain('CWD scoped memory');
+    });
+
+    it('should load both direct LLXPRT.md and .llxprt/LLXPRT.md from the same directory', async () => {
+      const directFile = await createTestFile(
+        path.join(projectRoot, DEFAULT_CONTEXT_FILENAME),
+        'Direct memory content',
+      );
+      const llxprtDirFile = await createTestFile(
+        path.join(projectRoot, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Scoped memory content',
+      );
+
+      const result = await loadServerHierarchicalMemory(
+        cwd,
+        [],
+        false,
+        new FileDiscoveryService(projectRoot),
+        [],
+        DEFAULT_FOLDER_TRUST,
+      );
+
+      expect(result.filePaths).toContain(directFile);
+      expect(result.filePaths).toContain(llxprtDirFile);
+      expect(result.memoryContent).toContain('Direct memory content');
+      expect(result.memoryContent).toContain('Scoped memory content');
+    });
+
+    it('should not duplicate global memory path when scanning .llxprt/ directories', async () => {
+      const globalFile = await createTestFile(
+        path.join(homedir, LLXPRT_DIR, DEFAULT_CONTEXT_FILENAME),
+        'Global memory content',
+      );
+
+      const result = await loadServerHierarchicalMemory(
+        cwd,
+        [],
+        false,
+        new FileDiscoveryService(projectRoot),
+        [],
+        DEFAULT_FOLDER_TRUST,
+      );
+
+      expect(result.filePaths).toContain(globalFile);
+      const occurrences = result.filePaths.filter(
+        (p) => p === globalFile,
+      ).length;
+      expect(occurrences).toBe(1);
+    });
+  });
 });
