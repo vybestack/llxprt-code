@@ -27,6 +27,7 @@ import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useFolderTrust } from './hooks/useFolderTrust.js';
+import { useWelcomeOnboarding } from './hooks/useWelcomeOnboarding.js';
 import { useIdeTrustListener } from './hooks/useIdeTrustListener.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
@@ -624,6 +625,18 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
     useFolderTrust(settings, config, addItem);
+
+  // Welcome onboarding - shown after folder trust, before other dialogs
+  const {
+    showWelcome: isWelcomeDialogOpen,
+    state: welcomeState,
+    actions: welcomeActions,
+    availableProviders: welcomeAvailableProviders,
+    triggerAuth: triggerWelcomeAuth,
+  } = useWelcomeOnboarding({
+    settings,
+    isFolderTrustComplete: !isFolderTrustDialogOpen && !isRestarting,
+  });
 
   const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
   useEffect(() => {
@@ -1483,6 +1496,7 @@ export const AppContainer = (props: AppContainerProps) => {
       !isProviderModelDialogOpen &&
       !isToolsDialogOpen &&
       !showPrivacyNotice &&
+      !isWelcomeDialogOpen &&
       geminiClient
     ) {
       submitQuery(initialPrompt);
@@ -1499,6 +1513,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isProviderModelDialogOpen,
     isToolsDialogOpen,
     showPrivacyNotice,
+    isWelcomeDialogOpen,
     geminiClient,
   ]);
 
@@ -1632,6 +1647,11 @@ export const AppContainer = (props: AppContainerProps) => {
     isRestarting,
     isTrustedFolder: config.isTrustedFolder(),
 
+    // Welcome onboarding
+    isWelcomeDialogOpen,
+    welcomeState,
+    welcomeAvailableProviders,
+
     // Input history
     inputHistory: inputHistoryStore.inputHistory,
 
@@ -1708,6 +1728,10 @@ export const AppContainer = (props: AppContainerProps) => {
 
       // Folder trust dialog
       handleFolderTrustSelect,
+
+      // Welcome onboarding
+      welcomeActions,
+      triggerWelcomeAuth,
 
       // Permissions dialog
       openPermissionsDialog,
@@ -1792,6 +1816,8 @@ export const AppContainer = (props: AppContainerProps) => {
       handleToolsSelect,
       exitToolsDialog,
       handleFolderTrustSelect,
+      welcomeActions,
+      triggerWelcomeAuth,
       openPermissionsDialog,
       closePermissionsDialog,
       openLoggingDialog,

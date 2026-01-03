@@ -81,6 +81,24 @@ export interface UIActions {
   // Folder trust dialog
   handleFolderTrustSelect: (choice: FolderTrustChoice) => void;
 
+  // Welcome onboarding
+  welcomeActions: {
+    startSetup: () => void;
+    selectProvider: (providerId: string) => void;
+    selectAuthMethod: (method: 'oauth' | 'api_key') => void;
+    onAuthComplete: () => void;
+    onAuthError: (error: string) => void;
+    skipSetup: () => void;
+    goBack: () => void;
+    saveProfile: (name: string) => Promise<void>;
+    dismiss: () => void;
+  };
+  triggerWelcomeAuth: (
+    provider: string,
+    method: 'oauth' | 'api_key',
+    apiKey?: string,
+  ) => Promise<void>;
+
   // Permissions dialog
   openPermissionsDialog: () => void;
   closePermissionsDialog: () => void;

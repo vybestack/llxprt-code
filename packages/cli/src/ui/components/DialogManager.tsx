@@ -9,6 +9,7 @@ import { useCallback } from 'react';
 import { IdeIntegrationNudge } from '../IdeIntegrationNudge.js';
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // TODO: Not yet ported from upstream
 import { FolderTrustDialog } from './FolderTrustDialog.js';
+import { WelcomeDialog } from './WelcomeOnboarding/WelcomeDialog.js';
 import { ShellConfirmationDialog } from './ShellConfirmationDialog.js';
 import { ConsentPrompt } from './ConsentPrompt.js';
 import { ThemeDialog } from './ThemeDialog.js';
@@ -95,6 +96,16 @@ export const DialogManager = ({
       <FolderTrustDialog
         onSelect={uiActions.handleFolderTrustSelect}
         isRestarting={uiState.isRestarting}
+      />
+    );
+  }
+  if (uiState.isWelcomeDialogOpen) {
+    return (
+      <WelcomeDialog
+        state={uiState.welcomeState}
+        actions={uiActions.welcomeActions}
+        availableProviders={uiState.welcomeAvailableProviders}
+        triggerAuth={uiActions.triggerWelcomeAuth}
       />
     );
   }

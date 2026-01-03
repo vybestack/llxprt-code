@@ -13,6 +13,7 @@
 ## Task 1: Create Welcome Config Service
 
 **Files:**
+
 - Create: `packages/cli/src/config/welcomeConfig.ts`
 
 **Step 1: Create the welcome config module**
@@ -114,6 +115,7 @@ git commit -m "feat(welcome): add welcome config service for first-run detection
 ## Task 2: Create Welcome State Types and Hook
 
 **Files:**
+
 - Create: `packages/cli/src/ui/hooks/useWelcomeOnboarding.ts`
 
 **Step 1: Create the hook with state management**
@@ -191,7 +193,9 @@ export const useWelcomeOnboarding = (
     if (providerManager) {
       const providers = providerManager.listProviders();
       setAvailableProviders(providers);
-      debug.log(`Loaded ${providers.length} providers: ${providers.join(', ')}`);
+      debug.log(
+        `Loaded ${providers.length} providers: ${providers.join(', ')}`,
+      );
     }
   }, [runtime]);
 
@@ -323,6 +327,7 @@ git commit -m "feat(welcome): add useWelcomeOnboarding hook for state management
 ## Task 3: Create WelcomeStep Component
 
 **Files:**
+
 - Create: `packages/cli/src/ui/components/WelcomeOnboarding/WelcomeStep.tsx`
 
 **Step 1: Create the welcome step component**
@@ -412,6 +417,7 @@ git commit -m "feat(welcome): add WelcomeStep component"
 ## Task 4: Create ProviderSelectStep Component
 
 **Files:**
+
 - Create: `packages/cli/src/ui/components/WelcomeOnboarding/ProviderSelectStep.tsx`
 
 **Step 1: Create the provider selection component**
@@ -518,6 +524,7 @@ git commit -m "feat(welcome): add ProviderSelectStep component"
 ## Task 5: Create AuthMethodStep Component
 
 **Files:**
+
 - Create: `packages/cli/src/ui/components/WelcomeOnboarding/AuthMethodStep.tsx`
 
 **Step 1: Create the auth method selection component**
@@ -655,6 +662,7 @@ git commit -m "feat(welcome): add AuthMethodStep component"
 ## Task 6: Create AuthenticationStep Component
 
 **Files:**
+
 - Create: `packages/cli/src/ui/components/WelcomeOnboarding/AuthenticationStep.tsx`
 
 **Step 1: Create the authentication step component**
@@ -825,6 +833,7 @@ git commit -m "feat(welcome): add AuthenticationStep component"
 ## Task 7: Create CompletionStep Component
 
 **Files:**
+
 - Create: `packages/cli/src/ui/components/WelcomeOnboarding/CompletionStep.tsx`
 
 **Step 1: Create the completion step component**
@@ -990,6 +999,7 @@ git commit -m "feat(welcome): add CompletionStep component with profile save"
 ## Task 8: Create SkipExitStep Component
 
 **Files:**
+
 - Create: `packages/cli/src/ui/components/WelcomeOnboarding/SkipExitStep.tsx`
 
 **Step 1: Create the skip exit step component**
@@ -1066,6 +1076,7 @@ git commit -m "feat(welcome): add SkipExitStep component"
 ## Task 9: Create Main WelcomeDialog Component
 
 **Files:**
+
 - Create: `packages/cli/src/ui/components/WelcomeOnboarding/WelcomeDialog.tsx`
 - Create: `packages/cli/src/ui/components/WelcomeOnboarding/index.ts`
 
@@ -1227,6 +1238,7 @@ git commit -m "feat(welcome): add WelcomeDialog main component and exports"
 ## Task 10: Integrate into AppContainer
 
 **Files:**
+
 - Modify: `packages/cli/src/ui/AppContainer.tsx`
 
 **Step 1: Add imports at top of file**
@@ -1243,12 +1255,8 @@ import { WelcomeDialog } from './components/WelcomeOnboarding/index.js';
 Add inside AppContainer function, after the useFolderTrust hook (around line 625):
 
 ```typescript
-  const {
-    showWelcome,
-    welcomeState,
-    welcomeActions,
-    availableProviders,
-  } = useWelcomeOnboarding(config, settings);
+const { showWelcome, welcomeState, welcomeActions, availableProviders } =
+  useWelcomeOnboarding(config, settings);
 ```
 
 **Step 3: Add triggerAuth function**
@@ -1256,21 +1264,21 @@ Add inside AppContainer function, after the useFolderTrust hook (around line 625
 Add the auth trigger function (after the welcome hook):
 
 ```typescript
-  const triggerWelcomeAuth = useCallback(
-    async (provider: string, method: 'oauth' | 'api_key', apiKey?: string) => {
-      if (method === 'api_key' && apiKey) {
-        // Set API key in settings
-        const settingsService = runtime.getSettingsService();
-        if (settingsService) {
-          settingsService.setProviderSetting(provider, 'apiKey', apiKey);
-        }
-      } else if (method === 'oauth') {
-        // Trigger OAuth flow
-        await config.refreshAuth(`oauth_${provider}`);
+const triggerWelcomeAuth = useCallback(
+  async (provider: string, method: 'oauth' | 'api_key', apiKey?: string) => {
+    if (method === 'api_key' && apiKey) {
+      // Set API key in settings
+      const settingsService = runtime.getSettingsService();
+      if (settingsService) {
+        settingsService.setProviderSetting(provider, 'apiKey', apiKey);
       }
-    },
-    [config, runtime],
-  );
+    } else if (method === 'oauth') {
+      // Trigger OAuth flow
+      await config.refreshAuth(`oauth_${provider}`);
+    }
+  },
+  [config, runtime],
+);
 ```
 
 **Step 4: Add welcome dialog to the render**
@@ -1285,28 +1293,28 @@ In the `uiState` object, add to UIState interface check (around line 1475):
 Update the condition for initial prompt submission (around line 1474):
 
 ```typescript
-  useEffect(() => {
-    if (
-      initialPrompt &&
-      !initialPromptSubmitted.current &&
-      !isAuthenticating &&
-      !isAuthDialogOpen &&
-      !isThemeDialogOpen &&
-      !isEditorDialogOpen &&
-      !isProviderDialogOpen &&
-      !isProviderModelDialogOpen &&
-      !isToolsDialogOpen &&
-      !showPrivacyNotice &&
-      !showWelcome && // Add this
-      geminiClient
-    ) {
-      submitQuery(initialPrompt);
-      initialPromptSubmitted.current = true;
-    }
-  }, [
-    // ... existing deps
-    showWelcome, // Add this
-  ]);
+useEffect(() => {
+  if (
+    initialPrompt &&
+    !initialPromptSubmitted.current &&
+    !isAuthenticating &&
+    !isAuthDialogOpen &&
+    !isThemeDialogOpen &&
+    !isEditorDialogOpen &&
+    !isProviderDialogOpen &&
+    !isProviderModelDialogOpen &&
+    !isToolsDialogOpen &&
+    !showPrivacyNotice &&
+    !showWelcome && // Add this
+    geminiClient
+  ) {
+    submitQuery(initialPrompt);
+    initialPromptSubmitted.current = true;
+  }
+}, [
+  // ... existing deps
+  showWelcome, // Add this
+]);
 ```
 
 **Step 5: Render welcome dialog in DefaultAppLayout**
@@ -1316,7 +1324,7 @@ The WelcomeDialog should be rendered in the layout. Modify `packages/cli/src/ui/
 Add to UIState interface in `packages/cli/src/ui/contexts/UIStateContext.ts`:
 
 ```typescript
-  showWelcome: boolean;
+showWelcome: boolean;
 ```
 
 **Step 6: Commit**
@@ -1332,6 +1340,7 @@ git commit -m "feat(welcome): integrate welcome onboarding into AppContainer"
 ## Task 11: Update DefaultAppLayout
 
 **Files:**
+
 - Modify: `packages/cli/src/ui/layouts/DefaultAppLayout.tsx`
 
 **Step 1: Add welcome dialog rendering**
@@ -1439,12 +1448,14 @@ Exit and restart llxprt - welcome should NOT appear again.
 ## Summary
 
 This plan creates:
+
 - `welcomeConfig.ts` - First-run detection service
 - `useWelcomeOnboarding.ts` - State management hook
 - `WelcomeOnboarding/` component folder with 6 step components
 - Integration into AppContainer and DefaultAppLayout
 
 The flow:
+
 1. After folder trust → check `welcomeCompleted`
 2. If false → show welcome dialog
 3. User navigates: Welcome → Provider → Auth Method → Auth → Completion
