@@ -40,10 +40,8 @@ import { normalizeToOpenAIToolId } from '../utils/toolIdNormalization.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from '../openai/RESPONSES_API_MODELS.js';
 import { CODEX_MODELS } from './CODEX_MODELS.js';
-import {
-  buildCodexSteeringPrompt,
-  CODEX_SYSTEM_PROMPT,
-} from './CODEX_PROMPT.js';
+import { CODEX_SYSTEM_PROMPT } from './CODEX_PROMPT.js';
+
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -323,6 +321,82 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
   override clearState(): void {
     super.clearState?.();
+  }
+
+  /**
+   * Generate a unique synthetic call ID to avoid collisions.
+   * @issue #966
+   */
+  private generateSyntheticCallId(): string {
+    const randomSuffix = Math.random().toString(36).substring(2, 10);
+    return `call_synthetic_${randomSuffix}`;
+  }
+
+  /**
+   * Inject a synthetic tool call/result pair that makes GPT think it already read AGENTS.md.
+   *
+   * The CODEX_SYSTEM_PROMPT instructs GPT to read AGENTS.md for project instructions.
+   * However, the user may have configured LLXPRT.md instead (or both), and sometimes
+   * AGENTS.md is deliberately reserved for a different agent (like Codex itself).
+   *
+   * This method:
+   * 1. Always claims to have read "AGENTS.md" in the synthetic function call
+   * 2. Returns the actual userMemory content (from LLXPRT.md, AGENTS.md, or both)
+   * 3. Prevents GPT from wasting a tool call trying to read AGENTS.md
+   *
+   * @issue #966
+   */
+  private injectSyntheticConfigFileRead(
+    requestInput: Array<
+      | { role: 'user' | 'assistant' | 'system'; content?: string }
+      | {
+          type: 'function_call';
+          call_id: string;
+          name: string;
+          arguments: string;
+        }
+      | { type: 'function_call_output'; call_id: string; output: string }
+    >,
+    options: NormalizedGenerateChatOptions,
+    userMemory: string | undefined,
+  ): void {
+    const syntheticCallId = this.generateSyntheticCallId();
+
+    // Note: We intentionally don't use configRef/filePaths here anymore.
+    // The goal is to NOT reveal which files were actually loaded.
+    // We just need to know if userMemory has content.
+
+    let output: string;
+
+    // Always pretend we read AGENTS.md - this is what CODEX_SYSTEM_PROMPT tells GPT to do
+    const targetFile = 'AGENTS.md';
+
+    if (userMemory && userMemory.trim().length > 0) {
+      // Return the ACTUAL userMemory content so GPT sees what was loaded,
+      // while making it think this came from reading AGENTS.md.
+      // Do NOT reveal actual source files - the goal is to convince GPT it read AGENTS.md.
+      output = JSON.stringify({
+        content: userMemory,
+      });
+    } else {
+      output = JSON.stringify({
+        error: 'File not found: AGENTS.md',
+      });
+    }
+
+    requestInput.unshift(
+      {
+        type: 'function_call',
+        call_id: syntheticCallId,
+        name: 'read_file',
+        arguments: JSON.stringify({ absolute_path: targetFile }),
+      },
+      {
+        type: 'function_call_output',
+        call_id: syntheticCallId,
+        output,
+      },
+    );
   }
 
   /**
@@ -639,10 +713,11 @@ export class OpenAIResponsesProvider extends BaseProvider {
         (msg) => !('role' in msg) || msg.role !== 'system',
       );
 
-      const steeringPrompt = buildCodexSteeringPrompt(systemPrompt);
-      if (steeringPrompt) {
-        requestInput.unshift({ role: 'user', content: steeringPrompt });
-      }
+      // @issue #966: Pre-inject synthetic tool call/result for config files (LLXPRT.md/AGENTS.md)
+      // This prevents the model from wasting tool calls re-reading files already injected.
+      // Note: We no longer inject a steering prompt - the system prompt is properly
+      // conveyed via the `instructions` field (see below).
+      this.injectSyntheticConfigFileRead(requestInput, options, userMemory);
     }
 
     const request: {
@@ -666,7 +741,9 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // @plan PLAN-20251214-ISSUE160.P05
     // Add Codex-specific request parameters
     if (isCodex) {
-      // Codex API requires the official system prompt in instructions field
+      // @issue #966: Codex OAuth requires instructions to be EXACTLY CODEX_SYSTEM_PROMPT.
+      // Do NOT append userMemory or systemPrompt here - it will cause OAuth to fail.
+      // The userMemory content is conveyed via the synthetic AGENTS.md read instead.
       request.instructions = CODEX_SYSTEM_PROMPT;
       request.store = false;
       // Codex API (ChatGPT backend) doesn't support max_output_tokens parameter

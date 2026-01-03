@@ -71,16 +71,21 @@ describe('OpenAIResponsesProvider Codex Mode - cancelled tool calls', () => {
           : String(init?.body);
       const parsed = JSON.parse(bodyText) as { input: unknown[] };
 
-      // Ensure we are including a function_call_output for the cancelled tool
+      // Ensure we are including function_call_output entries
+      // @issue #966: Synthetic config file read is now injected, so there are 2 outputs
       const outputs = parsed.input.filter((item) => {
         if (item === null || typeof item !== 'object') return false;
         return (item as { type?: unknown }).type === 'function_call_output';
       });
-      expect(outputs.length).toBe(1);
+      // One synthetic for config file, one for the cancelled tool
+      expect(outputs.length).toBeGreaterThanOrEqual(2);
 
-      const output = outputs[0];
-      expect(output).toBeTypeOf('object');
-      expect((output as { call_id?: unknown }).call_id).toBe('call_abc123');
+      // The cancelled tool's synthetic response should be present
+      const cancelledToolOutput = outputs.find(
+        (o) => (o as { call_id?: unknown }).call_id === 'call_abc123',
+      );
+      expect(cancelledToolOutput).toBeDefined();
+      expect(cancelledToolOutput).toBeTypeOf('object');
 
       // Minimal streaming response body (empty stream is ok for this unit)
       return new Response('', { status: 200 });

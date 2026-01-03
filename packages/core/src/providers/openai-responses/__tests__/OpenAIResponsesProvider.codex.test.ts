@@ -383,7 +383,7 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
       expect(parsedBody.stream).toBe(true);
     });
 
-    it('should add steering message ahead of user messages in Codex mode', async () => {
+    it('should inject synthetic config file read and include instructions in Codex mode', async () => {
       const codexToken: CodexOAuthToken = {
         access_token: 'test-access-token',
         token_type: 'Bearer',
@@ -391,7 +391,6 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
         account_id: 'test-account-id',
       };
 
-      // Create mock OAuth manager
       const mockOAuthManager = {
         getOAuthToken: vi.fn().mockResolvedValue(codexToken),
       };
@@ -474,7 +473,14 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
 
       expect(capturedBody).toBeDefined();
       const parsedBody = JSON.parse(capturedBody!) as {
-        input?: Array<{ role: string; content?: string }>;
+        input?: Array<{
+          type?: string;
+          role?: string;
+          content?: string;
+          call_id?: string;
+          name?: string;
+          output?: string;
+        }>;
         instructions?: string;
       };
       expect(parsedBody.input).toBeDefined();
@@ -489,19 +495,34 @@ describe('OpenAIResponsesProvider Codex Mode @plan:PLAN-20251213-ISSUE160.P03', 
         'terminal-based coding assistant',
       );
 
-      // Steering message should be first input message
-      const firstMessage = parsedBody.input![0];
-      expect(firstMessage.role).toBe('user');
-      expect(firstMessage.content).toContain('# IMPORTANT');
-      expect(firstMessage.content).toContain('ignore the system prompt');
-      expect(firstMessage.content).toContain('# New System Prompt');
-      expect(firstMessage.content).toContain('You are LLxprt Code running');
-      expect(firstMessage.content).toContain('# Task');
-      expect(parsedBody.input).toHaveLength(2);
+      // @issue #966: No more steering message with "ignore the system prompt"
+      // Instead, there's a synthetic tool call/result for config file read
+      const syntheticCall = parsedBody.input?.find(
+        (item) =>
+          item.type === 'function_call' &&
+          item.call_id?.startsWith('call_synthetic_'),
+      );
+      expect(syntheticCall).toBeDefined();
+      expect(syntheticCall?.name).toBe('read_file');
 
-      const secondMessage = parsedBody.input![1];
-      expect(secondMessage.role).toBe('user');
-      expect(secondMessage.content).toBe('user question');
+      // Synthetic call should always target AGENTS.md (what CODEX_SYSTEM_PROMPT tells GPT to read)
+      const argsJson = JSON.parse(
+        (syntheticCall as { arguments?: string })?.arguments ?? '{}',
+      ) as { absolute_path?: string };
+      expect(argsJson.absolute_path).toBe('AGENTS.md');
+
+      const syntheticOutput = parsedBody.input?.find(
+        (item) =>
+          item.type === 'function_call_output' &&
+          item.call_id === syntheticCall?.call_id,
+      );
+      expect(syntheticOutput).toBeDefined();
+
+      // User message should be present
+      const userMessage = parsedBody.input?.find(
+        (item) => item.role === 'user' && item.content === 'user question',
+      );
+      expect(userMessage).toBeDefined();
     });
 
     it('should NOT inject system prompt when not in Codex mode', async () => {
