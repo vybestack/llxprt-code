@@ -170,6 +170,42 @@ describe('ShellExecutionService', () => {
       expect(result.output).toBe('');
       expect(onOutputEventMock).not.toHaveBeenCalled();
     });
+
+    it('should truncate PTY output using a sliding window and show a warning', async () => {
+      const MAX_SIZE = 16 * 1024 * 1024;
+      const chunk1 = 'a'.repeat(MAX_SIZE / 2 - 5);
+      const chunk2 = 'b'.repeat(MAX_SIZE / 2 - 5);
+      const chunk3 = 'c'.repeat(20);
+
+      const { result } = await simulateExecution(
+        'large-output',
+        async (pty) => {
+          pty.onData.mock.calls[0][0](chunk1);
+          await new Promise((resolve) => setImmediate(resolve));
+          pty.onData.mock.calls[0][0](chunk2);
+          await new Promise((resolve) => setImmediate(resolve));
+          pty.onData.mock.calls[0][0](chunk3);
+          await new Promise((resolve) => setImmediate(resolve));
+          pty.onExit.mock.calls[0][0]({ exitCode: 0, signal: null });
+        },
+      );
+
+      const truncationMessage =
+        '[LLXPRT_CODE_WARNING: Output truncated. The buffer is limited to 16MB.]';
+      expect(result.output).toContain(truncationMessage);
+
+      const outputWithoutMessage = result.output
+        .substring(0, result.output.indexOf(truncationMessage))
+        .trimEnd();
+
+      expect(outputWithoutMessage.length).toBe(MAX_SIZE);
+
+      const expectedStart = (chunk1 + chunk2 + chunk3).slice(-MAX_SIZE);
+      expect(
+        outputWithoutMessage.startsWith(expectedStart.substring(0, 10)),
+      ).toBe(true);
+      expect(outputWithoutMessage.endsWith('c'.repeat(20))).toBe(true);
+    }, 20000);
   });
 
   describe('Failed Execution', () => {

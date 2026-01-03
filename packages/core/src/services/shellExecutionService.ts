@@ -25,16 +25,8 @@ function stripAnsiIfPresent(value: string): string {
     : value;
 }
 
-// @ts-expect-error getFullText is not a public API.
-const getFullText = (terminal: Terminal) => {
-  const buffer = terminal.buffer.active;
-  const lines: string[] = [];
-  for (let i = 0; i < buffer.length; i++) {
-    const line = buffer.getLine(i);
-    lines.push(line ? line.translateToString(true) : '');
-  }
-  return lines.join('\n').trim();
-};
+// Note: getFullText was removed as the PTY path now uses truncatedOutput
+// for bounded memory instead of extracting the full xterm terminal buffer.
 
 /** A structured result from a shell command execution. */
 export interface ShellExecutionResult {
@@ -429,6 +421,10 @@ export class ShellExecutionService {
         let sniffBuffer = Buffer.alloc(0);
         let totalBytesReceived = 0;
 
+        // Truncation tracking for PTY output (mirrors child_process path)
+        let truncatedOutput = '';
+        let outputTruncated = false;
+
         const handleOutput = (data: Buffer) => {
           processingChain = processingChain.then(
             () =>
@@ -464,10 +460,23 @@ export class ShellExecutionService {
 
                 if (isStreamingRawContent) {
                   const decodedChunk = decoder.decode(data, { stream: true });
+                  const strippedChunk = stripAnsiIfPresent(decodedChunk);
+
+                  // Apply truncation to maintain bounded memory
+                  const { newBuffer, truncated } = this.appendAndTruncate(
+                    truncatedOutput,
+                    strippedChunk,
+                    MAX_CHILD_PROCESS_BUFFER_SIZE,
+                  );
+                  truncatedOutput = newBuffer;
+                  if (truncated) {
+                    outputTruncated = true;
+                  }
+
                   headlessTerminal.write(decodedChunk, () => {
                     onOutputEvent({
                       type: 'data',
-                      chunk: stripAnsiIfPresent(decodedChunk),
+                      chunk: strippedChunk,
                     });
                     resolve();
                   });
@@ -495,11 +504,20 @@ export class ShellExecutionService {
             const finalize = () => {
               const finalBuffer = Buffer.concat(outputChunks);
 
-              const fullOutput = getFullText(headlessTerminal);
+              // Use our truncated output instead of the unbounded terminal buffer
+              let finalOutput = truncatedOutput;
+              if (outputTruncated) {
+                const truncationMessage = `
+[LLXPRT_CODE_WARNING: Output truncated. The buffer is limited to ${
+                  MAX_CHILD_PROCESS_BUFFER_SIZE / (1024 * 1024)
+                }MB.]`;
+                finalOutput += truncationMessage;
+              }
+
               resolve({
                 rawOutput: finalBuffer,
-                output: fullOutput,
-                stdout: fullOutput, // For PTY, stdout and stderr are combined
+                output: finalOutput.trim(),
+                stdout: truncatedOutput, // For PTY, stdout and stderr are combined
                 stderr: '', // PTY combines output streams
                 exitCode,
                 signal: signal ?? null,
