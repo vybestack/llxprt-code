@@ -199,6 +199,20 @@ async function getGeminiMdFilePathsInternalForEachDir(
           // Not found, continue.
         }
 
+        const llxprtDirPath = path.join(
+          currentDir,
+          GEMINI_DIR,
+          geminiMdFilename,
+        );
+        try {
+          await fs.access(llxprtDirPath, fsSync.constants.R_OK);
+          if (llxprtDirPath !== globalMemoryPath) {
+            upwardPaths.unshift(llxprtDirPath);
+          }
+        } catch {
+          // Not found, continue.
+        }
+
         if (currentDir === ultimateStopDir) {
           break;
         }
