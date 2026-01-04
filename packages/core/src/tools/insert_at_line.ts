@@ -5,6 +5,7 @@
  */
 
 import path from 'path';
+import * as Diff from 'diff';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import {
   BaseDeclarativeTool,
@@ -13,16 +14,21 @@ import {
   type ToolInvocation,
   type ToolLocation,
   type ToolResult,
+  type ToolCallConfirmationDetails,
+  type ToolEditConfirmationDetails,
+  ToolConfirmationOutcome,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 
-import { Config } from '../config/config.js';
+import { Config, ApprovalMode } from '../config/config.js';
 import {
   recordFileOperationMetric,
   FileOperation,
 } from '../telemetry/metrics.js';
 import { getSpecificMimeType } from '../utils/fileUtils.js';
 import { isNodeError } from '../utils/errors.js';
+import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
+import { IDEConnectionStatus } from '../ide/ide-client.js';
 
 /**
  * Parameters for the InsertAtLine tool
@@ -67,17 +73,101 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
     return [{ path: this.params.absolute_path, line: this.params.line_number }];
   }
 
+  override async shouldConfirmExecute(
+    _abortSignal: AbortSignal,
+  ): Promise<ToolCallConfirmationDetails | false> {
+    const approvalMode = this.config.getApprovalMode();
+    if (
+      approvalMode === ApprovalMode.AUTO_EDIT ||
+      approvalMode === ApprovalMode.YOLO
+    ) {
+      return false;
+    }
+
+    const fileService = this.config.getFileSystemService();
+
+    let originalContent = '';
+    let fileExists = true;
+    try {
+      originalContent = await fileService.readTextFile(
+        this.params.absolute_path,
+      );
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') {
+        fileExists = false;
+        originalContent = '';
+      } else {
+        return false;
+      }
+    }
+
+    const lines = originalContent.split('\n');
+    const totalLines = lines.length;
+
+    if (fileExists && this.params.line_number > totalLines + 1) {
+      return false;
+    }
+
+    if (!fileExists && this.params.line_number !== 1) {
+      return false;
+    }
+
+    const insertIndex = this.params.line_number - 1;
+    const newLines = this.params.content.split('\n');
+    const resultLines = [...lines];
+    resultLines.splice(insertIndex, 0, ...newLines);
+    const newContent = resultLines.join('\n');
+
+    const relativePath = makeRelative(
+      this.params.absolute_path,
+      this.config.getTargetDir(),
+    );
+    const fileName = path.basename(this.params.absolute_path);
+
+    const fileDiff = Diff.createPatch(
+      fileName,
+      originalContent,
+      newContent,
+      'Current',
+      'Proposed',
+      DEFAULT_DIFF_OPTIONS,
+    );
+
+    const ideClient = this.config.getIdeClient();
+    const ideConfirmation =
+      this.config.getIdeMode() &&
+      ideClient &&
+      ideClient.getConnectionStatus().status === IDEConnectionStatus.Connected
+        ? ideClient.openDiff(this.params.absolute_path, newContent)
+        : undefined;
+
+    const confirmationDetails: ToolEditConfirmationDetails = {
+      type: 'edit',
+      title: `Confirm Insert: ${shortenPath(relativePath)} (at line ${this.params.line_number})`,
+      fileName,
+      filePath: this.params.absolute_path,
+      fileDiff,
+      originalContent,
+      newContent,
+      onConfirm: async (outcome: ToolConfirmationOutcome) => {
+        if (outcome === ToolConfirmationOutcome.ProceedAlways) {
+          this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
+        }
+      },
+      ideConfirmation,
+    };
+    return confirmationDetails;
+  }
+
   async execute(): Promise<ToolResult> {
     const fileService = this.config.getFileSystemService();
 
-    // Read the file content
     let content: string;
     let fileExists = true;
     try {
       content = await fileService.readTextFile(this.params.absolute_path);
     } catch (error) {
       if (isNodeError(error) && error.code === 'ENOENT') {
-        // File doesn't exist - only allow insertion at line 1
         if (this.params.line_number !== 1) {
           return {
             llmContent: `Cannot insert at line ${this.params.line_number}: file does not exist. For new files, you can only insert at line_number: 1`,
@@ -102,10 +192,8 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
       }
     }
 
-    // Split into lines
     const lines = content.split('\n');
 
-    // Validate line number
     const totalLines = lines.length;
     if (fileExists && this.params.line_number > totalLines + 1) {
       return {
@@ -118,23 +206,17 @@ class InsertAtLineToolInvocation extends BaseToolInvocation<
       };
     }
 
-    // Calculate 0-based insertion index
     const insertIndex = this.params.line_number - 1;
 
-    // Split new content into lines
     const newLines = this.params.content.split('\n');
 
-    // Insert the lines
     lines.splice(insertIndex, 0, ...newLines);
 
-    // Join back
     const newContent = lines.join('\n');
 
-    // Write back
     try {
       await fileService.writeTextFile(this.params.absolute_path, newContent);
 
-      // Record metrics
       const linesInserted = newLines.length;
       const mimetype = getSpecificMimeType(this.params.absolute_path);
       recordFileOperationMetric(
