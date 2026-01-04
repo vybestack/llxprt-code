@@ -85,6 +85,7 @@ export interface UIActions {
   welcomeActions: {
     startSetup: () => void;
     selectProvider: (providerId: string) => void;
+    selectModel: (modelId: string) => void;
     selectAuthMethod: (method: 'oauth' | 'api_key') => void;
     onAuthComplete: () => void;
     onAuthError: (error: string) => void;

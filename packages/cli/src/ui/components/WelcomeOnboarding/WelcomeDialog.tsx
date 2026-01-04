@@ -10,6 +10,7 @@ import { Colors } from '../../colors.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { WelcomeStep, type WelcomeChoice } from './WelcomeStep.js';
 import { ProviderSelectStep } from './ProviderSelectStep.js';
+import { ModelSelectStep } from './ModelSelectStep.js';
 import { AuthMethodStep } from './AuthMethodStep.js';
 import { AuthenticationStep } from './AuthenticationStep.js';
 import { CompletionStep } from './CompletionStep.js';
@@ -17,12 +18,14 @@ import { SkipExitStep } from './SkipExitStep.js';
 import type {
   WelcomeState,
   WelcomeActions,
+  ModelInfo,
 } from '../../hooks/useWelcomeOnboarding.js';
 
 interface WelcomeDialogProps {
   state: WelcomeState;
   actions: WelcomeActions;
   availableProviders: string[];
+  availableModels: ModelInfo[];
   triggerAuth: (
     provider: string,
     method: 'oauth' | 'api_key',
@@ -34,6 +37,7 @@ export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
   state,
   actions,
   availableProviders,
+  availableModels,
   triggerAuth,
 }) => {
   // Handle global escape to skip (except during auth)
@@ -71,6 +75,16 @@ export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
           />
         );
 
+      case 'model':
+        return (
+          <ModelSelectStep
+            provider={state.selectedProvider!}
+            models={availableModels}
+            onSelect={actions.selectModel}
+            onBack={actions.goBack}
+          />
+        );
+
       case 'auth_method':
         return (
           <AuthMethodStep
@@ -97,6 +111,7 @@ export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
         return (
           <CompletionStep
             provider={state.selectedProvider!}
+            model={state.selectedModel}
             authMethod={state.selectedAuthMethod!}
             onSaveProfile={actions.saveProfile}
             onDismiss={actions.dismiss}

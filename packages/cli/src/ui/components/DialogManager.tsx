@@ -105,6 +105,7 @@ export const DialogManager = ({
         state={uiState.welcomeState}
         actions={uiActions.welcomeActions}
         availableProviders={uiState.welcomeAvailableProviders}
+        availableModels={uiState.welcomeAvailableModels}
         triggerAuth={uiActions.triggerWelcomeAuth}
       />
     );

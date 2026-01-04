@@ -27,7 +27,7 @@ import type {
 import type { SlashCommand, CommandContext } from '../commands/types.js';
 import type { ShellConfirmationRequest } from '../components/ShellConfirmationDialog.js';
 import type { LoadedSettings } from '../../config/settings.js';
-import type { WelcomeState } from '../hooks/useWelcomeOnboarding.js';
+import type { WelcomeState, ModelInfo } from '../hooks/useWelcomeOnboarding.js';
 
 /**
  * UI State shape for the AppContainer architecture.
@@ -161,6 +161,7 @@ export interface UIState {
   isWelcomeDialogOpen: boolean;
   welcomeState: WelcomeState;
   welcomeAvailableProviders: string[];
+  welcomeAvailableModels: ModelInfo[];
 
   // Input history
   inputHistory: string[];

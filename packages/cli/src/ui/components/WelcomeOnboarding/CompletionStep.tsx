@@ -11,6 +11,7 @@ import { useKeypress } from '../../hooks/useKeypress.js';
 
 interface CompletionStepProps {
   provider: string;
+  model?: string;
   authMethod: 'oauth' | 'api_key';
   onSaveProfile: (name: string) => Promise<void>;
   onDismiss: () => void;
@@ -19,6 +20,7 @@ interface CompletionStepProps {
 
 export const CompletionStep: React.FC<CompletionStepProps> = ({
   provider,
+  model,
   authMethod,
   onSaveProfile,
   onDismiss,
@@ -33,8 +35,9 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
   const authDisplay = authMethod === 'oauth' ? 'OAuth' : 'API Key';
 
   const handleProfileSubmit = useCallback(async () => {
-    if (!profileName.trim()) {
-      setShowProfilePrompt(false);
+    const trimmedName = profileName.trim();
+    if (!trimmedName) {
+      setError('Profile name is required');
       return;
     }
 
@@ -42,7 +45,7 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
     setError(undefined);
 
     try {
-      await onSaveProfile(profileName.trim());
+      await onSaveProfile(trimmedName);
       setShowProfilePrompt(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save profile');
@@ -53,11 +56,6 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
   // Handle keyboard input
   useKeypress(
     (key) => {
-      if (key.name === 'escape' && showProfilePrompt && !saving) {
-        setShowProfilePrompt(false);
-        return;
-      }
-
       if (key.name === 'return') {
         if (showProfilePrompt && !saving) {
           handleProfileSubmit();
@@ -77,16 +75,14 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
         return;
       }
 
-      // Only accept printable characters
+      // Accept printable characters (including paste - multi-char sequences)
       const char = key.sequence;
-      if (
-        char &&
-        char.length === 1 &&
-        !key.ctrl &&
-        !key.meta &&
-        key.insertable
-      ) {
-        setProfileName((prev) => prev + char);
+      if (char && !key.ctrl && !key.meta) {
+        // Filter to only printable ASCII characters
+        const printable = char.replace(/[^\x20-\x7E]/g, '');
+        if (printable) {
+          setProfileName((prev) => prev + printable);
+        }
       }
     },
     { isActive: isFocused },
@@ -95,27 +91,32 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
   return (
     <Box flexDirection="column">
       <Box flexDirection="column" marginBottom={1}>
+        <Text bold color={Colors.AccentCyan}>
+          Step 5 of 5: Save Your Profile
+        </Text>
+        <Text> </Text>
         <Text bold color={Colors.AccentGreen}>
-          {"✓ You're all set!"}
+          {'✓ Authentication complete!'}
         </Text>
       </Box>
 
       <Box flexDirection="column" marginBottom={1}>
         <Text>Provider: {providerDisplay}</Text>
+        {model && <Text>Model: {model}</Text>}
         <Text>Authentication: {authDisplay}</Text>
       </Box>
 
       {showProfilePrompt ? (
         <Box flexDirection="column">
           <Box marginBottom={1}>
-            <Text bold>Save this setup as a profile? (optional)</Text>
+            <Text bold>Save this setup as a profile</Text>
           </Box>
 
           <Text color={Colors.Gray}>
-            Profiles let you quickly switch between configurations.
+            This profile will be loaded automatically on startup.
           </Text>
           <Text color={Colors.Gray}>
-            Use /profile load &lt;name&gt; to restore this setup later.
+            Use /profile load &lt;name&gt; to switch profiles later.
           </Text>
 
           <Box marginTop={1} flexDirection="column">
@@ -138,7 +139,7 @@ export const CompletionStep: React.FC<CompletionStepProps> = ({
 
           <Box marginTop={1}>
             <Text color={Colors.Gray}>
-              Enter a name and press Enter to save, or Esc to skip
+              Enter a name and press Enter to save
             </Text>
           </Box>
         </Box>

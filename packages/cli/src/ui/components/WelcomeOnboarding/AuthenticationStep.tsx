@@ -76,16 +76,14 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
         return;
       }
 
-      // Only accept printable characters
+      // Accept printable characters (including paste - multi-char sequences)
       const char = key.sequence;
-      if (
-        char &&
-        char.length === 1 &&
-        !key.ctrl &&
-        !key.meta &&
-        key.insertable
-      ) {
-        setApiKey((prev) => prev + char);
+      if (char && !key.ctrl && !key.meta) {
+        // Filter to only printable ASCII characters (handles both typing and paste)
+        const printable = char.replace(/[^\x20-\x7E]/g, '');
+        if (printable) {
+          setApiKey((prev) => prev + printable);
+        }
       }
     },
     { isActive: isFocused },
@@ -112,7 +110,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
       <Box flexDirection="column">
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color={Colors.AccentCyan}>
-            Step 3 of 3: Authenticating with {providerDisplay}
+            Step 4 of 5: Authenticating with {providerDisplay}
           </Text>
         </Box>
 
@@ -141,7 +139,7 @@ export const AuthenticationStep: React.FC<AuthenticationStepProps> = ({
     <Box flexDirection="column">
       <Box flexDirection="column" marginBottom={1}>
         <Text bold color={Colors.AccentCyan}>
-          Step 3 of 3: Enter Your API Key
+          Step 4 of 5: Enter Your API Key
         </Text>
       </Box>
 

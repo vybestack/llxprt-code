@@ -632,6 +632,7 @@ export const AppContainer = (props: AppContainerProps) => {
     state: welcomeState,
     actions: welcomeActions,
     availableProviders: welcomeAvailableProviders,
+    availableModels: welcomeAvailableModels,
     triggerAuth: triggerWelcomeAuth,
   } = useWelcomeOnboarding({
     settings,
@@ -1651,6 +1652,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isWelcomeDialogOpen,
     welcomeState,
     welcomeAvailableProviders,
+    welcomeAvailableModels,
 
     // Input history
     inputHistory: inputHistoryStore.inputHistory,

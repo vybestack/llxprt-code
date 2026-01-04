@@ -67,7 +67,7 @@ export const ProviderSelectStep: React.FC<ProviderSelectStepProps> = ({
     <Box flexDirection="column">
       <Box flexDirection="column" marginBottom={1}>
         <Text bold color={Colors.AccentCyan}>
-          Step 1 of 3: Choose Your AI Provider
+          Step 1 of 5: Choose Your AI Provider
         </Text>
         <Text> </Text>
         <Text>{"Select which AI provider you'd like to use:"}</Text>

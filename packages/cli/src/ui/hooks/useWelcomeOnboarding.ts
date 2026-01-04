@@ -18,6 +18,7 @@ const debug = new DebugLogger('llxprt:ui:useWelcomeOnboarding');
 export type WelcomeStep =
   | 'welcome'
   | 'provider'
+  | 'model'
   | 'auth_method'
   | 'authenticating'
   | 'completion'
@@ -26,6 +27,7 @@ export type WelcomeStep =
 export interface WelcomeState {
   step: WelcomeStep;
   selectedProvider?: string;
+  selectedModel?: string;
   selectedAuthMethod?: 'oauth' | 'api_key';
   authInProgress: boolean;
   error?: string;
@@ -34,6 +36,7 @@ export interface WelcomeState {
 export interface WelcomeActions {
   startSetup: () => void;
   selectProvider: (providerId: string) => void;
+  selectModel: (modelId: string) => void;
   selectAuthMethod: (method: 'oauth' | 'api_key') => void;
   onAuthComplete: () => void;
   onAuthError: (error: string) => void;
@@ -48,11 +51,17 @@ export interface UseWelcomeOnboardingOptions {
   isFolderTrustComplete: boolean;
 }
 
+export interface ModelInfo {
+  id: string;
+  name: string;
+}
+
 export interface UseWelcomeOnboardingReturn {
   showWelcome: boolean;
   state: WelcomeState;
   actions: WelcomeActions;
   availableProviders: string[];
+  availableModels: ModelInfo[];
   triggerAuth: (
     provider: string,
     method: 'oauth' | 'api_key',
@@ -78,6 +87,7 @@ export const useWelcomeOnboarding = (
   });
 
   const [availableProviders, setAvailableProviders] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
 
   // Load available providers on mount
   useEffect(() => {
@@ -91,6 +101,35 @@ export const useWelcomeOnboarding = (
     }
   }, [runtime]);
 
+  // Load available models when provider is selected
+  useEffect(() => {
+    const loadModels = async () => {
+      if (!state.selectedProvider) {
+        setAvailableModels([]);
+        return;
+      }
+
+      try {
+        const models = await runtime.listAvailableModels(
+          state.selectedProvider,
+        );
+        const modelInfos: ModelInfo[] = models.map((m) => ({
+          id: m.name,
+          name: m.name,
+        }));
+        setAvailableModels(modelInfos);
+        debug.log(
+          `Loaded ${modelInfos.length} models for ${state.selectedProvider}`,
+        );
+      } catch (error) {
+        debug.log(`Failed to load models: ${error}`);
+        setAvailableModels([]);
+      }
+    };
+
+    loadModels();
+  }, [runtime, state.selectedProvider]);
+
   const startSetup = useCallback(() => {
     setState((prev) => ({ ...prev, step: 'provider' }));
   }, []);
@@ -99,6 +138,14 @@ export const useWelcomeOnboarding = (
     setState((prev) => ({
       ...prev,
       selectedProvider: providerId,
+      step: 'model',
+    }));
+  }, []);
+
+  const selectModel = useCallback((modelId: string) => {
+    setState((prev) => ({
+      ...prev,
+      selectedModel: modelId,
       step: 'auth_method',
     }));
   }, []);
@@ -113,15 +160,10 @@ export const useWelcomeOnboarding = (
   }, []);
 
   const onAuthComplete = useCallback(() => {
-    const providerManager = runtime.getCliProviderManager();
-    if (providerManager && state.selectedProvider) {
-      try {
-        providerManager.setActiveProvider(state.selectedProvider);
-        debug.log(`Set active provider to: ${state.selectedProvider}`);
-      } catch (error) {
-        debug.log(`Failed to set active provider: ${error}`);
-      }
-    }
+    // Provider switch already happened in triggerAuth, just update UI state
+    debug.log(
+      `[onAuthComplete] Auth complete for provider: ${state.selectedProvider}`,
+    );
 
     setState((prev) => ({
       ...prev,
@@ -129,7 +171,7 @@ export const useWelcomeOnboarding = (
       authInProgress: false,
       error: undefined,
     }));
-  }, [runtime, state.selectedProvider]);
+  }, [state.selectedProvider]);
 
   const onAuthError = useCallback((error: string) => {
     setState((prev) => ({
@@ -147,8 +189,10 @@ export const useWelcomeOnboarding = (
   const goBack = useCallback(() => {
     setState((prev) => {
       switch (prev.step) {
-        case 'auth_method':
+        case 'model':
           return { ...prev, step: 'provider', selectedProvider: undefined };
+        case 'auth_method':
+          return { ...prev, step: 'model', selectedModel: undefined };
         case 'authenticating':
           return {
             ...prev,
@@ -167,10 +211,43 @@ export const useWelcomeOnboarding = (
   const saveProfile = useCallback(
     async (name: string) => {
       try {
+        const providerManager = runtime.getCliProviderManager();
+        debug.log(
+          `[saveProfile] START name=${name}, active provider: ${providerManager?.getActiveProviderName()}`,
+        );
+
+        // Check if profile already exists
+        const existingProfiles = await runtime.listSavedProfiles();
+        debug.log(
+          `[saveProfile] Existing profiles: ${existingProfiles.join(', ')}`,
+        );
+        if (existingProfiles.includes(name)) {
+          throw new Error(
+            `Profile "${name}" already exists. Please choose a different name.`,
+          );
+        }
+
+        // Save the profile snapshot
+        debug.log(`[saveProfile] Calling saveProfileSnapshot...`);
         await runtime.saveProfileSnapshot(name);
-        debug.log(`Saved profile: ${name}`);
+        debug.log(`[saveProfile] Saved profile: ${name}`);
+
+        // Set as default profile so it loads on startup
+        debug.log(`[saveProfile] Setting as default profile...`);
+        await runtime.setDefaultProfileName(name);
+        debug.log(`[saveProfile] Set default profile: ${name}`);
+
+        // Load the profile immediately in current session
+        debug.log(`[saveProfile] Loading profile...`);
+        const loadResult = await runtime.loadProfileByName(name);
+        debug.log(
+          `[saveProfile] Load result: ${JSON.stringify(loadResult, null, 2)}`,
+        );
+        debug.log(
+          `[saveProfile] After load - active provider: ${providerManager?.getActiveProviderName()}`,
+        );
       } catch (error) {
-        debug.log(`Failed to save profile: ${error}`);
+        debug.log(`[saveProfile] Failed: ${error}`);
         throw error;
       }
     },
@@ -189,11 +266,29 @@ export const useWelcomeOnboarding = (
     async (
       provider: string,
       method: 'oauth' | 'api_key',
-      _apiKey?: string,
+      apiKey?: string,
     ): Promise<void> => {
-      debug.log(`Triggering auth for ${provider} via ${method}`);
+      debug.log(`[triggerAuth] START provider=${provider} method=${method}`);
       const oauthManager = runtime.getCliOAuthManager();
       const providerManager = runtime.getCliProviderManager();
+
+      debug.log(
+        `[triggerAuth] Before switch - current active: ${providerManager?.getActiveProviderName()}`,
+      );
+
+      // Use switchActiveProvider (not setActiveProvider) - it does full provider switch
+      // including config updates, ephemeral settings, and settingsService updates
+      const switchResult = await runtime.switchActiveProvider(provider);
+      debug.log(
+        `[triggerAuth] After switchActiveProvider - changed: ${switchResult.changed}, now active: ${providerManager?.getActiveProviderName()}`,
+      );
+
+      // Set the selected model
+      if (state.selectedModel) {
+        debug.log(`[triggerAuth] Setting model to: ${state.selectedModel}`);
+        await runtime.setActiveModel(state.selectedModel);
+        debug.log(`[triggerAuth] Model set to: ${state.selectedModel}`);
+      }
 
       if (method === 'oauth') {
         // Trigger OAuth flow
@@ -201,24 +296,25 @@ export const useWelcomeOnboarding = (
           throw new Error('OAuth manager not available');
         }
         await oauthManager.authenticate(provider);
-      } else {
-        // API key path: For now, just enable OAuth for this provider
-        // In the future, this could use a dedicated API key setting mechanism
-        // The API key can be set via environment variables or /key command
+        debug.log(`[triggerAuth] OAuth complete for ${provider}`);
+      } else if (apiKey) {
+        // API key path: set the key for the now-active provider
         debug.log(
-          `API key auth not yet supported in welcome flow - please use /key command or environment variables`,
+          `[triggerAuth] Calling updateActiveProviderApiKey for ${provider}`,
         );
-        throw new Error(
-          'API key authentication during onboarding not yet supported. Use /key command after setup.',
+        const result = await runtime.updateActiveProviderApiKey(apiKey);
+        debug.log(
+          `[triggerAuth] API key result: ${result.message}, providerName=${result.providerName}`,
         );
+      } else {
+        throw new Error('API key is required for API key authentication');
       }
 
-      // Set the active provider after successful auth
-      if (providerManager) {
-        providerManager.setActiveProvider(provider);
-      }
+      debug.log(
+        `[triggerAuth] END - active provider: ${providerManager?.getActiveProviderName()}`,
+      );
     },
-    [runtime],
+    [runtime, state.selectedModel],
   );
 
   return {
@@ -227,6 +323,7 @@ export const useWelcomeOnboarding = (
     actions: {
       startSetup,
       selectProvider,
+      selectModel,
       selectAuthMethod,
       onAuthComplete,
       onAuthError,
@@ -236,6 +333,7 @@ export const useWelcomeOnboarding = (
       dismiss,
     },
     availableProviders,
+    availableModels,
     triggerAuth,
   };
 };
