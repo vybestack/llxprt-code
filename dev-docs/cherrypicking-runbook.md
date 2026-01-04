@@ -14,8 +14,8 @@ For selection criteria, non-negotiables (privacy/multi-provider/tool batching), 
 
 ## Naming Convention (Required)
 
-- **Branch name:** `YYYYMMDDgemerge` (no hyphen), e.g. `20251215gemerge`
-- **Plan folder:** `project-plans/YYYYMMDDgemerge/` (matches branch name)
+- **Branch name:** `YYYYMMDDgmerge` (no hyphen), e.g. `20251215gmerge`
+- **Plan folder:** `project-plans/YYYYMMDDgmerge/` (matches branch name)
 
 Do not create “marker-only merge commits” to record sync points. Tracking is done via the plan folder artifacts and commit messages (see `dev-docs/cherrypicking.md`).
 
@@ -37,28 +37,28 @@ Do not create “marker-only merge commits” to record sync points. Tracking is
 
 ## Required Artifacts (Write These Files)
 
-Create `project-plans/YYYYMMDDgemerge/` and write:
+Create `project-plans/YYYYMMDDgmerge/` and write:
 
-- `project-plans/YYYYMMDDgemerge/CHERRIES.md`  
+- `project-plans/YYYYMMDDgmerge/CHERRIES.md`  
   Decision tables for every upstream commit in the range.
-- `project-plans/YYYYMMDDgemerge/SUMMARY.md`  
+- `project-plans/YYYYMMDDgmerge/SUMMARY.md`  
   Short “what’s happening” overview + counts + any high-risk items.
-- `project-plans/YYYYMMDDgemerge/PLAN.md`  
+- `project-plans/YYYYMMDDgmerge/PLAN.md`  
   Executable batch schedule (chronological), verification cadence, and links to reimplementation playbooks.
-- `project-plans/YYYYMMDDgemerge/PROGRESS.md`  
+- `project-plans/YYYYMMDDgmerge/PROGRESS.md`  
   A checklist to track batch completion (and record the LLxprt commit hash per batch).
-- `project-plans/YYYYMMDDgemerge/NOTES.md`  
+- `project-plans/YYYYMMDDgmerge/NOTES.md`  
   Running notes while executing batches (conflicts, decisions, deviations, follow-ups).
-- `project-plans/YYYYMMDDgemerge/AUDIT.md`  
+- `project-plans/YYYYMMDDgmerge/AUDIT.md`  
   Post-implementation reconciliation: upstream SHA → “PICKED/REIMPLEMENTED/SKIPPED/NO_OP” + LLxprt commit hash(es) + notes.
 
 For every **REIMPLEMENT** upstream commit, add a per-commit playbook:
 
-- `project-plans/YYYYMMDDgemerge/<upstream-sha>-plan.md`
+- `project-plans/YYYYMMDDgmerge/<upstream-sha>-plan.md`
 
 You may generate these with subagents, but they must be specific enough that a context-wiped agent can execute them safely and deterministically.
 
-Use `project-plans/20251215gemerge/` as a structure reference (not as a decision template).
+Use `project-plans/20251215gmerge/` as a structure reference (not as a decision template).
 
 ---
 
@@ -70,14 +70,14 @@ From repo root:
 git fetch origin
 git checkout main
 git pull --ff-only
-git checkout -b YYYYMMDDgemerge
+git checkout -b YYYYMMDDgmerge
 
 # Ensure upstream remote exists (use upstream = gemini-cli)
 git remote add upstream https://github.com/google-gemini/gemini-cli.git 2>/dev/null || true
 git remote set-url upstream https://github.com/google-gemini/gemini-cli.git
 git fetch upstream --tags
 
-mkdir -p project-plans/YYYYMMDDgemerge
+mkdir -p project-plans/YYYYMMDDgmerge
 ```
 
 ---
@@ -118,7 +118,7 @@ For every upstream commit in the range, choose exactly one:
 
 ### Required table order
 
-In `project-plans/YYYYMMDDgemerge/CHERRIES.md`, include three separate tables in this exact order:
+In `project-plans/YYYYMMDDgmerge/CHERRIES.md`, include three separate tables in this exact order:
 
 1. **PICK table** (chronological)
 2. **SKIP table** (chronological)
@@ -160,7 +160,7 @@ Goal: turn the decisions into an executable, deterministic batch schedule.
      - typical signals: touches tool scheduling/execution, policy/approvals, core tool naming, multi-provider routing, or other LLxprt “non-negotiables”
 3. **REIMPLEMENT** commits:
    - **solo batch** (batch size 1)
-   - `PLAN.md` must link to `project-plans/YYYYMMDDgemerge/<sha>-plan.md`
+   - `PLAN.md` must link to `project-plans/YYYYMMDDgmerge/<sha>-plan.md`
 4. **SKIP** commits:
    - do not batch (they are not executed)
 
@@ -198,7 +198,7 @@ Recommended commit message templates:
 
 ### Required PLAN.md contents
 
-`project-plans/YYYYMMDDgemerge/PLAN.md` must include:
+`project-plans/YYYYMMDDgmerge/PLAN.md` must include:
 
 1. A short “non-negotiables” section pointing to `dev-docs/cherrypicking.md` (privacy/multi-provider/tool batching/branding).
 2. A “file existence pre-check” section (files referenced by reimplement plans that might not exist in LLxprt).
@@ -260,7 +260,7 @@ Update continuously as you execute:
 Open a PR against `main` that:
 
 - References the tracking issue (e.g. `Fixes #708`)
-- Links to `project-plans/YYYYMMDDgemerge/CHERRIES.md` and `project-plans/YYYYMMDDgemerge/AUDIT.md`
+- Links to `project-plans/YYYYMMDDgmerge/CHERRIES.md` and `project-plans/YYYYMMDDgmerge/AUDIT.md`
 - Summarizes major functional changes and any intentional SKIPs/NO_OPs
 
 ---
