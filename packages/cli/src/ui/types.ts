@@ -1,16 +1,35 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
+import type {
   CompressionStatus,
   GeminiCLIExtension,
+  MCPServerConfig,
+  ThoughtSummary,
   ToolCallConfirmationDetails,
+  ToolConfirmationOutcome,
   ToolResultDisplay,
-  type ThinkingBlock,
-} from '@vybestack/llxprt-code-core';
+  RetrieveUserQuotaResponse,
+  SkillDefinition,
+} from '@google/gemini-cli-core';
+import type { PartListUnion } from '@google/genai';
+import { type ReactNode } from 'react';
+
+export type { ThoughtSummary, SkillDefinition };
+
+export enum AuthState {
+  // Attempting to authenticate or re-authenticate
+  Unauthenticated = 'unauthenticated',
+  // Auth dialog is open for user to select auth method
+  Updating = 'updating',
+  // Waiting for user to input API key
+  AwaitingApiKeyInput = 'awaiting_api_key_input',
+  // Successfully authenticated
+  Authenticated = 'authenticated',
+}
 
 // Only defining the state enum needed by the UI
 export enum StreamingState {
@@ -53,8 +72,8 @@ export interface IndividualToolCallDisplay {
   status: ToolCallStatus;
   confirmationDetails: ToolCallConfirmationDetails | undefined;
   renderOutputAsMarkdown?: boolean;
-  isFocused?: boolean;
   ptyId?: number;
+  outputFile?: string;
 }
 
 export interface CompressionProps {
@@ -63,6 +82,11 @@ export interface CompressionProps {
   newTokenCount: number | null;
   compressionStatus: CompressionStatus | null;
 }
+
+/**
+ * For use when you want no icon.
+ */
+export const emptyIcon = '  ';
 
 export interface HistoryItemBase {
   text?: string; // Text content for user/gemini/info/error messages
@@ -76,30 +100,18 @@ export type HistoryItemUser = HistoryItemBase & {
 export type HistoryItemGemini = HistoryItemBase & {
   type: 'gemini';
   text: string;
-  model?: string;
-  profileName?: string;
-  thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
 };
 
 export type HistoryItemGeminiContent = HistoryItemBase & {
   type: 'gemini_content';
   text: string;
-  model?: string;
-  profileName?: string;
-  thinkingBlocks?: ThinkingBlock[]; // @plan:PLAN-20251202-THINKING-UI.P06
-};
-
-export type HistoryItemOAuthURL = HistoryItemBase & {
-  type: 'oauth_url';
-  text: string;
-  url: string;
 };
 
 export type HistoryItemInfo = HistoryItemBase & {
   type: 'info';
   text: string;
-  icon?: string; // Custom prefix (default: 'ℹ ')
-  color?: string; // Custom color (default: theme.status.warning)
+  icon?: string;
+  color?: string;
 };
 
 export type HistoryItemError = HistoryItemBase & {
@@ -118,18 +130,10 @@ export type HistoryItemAbout = HistoryItemBase & {
   osVersion: string;
   sandboxEnv: string;
   modelVersion: string;
+  selectedAuthType: string;
   gcpProject: string;
-  /**
-   * Path to the configured keyfile for the active provider. Empty string if none.
-   */
-  keyfile: string;
-  /**
-   * "active" when an API key is configured for the active provider, otherwise empty string.
-   */
-  key: string;
   ideClient: string;
-  provider: string;
-  baseURL: string;
+  userEmail?: string;
 };
 
 export type HistoryItemHelp = HistoryItemBase & {
@@ -140,7 +144,7 @@ export type HistoryItemHelp = HistoryItemBase & {
 export type HistoryItemStats = HistoryItemBase & {
   type: 'stats';
   duration: string;
-  quotaLines?: string[];
+  quotas?: RetrieveUserQuotaResponse;
 };
 
 export type HistoryItemModelStats = HistoryItemBase & {
@@ -151,12 +155,9 @@ export type HistoryItemToolStats = HistoryItemBase & {
   type: 'tool_stats';
 };
 
-export type HistoryItemCacheStats = HistoryItemBase & {
-  type: 'cache_stats';
-};
-
-export type HistoryItemLBStats = HistoryItemBase & {
-  type: 'lb_stats';
+export type HistoryItemModel = HistoryItemBase & {
+  type: 'model';
+  model: string;
 };
 
 export type HistoryItemQuit = HistoryItemBase & {
@@ -166,7 +167,6 @@ export type HistoryItemQuit = HistoryItemBase & {
 
 export type HistoryItemToolGroup = HistoryItemBase & {
   type: 'tool_group';
-  agentId?: string;
   tools: IndividualToolCallDisplay[];
 };
 
@@ -183,11 +183,6 @@ export type HistoryItemCompression = HistoryItemBase & {
 export type HistoryItemExtensionsList = HistoryItemBase & {
   type: 'extensions_list';
   extensions: GeminiCLIExtension[];
-};
-
-export type HistoryItemHooksList = HistoryItemBase & {
-  type: 'hooks_list';
-  hooks: Array<import('@vybestack/llxprt-code-core').HookRegistryEntry>;
 };
 
 export interface ChatDetail {
@@ -212,12 +207,6 @@ export type HistoryItemToolsList = HistoryItemBase & {
   showDescriptions: boolean;
 };
 
-export interface SkillDefinition {
-  name: string;
-  description: string;
-  disabled?: boolean;
-}
-
 export type HistoryItemSkillsList = HistoryItemBase & {
   type: 'skills_list';
   skills: SkillDefinition[];
@@ -226,28 +215,63 @@ export type HistoryItemSkillsList = HistoryItemBase & {
 
 // JSON-friendly types for using as a simple data model showing info about an
 // MCP Server.
-export interface McpServer {
+export interface JsonMcpTool {
+  serverName: string;
   name: string;
-  connected: boolean;
   description?: string;
-  environment?: Record<string, string>;
-  error?: string;
-  tools: string[];
-  prompts: string[];
-  resources: string[];
+  schema?: {
+    parametersJsonSchema?: unknown;
+    parameters?: unknown;
+  };
+}
+
+export interface JsonMcpPrompt {
+  serverName: string;
+  name: string;
+  description?: string;
+}
+
+export interface JsonMcpResource {
+  serverName: string;
+  name?: string;
+  uri?: string;
+  mimeType?: string;
+  description?: string;
 }
 
 export type HistoryItemMcpStatus = HistoryItemBase & {
   type: 'mcp_status';
-  servers: McpServer[];
+  servers: Record<string, MCPServerConfig>;
+  tools: JsonMcpTool[];
+  prompts: JsonMcpPrompt[];
+  resources: JsonMcpResource[];
+  authStatus: Record<
+    string,
+    'authenticated' | 'expired' | 'unauthenticated' | 'not-configured'
+  >;
+  blockedServers: Array<{ name: string; extensionName: string }>;
+  discoveryInProgress: boolean;
+  connectingServers: string[];
+  showDescriptions: boolean;
+  showSchema: boolean;
 };
 
-export type HistoryItemProfileChange = HistoryItemBase & {
-  type: 'profile_change';
-  profileName: string;
+export type HistoryItemHooksList = HistoryItemBase & {
+  type: 'hooks_list';
+  hooks: Array<{
+    config: { command?: string; type: string; timeout?: number };
+    source: string;
+    eventName: string;
+    matcher?: string;
+    sequential?: boolean;
+    enabled: boolean;
+  }>;
 };
 
-// Union type for all history item types
+// Using Omit<HistoryItem, 'id'> seems to have some issues with typescript's
+// type inference e.g. historyItem.type === 'tool_group' isn't auto-inferring that
+// 'tools' in historyItem.
+// Individually exported types extending HistoryItemBase
 export type HistoryItemWithoutId =
   | HistoryItemUser
   | HistoryItemUserShell
@@ -262,23 +286,17 @@ export type HistoryItemWithoutId =
   | HistoryItemStats
   | HistoryItemModelStats
   | HistoryItemToolStats
-  | HistoryItemCacheStats
-  | HistoryItemLBStats
+  | HistoryItemModel
   | HistoryItemQuit
   | HistoryItemCompression
-  | HistoryItemOAuthURL
   | HistoryItemExtensionsList
-  | HistoryItemHooksList
   | HistoryItemToolsList
   | HistoryItemSkillsList
   | HistoryItemMcpStatus
   | HistoryItemChatList
-  | HistoryItemProfileChange;
+  | HistoryItemHooksList;
 
 export type HistoryItem = HistoryItemWithoutId & { id: number };
-
-// Constant for "no icon, just indent"
-export const emptyIcon = '  ';
 
 // Message types used by internal command feedback (subset of HistoryItem types)
 export enum MessageType {
@@ -291,16 +309,15 @@ export enum MessageType {
   STATS = 'stats',
   MODEL_STATS = 'model_stats',
   TOOL_STATS = 'tool_stats',
-  CACHE_STATS = 'cache_stats',
-  LB_STATS = 'lb_stats',
   QUIT = 'quit',
   GEMINI = 'gemini',
   COMPRESSION = 'compression',
   EXTENSIONS_LIST = 'extensions_list',
+  TOOLS_LIST = 'tools_list',
   SKILLS_LIST = 'skills_list',
+  MCP_STATUS = 'mcp_status',
   CHAT_LIST = 'chat_list',
   HOOKS_LIST = 'hooks_list',
-  PROFILE_CHANGE = 'profile_change',
 }
 
 // Simplified message structure for internal feedback
@@ -317,18 +334,16 @@ export type Message =
       osVersion: string;
       sandboxEnv: string;
       modelVersion: string;
+      selectedAuthType: string;
       gcpProject: string;
-      keyfile: string;
-      key: string;
       ideClient: string;
-      provider: string;
-      baseURL: string;
+      userEmail?: string;
       content?: string; // Optional content, not really used for ABOUT
     }
   | {
       type: MessageType.HELP;
       timestamp: Date;
-      content?: string;
+      content?: string; // Optional content, not really used for HELP
     }
   | {
       type: MessageType.STATS;
@@ -343,16 +358,6 @@ export type Message =
     }
   | {
       type: MessageType.TOOL_STATS;
-      timestamp: Date;
-      content?: string;
-    }
-  | {
-      type: MessageType.CACHE_STATS;
-      timestamp: Date;
-      content?: string;
-    }
-  | {
-      type: MessageType.LB_STATS;
       timestamp: Date;
       content?: string;
     }
@@ -380,7 +385,7 @@ export interface ConsoleMessageItem {
  */
 export interface SubmitPromptResult {
   type: 'submit_prompt';
-  content: string;
+  content: PartListUnion;
 }
 
 /**
@@ -397,7 +402,19 @@ export type SlashCommandProcessorResult =
     }
   | SubmitPromptResult;
 
+export interface ShellConfirmationRequest {
+  commands: string[];
+  onConfirm: (
+    outcome: ToolConfirmationOutcome,
+    approvedCommands?: string[],
+  ) => void;
+}
+
 export interface ConfirmationRequest {
-  prompt: React.ReactNode;
+  prompt: ReactNode;
   onConfirm: (confirm: boolean) => void;
+}
+
+export interface LoopDetectionConfirmationRequest {
+  onComplete: (result: { userSelection: 'disable' | 'keep' }) => void;
 }
