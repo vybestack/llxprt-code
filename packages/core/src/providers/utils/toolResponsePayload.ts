@@ -12,6 +12,32 @@ import {
   hasUnicodeReplacements,
 } from '../../utils/unicodeUtils.js';
 
+export function formatToolResponseText(params: {
+  status: 'success' | 'error';
+  toolName?: string;
+  error?: string;
+  output?: string;
+}): string {
+  const blocks: string[] = [];
+
+  blocks.push('status:');
+  blocks.push(params.status);
+
+  blocks.push('');
+  blocks.push('toolName:');
+  blocks.push(params.toolName ?? '');
+
+  blocks.push('');
+  blocks.push('error:');
+  blocks.push(params.error ?? '');
+
+  blocks.push('');
+  blocks.push('output:');
+  blocks.push(params.output ?? '');
+
+  return blocks.join('\n');
+}
+
 export interface ToolResponsePayload {
   status: 'success' | 'error';
   toolName?: string;
@@ -62,13 +88,17 @@ function formatToolResult(result: unknown): {
     const formatted = formatToolResultValue(result);
     return { ...formatted, raw: result };
   }
-  try {
-    const serialized = JSON.stringify(result);
-    return { value: serialized, raw: serialized };
-  } catch {
-    const coerced = coerceToString(result);
-    return { value: coerced, raw: coerced };
+
+  if (typeof result === 'object') {
+    const output = (result as { output?: unknown }).output;
+    if (typeof output === 'string') {
+      const formatted = formatToolResultValue(output);
+      return { ...formatted, raw: output };
+    }
   }
+
+  const coerced = coerceToString(result);
+  return { value: coerced, raw: coerced };
 }
 
 function limitToolPayload(

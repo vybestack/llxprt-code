@@ -321,7 +321,7 @@ const response = await provider.generateChatCompletion({
 2. **Tool calls not working**
    - Ensure tools are properly formatted for Responses API
    - Check that `tool_choice` is used instead of `function_call`
-   - Verify tool response format matches expected structure
+   - Verify tool response format matches expected structure (see [Tool output format](../tool-output-format.md))
 
 3. **Streaming issues**
    - Ensure SSE parsing is working correctly
