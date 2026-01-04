@@ -4,22 +4,22 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | (none) |
+| **Last Completed** | Batch 01 |
 | **In Progress** | (none) |
-| **Next Up** | Batch 01 |
-| **Progress** | 0/49 (0%) |
+| **Next Up** | Batch 02 |
+| **Progress** | 1/49 (2%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
-- [ ] On main: `git pull --ff-only`
-- [ ] Branch exists: `git checkout -b 20260104gmerge`
-- [ ] Upstream remote + tags fetched: `git fetch upstream --tags`
-- [ ] Clean worktree before Batch 01: `git status --porcelain` is empty
-- [ ] File existence pre-check run (see PLAN.md)
+- [x] On main: `git pull --ff-only`
+- [x] Branch exists: `git checkout -b 20260104gmerge`
+- [x] Upstream remote + tags fetched: `git fetch upstream --tags`
+- [x] Clean worktree before Batch 01: `git status --porcelain` is empty
+- [x] File existence pre-check run (see PLAN.md)
 
 ## Batch Checklist
 
-- [ ] Batch 01 — QUICK — REIMPLEMENT — `b8df8b2a` — feat(core): wire up UI for ASK_USER policy decisions in message bus (#10630)
+- [x] Batch 01 — QUICK — REIMPLEMENT — `b8df8b2a` — feat(core): wire up UI for ASK_USER policy decisions in message bus (#10630)
 - [ ] Batch 02 — FULL — PICK — `4f17eae5, d38ab079, 2e6d69c9, 47f69317, 8c1656bf` — feat(cli): Prevent queuing of slash and shell commands (#11094) / Update shell tool call colors for confirmed actions (#11126) / Fix --allowed-tools in non-interactive mode to do substring matching for parity with interactive mode. (#10944) / Add support for output-format stream-jsonflag for headless mode (#10883) / Don't always fall back on a git clone when installing extensions (#11229)
 - [ ] Batch 03 — QUICK — PICK — `cfaa95a2` — feat(cli): Add nargs to yargs options (#11132)
 - [ ] Batch 04 — FULL — REIMPLEMENT — `130f0a02` — chore(subagents): Remove legacy subagent code (#11175)
