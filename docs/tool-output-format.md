@@ -8,7 +8,7 @@ This avoids double/triple JSON-encoding that produces heavily escaped strings, w
 
 The tool output text is formatted as:
 
-```
+```text
 status:
 <success|error>
 
