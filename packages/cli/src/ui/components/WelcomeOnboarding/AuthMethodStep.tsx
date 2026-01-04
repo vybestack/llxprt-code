@@ -86,7 +86,7 @@ export const AuthMethodStep: React.FC<AuthMethodStepProps> = ({
     <Box flexDirection="column">
       <Box flexDirection="column" marginBottom={1}>
         <Text bold color={Colors.AccentCyan}>
-          Step 2 of 3: Choose Authentication Method
+          Step 3 of 5: Choose Authentication Method
         </Text>
         <Text> </Text>
         <Text>How would you like to authenticate with {providerDisplay}?</Text>
