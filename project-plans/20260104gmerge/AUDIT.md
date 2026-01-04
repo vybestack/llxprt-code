@@ -224,3 +224,12 @@ Resolution: SKIP - Deepthinker confirmed LLxprt's subagent system is more advanc
 
 Original decision: `c9c633be` marked as REIMPLEMENT.
 Resolution: **REIMPLEMENTED** - Applied upstream refactoring to LLxprt. Tool names GOOGLE_WEB_FETCH_TOOL and DIRECT_WEB_FETCH_TOOL already existed in tool-names.ts. Replaced hardcoded 'web_fetch' and 'direct_web_fetch' strings in google-web-fetch.ts and direct-web-fetch.ts with imported constants. Upstream policy.test.ts, policy.ts, and web-fetch.ts changes are NO_OP (files don't exist or have different structure in LLxprt).
+### Batch 06 - Mixed Resolution
+
+Original decisions: All 3 commits marked as PICK. Analysis shows:
+
+| Commit | Original Decision | Resolution Path | Why |
+|---|---|---|---|
+| `60420e52` | PICK | **PICK** | Same logic in `packages/cli/src/ui/hooks/useCommandCompletion.tsx:223`; applies cleanly (no space when suggestion ends with `/` or `\\`) |
+| `a9083b9d` | PICK | **REIMPLEMENT** | LLxprt already attaches `extensionName` when merging MCP configs but output omits it (`packages/cli/src/commands/mcp/list.ts:121`) |
+| `b734723d` | PICK | **REIMPLEMENT** | LLxprt config differs (`llxprt-extension.json`), different warning text (`packages/cli/src/config/extension.ts:578`), no `--consent` option |
