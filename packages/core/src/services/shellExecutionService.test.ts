@@ -438,6 +438,8 @@ describe('ShellExecutionService child_process fallback', () => {
       configurable: true,
     });
 
+    mockChildProcess.once = mockChildProcess.on.bind(mockChildProcess);
+
     mockCpSpawn.mockReturnValue(mockChildProcess);
   });
 
@@ -489,6 +491,16 @@ describe('ShellExecutionService child_process fallback', () => {
         type: 'data',
         chunk: 'a warning',
       });
+    });
+
+    it('should resolve when only the close event fires', async () => {
+      const { result } = await simulateExecution('ls -l', (cp) => {
+        cp.stdout?.emit('data', Buffer.from('file1.txt\n'));
+        cp.emit('close', 0, null);
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.output).toBe('file1.txt');
     });
 
     it('should strip ANSI codes from output', async () => {
@@ -831,6 +843,7 @@ describe('ShellExecutionService execution method selection', () => {
       value: 54321,
       configurable: true,
     });
+    mockChildProcess.once = mockChildProcess.on.bind(mockChildProcess);
     mockCpSpawn.mockReturnValue(mockChildProcess);
   });
 

@@ -18,6 +18,7 @@ const fakeChildFactory = () => {
     stdout: { on: vi.fn<(event: string, cb: Listener) => void>() },
     stderr: { on: vi.fn<(event: string, cb: Listener) => void>() },
     on: vi.fn<(event: string, cb: Listener) => void>(),
+    once: vi.fn<(event: string, cb: Listener) => void>(),
     pid: 2222,
     kill: vi.fn<(signal?: NodeJS.Signals) => boolean>(),
   };
