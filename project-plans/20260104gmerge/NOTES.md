@@ -134,6 +134,31 @@ packages/core/src/tools/tools.ts                  | 114 +++++++++++++++++++---
 ```
 ---
 
+## Batch 02 - Deepthinker Analysis Results
+
+### Resolution Summary
+
+| Commit | SHA | Resolution | Rationale |
+|---|---|---|---|
+| Prevent queuing of slash/shell commands | 4f17eae5 | **REIMPLEMENT** | LLxprt has StreamingState but lacks queue error state UI wiring |
+| Shell tool call colors for confirmed actions | d38ab079 | **SKIP** | Purely aesthetic; conflicts with LLxprt SemanticColors palette |
+| Fix --allowed-tools substring matching | 2e6d69c9 | **REIMPLEMENT** | Bug fix - LLxprt has same issue in parseAllowedSubcommands/shell.ts |
+| Add output-format stream-json flag | 47f69317 | **REIMPLEMENT** | New feature requires LLxprt integration in output-format.ts, nonInteractiveCli.ts |
+| Avoid unconditional git clone fallback | 8c1656bf | **REIMPLEMENT** | Apply result object + consent-driven fallback to LLxprt extension plumbing |
+
+### Detailed Findings
+
+**4f17eae5**: LLxprt's InputPrompt has setQueueErrorMessage/streamingState props but no queue error display or blocking logic in handleSubmitAndClear. Need to wire queue error state through UIState/UIActions contexts to Composer and InputPrompt.
+
+**d38ab079**: LLxprt uses SemanticColors.text.secondary for separator (matches upstream intent), but tool group border and shell prompt colors diverge. No functional change requested - SKIP for aesthetic divergence.
+
+**2e6d69c9**: LLxprt still uses parseAllowedSubcommands in ShellToolInvocation.shouldConfirmExecute, and doesToolInvocationMatch doesn't accept raw strings like upstream's fix. Apply substring matching fix to shell.ts and tool-utils.ts.
+
+**47f69317**: LLxprt only supports text/json output. Need to implement stream JSON formatter in utils/output-format.ts, wire into nonInteractiveCli.ts and errors.ts, and update LLxprt docs (upstream docs won't apply).
+
+**8c1656bf**: LLxprt's downloadFromGitHubRelease throws on errors; installOrUpdateExtension always clones on failure. Apply upstream's structured result object approach with consent flow.
+---
+
 ## Batch 02
 
 ### Selection Record
@@ -187,7 +212,7 @@ Ready to Execute: YES
 
 ### Execution Record
 
-Attempted cherry-pick of `cfaa95a2`. Conflicts in `packages/cli/src/config/config.ts` due to diverged extension handling. Needs subagent analysis to determine if this is a simple conflict or requires prereq work. Status: PENDING ANALYSIS.
+Attempted cherry-pick of `cfaa95a2`. Conflicts in `packages/cli/src/config/config.ts` due to diverged extension handling. Deepthinker analysis recommends REIMPLEMENT - add `nargs: 1` to all single-argument options in LLxprt's config.ts and port two upstream tests.
 
 ```
 $ git cherry-pick cfaa95a2
@@ -199,11 +224,16 @@ CONFLICT (content): Merge conflict in packages/cli/src/config/config.ts
 
 ### Verification Record
 
-Not yet verified due to conflict.
+Not yet verified.
+
+### Status Documentation
+
+Batch 03 commit: `cfaa95a2` marked as REIMPLEMENT in AUDIT.md.
+ Resolution: Add `nargs: 1` to all single-argument string/array options (LLxprt has many options without nargs that share the same parsing risk). Port two upstream tests for positional prompts after flags.
 
 ### Commit/Push Record
 
-No commit created. Status remains PENDING ANALYSIS.
+No commit created (REIMPLEMENT needed). Status documented in AUDIT.md.
 
 ---
 ---

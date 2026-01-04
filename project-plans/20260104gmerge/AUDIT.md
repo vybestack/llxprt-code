@@ -210,6 +210,11 @@ Original decisions: All 5 commits were marked as PICK. Analysis shows:
 Original decision: `cfaa95a2` marked as PICK.
 Status: Cherry-pick conflicts in config.ts due to diverged extension handling. Needs subagent analysis to determine resolution path.
 
+### Batch 03 - REIMPLEMENT
+
+Original decision: `cfaa95a2` marked as PICK.
+Resolution: **REIMPLEMENT** - Add `nargs: 1` to all single-argument string/array options in config.ts (LLxprt has many options without nargs that share the same parsing risk as upstream). Two upstream tests should be ported to lock in behavior: positional prompt after `--telemetry-target`, and long positional prompt after multiple `--allowed-tools`. Direct cherry-pick conflicts with LLxprt's diverged option set.
+
 ### Batch 04 - SKIP
 
 Original decision: `130f0a02` marked as REIMPLEMENT.
