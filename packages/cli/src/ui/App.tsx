@@ -5,7 +5,7 @@
  */
 
 import { useReducer } from 'react';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config, PersistedSession } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../config/settings.js';
 import { KeypressProvider } from './contexts/KeypressContext.js';
 import { MouseProvider } from './contexts/MouseContext.js';
@@ -28,6 +28,7 @@ interface AppProps {
   settings: LoadedSettings;
   startupWarnings?: string[];
   version: string;
+  restoredSession?: PersistedSession;
 }
 
 /**

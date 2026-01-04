@@ -19,6 +19,7 @@ import {
   ToolCallStatus,
   type HistoryItemWithoutId,
   type HistoryItem,
+  type IndividualToolCallDisplay,
 } from './types.js';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useResponsive } from './hooks/useResponsive.js';
@@ -64,6 +65,11 @@ import {
   getSettingsService,
   DebugLogger,
   uiTelemetryService,
+  SessionPersistenceService,
+  type PersistedSession,
+  type IContent,
+  type ToolCallBlock,
+  type ToolResponseBlock,
 } from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
 import { validateAuthMethod } from '../config/auth.js';
@@ -131,6 +137,7 @@ interface AppContainerProps {
   version: string;
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
+  restoredSession?: PersistedSession;
 }
 
 function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
@@ -152,6 +159,7 @@ export const AppContainer = (props: AppContainerProps) => {
     startupWarnings = [],
     appState,
     appDispatch,
+    restoredSession,
   } = props;
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
@@ -346,6 +354,194 @@ export const AppContainer = (props: AppContainerProps) => {
       lastPublishedHistoryTokensRef.current = null;
     };
   }, [config, updateHistoryTokenCount, tokenLogger]);
+
+  // Convert IContent[] to UI HistoryItem[] for display
+  const convertToUIHistory = useCallback(
+    (history: IContent[]): HistoryItem[] => {
+      const items: HistoryItem[] = [];
+      let id = 1;
+
+      // First pass: collect all tool responses by callId for lookup
+      const toolResponseMap = new Map<string, ToolResponseBlock>();
+      for (const content of history) {
+        if (content.speaker === 'tool') {
+          const responseBlocks = content.blocks.filter(
+            (b): b is ToolResponseBlock => b.type === 'tool_response',
+          );
+          for (const resp of responseBlocks) {
+            toolResponseMap.set(resp.callId, resp);
+          }
+        }
+      }
+
+      for (const content of history) {
+        // Extract text blocks
+        const textBlocks = content.blocks.filter(
+          (b): b is { type: 'text'; text: string } => b.type === 'text',
+        );
+        const text = textBlocks.map((b) => b.text).join('\n');
+
+        // Extract tool call blocks for AI
+        const toolCallBlocks = content.blocks.filter(
+          (b): b is ToolCallBlock => b.type === 'tool_call',
+        );
+
+        if (content.speaker === 'human' && text) {
+          items.push({
+            id: id++,
+            type: 'user',
+            text,
+          } as HistoryItem);
+        } else if (content.speaker === 'ai') {
+          // Add text response if present
+          if (text) {
+            items.push({
+              id: id++,
+              type: 'gemini',
+              text,
+              model: content.metadata?.model,
+            } as HistoryItem);
+          }
+          // Add tool calls as proper tool_group items
+          if (toolCallBlocks.length > 0) {
+            const tools: IndividualToolCallDisplay[] = toolCallBlocks.map(
+              (tc) => {
+                const response = toolResponseMap.get(tc.id);
+                // Format result display from tool response
+                let resultDisplay: string | undefined;
+                if (response) {
+                  if (response.error) {
+                    resultDisplay = `Error: ${response.error}`;
+                  } else if (response.result !== undefined) {
+                    // Convert result to string for display
+                    const result = response.result as Record<string, unknown>;
+                    if (typeof result === 'string') {
+                      resultDisplay = result;
+                    } else if (result && typeof result === 'object') {
+                      // Handle common result formats
+                      if (
+                        'output' in result &&
+                        typeof result.output === 'string'
+                      ) {
+                        resultDisplay = result.output;
+                      } else {
+                        resultDisplay = JSON.stringify(result, null, 2);
+                      }
+                    }
+                  }
+                }
+                return {
+                  callId: tc.id,
+                  name: tc.name,
+                  description: tc.description || '',
+                  resultDisplay,
+                  status: response
+                    ? ToolCallStatus.Success
+                    : ToolCallStatus.Pending,
+                  confirmationDetails: undefined,
+                };
+              },
+            );
+            items.push({
+              id: id++,
+              type: 'tool_group',
+              agentId: 'primary',
+              tools,
+            } as HistoryItem);
+          }
+        }
+        // Skip tool speaker entries - already processed via map
+      }
+
+      return items;
+    },
+    [],
+  );
+
+  // Session restoration for --continue functionality
+  // Split into two parts: UI restoration (immediate) and core history (when available)
+  const sessionRestoredRef = useRef(false);
+  const coreHistoryRestoredRef = useRef(false);
+
+  // Part 1: Restore UI history immediately on mount
+  useEffect(() => {
+    if (!restoredSession || sessionRestoredRef.current) {
+      return;
+    }
+    sessionRestoredRef.current = true;
+
+    try {
+      // Use saved UI history if available (preserves exact display), otherwise convert from core history
+      let uiHistoryItems: HistoryItem[];
+      if (
+        restoredSession.uiHistory &&
+        Array.isArray(restoredSession.uiHistory)
+      ) {
+        uiHistoryItems = restoredSession.uiHistory as HistoryItem[];
+        debug.log(`Using saved UI history (${uiHistoryItems.length} items)`);
+      } else {
+        uiHistoryItems = convertToUIHistory(restoredSession.history);
+        debug.log(
+          `Converted core history to UI (${uiHistoryItems.length} items)`,
+        );
+      }
+      loadHistory(uiHistoryItems);
+
+      debug.log(
+        `Restored ${restoredSession.history.length} messages (${uiHistoryItems.length} UI items) for display`,
+      );
+
+      // Add an info message
+      addItem(
+        {
+          type: 'info',
+          text: `Session restored (${uiHistoryItems.length} messages from ${new Date(restoredSession.updatedAt || restoredSession.createdAt).toLocaleString()})`,
+        },
+        Date.now(),
+      );
+    } catch (err) {
+      debug.error('Failed to restore UI history:', err);
+      addItem(
+        {
+          type: 'warning',
+          text: 'Failed to restore previous session display.',
+        },
+        Date.now(),
+      );
+    }
+  }, [restoredSession, convertToUIHistory, loadHistory, addItem]);
+
+  // Part 2: Restore core history when historyService becomes available (for AI context)
+  useEffect(() => {
+    if (!restoredSession || coreHistoryRestoredRef.current) {
+      return;
+    }
+
+    const checkInterval = setInterval(() => {
+      const geminiClient = config.getGeminiClient();
+      const historyService = geminiClient?.getHistoryService?.();
+
+      if (!historyService) {
+        return;
+      }
+
+      clearInterval(checkInterval);
+      coreHistoryRestoredRef.current = true;
+
+      try {
+        historyService.validateAndFix();
+        historyService.addAll(restoredSession.history);
+        debug.log('Restored core history for AI context');
+      } catch (err) {
+        debug.error('Failed to restore core history:', err);
+      }
+    }, 100);
+
+    return () => {
+      clearInterval(checkInterval);
+    };
+  }, [restoredSession, config]);
+
   const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const externalEditorStateRef = useRef<{
@@ -1450,6 +1646,54 @@ export const AppContainer = (props: AppContainerProps) => {
       refreshStatic();
     }
   }, [streamingState, refreshStatic, _staticNeedsRefresh]);
+
+  // Session persistence - always save so sessions can be resumed with --continue
+  const sessionPersistence = useMemo(
+    () => new SessionPersistenceService(config.storage, config.getSessionId()),
+    [config],
+  );
+
+  // Track previous streaming state to detect turn completion
+  const prevStreamingStateRef = useRef<StreamingState>(streamingState);
+
+  // Save session when turn completes (streaming goes idle)
+  useEffect(() => {
+    const wasActive =
+      prevStreamingStateRef.current === StreamingState.Responding ||
+      prevStreamingStateRef.current === StreamingState.WaitingForConfirmation;
+    const isNowIdle = streamingState === StreamingState.Idle;
+    prevStreamingStateRef.current = streamingState;
+
+    if (!wasActive || !isNowIdle) {
+      return;
+    }
+
+    // Get history from gemini client and save
+    const geminiClient = config.getGeminiClient();
+    const historyService = geminiClient?.getHistoryService?.();
+    if (!historyService) {
+      return;
+    }
+
+    const historyToSave = historyService.getComprehensive();
+    if (historyToSave.length === 0) {
+      return;
+    }
+
+    sessionPersistence
+      .save(
+        historyToSave,
+        {
+          provider: config.getProvider?.() ?? undefined,
+          model: config.getModel(),
+          tokenCount: historyService.getTotalTokens(),
+        },
+        history, // Save UI history for exact display restoration
+      )
+      .catch((err: unknown) => {
+        debug.error('Failed to save session:', err);
+      });
+  }, [streamingState, sessionPersistence, config, history]);
 
   const filteredConsoleMessages = useMemo(() => {
     if (config.getDebugMode()) {

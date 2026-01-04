@@ -353,3 +353,8 @@ export {
   SESSION_FILE_PREFIX,
   type ConversationRecord,
 } from './storage/sessionTypes.js';
+
+export {
+  SessionPersistenceService,
+  type PersistedSession,
+} from './storage/SessionPersistenceService.js';

@@ -74,6 +74,8 @@ import {
   SettingsService,
   DebugLogger,
   ProfileManager,
+  SessionPersistenceService,
+  type PersistedSession,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -218,6 +220,25 @@ export async function startInteractiveUI(
   workspaceRoot: string,
 ) {
   const version = await getCliVersion();
+
+  // Load previous session if --continue flag was used
+  let restoredSession: PersistedSession | null = null;
+  if (config.isContinueSession()) {
+    const persistence = new SessionPersistenceService(
+      config.storage,
+      config.getSessionId(),
+    );
+    restoredSession = await persistence.loadMostRecent();
+
+    if (restoredSession) {
+      const formattedTime =
+        SessionPersistenceService.formatSessionTime(restoredSession);
+      console.log(chalk.green(`Resumed session from ${formattedTime}`));
+    } else {
+      console.log(chalk.yellow('No previous session found. Starting fresh.'));
+    }
+  }
+
   // Detect and enable Kitty keyboard protocol once at startup
   await detectAndEnableKittyProtocol();
   setWindowTitle(basename(workspaceRoot), settings);
@@ -257,6 +278,7 @@ export async function startInteractiveUI(
             settings={settings}
             startupWarnings={startupWarnings}
             version={version}
+            restoredSession={restoredSession ?? undefined}
           />
         </SettingsContext.Provider>
       </ErrorBoundary>

@@ -359,6 +359,7 @@ export interface ConfigParameters {
   enableToolOutputTruncation?: boolean;
   continueOnFailedApiCall?: boolean;
   enableShellOutputEfficiency?: boolean;
+  continueSession?: boolean;
 }
 
 export class Config {
@@ -519,6 +520,7 @@ export class Config {
   enableToolOutputTruncation: boolean;
   private readonly continueOnFailedApiCall: boolean;
   private readonly enableShellOutputEfficiency: boolean;
+  private readonly continueSession: boolean;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -656,6 +658,7 @@ export class Config {
     this.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
     this.enableShellOutputEfficiency =
       params.enableShellOutputEfficiency ?? true;
+    this.continueSession = params.continueSession ?? false;
     this.extensionManagement = params.extensionManagement ?? false;
     this.storage = new Storage(this.targetDir);
     this.enablePromptCompletion = params.enablePromptCompletion ?? false;
@@ -854,6 +857,10 @@ export class Config {
 
   getSessionId(): string {
     return this.sessionId;
+  }
+
+  isContinueSession(): boolean {
+    return this.continueSession;
   }
 
   shouldLoadMemoryFromIncludeDirectories(): boolean {
