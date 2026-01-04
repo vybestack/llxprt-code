@@ -24,12 +24,15 @@ export type WelcomeStep =
   | 'completion'
   | 'skipped';
 
+export type ModelsLoadStatus = 'idle' | 'loading' | 'success' | 'error';
+
 export interface WelcomeState {
   step: WelcomeStep;
   selectedProvider?: string;
   selectedModel?: string;
   selectedAuthMethod?: 'oauth' | 'api_key';
   authInProgress: boolean;
+  modelsLoadStatus: ModelsLoadStatus;
   error?: string;
 }
 
@@ -84,6 +87,7 @@ export const useWelcomeOnboarding = (
   const [state, setState] = useState<WelcomeState>({
     step: 'welcome',
     authInProgress: false,
+    modelsLoadStatus: 'idle',
   });
 
   const [availableProviders, setAvailableProviders] = useState<string[]>([]);
@@ -106,8 +110,11 @@ export const useWelcomeOnboarding = (
     const loadModels = async () => {
       if (!state.selectedProvider) {
         setAvailableModels([]);
+        setState((prev) => ({ ...prev, modelsLoadStatus: 'idle' }));
         return;
       }
+
+      setState((prev) => ({ ...prev, modelsLoadStatus: 'loading' }));
 
       try {
         const models = await runtime.listAvailableModels(
@@ -118,12 +125,14 @@ export const useWelcomeOnboarding = (
           name: m.name,
         }));
         setAvailableModels(modelInfos);
+        setState((prev) => ({ ...prev, modelsLoadStatus: 'success' }));
         debug.log(
           `Loaded ${modelInfos.length} models for ${state.selectedProvider}`,
         );
       } catch (error) {
         debug.log(`Failed to load models: ${error}`);
         setAvailableModels([]);
+        setState((prev) => ({ ...prev, modelsLoadStatus: 'error' }));
       }
     };
 

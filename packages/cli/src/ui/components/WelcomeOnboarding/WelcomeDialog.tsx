@@ -76,19 +76,22 @@ export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
         );
 
       case 'model':
+        if (!state.selectedProvider) return null;
         return (
           <ModelSelectStep
-            provider={state.selectedProvider!}
+            provider={state.selectedProvider}
             models={availableModels}
+            modelsLoadStatus={state.modelsLoadStatus}
             onSelect={actions.selectModel}
             onBack={actions.goBack}
           />
         );
 
       case 'auth_method':
+        if (!state.selectedProvider) return null;
         return (
           <AuthMethodStep
-            provider={state.selectedProvider!}
+            provider={state.selectedProvider}
             onSelect={actions.selectAuthMethod}
             onBack={actions.goBack}
             error={state.error}
@@ -96,10 +99,11 @@ export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
         );
 
       case 'authenticating':
+        if (!state.selectedProvider || !state.selectedAuthMethod) return null;
         return (
           <AuthenticationStep
-            provider={state.selectedProvider!}
-            method={state.selectedAuthMethod!}
+            provider={state.selectedProvider}
+            method={state.selectedAuthMethod}
             onComplete={actions.onAuthComplete}
             onError={actions.onAuthError}
             onBack={actions.goBack}
@@ -108,11 +112,12 @@ export const WelcomeDialog: React.FC<WelcomeDialogProps> = ({
         );
 
       case 'completion':
+        if (!state.selectedProvider || !state.selectedAuthMethod) return null;
         return (
           <CompletionStep
-            provider={state.selectedProvider!}
+            provider={state.selectedProvider}
             model={state.selectedModel}
-            authMethod={state.selectedAuthMethod!}
+            authMethod={state.selectedAuthMethod}
             onSaveProfile={actions.saveProfile}
             onDismiss={actions.dismiss}
           />
