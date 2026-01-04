@@ -19,7 +19,7 @@
 | # | Upstream | Decision | Status | Local | Subject | Notes |
 |---:|:--|:--|:--|:--|:--|:--|
 | 1 | `8a937ebf` | SKIP |  |  | chore(release): bump version to 0.11.0-nightly.20251015.203bad7c (#11212) |  |
-| 2 | `b8df8b2a` | REIMPLEMENT |  |  | feat(core): wire up UI for ASK_USER policy decisions in message bus (#10630) | Applied to google-web-fetch (LLxprt rename); message bus subscribe/unsubscribe optional chaining. |
+| 2 | `b8df8b2a` | REIMPLEMENT |  |  | feat(core): wire up UI for ASK_USER policy decisions in message bus (#10630) |  |
 | 3 | `4f17eae5` | PICK |  |  | feat(cli): Prevent queuing of slash and shell commands (#11094) |  |
 | 4 | `d38ab079` | PICK |  |  | Update shell tool call colors for confirmed actions (#11126) |  |
 | 5 | `47f5e73b` | SKIP |  |  | Docs: Fix typo in docs/changelogs/index.md (#11215) |  |

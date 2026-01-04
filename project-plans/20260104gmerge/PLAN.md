@@ -58,7 +58,8 @@ References:
 
 ## Non-negotiables
 - Keep LLxprt multi-provider architecture; avoid Google-only auth changes.
-- Do not reintroduce ClearcutLogger/Google telemetry.
+- Do not reintroduce ClearcutLogger/Google telemetry (no Clearcut logger, no settings-to-Google logging).
+- Never reintroduce removed features: `NextSpeakerChecker`, `nextSpeakerChecker.ts`, `FlashFallback`, `smart_edit`, `useSmartEdit`.
 - Keep A2A server private (no publishable changes).
 - Preserve LLxprt tool names (replace/search_file_content/list_directory/google_web_fetch/direct_web_fetch).
 - Maintain emoji-free policy and skip next-speaker checks.
