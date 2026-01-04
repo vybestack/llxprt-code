@@ -5,6 +5,7 @@
  */
 
 import path from 'path';
+import * as Diff from 'diff';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import {
   BaseDeclarativeTool,
@@ -13,15 +14,20 @@ import {
   type ToolInvocation,
   type ToolLocation,
   type ToolResult,
+  type ToolCallConfirmationDetails,
+  type ToolEditConfirmationDetails,
+  ToolConfirmationOutcome,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 
-import { Config } from '../config/config.js';
+import { Config, ApprovalMode } from '../config/config.js';
 import {
   recordFileOperationMetric,
   FileOperation,
 } from '../telemetry/metrics.js';
 import { getSpecificMimeType } from '../utils/fileUtils.js';
+import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
+import { IDEConnectionStatus } from '../ide/ide-client.js';
 
 /**
  * Parameters for the DeleteLineRange tool
@@ -66,10 +72,84 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
     return [{ path: this.params.absolute_path, line: this.params.start_line }];
   }
 
+  override async shouldConfirmExecute(
+    _abortSignal: AbortSignal,
+  ): Promise<ToolCallConfirmationDetails | false> {
+    const approvalMode = this.config.getApprovalMode();
+    if (
+      approvalMode === ApprovalMode.AUTO_EDIT ||
+      approvalMode === ApprovalMode.YOLO
+    ) {
+      return false;
+    }
+
+    const fileService = this.config.getFileSystemService();
+
+    let originalContent: string;
+    try {
+      originalContent = await fileService.readTextFile(
+        this.params.absolute_path,
+      );
+    } catch {
+      return false;
+    }
+
+    const lines = originalContent.split('\n');
+    const totalLines = lines.length;
+    if (this.params.start_line > totalLines) {
+      return false;
+    }
+
+    const startIndex = this.params.start_line - 1;
+    const count = this.params.end_line - this.params.start_line + 1;
+    const newLines = [...lines];
+    newLines.splice(startIndex, count);
+    const newContent = newLines.join('\n');
+
+    const relativePath = makeRelative(
+      this.params.absolute_path,
+      this.config.getTargetDir(),
+    );
+    const fileName = path.basename(this.params.absolute_path);
+
+    const fileDiff = Diff.createPatch(
+      fileName,
+      originalContent,
+      newContent,
+      'Current',
+      'Proposed',
+      DEFAULT_DIFF_OPTIONS,
+    );
+
+    const ideClient = this.config.getIdeClient();
+    const ideConfirmation =
+      this.config.getIdeMode() &&
+      ideClient &&
+      ideClient.getConnectionStatus().status === IDEConnectionStatus.Connected
+        ? ideClient.openDiff(this.params.absolute_path, newContent)
+        : undefined;
+
+    const confirmationDetails: ToolEditConfirmationDetails = {
+      type: 'edit',
+      title: `Confirm Delete: ${shortenPath(relativePath)} (lines ${this.params.start_line}-${this.params.end_line})`,
+      fileName,
+      filePath: this.params.absolute_path,
+      fileDiff,
+      originalContent,
+      newContent,
+      onConfirm: async (outcome: ToolConfirmationOutcome) => {
+        if (outcome === ToolConfirmationOutcome.ProceedAlways) {
+          this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
+        }
+      },
+      ideConfirmation,
+    };
+    return confirmationDetails;
+  }
+
   async execute(): Promise<ToolResult> {
     const fileService = this.config.getFileSystemService();
 
-    // Read the file content
     let content: string;
     try {
       content = await fileService.readTextFile(this.params.absolute_path);
@@ -84,10 +164,8 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
       };
     }
 
-    // Split into lines
     const lines = content.split('\n');
 
-    // Validate line numbers
     const totalLines = lines.length;
     if (this.params.start_line > totalLines) {
       return {
@@ -100,21 +178,16 @@ class DeleteLineRangeToolInvocation extends BaseToolInvocation<
       };
     }
 
-    // Calculate 0-based indices
     const startIndex = this.params.start_line - 1;
     const count = this.params.end_line - this.params.start_line + 1;
 
-    // Remove the lines
     lines.splice(startIndex, count);
 
-    // Join back
     const newContent = lines.join('\n');
 
-    // Write back
     try {
       await fileService.writeTextFile(this.params.absolute_path, newContent);
 
-      // Record metrics
       const linesDeleted = count;
       const mimetype = getSpecificMimeType(this.params.absolute_path);
       recordFileOperationMetric(
