@@ -68,7 +68,8 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
     expect(request.input?.[3]).toEqual({
       type: 'function_call_output',
       call_id: 'call_123',
-      output: 'Sunny, 72°F',
+      output:
+        'status:\nsuccess\n\ntoolName:\nget_weather\n\nerror:\n\n\noutput:\nSunny, 72°F',
     });
   });
 

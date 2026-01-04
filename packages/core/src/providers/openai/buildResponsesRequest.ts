@@ -2,6 +2,11 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
+import {
+  buildToolResponsePayload,
+  formatToolResponseText,
+} from '../utils/toolResponsePayload.js';
+
 import { DebugLogger } from '../../debug/index.js';
 import {
   type IContent,
@@ -223,7 +228,10 @@ export function buildResponsesRequest(
                 type: 'function_call' as const,
                 call_id: normalizeToOpenAIToolId(toolCallBlock.id),
                 name: toolCallBlock.name,
-                arguments: JSON.stringify(toolCallBlock.parameters),
+                arguments:
+                  typeof toolCallBlock.parameters === 'string'
+                    ? toolCallBlock.parameters
+                    : JSON.stringify(toolCallBlock.parameters),
               });
             }
           });
@@ -234,18 +242,21 @@ export function buildResponsesRequest(
           msg.blocks.forEach((block) => {
             if (block.type === 'tool_response') {
               const toolResponseBlock = block as ToolResponseBlock;
-              // Sanitize content to ensure it's safe for JSON/API transmission
-              const resultStr =
-                typeof toolResponseBlock.result === 'string'
-                  ? toolResponseBlock.result
-                  : JSON.stringify(toolResponseBlock.result);
-              let sanitizedContent = resultStr;
-              if (hasUnicodeReplacements(resultStr)) {
+
+              const payload = buildToolResponsePayload(toolResponseBlock);
+              let sanitizedContent = formatToolResponseText({
+                status: payload.status,
+                toolName: payload.toolName ?? toolResponseBlock.toolName,
+                error: payload.error,
+                output: payload.result,
+              });
+
+              if (hasUnicodeReplacements(sanitizedContent)) {
                 logger.debug(
                   () =>
                     'Tool output contains Unicode replacement characters (U+FFFD), sanitizing...',
                 );
-                sanitizedContent = ensureJsonSafe(resultStr);
+                sanitizedContent = ensureJsonSafe(sanitizedContent);
               }
 
               // Normalize tool IDs to OpenAI format (call_XXX) - fixes issue #825

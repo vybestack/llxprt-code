@@ -62,7 +62,10 @@ import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { filterOpenAIRequestParams } from './openaiRequestParams.js';
 import { ensureJsonSafe } from '../../utils/unicodeUtils.js';
 import { ToolCallPipeline } from './ToolCallPipeline.js';
-import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
+import {
+  buildToolResponsePayload,
+  formatToolResponseText,
+} from '../utils/toolResponsePayload.js';
 import { isLocalEndpoint } from '../utils/localEndpoint.js';
 import {
   filterThinkingForContext,
@@ -1127,7 +1130,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     config?: Config,
   ): string {
     const payload = buildToolResponsePayload(block, config);
-    return ensureJsonSafe(JSON.stringify(payload));
+    return ensureJsonSafe(
+      formatToolResponseText({
+        status: payload.status,
+        toolName: payload.toolName ?? block.toolName,
+        error: payload.error,
+        output: payload.result,
+      }),
+    );
   }
 
   private shouldCompressToolMessages(
