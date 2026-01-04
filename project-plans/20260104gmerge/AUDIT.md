@@ -189,4 +189,29 @@
 | 169 | `c9c2e79d` | SKIP |  |  | chore(release): v0.11.0-preview.4 |  |
 | 170 | `92f5355d` | SKIP |  |  | chore(release): v0.11.0-preview.5 |  |
 | 171 | `d9f6cebe` | SKIP |  |  | chore(release): v0.11.0-preview.5+patch.1 |  |
+---
+
+## Analysis Notes (Preserving Original Decisions)
+
+### Batch 02 - Deepthinker Resolution Paths
+
+Original decisions: All 5 commits were marked as PICK. Analysis shows:
+
+| Commit | Original Decision | Resolution Path | Why |
+|---|---|---|---|
+| `4f17eae5` | PICK | **REIMPLEMENT** | LLxprt has StreamingState but no queue error UI wiring; needs LLxprt-specific implementation in AppContainer.tsx, UIState/UIActions contexts, Composer, InputPrompt |
+| `d38ab079` | PICK | **SKIP** | Purely aesthetic (color changes); conflicts with LLxprt SemanticColors palette; no functional value |
+| `2e6d69c9` | PICK | **REIMPLEMENT** | Bug fix - LLxprt has same issue in parseAllowedSubcommands/shell.ts; need to apply substring matching fix to shell.ts and tool-utils.ts |
+| `47f69317` | PICK | **REIMPLEMENT** | New feature requires LLxprt integration in output-format.ts, nonInteractiveCli.ts, errors.ts; upstream docs won't apply cleanly |
+| `8c1656bf` | PICK | **REIMPLEMENT** | Apply result object + consent-driven fallback to LLxprt extension plumbing (extension.ts, github.ts) |
+
+### Batch 03 - Pending
+
+Original decision: `cfaa95a2` marked as PICK.
+Status: Cherry-pick conflicts in config.ts due to diverged extension handling. Needs subagent analysis to determine resolution path.
+
+### Batch 04 - SKIP
+
+Original decision: `130f0a02` marked as REIMPLEMENT.
+Resolution: SKIP - Deepthinker confirmed LLxprt's subagent system is more advanced (SubAgentScope). Removing these files would break core LLxprt functionality. Upstream removal targets legacy code that doesn't exist in LLxprt.
 | 172 | `5213d9f3` | SKIP |  |  | chore(release): v0.11.0-preview.6 |  |
