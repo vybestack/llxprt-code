@@ -13,6 +13,7 @@ import {
   type ToolInvocation,
   type ToolResult,
 } from './tools.js';
+import { GOOGLE_WEB_FETCH_TOOL } from './tool-names.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { ToolErrorType } from './tool-error.js';
 import { getErrorMessage } from '../utils/errors.js';
@@ -302,7 +303,7 @@ class GoogleWebFetchToolInvocation extends BaseToolInvocation<
 
     // Check if provider supports web_fetch
     const supportedTools = serverToolsProvider.getServerTools();
-    if (!supportedTools.includes('web_fetch')) {
+    if (!supportedTools.includes(GOOGLE_WEB_FETCH_TOOL)) {
       return {
         llmContent:
           'Web fetch is not available. The server tools provider does not support web fetch.',
