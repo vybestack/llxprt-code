@@ -90,6 +90,7 @@ describe('startInteractiveUI ink render options', () => {
       debugMode: false,
       model: 'gemini-2.5-flash-lite',
       accessibility: { screenReader: false },
+      continueSession: false,
     });
 
     await startInteractiveUI(config, createLoadedSettings(), [], tempDir);
@@ -117,6 +118,7 @@ describe('startInteractiveUI ink render options', () => {
       debugMode: false,
       model: 'gemini-2.5-flash-lite',
       accessibility: { screenReader: true },
+      continueSession: false,
     });
 
     await startInteractiveUI(config, createLoadedSettings(), [], tempDir);

@@ -18,6 +18,23 @@ import { AuthCommandExecutor } from '../authCommand.js';
 import { OAuthManager } from '../../../auth/oauth-manager.js';
 import { CommandContext } from '../types.js';
 
+// Mock the runtime settings module to avoid needing full CLI runtime context
+vi.mock('../../../runtime/runtimeSettings.js', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('../../../runtime/runtimeSettings.js')
+    >();
+  return {
+    ...actual,
+    switchActiveProvider: vi.fn().mockResolvedValue({
+      changed: false,
+      previousProvider: 'anthropic',
+      nextProvider: 'anthropic',
+    }),
+    getEphemeralSetting: vi.fn().mockReturnValue(true),
+  };
+});
+
 // Mock OAuth manager for bucket operations
 const mockOAuthManager = {
   registerProvider: vi.fn(),
