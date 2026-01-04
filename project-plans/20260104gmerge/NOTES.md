@@ -281,4 +281,78 @@ Batch 04 commit: `130f0a02` marked as SKIP in AUDIT.md.
 
 ### Commit/Push Record
 
+---
+
+## Batch 05
+
+### Selection Record
+
+```
+Batch: 05
+Type: QUICK REIMPLEMENT
+Upstream SHA(s): c9c633be
+Subject: refactor: move `web_fetch` tool name to `tool-names.ts` (#11174)
+Playbook: project-plans/20260104gmerge/c9c633be-plan.md
+Prerequisites Checked:
+  - Previous batch record exists: YES
+  - Previous batch verification: PASS
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+```
+
+### Execution Record
+
+Upstream commit moves web_fetch tool name to centralized tool-names.ts. In LLxprt:
+- Tool names already centralized in tool-names.ts with GOOGLE_WEB_FETCH_TOOL and DIRECT_WEB_FETCH_TOOL
+- Found hardcoded 'web_fetch' string in google-web-fetch.ts line 305 in supportedTools.includes() check
+- Found hardcoded 'direct_web_fetch' string in DirectWebFetchTool.Name property
+
+Applied changes:
+1. Added import of GOOGLE_WEB_FETCH_TOOL to google-web-fetch.ts
+2. Replaced 'web_fetch' with GOOGLE_WEB_FETCH_TOOL in supportedTools.includes() check
+3. Added import of DIRECT_WEB_FETCH_TOOL to direct-web-fetch.ts
+4. Replaced 'direct_web_fetch' with DIRECT_WEB_FETCH_TOOL in DirectWebFetchTool.Name property
+
+Upstream files missing in LLxprt (NO_OP):
+- packages/cli/src/config/policy.test.ts (no policy test in LLxprt)
+- packages/cli/src/config/policy.ts (no policy.ts in LLxprt)
+- packages/core/src/tools/web-fetch.ts (LLxprt uses google-web-fetch.ts and direct-web-fetch.ts)
+
+Implementation verified: lint and typecheck passed.
+
+```
+$ git diff packages/core/src/tools/google-web-fetch.ts
+import { GOOGLE_WEB_FETCH_TOOL } from './tool-names.js';
+- if (!supportedTools.includes('web_fetch')) {
++ if (!supportedTools.includes(GOOGLE_WEB_FETCH_TOOL)) {
+
+$ git diff packages/core/src/tools/direct-web-fetch.ts
+import { DIRECT_WEB_FETCH_TOOL } from './tool-names.js';
+- static readonly Name = 'direct_web_fetch';
++ static readonly Name = DIRECT_WEB_FETCH_TOOL;
+```
+
+### Verification Record
+
+Verification commands run:
+```
+$ npm run lint
+PASS
+
+$ npm run typecheck
+PASS
+```
+
+### Feature Landing Verification
+
+- Tool names now use centralized constants from tool-names.ts
+- No functional changes - refactor only
+- Upstream policy.test.ts and policy.ts changes are NO_OP (files don't exist in LLxprt)
+- Upstream web-fetch.ts changes are NO_OP (LLxprt uses different file structure)
+
+### Commit/Push Record
+
+Commit: `19c602897`
+Message: "reimplement: refactor: move web_fetch tool name to tool-names.ts (#11174) (upstream c9c633be)"
 No commit created (SKIP). AUDIT.md, NOTES.md, PROGRESS.md updated.

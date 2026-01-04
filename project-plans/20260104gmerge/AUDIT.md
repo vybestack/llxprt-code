@@ -7,7 +7,7 @@
 | Status | Count |
 |---|---:|
 | PICKED | 0 |
-| REIMPLEMENTED | 1 |
+| REIMPLEMENTED | 2 |
 | SKIP | 1 |
 | NO_OP | 0 |
 | ALREADY_PRESENT | 0 |
@@ -35,7 +35,7 @@
 | 15 | `e2fef41f` | SKIP |  |  | fix(ci): Ensure we cleanup the `false` tag. (#11232) |  |
 | 16 | `8c74be79` | SKIP |  |  | Update README.md (#11240) |  |
 | 17 | `130f0a02` | REIMPLEMENT | SKIP | `577de9661` | chore(subagents): Remove legacy subagent code (#11175) | LLxprt has advanced subagent system (SubAgentScope); removal would break core functionality |
-| 18 | `c9c633be` | REIMPLEMENT |  |  | refactor: move `web_fetch` tool name to `tool-names.ts` (#11174) |  |
+| 18 | `c9c633be` | REIMPLEMENT | REIMPLEMENTED | `19c602897` | refactor: move `web_fetch` tool name to `tool-names.ts` (#11174) | Added GOOGLE_WEB_FETCH_TOOL and DIRECT_WEB_FETCH_TOOL imports; replaced hardcoded strings |
 | 19 | `3acb014e` | SKIP |  |  | fix(e2e): Refactor and unskip context compression interactive tests (#11086) |  |
 | 20 | `60420e52` | PICK |  |  | feat: Do not add trailing space on directory autocomplete (#11227) |  |
 | 21 | `a9083b9d` | PICK |  |  | include extension name in `gemini mcp list` command (#11263) |  |
@@ -220,3 +220,7 @@ Resolution: **REIMPLEMENT** - Add `nargs: 1` to all single-argument string/array
 Original decision: `130f0a02` marked as REIMPLEMENT.
 Resolution: SKIP - Deepthinker confirmed LLxprt's subagent system is more advanced (SubAgentScope). Removing these files would break core LLxprt functionality. Upstream removal targets legacy code that doesn't exist in LLxprt.
 | 172 | `5213d9f3` | SKIP |  |  | chore(release): v0.11.0-preview.6 |  |
+### Batch 05 - REIMPLEMENTED
+
+Original decision: `c9c633be` marked as REIMPLEMENT.
+Resolution: **REIMPLEMENTED** - Applied upstream refactoring to LLxprt. Tool names GOOGLE_WEB_FETCH_TOOL and DIRECT_WEB_FETCH_TOOL already existed in tool-names.ts. Replaced hardcoded 'web_fetch' and 'direct_web_fetch' strings in google-web-fetch.ts and direct-web-fetch.ts with imported constants. Upstream policy.test.ts, policy.ts, and web-fetch.ts changes are NO_OP (files don't exist or have different structure in LLxprt).
