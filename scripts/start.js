@@ -31,7 +31,7 @@ const bootstrapSnapshot = parseBootstrapArgs();
 function sanitizeNodeOptions(nodeOptions) {
   if (!nodeOptions) return nodeOptions;
   return nodeOptions
-    .replace(/\s*--localstorage-file(?:\s*=\s*\S*)?/g, '')
+    .replace(/\s*--localstorage-file(?:(?:\s*=\s*|\s+)\S+)?/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
