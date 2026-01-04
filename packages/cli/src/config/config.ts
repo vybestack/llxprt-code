@@ -358,7 +358,8 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         .option('continue', {
           alias: 'C',
           type: 'boolean',
-          description: 'Resume the most recent session for this project',
+          description:
+            'Resume the most recent session for this project. Can be combined with --prompt to continue with a new message.',
           default: false,
         })
         .deprecateOption(

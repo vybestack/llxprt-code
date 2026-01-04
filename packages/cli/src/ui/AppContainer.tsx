@@ -151,6 +151,32 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
   });
 }
 
+// Valid history item types for session restore validation (must be module-level for stable reference)
+const VALID_HISTORY_TYPES = new Set([
+  'user',
+  'gemini',
+  'gemini_content',
+  'oauth_url',
+  'info',
+  'error',
+  'warning',
+  'about',
+  'help',
+  'stats',
+  'model_stats',
+  'tool_stats',
+  'cache_stats',
+  'lb_stats',
+  'quit',
+  'tool_group',
+  'user_shell',
+  'compression',
+  'extensions_list',
+  'tools_list',
+  'mcp_status',
+  'chat_list',
+]);
+
 export const AppContainer = (props: AppContainerProps) => {
   debug.log('AppContainer architecture active (v2)');
   const {
@@ -463,6 +489,83 @@ export const AppContainer = (props: AppContainerProps) => {
   const sessionRestoredRef = useRef(false);
   const coreHistoryRestoredRef = useRef(false);
 
+  /**
+   * Validates that an item matches the HistoryItem schema.
+   * Uses duck typing for flexibility with minor schema changes.
+   */
+  const isValidHistoryItem = useCallback(
+    (item: unknown): item is HistoryItem => {
+      if (typeof item !== 'object' || item === null) {
+        return false;
+      }
+
+      const obj = item as Record<string, unknown>;
+
+      // Required fields
+      if (typeof obj.id !== 'number') return false;
+      if (typeof obj.type !== 'string') return false;
+
+      // Check if type is valid (allow unknown types from newer versions)
+      if (!VALID_HISTORY_TYPES.has(obj.type)) {
+        debug.warn(`Unknown history item type: ${obj.type}`);
+        // Allow unknown types to pass - might be from newer version
+      }
+
+      // Type-specific validation
+      switch (obj.type) {
+        case 'user':
+        case 'gemini':
+        case 'gemini_content':
+        case 'info':
+        case 'warning':
+        case 'error':
+        case 'user_shell':
+          // Text types should have text (but might be empty)
+          return typeof obj.text === 'string' || obj.text === undefined;
+
+        case 'tool_group':
+          // Tool groups must have tools array
+          if (!Array.isArray(obj.tools)) return false;
+          return obj.tools.every(
+            (tool) =>
+              typeof tool === 'object' &&
+              tool !== null &&
+              typeof (tool as Record<string, unknown>).callId === 'string' &&
+              typeof (tool as Record<string, unknown>).name === 'string',
+          );
+
+        default:
+          // For other types, just having id and type is enough
+          return true;
+      }
+    },
+    [],
+  );
+
+  /**
+   * Validates all items in a history array.
+   * Returns valid items, filters invalid ones.
+   */
+  const validateUIHistory = useCallback(
+    (items: unknown[]): { valid: HistoryItem[]; invalidCount: number } => {
+      const valid: HistoryItem[] = [];
+      let invalidCount = 0;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (isValidHistoryItem(item)) {
+          valid.push(item);
+        } else {
+          debug.warn(`Invalid history item at index ${i}:`, item);
+          invalidCount++;
+        }
+      }
+
+      return { valid, invalidCount };
+    },
+    [isValidHistoryItem],
+  );
+
   // Part 1: Restore UI history immediately on mount
   useEffect(() => {
     if (!restoredSession || sessionRestoredRef.current) {
@@ -473,14 +576,39 @@ export const AppContainer = (props: AppContainerProps) => {
     try {
       // Use saved UI history if available (preserves exact display), otherwise convert from core history
       let uiHistoryItems: HistoryItem[];
+      let usedFallback = false;
+      let invalidCount = 0;
+
       if (
         restoredSession.uiHistory &&
         Array.isArray(restoredSession.uiHistory)
       ) {
-        uiHistoryItems = restoredSession.uiHistory as HistoryItem[];
-        debug.log(`Using saved UI history (${uiHistoryItems.length} items)`);
+        // Validate UI history items before loading
+        const validation = validateUIHistory(restoredSession.uiHistory);
+        invalidCount = validation.invalidCount;
+
+        if (invalidCount > 0) {
+          debug.warn(`${invalidCount} invalid UI history items found`);
+
+          if (validation.valid.length === 0) {
+            // All items invalid - fall back to conversion
+            debug.warn('All UI history invalid, falling back to conversion');
+            uiHistoryItems = convertToUIHistory(restoredSession.history);
+            usedFallback = true;
+          } else {
+            // Some items valid - use them
+            uiHistoryItems = validation.valid;
+          }
+        } else {
+          uiHistoryItems = validation.valid;
+        }
+
+        if (!usedFallback) {
+          debug.log(`Using saved UI history (${uiHistoryItems.length} items)`);
+        }
       } else {
         uiHistoryItems = convertToUIHistory(restoredSession.history);
+        usedFallback = true;
         debug.log(
           `Converted core history to UI (${uiHistoryItems.length} items)`,
         );
@@ -491,14 +619,31 @@ export const AppContainer = (props: AppContainerProps) => {
         `Restored ${restoredSession.history.length} messages (${uiHistoryItems.length} UI items) for display`,
       );
 
-      // Add an info message
+      // Add info message about restoration
+      const sessionTime = new Date(
+        restoredSession.updatedAt || restoredSession.createdAt,
+      ).toLocaleString();
+      const source = usedFallback
+        ? 'converted from core'
+        : 'restored from UI cache';
       addItem(
         {
           type: 'info',
-          text: `Session restored (${uiHistoryItems.length} messages from ${new Date(restoredSession.updatedAt || restoredSession.createdAt).toLocaleString()})`,
+          text: `Session restored (${uiHistoryItems.length} messages ${source} from ${sessionTime})`,
         },
         Date.now(),
       );
+
+      // Warn if some items were corrupted
+      if (invalidCount > 0 && !usedFallback) {
+        addItem(
+          {
+            type: 'warning',
+            text: `${invalidCount} corrupted message(s) could not be displayed.`,
+          },
+          Date.now(),
+        );
+      }
     } catch (err) {
       debug.error('Failed to restore UI history:', err);
       addItem(
@@ -509,7 +654,13 @@ export const AppContainer = (props: AppContainerProps) => {
         Date.now(),
       );
     }
-  }, [restoredSession, convertToUIHistory, loadHistory, addItem]);
+  }, [
+    restoredSession,
+    convertToUIHistory,
+    loadHistory,
+    addItem,
+    validateUIHistory,
+  ]);
 
   // Part 2: Restore core history when historyService becomes available (for AI context)
   useEffect(() => {
@@ -531,16 +682,27 @@ export const AppContainer = (props: AppContainerProps) => {
       try {
         historyService.validateAndFix();
         historyService.addAll(restoredSession.history);
-        debug.log('Restored core history for AI context');
+
+        debug.log(
+          `Restored ${restoredSession.history.length} items to core history for AI context`,
+        );
       } catch (err) {
         debug.error('Failed to restore core history:', err);
+        // Notify user that AI context is missing - this is critical!
+        addItem(
+          {
+            type: 'warning',
+            text: 'Previous session display restored, but AI context could not be loaded. The AI will not remember the previous conversation.',
+          },
+          Date.now(),
+        );
       }
     }, 100);
 
     return () => {
       clearInterval(checkInterval);
     };
-  }, [restoredSession, config]);
+  }, [restoredSession, config, addItem]);
 
   const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
@@ -1648,9 +1810,12 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [streamingState, refreshStatic, _staticNeedsRefresh]);
 
   // Session persistence - always save so sessions can be resumed with --continue
+  // Use stable dependencies to avoid recreating service (and new file path) on config changes
+  const storage = config.storage;
+  const sessionId = config.getSessionId();
   const sessionPersistence = useMemo(
-    () => new SessionPersistenceService(config.storage, config.getSessionId()),
-    [config],
+    () => new SessionPersistenceService(storage, sessionId),
+    [storage, sessionId],
   );
 
   // Track previous streaming state to detect turn completion

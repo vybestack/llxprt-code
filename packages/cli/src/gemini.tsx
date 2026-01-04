@@ -223,6 +223,8 @@ export async function startInteractiveUI(
 
   // Load previous session if --continue flag was used
   let restoredSession: PersistedSession | null = null;
+  const initialPrompt = config.getQuestion();
+
   if (config.isContinueSession()) {
     const persistence = new SessionPersistenceService(
       config.storage,
@@ -233,9 +235,32 @@ export async function startInteractiveUI(
     if (restoredSession) {
       const formattedTime =
         SessionPersistenceService.formatSessionTime(restoredSession);
-      console.log(chalk.green(`Resumed session from ${formattedTime}`));
+
+      if (initialPrompt) {
+        // User provided both --continue and --prompt
+        console.log(chalk.cyan(`Resuming session from ${formattedTime}`));
+        const truncatedPrompt =
+          initialPrompt.length > 50
+            ? `${initialPrompt.slice(0, 50)}...`
+            : initialPrompt;
+        console.log(
+          chalk.dim(
+            `Your prompt "${truncatedPrompt}" will be submitted after session loads.`,
+          ),
+        );
+      } else {
+        console.log(chalk.green(`Resumed session from ${formattedTime}`));
+      }
     } else {
-      console.log(chalk.yellow('No previous session found. Starting fresh.'));
+      if (initialPrompt) {
+        console.log(
+          chalk.yellow(
+            'No previous session found. Starting fresh with your prompt.',
+          ),
+        );
+      } else {
+        console.log(chalk.yellow('No previous session found. Starting fresh.'));
+      }
     }
   }
 

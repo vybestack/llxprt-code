@@ -10,8 +10,55 @@ import * as crypto from 'node:crypto';
 import { type IContent } from '../services/history/IContent.js';
 import { Storage } from '../config/storage.js';
 import { DebugLogger } from '../debug/index.js';
+import {
+  type ToolResultDisplay,
+  type ToolCallConfirmationDetails,
+} from '../tools/tools.js';
 
 const logger = new DebugLogger('llxprt:session:persistence');
+
+/**
+ * Persisted tool call display information.
+ * Matches CLI's IndividualToolCallDisplay interface for type compatibility.
+ */
+export interface PersistedToolCall {
+  /** Unique identifier for the tool call */
+  callId: string;
+  /** Tool name */
+  name: string;
+  /** Human-readable description of what the tool is doing */
+  description: string;
+  /** Tool execution status (string to accept CLI's ToolCallStatus enum) */
+  status: string;
+  /** Result display for completed tools */
+  resultDisplay: ToolResultDisplay | undefined;
+  /** Confirmation details for tools requiring user approval */
+  confirmationDetails: ToolCallConfirmationDetails | undefined;
+  /** Whether to render output as markdown */
+  renderOutputAsMarkdown?: boolean;
+  /** Whether this tool is currently focused in UI */
+  isFocused?: boolean;
+}
+
+/**
+ * Minimal interface for persisted UI history items.
+ * CLI's HistoryItem should satisfy this interface.
+ * Uses permissive types since CLI has multiple history types with different shapes.
+ */
+export interface PersistedUIHistoryItem {
+  /** Unique identifier for the history item */
+  id: number;
+  /** Type discriminator for the history item */
+  type: string;
+  /** Optional text content (for user/gemini/info/warning/error messages) */
+  text?: string;
+  /** Optional model identifier (for gemini responses) */
+  model?: string;
+  /** Optional agent ID (for subagent contexts) */
+  agentId?: string;
+  /** Optional tools array - shape varies by type (tool_group vs tools_list) */
+  tools?: unknown[];
+}
 
 /**
  * Persisted session format for --continue functionality
@@ -30,7 +77,7 @@ export interface PersistedSession {
   /** Full conversation history (core format) */
   history: IContent[];
   /** UI history items for display restoration (preserves exactly what user sees) */
-  uiHistory?: unknown[];
+  uiHistory?: PersistedUIHistoryItem[];
   /** Optional metadata */
   metadata?: {
     provider?: string;
@@ -87,7 +134,7 @@ export class SessionPersistenceService {
   async save(
     history: IContent[],
     metadata?: PersistedSession['metadata'],
-    uiHistory?: unknown[],
+    uiHistory?: PersistedUIHistoryItem[],
   ): Promise<void> {
     try {
       // Ensure chats directory exists
@@ -129,14 +176,17 @@ export class SessionPersistenceService {
    */
   async loadMostRecent(): Promise<PersistedSession | null> {
     try {
-      // Check if chats directory exists
-      if (!fs.existsSync(this.chatsDir)) {
-        logger.debug('No chats directory found');
-        return null;
+      // Find all persisted session files (readdir throws ENOENT if dir doesn't exist)
+      let files: string[];
+      try {
+        files = await fs.promises.readdir(this.chatsDir);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+          logger.debug('No chats directory found');
+          return null;
+        }
+        throw err;
       }
-
-      // Find all persisted session files
-      const files = await fs.promises.readdir(this.chatsDir);
       const sessionFiles = files
         .filter(
           (f) => f.startsWith(PERSISTED_SESSION_PREFIX) && f.endsWith('.json'),

@@ -357,4 +357,6 @@ export {
 export {
   SessionPersistenceService,
   type PersistedSession,
+  type PersistedUIHistoryItem,
+  type PersistedToolCall,
 } from './storage/SessionPersistenceService.js';
