@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 05 |
+| **Last Completed** | Batch 02 (Re-execution) |
 | **In Progress** | — |
-| **Next Up** | Batch 06 |
-| **Progress** | 5/49 (10%) |
+| **Next Up** | Batch 03 |
+| **Progress** | 2/49 (4%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight

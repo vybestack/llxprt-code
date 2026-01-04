@@ -198,8 +198,8 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         })
         .option('output-format', {
           type: 'string',
-          choices: [OutputFormat.TEXT, OutputFormat.JSON],
-          description: 'Output format for non-interactive mode (text or json).',
+          choices: [OutputFormat.TEXT, OutputFormat.JSON, OutputFormat.STREAM_JSON],
+          description: 'Output format for non-interactive mode (text, json, or stream-json).',
         })
         .option('sandbox', {
           alias: 's',

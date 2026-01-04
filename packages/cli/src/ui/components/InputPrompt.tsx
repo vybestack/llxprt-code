@@ -25,6 +25,7 @@ import { keyMatchers, Command } from '../keyMatchers.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import type { Config, ApprovalMode } from '@vybestack/llxprt-code-core';
 import { StreamingState } from '../types.js';
+import { isSlashCommand } from '../utils/commandUtils.js';
 import {
   parseInputForHighlighting,
   buildSegmentsForVisualSlice,
@@ -76,8 +77,9 @@ export interface InputPromptProps {
   popAllMessages?: (callback: (messages: string) => void) => void;
   vimModeEnabled?: boolean;
   isEmbeddedShellFocused?: boolean;
-  setQueueErrorMessage?: (message: string) => void;
+  setQueueErrorMessage?: (message: string | null) => void;
   streamingState?: StreamingState;
+  queueErrorMessage?: string | null;
 }
 
 // The input content, input container, and input suggestions list may have different widths
@@ -123,6 +125,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   onSuggestionsVisibilityChange,
   suggestionsPosition = 'below',
   vimHandleInput,
+  setQueueErrorMessage,
+  streamingState,
 }) => {
   const [justNavigatedHistory, setJustNavigatedHistory] = useState(false);
   const [escPressCount, setEscPressCount] = useState(0);
@@ -239,6 +243,31 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       shellModeActive,
       shellHistory,
       resetReverseSearchCompletionState,
+    ],
+  );
+
+  const handleSubmit = useCallback(
+    (submittedValue: string) => {
+      const trimmedMessage = submittedValue.trim();
+      const isSlash = isSlashCommand(trimmedMessage);
+
+      const isShell = shellModeActive;
+      if (
+        (isSlash || isShell) &&
+        streamingState === StreamingState.Responding
+      ) {
+        setQueueErrorMessage?.(
+          `${isShell ? 'Shell' : 'Slash'} commands cannot be queued`,
+        );
+        return;
+      }
+      handleSubmitAndClear(trimmedMessage);
+    },
+    [
+      handleSubmitAndClear,
+      shellModeActive,
+      streamingState,
+      setQueueErrorMessage,
     ],
   );
 
@@ -513,7 +542,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
       // If the command is a perfect match, pressing enter should execute it.
       if (completion.isPerfectMatch && keyMatchers[Command.RETURN](key)) {
-        handleSubmitAndClear(buffer.text);
+        handleSubmit(buffer.text);
         return;
       }
 
@@ -602,7 +631,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
             buffer.backspace();
             buffer.newline();
           } else {
-            handleSubmitAndClear(buffer.text);
+            handleSubmit(buffer.text);
           }
         }
         return;
@@ -688,6 +717,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       onClearScreen,
       inputHistory,
       handleSubmitAndClear,
+      handleSubmit,
       shellHistory,
       reverseSearchCompletion,
       handleClipboardImage,

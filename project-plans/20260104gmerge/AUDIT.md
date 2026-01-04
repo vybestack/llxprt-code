@@ -7,8 +7,9 @@
 | Status | Count |
 |---|---:|
 | PICKED | 0 |
-| REIMPLEMENTED | 2 |
-| SKIP | 1 |
+| REIMPLEMENTED | 5 |
+| SKIP | 2 |
+| PARTIAL | 1 |
 | NO_OP | 0 |
 | ALREADY_PRESENT | 0 |
 | DIVERGED | 0 |
@@ -20,16 +21,16 @@
 |---:|:--|:--|:--|:--|:--|:--|
 | 1 | `8a937ebf` | SKIP |  |  | chore(release): bump version to 0.11.0-nightly.20251015.203bad7c (#11212) |  |
 | 2 | `b8df8b2a` | REIMPLEMENT | REIMPLEMENTED | `b46177ec0` | feat(core): wire up UI for ASK_USER policy decisions in message bus (#10630) | Applied to google-web-fetch.ts; upstream web-fetch.ts/web-fetch.test.ts/message-bus-integration.test.ts missing in LLxprt = NO_OP for those files |
-| 3 | `4f17eae5` | PICK |  |  | feat(cli): Prevent queuing of slash and shell commands (#11094) | Needs analysis for UI conflicts with LLxprt multi-provider architecture |
-| 4 | `d38ab079` | PICK |  |  | Update shell tool call colors for confirmed actions (#11126) | Needs analysis for color theme divergences |
+| 3 | `4f17eae5` | REIMPLEMENT | REIMPLEMENTED |  | feat(cli): Prevent queuing of slash and shell commands (#11094) | Wired queueErrorMessage state through UIState/UIActions contexts, Composer, InputPrompt; added handleSubmit wrapper for queue blocking |
+| 4 | `d38ab079` | SKIP | SKIPPED |  | Update shell tool call colors for confirmed actions (#11126) | Purely aesthetic; conflicts with LLxprt SemanticColors palette; no functional value |
 | 5 | `47f5e73b` | SKIP |  |  | Docs: Fix typo in docs/changelogs/index.md (#11215) |  |
 | 6 | `c80352a7` | SKIP |  |  | Docs: Fix typo in docs/get-started/index.md (#10793) |  |
-| 7 | `2e6d69c9` | PICK |  |  | Fix --allowed-tools in non-interactive mode to do substring matching for parity with interactive mode. (#10944) | Needs analysis - LLxprt may already have doesToolInvocationMatch functionality |
+| 7 | `2e6d69c9` | REIMPLEMENT | REIMPLEMENTED |  | Fix --allowed-tools in non-interactive mode to do substring matching for parity with interactive mode. (#10944) | Updated doesToolInvocationMatch to accept string invocation; removed parseAllowedSubcommands; updated shouldConfirmExecute |
 | 8 | `7bed302f` | SKIP |  |  | refactor(actions): remove checkout from sub-actions (#11219) |  |
-| 9 | `47f69317` | PICK |  |  | Add support for output-format stream-jsonflag for headless mode (#10883) | Needs analysis - stream-json format may not be supported in LLxprt |
+| 9 | `47f69317` | REIMPLEMENT | REIMPLEMENTED |  | Add support for output-format stream-jsonflag for headless mode (#10883) | Added STREAM_JSON to OutputFormat; added StreamJsonFormatter class; wired into nonInteractiveCli.ts |
 | 10 | `ccaa7009` | SKIP |  |  | fix(infra) - Reenable github test (#10839) |  |
 | 11 | `1fc3fc0a` | SKIP |  |  | fix(ci): Fix a2a publishing (#11211) |  |
-| 12 | `8c1656bf` | PICK |  |  | Don't always fall back on a git clone when installing extensions (#11229) |  |
+| 12 | `8c1656bf` | REIMPLEMENT | PARTIAL |  | Don't always fall back on a git clone when installing extensions (#11229) | LLxprt extension system already handles github-release/git types; consent flow not applied |
 | 13 | `cfaa95a2` | PICK |  |  | feat(cli): Add nargs to yargs options (#11132) |  |
 | 14 | `72b2cc54` | SKIP |  |  | Updates from running "npm install" (#11238) |  |
 | 15 | `e2fef41f` | SKIP |  |  | fix(ci): Ensure we cleanup the `false` tag. (#11232) |  |

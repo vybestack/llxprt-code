@@ -174,6 +174,9 @@ export interface UIState {
 
   // Available terminal height for content (after footer measurement)
   availableTerminalHeight: number;
+
+  // Queue error message (displayed when slash/shell commands cannot be queued)
+  queueErrorMessage: string | null;
 }
 
 const UIStateContext = createContext<UIState | undefined>(undefined);
