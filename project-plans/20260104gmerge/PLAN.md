@@ -1,3 +1,52 @@
+# Subagent Execution Runbook (Required)
+
+This plan is executed via subagents with mandatory cross-review. Treat the per-batch “DONE” state as: desired functionality implemented, verification per `dev-docs/RULES.md` completed, and paperwork updated (`PROGRESS.md`, `NOTES.md`, `AUDIT.md`).
+
+## Roles
+
+- **`typescriptexpert`**: Implements **REIMPLEMENT** batches (TDD-first per `dev-docs/RULES.md`).
+- **`cherrypicker`**: Executes **PICK** batches (git cherry-pick + conflict resolution + verification).
+- **`deepthinker`**: Reviews every batch result and either approves or returns actionable change requests.
+
+## Batch Execution Protocol
+
+For each batch in `PLAN.md`, follow this loop:
+
+1. **Check the plan**
+   - Read `project-plans/20260104gmerge/PLAN.md` and the batch row.
+   - For REIMPLEMENT batches, also read the linked playbook `project-plans/20260104gmerge/<sha>-plan.md`.
+
+2. **Execute (primary agent)**
+   - If batch type is **REIMPLEMENT**: launch `typescriptexpert` to implement the batch, including tests (RED → GREEN → REFACTOR).
+   - If batch type is **PICK**: launch `cherrypicker` to apply the upstream commits per the batch definition.
+
+3. **Review**
+   - Launch `deepthinker` to review changes, focusing on:
+     - Functional correctness and alignment with the batch intent.
+     - Conformance to `dev-docs/RULES.md` (tests-first for production code).
+     - Verification commands run per batch cadence.
+     - Paperwork updates are complete and consistent.
+
+4. **If review fails (escalation/repair loop)**
+   - Run at most **2** repair cycles:
+     1) launch a new `typescriptexpert` to address review feedback,
+     2) re-run `deepthinker` review.
+   - If still failing after 2 cycles:
+     - `deepthinker` becomes the implementer to finish the batch,
+     - `typescriptexpert` becomes the reviewer.
+     - Repeat up to **3** cycles until both agree the batch is DONE.
+
+5. **Paperwork + TODO discipline (non-optional)**
+   - After a batch is accepted:
+     - Update `project-plans/20260104gmerge/PROGRESS.md` (status + last updated + checkboxes).
+     - Append a short entry to `project-plans/20260104gmerge/NOTES.md`.
+     - Update `project-plans/20260104gmerge/AUDIT.md` (Status column + any Local commit refs if applicable).
+   - Maintain the session TODO list so it always contains, after the current item:
+     - `check PLAN` → `do batch NN` → `check PLAN` → `do batch NN+1`.
+
+---
+
+
 # gemini-cli v0.10.0 → v0.11.3: Batch Plan
 
 References:
