@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 01 |
-| **In Progress** | (none) |
-| **Next Up** | Batch 02 |
-| **Progress** | 1/49 (2%) |
+| **Last Completed** | Batch 04 |
+| **In Progress** | — |
+| **Next Up** | Batch 05 |
+| **Progress** | 4/49 (8%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -20,9 +20,9 @@ Use this checklist to track batch execution progress.
 ## Batch Checklist
 
 - [x] Batch 01 — QUICK — REIMPLEMENT — `b8df8b2a` — feat(core): wire up UI for ASK_USER policy decisions in message bus (#10630)
-- [ ] Batch 02 — FULL — PICK — `4f17eae5, d38ab079, 2e6d69c9, 47f69317, 8c1656bf` — feat(cli): Prevent queuing of slash and shell commands (#11094) / Update shell tool call colors for confirmed actions (#11126) / Fix --allowed-tools in non-interactive mode to do substring matching for parity with interactive mode. (#10944) / Add support for output-format stream-jsonflag for headless mode (#10883) / Don't always fall back on a git clone when installing extensions (#11229)
-- [ ] Batch 03 — QUICK — PICK — `cfaa95a2` — feat(cli): Add nargs to yargs options (#11132)
-- [ ] Batch 04 — FULL — REIMPLEMENT — `130f0a02` — chore(subagents): Remove legacy subagent code (#11175)
+- [x] Batch 02 — FULL — PICK — `4f17eae5, d38ab079, 2e6d69c9, 47f69317, 8c1656bf` — feat(cli): Prevent queuing of slash and shell commands (#11094) / Update shell tool call colors for confirmed actions (#11126) / Fix --allowed-tools in non-interactive mode to do substring matching for parity with interactive mode. (#10944) / Add support for output-format stream-jsonflag for headless mode (#10883) / Don't always fall back on a git clone when installing extensions (#11229)
+- [x] Batch 03 — QUICK — PICK — `cfaa95a2` — feat(cli): Add nargs to yargs options (#11132)
+- [x] Batch 04 — FULL — REIMPLEMENT — `130f0a02` — chore(subagents): Remove legacy subagent code (#11175)
 - [ ] Batch 05 — QUICK — REIMPLEMENT — `c9c633be` — refactor: move `web_fetch` tool name to `tool-names.ts` (#11174)
 - [ ] Batch 06 — FULL — PICK — `60420e52, a9083b9d, b734723d` — feat: Do not add trailing space on directory autocomplete (#11227) / include extension name in `gemini mcp list` command (#11263) / Update extensions install warning (#11149)
 - [ ] Batch 07 — QUICK — REIMPLEMENT — `05930d5e` — fix(web-fetch): respect Content-Type header in fallback mechanism (#11284)
