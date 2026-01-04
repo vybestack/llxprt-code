@@ -12,7 +12,6 @@ vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return {
     ...actual,
-    existsSync: vi.fn(),
     promises: {
       ...actual.promises,
       mkdir: vi.fn(),
@@ -216,7 +215,9 @@ describe('SessionPersistenceService', () => {
       crypto.createHash('sha256').update(mockProjectRoot).digest('hex');
 
     it('should return null if chats directory does not exist', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      const enoentError = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoentError.code = 'ENOENT';
+      vi.mocked(fs.promises.readdir).mockRejectedValue(enoentError);
 
       const result = await service.loadMostRecent();
 
@@ -224,7 +225,6 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should return null if no session files exist', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.promises.readdir).mockResolvedValue([] as unknown as []);
 
       const result = await service.loadMostRecent();
@@ -233,7 +233,6 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should ignore non-session files', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.promises.readdir).mockResolvedValue([
         'other-file.json',
         'persisted-session-backup.json.bak',
@@ -246,7 +245,6 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should load the most recent session file (sorted by filename)', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.promises.readdir).mockResolvedValue([
         'persisted-session-2026-01-01T00-00-00-000Z.json',
         'persisted-session-2026-01-03T00-00-00-000Z.json', // Most recent
@@ -276,7 +274,6 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should reject session with wrong project hash', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.promises.readdir).mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
@@ -300,7 +297,6 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should reject session with unknown version', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.promises.readdir).mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
@@ -324,7 +320,6 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should handle corrupted JSON gracefully and backup', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.promises.readdir).mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
@@ -342,7 +337,6 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should return session with UI history when present', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.promises.readdir).mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
@@ -372,7 +366,6 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should handle readdir failure gracefully', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.promises.readdir).mockRejectedValue(
         new Error('Permission denied'),
       );
@@ -383,7 +376,6 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should handle readFile failure gracefully', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.promises.readdir).mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);

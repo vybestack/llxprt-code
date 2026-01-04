@@ -668,6 +668,22 @@ export const AppContainer = (props: AppContainerProps) => {
       return;
     }
 
+    const TIMEOUT_MS = 30000; // 30 second timeout
+
+    const timeout = setTimeout(() => {
+      clearInterval(checkInterval);
+      debug.warn(
+        'Timed out waiting for history service to restore core history',
+      );
+      addItem(
+        {
+          type: 'warning',
+          text: 'Could not restore AI context - history service unavailable.',
+        },
+        Date.now(),
+      );
+    }, TIMEOUT_MS);
+
     const checkInterval = setInterval(() => {
       const geminiClient = config.getGeminiClient();
       const historyService = geminiClient?.getHistoryService?.();
@@ -677,6 +693,7 @@ export const AppContainer = (props: AppContainerProps) => {
       }
 
       clearInterval(checkInterval);
+      clearTimeout(timeout);
       coreHistoryRestoredRef.current = true;
 
       try {
@@ -701,6 +718,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     return () => {
       clearInterval(checkInterval);
+      clearTimeout(timeout);
     };
   }, [restoredSession, config, addItem]);
 
