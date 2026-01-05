@@ -576,3 +576,125 @@ Batch 06 commits:
 ### Commit/Push Record
 
 Commit `c527c3ecf` created for 60420e52 only. Other two commits skipped as documented above. AUDIT.md, PROGRESS.md updated.
+
+---
+
+## Batch 07
+
+### Selection Record
+
+```
+Batch: 07
+Type: REIMPLEMENT
+Upstream SHA(s): 05930d5e
+Subject: fix(web-fetch): respect Content-Type header in fallback mechanism (#11284)
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES
+  - Previous batch verification: PASS
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+```
+
+### Execution Record
+
+**05930d5e - Respect Content-Type header in fallback mechanism**: REIMPLEMENTED
+
+Upstream changes:
+- In web-fetch.ts fallback: Check Content-Type header before converting content
+- For text/html content: use html-to-text conversion
+- For application/json, text/plain, etc.: return raw text content
+- For missing Content-Type: assume HTML and convert
+- Added 4 tests covering HTML, JSON, plain text, and missing header scenarios
+
+LLxprt implementation:
+- Applied to `packages/core/src/tools/google-web-fetch.ts` (LLxprt's equivalent of upstream web-fetch.ts)
+- Modified `executeFallback()` method in `GoogleWebFetchToolInvocation` class
+- Changed from: always using html-to-text conversion (`convert(html, ...)`)
+- Changed to: check `response.headers.get('content-type')` and conditionally convert
+
+Implementation details:
+```typescript
+const rawContent = await response.text();
+const contentType = response.headers.get('content-type') || '';
+let textContent: string;
+
+// Only use html-to-text if content type is HTML, or if no content type is provided (assume HTML)
+if (
+  contentType.toLowerCase().includes('text/html') ||
+  contentType === ''
+) {
+  textContent = convert(rawContent, {
+    wordwrap: false,
+    selectors: [
+      { selector: 'a', options: { ignoreHref: true } },
+      { selector: 'img', format: 'skip' },
+    ],
+  });
+} else {
+  // For other content types (text/plain, application/json, etc.), use raw text
+  textContent = rawContent;
+}
+
+textContent = textContent.substring(0, MAX_CONTENT_LENGTH);
+```
+
+Tests added to google-web-fetch.test.ts:
+1. HTML content is converted to text using html-to-text
+2. JSON content is returned raw (not converted)
+3. Plain text content is returned raw
+4. Missing Content-Type header defaults to HTML conversion
+
+Note: html-to-text conversion converts text to uppercase, so test uses case-insensitive assertion.
+
+### Verification Record
+
+```bash
+$ git diff HEAD~1 packages/core/src/tools/google-web-fetch.ts | head -50
++      const rawContent = await response.text();
++      const contentType = response.headers.get('content-type') || '';
++      let textContent: string;
++
++      // Only use html-to-text if content type is HTML, or if no content type is provided (assume HTML)
++      if (
++        contentType.toLowerCase().includes('text/html') ||
++        contentType === ''
++      ) {
++        textContent = convert(rawContent, {
++          wordwrap: false,
++          selectors: [
++            { selector: 'a', options: { ignoreHref: true } },
++            { selector: 'img', format: 'skip' },
++          ],
++        });
++      } else {
++        // For other content types (text/plain, application/json, etc.), use raw text
++        textContent = rawContent;
++      }
+
+$ npm run lint
+PASS
+
+$ npm run typecheck
+PASS
+
+$ cd packages/core && npm run test -- google-web-fetch.test.ts
+[OK] src/tools/google-web-fetch.test.ts (24 tests) 28ms
+
+Test Files  1 passed (1)
+      Tests  24 passed (24)
+```
+
+All tests pass including 4 new Content-Type tests.
+
+### Status Documentation
+
+Batch 07 commit: `05930d5e` - REIMPLEMENTED as `30a369b56`.
+Applied upstream fix to prevent JSON responses from being stripped by html-to-text conversion during fallback.
+
+### Commit/Push Record
+
+Commit: `30a369b56`
+Message: "reimplement: fix(web-fetch): respect Content-Type header in fallback mechanism (#11284)"
+AUDIT.md updated. PROGRESS.md updated.

@@ -47,6 +47,7 @@
 | 26 | `c96fd828` | SKIP |  |  | Docs: Move security file from root to docs (#11259) |  |
 | 27 | `155242af` | SKIP |  |  | chore: remove emojis from tips / tips for prompt (#11220) |  |
 | 28 | `ffa547ce` | SKIP |  |  | Docs: remove mention of IDE mode from README (#11260) |  |
+| 29 | `05930d5e` | REIMPLEMENT | REIMPLEMENTED | `30a369b56` | fix(web-fetch): respect Content-Type header in fallback mechanism (#11284) | Applied to google-web-fetch fallback; added Content-Type check - text/html gets converted via html-to-text, JSON/text/plain/etc returned raw |
 | 29 | `6ded45e5` | PICK |  |  | feat: Add markdown toggle (alt+m) to switch between rendered and raw… (#10383) |  |
 | 30 | `d2c9c5b3` | PICK |  |  | Use Node.js built-ins in scripts/clean.js instead of glob. (#11286) |  |
 | 31 | `39cc07de` | SKIP |  |  | chore: add upstream docs CI check (#11277) |  |
