@@ -19,6 +19,7 @@ import {
 } from '../../constants.js';
 import { useKeypress } from '../../hooks/useKeypress.js';
 import { stripShellMarkers } from '@vybestack/llxprt-code-core';
+import { useUIState } from '../../contexts/UIStateContext.js';
 
 const STATIC_HEIGHT = 1;
 const RESERVED_LINE_COUNT = 5; // for tool name, status, padding etc.
@@ -48,6 +49,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   renderOutputAsMarkdown = true,
   isFocused = true,
 }) => {
+  const { renderMarkdown } = useUIState();
   const availableHeight = availableTerminalHeight
     ? Math.max(
         availableTerminalHeight - STATIC_HEIGHT - RESERVED_LINE_COUNT,
@@ -210,6 +212,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
                   isPending={false}
                   availableTerminalHeight={availableHeight}
                   terminalWidth={childWidth}
+                  renderMarkdown={renderMarkdown}
                 />
               </Box>
             )}

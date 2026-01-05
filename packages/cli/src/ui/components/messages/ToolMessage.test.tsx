@@ -5,11 +5,12 @@
  */
 
 import React from 'react';
-import { render } from 'ink-testing-library';
-import { ToolMessage, ToolMessageProps } from './ToolMessage.js';
+import type { ToolMessageProps } from './ToolMessage.js';
+import { ToolMessage } from './ToolMessage.js';
 import { StreamingState, ToolCallStatus } from '../../types.js';
 import { Text } from 'ink';
 import { StreamingContext } from '../../contexts/StreamingContext.js';
+import { renderWithProviders } from '../../../test-utils/render.js';
 
 // Mock child components or utilities if they are complex or have side effects
 vi.mock('../GeminiRespondingSpinner.js', () => ({
@@ -46,7 +47,7 @@ const renderWithContext = (
   streamingState: StreamingState,
 ) => {
   const contextValue: StreamingState = streamingState;
-  return render(
+  return renderWithProviders(
     <StreamingContext.Provider value={contextValue}>
       {ui}
     </StreamingContext.Provider>,

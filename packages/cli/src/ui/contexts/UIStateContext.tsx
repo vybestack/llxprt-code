@@ -177,6 +177,9 @@ export interface UIState {
 
   // Queue error message (displayed when slash/shell commands cannot be queued)
   queueErrorMessage: string | null;
+
+  // Markdown rendering toggle (alt+m)
+  renderMarkdown: boolean;
 }
 
 const UIStateContext = createContext<UIState | undefined>(undefined);

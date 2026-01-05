@@ -69,6 +69,7 @@ describe('keyMatchers', () => {
     [Command.TOGGLE_TODO_DIALOG]: (key: Key) => key.ctrl && key.name === 'q',
     [Command.TOGGLE_IDE_CONTEXT_DETAIL]: (key: Key) =>
       key.ctrl && key.name === 'g',
+    [Command.TOGGLE_MARKDOWN]: (key: Key) => key.meta && key.name === 'm',
     [Command.QUIT]: (key: Key) => key.ctrl && key.name === 'c',
     [Command.EXIT]: (key: Key) => key.ctrl && key.name === 'd',
     [Command.SHOW_MORE_LINES]: (key: Key) => key.ctrl && key.name === 's',
@@ -297,6 +298,11 @@ describe('keyMatchers', () => {
       command: Command.TOGGLE_IDE_CONTEXT_DETAIL,
       positive: [createKey('g', { ctrl: true })],
       negative: [createKey('g'), createKey('t', { ctrl: true })],
+    },
+    {
+      command: Command.TOGGLE_MARKDOWN,
+      positive: [createKey('m', { meta: true })],
+      negative: [createKey('m'), createKey('m', { shift: true })],
     },
     {
       command: Command.QUIT,

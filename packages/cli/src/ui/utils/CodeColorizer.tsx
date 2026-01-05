@@ -143,10 +143,13 @@ export function colorizeCode(
   maxWidth?: number,
   theme?: Theme,
   settings?: LoadedSettings,
+  hideLineNumbers?: boolean,
 ): React.ReactNode {
   const codeToHighlight = code.replace(/\n$/, '');
   const activeTheme = theme || themeManager.getActiveTheme();
-  const showLineNumbers = settings?.merged.showLineNumbers ?? true;
+  const showLineNumbers = hideLineNumbers
+    ? false
+    : (settings?.merged.showLineNumbers ?? true);
 
   try {
     // Render the HAST tree using the adapted theme

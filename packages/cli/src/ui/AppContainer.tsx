@@ -473,6 +473,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const [showToolDescriptions, setShowToolDescriptions] =
     useState<boolean>(false);
   const [showDebugProfiler, setShowDebugProfiler] = useState(false);
+  const [renderMarkdown, setRenderMarkdown] = useState<boolean>(true);
 
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
   const [quittingMessages, setQuittingMessages] = useState<
@@ -1270,6 +1271,13 @@ export const AppContainer = (props: AppContainerProps) => {
         if (Object.keys(mcpServers || {}).length > 0) {
           handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
         }
+      } else if (keyMatchers[Command.TOGGLE_MARKDOWN](key)) {
+        setRenderMarkdown((prev) => {
+          const newValue = !prev;
+          // Force re-render of static content
+          refreshStatic();
+          return newValue;
+        });
       } else if (
         keyMatchers[Command.TOGGLE_IDE_CONTEXT_DETAIL](key) &&
         config.getIdeMode() &&
@@ -1305,6 +1313,7 @@ export const AppContainer = (props: AppContainerProps) => {
       cancelOngoingRequest,
       addItem,
       settings.merged.debugKeystrokeLogging,
+      refreshStatic,
     ],
   );
 
@@ -1671,6 +1680,9 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Queue error message
     queueErrorMessage,
+
+    // Markdown rendering toggle
+    renderMarkdown,
   };
 
   // Build UIActions object - memoized to avoid unnecessary re-renders (upstream optimization)
