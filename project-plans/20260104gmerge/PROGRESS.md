@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 11 (1 commit - SKIPPED due to different architecture) |
+| **Last Completed** | Batch 12 (1 commit - SKIPPED - feature doesn't exist in LLxprt) |
 | **In Progress** | — |
-| **Next Up** | Batch 12 |
-| **Progress** | 9/49 (18%) |
+| **Next Up** | Batch 13 |
+| **Progress** | 10/49 (20%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -30,7 +30,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 09 — QUICK — REIMPLEMENT — `937c15c6` — refactor: Remove deprecated --all-files flag (#11228)
 - [x] Batch 10 — FULL — PICK — `c71b7491, 991bd373, a4403339` — fix: Add folder names in permissions dialog similar to the launch dialog (#11278) / fix(scripts): Improve deflake script isolation and unskip test (#11325) / feat(ui): add "Esc to close" hint to SettingsDialog (#11289)
 - [x] Batch 11 — QUICK — REIMPLEMENT — `9049f8f8` — feat: remove deprecated telemetry flags (#11318)
-- [ ] Batch 12 — FULL — PICK — `22f725eb` — feat: allow editing queued messages with up arrow key (#10392)
+- [x] Batch 12 — FULL — PICK — `22f725eb` — feat: allow editing queued messages with up arrow key (#10392)
 - [ ] Batch 13 — QUICK — REIMPLEMENT — `dcf362bc` — Inline tree-sitter wasm and add runtime fallback (#11157)
 - [ ] Batch 14 — FULL — PICK — `406f0baa, d42da871` — fix(ux) keyboard input hangs while waiting for keyboard input. (#10121) / fix(accessibility) allow line wrapper in screen reader mode  (#11317)
 - [ ] Batch 15 — QUICK — PICK — `3a1d3769` — Refactor `EditTool.Name` to use centralized `EDIT_TOOL_NAME` (#11343)

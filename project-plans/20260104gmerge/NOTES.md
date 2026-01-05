@@ -1038,5 +1038,61 @@ N/A - batch skipped
 Batch 11: 9049f8f8 - SKIP (different telemetry architecture for multi-provider system)
 
 ### Commit/Push Record
+---
+
+## Batch 12
+
+### Selection Record
+
+Batch: 12
+Type: PICK
+Upstream SHA(s): 22f725eb
+Subject: feat: allow editing queued messages with up arrow key (#10392)
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES
+  - Previous batch verification: PASS
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record
+
+**22f725eb - Allow editing queued messages with up arrow key**: SKIP (INFRASTRUCTURE NOT PRESENT)
+
+Upstream changes:
+- Adds queued message editing with up arrow key
+- Adds useMessageQueue hook with popAllMessages function
+- Adds QueuedMessageDisplay component
+- Adds InputPrompt component editing capability
+- Updates AppContainer to integrate queued message editing
+- 9 files changed, 399 insertions, 8 deletions
+
+LLxprt assessment:
+Missing infrastructure:
+- useMessageQueue hook does not exist in LLxprt
+- QueuedMessageDisplay component does not exist in LLxprt
+- Message queue infrastructure not present
+- QueuedMessageDisplay tests and InputPrompt tests for queued editing don't exist
+
+This is a significant feature addition (399 lines) that introduces new infrastructure:
+1. Message queue system for storing/displaying pending messages
+2. QueuedMessageDisplay component for rendering queued messages
+3. Up arrow key binding to edit queued messages
+4. Editing workflows for previously queued commands
+
+LLxprt does not have this queued message feature. Implementing this would be adding a major new feature rather than porting an existing one.
+
+Decision: SKIP - This is a major feature addition that LLxprt doesn't have. Would require creating new infrastructure (useMessageQueue hook, QueuedMessageDisplay component, message queue system) totaling ~399 lines of new code. Not a simple pick or reimplement of existing functionality.
+
+### Verification Record
+
+N/A - batch skipped
+
+### Status Documentation
+
+Batch 12: 22f725eb - SKIP (queued message infrastructure not present in LLxprt)
+
+### Commit/Push Record
 
 Commit c3d9e02e1 created for d2c9c5b3 with conflict resolution. 6ded45e5 skipped due to conflicts. AUDIT.md, PROGRESS.md updated.
