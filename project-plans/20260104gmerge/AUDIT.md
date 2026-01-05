@@ -31,7 +31,7 @@
 | 10 | `ccaa7009` | SKIP |  |  | fix(infra) - Reenable github test (#10839) |  |
 | 11 | `1fc3fc0a` | SKIP |  |  | fix(ci): Fix a2a publishing (#11211) |  |
 | 12 | `8c1656bf` | REIMPLEMENT | PARTIAL |  | Don't always fall back on a git clone when installing extensions (#11229) | LLxprt extension system already handles github-release/git types; consent flow not applied |
-| 13 | `cfaa95a2` | PICK |  |  | feat(cli): Add nargs to yargs options (#11132) |  |
+| 13 | `cfaa95a2` | REIMPLEMENT | SKIP |  | feat(cli): Add nargs to yargs options (#11132) | Already implemented in LLxprt via commit dcf347e21 - all nargs: 1 options and both tests present |
 | 14 | `72b2cc54` | SKIP |  |  | Updates from running "npm install" (#11238) |  |
 | 15 | `e2fef41f` | SKIP |  |  | fix(ci): Ensure we cleanup the `false` tag. (#11232) |  |
 | 16 | `8c74be79` | SKIP |  |  | Update README.md (#11240) |  |
