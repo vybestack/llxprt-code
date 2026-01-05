@@ -990,5 +990,53 @@ lint: PASS, typecheck: PASS
 Batch 10: 3 commits - all REIMPLEMENTED as 0e2efa699, bd104ab7a, a11d156aa
 
 ### Commit/Push Record
+---
+
+## Batch 11
+
+### Selection Record
+
+Batch: 11
+Type: REIMPLEMENT
+Upstream SHA(s): 9049f8f8
+Subject: feat: remove deprecated telemetry flags (#11318)
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES
+  - Previous batch verification: PASS
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+
+### Execution Record
+
+**9049f8f8 - Remove deprecated telemetry flags**: SKIP (DIFFERENT ARCHITECTURE)
+
+Upstream changes:
+- Removes Google-specific telemetry CLI flags: --telemetry, --telemetry-target, --telemetry-otlp-endpoint, --telemetry-otlp-protocol, --telemetry-log-prompts, --telemetry-outfile
+- Removes telemetry options from CliArgs interface
+- Removes deprecateOption messages for telemetry flags
+- Removes telemetry tests (describe block "loadCliConfig telemetry")
+- 3 files changed, 493 deletions
+
+LLxprt assessment:
+LLxprt has multi-provider architecture with different telemetry system. The upstream commit removes Google-specific telemetry CLI flags that are deprecated in favor of settings.json. LLxprt's telemetry system:
+- Supports multiple providers (Google, OpenAI, Anthropic, etc.)
+- Provider-specific telemetry configurations
+- Different telemetry infrastructure than upstream
+
+The flags to be removed (--telemetry, --telemetry-target, etc.) may be used by LLxprt's multi-provider telemetry system and should be reviewed separately. This is not a simple removal but requires understanding how LLxprt's telemetry differs from Google Code Assist's telemetry.
+
+Decision: SKIP - LLxprt has different multi-provider telemetry architecture. These flags should be reviewed separately as part of LLxprt's multi-provider system evolution, not just blindly removed.
+
+### Verification Record
+
+N/A - batch skipped
+
+### Status Documentation
+
+Batch 11: 9049f8f8 - SKIP (different telemetry architecture for multi-provider system)
+
+### Commit/Push Record
 
 Commit c3d9e02e1 created for d2c9c5b3 with conflict resolution. 6ded45e5 skipped due to conflicts. AUDIT.md, PROGRESS.md updated.

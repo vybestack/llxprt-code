@@ -61,7 +61,7 @@
 | 39 | `c71b7491` | PICK | REIMPLEMENTED - COMMITTED | `0e2efa699` | fix: Add folder names in permissions dialog similar to the launch dialog (#11278) | REIMPLEMENTED in LLxprt - added folder name to 'Trust this folder' label using existing workingDirectory from hook |
 | 40 | `991bd373` | PICK | REIMPLEMENTED - COMMITTED | `bd104ab7a` | fix(scripts): Improve deflake script isolation and unskip test (#11325) | REIMPLEMENTED - added .dockerignore temp handling, env passing, cmd args support; ctrl-c test kept as skipIf(CI) |
 | 41 | `a4403339` | PICK | REIMPLEMENTED - COMMITTED | `a11d156aa` | feat(ui): add "Esc to close" hint to SettingsDialog (#11289) | REIMPLEMENTED - updated help text and tests (LLxprt has no snapshots) |
-| 43 | `9049f8f8` | REIMPLEMENT |  |  | feat: remove deprecated telemetry flags (#11318) |  |
+| 43 | `9049f8f8` | REIMPLEMENT | SKIP |  | feat: remove deprecated telemetry flags (#11318) | LLxprt has multi-provider architecture with different telemetry system. Upstream removes Google-specific telemetry CLI flags (--telemetry, --telemetry-target, --telemetry-otlp-endpoint, --telemetry-log-prompts, --telemetry-outfile) deprecated in favor of settings.json. LLxprt's telemetry differs and these flags should be reviewed separately for multi-provider system. |
 | 44 | `22f725eb` | PICK |  |  | feat: allow editing queued messages with up arrow key (#10392) |  |
 | 45 | `dcf362bc` | REIMPLEMENT |  |  | Inline tree-sitter wasm and add runtime fallback (#11157) |  |
 | 46 | `a67deae8` | SKIP |  |  | test: skip extension update test in windows (#11275) |  |

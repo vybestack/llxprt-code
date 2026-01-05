@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 10 (3 commits - all REIMPLEMENTED and COMMITTED) |
+| **Last Completed** | Batch 11 (1 commit - SKIPPED due to different architecture) |
 | **In Progress** | — |
-| **Next Up** | Batch 11 |
-| **Progress** | 8/49 (16%) |
+| **Next Up** | Batch 12 |
+| **Progress** | 9/49 (18%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -29,7 +29,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 08 — FULL — PICK — `6ded45e5, d2c9c5b3` — feat: Add markdown toggle (alt+m) to switch between rendered and raw… (#10383) / Use Node.js built-ins in scripts/clean.js instead of glob. (#11286)
 - [x] Batch 09 — QUICK — REIMPLEMENT — `937c15c6` — refactor: Remove deprecated --all-files flag (#11228)
 - [x] Batch 10 — FULL — PICK — `c71b7491, 991bd373, a4403339` — fix: Add folder names in permissions dialog similar to the launch dialog (#11278) / fix(scripts): Improve deflake script isolation and unskip test (#11325) / feat(ui): add "Esc to close" hint to SettingsDialog (#11289)
-- [ ] Batch 11 — QUICK — REIMPLEMENT — `9049f8f8` — feat: remove deprecated telemetry flags (#11318)
+- [x] Batch 11 — QUICK — REIMPLEMENT — `9049f8f8` — feat: remove deprecated telemetry flags (#11318)
 - [ ] Batch 12 — FULL — PICK — `22f725eb` — feat: allow editing queued messages with up arrow key (#10392)
 - [ ] Batch 13 — QUICK — REIMPLEMENT — `dcf362bc` — Inline tree-sitter wasm and add runtime fallback (#11157)
 - [ ] Batch 14 — FULL — PICK — `406f0baa, d42da871` — fix(ux) keyboard input hangs while waiting for keyboard input. (#10121) / fix(accessibility) allow line wrapper in screen reader mode  (#11317)
