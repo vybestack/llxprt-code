@@ -180,7 +180,6 @@ describe.skipIf(skipOnWindowsCi)(
         'welcome-config.json',
       );
 
-
       writeFileSync(
         process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH,
         JSON.stringify({ welcomeCompleted: true }, null, 2),
