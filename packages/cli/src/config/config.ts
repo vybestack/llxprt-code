@@ -13,6 +13,7 @@ import yargs from 'yargs/yargs';
 import { hideBin } from 'yargs/helpers';
 import process from 'node:process';
 import { mcpCommand } from '../commands/mcp.js';
+import { skillsCommand } from '../commands/skills.js';
 import { hooksCommand } from '../commands/hooks.js';
 import {
   Config,
@@ -594,6 +595,10 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
 
   if (settings?.extensionManagement ?? false) {
     yargsInstance.command(extensionsCommand);
+  }
+
+  if (settings?.experimental?.skills ?? false) {
+    yargsInstance.command(skillsCommand);
   }
 
   yargsInstance
