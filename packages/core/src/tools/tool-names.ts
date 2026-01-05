@@ -16,6 +16,9 @@
 export const GOOGLE_WEB_SEARCH_TOOL = 'google_web_search';
 export const EXA_WEB_SEARCH_TOOL = 'exa_web_search';
 
+// Alias for upstream compatibility - EDIT_TOOL_NAME centralizes the edit tool name
+export const EDIT_TOOL_NAME = 'replace';
+
 // File System Tools
 export const READ_FILE_TOOL = 'read_file';
 export const WRITE_FILE_TOOL = 'write_file';
