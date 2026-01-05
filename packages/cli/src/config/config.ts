@@ -1480,6 +1480,12 @@ export async function loadCliConfig(
       };
       return eventHooks;
     })(),
+    onReload: async () => {
+      const refreshedSettings = loadSettings(cwd);
+      return {
+        disabledSkills: refreshedSettings.merged.skills?.disabled,
+      };
+    },
   });
 
   const enhancedConfig = config;

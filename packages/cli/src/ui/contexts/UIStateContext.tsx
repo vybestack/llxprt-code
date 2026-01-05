@@ -235,6 +235,9 @@ export interface UIState {
   // Interactive shell focus state
   activeShellPtyId: number | null;
   embeddedShellFocused: boolean;
+
+  // Settings reload nonce (incremented when skills/settings change)
+  settingsNonce: number;
 }
 
 const UIStateContext = createContext<UIState | undefined>(undefined);

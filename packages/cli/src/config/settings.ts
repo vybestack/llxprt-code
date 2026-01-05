@@ -431,6 +431,7 @@ export class LoadedSettings {
 
     this._merged = this.computeMergedSettings();
     saveSettings(settingsFile);
+    coreEvents.emitSettingsChanged();
   }
 
   // Provider keyfile methods for llxprt multi-provider support

@@ -34,6 +34,8 @@ import type { SettingsService } from '../settings/SettingsService.js';
 
 import { ShellTool } from '../tools/shell.js';
 import { ReadFileTool } from '../tools/read-file.js';
+import { ACTIVATE_SKILL_TOOL_NAME } from '../tools/tool-names.js';
+import type { SkillDefinition } from '../skills/skillLoader.js';
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
@@ -51,6 +53,7 @@ vi.mock('fs', async (importOriginal) => {
 vi.mock('../tools/tool-registry', () => {
   const ToolRegistryMock = vi.fn();
   ToolRegistryMock.prototype.registerTool = vi.fn();
+  ToolRegistryMock.prototype.unregisterTool = vi.fn();
   ToolRegistryMock.prototype.discoverAllTools = vi.fn();
   ToolRegistryMock.prototype.sortTools = vi.fn();
   ToolRegistryMock.prototype.getAllTools = vi.fn(() => []); // Mock methods if needed
@@ -95,6 +98,7 @@ vi.mock('../core/client.js', () => ({
     setHistory: vi.fn(),
     storeHistoryForLaterUse: vi.fn(),
     dispose: vi.fn(),
+    stripThoughtsFromHistory: vi.fn(),
   })),
 }));
 
@@ -1705,5 +1709,105 @@ describe('Config getHookSystem', () => {
     const config = new Config(baseParams);
     expect(config.getEnableHooks()).toBe(false);
     expect(config.getHookSystem()).toBeUndefined();
+  });
+
+  describe('reloadSkills', () => {
+    it('should refresh disabledSkills and re-register ActivateSkillTool when skills exist', async () => {
+      const mockOnReload = vi.fn().mockResolvedValue({
+        disabledSkills: ['skill2'],
+      });
+      const params: ConfigParameters = {
+        sessionId: 'test-session',
+        targetDir: '/tmp/test',
+        debugMode: false,
+        model: 'test-model',
+        cwd: '/tmp/test',
+        skillsSupport: true,
+        onReload: mockOnReload,
+      };
+
+      config = new Config(params);
+      await config.initialize();
+
+      const skillManager = config.getSkillManager();
+      const toolRegistry = config.getToolRegistry();
+
+      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
+      vi.spyOn(skillManager, 'setDisabledSkills');
+      vi.spyOn(toolRegistry, 'registerTool');
+      vi.spyOn(toolRegistry, 'unregisterTool');
+
+      const mockSkills = [{ name: 'skill1' }];
+      vi.spyOn(skillManager, 'getSkills').mockReturnValue(
+        mockSkills as SkillDefinition[],
+      );
+
+      await config.reloadSkills();
+
+      expect(mockOnReload).toHaveBeenCalled();
+      expect(skillManager.setDisabledSkills).toHaveBeenCalledWith(['skill2']);
+      expect(toolRegistry.registerTool).toHaveBeenCalled();
+      expect(toolRegistry.unregisterTool).not.toHaveBeenCalledWith(
+        ACTIVATE_SKILL_TOOL_NAME,
+      );
+    });
+
+    it('should unregister ActivateSkillTool when no skills exist after reload', async () => {
+      const params: ConfigParameters = {
+        sessionId: 'test-session',
+        targetDir: '/tmp/test',
+        debugMode: false,
+        model: 'test-model',
+        cwd: '/tmp/test',
+        skillsSupport: true,
+      };
+
+      config = new Config(params);
+      await config.initialize();
+
+      const skillManager = config.getSkillManager();
+      const toolRegistry = config.getToolRegistry();
+
+      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
+      vi.spyOn(toolRegistry, 'registerTool');
+      vi.spyOn(toolRegistry, 'unregisterTool');
+
+      vi.spyOn(skillManager, 'getSkills').mockReturnValue([]);
+
+      await config.reloadSkills();
+
+      expect(toolRegistry.unregisterTool).toHaveBeenCalledWith(
+        ACTIVATE_SKILL_TOOL_NAME,
+      );
+    });
+
+    it('should clear disabledSkills when onReload returns undefined for them', async () => {
+      const mockOnReload = vi.fn().mockResolvedValue({
+        disabledSkills: undefined,
+      });
+      const params: ConfigParameters = {
+        sessionId: 'test-session',
+        targetDir: '/tmp/test',
+        debugMode: false,
+        model: 'test-model',
+        cwd: '/tmp/test',
+        skillsSupport: true,
+        onReload: mockOnReload,
+      };
+
+      config = new Config(params);
+      // Initially set some disabled skills
+      // @ts-expect-error - accessing private
+      config.disabledSkills = ['skill1'];
+      await config.initialize();
+
+      const skillManager = config.getSkillManager();
+      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
+      vi.spyOn(skillManager, 'setDisabledSkills');
+
+      await config.reloadSkills();
+
+      expect(skillManager.setDisabledSkills).toHaveBeenCalledWith([]);
+    });
   });
 });

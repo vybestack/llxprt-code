@@ -58,6 +58,7 @@ export enum CoreEvent {
   ConsoleLog = 'console-log',
   Output = 'output',
   ExternalEditorClosed = 'external-editor-closed',
+  SettingsChanged = 'settings-changed',
 }
 
 export class CoreEventEmitter extends EventEmitter {
@@ -89,6 +90,13 @@ export class CoreEventEmitter extends EventEmitter {
     } else {
       this.emit(CoreEvent.UserFeedback, payload);
     }
+  }
+
+  /**
+   * Notifies subscribers that settings have been modified.
+   */
+  emitSettingsChanged(): void {
+    this.emit(CoreEvent.SettingsChanged);
   }
 
   /**
@@ -124,6 +132,10 @@ export class CoreEventEmitter extends EventEmitter {
     listener: (payload: OutputPayload) => void,
   ): this;
   override on(
+    event: CoreEvent.SettingsChanged,
+    listener: () => void,
+  ): this;
+  override on(
     event: string | symbol,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     listener: (...args: any[]) => void,
@@ -150,6 +162,10 @@ export class CoreEventEmitter extends EventEmitter {
   override off(
     event: CoreEvent.Output,
     listener: (payload: OutputPayload) => void,
+  ): this;
+  override off(
+    event: CoreEvent.SettingsChanged,
+    listener: () => void,
   ): this;
   override off(
     event: string | symbol,

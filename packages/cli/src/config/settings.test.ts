@@ -89,6 +89,7 @@ vi.mock('fs', async (importOriginal) => {
 
 const mockCoreEvents = vi.hoisted(() => ({
   emitFeedback: vi.fn(),
+  emitSettingsChanged: vi.fn(),
 }));
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {

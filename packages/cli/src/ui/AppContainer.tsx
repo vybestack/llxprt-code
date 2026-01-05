@@ -663,6 +663,8 @@ export const AppContainer = (props: AppContainerProps) => {
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
   const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
 
+  const [settingsNonce, setSettingsNonce] = useState(0);
+
   const openPermissionsDialog = useCallback(() => {
     setIsPermissionsDialogOpen(true);
   }, []);
@@ -808,6 +810,17 @@ export const AppContainer = (props: AppContainerProps) => {
 
     return undefined;
   }, [config]);
+
+  useEffect(() => {
+    const handleSettingsChanged = () => {
+      setSettingsNonce((prev) => prev + 1);
+    };
+
+    coreEvents.on(CoreEvent.SettingsChanged, handleSettingsChanged);
+    return () => {
+      coreEvents.off(CoreEvent.SettingsChanged, handleSettingsChanged);
+    };
+  }, []);
 
   useEffect(() => {
     const openDebugConsole = () => {
@@ -2029,6 +2042,7 @@ export const AppContainer = (props: AppContainerProps) => {
     // Core app context
     config,
     settings,
+    settingsNonce,
 
     // Terminal dimensions
     terminalWidth,
