@@ -750,7 +750,8 @@ describe('retryWithBackoff', () => {
 
       expect(result).toBeInstanceOf(Error);
       expect(result.message).toBe('Rate limit exceeded');
-      expect(failoverCallback).toHaveBeenCalled();
+      expect(failoverCallback).toHaveBeenCalledTimes(1);
+      expect(mockFn).toHaveBeenCalledTimes(1);
     });
   });
 });

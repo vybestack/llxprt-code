@@ -334,12 +334,14 @@ export async function retryWithBackoff<T>(
         consecutive401s = 0;
       }
 
+      // Retry once to allow OAuth refresh or onPersistent429 to refresh before failover.
       const shouldAttemptRefreshRetry =
         is401 && options?.onPersistent429 && consecutive401s === 1;
 
       if (shouldAttemptRefreshRetry) {
         logger.debug(
-          () => '401 error detected, retrying once before bucket failover',
+          () =>
+            '401 error detected, retrying once to allow refresh before bucket failover',
         );
       }
 
