@@ -6,17 +6,20 @@
 
 import { renderWithProviders } from '../../test-utils/render.js';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { waitFor } from '@testing-library/react';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
 import React from 'react';
 import { SettingsContext } from '../contexts/SettingsContext.js';
 
 const mockedExit = vi.hoisted(() => vi.fn());
+const mockedCwd = vi.hoisted(() => vi.fn());
 
 vi.mock('process', async () => {
   const actual = await vi.importActual('process');
   return {
     ...actual,
     exit: mockedExit,
+    cwd: mockedCwd,
   };
 });
 
@@ -66,6 +69,7 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => (
 describe('PermissionsModifyTrustDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedCwd.mockReturnValue('/test/dir');
   });
 
   afterEach(() => {
@@ -98,6 +102,19 @@ describe('PermissionsModifyTrustDialog', () => {
     expect(lastFrame()).toContain('Trust this folder');
     expect(lastFrame()).toContain('Trust parent folder');
     expect(lastFrame()).toContain("Don't trust");
+  });
+
+  it('should render the labels with folder names', async () => {
+    const { lastFrame } = renderWithProviders(
+      <Wrapper>
+        <PermissionsModifyTrustDialog onExit={vi.fn()} addItem={vi.fn()} />
+      </Wrapper>,
+    );
+
+    await waitFor(() => {
+      expect(lastFrame()).toContain('Trust this folder (dir)');
+      expect(lastFrame()).toContain('Trust parent folder (test)');
+    });
   });
 
   it('should show help text', () => {
