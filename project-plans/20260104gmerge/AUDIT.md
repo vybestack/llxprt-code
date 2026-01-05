@@ -38,10 +38,10 @@
 | 17 | `130f0a02` | REIMPLEMENT | SKIP | `577de9661` | chore(subagents): Remove legacy subagent code (#11175) | LLxprt has advanced subagent system (SubAgentScope); removal would break core functionality |
 | 18 | `c9c633be` | REIMPLEMENT | REIMPLEMENTED | `19c602897` | refactor: move `web_fetch` tool name to `tool-names.ts` (#11174) | Added GOOGLE_WEB_FETCH_TOOL and DIRECT_WEB_FETCH_TOOL imports; replaced hardcoded strings |
 | 19 | `3acb014e` | SKIP |  |  | fix(e2e): Refactor and unskip context compression interactive tests (#11086) |  |
-| 20 | `60420e52` | PICK |  |  | feat: Do not add trailing space on directory autocomplete (#11227) |  |
-| 21 | `a9083b9d` | PICK |  |  | include extension name in `gemini mcp list` command (#11263) |  |
+| 20 | `60420e52` | PICK | COMMITTED | `c527c3ecf` | feat: Do not add trailing space on directory autocomplete (#11227) | Cherry-picked successfully; no conflicts |
+| 21 | `a9083b9d` | PICK | SKIP |  | include extension name in `gemini mcp list` command (#11263) | Already implemented in LLxprt - mcpCommand.ts lines 163-164 already show "(from ${server.extensionName})" in serverDisplayName |
 | 22 | `5aaa0e66` | SKIP |  |  | Enable --debug-tool for codebase investigator. (#11033) |  |
-| 23 | `b734723d` | PICK |  |  | Update extensions install warning (#11149) |  |
+| 23 | `b734723d` | PICK | SKIP |  | Update extensions install warning (#11149) | Different security text approach - LLxprt already has "Extensions may introduce unexpected behavior. Ensure you have investigated the extension source and trust the author." warning (line 584) |
 | 24 | `872d2eaf` | SKIP |  |  | chore(ci): remove github publish workflow from upstream (#11246) |  |
 | 25 | `b4f6c7c4` | SKIP |  |  | Docs: Add autocomplete demo gif to README (#11255) |  |
 | 26 | `c96fd828` | SKIP |  |  | Docs: Move security file from root to docs (#11259) |  |

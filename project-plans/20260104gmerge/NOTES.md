@@ -484,3 +484,95 @@ Reason: LLxprt has `nargs: 1` on all relevant single-argument yargs options via 
 ### Commit/Push Record
 
 No commit created (NO_OP - already implemented). AUDIT.md, PROGRESS.md updated.
+
+---
+
+## Batch 06
+
+### Selection Record
+
+```
+Batch: 06
+Type: PICK (3 commits)
+Upstream SHA(s): 60420e52, a9083b9d, b734723d
+Subject: feat: Do not add trailing space on directory autocomplete (#11227) / include extension name in `gemini mcp list` command (#11263) / Update extensions install warning (#11149)
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES
+  - Previous batch verification: PASS
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+```
+
+### Execution Record
+
+**60420e52 - Do not add trailing space on directory autocomplete**: PICKED (COMMITTED)
+
+```bash
+$ git cherry-pick 60420e52
+Auto-merging packages/cli/src/ui/hooks/useCommandCompletion.test.ts
+Auto-merging packages/cli/src/ui/hooks/useCommandCompletion.tsx
+[20260104gmerge c527c3ecf] feat: Do not add trailing space on directory autocomplete (#11227)
+ 2 files changed, 67 insertions(+), 1 deletion(-)
+```
+
+This commit removes trailing space in directory autocomplete results. Clean cherry-pick, no conflicts.
+
+**a9083b9d - Include extension name in mcp list command**: NO_OP (Already Implemented)
+
+Upstream changes:
+- Adds `(from ${server.extensionName})` to server name display in `/mcp list` output
+
+LLxprt already has this feature:
+- `packages/cli/src/ui/commands/mcpCommand.ts` lines 163-164:
+```typescript
+let serverDisplayName = serverName;
+if (server.extensionName) {
+  serverDisplayName += ` (from ${server.extensionName})`;
+}
+```
+
+The extension name is already shown when MCP servers are configured via extensions.
+
+**b734723d - Update extensions install warning**: NO_OP (Different security text approach)
+
+Upstream changes:
+1. Exports `INSTALL_WARNING_MESSAGE` constant from extension.ts
+2. Adds `--consent` flag to install command to suppress interactive prompt
+3. Changes security warning from generic to: "The extension you are about to install may have been created by a third-party developer and sourced from a public repository. Google does not vet, endorse, or guarantee the functionality or security of extensions..."
+
+LLxprt analysis:
+- LLxprt has warning at `packages/cli/src/config/extension.ts` line 584: "**Extensions may introduce unexpected behavior. Ensure you have investigated the extension source and trust the author.**"
+- Different branding language (LLxprt vs Google)
+- No centralized `INSTALL_WARNING_MESSAGE` constant exported
+- No `--consent` flag in install command
+
+Decision: SKIP - LLxprt has equivalent security warning with appropriate branding. The `--consent` flag would require CLI scaffolding changes that diverge from upstream's approach.
+
+### Verification Record
+
+```bash
+$ git log --oneline -1
+c527c3ecf feat: Do not add trailing space on directory autocomplete (#11227)
+
+$ npm run lint
+PASS
+
+$ npm run typecheck
+PASS
+
+$ npm run test -- packages/cli/src/ui/hooks/useCommandCompletion.test.ts
+PASS (62 tests included in this file)
+```
+
+### Status Documentation
+
+Batch 06 commits:
+- `60420e52` - COMMITTED `c527c3ecf`
+- `a9083b9d` - SKIP (already implemented)
+- `b734723d` - SKIP (different security text approach)
+
+### Commit/Push Record
+
+Commit `c527c3ecf` created for 60420e52 only. Other two commits skipped as documented above. AUDIT.md, PROGRESS.md updated.
