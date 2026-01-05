@@ -27,23 +27,12 @@ const DOCKERIGNORE_CONTENT = `.integration-tests`.trim();
  * @returns {Promise<number>} A Promise that resolves with the exit code of the process.
  */
 function runCommand(command, args = []) {
-  // Split the command string into the command name and its arguments.
-  // This handles quotes and spaces more robustly than a simple split(' ').
-  // For 'npm run test:e2e -- --test-name-pattern "replace"', it results in:
-  // cmd: 'npm', splitArgs: ['run', 'test:e2e', '--', '--test-name-pattern', 'replace']
-  const parts = command.match(/(?:[^\s\"]+|\"[^\"]*\")+/g) || [];
-  const cmd = parts[0];
-  const splitArgs = parts.slice(1).map((arg) => arg.replace(/"/g, '')); // Remove surrounding quotes
-
-  // Merge the two arrays
-  const allArgs = [...splitArgs, ...args];
-
-  if (!cmd) {
+  if (!command) {
     return Promise.resolve(1);
   }
 
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, allArgs, {
+    const child = spawn(command, args, {
       shell: true,
       stdio: 'inherit',
       env: { ...process.env },
@@ -60,7 +49,6 @@ function runCommand(command, args = []) {
     });
   });
 }
-// -------------------------------------------------------------------
 
 async function main() {
   const argv = await yargs(hideBin(process.argv))
