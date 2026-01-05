@@ -18,7 +18,6 @@
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, it } from 'vitest';
-import { resetWelcomeConfigForTesting } from '../packages/cli/src/config/welcomeConfig.js';
 import { TestRig } from './test-helper.js';
 
 // Windows CI runners are unreliable for node-pty interactive tests (winpty agent "File not found").
@@ -164,18 +163,6 @@ describe.skipIf(skipOnWindowsCi)(
     const rig = new TestRig();
 
     beforeAll(async () => {
-      resetWelcomeConfigForTesting();
-
-      process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH = join(
-        rig.testDir!,
-        'welcome-config.json',
-      );
-
-      writeFileSync(
-        process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH,
-        JSON.stringify({ welcomeCompleted: true }, null, 2),
-      );
-
       // Setup test directory with MCP server configuration
       await rig.setup('cyclic-schema-mcp-server', {
         settings: {
@@ -187,6 +174,16 @@ describe.skipIf(skipOnWindowsCi)(
           },
         },
       });
+
+      process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH = join(
+        rig.testDir!,
+        'welcome-config.json',
+      );
+
+      writeFileSync(
+        process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH,
+        JSON.stringify({ welcomeCompleted: true }, null, 2),
+      );
 
       // Create server script in the test directory
       const testServerPath = join(rig.testDir!, 'mcp-server.cjs');
