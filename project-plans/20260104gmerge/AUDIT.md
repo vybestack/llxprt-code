@@ -52,16 +52,15 @@
 | 30 | `d2c9c5b3` | PICK | COMMITTED | `c3d9e02e1` | Use Node.js built-ins in scripts/clean.js instead of glob. (#11286) | Cherry-picked with clean.js conflict resolved - kept glob for .stryker-tmp but applied readdir/stat for workspace packages and vsix files |
 | 31 | `39cc07de` | SKIP |  |  | chore: add upstream docs CI check (#11277) |  |
 | 32 | `bec2bfca` | SKIP |  |  | Revert "chore: add upstream docs CI check" (#11290) |  |
-| 33 | `937c15c6` | REIMPLEMENT |  |  | refactor: Remove deprecated --all-files flag (#11228) |  |
+| 33 | `937c15c6` | REIMPLEMENT | REIMPLEMENTED | `a35cb3d6d` | refactor: Remove deprecated --all-files flag (#11228) | Removed --all-files option, allFiles property, fullContext parameter/method from Config class across 3 packages; updated test mocks and documentation |
 | 34 | `de3632af` | SKIP |  |  | chore(ci): improve workflow references (#11266) |  |
 | 35 | `6b866d12` | SKIP |  |  | chore(ci): rename upload artifact (#11268) |  |
 | 36 | `2aa1d742` | SKIP |  |  | fix(infra): disable flaky extension update tests (#11273) |  |
 | 37 | `01c577c3` | SKIP |  |  | fix(infra): improve interactive test isolation (#11280) |  |
 | 38 | `02241e91` | SKIP |  |  | feat(auth): Improve auth dialog error handling and messaging (#11320) |  |
-| 39 | `c71b7491` | PICK |  |  | fix: Add folder names in permissions dialog similar to the launch dialog (#11278) |  |
-| 40 | `9a4211b6` | SKIP |  |  | Improve rendering of ToDo lists. (#11315) |  |
-| 41 | `991bd373` | PICK |  |  | fix(scripts): Improve deflake script isolation and unskip test (#11325) |  |
-| 42 | `a4403339` | PICK |  |  | feat(ui): add "Esc to close" hint to SettingsDialog (#11289) |  |
+| 39 | `c71b7491` | PICK | REIMPLEMENTED - COMMITTED | `0e2efa699` | fix: Add folder names in permissions dialog similar to the launch dialog (#11278) | REIMPLEMENTED in LLxprt - added folder name to 'Trust this folder' label using existing workingDirectory from hook |
+| 40 | `991bd373` | PICK | REIMPLEMENTED - COMMITTED | `bd104ab7a` | fix(scripts): Improve deflake script isolation and unskip test (#11325) | REIMPLEMENTED - added .dockerignore temp handling, env passing, cmd args support; ctrl-c test kept as skipIf(CI) |
+| 41 | `a4403339` | PICK | REIMPLEMENTED - COMMITTED | `a11d156aa` | feat(ui): add "Esc to close" hint to SettingsDialog (#11289) | REIMPLEMENTED - updated help text and tests (LLxprt has no snapshots) |
 | 43 | `9049f8f8` | REIMPLEMENT |  |  | feat: remove deprecated telemetry flags (#11318) |  |
 | 44 | `22f725eb` | PICK |  |  | feat: allow editing queued messages with up arrow key (#10392) |  |
 | 45 | `dcf362bc` | REIMPLEMENT |  |  | Inline tree-sitter wasm and add runtime fallback (#11157) |  |

@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 08 (2 commits - 1x SKIPPED already implemented, 1x PICK COMMITTED) |
+| **Last Completed** | Batch 10 (3 commits - all REIMPLEMENTED and COMMITTED) |
 | **In Progress** | — |
-| **Next Up** | Batch 09 |
-| **Progress** | 6/49 (12%) |
+| **Next Up** | Batch 11 |
+| **Progress** | 8/49 (16%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -27,8 +27,8 @@ Use this checklist to track batch execution progress.
 - [x] Batch 06 — FULL — PICK — `60420e52, a9083b9d, b734723d` — feat: Do not add trailing space on directory autocomplete (#11227) / include extension name in `gemini mcp list` command (#11263) / Update extensions install warning (#11149)
 - [x] Batch 07 — QUICK — REIMPLEMENT — `05930d5e` — fix(web-fetch): respect Content-Type header in fallback mechanism (#11284)
 - [x] Batch 08 — FULL — PICK — `6ded45e5, d2c9c5b3` — feat: Add markdown toggle (alt+m) to switch between rendered and raw… (#10383) / Use Node.js built-ins in scripts/clean.js instead of glob. (#11286)
-- [ ] Batch 09 — QUICK — REIMPLEMENT — `937c15c6` — refactor: Remove deprecated --all-files flag (#11228)
-- [ ] Batch 10 — FULL — PICK — `c71b7491, 991bd373, a4403339` — fix: Add folder names in permissions dialog similar to the launch dialog (#11278) / fix(scripts): Improve deflake script isolation and unskip test (#11325) / feat(ui): add "Esc to close" hint to SettingsDialog (#11289)
+- [x] Batch 09 — QUICK — REIMPLEMENT — `937c15c6` — refactor: Remove deprecated --all-files flag (#11228)
+- [x] Batch 10 — FULL — PICK — `c71b7491, 991bd373, a4403339` — fix: Add folder names in permissions dialog similar to the launch dialog (#11278) / fix(scripts): Improve deflake script isolation and unskip test (#11325) / feat(ui): add "Esc to close" hint to SettingsDialog (#11289)
 - [ ] Batch 11 — QUICK — REIMPLEMENT — `9049f8f8` — feat: remove deprecated telemetry flags (#11318)
 - [ ] Batch 12 — FULL — PICK — `22f725eb` — feat: allow editing queued messages with up arrow key (#10392)
 - [ ] Batch 13 — QUICK — REIMPLEMENT — `dcf362bc` — Inline tree-sitter wasm and add runtime fallback (#11157)
