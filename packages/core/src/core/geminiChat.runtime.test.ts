@@ -43,7 +43,7 @@ function createConfigParams(
     targetDir: '/tmp/project',
     debugMode: false,
     question: undefined,
-    fullContext: false,
+
     userMemory: '',
     embeddingModel: 'gemini-embedding',
     sandbox: undefined,

@@ -136,7 +136,7 @@ export interface CliArgs {
   prompt: string | undefined;
   promptInteractive: string | undefined;
   outputFormat: string | undefined;
-  allFiles: boolean | undefined;
+
   showMemoryUsage: boolean | undefined;
   yolo: boolean | undefined;
   approvalMode: string | undefined;
@@ -198,8 +198,13 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
         })
         .option('output-format', {
           type: 'string',
-          choices: [OutputFormat.TEXT, OutputFormat.JSON, OutputFormat.STREAM_JSON],
-          description: 'Output format for non-interactive mode (text, json, or stream-json).',
+          choices: [
+            OutputFormat.TEXT,
+            OutputFormat.JSON,
+            OutputFormat.STREAM_JSON,
+          ],
+          description:
+            'Output format for non-interactive mode (text, json, or stream-json).',
         })
         .option('sandbox', {
           alias: 's',
@@ -227,12 +232,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           default: false,
         })
 
-        .option('all-files', {
-          alias: ['a'],
-          type: 'boolean',
-          description: 'Include ALL files in context?',
-          default: false,
-        })
         .option('show-memory-usage', {
           type: 'boolean',
           description: 'Show memory usage in status bar',
@@ -394,10 +393,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           'checkpointing',
           'Use settings.json instead. This flag will be removed in a future version.',
         )
-        .deprecateOption(
-          'all-files',
-          'Use @ includes in the application instead. This flag will be removed in a future version.',
-        )
+
         .deprecateOption(
           'prompt',
           'Use the positional prompt instead. This flag will be removed in a future version.',
@@ -608,7 +604,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       undefined,
     promptInteractive: result.promptInteractive as string | undefined,
     outputFormat: result.outputFormat as string | undefined,
-    allFiles: result.allFiles as boolean | undefined,
+
     showMemoryUsage: result.showMemoryUsage as boolean | undefined,
     yolo: result.yolo as boolean | undefined,
     approvalMode: result.approvalMode as string | undefined,
@@ -1239,7 +1235,7 @@ export async function loadCliConfig(
     debugMode,
     outputFormat,
     question,
-    fullContext: argv.allFiles || false,
+
     coreTools: effectiveSettings.coreTools || undefined,
     allowedTools: allowedTools.length > 0 ? allowedTools : undefined,
     policyEngineConfig,

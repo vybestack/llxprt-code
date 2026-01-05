@@ -244,7 +244,7 @@ describe('useGeminiStream - ThinkingBlock Integration', () => {
       targetDir: '/test/dir',
       debugMode: false,
       question: undefined,
-      fullContext: false,
+
       coreTools: [],
       toolDiscoveryCommand: undefined,
       toolCallCommand: undefined,

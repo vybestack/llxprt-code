@@ -478,9 +478,9 @@ describe('ShellTool', () => {
       });
 
       it('should not throw an error or block for an allowed command', async () => {
-        ((mockConfig as Record<string, unknown>).getAllowedTools as Mock).mockReturnValue([
-          'ShellTool(wc)',
-        ]);
+        (
+          (mockConfig as Record<string, unknown>).getAllowedTools as Mock
+        ).mockReturnValue(['ShellTool(wc)']);
         const invocation = shellTool.build({ command: 'wc -l foo.txt' });
         const confirmation = await invocation.shouldConfirmExecute(
           new AbortController().signal,
@@ -489,9 +489,9 @@ describe('ShellTool', () => {
       });
 
       it('should not throw an error or block for an allowed command with arguments', async () => {
-        ((mockConfig as Record<string, unknown>).getAllowedTools as Mock).mockReturnValue([
-          'ShellTool(wc -l)',
-        ]);
+        (
+          (mockConfig as Record<string, unknown>).getAllowedTools as Mock
+        ).mockReturnValue(['ShellTool(wc -l)']);
         const invocation = shellTool.build({ command: 'wc -l foo.txt' });
         const confirmation = await invocation.shouldConfirmExecute(
           new AbortController().signal,
@@ -500,9 +500,9 @@ describe('ShellTool', () => {
       });
 
       it('should throw an error for command that is not allowed', async () => {
-        ((mockConfig as Record<string, unknown>).getAllowedTools as Mock).mockReturnValue([
-          'ShellTool(wc -l)',
-        ]);
+        (
+          (mockConfig as Record<string, unknown>).getAllowedTools as Mock
+        ).mockReturnValue(['ShellTool(wc -l)']);
         const invocation = shellTool.build({ command: 'madeupcommand' });
         await expect(
           invocation.shouldConfirmExecute(new AbortController().signal),
@@ -510,9 +510,9 @@ describe('ShellTool', () => {
       });
 
       it('should throw an error for a command that is a prefix of an allowed command', async () => {
-        ((mockConfig as Record<string, unknown>).getAllowedTools as Mock).mockReturnValue([
-          'ShellTool(wc -l)',
-        ]);
+        (
+          (mockConfig as Record<string, unknown>).getAllowedTools as Mock
+        ).mockReturnValue(['ShellTool(wc -l)']);
         const invocation = shellTool.build({ command: 'wc' });
         await expect(
           invocation.shouldConfirmExecute(new AbortController().signal),

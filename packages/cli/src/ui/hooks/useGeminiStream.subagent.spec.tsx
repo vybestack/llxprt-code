@@ -180,7 +180,6 @@ describe('useGeminiStream subagent isolation', () => {
       targetDir: '/tmp/project',
       debugMode: false,
       question: undefined,
-      fullContext: false,
       coreTools: [],
       toolDiscoveryCommand: undefined,
       toolCallCommand: undefined,

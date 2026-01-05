@@ -144,7 +144,6 @@ export class StreamJsonFormatter {
     return JSON.stringify(event) + '\\n';
   }
 
-
   /**
    * Emits an event directly to stdout in JSONL format.
    * @param event - The stream event to emit

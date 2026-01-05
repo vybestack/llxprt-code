@@ -240,7 +240,9 @@ export async function runNonInteractive(
               type: JsonStreamEventType.TOOL_USE,
               timestamp: new Date().toISOString(),
               tool_name: toolCallRequest.name,
-              tool_id: toolCallRequest.callId ?? `${toolCallRequest.name}-${Date.now()}`,
+              tool_id:
+                toolCallRequest.callId ??
+                `${toolCallRequest.name}-${Date.now()}`,
               parameters: toolCallRequest.args ?? {},
             });
           }
