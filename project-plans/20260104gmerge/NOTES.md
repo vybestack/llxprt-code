@@ -1213,6 +1213,66 @@ All tests pass including 4 new Content-Type tests.
 Batch 07 commit: `05930d5e` - REIMPLEMENTED as `30a369b56`.
 Applied upstream fix to prevent JSON responses from being stripped by html-to-text conversion during fallback.
 
+
+### Batch 07 Re-validation (2026-01-05)
+
+**VERIFIED - Already Implemented**
+
+Implementation: Commit 30a369b56
+
+Per new verification policy, all required commands were executed in order:
+
+**1) npm run lint:**
+
+PASS (exit code: 0, no errors or warnings)
+
+**2) npm run typecheck:**
+
+PASS (all 4 workspaces passed, exit code: 0)
+
+**3) npm run build:**
+
+PASS (exit code: 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+PASS (exit code: 0 - Application started successfully, processed request, generated haiku output)
+
+**Feature Verification:**
+
+Verified that the Content-Type check is implemented in google-web-fetch.ts executeFallback() method:
+
+The implementation correctly:
+- Extracts the raw content from the HTTP response
+- Gets the Content-Type header (defaults to empty string if not present)
+- Only uses html-to-text conversion when content type is 'text/html' or missing (assumes HTML)
+- Returns raw text for all other content types (application/json, text/plain, etc.)
+
+**Test Verification:**
+
+All 24 tests pass
+
+Including the 4 new Content-Type tests added in commit 30a369b56:
+1. HTML content is converted to text using html-to-text
+2. JSON content is returned raw (not converted)
+3. Plain text content is returned raw
+4. Missing Content-Type header defaults to HTML conversion
+
+**Verification Summary:**
+
+- Batch 07 upstream commit 05930d5e adds Content-Type header check in web-fetch fallback mechanism
+- LLxprt implementation 30a369b56 successfully applied this fix to google-web-fetch.ts
+- The fix prevents JSON responses from being incorrectly processed by html-to-text conversion during fallback
+- All verification commands PASS (lint, typecheck, build, application start)
+- All tests pass (24 tests in google-web-fetch.test.ts)
+- Build artifacts properly generated
+
+Files modified in commit 30a369b56:
+- packages/core/src/tools/google-web-fetch.ts - Added Content-Type check in executeFallback()
+- packages/core/src/tools/google-web-fetch.test.ts - Added 4 Content-Type tests
+
+Conclusion: Batch 07 implementation **FULLY VERIFIED** and functional. The Content-Type header check is correctly implemented in the web-fetch fallback mechanism.
+
 ---
 
 ## Batch 08
