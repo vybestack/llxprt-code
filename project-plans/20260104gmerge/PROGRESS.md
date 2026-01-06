@@ -151,3 +151,28 @@ Use this checklist to track batch execution progress.
 - Decision: PERMANENT SKIP - complexity outweighs accuracy benefit for LLxprt
 - AUDIT.md: No changes needed (SKIP decision confirmed)
 
+
+### Batch 17 (2026-01-06)
+- Contains 5 commits: 8da47db1, 7c086fe5, e4226b8a, 4d2a1111, 426d3614
+- Status: VERIFIED - All 5 commits already present in codebase
+- Upstream commit details:
+  - 8da47db1: fix(cli): enable and fix types for MCP command tests (#11385)
+  - 7c086fe5: Remove MCP Tips and reorganize MCP slash commands (#11387)
+  - e4226b8a: Only check for updates if disableUpdateNag is false (#11405)
+  - 4d2a1111: fix: make @file suggestions case-insensitive (#11394)
+  - 426d3614: fix: Unset selected auth type in integ test so that the local setting… (#11322)
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- Verification evidence:
+  - lint: PASS (exit code 0)
+  - typecheck: PASS (all 4 workspaces)
+  - build: PASS (exit code 0)
+  - start.js: PASS (haiku generation successful)
+- Technical verification:
+  - 8da47db1: Test files use vi.importActual, Copyright 2025 Vybestack LLC
+  - 7c086fe5: McpStatus.tsx deleted (as expected), subcommands present (list, desc, schema)
+  - e4226b8a: checkForUpdates(settings) call at line 267, disableUpdateNag check in updateCheck.ts
+  - 4d2a1111: toLowerCase() calls in useAtCompletion.ts for pattern matching
+  - 426d3614: selectedType: '' present in json-output.test.ts
+- See NOTES.md for detailed output (Batch 17 section)
+- AUDIT.md: No changes needed (implementation status verified)

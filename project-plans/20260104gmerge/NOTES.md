@@ -3496,3 +3496,147 @@ New worlds come to life.
   - ThemeDialog.tsx
 
 Conclusion: Batch 16 upstream changes **ALREADY APPLIED** in LLxprt codebase (3 PICKED, 2 SKIPPED due to architectural differences). All validation tests PASS.
+---
+
+## Batch 17 Re-Validation (2025-01-06)
+
+**Batch 17 Commits:** 8da47db1, 7c086fe5, e4226b8a, 4d2a1111, 426d3614
+
+**Batch 17 Status:** VERIFIED (All 5 commits already applied)
+
+### Summary
+
+Batch 17 contains 5 commits focused on MCP (Model Context Protocol) fixes, UI improvements, and test enhancements. All commits have been verified to be already present in the LLxprt codebase.
+
+### Commit Details
+
+1. **8da47db1** - fix(cli): enable and fix types for MCP command tests (#11385)
+   - Status: VERIFIED
+   - Files modified: packages/cli/src/commands/mcp.test.ts, packages/cli/src/commands/mcp/add.test.ts, packages/cli/src/commands/mcp/remove.test.ts, packages/cli/tsconfig.json
+   - Changes: Fixed test type mocks using vi.importActual, improved test infrastructure
+   - Already applied with LLxprt-specific branding (Copyright 2025 Vybestack LLC)
+
+2. **7c086fe5** - Remove MCP Tips and reorganize MCP slash commands (#11387)
+   - Status: VERIFIED
+   - Files modified: docs/cli/commands.md, packages/cli/src/ui/commands/mcpCommand.ts, packages/cli/src/ui/components/views/McpStatus.tsx, packages/cli/src/ui/components/views/McpStatus.test.tsx, packages/cli/src/ui/types.ts
+   - Changes: Created separate listCommand, descCommand, and schemaCommand for MCP, removed tips feature, simplified command structure
+   - Already applied: McpStatus.tsx and McpStatus.test.tsx already removed (files don't exist), command structure uses subcommands approach
+
+3. **e4226b8a** - Only check for updates if disableUpdateNag is false (#11405)
+   - Status: VERIFIED
+   - Files modified: packages/cli/src/gemini.tsx, packages/cli/src/ui/utils/updateCheck.test.ts, packages/cli/src/ui/utils/updateCheck.ts
+   - Changes: Modified checkForUpdates to accept settings parameter and respect disableUpdateNag setting
+   - Already applied: checkForUpdates(settings) call present at line 267, updateCheck.ts has disableUpdateNag check
+
+4. **4d2a1111** - fix: make @file suggestions case-insensitive (#11394)
+   - Status: VERIFIED
+   - Files modified: packages/cli/src/ui/components/InputPrompt.test.tsx, packages/cli/src/ui/hooks/useAtCompletion.test.ts, packages/cli/src/ui/hooks/useAtCompletion.ts
+   - Changes: Added .toLowerCase() to pattern matching for case-insensitive file suggestions
+   - Already applied: toLowerCase() calls present in useAtCompletion.ts at lines searching pattern
+
+5. **426d3614** - fix: Unset selected auth type in integ test so that the local setting…
+   - Status: VERIFIED
+   - Files modified: integration-tests/json-output.test.ts
+   - Changes: Added selectedType: '' to auth configuration in test
+   - Already applied: selectedType: '' present in test settings
+
+### Validation Results
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] PASS (exit code 0)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] PASS (exit code 0, all 4 workspaces)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] PASS (exit code 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+Code flows through the mind
+Logic weaves its patterns tight
+Beauty in design
+```
+
+[OK] PASS (Application started successfully, processed request, generated haiku output)
+
+### Verification Summary
+
+- **Total Commits:** 5
+- **Verified:** 5
+- **Skipped:** 0
+- **Implemented:** 0 (all already present)
+
+All Batch 17 commits have been successfully verified as present in the codebase. All four mandatory validation commands (lint, typecheck, build, start.js) completed successfully. No additional implementation was required.

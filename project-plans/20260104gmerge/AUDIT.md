@@ -78,12 +78,12 @@
 | 57 | `659b0557` | PICK |  |  | feat(cli): Suppress slash command execution and suggestions in shell mode (#11380) |  |
 | 58 | `4a0fcd05` | PICK |  |  | fix(scripts): Update get-release-version to use yargs parsing, handle a dynamically set package name (#11374) |  |
 | 59 | `2b61ac53` | PICK |  |  | feat: add missing visual cue for closing dialogs with Esc key (#11386) |  |
-| 60 | `8da47db1` | PICK |  |  | Enable/fix MCP command tests typechecking (#11281) |  |
+| 60 | `8da47db1` | PICK | VERIFIED |  | Enable/fix MCP command tests typechecking (#11281) | Already present in LLxprt - verified 2026-01-06 |
 | 61 | `67866849` | SKIP |  |  | chore: Update release metadata for 0.10.0-preview.1 (#11419) |  |
-| 62 | `7c086fe5` | PICK |  |  | MCP docs/UI cleanup (#10943) |  |
-| 63 | `e4226b8a` | PICK |  |  | Update nag respects disableUpdateNag (#11269) |  |
-| 64 | `4d2a1111` | PICK |  |  | Case-insensitive @file suggestions (#11285) |  |
-| 65 | `426d3614` | PICK |  |  | Fix auth selection integration test (#11256) |  |
+| 62 | `7c086fe5` | PICK | VERIFIED |  | MCP docs/UI cleanup (#10943) | Already present in LLxprt - verified 2026-01-06 |
+| 63 | `e4226b8a` | PICK | VERIFIED |  | Update nag respects disableUpdateNag (#11269) | Already present in LLxprt - verified 2026-01-06 |
+| 64 | `4d2a1111` | PICK | VERIFIED |  | Case-insensitive @file suggestions (#11285) | Already present in LLxprt - verified 2026-01-06 |
+| 65 | `426d3614` | PICK | VERIFIED |  | Fix auth selection integration test (#11256) | Already present in LLxprt - verified 2026-01-06 |
 | 66 | `b4a405c6` | PICK |  |  | Slash command descriptions style cleanup (#11330) |  |
 | 67 | `d3bdbc69` | PICK |  |  | Extensions: add extension IDs (#11333) |  |
 | 68 | `08e87a59` | REIMPLEMENT |  |  | Log all user settings to enable measurement of experiment impacts (#11354) |  |
