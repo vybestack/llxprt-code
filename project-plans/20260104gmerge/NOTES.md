@@ -374,7 +374,7 @@ Conclusion: Batch 02 implementation **FULLY REMEDIATED** and verified. All 5 ups
 Commit created with message: `cherry-pick: upstream 4f17eae5..8c1656bf batch 02`
 
 ---
----
+
 
 ## Batch 03
 
@@ -420,7 +420,7 @@ Batch 03 commit: `cfaa95a2` marked as REIMPLEMENT in AUDIT.md.
 No commit created (REIMPLEMENT needed). Status documented in AUDIT.md.
 
 ---
----
+
 
 ## Batch 04
 
@@ -944,7 +944,160 @@ Batch 06 commits:
 
 Commit `c527c3ecf` created for 60420e52 only. Other two commits skipped as documented above. AUDIT.md, PROGRESS.md updated.
 
+### Batch 06 Re-validation (2026-01-05)
+
+**VERIFIED - Already Implemented**
+
+Commit c527c3ecf already implements upstream commit 60420e52 (Do not add trailing space on directory autocomplete).
+
+Per new verification policy, all required commands were executed in order.
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code 0, no errors or warnings)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (all 4 workspaces passed, exit code 0)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+The screen glows with life,
+Lines of code dance in the dark,
+Creating new worlds.
+```
+
+[OK] **PASS** (exit code 0 - Application started successfully, processed request, generated haiku output)
+
+**Feature Verification:**
+
+**60420e52 - Directory autocomplete (COMMITTED as c527c3ecf):**
+
+Verified commit details:
+```bash
+$ git show c527c3ecf --stat
+commit c527c3ecfc4f94e70082b42f777fe52b2f6c7bcf
+Date: Thu Oct 16 15:10:23 2025 +0200
+feat: Do not add trailing space on directory autocomplete (#11227)
+
+.../cli/src/ui/hooks/useCommandCompletion.test.ts  | 62 ++++++++++++++++++++++
+packages/cli/src/ui/hooks/useCommandCompletion.tsx |  6 ++-
+2 files changed, 67 insertions(+), 1 deletion(-)
+```
+
+The commit successfully implements the directory autocomplete fix. Files modified:
+- useCommandCompletion.tsx: Main implementation
+- useCommandCompletion.test.ts: Added 62 lines of tests
+
+**a9083b9d - Extension name in mcp list (NO_OP):**
+
+Verified LLxprt already has this feature at mcpCommand.ts lines 163-164:
+```typescript
+let serverDisplayName = serverName;
+if (server.extensionName) {
+  serverDisplayName += ` (from ${server.extensionName})`;
+}
+```
+
+Extension name already shown when MCP servers are configured via extensions.
+
+**b734723d - Extensions install warning (SKIP):**
+
+LLxprt has warning at extension.ts line 584:
+```typescript
+'**Extensions may introduce unexpected behavior. Ensure you have investigated the extension source and trust the author.**'
+```
+
+Different branding language (LLxprt vs Google). Reasonable divergence for different product branding.
+
+**Verification Summary:**
+
+- Batch 06 upstream commits: 60420e52 (COMMITTED as c527c3ecf), a9083b9d (NO_OP), b734723d (SKIP)
+- Directory autocomplete fix (60420e52) successfully implemented
+- MCP list extension name (a9083b9d) already implemented in LLxprt
+- Extensions install warning (b734723d) skipped - LLxprt has equivalent with appropriate branding
+- All verification commands PASS (lint, typecheck, build, application start)
+- Build artifacts properly generated (all dist files exist and are up-to-date)
+
+Conclusion: Batch 06 implementation **FULLY VERIFIED** and functional. No changes needed, all commits were properly processed during initial implementation.
+
+
 ---
+
+
 
 ## Batch 07
 
@@ -1557,4 +1710,3 @@ Original implementation commit: `dcf347e21` (fix: ensure positional prompt argum
 
 Conclusion: Batch 03 implementation **ALREADY VERIFIED** and functional. No new commit needed, functionality predates upstream commit.
 
----
