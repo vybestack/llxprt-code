@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 35 (2 PICKED, 7 items need REIMPLEMENT/MANUAL_REVIEW/SKIP) |
+| **Last Completed** | Batch 40 (all marked as SKIP/REIMPLEMENT/MANUAL_REVIEW due to conflicts) |
 | **In Progress** | — |
-| **Next Up** | Batch 36 |
-| **Progress** | 35/49 (71%) |
+| **Next Up** | Batch 41 |
+| **Progress** | 40/49 (82%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -54,11 +54,11 @@ Use this checklist to track batch execution progress.
 - [x] Batch 33 — QUICK — PICK — `518a9ca3, d0ab6e99, 397e52da` — 518a9ca3 SKIP (superseded), d0ab6e99 MANUAL_REVIEW, 397e52da MANUAL_REVIEW
 - [x] Batch 34 — FULL — SKIP — `36de6862` — SKIP-REIMPLEMENT (traceId propagation - needs manual integration)
 - [x] Batch 35 — QUICK — PICK — `49bde9fc, 61a71c4f, d5a06d3c` — 49bde9fc PICKED fffbb87ee, 61a71c4f SKIP (custom waitFor needed for ink), d5a06d3c PICKED 019f9daba
-- [ ] Batch 36 — FULL — REIMPLEMENT — `995ae717` — refactor(logging): Centralize all console messaging to a shared logger (part 1) (#11537)
-- [ ] Batch 37 — QUICK — REIMPLEMENT — `cc7e1472` — Pass whole extensions rather than just context files (#10910)
-- [ ] Batch 38 — FULL — PICK — `31f58a1f, 70a99af1, 72b16b3a` — Fix Windows ripgrep detection (#11221) / Fix shell auto-approval parsing (#11405) / Fix macOS sandbox PTY spawn errors (#11345)
-- [ ] Batch 39 — QUICK — REIMPLEMENT — `7dd2d8f7` — fix(tools): restore static tool names to fix configuration exclusions (#11551)
-- [ ] Batch 40 — FULL — PICK — `654c5550, 0658b4aa` — Add wasm read test (#11336) / Deflake replace integration test (#11338)
+- [x] Batch 36 — FULL — SKIP — `995ae717` — SKIP (LLxprt has DebugLogger architecture, not shared singleton)
+- [x] Batch 37 — QUICK — SKIP — `cc7e1472` — SKIP-REIMPLEMENT (major extension system refactor - 35 files)
+- [x] Batch 38 — FULL — SKIP — `31f58a1f, 70a99af1, 72b16b3a` — all CONFLICTS: 31f58a1 SKIP (different ripgrep), 70a99af1 REIMPLEMENT, 72b16b3a REIMPLEMENT
+- [x] Batch 39 — QUICK — REIMPLEMENT — `7dd2d8f7` — REIMPLEMENT (ShellTool needs static Name, others have it)
+- [x] Batch 40 — FULL — SKIP — `654c5550, 0658b4aa` — both CONFLICTS: 654c5550 SKIP-TEST, 0658b4aa MANUAL_REVIEW
 - [ ] Batch 41 — QUICK — REIMPLEMENT — `bf80263b` — feat: Implement message bus and policy engine (#11523)
 - [ ] Batch 42 — FULL — PICK — `62dc9683, e72c00cf, cf16d167` — MCP add array handling + tests (#11292) / Proxy agent error handling (#11310) / Repo tooling: tsconfig linter for exclude list (#11298)
 - [ ] Batch 43 — QUICK — REIMPLEMENT — `dd3b1cb6` — feat(cli): continue request after disabling loop detection (#11416)
