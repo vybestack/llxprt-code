@@ -403,6 +403,7 @@ export async function start_sandbox(
 
       if (process.stdin.isTTY) {
         try {
+          // Issue #1020: Wrap setRawMode with error handling to prevent EIO crashes
           // Best-effort: restore cooked mode before handing the terminal to the sandbox.
           process.stdin.setRawMode(false);
         } catch {
@@ -435,12 +436,17 @@ export async function start_sandbox(
           }
         }
 
+        // Issue #1020: Wrap setRawMode with error handling to prevent EIO crashes
         // Do not force raw mode on if it was off when we entered.
         if (stdinHadRawMode) {
           try {
             process.stdin.setRawMode(true);
-          } catch {
-            // ignore
+          } catch (err) {
+            // Issue #1020: Log I/O errors but don't crash
+            // This can happen after long-running sessions on macOS
+            if (cliConfig?.getDebugMode()) {
+              console.error('[sandbox] Failed to restore raw mode:', err);
+            }
           }
         }
       });
@@ -983,6 +989,7 @@ export async function start_sandbox(
 
     if (process.stdin.isTTY) {
       try {
+        // Issue #1020: Wrap setRawMode with error handling to prevent EIO crashes
         // Best-effort: restore cooked mode before handing the terminal to the sandbox.
         process.stdin.setRawMode(false);
       } catch {
@@ -1014,12 +1021,17 @@ export async function start_sandbox(
         }
       }
 
+      // Issue #1020: Wrap setRawMode with error handling to prevent EIO crashes
       // Do not force raw mode on if it was off when we entered.
       if (stdinHadRawMode) {
         try {
           process.stdin.setRawMode(true);
-        } catch {
-          // ignore
+        } catch (err) {
+          // Issue #1020: Log I/O errors but don't crash
+          // This can happen after long-running sessions on macOS
+          if (cliConfig?.getDebugMode()) {
+            console.error('[sandbox] Failed to restore raw mode:', err);
+          }
         }
       }
     });
