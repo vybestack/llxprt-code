@@ -3382,29 +3382,100 @@ Current description in `google-web-fetch.ts` (verified):
 
 This is **IDENTICAL** to the upstream change in 98eef9ba.
 
+
 ### Batch 28 Re-Validation Record
 
-```bash
-$ npm run lint
+**1) npm run lint:**
+
 ```
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
 [OK] **PASS** (exit code: 0, no errors or warnings)
 
-```bash
-$ npm run typecheck
+**2) npm run typecheck:**
+
 ```
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
 [OK] **PASS** (all 4 workspaces passed, exit code: 0)
 
-```bash
-$ npm run build
+**3) npm run build:**
+
 ```
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
 [OK] **PASS** (exit code: 0)
 
-```bash
-$ node script/start.js --profile-load synthetic "write me a haiku"
-```
-[OK] **PASS** (exit code: 0 - Application started successfully)
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
 
-### Verification
+```
+Checking build status...
+Build is up-to-date.
+
+LLxprt code flows fast,
+Debugging sessions pass by,
+New features take shape.
+```
+
+[OK] **PASS** (exit code: 0 - Application started successfully, processed request, generated haiku output)
+
+### Verification Summary
 
 1. **Lint:** PASS ✓
 2. **Typecheck:** PASS ✓ (all 4 workspaces)
@@ -3422,6 +3493,4 @@ No changes needed.
 ### Status Documentation
 
 **Batch 28 commit:** `98eef9ba` - ALREADY IMPLEMENTED (no action needed)
-
 **Decision:** VERIFIED - Implementation complete and validated.
-
