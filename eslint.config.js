@@ -16,7 +16,7 @@ import licenseHeader from 'eslint-plugin-license-header';
 import reactRenderSafety from './eslint-rules/react-render-safety.js';
 import noInlineDeps from './eslint-rules/no-inline-deps.js';
 import inkTextColorRequired from './eslint-rules/ink-text-color-required.js';
-import path from 'node:path'; // Use node: prefix for built-ins
+import path from 'node:path';
 import url from 'node:url';
 
 // --- ESM way to get __dirname ---
