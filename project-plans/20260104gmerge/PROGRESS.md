@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 17 (4 PICKED, 1 SKIPPED) |
+| **Last Completed** | Batch 18 (2 SKIPPED - cosmetic and needs REIMPLEMENT) |
 | **In Progress** | — |
-| **Next Up** | Batch 18 |
-| **Progress** | 17/49 (35%) |
+| **Next Up** | Batch 19 |
+| **Progress** | 18/49 (37%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -36,7 +36,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 15 — QUICK — PICK — `3a1d3769` — Refactor `EditTool.Name` to use centralized `EDIT_TOOL_NAME` (#11343) — COMMITTED as 8d4830129
 - [x] Batch 16 — FULL — PICK — `f3ffaf09, 0ded546a, 659b0557, 4a0fcd05, 2b61ac53` — f3ffaf09 PICKED a5ebeada6 / 0ded546a SKIP (PromptService architecture) / 659b0557 PICKED f6d41e648 / 4a0fcd05 SKIP (different release system) / 2b61ac53 PICKED 8b6f7643f
 - [x] Batch 17 — QUICK — PICK — `8da47db1, 7c086fe5, e4226b8a, 4d2a1111, 426d3614` — 8da47db1 PICKED a4dc52cc8 / 7c086fe5 SKIP (McpStatus.tsx deleted) / e4226b8a PICKED 32c4504b6 / 4d2a1111 PICKED 5938d570f / 426d3614 PICKED afe58d996
-- [ ] Batch 18 — FULL — PICK — `b4a405c6, d3bdbc69` — Slash command descriptions style cleanup (#11330) / Extensions: add extension IDs (#11333)
+- [x] Batch 18 — FULL — PICK — `b4a405c6, d3bdbc69` — b4a405c6 SKIP (cosmetic, LLxprt has custom descriptions) / d3bdbc69 SKIP-REIMPLEMENT (extension IDs valuable but conflicts with LLxprt flow)
 - [ ] Batch 19 — QUICK — REIMPLEMENT — `08e87a59` — Log all user settings to enable measurement of experiment impacts (#11354)
 - [ ] Batch 20 — FULL — PICK — `21163a16` — Enable typechecking for ui/commands tests (#11340)
 - [ ] Batch 21 — QUICK — REIMPLEMENT — `9b9ab609` — feat(logging): Centralize debug logging with a dedicated utility (#11417)
