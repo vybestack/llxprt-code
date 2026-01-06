@@ -125,6 +125,21 @@ Use this checklist to track batch execution progress.
 - Upstream uses Clearcut for telemetry; LLxprt uses uiTelemetryService and logCliConfiguration()
 
 ### Batch 13 (2026-01-06)
+
+### Batch 16 (2026-01-06)
+- Already applied: a5ebeada6, f6d41e648, 8b6f7643f (3 PICKED)
+- Upstream SHAs: f3ffaf09, 0ded546a, 659b0557, 4a0fcd05, 2b61ac53
+- Skipped: 0ded546a (PromptService architecture differs), 4a0fcd05 (different release system)
+- Functionality:
+  - a5ebeada6: 500ms delay before copying text in Linux (fix: copy command delay in Linux handled #6856)
+  - f6d41e648: shell mode for interactive terminal commands (feat(cli): Suppress slash command execution and suggestions in shell mode #11380)
+  - 8b6f7643f: Esc cancel hint in confirmations (feat: add missing visual cue for closing dialogs with Esc key #11386)
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- Test coverage: commandUtils.test.ts (+87 lines), InputPrompt.test.tsx (+16 lines), useCommandCompletion.test.ts (+69 lines), useGeminiStream.test.tsx (+69 lines)
+- UI components updated: EditorSettingsDialog.tsx, PermissionsModifyTrustDialog.tsx, ThemeDialog.tsx
+- See NOTES.md for detailed output (lines 3334+)
+- AUDIT.md: No changes needed (implementation status unchanged)
 - Upstream commit dcf362bc implements tree-sitter WASM bundling for shell command parsing
 - Original plan decision: SKIP (deferred for separate evaluation)
 - Re-validated all verification commands (lint, typecheck, build, start)
