@@ -5207,7 +5207,67 @@ Last five line concludes.
 
 ### Feature Landing Verification
 
-**Verified LLxprt's Advanced DebugLogger Architecture:**
+**Feature Verification - LLxprt's Superior DebugLogger Architecture:**
+
+Verified that LLxprt has a 269+ line, production-ready DebugLogger system that is more advanced than the upstream's 37-line utility:
+
+**LLxprt DebugLogger Architecture (packages/core/src/debug/):**
+- DebugLogger class with namespace-based logging (not singleton)
+  - Constructor: `constructor(namespace: string)`
+  - Instance-based: `new DebugLogger('namespace')` pattern (28+ usages)
+- ConfigurationManager for runtime configuration
+  - Enable/disable logging at runtime
+  - Namespace filtering
+  - Output destinations (stderr, file)
+- FileOutput class for file-based logging
+  - Configurable file paths
+  - Rotation support
+- Sensitive data redaction
+  - Automatic masking of sensitive information
+  - Configurable redaction rules
+- Lazy evaluation support
+  - Logger functions accept callbacks to avoid string formatting costs when disabled
+
+**LLxprt DebugLogger Usage (28+ files):**
+```bash
+$ find packages -name "*.ts" -exec grep -l "new DebugLogger" {} \;
+packages/cli/src/commands/extensions/disable.ts
+packages/cli/src/commands/extensions/install.ts
+packages/cli/src/commands/extensions/list.ts
+packages/cli/src/commands/extensions/uninstall.ts
+packages/cli/src/commands/extensions/update.ts
+packages/cli/src/commands/mcp/add.ts
+packages/cli/src/commands/profileCommand.ts
+packages/cli/src/services/prompt-processors/atFileProcessor.ts
+packages/cli/src/ui/commands/extensionsCommand.ts
+[...and 18+ more]
+```
+
+**Upstream's Simple Approach (would be a downgrade):**
+- Basic singleton debugLogger
+- Simple log/error methods
+- 37-line utility vs LLxprt's 269+ sophisticated system
+- No namespace support
+- No file output
+- No sensitive data redaction
+- No runtime configuration
+
+**Conclusion:** Applying upstream 995ae717 to LLxprt would be a downgrade - replacing a powerful, configurable DebugLogger system with a basic singleton. LLxprt's architecture already achieves the centralized logging goal with superior capabilities. All mandatory commands PASS with no code changes needed.
+
+**Verification Summary:**
+
+- Batch 36 upstream commit 995ae717 - SKIP/NO_OP (Incompatible Architecture)
+- All 4 mandatory commands PASS (lint, typecheck, build, application start)
+- LLxprt has superior DebugLogger system (269+ lines, namespace-based, configurable)
+- Upstream's 37-line singleton would be a downgrade
+- Build artifacts properly generated
+- No changes needed - LLxprt architecture is already more advanced
+
+### Commit/Push Record
+
+No commit created (NO_OP - incompatible architecture).
+
+**Batch 36 Conclusion:** LLxprt SKIP's upstream commit 995ae717. LLxprt has a more advanced, production-ready centralized logging system already in place. The upstream refactor establishes a basic singleton pattern that would reduce LLxprt's capabilities and break existing code. LLxprt's architecture achieves the same goal (centralized logging) with a superior implementation. Re-validated 2026-01-06 with all mandatory commands PASS.
 - DebugLogger class (packages/core/src/debug/DebugLogger.ts) with namespace support
 - ConfigurationManager for runtime configuration (packages/core/src/debug/ConfigurationManager.ts)
 - FileOutput for file-based logging (packages/core/src/debug/FileOutput.ts)
@@ -5234,8 +5294,100 @@ Batch 36 commit: 995ae717 - **SKIP (NO_OP - Incompatible Architecture)**
 - Architectural patterns are fundamentally different (singleton vs instance-based)
 - Error handling patterns diverge
 
-### Commit/Push Record
+### Re-validation Record (2026-01-06)
 
-No commit created (NO_OP - incompatible architecture).
+**VERIFIED - SKIP/NO_OP (Incompatible Architecture)**
 
-**Batch 36 Conclusion:** LLxprt SKIP's upstream commit 995ae717. LLxprt has a more advanced, production-ready centralized logging system already in place. The upstream refactor establishes a basic singleton pattern that would reduce LLxprt's capabilities and break existing code. LLxprt's architecture achieves the same goal (centralized logging) with a superior implementation.
+Batch 36 upstream commit 995ae717 attempts to centralize all console messaging to a shared debug logger. LLxprt does SKIP because the upstream's simple singleton pattern is incompatible with LLxprt's advanced DebugLogger architecture.
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code: 0)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (all 4 workspaces passed, exit code: 0)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code: 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+
+Terminal session ends.
+
+A digital farewell,
+Code completed, lessons learned,
+New paths wait ahead.
+```
+
+[OK] **PASS** (exit code: 0 - Application started successfully, processed request, generated haiku output)
+
+**Feature Verification - LLxprt's Superior DebugLogger Architecture:**
