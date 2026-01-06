@@ -2467,67 +2467,28 @@ Decision: SKIP - The API change is too invasive for automatic application. Requi
 
 Notable: The dead code (WorkspaceMigrationDialog, useWorkspaceMigration) could be removed separately, but this is a minor cleanup compared to the API change scope.
 
-### Commit/Push Record
+__LLXPRT_CMD__:tail -n +2 project-plans/20260104gmerge/batch23-revalidation.md
 
-No commit created (SKIP - architectural divergence requires manual review).
+## Batch 23 - Re-Validation (2026-01-06)
 
-### Batch 22 Summary (VERIFIED - SKIP)
+### Upstream Commit
+- Commit: cedf0235a
+- Title: "fix(cli): enable typechecking for ui/components tests (#11419)"
+- Date: Thu Oct 30 00:47:58 2025 -0700
+- Author: Deepan Subramanian <deepansub@google.com>
+- Files changed: 13 files, +88/-7 lines
 
-- Upstream: f4330c9f - Remove workspace extensions and migrations (19 files, +214/-1063)
-- LLxprt Status: Extension API differs, workspace migration components are dead code
-- Verification: All 4 mandatory commands PASS
-- Decision: SKIP - Significant API change requires architectural review
-- Evidence: Full logging in project-plans/20260104gmerge/batch22-validation.txt
-- Recommendation: Separate cleanup of dead code from API simplification
+Scope Summary:
+The upstream commit enables typechecking for ui/components test files by:
+1. Removes 10 test files from tsconfig.json exclude list
+2. Fixes type errors in those test files (adds imports, non-null assertions, mock properties)
+3. Exports ToolCallDecision from core telemetry
 
-### Selection Record
-
-### Selection Record
-
-```
-Batch: 23
-Type: QUICK_SKIP
-Upstream SHA(s): cedf0235a
-Subject: fix(cli): enable typechecking for ui/components tests (#11419)
-Playbook: N/A
-Prerequisites Checked:
-  - Previous batch record exists: YES
-  - Previous batch verification: PASS
-  - Previous batch pushed: N/A
-  - Special dependencies: None
-Ready to Execute: YES
-```
-
-### Execution Record
-
-```
-$ git cherry-pick cedf0235a
-(SKIPPED - Already verified)
-```
-
-### Verification Record
-
-**Mandatory Full Validation:**
-
-```bash
-$ npm run lint
-PASS (exit code 0)
-
-$ npm run typecheck
-PASS (all 4 workspaces: core, cli, a2a-server, test-utils)
-
-$ npm run build
-PASS (all packages built successfully)
-
-$ node scripts/start.js --profile-load synthetic "write me a haiku"
-PASS (synthetic profile loaded, haiku generated correctly)
-```
-
-### Status Documentation
+### LLxprt Status Assessment
 
 **VERIFIED - SKIP (Batch Already Applied via Architectural Divergence)**
 
-Batch 23 upstre am commit cedf0235a enables typechecking for ui/components tests. However, LLxprt already has ui/components typecheck enabled through architectural divergence - missing test files were removed during multi-provider refactoring, not excluded from typecheck.
+LLxprt already has ui/components typecheck enabled through architectural divergence. The missing test files were removed during multi-provider refactoring, not excluded from typecheck.
 
 Key findings:
 - No ui/components tests excluded in LLxprt's tsconfig.json
@@ -2536,7 +2497,138 @@ Key findings:
 - LLxprt has 5/10 ui/components test files from upstream
 - Missing tests removed during multi-provider architectural refactoring
 
-PROGRESS.md correctly identifies Batch 23 as QUICK_SKIP with note "ui/components tests diverged for multi-provider".
+### Full Validation Outputs
 
-All mandatory validation commands passed. See batch23-notes.md for detailed analysis.
+#### 1) npm run lint
 
+```bash
+$ npm run lint
+
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code 0 - No linting errors)
+
+#### 2) npm run typecheck
+
+```bash
+$ npm run typecheck
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (exit code 0 - All 4 workspaces typecheck successfully)
+
+#### 3) npm run build
+
+```bash
+$ npm run build
+
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code 0 - Build completed successfully)
+
+#### 4) node scripts/start.js --profile-load synthetic "write me a haiku"
+
+```bash
+$ node scripts/start.js --profile-load synthetic "write me a haiku"
+Checking build status...
+Build is up-to-date.
+
+The cursor blinks bright,
+Code flows through wires like streams,
+Dawn breaks on silicon.
+```
+
+[OK] **PASS** (exit code 0 - Application started successfully, processed request, generated haiku output)
+
+### Status Documentation
+
+**Batch 23 - QUICK_SKIP (ui/components tests diverged for multi-provider)**
+
+**Root Cause Analysis:**
+
+Batch 23's goal (enable typechecking for ui/components tests) is ALREADY achieved in LLxprt because:
+
+1. **No ui/components tests excluded**: LLxprt's tsconfig.json does not exclude any ui/components test files. The tsconfig.js exclude list reflects what tests actually exist in LLxprt.
+
+2. **Typecheck passes completely**: All 4 workspaces (core, cli, a2a-server, test-utils) pass typecheck with 0 errors.
+
+3. **Missing test files removed during refactoring**: The missing test files (ContextSummaryDisplay, SessionSummaryDisplay, StatsDisplay, ToolStatsDisplay, WarningMessage) were removed during LLxprt's multi-provider architectural refactoring, not excluded from typecheck.
+
+4. **LLxprt has different component architecture**: LLxprt's multi-provider support required different components and test coverage. The upstream test files don't apply to LLxprt's architecture.
+
+**Comparison Table:**
+
+| Aspect | Upstream (cedf0235a) | LLxprt |
+|--------|---------------------|--------|
+| Test files excluded from typecheck | 10 ui/components tests were excluded | 0 (all tests typechecked) |
+| SessionStatsState | Has sessionId, ToolCallDecision | Different (multi-provider adapted) |
+| VisualLayout | Uses viewportHeight, visualLayout | Different text buffer architecture |
+| Test file coverage | 10 ui/components test files | 5 ui/components test files (diverged architecture) |
+
+**PROGRESS.md correctly identifies Batch 23 as QUICK_SKIP** with note "ui/components tests diverged for multi-provider".
+
+### Resolution
+
+All 4 mandatory validation commands PASS. No changes needed. Batch 23 verification confirmed: ui/components typecheck is already enabled in LLxprt via architectural divergence.
+
+- Upstream: cedf0235a - Enable typechecking for ui/components tests (13 files, +88/-7)
+- LLxprt Status: QUICK_SKIP - ui/components tests diverged for multi-provider
+- Verification: All 4 mandatory commands PASS
+- Decision: SKIP - Feature already implemented through architectural divergence
+- Evidence: Full validation outputs logged in NOTES.md under Batch 23
