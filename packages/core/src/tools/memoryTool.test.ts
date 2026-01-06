@@ -229,8 +229,8 @@ describe('MemoryTool', () => {
             type: 'string',
             enum: ['global', 'project'],
             description:
-              'Where to save the memory: "global" (default, saves to ~/.llxprt) or "project" (saves to project-local .llxprt directory)',
-            default: 'global',
+              'Where to save the memory: "global" or "project" (default, saves to project-local .llxprt directory)',
+            default: 'project',
           },
         },
         required: ['fact'],
@@ -240,12 +240,12 @@ describe('MemoryTool', () => {
     it('should call performAddMemoryEntry with correct parameters and return success', async () => {
       const params = { fact: 'The sky is blue' };
       const invocation = memoryTool.build(params);
+      // Without working directory, it should default to global
       const result = await invocation.execute(mockAbortSignal);
-      // Use getCurrentLlxprtMdFilename for the default expectation before any setLlxprtMdFilename calls in a test
-      const expectedFilePath = path.join(
+      const expectedGlobalPath = path.join(
         os.homedir(),
         '.llxprt',
-        getCurrentLlxprtMdFilename(), // This will be DEFAULT_CONTEXT_FILENAME unless changed by a test
+        getCurrentLlxprtMdFilename(),
       );
 
       // For this test, we expect the actual fs methods to be passed
@@ -257,7 +257,7 @@ describe('MemoryTool', () => {
 
       expect(performAddMemoryEntrySpy).toHaveBeenCalledWith(
         params.fact,
-        expectedFilePath,
+        expectedGlobalPath,
         expectedFsArgument,
       );
       const successMessage = `Okay, I've remembered that: "${params.fact}"`;
@@ -484,7 +484,7 @@ describe('MemoryTool', () => {
         type: 'string',
         enum: ['global', 'project'],
         description: expect.stringContaining('Where to save'),
-        default: 'global',
+        default: 'project',
       });
     });
 
@@ -521,14 +521,42 @@ describe('MemoryTool', () => {
       performAddMemoryEntrySpy.mockRestore();
     });
 
-    it('should save to global directory when scope is "global" or undefined', async () => {
+    it('should save to project directory by default (when scope is undefined and workingDir is set)', async () => {
       const performAddMemoryEntrySpy = vi
         .spyOn(MemoryTool, 'performAddMemoryEntry')
         .mockResolvedValue(undefined) as Mock<
         typeof MemoryTool.performAddMemoryEntry
       >;
 
-      const params = { fact: 'Global fact' };
+      const params = { fact: 'Project fact by default' };
+      const invocation = memoryTool.build(params);
+      invocation.setWorkingDir(mockWorkingDir);
+
+      await invocation.execute(mockAbortSignal);
+
+      const expectedProjectPath = path.join(
+        mockWorkingDir,
+        '.llxprt',
+        getCurrentLlxprtMdFilename(),
+      );
+
+      expect(performAddMemoryEntrySpy).toHaveBeenCalledWith(
+        params.fact,
+        expectedProjectPath,
+        expect.anything(),
+      );
+
+      performAddMemoryEntrySpy.mockRestore();
+    });
+
+    it('should save to global directory when scope is explicitly "global"', async () => {
+      const performAddMemoryEntrySpy = vi
+        .spyOn(MemoryTool, 'performAddMemoryEntry')
+        .mockResolvedValue(undefined) as Mock<
+        typeof MemoryTool.performAddMemoryEntry
+      >;
+
+      const params = { fact: 'Global fact', scope: 'global' as const };
       const invocation = memoryTool.build(params);
 
       await invocation.execute(mockAbortSignal);
