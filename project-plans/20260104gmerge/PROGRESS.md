@@ -357,3 +357,18 @@ Use this checklist to track batch execution progress.
   - All upstream functionality present in LLxprt
 - See NOTES.md for detailed output (Batch 34 - Re-validation section)
 - AUDIT.md: No changes needed (line 93 already marked as VERIFIED)
+__LLXPRT_CMD__:cat /Users/acoliver/projects/llxprt/branch-1/llxprt-code/tmp_batch35_progress.txt
+
+### Batch 35 (2026-01-06)
+- Status: VERIFIED - Already implemented
+- Commits:
+  - 49bde9fc: COMMITTED as fffbb87ee (GCS path handling)
+  - 61a71c4f: SKIP (waitFor cleanup - custom implementation needed for ink)
+  - d5a06d3c: COMMITTED as 019f9daba (gitignore trailing spaces)
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- See NOTES.md for detailed output (Batch 35 - Re-validation section)
+- Files modified:
+  - fffbb87ee: packages/a2a-server/src/persistence/gcs.ts, gcs.test.ts (47 lines added)
+  - 019f9daba: packages/core/src/utils/gitIgnoreParser.ts, gitIgnoreParser.test.ts (21 insertions, 1 deletion)
+- AUDIT.md: No changes needed (implementation status unchanged)

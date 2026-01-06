@@ -111,12 +111,12 @@
 | 90 | `9a4c0455` | SKIP |  |  | Docs: update README (configuration examples) (#11369) |  |
 | 91 | `a96f0659` | SKIP |  |  | test: skip Linux perf integration test (#11404) |  |
 | 92 | `085e5b1f` | SKIP |  |  | chore: remove unused package lock flag (#11401) |  |
-| 93 | `36de6862` | REIMPLEMENT |  |  | feat: Propagate traceId from code assist to response metadata (Fixes … (#11360) |  |
-| 94 | `49bde9fc` | PICK |  |  | Fix GCS path handling in a2a-server (#11297) |  |
+| 93 | `36de6862` | VERIFIED | 2026-01-06 | Implement: Propagate traceId from code assist to response metadata (Fixes … (#11360) |
+| 94 | `49bde9fc` | PICK | VERIFIED | `fffbb87ee` | Fix GCS path handling in a2a-server (#11297) | GCS path input handling implemented - 47 lines added (37 tests, 10 impl). All mandatory commands PASS 2026-01-06. |
 | 95 | `30d9a336` | SKIP |  |  | chore: ensure release version uses npm pack (#11378) |  |
 | 96 | `3c57e76c` | SKIP |  |  | chore(release): v0.11.0-preview.0 |  |
-| 97 | `61a71c4f` | PICK |  |  | Testing: remove custom waitFor (#11327) |  |
-| 98 | `d5a06d3c` | PICK |  |  | Fix gitignore parser for trailing spaces (#11299) |  |
+| 97 | `61a71c4f` | PICK | SKIP |  | Testing: remove custom waitFor (#11327) | LLxprt requires custom waitFor implementation for ink component - architectural incompatibility. 2 of 3 Batch 35 commits applied, all mandatory commands PASS 2026-01-06. |
+| 98 | `d5a06d3c` | PICK | VERIFIED | `019f9daba` | Fix gitignore parser for trailing spaces (#11299) | Trailing spaces in gitignore patterns preserved - 21 insertions, 1 deletion. All mandatory commands PASS 2026-01-06. |
 | 99 | `995ae717` | REIMPLEMENT |  |  | refactor(logging): Centralize all console messaging to a shared logger (part 1) (#11537) |  |
 | 100 | `cc7e1472` | REIMPLEMENT |  |  | Pass whole extensions rather than just context files (#10910) |  |
 | 101 | `31f58a1f` | PICK |  |  | Fix Windows ripgrep detection (#11221) |  |
