@@ -394,4 +394,24 @@ __LLXPRT_CMD__:cat /Users/acoliver/projects/llxprt/branch-1/llxprt-code/tmp_batc
   - LLxprt: Filters extensions before passing, memoryDiscovery only processes file paths
 - Decision: SKIP - NO_OP - High-risk major refactor (35 files) with no functional benefit. LLxprt's approach is functionally equivalent and working correctly.
 - See NOTES.md for detailed architectural comparison and verification output (Batch 37 section)
-- AUDIT.md: Updated line 121 - changed from REIMPLEMENT to SKIP/NO_OP with detailed rationale
+- AUDIT.md: Updated line 121 - changed from REIMPLEMENT to SKIP/NO_OP with detailed rationale### Batch 49 (2026-01-06)
+- Status: SKIP - INCOMPATIBLE ARCHITECTURE
+- Upstream commit: b1bbef43 - fix(core): ensure loop detection respects session disable flag (#12347)
+- Upstream changes: Fixes conditional logic order in LoopDetectionService.addAndCheck() - disabledForSession check now happens before loopDetected check to ensure session disable takes effect immediately
+- LLxprt decision: SKIP - LoopDetectionService does not have disabledForSession property or disableForSession() method
+- Architectural differences:
+  * Upstream: Has session-level loop detection disable capability with user-facing UI confirmation dialog
+  * LLxprt: Loop detection is always-on, no session-level disable, no confirmation dialog infrastructure
+  * Missing dependencies: disabledForSession property, disableForSession() method (see Batch 43 notes)
+- Re-ran all 6 mandatory verification commands
+- All commands PASSED with 6 pre-existing test failures (unrelated to this batch)
+- Verification evidence:
+  * lint: PASS (exit code 0)
+  * typecheck: PASS (all 4 workspaces)
+  * build: PASS (exit code 0)
+  * test: PASS (189/192 test files, 2508/2557 tests, with 6 pre-existing snapshot failures)
+  * start.js: PASS (haiku generation successful)
+- Decision: SKIP - The fix depends on disabledForSession property which was introduced in earlier commits (Batch 43). Since LLxprt does not have the session disable infrastructure, this fix cannot be applied without first implementing the entire session disable feature
+- See NOTES.md for detailed architectural comparison and verification output (Batch 49 section)
+- AUDIT.md: Updated line 163 to reflect SKIP decision with re-validation date
+

@@ -7335,3 +7335,163 @@ Verified that LLxprt's compression implementation is equivalent to upstream's go
 No commit created (SKIP - NO_OP). Batch 48 documented as alternative architecture in NOTES.md.
 
 ---
+## Batch 49 - Re-validation (2026-01-06)
+
+### Upstream Commit
+
+**Commit:** `b1bbef433d10a1e00c4d105769f5b380b61952f3`
+**Title:** fix(core): ensure loop detection respects session disable flag (#12347)
+**Files Changed:** 2 files with 18 insertions and 1 deletion
+- `packages/core/src/services/loopDetectionService.test.ts` (+13 lines)
+- `packages/core/src/services/loopDetectionService.ts` (+6 lines, -1 line)
+
+### Batch Summary
+
+Upstream commit fixes the conditional logic order in `LoopDetectionService.addAndCheck()` to ensure that when loop detection is disabled at the session level, it returns `false` immediately without checking if a loop was already detected. Previously, `this.disabledForSession` and `this.loopDetected` were checked together in the same if condition, causing session disable to not take effect after a loop had been detected.
+
+The fix separates the checks:
+1. First check if disabled for session → return false immediately
+2. Then check if loop was already detected → return true
+
+This ensures that when a user disables loop detection mid-stream, it takes effect immediately rather than continuing to report the previous loop.
+
+### Implementation Status
+
+**Status: SKIP - INCOMPATIBLE ARCHITECTURE**
+
+**Reasoning:**
+
+1. **Missing `disabledForSession` functionality:**
+   - Upstream's `LoopDetectionService` has a `disabledForSession` property and a related `disableForSession()` method
+   - LLxprt's `LoopDetectionService` does NOT have `disabledForSession` property or `disableForSession()` method
+   - The `addAndCheck()` method in LLxprt only checks `loopDetected`, not `disabledForSession`
+
+2. **Different loop detection philosophy:**
+   - Architecture is fundamentally different from upstream
+   - LLxprt's loop detection is always-on without session-level disable capability
+   - No user-facing mechanism to disable loop detection
+   - No confirmation dialog for loop detection events (see Batch 43 notes)
+
+3. **Code comparison:**
+
+   **Upstream code (after fix):**
+   ```typescript
+   addAndCheck(event: ServerGeminiStreamEvent): boolean {
+     if (this.disabledForSession) {
+       return false;
+     }
+
+     if (this.loopDetected) {
+       return true;
+     }
+     // ... loop detection logic
+   }
+   ```
+
+   **LLxprt code (current):**
+   ```typescript
+   addAndCheck(event: ServerGeminiStreamEvent): boolean {
+     if (this.loopDetected) {
+       return true;
+     }
+     // ... loop detection logic
+   }
+   ```
+
+4. **Test dependency:**
+   - The upstream test verifies that `service.disableForSession()` stops loop reporting
+   - LLxprt does not have `disableForSession()` method
+   - The test cannot be implemented without this method
+
+### Verification Results - All Commands PASS
+
+**1. npm run format:** [OK] PASS
+
+> @vybestack/llxprt-code@0.8.0 format
+> prettier --experimental-cli --write .
+
+**2. npm run lint:** [OK] PASS
+
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+
+**3. npm run typecheck:** [OK] PASS
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+
+**4. npm run test:** WARNING: PASS (6 pre-existing test failures)
+
+```
+Test Files  189 passed, 2 failed | 1 skipped (192)
+     Tests  2508 passed, 6 failed, 43 skipped (2557)
+```
+
+Pre-existing failures (unrelated to Batch 49):
+- `src/ui/components/messages/GeminiMessage.test.tsx` (4 snapshot failures - RuntimeContextProvider error)
+- `src/ui/components/messages/ToolMessageRawMarkdown.test.tsx` (2 snapshot failures - Error rendering text blocks)
+
+All failures are pre-existing and unrelated to Batch 49 (loop detection).
+
+**5. npm run build:** [OK] PASS
+
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+Successfully copied files for all packages (core, cli, a2a-server, test-utils, vscode-ide-companion)
+
+**6. CLI functional test:** [OK] PASS
+
+```bash
+$ node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
+Checking build status...
+Build is up-to-date.
+
+I'll write a haiku for you:
+
+Lines short and precise
+Nature captured in words
+Five seven five sounds
+
+(That's a meta-haiku about haikus themselves!)
+```
+
+Command executed successfully and generated a response.
+
+### Conclusion
+
+**Status: SKIP - INCOMPATIBLE ARCHITECTURE**
+
+Batch 49 upstream commit `b1bbef43` fixes the behavior when loop detection is disabled at the session level. This requires:
+
+1. A `disabledForSession` property in `LoopDetectionService` (not present in LLxprt)
+2. A `disableForSession()` method to set this property (not present in LLxprt)
+3. Reordered conditional logic in `addAndCheck()` to respect the session disable flag
+
+LLxprt's loop detection architecture is fundamentally different:
+- Loop detection is always-on
+- No session-level disable functionality
+- No user-facing mechanism to disable loop detection
+- Simpler implementation without the session disable feature
+
+The upstream commit is a **6-line change** that relies on the `disabledForSession` property which was introduced in earlier commits (Batch 43 and related work). Since LLxprt does not have the session disable infrastructure, this fix is:
+
+1. **Not applicable** - The logic being fixed cannot be implemented without the base infrastructure
+2. **Not needed** - LLxprt does not support session-level loop detection disable
+3. **Cannot be backported** - Would require implementing the entire session disable feature
+
+**Recommendation:** Document as SKIP with clear architectural differences. The session-level loop detection disable feature is a significant enhancement beyond simple loop detection and represents a design choice that LLxprt has not adopted. If this feature is desired, it would require a separate comprehensive task to implement the entire session disable infrastructure including UI components, service methods, and state management.
+
+**All 6 mandatory validation commands PASS [OK]** (with 6 pre-existing test failures unrelated to this batch)
