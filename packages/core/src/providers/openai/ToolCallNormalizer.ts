@@ -28,6 +28,7 @@ const logger = new DebugLogger('llxprt:providers:openai:toolCallNormalizer');
 
 export interface NormalizedToolCall {
   index: number;
+  id?: string;
   name: string;
   args: Record<string, unknown>;
   originalArgs?: string;
@@ -36,6 +37,7 @@ export interface NormalizedToolCall {
 // Local interface to replace dependency on ToolCallValidator
 export interface ValidatedToolCall {
   index: number;
+  id?: string;
   name: string;
   args?: string;
   isValid: boolean;
@@ -58,6 +60,7 @@ export class ToolCallNormalizer {
     try {
       const normalized: NormalizedToolCall = {
         index: validatedCall.index,
+        id: validatedCall.id,
         name: this.normalizeToolName(validatedCall.name),
         args: this.parseArgs(validatedCall.args),
         originalArgs: validatedCall.args,
