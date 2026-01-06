@@ -4750,3 +4750,174 @@ No implementation needed. All three commits address issues that are either:
 
 No commit created (NO_OP - already implemented/incompatible). AUDIT.md and PROGRESS.md updated to reflect Batch 33 verification.
 
+__LLXPRT_CMD__:cat tmp/batch34-notes-append.md
+---
+
+## Batch 34 - Re-validation (2026-01-06)
+
+**VERIFIED - TraceId Propagation Already Implemented**
+
+**Upstream Commit:** `36de6862` - feat: Propagate traceId from code assist to response metadata (#11360)
+
+**Status:** NO_OP - TraceId propagation already fully implemented in LLxprt
+
+### Selection Record
+
+```
+Batch: 34
+Type: VERIFIED
+Upstream SHA(s): 36de6862
+Subject: feat: Propagate traceId from code assist to response metadata (Fixes … (#11360)
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES
+  - Previous batch verification: PASS (Batch 33)
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+```
+
+### Execution Record
+
+**VERIFIED - Already Implemented**
+
+Upstream commit 36de6862 propagates traceId from code assist server to response metadata. Full verification confirms this functionality is already implemented in LLxprt across all three layers:
+
+1. **Code Assist Layer:** `packages/core/src/code_assist/converter.ts` - CaGenerateContentResponse includes traceId, mapped to responseId
+2. **Core Turn Layer:** `packages/core/src/core/turn.ts` - ServerGeminiContentEvent and ServerGeminiThoughtEvent include traceId
+3. **A2A Server Agent Task Layer:** `packages/a2a-server/src/agent/task.ts` - All event generation methods accept and propagate traceId
+
+### Verification Record (Re-validation 2026-01-06)
+
+Per new verification policy, all required commands executed in order:
+
+#### 1) npm run lint
+
+Full output:
+```
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (Exit Code: 0, no errors or warnings)
+
+#### 2) npm run typecheck
+
+Full output:
+```
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (Exit Code: 0, all 4 workspaces passed)
+
+#### 3) npm run build
+
+Full output:
+```
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (Exit Code: 0, all packages built successfully)
+
+#### 4) node scripts/start.js --profile-load synthetic "write me a haiku"
+
+Full output:
+```
+Checking build status...
+Build is up-to-date.
+
+The code flows like streams,
+Logic woven with care and might,
+Systems bloom in light.
+```
+
+[OK] **PASS** (Application started successfully, processed request, generated haiku output)
+
+### Feature Landing Verification
+
+Verified complete traceId propagation path through all layers:
+
+**Code Assist Server Layer (converter.ts):**
+- Line 76: CaGenerateContentResponse interface includes traceId
+- Line 141: fromGenerateContentResponse maps traceId to responseId
+
+**Core Turn Layer (turn.ts):**
+- Line 127: ServerGeminiContentEvent includes optional traceId
+- Line 138: ServerGeminiThoughtEvent includes optional traceId
+- Line 344: TraceId extracted from resp.responseId
+- Lines 358, 365: TraceId propagated to yielded Content and Thought events
+
+**A2A Server Agent Task Layer (task.ts):**
+- Line 232-239: _createStatusUpdateEvent accepts traceId parameter
+- Lines 250-251: traceId included in metadata
+- Line 275: setTaskStateAndPublishUpdate accepts traceId
+- Line 300: traceId passed down the chain
+- Lines 599-605: acceptAgentMessage extracts and distributes traceId
+- Lines 938, 955, 960: _sendTextContent and _sendThought forward traceId
+
+### Verification Summary
+
+- Batch 34 upstream commit 36de6862 propagates traceId from code assist to response metadata
+- LLxprt has complete implementation with 18 traceId references across 3 key files
+- traceId flow: Code Assist Server → Core Turn → A2A Server Task → Event Bus
+- All 4 mandatory verification commands PASS (lint, typecheck, build, application start)
+- No implementation needed - feature already exists and is fully functional
+- Build artifacts properly generated
+
+### Commit/Push Record
+
+No commit created (VERIFIED NO_OP - already implemented). AUDIT.md line 93 already marked as VERIFIED. PROGRESS.md line 55 already documents completion.
+
+---
