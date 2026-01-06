@@ -51,8 +51,13 @@ describe('stdin EIO error handling', () => {
     stdin.pause = mockPause;
 
     // Ensure isPaused is available (if it wasn't already)
-    if (typeof (stdin as any).isPaused !== 'function') {
-      (stdin as any).isPaused = vi.fn(() => false);
+    if (
+      typeof (stdin as unknown as Record<string, unknown>).isPaused !==
+      'function'
+    ) {
+      (stdin as unknown as Record<string, unknown>).isPaused = vi.fn(
+        () => false,
+      );
     }
   });
 
@@ -69,12 +74,15 @@ describe('stdin EIO error handling', () => {
     mockPause.mockRestore();
 
     // Clean up the isPaused mock if it was added during the test
+    const stdinRecord = stdin as unknown as Record<string, unknown>;
+    const isPaused = stdinRecord.isPaused;
     if (
-      typeof (stdin as any).isPaused === 'function' &&
-      (stdin as any).isPaused.mockRestore
+      typeof isPaused === 'function' &&
+      isPaused &&
+      (isPaused as unknown as { mockRestore: () => void }).mockRestore
     ) {
-      (stdin as any).isPaused.mockRestore();
-      delete (stdin as any).isPaused;
+      (isPaused as unknown as { mockRestore: () => void }).mockRestore();
+      delete stdinRecord.isPaused;
     }
 
     // Clean up any error listeners
@@ -151,7 +159,7 @@ describe('stdin EIO error handling', () => {
       stdin.isRaw = false;
       // Mock isPaused to return true
       const mockIsPaused = vi.fn(() => true);
-      (stdin as any).isPaused = mockIsPaused;
+      (stdin as unknown as Record<string, unknown>).isPaused = mockIsPaused;
 
       const manager = new StdinRawModeManager();
 
