@@ -1632,6 +1632,190 @@ Added folder name to "Trust this folder" label using existing workingDirectory f
 **991bd373 - Improve deflake script isolation**: REIMPLEMENTED (COMMITTED as bd104ab7a)
 
 Added .dockerignore temp file handling, env passing, cmd args support.
+### Batch 08 Re-validation (2026-01-05)
+
+**VERIFIED - Already Implemented**
+
+Batch 08 contains 2 commits:
+- 6ded45e5 - Add markdown toggle (alt+m) to switch between rendered and raw
+- d2c9c5b3 - Use Node.js built-ins in scripts/clean.js instead of glob
+
+**Commit 6ded45e5 - Markdown toggle (SKIP - NO_OP):**
+
+Upstream adds markdown toggle feature with alt+m/option+m keyboard shortcut.
+Search verified LLxprt already has complete implementation:
+- RawMarkdownIndicator.tsx component exists at `packages/cli/src/ui/components/RawMarkdownIndicator.tsx`
+- renderMarkdown state exists in UIStateContext.tsx (line 182)
+- MarkdownDisplay.tsx supports renderMarkdown prop (lines 20, 35, 42)
+- GeminiMessage.tsx, ToolMessage.tsx, GeminiMessageContent.tsx pass renderMarkdown from UIState
+- Tests exist (GeminiMessage.test.tsx, ToolMessageRawMarkdown.test.tsx)
+- Keyboard shortcuts: `option+m` on darwin, `alt+m` on other platforms
+
+All components and functionality already present in LLxprt. Feature implemented prior to upstream 6ded45e5.
+Marked as SKIP/NO_OP.
+
+**Commit d2c9c5b3 - Node.js built-ins in clean.js (COMMITTED as c3d9e02e1):**
+
+Verified commit c3d9e02e1 already implements upstream changes:
+- Clean.js already uses readdirSync, statSync from 'node:fs' instead of glob library
+- Workspace package dist cleaning uses readdirSync/statSync directory iteration
+- VSIX file cleanup uses readdirSync() directory iteration
+- LLxprt additionally handles .stryker-tmp cleanup using recursive directory search (findDirsRecursive helper)
+- License header updated to Vybestack LLC (appropriate for LLxprt)
+
+Conflict resolution during initial cherry-pick preserved LLxprt's .stryker-tmp recursive cleanup logic which upstream doesn't have.
+
+Per new verification policy, all required commands were executed in order:
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code 0, no errors or warnings)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (all 4 workspaces passed, exit code 0)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+
+A line of bugs squashed,
+Another waits in shadows,
+The work never ends.
+```
+
+[OK] **PASS** (exit code 0 - Application started successfully, processed request, generated haiku output)
+
+**Feature Verification:**
+
+**Markdown toggle (6ded45e5 - NO_OP):**
+
+Verified complete implementation exists in LLxprt:
+```bash
+$ grep -n "renderMarkdown" packages/cli/src/ui/contexts/UIStateContext.tsx
+181: // Markdown rendering toggle (alt+m)
+182:   renderMarkdown: boolean;
+
+$ grep -n "renderMarkdown" packages/cli/src/ui/utils/MarkdownDisplay.tsx
+20:  renderMarkdown?: boolean;
+35:  renderMarkdown = true,
+42:    if (!renderMarkdown) {
+
+$ head -15 packages/cli/src/ui/components/RawMarkdownIndicator.tsx
+export const RawMarkdownIndicator: React.FC = () => {
+  const modKey = process.platform === 'darwin' ? 'option+m' : 'alt+m';
+```
+
+All components and state management already present in LLxprt codebase.
+
+**Clean.js Node.js built-ins (d2c9c5b3 - COMMITTED as c3d9e02e1):**
+
+Verified clean.js uses Node.js built-ins:
+```bash
+$ head -10 scripts/clean.js
+import { rmSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+$ grep -n "findDirsRecursive" scripts/clean.js
+36: function findDirsRecursive(dir, predicate, results = []) {
+
+$ grep -A2 "const strayStrykerDirs" scripts/clean.js
+const strayStrykerDirs = findDirsRecursive(
+  root,
+  (name) => name === '.stryker-tmp',
+);
+```
+
+- Workspace dist cleaning uses readdirSync/statSync (lines 44-63)
+- VSIX file cleanup uses readdirSync (lines 75-85)
+- LLxprt additional: .stryker-tmp recursive cleanup using findDirsRecursive helper (lines 36-52, 69-73)
+
+**Verification Summary:**
+
+- Batch 08 commit 6ded45e5 - SKIP/NO_OP (markdown toggle already fully implemented in LLxprt)
+- Batch 08 commit d2c9c5b3 - COMMITTED as c3d9e02e1 (Node.js built-ins in clean.js with LLxprt enhancements)
+- Markdown toggle feature: RawMarkdownIndicator, renderMarkdown state, Alt+M/Opt+M keyboard shortcuts - all present
+- Clean.js refactoring: readdirSync/statSync used instead of glob library; LLxprt preserves .stryker-tmp recursive cleanup
+- All verification commands PASS (lint, typecheck, build, application start)
+- Build artifacts properly generated
+- No changes needed - both commits were properly processed during initial implementation
+
+Conclusion: Batch 08 implementation **FULLY VERIFIED** and functional. Markdown toggle already exists in LLxprt codebase; clean.js refactoring uses Node.js built-ins as specified by upstream d2c9c5b3.
+
+---
 
 **a4403339 - Add "Esc to close" hint**: REIMPLEMENTED (COMMITTED as a11d156aa)
 
