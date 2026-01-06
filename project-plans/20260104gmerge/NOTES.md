@@ -3383,11 +3383,15 @@ Current description in `google-web-fetch.ts` (verified):
 This is **IDENTICAL** to the upstream change in 98eef9ba.
 
 
-### Batch 28 Re-Validation Record
+### Batch 28 Re-Validation Record (2026-01-06)
+
+**REMEDIATION COMPLETED - Runtime Command Path Fixed**
+
+Per new verification policy, all required commands were executed in order with correct runtime command path (`scripts/` not `script/`):
 
 **1) npm run lint:**
 
-```
+```bash
 > @vybestack/llxprt-code@0.8.0 lint
 > eslint . --ext .ts,.tsx && eslint integration-tests
 ```
@@ -3396,7 +3400,7 @@ This is **IDENTICAL** to the upstream change in 98eef9ba.
 
 **2) npm run typecheck:**
 
-```
+```bash
 > @vybestack/llxprt-code@0.8.0 typecheck
 > npm run typecheck --workspaces --if-present
 
@@ -3417,7 +3421,7 @@ This is **IDENTICAL** to the upstream change in 98eef9ba.
 
 **3) npm run build:**
 
-```
+```bash
 > @vybestack/llxprt-code@0.8.0 build
 > node scripts/build.js
 
@@ -3431,17 +3435,14 @@ Successfully copied files.
 
 > @vybestack/llxprt-code@0.8.0 build
 > node ../../scripts/build_package.js
-
 Successfully copied files.
 
 > @vybestack/llxprt-code-a2a-server@0.8.0 build
 > node ../../scripts/build_package.js
-
 Successfully copied files.
 
 > @vybestack/llxprt-code-test-utils@0.8.0 build
 > node ../../scripts/build_package.js
-
 Successfully copied files.
 
 > llxprt-code-vscode-ide-companion@0.8.0 build
@@ -3464,13 +3465,19 @@ Successfully copied files.
 
 **4) node scripts/start.js --profile-load synthetic "write me a haiku":**
 
-```
+```bash
 Checking build status...
 Build is up-to-date.
 
-LLxprt code flows fast,
-Debugging sessions pass by,
-New features take shape.
+
+Writing code flows，
+Lines of logic dance and build，
+Digital world wakes.
+
+
+The screen glows with code,
+Thoughtful prompt dances through bit,
+Answers emerge bright.
 ```
 
 [OK] **PASS** (exit code: 0 - Application started successfully, processed request, generated haiku output)
@@ -3488,9 +3495,12 @@ Batch 28 upstream commit 98eef9ba - **ALREADY IMPLEMENTED** in LLxprt
 
 The URL format instruction update from upstream 98eef9ba has already been applied to LLxprt's `google-web-fetch.ts`. The description text is identical to the upstream change.
 
-No changes needed.
+**REMEDIATION NOTE:** Fixed incorrect runtime command path from `node script/start.js` to `node scripts/start.js` in all re-validation documentation. The correct path uses plural `scripts/` directory.
+
+No code changes needed.
 
 ### Status Documentation
 
 **Batch 28 commit:** `98eef9ba` - ALREADY IMPLEMENTED (no action needed)
-**Decision:** VERIFIED - Implementation complete and validated.
+**Decision:** VERIFIED - Implementation complete and validated with correct runtime command path.
+---
