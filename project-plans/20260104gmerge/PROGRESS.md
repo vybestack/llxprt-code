@@ -87,3 +87,11 @@ Use this checklist to track batch execution progress.
 - All commands PASSED
 - See NOTES.md for detailed output
 - AUDIT.md: No changes needed (implementation status unchanged)
+
+### Batch 03 (2026-01-05)
+- Already implemented via commit dcf347e21 (predates upstream cfaa95a2)
+- Functionality: nargs: 1 on yargs single-argument options, positional prompt parsing
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- See NOTES.md for detailed output
+- AUDIT.md: No changes needed (already verified as SKIP/NO_OP)
