@@ -218,8 +218,8 @@ Resolution: **REIMPLEMENT** - Add `nargs: 1` to all single-argument string/array
 
 ### Batch 04 - SKIP
 
-Original decision: `130f0a02` marked as REIMPLEMENT.
 Resolution: SKIP - Deepthinker confirmed LLxprt's subagent system is more advanced (SubAgentScope). Removing these files would break core LLxprt functionality. Upstream removal targets legacy code that doesn't exist in LLxprt.
+Re-validation (2026-01-05): All mandatory commands PASS - npm run lint, npm run typecheck, npm run build, node scripts/start.js --profile-load synthetic. Full outputs in NOTES.md.
 | 172 | `5213d9f3` | SKIP |  |  | chore(release): v0.11.0-preview.6 |  |
 ### Batch 05 - REIMPLEMENTED
 

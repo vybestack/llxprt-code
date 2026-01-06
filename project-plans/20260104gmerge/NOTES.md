@@ -465,6 +465,98 @@ Batch 04 commit: `130f0a02` marked as SKIP in AUDIT.md.
 
 ### Commit/Push Record
 
+### Re-validation Record (2026-01-05)
+
+All mandatory validation commands PASS for Batch 04 (SKIP - subagent removal not applicable to LLxprt).
+
+\`\`\`bash
+$ npm run lint
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+
+✅ PASS (exit code: 0)
+\`\`\`
+
+\`\`\`bash
+$ npm run typecheck
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+
+✅ PASS (exit code: 0) - All 4 workspaces typecheck successfully
+\`\`\`
+
+\`\`\`bash
+$ npm run build
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+
+✅ PASS (exit code: 0)
+\`\`\`
+
+\`\`\`bash
+$ node scripts/start.js --profile-load synthetic "write me a haiku"
+Checking build status...
+Build is up-to-date.
+
+Code flows through the screen,
+Bugs vanish into the night,
+Quiet dawn arrives.
+
+✅ PASS (exit code: 0) - CLI executed successfully with haiku output
+\`\`\`
+
+**Summary**: All validation commands PASS. Batch 04 correctly SKIP'd as upstream `130f0a02` removes legacy subagent code, while LLxprt has an advanced, actively-used subagent system (SubAgentScope, subagentOrchestrator, subagentCommand). Applying the change would delete core LLxprt functionality.
+
 ---
 
 ## Batch 05
