@@ -8,7 +8,7 @@ Use this checklist to track batch execution progress.
 | **In Progress** | — |
 | **Next Up** | — |
 | **Progress** | 49/49 (100%) |
-| **Last Updated** | 2026-01-06 (Batch 37 re-validated) |
+| **Last Updated** | 2026-01-06 (Batch 38 re-validated with full output logs) |
 
 ## Preflight
 - [x] On main: `git pull --ff-only`
