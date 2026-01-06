@@ -160,11 +160,11 @@
 | 140 | `cc3904f0` | SKIP |  |  | chore: todo aria labels (#11496) |  |
 | 141 | `c6a59896` | SKIP |  |  | Add extensions logging (#11261) |  |
 | 142 | `306e12c2` | SKIP | | | Fix shift+tab input regression (#11349) | Already implemented as b1fc76d88 (same PR #11634)
-| 143 | `c7243997` | PICK |  |  | Fix flaky BaseSelectionList test (#11337) |  |
-| 144 | `2940b508` | PICK |  |  | fix: Ignore correct errors thrown when resizing or scrolling an exited pty (#11440) |  |
+| 143 | `c7243997` | SKIP |  |  | Fix flaky BaseSelectionList test (#11337) | ALREADY IMPLEMENTED as a9ecf32c1 (same PR #11620) |
+| 144 | `2940b508` | SKIP |  |  | fix: Ignore correct errors thrown when resizing or scrolling an exited pty (#11440) | INCOMPATIBLE ARCHITECTURE - LLxprt has no resizePty() method. Re-validated 2026-01-06 with all mandatory commands PASS. |
 | 145 | `d1c913ed` | SKIP |  |  | Docs: update README for MCP prompts (#11467) |  |
 | 146 | `73b1afb1` | SKIP |  |  | chore: remove hello extension (#11511) |  |
-| 147 | `0d7da7ec` | PICK |  |  | MCP OAuth path parameter handling (#11305) |  |
+| 147 | `0d7da7ec` | SKIP |  |  | MCP OAuth path parameter handling (#11305) | ALREADY IMPLEMENTED as 5b6901cd7 (same PR #11654) |
 | 148 | `dc90c8fe` | SKIP |  |  | chore(release): v0.11.0-preview.1 |  |
 | 149 | `0542de95` | SKIP |  |  | chore(release): v0.11.0-preview.2 |  |
 | 150 | `9cf8b403` | SKIP |  |  | chore(release): v0.11.0-preview.3 |  |

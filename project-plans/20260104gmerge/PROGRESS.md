@@ -64,7 +64,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 43 — QUICK — SKIP — `dd3b1cb6` — SKIP (INCOMPATIBLE_ARCHITECTURE - requires LoopDetectionConfirmation dialog and disableForSession() method which do not exist in LLxprt) | See NOTES.md
 - [x] Batch 44 -- FULL -- VERIFIED -- `b364f376` -- VERIFIED (superior DebugLogger implementation)
 - [x] Batch 45 — QUICK — PICK — `16f5f767, ccf8d0ca, 5b750f51, ed9f714f, 306e12c2` — 16f5f767 SKIP, ccf8d0ca SKIP, 5b750f51 SKIP (already implemented), ed9f714f SKIP, 306e12c2 PICKED b1fc76d88
-- [x] Batch 46 — FULL — PICK — `c7243997, 2940b508, 0d7da7ec` — c7243997 PICKED a9ecf32c1, 2940b508 SKIP (already implemented), 0d7da7ec PICKED 5b6901cd7
+- [x] Batch 46 — FULL — VERIFIED — `c7243997, 2940b508, 0d7da7ec` — c7243997 SKIP (ALREADY_IMPLEMENTED as a9ecf32c1), 2940b508 SKIP (INCOMPATIBLE_ARCHITECTURE), 0d7da7ec SKIP (ALREADY_IMPLEMENTED as 5b6901cd7) — 2026-01-06
 - [x] Batch 47 — QUICK — PICK — `847c6e7f` — SKIP-REIMPLEMENT (different compression architecture)
 - [x] Batch 48 — FULL — PICK — `ce40a653` — SKIP (depends on batch 47, missing files)
 - [x] Batch 49 — QUICK — PICK — `b1bbef43` — SKIP (different loop detection implementation order)
