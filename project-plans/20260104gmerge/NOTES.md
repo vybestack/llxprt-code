@@ -3476,6 +3476,8 @@ Successfully copied files for all packages (core, cli, a2a-server, test-utils, v
 
 **6. CLI functional test:** [OK] PASS
 
+```bash
+$ node scripts/start.js --profile-load synthetic --prompt "write me a haiku"
 Checking build status...
 Build is up-to-date.
 
@@ -3485,6 +3487,7 @@ Here's a haiku for you:
 Code flows through the screen
 Keyboard dances, thoughts take wing
 Digital daylight
+```
 
 Command executed successfully and generated a response.
 
