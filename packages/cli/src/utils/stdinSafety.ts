@@ -193,32 +193,63 @@ export class StdinRawModeManager {
   }
 }
 
+// Global singleton handler for installStdinErrorHandler
+let globalStdinErrorHandler: StdinErrorHandler | null = null;
+
 /**
  * Legacy helper function for backward compatibility
  * Installs a global stdin error handler without managing raw mode
  *
  * @deprecated Use StdinRawModeManager instead for better lifecycle management
  *
- * @param options - Error handling options
+ * @param options - Error handling options (only used on first call)
  * @returns The error handler function (for removal later)
  */
 export function installStdinErrorHandler(
   options?: StdinSafetyOptions,
 ): StdinErrorHandler {
+  // Return existing handler if already installed (singleton pattern)
+  if (globalStdinErrorHandler) {
+    return globalStdinErrorHandler;
+  }
+
+  // Create and install the handler
   const manager = new StdinRawModeManager(options);
   const handler = manager.getErrorHandler();
 
-  // Only install the handler, don't manage raw mode
+  // Only install the handler if it's not already present
   if (!process.stdin.listeners('error').includes(handler)) {
     process.stdin.on('error', handler);
   }
+
+  // Store as singleton for idempotency
+  globalStdinErrorHandler = handler;
 
   return handler;
 }
 
 /**
+ * Reset the global stdin error handler (for testing only)
+ * @internal
+ */
+export function _resetGlobalStdinErrorHandler(): void {
+  if (globalStdinErrorHandler) {
+    // Remove all instances of this handler from the listeners
+    try {
+      process.stdin.removeListener('error', globalStdinErrorHandler);
+    } catch (_err) {
+      // Ignore if handler not found
+    }
+    globalStdinErrorHandler = null;
+  }
+}
+
+/**
  * Helper to safely enable raw mode with error handling
  * Returns a cleanup function that should be called to restore the original state
+ *
+ * Note: If stdin is not a TTY or raw mode cannot be enabled, the wrapped
+ * function still executes but no raw mode changes are made.
  *
  * @param options - Error handling options
  * @returns Cleanup function that restores stdin to its previous state

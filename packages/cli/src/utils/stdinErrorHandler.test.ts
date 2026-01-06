@@ -17,12 +17,12 @@ import {
   StdinRawModeManager,
   installStdinErrorHandler,
   withSafeRawMode,
+  _resetGlobalStdinErrorHandler,
 } from './stdinSafety.js';
 
 type TestStdin = NodeJS.ReadStream & {
   isRaw?: boolean;
   isTTY?: boolean;
-  isPaused?: () => boolean;
   setRawMode: (mode: boolean) => NodeJS.ReadStream;
   resume: () => NodeJS.ReadStream;
   pause: () => NodeJS.ReadStream;
@@ -49,15 +49,30 @@ describe('stdin EIO error handling', () => {
     stdin.setRawMode = mockSetRawMode;
     stdin.resume = mockResume;
     stdin.pause = mockPause;
+
+    // Ensure isPaused is available (if it wasn't already)
+    if (typeof (stdin as any).isPaused !== 'function') {
+      (stdin as any).isPaused = vi.fn(() => false);
+    }
   });
 
   afterEach(() => {
     // Restore original methods
-    stdin.isTTY = originalIsTTY;
-    stdin.isRaw = originalIsRaw;
+    if (originalIsTTY !== undefined) {
+      stdin.isTTY = originalIsTTY;
+    }
+    if (originalIsRaw !== undefined) {
+      stdin.isRaw = originalIsRaw;
+    }
     mockSetRawMode.mockRestore();
     mockResume.mockRestore();
     mockPause.mockRestore();
+
+    // Clean up the isPaused mock if it was added during the test
+    if (typeof (stdin as any).isPaused === 'function' && (stdin as any).isPaused.mockRestore) {
+      (stdin as any).isPaused.mockRestore();
+      delete (stdin as any).isPaused;
+    }
 
     // Clean up any error listeners
     const listeners = process.stdin.listeners('error') as Array<
@@ -68,6 +83,9 @@ describe('stdin EIO error handling', () => {
         process.stdin.removeListener('error', listener);
       }
     }
+
+    // Reset global handler state
+    _resetGlobalStdinErrorHandler();
   });
 
   describe('StdinRawModeManager', () => {
@@ -128,7 +146,9 @@ describe('stdin EIO error handling', () => {
     it('should resume stdin if paused after error', () => {
       stdin.isTTY = true;
       stdin.isRaw = false;
-      stdin.isPaused = vi.fn(() => true);
+      // Mock isPaused to return true
+      const mockIsPaused = vi.fn(() => true);
+      (stdin as any).isPaused = mockIsPaused;
 
       const manager = new StdinRawModeManager();
 
@@ -140,7 +160,7 @@ describe('stdin EIO error handling', () => {
       expect(mockResume).toHaveBeenCalled();
 
       manager.disable();
-      delete stdin.isPaused;
+      // Cleanup happens in afterEach
     });
 
     it('should log errors in debug mode', () => {
@@ -267,13 +287,14 @@ describe('stdin EIO error handling', () => {
     });
 
     it('should not install duplicate handlers', () => {
+      const initialCount = process.stdin.listeners('error').length;
       const handler1 = installStdinErrorHandler();
+      const countAfterFirst = process.stdin.listeners('error').length;
       const handler2 = installStdinErrorHandler();
+      const countAfterSecond = process.stdin.listeners('error').length;
 
-      const listeners = process.stdin.listeners('error');
-      const uniqueHandlers = listeners.filter((l) => l === handler1);
-
-      expect(uniqueHandlers.length).toBe(1);
+      expect(countAfterFirst).toBe(initialCount + 1);
+      expect(countAfterSecond).toBe(countAfterFirst);
 
       process.stdin.removeListener('error', handler1);
       process.stdin.removeListener('error', handler2);

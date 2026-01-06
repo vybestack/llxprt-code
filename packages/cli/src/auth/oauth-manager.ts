@@ -1680,11 +1680,12 @@ export class OAuthManager {
             const onError = (err: Error): void => {
               cleanup();
               // Check if this is a transient I/O error we should ignore
+              const nodeError = err as NodeJS.ErrnoException;
               const isEioError =
-                err instanceof Error &&
-                (('code' in err && err.code === 'EIO') ||
-                  ('errno' in err && typeof err.errno === 'number' && err.errno === -5) ||
-                  err.message.includes('EIO'));
+                nodeError.code === 'EIO' ||
+                nodeError.errno === -5 ||
+                (typeof nodeError.message === 'string' &&
+                  nodeError.message.includes('EIO'));
               if (isEioError) {
                 // EIO errors are transient - treat as user cancel instead of crashing
                 logger.debug('Ignoring transient stdin EIO error during prompt');
