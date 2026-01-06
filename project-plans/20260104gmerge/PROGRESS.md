@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 20 (SKIPPED - test implementations diverged) |
+| **Last Completed** | Batch 25 (Batches 21-25 all SKIPPED - LLxprt architectural differences) |
 | **In Progress** | — |
-| **Next Up** | Batch 21 |
-| **Progress** | 20/49 (41%) |
+| **Next Up** | Batch 26 |
+| **Progress** | 25/49 (51%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -39,11 +39,11 @@ Use this checklist to track batch execution progress.
 - [x] Batch 18 — FULL — PICK — `b4a405c6, d3bdbc69` — b4a405c6 SKIP (cosmetic, LLxprt has custom descriptions) / d3bdbc69 SKIP-REIMPLEMENT (extension IDs valuable but conflicts with LLxprt flow)
 - [x] Batch 19 — QUICK — SKIP — `08e87a59` — SKIP (Clearcut telemetry not in LLxprt; uses logCliConfiguration() instead)
 - [x] Batch 20 — FULL — SKIP — `21163a16` — SKIP (LLxprt command tests diverged; can enable typechecking independently)
-- [ ] Batch 21 — QUICK — REIMPLEMENT — `9b9ab609` — feat(logging): Centralize debug logging with a dedicated utility (#11417)
-- [ ] Batch 22 — FULL — REIMPLEMENT — `f4330c9f` — remove support for workspace extensions and migrations (#11324)
-- [ ] Batch 23 — QUICK — PICK — `cedf0235` — Enable typechecking for ui/components tests (#11350)
-- [ ] Batch 24 — FULL — PICK — `2ef38065` — refactor(tools): Migrate shell tool name to a centralized constant (#11418)
-- [ ] Batch 25 — QUICK — PICK — `dd42893d` — Enable typechecking for config tests (#11341)
+- [x] Batch 21 — QUICK — SKIP — `9b9ab609` — SKIP (LLxprt has sophisticated DebugLogger with 269+ usages)
+- [x] Batch 22 — FULL — SKIP — `f4330c9f` — SKIP (LLxprt retains workspace extensions for multi-provider config)
+- [x] Batch 23 — QUICK — SKIP — `cedf0235` — SKIP (ui/components tests diverged for multi-provider)
+- [x] Batch 24 — FULL — SKIP — `2ef38065` — SKIP (SHELL_TOOL_NAME already exists in tool-names.ts)
+- [x] Batch 25 — QUICK — SKIP — `dd42893d` — SKIP (config tests diverged for multi-provider architecture)
 - [ ] Batch 26 — FULL — REIMPLEMENT — `f22aa72c` — Making shell:true as default and adding -I to  grep (#11448)
 - [ ] Batch 27 — QUICK — PICK — `d065c3ca` — Enable typechecking for more test files (#11370)
 - [ ] Batch 28 — FULL — REIMPLEMENT — `98eef9ba` — fix: Update web_fetch tool definition to instruct the model to provid… (#11252)
