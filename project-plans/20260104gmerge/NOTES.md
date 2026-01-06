@@ -3937,3 +3937,51 @@ Batch 29 implementation is fully functional and validated. The remediation consi
 **Files modified in remediation:** 0 (environmental fix only)
 
 ---
+
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+
+
+## Batch 30 (0fd9ff0f) — Fix type errors in UI hooks tests
+
+### Batch Notes
+**Upstream commit:** 0fd9ff0f — fix(cli): Fix type errors in UI hooks tests (#11483)
+**Date:** Sun Oct 19 17:16:16 2025 -0700
+
+**Files changed in upstream:**
+- packages/cli/src/ui/hooks/slashCommandProcessor.test.ts (50 +/-)
+- packages/cli/src/ui/hooks/useAtCompletion.test.ts (5 +/-)
+- packages/cli/src/ui/hooks/useCommandCompletion.test.ts (14 +/-)
+- packages/cli/src/ui/hooks/useConsoleMessages.test.ts (2 +/-)
+- packages/cli/src/ui/hooks/useFocus.test.ts (17 +/-)
+- packages/cli/src/ui/hooks/useFolderTrust.test.ts (8 +/-)
+- packages/cli/src/ui/hooks/useGeminiStream.test.tsx (104 +/-)
+- packages/cli/src/ui/hooks/useKeypress.test.ts (7 +/-)
+- packages/cli/src/ui/hooks/usePhraseCycler.test.ts (7 +/-)
+- packages/cli/src/ui/hooks/vim.test.ts (409 +/-)
+- packages/cli/tsconfig.json (10 -)
+
+**Summary of upstream changes:**
+Fixes TypeScript type errors in UI hooks tests caused by strict type checking updates.
+
+### Verification Method
+Checked for upstream changes in current codebase.
+
+### Re-Validation
+
+#### 1) npm run lint
+[PASS] Exit code 0
+
+#### 2) npm run typecheck
+[PASS] 4/4 workspaces
+
+#### 3) npm run build
+[PASS] 5/5 packages
+
+#### 4) node scripts/start.js --profile-load synthetic "write me a haiku"
+[PASS] Application executes
+
+### Status Assessment
+VERIFIED — Batch 30 is effectively implemented.
+
+---
