@@ -8,7 +8,7 @@ Use this checklist to track batch execution progress.
 | **In Progress** | — |
 | **Next Up** | — |
 | **Progress** | 49/49 (100%) |
-| **Last Updated** | 2026-01-06 |
+| **Last Updated** | 2026-01-06 (Batch 37 re-validated) |
 
 ## Preflight
 - [x] On main: `git pull --ff-only`
@@ -55,7 +55,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 34 — FULL — VERIFIED — `36de6862` — VERIFIED (traceId propagation implemented)
 - [x] Batch 35 — QUICK — PICK — `49bde9fc, 61a71c4f, d5a06d3c` — 49bde9fc PICKED fffbb87ee, 61a71c4f SKIP (custom waitFor needed for ink), d5a06d3c PICKED 019f9daba
 - [x] Batch 36 — FULL — SKIP — `995ae717` — SKIP (LLxprt has DebugLogger architecture, not shared singleton)
-- [x] Batch 37 — QUICK — SKIP — `cc7e1472` — SKIP-REIMPLEMENT (major extension system refactor - 35 files)
+- [x] Batch 37 — QUICK — SKIP — `cc7e1472` — SKIP-NO_OP (architectural preference, same outcome achieved, re-validated 2026-01-06)
 - [x] Batch 38 — FULL — SKIP — `31f58a1f, 70a99af1, 72b16b3a` — all CONFLICTS: 31f58a1 SKIP (different ripgrep), 70a99af1 REIMPLEMENT, 72b16b3a REIMPLEMENT
 - [x] Batch 39 — QUICK — REIMPLEMENT — `7dd2d8f7` — SKIP (LLxprt already has complete message bus/policy engine)
 - [x] Batch 40 — FULL — SKIP — `654c5550, 0658b4aa` — both CONFLICTS: 654c5550 SKIP-TEST, 0658b4aa MANUAL_REVIEW
@@ -372,3 +372,26 @@ __LLXPRT_CMD__:cat /Users/acoliver/projects/llxprt/branch-1/llxprt-code/tmp_batc
   - fffbb87ee: packages/a2a-server/src/persistence/gcs.ts, gcs.test.ts (47 lines added)
   - 019f9daba: packages/core/src/utils/gitIgnoreParser.ts, gitIgnoreParser.test.ts (21 insertions, 1 deletion)
 - AUDIT.md: No changes needed (implementation status unchanged)
+
+### Batch 37 (2026-01-06)
+- Status: SKIP - NO_OP (Architecturally different but functionally equivalent)
+- Upstream commit: cc7e1472 - Pass whole extensions rather than just context files (#10910)
+- Upstream changes: Refactor extension data flow to pass whole extension objects with isActive properties instead of just context file paths. 35 files changed (+487/-1193 lines). Changes loadServerHierarchicalMemory signature from accepting extensionContextFilePaths string array to accepting extensions array, then filters for isActive when extracting context files.
+- LLxprt verification: Achieves same functional outcome through different architectural choice:
+  - packages/a2a-server/src/config/config.ts filters extensions BEFORE creating extensionContextFilePaths (line 74)
+  - packages/core/src/utils/memoryDiscovery.ts receives pre-filtered file paths, processes them directly
+  - Both approaches produce identical output: only context files from active extensions are included
+  - This is a code organization preference, not a functional difference
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- Verification evidence:
+  - lint: PASS (exit code 0)
+  - typecheck: PASS (all 4 workspaces)
+  - build: PASS (exit code 0)
+  - start.js: PASS (haiku generation successful)
+- Key architectural comparison:
+  - Upstream: Passes extension objects, filters by isActive in memoryDiscovery
+  - LLxprt: Filters extensions before passing, memoryDiscovery only processes file paths
+- Decision: SKIP - NO_OP - High-risk major refactor (35 files) with no functional benefit. LLxprt's approach is functionally equivalent and working correctly.
+- See NOTES.md for detailed architectural comparison and verification output (Batch 37 section)
+- AUDIT.md: Updated line 121 - changed from REIMPLEMENT to SKIP/NO_OP with detailed rationale
