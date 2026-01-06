@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 16 (3 PICKED, 2 SKIPPED) |
+| **Last Completed** | Batch 17 (4 PICKED, 1 SKIPPED) |
 | **In Progress** | — |
-| **Next Up** | Batch 17 |
-| **Progress** | 16/49 (33%) |
+| **Next Up** | Batch 18 |
+| **Progress** | 17/49 (35%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -35,7 +35,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 14 — FULL — SKIP — `406f0baa, d42da871` — fix(ux) keyboard input hangs while waiting for keyboard input. (#10121) / fix(accessibility) allow line wrapper in screen reader mode  (#11317) — LLxprt already has KITTY_SEQUENCE_TIMEOUT_MS; different line wrapper approach
 - [x] Batch 15 — QUICK — PICK — `3a1d3769` — Refactor `EditTool.Name` to use centralized `EDIT_TOOL_NAME` (#11343) — COMMITTED as 8d4830129
 - [x] Batch 16 — FULL — PICK — `f3ffaf09, 0ded546a, 659b0557, 4a0fcd05, 2b61ac53` — f3ffaf09 PICKED a5ebeada6 / 0ded546a SKIP (PromptService architecture) / 659b0557 PICKED f6d41e648 / 4a0fcd05 SKIP (different release system) / 2b61ac53 PICKED 8b6f7643f
-- [ ] Batch 17 — QUICK — PICK — `8da47db1, 7c086fe5, e4226b8a, 4d2a1111, 426d3614` — Enable/fix MCP command tests typechecking (#11281) / MCP docs/UI cleanup (#10943) / Update nag respects disableUpdateNag (#11269) / Case-insensitive @file suggestions (#11285) / Fix auth selection integration test (#11256)
+- [x] Batch 17 — QUICK — PICK — `8da47db1, 7c086fe5, e4226b8a, 4d2a1111, 426d3614` — 8da47db1 PICKED a4dc52cc8 / 7c086fe5 SKIP (McpStatus.tsx deleted) / e4226b8a PICKED 32c4504b6 / 4d2a1111 PICKED 5938d570f / 426d3614 PICKED afe58d996
 - [ ] Batch 18 — FULL — PICK — `b4a405c6, d3bdbc69` — Slash command descriptions style cleanup (#11330) / Extensions: add extension IDs (#11333)
 - [ ] Batch 19 — QUICK — REIMPLEMENT — `08e87a59` — Log all user settings to enable measurement of experiment impacts (#11354)
 - [ ] Batch 20 — FULL — PICK — `21163a16` — Enable typechecking for ui/commands tests (#11340)
