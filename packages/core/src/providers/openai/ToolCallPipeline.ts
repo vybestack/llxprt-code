@@ -61,7 +61,7 @@ export class ToolCallPipeline {
   }
 
   /**
-   * Create a consistent AbortError with DOMException polyfill support
+   * Check for cancellation at the start
    */
   private createAbortError(): Error {
     // Use DOMException if available (modern environments)
@@ -111,6 +111,7 @@ export class ToolCallPipeline {
           // Create a mock validated call for normalization
           const mockValidatedCall = {
             index: candidate.index,
+            id: candidate.id,
             name: candidate.name || '',
             args: candidate.args || '',
             isValid: true,

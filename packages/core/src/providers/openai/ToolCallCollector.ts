@@ -30,6 +30,7 @@ const logger = new DebugLogger('llxprt:providers:openai:toolCallCollector');
  */
 export interface ToolCallFragment {
   index: number;
+  id?: string;
   name?: string;
   args?: string;
   timestamp: number;
@@ -40,6 +41,7 @@ export interface ToolCallFragment {
  */
 export interface ToolCallCandidate {
   index: number;
+  id?: string;
   name?: string;
   args?: string;
   fragments: ToolCallFragment[];
@@ -130,9 +132,12 @@ export class ToolCallCollector {
       fragments: [...fragments].sort((a, b) => a.timestamp - b.timestamp),
     };
 
-    // Assemble final result - name uses override, args use accumulation
+    // Assemble final result - name uses override, args use accumulation, ID uses first occurrence
     let accumulatedArgs = '';
     for (const fragment of result.fragments) {
+      if (fragment.id && !result.id) {
+        result.id = fragment.id; // ID from first fragment
+      }
       if (fragment.name) {
         result.name = fragment.name; // name uses override logic
       }

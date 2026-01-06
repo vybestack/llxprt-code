@@ -3727,7 +3727,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
             for (const toolCall of reasoningToolCalls) {
               // Add complete tool call as fragments to pipeline
+              // For Kimi tool calls extracted from reasoning_content, generate a synthetic ID
+              // since they don't have a real tool_call_id from the API
               this.toolCallPipeline.addFragment(baseIndex, {
+                id: `call_kimi_${Date.now()}_${Math.random().toString(36).substring(7)}`,
                 name: toolCall.name,
                 args: JSON.stringify(toolCall.parameters),
               });
@@ -3967,7 +3970,10 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               if (deltaToolCall.index === undefined) continue;
 
               // Add fragment to pipeline instead of accumulating strings
+              // IMPORTANT: Capture the tool_call_id to preserve OpenAI API contract
+              // This ensures tool responses can be properly matched in the next turn
               this.toolCallPipeline.addFragment(deltaToolCall.index, {
+                id: deltaToolCall.id,
                 name: deltaToolCall.function?.name,
                 args: deltaToolCall.function?.arguments,
               });
@@ -4233,7 +4239,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           blocks.push({
             type: 'tool_call',
-            id: this.normalizeToHistoryToolId(`call_${normalizedCall.index}`),
+            id: this.normalizeToHistoryToolId(
+              normalizedCall.id || `call_${normalizedCall.index}`,
+            ),
             name: normalizedCall.name,
             parameters: processedParameters,
           });
