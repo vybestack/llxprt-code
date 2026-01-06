@@ -3328,3 +3328,171 @@ EditTool.Name correctly uses the centralized EDIT_TOOL_NAME constant from tool-n
 - No changes needed - already implemented
 
 Conclusion: Batch 15 upstream change **ALREADY IMPLEMENTED** in LLxprt codebase. EDIT_TOOL_NAME constant exists and is properly used by EditTool. Other files affected by upstream commit are NO_OP for LLxprt due to different architecture.
+
+---
+
+### Batch 16 - verification section
+
+**Upstream Commits:**
+- f3ffaf09: add 500ms delay before copying text
+- 0ded546a: avoid printing interactive shell commands
+- 659b0557: use shell mode for interactive terminal commands
+- 4a0fcd05: add get-release-version script
+- 2b61ac53: show Esc cancel hint in confirmations
+
+**Implementation Status (from PROGRESS.md):**
+- f3ffaf09 → PICKED as a5ebeada6 (fix: copy command delay in Linux handled)
+- 0ded546a → SKIP (PromptService architecture differs)
+- 659b0557 → PICKED as f6d41e648 (feat(cli): Suppress slash command execution and suggestions in shell mode)
+- 4a0fcd05 → SKIP (different release system)
+- 2b61ac53 → PICKED as 8b6f7643f (feat: add missing visual cue for closing dialogs with Esc key)
+
+**Already Applied (3 PICKED + 2 SKIPPED):**
+
+**Applied Commit 1: a5ebeada6** (from f3ffaf09)
+```
+fix: copy command delay in Linux handled (#6856)
+
+Files changed:
+- packages/cli/src/ui/utils/commandUtils.test.ts | 87 +++++++++++++++++++++++---
+- packages/cli/src/ui/utils/commandUtils.ts      | 24 ++++++-
+```
+
+**Applied Commit 2: f6d41e648** (from 659b0557)
+```
+feat(cli): Suppress slash command execution and suggestions in shell mode (#11380)
+
+Files changed:
+- packages/cli/src/ui/components/InputPrompt.test.tsx     | 16 ++++-
+- packages/cli/src/ui/components/InputPrompt.tsx         |  1 +
+- packages/cli/src/ui/hooks/useCommandCompletion.test.ts | 69 ++++++++++++++++++++
+- packages/cli/src/ui/hooks/useCommandCompletion.tsx     |  4 +-
+- packages/cli/src/ui/hooks/useGeminiStream.test.tsx     | 69 ++++++++++++++++++++
+- packages/cli/src/ui/hooks/useGeminiStream.ts           | 74 +++++++++++--------
+```
+
+**Applied Commit 3: 8b6f7643f** (from 2b61ac53)
+```
+feat: add missing visual cue for closing dialogs with Esc key (#11386)
+
+Files changed:
+- packages/cli/src/ui/components/EditorSettingsDialog.tsx         | 2 +-
+- packages/cli/src/ui/components/PermissionsModifyTrustDialog.tsx | 2 +-
+- packages/cli/src/ui/components/ThemeDialog.tsx                  | 2 +-
+```
+
+**Skipped:**
+- 0ded546a - PromptService architecture differs between upstream and LLxprt
+- 4a0fcd05 - LLxprt has different release versioning system
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code 0)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (exit code 0)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+Code flows through my veins,
+Logic dances in patterns bright,
+New worlds come to life.
+```
+
+[OK] **PASS** (Application started successfully, processed request, generated haiku output)
+
+**Verification Summary:**
+
+- Batch 16 upstream commits: f3ffaf09, 0ded546a, 659b0557, 4a0fcd05, 2b61ac53
+- Already applied commits:
+  - a5ebeada6 (from f3ffaf09): 500ms delay before copying text in Linux
+  - f6d41e648 (from 659b0557): shell mode for interactive terminal commands
+  - 8b6f7643f (from 2b61ac53): Esc cancel hint in confirmations
+- 2 commits skipped due to LLxprt architectural differences
+- All verification commands PASS (lint, typecheck, build, application start)
+- No compilation errors
+- Test coverage includes:
+  - commandUtils.test.ts (87 lines added for copy delay testing)
+  - InputPrompt.test.tsx (16 lines added)
+  - useCommandCompletion.test.ts (69 lines added for shell mode testing)
+  - useGeminiStream.test.tsx (69 lines added for shell mode testing)
+- UI components updated with Esc key hints:
+  - EditorSettingsDialog.tsx
+  - PermissionsModifyTrustDialog.tsx
+  - ThemeDialog.tsx
+
+Conclusion: Batch 16 upstream changes **ALREADY APPLIED** in LLxprt codebase (3 PICKED, 2 SKIPPED due to architectural differences). All validation tests PASS.
