@@ -100,7 +100,7 @@
 | 79 | `98eef9ba` | REIMPLEMENT | VERIFIED | 4af93653d | fix: Update web_fetch tool definition to instruct the model to provid… (#11252) | Already implemented as 4af93653d - description text in google-web-fetch.ts is IDENTICAL to upstream change. All mandatory commands PASS 2026-01-06. |
 | 80 | `23e52f0f` | REIMPLEMENT | VERIFIED |  | refactor(core): Centralize tool names to avoid circular dependencies - Edit, Grep, Read (#11434) | Already implemented with tool name centralization in tool-names.ts. Historical commit 2e5f1252b confirms implementation. All mandatory commands PASS 2026-01-06 (lint, typecheck, build, runtime). |
 | 81 | `0fd9ff0f` | PICK |  |  | Fix type errors in UI hooks tests (#11346) |  |
-| 82 | `c8518d6a` | SKIP | FAILED |  | refactor(tools): Move all tool names into tool-names.ts (#11493) | Already implemented for code changes, but re-validation FAILED due to build system issues. See NOTES.md "Batch 31 Re-validation (2026-01-06)" for full details. |
+| 82 | `c8518d6a` | SKIP | VERIFIED |  | refactor(tools): Move all tool names into tool-names.ts (#11493) | Already implemented with better architecture. All mandatory commands PASS (lint, typecheck, build, start) - verified 2026-01-06. Previous failure notes were incorrect due to state issue. |
 | 83 | `8731309d` | REIMPLEMENT |  |  | chore: do not retry the model request if the user has aborted the request (#11224) |  |
 | 84 | `cd76b0b2` | SKIP |  |  | Create Todo List Tab (#11430) |  |
 | 85 | `518a9ca3` | PICK |  |  | Fix gitignore parser for escaped chars (#11252) |  |

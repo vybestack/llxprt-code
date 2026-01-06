@@ -49,7 +49,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 28 — FULL — PICK — `98eef9ba` — PICKED as 4af93653d (web_fetch tool definition update)
 - [x] Batch 29 — QUICK — REIMPLEMENT — `23e52f0f` — REIMPLEMENTED as fb8155a2b (tool name aliases for compatibility)
 - [x] Batch 30 — FULL — SKIP — `0fd9ff0f` — SKIP (UI hooks tests structure differs)
-- [x] Batch 31 — QUICK — SKIP — `c8518d6a` — SKIP-FAILED (re-validation FAILED due to build system issues, see NOTES.md Batch 31 Re-validation section)
+- [x] Batch 31 — QUICK — SKIP — `c8518d6a` — VERIFIED (already implemented with better architecture, all mandatory commands PASS 2026-01-06)
 - [x] Batch 32 — FULL — SKIP — `8731309d` — SKIP-REIMPLEMENT (AbortSignal retry support - needs manual integration)
 - [x] Batch 33 — QUICK — PICK — `518a9ca3, d0ab6e99, 397e52da` — 518a9ca3 SKIP (superseded), d0ab6e99 MANUAL_REVIEW, 397e52da MANUAL_REVIEW
 - [x] Batch 34 — FULL — SKIP — `36de6862` — SKIP-REIMPLEMENT (traceId propagation - needs manual integration)
