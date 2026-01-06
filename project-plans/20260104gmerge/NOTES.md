@@ -1224,19 +1224,95 @@ Per new verification policy, all required commands were executed in order:
 
 **1) npm run lint:**
 
-PASS (exit code: 0, no errors or warnings)
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code: 0, no errors or warnings)
 
 **2) npm run typecheck:**
 
-PASS (all 4 workspaces passed, exit code: 0)
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (all 4 workspaces passed, exit code: 0)
 
 **3) npm run build:**
 
-PASS (exit code: 0)
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code: 0)
 
 **4) node scripts/start.js --profile-load synthetic "write me a haiku":**
 
-PASS (exit code: 0 - Application started successfully, processed request, generated haiku output)
+```bash
+Checking build status...
+Build is up-to-date.
+
+I understand you'd like a haiku. Let me create one for you:
+
+Fresh morning coffee
+Steam rises in gentle waves
+Quiet moments bloom
+```
+
+[OK] **PASS** (exit code: 0 - Application started successfully, processed request, generated haiku output)
 
 **Feature Verification:**
 
