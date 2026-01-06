@@ -176,3 +176,18 @@ Use this checklist to track batch execution progress.
   - 426d3614: selectedType: '' present in json-output.test.ts
 - See NOTES.md for detailed output (Batch 17 section)
 - AUDIT.md: No changes needed (implementation status verified)
+
+### Batch 20 (2026-01-06)
+- Status: SKIP - Already documented in commit 490a0ed6a
+- Upstream commit: 21163a16 - fix(cli): enable typechecking for ui/commands tests (#11413)
+- Upstream changes: Removes ui/commands tests from tsconfig.json exclude list and fixes test type annotations
+- LLxprt decision: SKIP - Architectural divergence. LLxprt keeps 25 ui/commands tests in exclude list (tsconfig.json lines 41-65) due to:
+  - Different test architecture (33 total command test files)
+  - Multi-provider architecture with different test mock requirements
+  - Pragmatic handling of third-party type library issues (OpenAI, Vite, MCP SDK)
+  - All 33 command tests execute and pass at runtime without typecheck
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- See NOTES.md for detailed output and architectural analysis
+- AUDIT.md: Updated line 90 to reflect SKIP decision with verification date
+

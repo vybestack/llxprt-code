@@ -87,7 +87,7 @@
 | 66 | `b4a405c6` | PICK |  |  | Slash command descriptions style cleanup (#11330) |  |
 | 67 | `d3bdbc69` | PICK |  |  | Extensions: add extension IDs (#11333) |  |
 | 68 | `08e87a59` | REIMPLEMENT |  |  | Log all user settings to enable measurement of experiment impacts (#11354) |  |
-| 69 | `21163a16` | PICK |  |  | Enable typechecking for ui/commands tests (#11340) |  |
+| 69 | `21163a16` | SKIP | SKIP | `490a0ed6a` | Enable typechecking for ui/commands tests (#11340) | LLxprt command tests excluded from typecheck (tsconfig.json lines 41-65) due to architectural divergence. All 33 tests execute and pass at runtime. Verified 2026-01-06: all mandatory commands PASS. |
 | 70 | `0b20f88f` | SKIP |  |  | test: skip context compression integration test (#11348) |  |
 | 71 | `9b9ab609` | REIMPLEMENT |  |  | feat(logging): Centralize debug logging with a dedicated utility (#11417) |  |
 | 72 | `f4330c9f` | REIMPLEMENT |  |  | remove support for workspace extensions and migrations (#11324) |  |
