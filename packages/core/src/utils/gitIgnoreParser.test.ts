@@ -277,4 +277,21 @@ src/*.tmp
       expect(parser.getPatterns()).toEqual(['.git', '*.log', '!important.log']);
     });
   });
+
+  describe('Escaped Characters', () => {
+    beforeEach(async () => {
+      await setupGitRepo();
+    });
+
+    it('should correctly handle escaped characters in .gitignore', async () => {
+      await createTestFile('.gitignore', '\\#foo\n\\!bar');
+      // Create files with special characters in names
+      await createTestFile('bla/#foo', 'content');
+      await createTestFile('bla/!bar', 'content');
+
+      // These should be ignored based on the escaped patterns
+      expect(parser.isIgnored('bla/#foo')).toBe(true);
+      expect(parser.isIgnored('bla/!bar')).toBe(true);
+    });
+  });
 });
