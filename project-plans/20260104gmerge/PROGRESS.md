@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 30 (3 PICKED/REIMPLEMENTED, 2 SKIPPED) |
+| **Last Completed** | Batch 35 (2 PICKED, 7 items need REIMPLEMENT/MANUAL_REVIEW/SKIP) |
 | **In Progress** | — |
-| **Next Up** | Batch 31 |
-| **Progress** | 30/49 (61%) |
+| **Next Up** | Batch 36 |
+| **Progress** | 35/49 (71%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -49,11 +49,11 @@ Use this checklist to track batch execution progress.
 - [x] Batch 28 — FULL — PICK — `98eef9ba` — PICKED as 4af93653d (web_fetch tool definition update)
 - [x] Batch 29 — QUICK — REIMPLEMENT — `23e52f0f` — REIMPLEMENTED as fb8155a2b (tool name aliases for compatibility)
 - [x] Batch 30 — FULL — SKIP — `0fd9ff0f` — SKIP (UI hooks tests structure differs)
-- [ ] Batch 31 — QUICK — REIMPLEMENT — `c8518d6a` — refactor(tools): Move all tool names into tool-names.ts (#11493)
-- [ ] Batch 32 — FULL — REIMPLEMENT — `8731309d` — chore: do not retry the model request if the user has aborted the request (#11224)
-- [ ] Batch 33 — QUICK — PICK — `518a9ca3, d0ab6e99, 397e52da` — Fix gitignore parser for escaped chars (#11252) / Fix SettingsDialog race clearing settings (#11358) / Fix theme dialog escaping resetting theme (#11347)
-- [ ] Batch 34 — FULL — REIMPLEMENT — `36de6862` — feat: Propagate traceId from code assist to response metadata (Fixes … (#11360)
-- [ ] Batch 35 — QUICK — PICK — `49bde9fc, 61a71c4f, d5a06d3c` — Fix GCS path handling in a2a-server (#11297) / Testing: remove custom waitFor (#11327) / Fix gitignore parser for trailing spaces (#11299)
+- [x] Batch 31 — QUICK — SKIP — `c8518d6a` — SKIP (LLxprt has different tool architecture)
+- [x] Batch 32 — FULL — SKIP — `8731309d` — SKIP-REIMPLEMENT (AbortSignal retry support - needs manual integration)
+- [x] Batch 33 — QUICK — PICK — `518a9ca3, d0ab6e99, 397e52da` — 518a9ca3 SKIP (superseded), d0ab6e99 MANUAL_REVIEW, 397e52da MANUAL_REVIEW
+- [x] Batch 34 — FULL — SKIP — `36de6862` — SKIP-REIMPLEMENT (traceId propagation - needs manual integration)
+- [x] Batch 35 — QUICK — PICK — `49bde9fc, 61a71c4f, d5a06d3c` — 49bde9fc PICKED fffbb87ee, 61a71c4f SKIP (custom waitFor needed for ink), d5a06d3c PICKED 019f9daba
 - [ ] Batch 36 — FULL — REIMPLEMENT — `995ae717` — refactor(logging): Centralize all console messaging to a shared logger (part 1) (#11537)
 - [ ] Batch 37 — QUICK — REIMPLEMENT — `cc7e1472` — Pass whole extensions rather than just context files (#10910)
 - [ ] Batch 38 — FULL — PICK — `31f58a1f, 70a99af1, 72b16b3a` — Fix Windows ripgrep detection (#11221) / Fix shell auto-approval parsing (#11405) / Fix macOS sandbox PTY spawn errors (#11345)
