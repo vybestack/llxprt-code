@@ -61,7 +61,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 40 — FULL — APPLIED — `654c5550, 0658b4aa` — Add wasm read test, deflake replace — 654c5550 PARTIAL REIMPLEMENTATION (function does not exist, added test using dynamic import), 0658b4aa applied exactly — 2026-01-06
 - [x] Batch 41 — VERIFIED — `bf80263b` — SKIP (ALREADY_EXISTS - LLxprt has superior message bus and policy engine implementation with advanced features like MCP spoofing protection, bucket auth flow, TOML config loader) | See NOTES.md
 - [x] Batch 42 — FULL — PICK — `62dc9683, e72c00cf, cf16d167` — 62dc9683 SKIP, e72c00cf PICKED f3d6f58e2, cf16d167 PICKED ba3c2f7a4
-- [x] Batch 43 — QUICK — REIMPLEMENT — `dd3b1cb6` — REIMPLEMENT (ShellTool needs static Name, others have it)
+- [x] Batch 43 — QUICK — SKIP — `dd3b1cb6` — SKIP (INCOMPATIBLE_ARCHITECTURE - requires LoopDetectionConfirmation dialog and disableForSession() method which do not exist in LLxprt) | See NOTES.md
 - [x] Batch 44 — FULL — REIMPLEMENT — `b364f376` — SKIP (LLxprt has DebugLogger architecture)
 - [x] Batch 45 — QUICK — PICK — `16f5f767, ccf8d0ca, 5b750f51, ed9f714f, 306e12c2` — 16f5f767 SKIP, ccf8d0ca SKIP, 5b750f51 SKIP (already implemented), ed9f714f SKIP, 306e12c2 PICKED b1fc76d88
 - [x] Batch 46 — FULL — PICK — `c7243997, 2940b508, 0d7da7ec` — c7243997 PICKED a9ecf32c1, 2940b508 SKIP (already implemented), 0d7da7ec PICKED 5b6901cd7

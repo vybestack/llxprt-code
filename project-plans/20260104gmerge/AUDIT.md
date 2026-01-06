@@ -8,7 +8,7 @@
 |---|---:|
 | PICKED | 0 |
 | REIMPLEMENTED | 5 |
-| SKIP | 3 |
+| SKIP | 4 |
 | PARTIAL | 1 |
 | NO_OP | 2 |
 | ALREADY_PRESENT | 0 |
@@ -127,7 +127,7 @@
 | 106 | `654c5550` | PICK | APPLIED | 2026-01-06 | Add wasm read test (#11336) | PARTIAL REIMPLEMENTATION - Function readWasmBinaryFromDisk does not exist in LLxprt fileUtils.ts; added test using dynamic import. Test-only change, no production impact. All validation commands PASS. |
 | 107 | `fc4e10b5` | SKIP |  |  | Docs: update README for extensions search (#11441) |  |
 | 108 | `81772c42` | SKIP |  |  | chore: update changes to url (#11442) |  |
-| 109 | `0e7b3951` | SKIP |  |  | feat: add shell defaults (#11373) |  |
+| 130 | `dd3b1cb6` | SKIP | SKIPPED |  | feat(cli): continue request after disabling loop detection (#11416) | INCOMPATIBLE_ARCHITECTURE - requires LoopDetectionConfirmation dialog and disableForSession() method which do not exist in LLxprt |
 | 110 | `f4080b60` | SKIP |  |  | test: Skip windows UI tests (#11422) |  |
 | 111 | `14867c7c` | SKIP |  |  | chore(ci): update action version (#11421) |  |
 | 112 | `0ed4f980` | SKIP |  |  | chore: update subactions version (#11423) |  |
@@ -148,7 +148,6 @@
 | 127 | `e72c00cf` | PICK | VERIFIED | `f3d6f58e2` | Proxy agent error handling (#11310) | COMMITTED as f3d6f58e2 - Error handling for proxy agent creation in fetch.ts. Re-validated 2026-01-06 with all mandatory commands PASS. |
 | 128 | `fb44f5ba` | SKIP |  |  | test: re-enable skip (#11558) |  |
 | 129 | `cf16d167` | PICK | VERIFIED | `ba3c2f7a4` | Repo tooling: tsconfig linter for exclude list (#11298) | COMMITTED as ba3c2f7a4 - Complete tsconfig exclude list linter implemented in scripts/lint.js. Re-validated 2026-01-06 with all mandatory commands PASS. |
-| 130 | `dd3b1cb6` | REIMPLEMENT |  |  | feat(cli): continue request after disabling loop detection (#11416) |  |
 | 131 | `f5e07d94` | SKIP |  |  | Docs: update for MCP template (#11561) |  |
 | 132 | `b364f376` | REIMPLEMENT |  |  | refactor(logging): Centralize console logging with debugLogger (#11590) |  |
 | 133 | `c6a59896` | SKIP |  |  | Add extensions logging (#11261) |  |
