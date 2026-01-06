@@ -104,3 +104,12 @@ Use this checklist to track batch execution progress.
 - All commands PASSED
 - See NOTES.md for detailed output
 - AUDIT.md: No changes needed (implementation status unchanged)
+
+### Batch 08 (2026-01-05)
+- Contains 2 commits: 6ded45e5, d2c9c5b3
+- 6ded45e5: SKIP/NO_OP - Markdown toggle already implemented (RawMarkdownIndicator, renderMarkdown state, Alt+M/Opt+M shortcuts)
+- d2c9c5b3: COMMITTED as c3d9e02e1 - Node.js built-ins in clean.js (readdirSync/statSync instead of glob)
+- Re-ran all verification commands (lint, typecheck, build, start)
+- All commands PASSED
+- See NOTES.md and batch08-revalidation.txt for detailed output
+- AUDIT.md: No changes needed (implementation status unchanged)
