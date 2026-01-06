@@ -30,9 +30,7 @@ describe('checkForUpdates', () => {
 
     mockSettings = {
       merged: {
-        general: {
-          disableUpdateNag: false,
-        },
+        disableUpdateNag: false,
       },
     } as LoadedSettings;
   });
@@ -43,7 +41,7 @@ describe('checkForUpdates', () => {
   });
 
   it('should return null if disableUpdateNag is true', async () => {
-    mockSettings.merged.general!.disableUpdateNag = true;
+    mockSettings.merged.disableUpdateNag = true;
     const result = await checkForUpdates(mockSettings);
     expect(result).toBeNull();
     expect(getPackageJson).not.toHaveBeenCalled();
@@ -158,7 +156,7 @@ describe('checkForUpdates', () => {
         throw new Error('Network error');
       }),
     });
-    const result = await checkForUpdates();
+    const result = await checkForUpdates(mockSettings);
     expect(result).toBeNull();
   });
 
@@ -220,7 +218,7 @@ describe('checkForUpdates', () => {
         fetchInfo: () => fetchInfoMock({ pkg, distTag }),
       }));
 
-      const result = await checkForUpdates();
+      const result = await checkForUpdates(mockSettings);
       expect(result?.message).toContain('1.2.3-nightly.1 → 1.3.0');
       expect(result?.update.latest).toBe('1.3.0');
     });
@@ -236,7 +234,7 @@ describe('checkForUpdates', () => {
         fetchInfo: () => new Promise(() => {}), // Never resolves
       }));
 
-      const checkPromise = checkForUpdates();
+      const checkPromise = checkForUpdates(mockSettings);
 
       // Advance timers to trigger the timeout
       await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 100);

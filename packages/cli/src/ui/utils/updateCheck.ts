@@ -43,7 +43,7 @@ export async function checkForUpdates(
   settings: LoadedSettings,
 ): Promise<UpdateObject | null> {
   try {
-    if (settings.merged.general?.disableUpdateNag) {
+    if (settings.merged.disableUpdateNag) {
       return null;
     }
     // Skip update check when running from source (development mode)
