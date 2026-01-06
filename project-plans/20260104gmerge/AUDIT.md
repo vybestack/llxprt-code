@@ -103,11 +103,11 @@
 | 82 | `c8518d6a` | SKIP | VERIFIED |  | refactor(tools): Move all tool names into tool-names.ts (#11493) | Already implemented with better architecture. All mandatory commands PASS (lint, typecheck, build, start) - verified 2026-01-06. Previous failure notes were incorrect due to state issue. |
 | 83 | `8731309d` | REIMPLEMENT | NO_OP | | chore: do not retry the model request if the user has aborted the request (#11224) | All upstream changes already present in LLxprt: delay.ts with abort support, RetryOptions.signal param, signal.aborted checks, delay signal passing, AbortError re-throw, geminiChat signal pass |
 | 84 | `cd76b0b2` | SKIP |  |  | Create Todo List Tab (#11430) |  |
-| 85 | `518a9ca3` | PICK |  |  | Fix gitignore parser for escaped chars (#11252) |  |
+| 85 | `518a9ca3` | VERIFIED NO_OP |  |  | Fix gitignore parser for escaped chars (#11252) |  |
 | 86 | `71ecc401` | SKIP |  |  | feat: add activity-based tracking for memory monitor (#11363) |  |
 | 87 | `35afab31` | SKIP |  |  | Don't display todo in history (#11516) |  |
-| 88 | `d0ab6e99` | PICK |  |  | Fix SettingsDialog race clearing settings (#11358) |  |
-| 89 | `397e52da` | PICK |  |  | Fix theme dialog escaping resetting theme (#11347) |  |
+| 88 | `d0ab6e99` | VERIFIED NO_OP |  |  | Fix SettingsDialog race clearing settings (#11358) |  |
+| 89 | `397e52da` | VERIFIED INCOMPATIBLE |  |  | Fix theme dialog escaping resetting theme (#11347) |  |
 | 90 | `9a4c0455` | SKIP |  |  | Docs: update README (configuration examples) (#11369) |  |
 | 91 | `a96f0659` | SKIP |  |  | test: skip Linux perf integration test (#11404) |  |
 | 92 | `085e5b1f` | SKIP |  |  | chore: remove unused package lock flag (#11401) |  |

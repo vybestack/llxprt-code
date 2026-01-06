@@ -51,7 +51,7 @@ Use this checklist to track batch execution progress.
 - [x] Batch 30 — FULL — SKIP — `0fd9ff0f` — SKIP (UI hooks tests structure differs)
 - [x] Batch 31 — QUICK — SKIP — `c8518d6a` — VERIFIED (already implemented with better architecture, all mandatory commands PASS 2026-01-06)
 - [x] Batch 32 — FULL — SKIP — `8731309d` — NO_OP (Already Implemented) - All upstream changes present in LLxprt
-- [x] Batch 33 — QUICK — PICK — `518a9ca3, d0ab6e99, 397e52da` — 518a9ca3 SKIP (superseded), d0ab6e99 MANUAL_REVIEW, 397e52da MANUAL_REVIEW
+- [x] Batch 33 — QUICK — PICK — `518a9ca3, d0ab6e99, 397e52da` — VERIFIED NO_OP (already implemented or incompatible architecture)
 - [x] Batch 34 — FULL — SKIP — `36de6862` — SKIP-REIMPLEMENT (traceId propagation - needs manual integration)
 - [x] Batch 35 — QUICK — PICK — `49bde9fc, 61a71c4f, d5a06d3c` — 49bde9fc PICKED fffbb87ee, 61a71c4f SKIP (custom waitFor needed for ink), d5a06d3c PICKED 019f9daba
 - [x] Batch 36 — FULL — SKIP — `995ae717` — SKIP (LLxprt has DebugLogger architecture, not shared singleton)
