@@ -53,6 +53,25 @@ const BUILTIN_SEATBELT_PROFILES = [
   'restrictive-proxied',
 ];
 
+export function buildSandboxEnvArgs(env: NodeJS.ProcessEnv): string[] {
+  const args: string[] = [];
+  const passthroughVariables = [
+    'LLXPRT_CODE_IDE_SERVER_PORT',
+    'LLXPRT_CODE_IDE_WORKSPACE_PATH',
+    'LLXPRT_CODE_WELCOME_CONFIG_PATH',
+    'TERM_PROGRAM',
+  ];
+
+  for (const envVar of passthroughVariables) {
+    const value = env[envVar];
+    if (value) {
+      args.push('--env', `${envVar}=${value}`);
+    }
+  }
+
+  return args;
+}
+
 /**
  * Determines whether the sandbox container should be run with the current user's UID and GID.
  * This is often necessary on Linux systems (especially Debian/Ubuntu based) when using
@@ -232,7 +251,7 @@ export async function start_sandbox(
 
       const profile = (process.env.SEATBELT_PROFILE ??= 'permissive-open');
       let profileFile = fileURLToPath(
-        new URL(`sandbox-macos-${profile}.sb`, import.meta.url),
+        new URL(`./sandbox-macos-${profile}.sb`, import.meta.url),
       );
       // if profile name is not recognized, then look for file under project settings directory
       if (!BUILTIN_SEATBELT_PROFILES.includes(profile)) {
@@ -312,6 +331,14 @@ export async function start_sandbox(
       let proxyProcess: ChildProcess | undefined = undefined;
       let sandboxProcess: ChildProcess | undefined = undefined;
       const sandboxEnv = { ...process.env };
+      for (const envVar of buildSandboxEnvArgs(process.env)) {
+        if (envVar === '--env') {
+          continue;
+        }
+        const [key, ...rest] = envVar.split('=');
+        sandboxEnv[key] = rest.join('=');
+      }
+
       if (proxyCommand) {
         const proxy =
           process.env.HTTPS_PROXY ||
@@ -391,6 +418,7 @@ export async function start_sandbox(
       // spawn child and let it inherit stdio
       sandboxProcess = spawn(config.command, args, {
         stdio: 'inherit',
+        env: sandboxEnv,
       });
 
       // Restore parent stdin mode/state after the sandbox exits.
@@ -780,16 +808,8 @@ export async function start_sandbox(
       args.push('--env', `COLORTERM=${process.env.COLORTERM}`);
     }
 
-    // Pass through IDE mode environment variables
-    for (const envVar of [
-      'LLXPRT_CODE_IDE_SERVER_PORT',
-      'LLXPRT_CODE_IDE_WORKSPACE_PATH',
-      'TERM_PROGRAM',
-    ]) {
-      if (process.env[envVar]) {
-        args.push('--env', `${envVar}=${process.env[envVar]}`);
-      }
-    }
+    // Pass through curated CLI environment variables.
+    args.push(...buildSandboxEnvArgs(process.env));
 
     // copy VIRTUAL_ENV if under working directory
     // also mount-replace VIRTUAL_ENV directory with <project_settings>/sandbox.venv

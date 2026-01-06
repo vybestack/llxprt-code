@@ -15,9 +15,9 @@
  * are accepted.
  */
 
-import { writeFileSync } from 'node:fs';
+import { unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { beforeAll, describe, it } from 'vitest';
+import { afterAll, beforeAll, describe, it } from 'vitest';
 import { TestRig } from './test-helper.js';
 
 // Windows CI runners are unreliable for node-pty interactive tests (winpty agent "File not found").
@@ -175,6 +175,16 @@ describe.skipIf(skipOnWindowsCi)(
         },
       });
 
+      process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH = join(
+        rig.testDir!,
+        'welcome-config.json',
+      );
+
+      writeFileSync(
+        process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH,
+        JSON.stringify({ welcomeCompleted: true }, null, 2),
+      );
+
       // Create server script in the test directory
       const testServerPath = join(rig.testDir!, 'mcp-server.cjs');
       writeFileSync(testServerPath, serverScript);
@@ -184,6 +194,18 @@ describe.skipIf(skipOnWindowsCi)(
         const { chmodSync } = await import('node:fs');
         chmodSync(testServerPath, 0o755);
       }
+    });
+
+    afterAll(() => {
+      if (process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH) {
+        try {
+          unlinkSync(process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH);
+        } catch {
+          // File may not exist or already cleaned up
+        }
+      }
+
+      delete process.env.LLXPRT_CODE_WELCOME_CONFIG_PATH;
     });
 
     it('mcp tool list should include tool with cyclic tool schema', async () => {

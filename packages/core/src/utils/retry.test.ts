@@ -605,14 +605,14 @@ describe('retryWithBackoff', () => {
      * @when onPersistent429 callback returns true (switch succeeded)
      * @then Retry should continue with new bucket
      */
-    it('should call onPersistent429 callback on consecutive 429 errors', async () => {
+    it('should call onPersistent429 callback on first 429 error', async () => {
       vi.useFakeTimers();
       let attempt = 0;
       let failoverCalled = false;
 
       const mockFn = vi.fn(async () => {
         attempt++;
-        if (attempt <= 2) {
+        if (attempt <= 1) {
           const error: HttpError = new Error('Rate limit exceeded');
           error.status = 429;
           throw error;
@@ -626,7 +626,7 @@ describe('retryWithBackoff', () => {
       });
 
       const promise = retryWithBackoff(mockFn, {
-        maxAttempts: 5,
+        maxAttempts: 1,
         initialDelayMs: 100,
         onPersistent429: failoverCallback,
         authType: 'oauth-bucket',
@@ -635,9 +635,87 @@ describe('retryWithBackoff', () => {
       await vi.runAllTimersAsync();
       await expect(promise).resolves.toBe('success after bucket switch');
 
-      // onPersistent429 should be called after consecutive 429 errors
+      // onPersistent429 should be called after the first 429 error
       expect(failoverCallback).toHaveBeenCalled();
       expect(failoverCalled).toBe(true);
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+
+    /**
+     * @requirement PLAN-20251213issue490 Bucket failover
+     * @scenario Bucket failover on 402 errors
+     * @given A request that returns 402 for first bucket
+     * @when onPersistent429 callback returns true (switch succeeded)
+     * @then Retry should continue with new bucket
+     */
+    it('should call onPersistent429 callback on first 402 error', async () => {
+      vi.useFakeTimers();
+      let attempt = 0;
+
+      const mockFn = vi.fn(async () => {
+        attempt++;
+        if (attempt === 1) {
+          const error: HttpError = new Error('Payment Required');
+          error.status = 402;
+          throw error;
+        }
+        return 'success after bucket switch';
+      });
+
+      const failoverCallback = vi.fn(async () => true);
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 1,
+        initialDelayMs: 100,
+        onPersistent429: failoverCallback,
+        authType: 'oauth-bucket',
+      });
+
+      await vi.runAllTimersAsync();
+      await expect(promise).resolves.toBe('success after bucket switch');
+      expect(failoverCallback).toHaveBeenCalledWith(
+        'oauth-bucket',
+        expect.any(Error),
+      );
+      expect(mockFn).toHaveBeenCalledTimes(2);
+    });
+
+    /**
+     * @requirement PLAN-20251213issue490 Bucket failover
+     * @scenario Bucket failover on 401 errors
+     * @given A request that returns 401 for first bucket
+     * @when onPersistent429 callback returns true (switch succeeded)
+     * @then Retry should continue with new bucket after refresh retry
+     */
+    it('should retry once on 401 before bucket failover', async () => {
+      vi.useFakeTimers();
+      let failoverCalled = false;
+
+      const mockFn = vi.fn(async () => {
+        if (!failoverCalled) {
+          const error: HttpError = new Error('Unauthorized');
+          error.status = 401;
+          throw error;
+        }
+        return 'success after bucket switch';
+      });
+
+      const failoverCallback = vi.fn(async () => {
+        failoverCalled = true;
+        return true;
+      });
+
+      const promise = retryWithBackoff(mockFn, {
+        maxAttempts: 3,
+        initialDelayMs: 100,
+        onPersistent429: failoverCallback,
+        authType: 'oauth-bucket',
+      });
+
+      await vi.runAllTimersAsync();
+      await expect(promise).resolves.toBe('success after bucket switch');
+      expect(failoverCallback).toHaveBeenCalledTimes(1);
+      expect(mockFn).toHaveBeenCalledTimes(3);
     });
 
     /**
@@ -672,7 +750,8 @@ describe('retryWithBackoff', () => {
 
       expect(result).toBeInstanceOf(Error);
       expect(result.message).toBe('Rate limit exceeded');
-      expect(failoverCallback).toHaveBeenCalled();
+      expect(failoverCallback).toHaveBeenCalledTimes(1);
+      expect(mockFn).toHaveBeenCalledTimes(1);
     });
   });
 });
