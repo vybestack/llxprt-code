@@ -4,10 +4,10 @@ Use this checklist to track batch execution progress.
 
 | Field | Value |
 |---|---|
-| **Last Completed** | Batch 40 (all marked as SKIP/REIMPLEMENT/MANUAL_REVIEW due to conflicts) |
+| **Last Completed** | Batch 49 (FINAL BATCH) |
 | **In Progress** | — |
-| **Next Up** | Batch 41 |
-| **Progress** | 40/49 (82%) |
+| **Next Up** | — |
+| **Progress** | 49/49 (100%) |
 | **Last Updated** | 2026-01-04 |
 
 ## Preflight
@@ -59,12 +59,12 @@ Use this checklist to track batch execution progress.
 - [x] Batch 38 — FULL — SKIP — `31f58a1f, 70a99af1, 72b16b3a` — all CONFLICTS: 31f58a1 SKIP (different ripgrep), 70a99af1 REIMPLEMENT, 72b16b3a REIMPLEMENT
 - [x] Batch 39 — QUICK — REIMPLEMENT — `7dd2d8f7` — REIMPLEMENT (ShellTool needs static Name, others have it)
 - [x] Batch 40 — FULL — SKIP — `654c5550, 0658b4aa` — both CONFLICTS: 654c5550 SKIP-TEST, 0658b4aa MANUAL_REVIEW
-- [ ] Batch 41 — QUICK — REIMPLEMENT — `bf80263b` — feat: Implement message bus and policy engine (#11523)
-- [ ] Batch 42 — FULL — PICK — `62dc9683, e72c00cf, cf16d167` — MCP add array handling + tests (#11292) / Proxy agent error handling (#11310) / Repo tooling: tsconfig linter for exclude list (#11298)
-- [ ] Batch 43 — QUICK — REIMPLEMENT — `dd3b1cb6` — feat(cli): continue request after disabling loop detection (#11416)
-- [ ] Batch 44 — FULL — REIMPLEMENT — `b364f376` — refactor(logging): Centralize console logging with debugLogger (#11590)
-- [ ] Batch 45 — QUICK — PICK — `16f5f767, ccf8d0ca, 5b750f51, ed9f714f, 306e12c2` — Test: use waitFor rather than wait (#11334) / Re-enable Ctrl+C integration test (#11357) / Disable CI for stable release setting (#11274) / Non-interactive MCP prompt commands (#11291) / Fix shift+tab input regression (#11349)
-- [ ] Batch 46 — FULL — PICK — `c7243997, 2940b508, 0d7da7ec` — Fix flaky BaseSelectionList test (#11337) / fix: Ignore correct errors thrown when resizing or scrolling an exited pty (#11440) / MCP OAuth path parameter handling (#11305)
-- [ ] Batch 47 — QUICK — PICK — `847c6e7f` — Refactor compression service (core structure change) (#11432)
-- [ ] Batch 48 — FULL — PICK — `ce40a653` — feat: add summarization low token threshold to avoid overflow (#11433)
-- [ ] Batch 49 — QUICK — PICK — `b1bbef43` — Allow continue on prompt if LoopDetection disabled (#11367)
+- [x] Batch 41 — QUICK — REIMPLEMENT — `bf80263b` — SKIP (LLxprt already has complete message bus/policy engine)
+- [x] Batch 42 — FULL — PICK — `62dc9683, e72c00cf, cf16d167` — 62dc9683 SKIP, e72c00cf PICKED f3d6f58e2, cf16d167 PICKED ba3c2f7a4
+- [x] Batch 43 — QUICK — REIMPLEMENT — `dd3b1cb6` — SKIP (useGeminiStream.ts conflicts, different architecture)
+- [x] Batch 44 — FULL — REIMPLEMENT — `b364f376` — SKIP (LLxprt has DebugLogger architecture)
+- [x] Batch 45 — QUICK — PICK — `16f5f767, ccf8d0ca, 5b750f51, ed9f714f, 306e12c2` — 16f5f767 SKIP, ccf8d0ca SKIP, 5b750f51 SKIP (already implemented), ed9f714f SKIP, 306e12c2 PICKED b1fc76d88
+- [x] Batch 46 — FULL — PICK — `c7243997, 2940b508, 0d7da7ec` — c7243997 PICKED a9ecf32c1, 2940b508 SKIP (already implemented), 0d7da7ec PICKED 5b6901cd7
+- [x] Batch 47 — QUICK — PICK — `847c6e7f` — SKIP-REIMPLEMENT (different compression architecture)
+- [x] Batch 48 — FULL — PICK — `ce40a653` — SKIP (depends on batch 47, missing files)
+- [x] Batch 49 — QUICK — PICK — `b1bbef43` — SKIP (different loop detection implementation order)
