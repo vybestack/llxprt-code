@@ -3152,3 +3152,179 @@ Batch 14 properly SKIP'd. Both upstream commits address features that LLxprt alr
 2. d42da871 (screen reader line wrapper): LLxprt uses Ink's approach without terminal escape sequences; architectural difference, not a bug
 
 All mandatory validation commands PASS. No changes required to LLxprt codebase. PROGRESS.md and .llxprt/LLXPRT.md already document this correctly.
+__LLXPRT_CMD__:cat temp_batch15_notes_append.md
+---
+
+## Batch 15
+
+### Selection Record
+```
+Batch: 15
+Type: ALREADY IMPLEMENTED
+Upstream SHA(s): 3a1d3769
+Subject: Refactor `EditTool.Name` to use centralized `EDIT_TOOL_NAME` (#11343)
+Playbook: N/A
+Prerequisites Checked:
+  - Previous batch record exists: YES
+  - Previous batch verification: PASS
+  - Previous batch pushed: N/A
+  - Special dependencies: None
+Ready to Execute: YES
+```
+
+### Execution Record
+
+**3a1d3769 - Centralize EditTool.Name constant: ALREADY IMPLEMENTED**
+
+Upstream changes:
+- Adds `EDIT_TOOL_NAME = 'replace'` constant to tool-names.ts
+- Replaces hardcoded `'replace'` with `EDIT_TOOL_NAME` constant in:
+  - `packages/core/src/tools/edit.ts` - EditTool.Name property
+  - `packages/core/src/tools/smart-edit.ts` - SmartEditTool.Name property
+  - `packages/core/src/core/prompts.ts` template strings
+  - `packages/core/src/utils/editCorrector.ts` tool comparisons
+  - `packages/core/src/utils/editCorrector.test.ts` test expectations
+
+LLxprt implementation status:
+- `EDIT_TOOL_NAME` constant already exists in tool-names.ts (line 20)
+- EditTool.Name already uses `EDIT_TOOL_NAME` constant (edit.ts line 697)
+- SmartEditTool does not exist in LLxprt (NO_OP)
+- prompts.ts does not use EditTool.Name references (LLxprt uses different prompt system via PromptService)
+- editCorrector.ts does not exist in LLxprt (NO_OP)
+- editCorrector.test.ts does not exist in LLxprt (NO_OP)
+
+Verification:
+- EDIT_TOOL_NAME exists in tool-names.ts
+- EditTool.Name uses EDIT_TOOL_NAME constant in edit.ts
+- All EditTool references already use the centralized constant
+
+### Status Documentation
+
+Batch 15 commit: `3a1d3769` - ALREADY IMPLEMENTED (NO_OP)
+Reason: LLxprt has EDIT_TOOL_NAME constant in tool-names.ts, and EditTool.Name already uses it. Other files changed in upstream (smart-edit.ts, prompts.ts, editCorrector.ts, editCorrector.test.ts) don't exist in LLxprt or use different architecture.
+
+### Batch 15 Re-validation (2026-01-05)
+
+**VERIFIED - Already Implemented**
+
+Batch 15 upstream commit 3a1d3769 centralizes EditTool.Name to use EDIT_TOOL_NAME constant.
+
+Per new verification policy, all required commands were executed in order:
+
+**1) npm run lint:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 lint
+> eslint . --ext .ts,.tsx && eslint integration-tests
+```
+
+[OK] **PASS** (exit code 0, no errors or warnings)
+
+**2) npm run typecheck:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 typecheck
+> npm run typecheck --workspaces --if-present
+
+> @vybestack/llxprt-code-core@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 typecheck
+> tsc --noEmit
+
+> @vybestack/llxprt-code-test-utils@0.8.0 typecheck
+> tsc --noEmit
+```
+
+[OK] **PASS** (all 4 workspaces passed, exit code 0)
+
+**3) npm run build:**
+
+```bash
+> @vybestack/llxprt-code@0.8.0 build
+> node scripts/build.js
+
+> @vybestack/llxprt-code@0.8.0 generate
+> node scripts/generate-git-commit-info.js && node scripts/generate_prompt_manifest.js
+
+> @vybestack/llxprt-code-core@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-a2a-server@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> @vybestack/llxprt-code-test-utils@0.8.0 build
+> node ../../scripts/build_package.js
+
+Successfully copied files.
+
+> llxprt-code-vscode-ide-companion@0.8.0 build
+> npm run build:dev
+
+> llxprt-code-vscode-ide-companion@0.8.0 build:dev
+> npm run check-types && npm run lint && node esbuild.js
+
+> llxprt-code-vscode-ide-companion@0.8.0 check-types
+> tsc --noEmit
+
+> llxprt-code-vscode-ide-companion@0.8.0 lint
+> eslint src
+
+[watch] build started
+[watch] build finished
+```
+
+[OK] **PASS** (exit code 0)
+
+**4) node scripts/start.js --profile-load synthetic "write me a haiku":**
+
+```bash
+Checking build status...
+Build is up-to-date.
+
+Code flows through my thoughts,
+Changing lines, creating worlds,
+Digital art blooms.
+```
+
+[OK] **PASS** (Application started successfully, processed request, generated haiku output)
+
+**Feature Verification:**
+
+Verified that EDIT_TOOL_NAME constant exists and is used by EditTool:
+- EDIT_TOOL_NAME = 'replace' exists in tool-names.ts (line 20)
+- EditTool.Name uses EDIT_TOOL_NAME constant (edit.ts line 697)
+- Import statement present: `import { EDIT_TOOL_NAME } from './tool-names.js';`
+- No hardcoded 'replace' string in EditTool.Name property
+
+EditTool.Name correctly uses the centralized EDIT_TOOL_NAME constant from tool-names.ts.
+
+**Upstream files not present in LLxprt (NO_OP):**
+- `packages/core/src/tools/smart-edit.ts` - LLxprt doesn't have SmartEditTool
+- `packages/core/src/core/prompts.ts` - Upstream's prompts.ts doesn't exist in LLxprt (LLxprt uses PromptService system)
+- `packages/core/src/utils/editCorrector.ts` - LLxprt doesn't have editCorrector
+- `packages/core/src/utils/editCorrector.test.ts` - LLxprt doesn't have editCorrector tests
+
+**Verification Summary:**
+
+- Batch 15 upstream commit 3a1d3769 centralizes EditTool.Name using EDIT_TOOL_NAME constant
+- LLxprt already has EDIT_TOOL_NAME = 'replace' in tool-names.ts (line 20)
+- LLxprt's EditTool.Name already uses EDIT_TOOL_NAME constant (edit.ts line 697)
+- Upstream smart-edit.ts, prompts.ts, editCorrector.ts, editCorrector.test.ts changes are NO_OP (files don't exist in LLxprt)
+- All verification commands PASS (lint, typecheck, build, application start)
+- Build artifacts properly generated
+- No changes needed - already implemented
+
+Conclusion: Batch 15 upstream change **ALREADY IMPLEMENTED** in LLxprt codebase. EDIT_TOOL_NAME constant exists and is properly used by EditTool. Other files affected by upstream commit are NO_OP for LLxprt due to different architecture.
