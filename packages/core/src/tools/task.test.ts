@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '../config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { ContextState, SubagentTerminateMode } from '../core/subagent.js';
+import { ToolErrorType } from './tool-error.js';
 
 describe('TaskTool', () => {
   let config: Config;
@@ -87,8 +88,9 @@ describe('TaskTool', () => {
         behaviourPrompts: ['Ship the feature', 'Respect coding standards'],
         toolConfig: { tools: ['read_file', 'write_file'] },
         outputConfig: { outputs: { summary: 'Outcome summary' } },
+        runConfig: { max_time_minutes: 1 },
       }),
-      signal,
+      expect.any(AbortSignal),
     );
     expect(scope.runInteractive).toHaveBeenCalledTimes(1);
     expect(scope.runNonInteractive).not.toHaveBeenCalled();
@@ -345,10 +347,315 @@ describe('TaskTool', () => {
 
     expect(launch).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'helper' }),
-      abortController.signal,
+      expect.any(AbortSignal),
     );
     expect(result.metadata?.cancelled).toBe(true);
     expect(result.returnDisplay).toMatch(/abort/i);
+  });
+
+  describe('timeout_ms handling', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('uses default timeout when timeout_ms is omitted', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-default',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithSettings = {
+        ...config,
+        getEphemeralSettings: () => ({
+          task_default_timeout_ms: 60000,
+          task_max_timeout_ms: 300000,
+        }),
+      } as unknown as Config;
+      const tool = new TaskTool(configWithSettings, {
+        orchestratorFactory: () => orchestrator,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+      });
+
+      const resultPromise = invocation.execute(
+        new AbortController().signal,
+        undefined,
+      );
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_time_minutes: 1,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+
+      await resultPromise;
+    });
+
+    it('clamps timeout_ms to max setting', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-max',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithSettings = {
+        ...config,
+        getEphemeralSettings: () => ({
+          task_default_timeout_ms: 60000,
+          task_max_timeout_ms: 120000,
+        }),
+      } as unknown as Config;
+
+      const tool = new TaskTool(configWithSettings, {
+        orchestratorFactory: () => orchestrator,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        timeout_ms: 999999,
+      });
+
+      const resultPromise = invocation.execute(
+        new AbortController().signal,
+        undefined,
+      );
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            max_time_minutes: 2,
+          }),
+        }),
+        expect.any(AbortSignal),
+      );
+
+      await resultPromise;
+    });
+
+    it('skips timeout when timeout_ms is -1', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-unlimited',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithSettings = {
+        ...config,
+        getEphemeralSettings: () => ({
+          task_default_timeout_ms: 60000,
+          task_max_timeout_ms: 300000,
+        }),
+      } as unknown as Config;
+      const tool = new TaskTool(configWithSettings, {
+        orchestratorFactory: () => orchestrator,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        timeout_ms: -1,
+      });
+
+      const resultPromise = invocation.execute(
+        new AbortController().signal,
+        undefined,
+      );
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(launch).toHaveBeenCalledWith(
+        expect.not.objectContaining({ runConfig: expect.anything() }),
+        expect.any(AbortSignal),
+      );
+
+      await resultPromise;
+    });
+
+    it('returns TIMEOUT error and partial output when timed out', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+
+      // The key insight: runInteractive in real SubAgentScope creates its own AbortController
+      // that listens for parent signals. When timeoutController.signal aborts, the subagent
+      // should detect this and reject with AbortError. We simulate that here.
+
+      let rejectPromise: ((error: Error) => void) | null = null;
+
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        cancel: vi.fn(),
+        runInteractive: vi.fn(
+          (_context: ContextState, _options?: unknown) =>
+            new Promise((_resolve, reject) => {
+              rejectPromise = reject;
+            }),
+        ),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-timeout',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithSettings = {
+        ...config,
+        getEphemeralSettings: () => ({
+          task_default_timeout_ms: 60000,
+          task_max_timeout_ms: 300000,
+        }),
+      } as unknown as Config;
+      const tool = new TaskTool(configWithSettings, {
+        orchestratorFactory: () => orchestrator,
+        isInteractiveEnvironment: () => true,
+      });
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        timeout_ms: 50,
+      });
+
+      const resultPromise = invocation.execute(
+        new AbortController().signal,
+        undefined,
+      );
+
+      // Wait for runInteractive to be called
+      await vi.advanceTimersByTimeAsync(5);
+
+      expect(scope.runInteractive).toHaveBeenCalled();
+
+      // Now advance time past the timeout (50ms)
+      await vi.advanceTimersByTimeAsync(60);
+
+      // The timeout should fire and the reject function we captured
+      // simulates the subagent detecting the abort and rejecting
+      if (rejectPromise) {
+        const abortError = new Error('Aborted');
+        abortError.name = 'AbortError';
+        rejectPromise(abortError);
+      }
+
+      await expect(resultPromise).resolves.toMatchObject({
+        error: { type: ToolErrorType.TIMEOUT },
+      });
+    });
+
+    it('returns EXECUTION_FAILED for user aborts', async () => {
+      const dispose = vi.fn().mockResolvedValue(undefined);
+      const scope = {
+        output: {
+          emitted_vars: {},
+          terminate_reason: SubagentTerminateMode.GOAL,
+        },
+        runInteractive: vi.fn().mockResolvedValue(undefined),
+        runNonInteractive: vi.fn(),
+        onMessage: undefined,
+      };
+      const launch = vi.fn().mockResolvedValue({
+        agentId: 'agent-abort',
+        scope,
+        dispose,
+        prompt: {} as unknown,
+        profile: {} as unknown,
+        config: {} as unknown,
+        runtime: {} as unknown,
+      });
+      const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const configWithSettings = {
+        ...config,
+        getEphemeralSettings: () => ({
+          task_default_timeout_ms: 60000,
+          task_max_timeout_ms: 300000,
+        }),
+      } as unknown as Config;
+      const tool = new TaskTool(configWithSettings, {
+        orchestratorFactory: () => orchestrator,
+      });
+
+      const abortController = new AbortController();
+      abortController.abort();
+
+      const invocation = tool.build({
+        subagent_name: 'helper',
+        goal_prompt: 'Ship it',
+        timeout_ms: 1000,
+      });
+
+      const result = await invocation.execute(
+        abortController.signal,
+        undefined,
+      );
+
+      expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
+      expect(result.error?.type).not.toBe(ToolErrorType.TIMEOUT);
+    });
   });
 
   it('validates required parameters', () => {

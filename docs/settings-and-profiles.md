@@ -45,6 +45,10 @@ Ephemeral settings are runtime configurations that last only for your current se
 | `tool-output-item-size-limit` | Maximum size per item/file in bytes                                                                  | `524288`                  | `1048576` (1MB)                    |
 | `max-prompt-tokens`           | Maximum tokens allowed in any prompt sent to LLM                                                     | `200000`                  | `300000`                           |
 | `shell-replacement`           | Allow command substitution ($(), <(), backticks)                                                     | `false`                   | `true`                             |
+| `shell_default_timeout_ms`    | Default timeout for shell tool executions in milliseconds                                            | `60000`                   | `120000`                           |
+| `shell_max_timeout_ms`        | Maximum timeout for shell tool executions in milliseconds                                            | `300000`                  | `600000`                           |
+| `task_default_timeout_ms`     | Default timeout for task tool executions in milliseconds                                             | `60000`                   | `120000`                           |
+| `task_max_timeout_ms`         | Maximum timeout for task tool executions in milliseconds                                             | `300000`                  | `600000`                           |
 | `emojifilter`                 | Emoji filter mode for LLM responses                                                                  | `auto`                    | `allowed`, `auto`, `warn`, `error` |
 
 **Note:** `auth-key` and `auth-keyfile` are no longer supported as ephemeral settings. Use `/key` and `/keyfile` commands instead.
@@ -88,6 +92,13 @@ The CLI parses each `--set key=value` just like `/set`, so CI jobs and scripts c
 # Enable shell command substitution (use with caution)
 
 /set shell-replacement true
+
+# Tool timeout settings
+
+/set shell_default_timeout_ms 120000
+/set shell_max_timeout_ms 600000
+/set task_default_timeout_ms 120000
+/set task_max_timeout_ms 600000
 
 # Tool output control settings
 

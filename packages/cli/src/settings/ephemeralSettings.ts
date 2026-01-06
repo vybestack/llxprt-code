@@ -90,6 +90,16 @@ export const ephemeralSettingHelp: Record<string, string> = {
     'Time window for counting failures in milliseconds (positive integer, default: 60000, load balancer only)',
   circuit_breaker_recovery_timeout_ms:
     'Cooldown period before retrying after circuit opens in milliseconds (positive integer, default: 30000, load balancer only)',
+
+  // Tool timeout settings (Issue #920)
+  task_default_timeout_ms:
+    'Default timeout for task tool executions in milliseconds (default: 60000, -1 for unlimited)',
+  task_max_timeout_ms:
+    'Maximum timeout allowed for task tool executions in milliseconds (default: 300000, -1 for unlimited)',
+  shell_default_timeout_ms:
+    'Default timeout for shell tool executions in milliseconds (default: 60000, -1 for unlimited)',
+  shell_max_timeout_ms:
+    'Maximum timeout allowed for shell tool executions in milliseconds (default: 300000, -1 for unlimited)',
 };
 
 const validEphemeralKeys = Object.keys(ephemeralSettingHelp);
@@ -460,6 +470,25 @@ export function parseEphemeralSettingValue(
       return {
         success: false,
         message: `${key} must be either 'true' or 'false'`,
+      };
+    }
+  }
+
+  if (
+    key === 'task_default_timeout_ms' ||
+    key === 'task_max_timeout_ms' ||
+    key === 'shell_default_timeout_ms' ||
+    key === 'shell_max_timeout_ms'
+  ) {
+    const numValue = parsedValue as number;
+    if (
+      typeof numValue !== 'number' ||
+      !Number.isInteger(numValue) ||
+      (numValue !== -1 && numValue <= 0)
+    ) {
+      return {
+        success: false,
+        message: `${key} must be a positive integer in milliseconds or -1 for unlimited`,
       };
     }
   }
